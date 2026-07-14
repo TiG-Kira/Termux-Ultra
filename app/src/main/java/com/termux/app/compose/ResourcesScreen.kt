@@ -40,16 +40,23 @@ fun ResourcesScreen(onExecuteScript: (String, String) -> Unit) {
 
     val resources = listOf(
         ResourceItem(
+            title = "MOE 全能",
+            description = "TMOE Linux 管理器，一键配置 chroot/PRoot 容器、安装各种 Linux 发行版",
+            url = "https://github.trss.me/Install/TMOE.html",
+            scriptUrl = "https://gitee.com/mo2/linux/raw/2/2.awk",
+            iconRes = R.drawable.ic_terminal
+        ),
+        ResourceItem(
             title = context.getString(R.string.resource_termux_setup),
             description = context.getString(R.string.resource_termux_setup_desc),
-            url = "https://termux.dev/docs/basic-setup",
-            scriptUrl = "https://raw.githubusercontent.com/termux/termux-app/master/docs/basic-setup.md",
+            url = "https://termux.dev/en/",
+            scriptUrl = "https://raw.githubusercontent.com/termux/termux-packages/master/packages/bash/build.sh",
             iconRes = R.drawable.ic_terminal
         ),
         ResourceItem(
             title = context.getString(R.string.resource_minecraft_server),
             description = context.getString(R.string.resource_minecraft_server_desc),
-            url = "https://github.com/MCServerSoft/minecraft-server-script",
+            url = "https://github.com/TheRemote/MinecraftBedrockServer",
             scriptUrl = "https://raw.githubusercontent.com/TheRemote/MinecraftBedrockServer/master/SetupMinecraft.sh",
             iconRes = R.drawable.ic_game
         ),
@@ -57,28 +64,28 @@ fun ResourcesScreen(onExecuteScript: (String, String) -> Unit) {
             title = context.getString(R.string.resource_linux_server),
             description = context.getString(R.string.resource_linux_server_desc),
             url = "https://github.com/teddysun/lamp",
-            scriptUrl = "https://raw.githubusercontent.com/teddysun/lamp/master/install.sh",
+            scriptUrl = "https://raw.githubusercontent.com/teddysun/lamp/master/lamp.sh",
             iconRes = R.drawable.ic_server
         ),
         ResourceItem(
             title = context.getString(R.string.resource_web_server),
             description = context.getString(R.string.resource_web_server_desc),
-            url = "https://github.com/nginxinc/docker-nginx",
-            scriptUrl = "https://raw.githubusercontent.com/nginxinc/docker-nginx/main/docker-entrypoint.sh",
+            url = "https://nginx.org/",
+            scriptUrl = "https://raw.githubusercontent.com/angristan/nginx-autoinstall/master/nginx-autoinstall.sh",
             iconRes = R.drawable.ic_web
         ),
         ResourceItem(
             title = context.getString(R.string.resource_node_js),
             description = context.getString(R.string.resource_node_js_desc),
-            url = "https://nodejs.org/en/download/package-manager",
+            url = "https://nodejs.org/",
             scriptUrl = "https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh",
             iconRes = R.drawable.ic_code
         ),
         ResourceItem(
             title = context.getString(R.string.resource_python_env),
             description = context.getString(R.string.resource_python_env_desc),
-            url = "https://python-poetry.org/docs/",
-            scriptUrl = "https://raw.githubusercontent.com/python-poetry/poetry/master/install-poetry.py",
+            url = "https://python-poetry.org/",
+            scriptUrl = "https://install.python-poetry.org",
             iconRes = R.drawable.ic_code
         )
     )
@@ -176,7 +183,13 @@ private fun ResourceCard(item: ResourceItem, onExecuteScript: (String, String) -
             Button(
                 onClick = {
                     val scriptName = item.scriptUrl.substringAfterLast("/")
-                    val command = "curl -sSL ${item.scriptUrl} | bash"
+                    val command = if (item.scriptUrl.endsWith(".awk")) {
+                        "curl -sSL -o /data/data/com.termux/files/home/tmp_script ${item.scriptUrl} && awk -f /data/data/com.termux/files/home/tmp_script"
+                    } else if (item.scriptUrl.endsWith(".py")) {
+                        "curl -sSL -o /data/data/com.termux/files/home/tmp_script.py ${item.scriptUrl} && python /data/data/com.termux/files/home/tmp_script.py"
+                    } else {
+                        "curl -sSL -o /data/data/com.termux/files/home/tmp_script.sh ${item.scriptUrl} && bash /data/data/com.termux/files/home/tmp_script.sh"
+                    }
                     onExecuteScript(scriptName, command)
                 },
                 modifier = Modifier.clip(RoundedCornerShape(12.dp)),

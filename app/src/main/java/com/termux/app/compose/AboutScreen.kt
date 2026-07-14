@@ -19,6 +19,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
@@ -117,13 +118,13 @@ fun AboutScreen(onBack: () -> Unit) {
                             modifier = Modifier
                                 .size(80.dp)
                                 .clip(CircleShape)
-                                .background(Color(0xFFFF69B4)),
+                                .background(Color.Black),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
                                 painter = painterResource(R.drawable.ic_terminal),
                                 contentDescription = "Logo",
-                                modifier = Modifier.size(40.dp),
+                                modifier = Modifier.size(44.dp),
                                 tint = Color.White
                             )
                         }
@@ -183,7 +184,7 @@ fun AboutScreen(onBack: () -> Unit) {
                             .clickable {
                                 val intent = android.content.Intent(
                                     android.content.Intent.ACTION_VIEW,
-                                    android.net.Uri.parse("https://github.com/tig-kira")
+                                    android.net.Uri.parse("https://github.com/TiG-Kira")
                                 )
                                 context.startActivity(intent)
                             }
@@ -206,13 +207,10 @@ fun AboutScreen(onBack: () -> Unit) {
                                         .background(MiuixTheme.colorScheme.surfaceVariant),
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    Text(
-                                        text = "K",
-                                        style = TextStyle(
-                                            fontSize = 24.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = MiuixTheme.colorScheme.onSurface
-                                        )
+                                    AsyncImage(
+                                        model = "https://github.com/TiG-Kira.png",
+                                        contentDescription = "Developer Avatar",
+                                        modifier = Modifier.size(48.dp)
                                     )
                                 }
                                 Column(
@@ -235,34 +233,6 @@ fun AboutScreen(onBack: () -> Unit) {
                                     )
                                 }
                             }
-                            Icon(
-                                painter = painterResource(R.drawable.ic_arrow_right),
-                                contentDescription = context.getString(R.string.arrow),
-                                tint = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                                modifier = Modifier.size(24.dp)
-                            )
-                        }
-                    }
-                }
-
-                item {
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp)
-                            .clip(RoundedCornerShape(20.dp))
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 16.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = context.getString(R.string.open_source_projects),
-                                style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                            )
                             Icon(
                                 painter = painterResource(R.drawable.ic_arrow_right),
                                 contentDescription = context.getString(R.string.arrow),
@@ -338,24 +308,54 @@ fun AboutScreen(onBack: () -> Unit) {
                     ) {
                         Column(
                             modifier = Modifier.padding(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                            horizontalAlignment = Alignment.Start
                         ) {
-                            InfoRow(
-                                title = context.getString(R.string.version),
-                                value = getVersionName(context)
-                            )
                             Text(
-                                text = context.getString(R.string.author),
+                                text = context.getString(R.string.termux_ultra_version),
                                 style = TextStyle(
-                                    fontSize = 13.sp,
+                                    fontSize = 14.sp,
                                     color = MiuixTheme.colorScheme.onSurfaceVariantSummary
                                 )
                             )
                             Text(
-                                text = context.getString(R.string.license),
+                                text = getVersionName(context),
+                                style = TextStyle(
+                                    fontSize = 24.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MiuixTheme.colorScheme.onSurface
+                                )
+                            )
+                            Text(
+                                text = "${context.getString(R.string.based_on_termux_version)} 0.118.3",
+                                style = TextStyle(
+                                    fontSize = 12.sp,
+                                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                                )
+                            )
+                        }
+                    }
+                }
+
+                item {
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
+
+                item {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                text = "Termux Ultra 使用 GPL 3.0 以及 MIT 许可，部分代码使用了 Trae 进行 AI 生成。",
                                 style = TextStyle(
                                     fontSize = 13.sp,
-                                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                                    color = MiuixTheme.colorScheme.onSurface
                                 )
                             )
                         }

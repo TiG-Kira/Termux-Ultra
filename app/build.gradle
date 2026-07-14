@@ -17,8 +17,8 @@ android {
         applicationId "com.termux"
         minSdkVersion project.properties.minSdkVersion.toInteger()
         targetSdkVersion project.properties.targetSdkVersion.toInteger()
-        versionCode 1002
-        versionName "0.118.3"
+        versionCode 1003
+        versionName "0.118.3.1.1"
 
         if (appVersionName) versionName = appVersionName
 
@@ -99,6 +99,8 @@ dependencies {
     implementation "androidx.appcompat:appcompat:1.7.0"
     implementation "androidx.core:core-ktx:1.15.0"
     implementation "androidx.preference:preference-ktx:1.2.1"
+
+    implementation "io.coil-kt:coil-compose:2.7.0"
 
     implementation project(':terminal-view')
     implementation project(':termux-shared')

@@ -300,6 +300,8 @@ public final class TermuxActivity extends ComponentActivity implements ServiceCo
         if (mTermuxTerminalViewClient != null)
             mTermuxTerminalViewClient.onResume();
 
+        updateTerminalToolbarTitle();
+
         isOnResumeAfterOnCreate = false;
     }
 
@@ -582,16 +584,29 @@ public final class TermuxActivity extends ComponentActivity implements ServiceCo
                 return kotlin.Unit.INSTANCE;
             },
             () -> {
-                mTermuxTerminalSessionClient.addNewSession(false, null);
+                int sessionCount = mTermuxService.getTermuxSessions().size();
+                String sessionName = com.termux.app.LocaleHelper.isChinese(this)
+                    ? "会话 " + (sessionCount + 1)
+                    : "Session " + (sessionCount + 1);
+                mTermuxTerminalSessionClient.addNewSession(false, sessionName);
                 updateTerminalToolbarTitle();
                 return kotlin.Unit.INSTANCE;
             },
             () -> {
                 TerminalSession currentSession = getCurrentSession();
                 if (currentSession != null) {
-                    currentSession.finishIfRunning();
+                    String sessionName = currentSession.mSessionName;
+                    if (sessionName == null || sessionName.isEmpty()) {
+                        sessionName = getString(R.string.terminal);
+                    }
+                    showToast(sessionName + " 已停止，返回代码: 137", true);
+                    mTermuxService.removeTermuxSession(currentSession);
                 }
-                finish();
+                if (mTermuxService.getTermuxSessions().isEmpty()) {
+                    finish();
+                } else {
+                    updateTerminalToolbarTitle();
+                }
                 return kotlin.Unit.INSTANCE;
             }
         );
@@ -615,7 +630,9 @@ public final class TermuxActivity extends ComponentActivity implements ServiceCo
                         }
                     }
                     if (sessionIndex > 0) {
-                        mCurrentTitle = getString(R.string.terminal) + " " + sessionIndex;
+                        mCurrentTitle = com.termux.app.LocaleHelper.isChinese(this)
+                            ? "会话 " + sessionIndex
+                            : "Session " + sessionIndex;
                     } else {
                         mCurrentTitle = getString(R.string.terminal);
                     }
@@ -853,6 +870,7 @@ public final class TermuxActivity extends ComponentActivity implements ServiceCo
 
     public void termuxSessionListNotifyUpdated() {
         mTermuxSessionListViewController.notifyDataSetChanged();
+        updateTerminalToolbarTitle();
     }
 
     public boolean isVisible() {

@@ -1,12 +1,15 @@
 package com.termux.app.compose
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -34,23 +37,31 @@ enum class ClipboardMode {
 
 private const val ROOT_PATH = "/data/data/com.termux"
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun FileManagerScreen() {
+fun FileManagerScreen(
+    onOpenFile: (String, String) -> Unit = { _, _ -> }
+) {
     val context = LocalContext.current
     var currentPath by remember { mutableStateOf(File("/data/data/com.termux/files")) }
     var files by remember { mutableStateOf<List<File>>(emptyList()) }
-    var selectedFile by remember { mutableStateOf<File?>(null) }
+    var selectedFiles by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var isInSelectionMode by remember { mutableStateOf(false) }
     var clipboardMode by remember { mutableStateOf(ClipboardMode.NONE) }
-    var clipboardFile by remember { mutableStateOf<File?>(null) }
+    var clipboardFiles by remember { mutableStateOf<Set<String>>(emptySet()) }
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showRenameDialog by remember { mutableStateOf(false) }
     var newFileName by remember { mutableStateOf("") }
     var showNewFolderDialog by remember { mutableStateOf(false) }
     var newFolderName by remember { mutableStateOf("") }
     var showWarningCard by remember { mutableStateOf(false) }
+    var showOpenWithDialog by remember { mutableStateOf(false) }
+    var fileToOpen by remember { mutableStateOf<File?>(null) }
 
     LaunchedEffect(currentPath) {
         files = currentPath.listFiles()?.sortedWith(compareBy({ !it.isDirectory }, { it.name })) ?: emptyList()
+        selectedFiles = emptySet()
+        isInSelectionMode = false
     }
 
     LaunchedEffect(Unit) {
@@ -62,19 +73,36 @@ fun FileManagerScreen() {
     }
 
     val scrollBehavior = MiuixScrollBehavior()
-
     val canGoUp = currentPath.parentFile != null && !currentPath.absolutePath.equals(ROOT_PATH)
+
+    fun refreshFiles() {
+        files = currentPath.listFiles()?.sortedWith(compareBy({ !it.isDirectory }, { it.name })) ?: emptyList()
+    }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = stringResource(R.string.files_title),
+                title = if (isInSelectionMode) {
+                    "${selectedFiles.size} ${stringResource(R.string.items)}"
+                } else {
+                    stringResource(R.string.files_title)
+                },
                 scrollBehavior = scrollBehavior,
                 navigationIcon = {
-                    if (canGoUp) {
+                    if (isInSelectionMode) {
+                        IconButton(onClick = {
+                            selectedFiles = emptySet()
+                            isInSelectionMode = false
+                        }) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_close),
+                                contentDescription = null,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                    } else if (canGoUp) {
                         IconButton(onClick = {
                             currentPath = currentPath.parentFile!!
-                            selectedFile = null
                         }) {
                             Icon(
                                 painter = painterResource(R.drawable.ic_arrow_back),
@@ -85,32 +113,12 @@ fun FileManagerScreen() {
                     }
                 },
                 actions = {
-                    if (clipboardMode != ClipboardMode.NONE && clipboardFile != null) {
-                        IconButton(onClick = {
-                            clipboardFile?.let { srcFile ->
-                                val destFile = File(currentPath, srcFile.name)
-                                if (clipboardMode == ClipboardMode.CUT) {
-                                    srcFile.renameTo(destFile)
-                                } else {
-                                    copyFile(srcFile, destFile)
-                                }
-                                clipboardMode = ClipboardMode.NONE
-                                clipboardFile = null
-                                files = currentPath.listFiles()?.sortedWith(compareBy({ !it.isDirectory }, { it.name })) ?: emptyList()
-                            }
-                        }) {
-                            Icon(
-                                painter = painterResource(R.drawable.ic_paste),
-                                contentDescription = stringResource(R.string.paste),
-                                modifier = Modifier.size(24.dp)
-                            )
-                        }
-                    }
-
-                    if (selectedFile != null) {
+                    if (isInSelectionMode && selectedFiles.isNotEmpty()) {
                         IconButton(onClick = {
                             clipboardMode = ClipboardMode.COPY
-                            clipboardFile = selectedFile
+                            clipboardFiles = selectedFiles.toSet()
+                            selectedFiles = emptySet()
+                            isInSelectionMode = false
                         }) {
                             Icon(
                                 painter = painterResource(R.drawable.ic_copy),
@@ -120,7 +128,9 @@ fun FileManagerScreen() {
                         }
                         IconButton(onClick = {
                             clipboardMode = ClipboardMode.CUT
-                            clipboardFile = selectedFile
+                            clipboardFiles = selectedFiles.toSet()
+                            selectedFiles = emptySet()
+                            isInSelectionMode = false
                         }) {
                             Icon(
                                 painter = painterResource(R.drawable.ic_cut),
@@ -128,15 +138,17 @@ fun FileManagerScreen() {
                                 modifier = Modifier.size(24.dp)
                             )
                         }
-                        IconButton(onClick = {
-                            newFileName = selectedFile?.name ?: ""
-                            showRenameDialog = true
-                        }) {
-                            Icon(
-                                painter = painterResource(R.drawable.ic_edit),
-                                contentDescription = stringResource(R.string.rename),
-                                modifier = Modifier.size(24.dp)
-                            )
+                        if (selectedFiles.size == 1) {
+                            IconButton(onClick = {
+                                newFileName = File(selectedFiles.first()).name
+                                showRenameDialog = true
+                            }) {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_edit),
+                                    contentDescription = stringResource(R.string.rename),
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
                         }
                         IconButton(onClick = {
                             showDeleteDialog = true
@@ -149,118 +161,287 @@ fun FileManagerScreen() {
                         }
                     }
 
-                    IconButton(onClick = {
-                        newFolderName = ""
-                        showNewFolderDialog = true
-                    }) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_add),
-                            contentDescription = stringResource(R.string.folder),
-                            modifier = Modifier.size(24.dp)
-                        )
+                    if (clipboardMode != ClipboardMode.NONE && clipboardFiles.isNotEmpty()) {
+                        IconButton(onClick = {
+                            clipboardFiles.forEach { srcPath ->
+                                val srcFile = File(srcPath)
+                                val destFile = File(currentPath, srcFile.name)
+                                if (clipboardMode == ClipboardMode.CUT) {
+                                    srcFile.renameTo(destFile)
+                                } else {
+                                    copyFile(srcFile, destFile)
+                                }
+                            }
+                            clipboardMode = ClipboardMode.NONE
+                            clipboardFiles = emptySet()
+                            refreshFiles()
+                        }) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_paste),
+                                contentDescription = stringResource(R.string.paste),
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                    }
+
+                    if (!isInSelectionMode) {
+                        IconButton(onClick = {
+                            newFolderName = ""
+                            showNewFolderDialog = true
+                        }) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_add),
+                                contentDescription = stringResource(R.string.folder),
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
                     }
                 }
             )
         }
     ) { padding ->
-        Column(
+        LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .nestedScroll(scrollBehavior.nestedScrollConnection)
+                .padding(horizontal = 16.dp)
+                .nestedScroll(scrollBehavior.nestedScrollConnection),
+            contentPadding = PaddingValues(vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             if (showWarningCard) {
+                item {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(16.dp))
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = stringResource(R.string.files_warning_message),
+                                fontSize = 14.sp,
+                                modifier = Modifier.weight(1f),
+                                color = MiuixTheme.colorScheme.onSurface
+                            )
+                            Icon(
+                                painter = painterResource(R.drawable.ic_close),
+                                contentDescription = stringResource(R.string.ok),
+                                modifier = Modifier
+                                    .size(24.dp)
+                                    .clickable { showWarningCard = false },
+                                tint = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                            )
+                        }
+                    }
+                }
+            }
+
+            item {
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
-                        .clip(RoundedCornerShape(16.dp))
                 ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(
-                            text = stringResource(R.string.files_warning_message),
-                            fontSize = 14.sp,
-                            modifier = Modifier.weight(1f),
-                            color = MiuixTheme.colorScheme.onSurface
-                        )
-                        Icon(
-                            painter = painterResource(R.drawable.ic_close),
-                            contentDescription = stringResource(R.string.ok),
-                            modifier = Modifier
-                                .size(24.dp)
-                                .clickable { showWarningCard = false },
-                            tint = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                        )
-                    }
+                    Text(
+                        text = currentPath.absolutePath,
+                        fontSize = 14.sp,
+                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                        modifier = Modifier.padding(12.dp)
+                    )
                 }
-            }
-
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
-            ) {
-                Text(
-                    text = currentPath.absolutePath,
-                    fontSize = 14.sp,
-                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                    modifier = Modifier.padding(12.dp)
-                )
             }
 
             if (files.isEmpty()) {
-                Column(
-                    modifier = Modifier.fillMaxSize(),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
-                ) {
-                    Text(
-                        text = stringResource(R.string.empty_folder),
-                        fontSize = 16.sp,
-                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                    )
-                }
-            } else {
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(horizontal = 16.dp)
-                ) {
-                    items(files) { fileItem ->
-                        FileItem(
-                            file = fileItem,
-                            isSelected = selectedFile?.absolutePath == fileItem.absolutePath,
-                            onClick = {
-                                if (fileItem.isDirectory) {
-                                    currentPath = fileItem
-                                    selectedFile = null
-                                } else {
-                                    selectedFile = if (selectedFile?.absolutePath == fileItem.absolutePath) null else fileItem
-                                }
-                            }
+                item {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 100.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Text(
+                            text = stringResource(R.string.empty_folder),
+                            fontSize = 16.sp,
+                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary
                         )
                     }
+                }
+            } else {
+                items(files) { fileItem ->
+                    FileItem(
+                        file = fileItem,
+                        isSelected = selectedFiles.contains(fileItem.absolutePath),
+                        isInSelectionMode = isInSelectionMode,
+                        onClick = {
+                            if (isInSelectionMode) {
+                                selectedFiles = if (selectedFiles.contains(fileItem.absolutePath)) {
+                                    selectedFiles - fileItem.absolutePath
+                                } else {
+                                    selectedFiles + fileItem.absolutePath
+                                }
+                                if (selectedFiles.isEmpty()) isInSelectionMode = false
+                            } else {
+                                if (fileItem.isDirectory) {
+                                    currentPath = fileItem
+                                } else {
+                                    fileToOpen = fileItem
+                                    showOpenWithDialog = true
+                                }
+                            }
+                        },
+                        onLongClick = {
+                            if (isInSelectionMode) {
+                                selectedFiles = if (selectedFiles.contains(fileItem.absolutePath)) {
+                                    selectedFiles - fileItem.absolutePath
+                                } else {
+                                    selectedFiles + fileItem.absolutePath
+                                }
+                            } else {
+                                selectedFiles = setOf(fileItem.absolutePath)
+                                isInSelectionMode = true
+                            }
+                        }
+                    )
                 }
             }
         }
     }
 
+    if (showOpenWithDialog && fileToOpen != null) {
+        val file = fileToOpen!!
+        AlertDialog(
+            title = { Text(file.name) },
+            text = {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = "大小: ${android.text.format.Formatter.formatFileSize(context, file.length())}",
+                        fontSize = 12.sp,
+                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("选择打开方式:", fontSize = 14.sp)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                onOpenFile(file.absolutePath, "cat \"${file.absolutePath}\"")
+                                showOpenWithDialog = false
+                                fileToOpen = null
+                            }
+                            .padding(vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_copy),
+                            contentDescription = null,
+                            modifier = Modifier.size(24.dp),
+                            tint = MiuixTheme.colorScheme.onSurface
+                        )
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Text("查看内容 (cat)")
+                    }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                onOpenFile(file.absolutePath, "vi \"${file.absolutePath}\"")
+                                showOpenWithDialog = false
+                                fileToOpen = null
+                            }
+                            .padding(vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_edit),
+                            contentDescription = null,
+                            modifier = Modifier.size(24.dp),
+                            tint = MiuixTheme.colorScheme.onSurface
+                        )
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Text("编辑 (vi)")
+                    }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                onOpenFile(file.absolutePath, "bash \"${file.absolutePath}\"")
+                                showOpenWithDialog = false
+                                fileToOpen = null
+                            }
+                            .padding(vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_terminal),
+                            contentDescription = null,
+                            modifier = Modifier.size(24.dp),
+                            tint = MiuixTheme.colorScheme.onSurface
+                        )
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Text("执行 (bash)")
+                    }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                                val clip = android.content.ClipData.newPlainText("path", file.absolutePath)
+                                clipboard.setPrimaryClip(clip)
+                                showOpenWithDialog = false
+                                fileToOpen = null
+                            }
+                            .padding(vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_copy),
+                            contentDescription = null,
+                            modifier = Modifier.size(24.dp),
+                            tint = MiuixTheme.colorScheme.onSurface
+                        )
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Text("复制路径")
+                    }
+                }
+            },
+            onDismissRequest = {
+                showOpenWithDialog = false
+                fileToOpen = null
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showOpenWithDialog = false
+                    fileToOpen = null
+                }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+            dismissButton = {}
+        )
+    }
+
     if (showDeleteDialog) {
         AlertDialog(
             title = { Text(stringResource(R.string.delete_confirm_title)) },
-            text = { Text(stringResource(R.string.delete_confirm_message)) },
+            text = { Text("${stringResource(R.string.delete_confirm_message)} (${selectedFiles.size})") },
             onDismissRequest = { showDeleteDialog = false },
             confirmButton = {
                 Button(onClick = {
-                    selectedFile?.deleteRecursively()
-                    selectedFile = null
-                    files = currentPath.listFiles()?.sortedWith(compareBy({ !it.isDirectory }, { it.name })) ?: emptyList()
+                    selectedFiles.forEach { path ->
+                        File(path).deleteRecursively()
+                    }
+                    selectedFiles = emptySet()
+                    isInSelectionMode = false
+                    refreshFiles()
                     showDeleteDialog = false
                 }) {
                     Text(stringResource(R.string.delete_confirm))
@@ -275,17 +456,17 @@ fun FileManagerScreen() {
     }
 
     if (showRenameDialog) {
+        val renameFile = File(selectedFiles.first())
         AlertDialog(
             title = { Text(stringResource(R.string.rename)) },
             onDismissRequest = { showRenameDialog = false },
             confirmButton = {
                 Button(onClick = {
-                    selectedFile?.let { oldFile ->
-                        val newFile = File(currentPath, newFileName)
-                        oldFile.renameTo(newFile)
-                        selectedFile = null
-                        files = currentPath.listFiles()?.sortedWith(compareBy({ !it.isDirectory }, { it.name })) ?: emptyList()
-                    }
+                    val newFile = File(renameFile.parentFile, newFileName)
+                    renameFile.renameTo(newFile)
+                    selectedFiles = emptySet()
+                    isInSelectionMode = false
+                    refreshFiles()
                     showRenameDialog = false
                 }) {
                     Text(stringResource(R.string.ok))
@@ -314,7 +495,7 @@ fun FileManagerScreen() {
                 Button(onClick = {
                     val newFolder = File(currentPath, newFolderName)
                     newFolder.mkdirs()
-                    files = currentPath.listFiles()?.sortedWith(compareBy({ !it.isDirectory }, { it.name })) ?: emptyList()
+                    refreshFiles()
                     showNewFolderDialog = false
                 }) {
                     Text(stringResource(R.string.ok))
@@ -336,55 +517,72 @@ fun FileManagerScreen() {
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun FileItem(
     file: File,
     isSelected: Boolean,
-    onClick: () -> Unit
+    isInSelectionMode: Boolean,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit
 ) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(bottom = 8.dp)
             .clip(RoundedCornerShape(16.dp))
-            .clickable(onClick = onClick),
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick),
         colors = CardDefaults.defaultColors(
             color = if (isSelected) MiuixTheme.colorScheme.surfaceVariant else MiuixTheme.colorScheme.surface
         )
     ) {
         Row(
-            modifier = Modifier.padding(16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
+            modifier = Modifier.padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.weight(1f)
-            ) {
-                Icon(
-                    painter = painterResource(if (file.isDirectory) R.drawable.ic_folder else R.drawable.ic_file),
-                    contentDescription = null,
-                    modifier = Modifier
-                        .size(32.dp)
-                        .padding(end = 12.dp),
-                    tint = MiuixTheme.colorScheme.onSurface
+            if (isInSelectionMode) {
+                Checkbox(
+                    checked = isSelected,
+                    onCheckedChange = { onClick() },
+                    modifier = Modifier.padding(end = 8.dp)
                 )
-                Column {
-                    Text(
-                        text = file.name,
-                        fontSize = 16.sp,
-                        modifier = Modifier.padding(bottom = 2.dp),
-                        fontWeight = FontWeight.Bold,
-                        color = MiuixTheme.colorScheme.onSurface
-                    )
-                    Text(
-                        text = if (file.isDirectory) {
-                            stringResource(R.string.folder)
-                        } else {
-                            "${formatFileSize(file.length())} - ${Date(file.lastModified()).toString()}"
-                        },
-                        fontSize = 12.sp,
-                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+            }
+
+            Icon(
+                painter = painterResource(if (file.isDirectory) R.drawable.ic_folder else R.drawable.ic_file),
+                contentDescription = null,
+                modifier = Modifier
+                    .size(32.dp)
+                    .padding(end = 12.dp),
+                tint = MiuixTheme.colorScheme.onSurface
+            )
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = file.name,
+                    fontSize = 16.sp,
+                    modifier = Modifier.padding(bottom = 2.dp),
+                    fontWeight = FontWeight.Bold,
+                    color = MiuixTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = if (file.isDirectory) {
+                        val count = file.listFiles()?.size ?: 0
+                        "$count ${stringResource(R.string.items)}"
+                    } else {
+                        "${formatFileSize(file.length())} - ${Date(file.lastModified()).toString()}"
+                    },
+                    fontSize = 12.sp,
+                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                )
+            }
+
+            if (file.isDirectory && !isInSelectionMode) {
+                IconButton(onClick = { onClick() }) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_arrow_right),
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
+                        tint = MiuixTheme.colorScheme.onSurfaceVariantSummary
                     )
                 }
             }

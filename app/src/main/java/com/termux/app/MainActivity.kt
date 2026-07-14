@@ -77,11 +77,8 @@ class MainActivity : ComponentActivity() {
                             handler.postDelayed({ updateSessions() }, 500)
                         },
                         onStopTerminal = { session ->
-                            termuxService?.removeTermuxSession(session.getTerminalSession())
+                            termuxService?.forceRemoveTermuxSession(session)
                             updateSessions()
-                            handler.postDelayed({ updateSessions() }, 300)
-                            handler.postDelayed({ updateSessions() }, 800)
-                            handler.postDelayed({ updateSessions() }, 1500)
                         },
                         onRenameTerminal = { session, newName ->
                             session.getTerminalSession().mSessionName = newName

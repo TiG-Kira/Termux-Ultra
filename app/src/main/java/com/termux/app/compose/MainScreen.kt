@@ -1,6 +1,7 @@
 package com.termux.app.compose
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
@@ -27,6 +28,7 @@ fun MainScreen(
     onAboutClick: () -> Unit
 ) {
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
             NavigationBar {
                 NavigationBarItem(
@@ -69,7 +71,7 @@ fun MainScreen(
                     onStopTerminal = onStopTerminal,
                     onRenameTerminal = onRenameTerminal
                 )
-                1 -> FileManagerScreen()
+                1 -> FileManagerScreen(onOpenFile = onExecuteScript)
                 2 -> ResourcesScreen(onExecuteScript = onExecuteScript)
                 3 -> SettingsScreen(onAboutClick = onAboutClick)
             }

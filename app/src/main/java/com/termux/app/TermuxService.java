@@ -18,6 +18,7 @@ import android.os.IBinder;
 import android.os.PowerManager;
 import android.provider.Settings;
 import android.widget.ArrayAdapter;
+import android.widget.Toast;
 
 import androidx.annotation.Nullable;
 
@@ -558,10 +559,37 @@ public final class TermuxService extends Service implements TermuxTask.TermuxTas
     public synchronized int removeTermuxSession(TerminalSession sessionToRemove) {
         int index = getIndexOfSession(sessionToRemove);
 
-        if (index >= 0)
-            mTermuxSessions.get(index).finish();
+        if (index >= 0) {
+            mTermuxSessions.get(index).getTerminalSession().finishIfRunning();
+            mTermuxSessions.remove(index);
+        }
 
         return index;
+    }
+
+    /** Force remove a TermuxSession from the list immediately. */
+    public synchronized void forceRemoveTermuxSession(TermuxSession sessionToRemove) {
+        int index = -1;
+        for (int i = 0; i < mTermuxSessions.size(); i++) {
+            if (mTermuxSessions.get(i).getTerminalSession() == sessionToRemove.getTerminalSession()) {
+                index = i;
+                break;
+            }
+        }
+        if (index >= 0) {
+            TermuxSession session = mTermuxSessions.get(index);
+            String sessionName = session.getTerminalSession().mSessionName;
+            if (sessionName == null || sessionName.isEmpty()) {
+                sessionName = getString(R.string.terminal);
+            }
+            session.getTerminalSession().finishIfRunning();
+            mTermuxSessions.remove(index);
+            final String finalSessionName = sessionName;
+            new Handler(getMainLooper()).post(() ->
+                Toast.makeText(TermuxService.this, finalSessionName + " 已停止，返回代码: 137", Toast.LENGTH_SHORT).show()
+            );
+        }
+        updateNotification();
     }
 
     /** Callback received when a {@link TermuxSession} finishes. */

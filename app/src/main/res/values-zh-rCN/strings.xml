@@ -217,6 +217,9 @@
     <string name="build">构建 1</string>
     <string name="author">作者: Kira</string>
     <string name="license">许可证: GPL-3.0</string>
+    <string name="termux_ultra_version">Termux Ultra 版本</string>
+    <string name="based_on_termux_version">基于 Termux 版本</string>
+    <string name="items">项</string>
     <string name="termux_settings">Termux 原生设置</string>
     <string name="termux_settings_description">打开 Termux 原生设置界面</string>
     <string name="copy">复制</string>

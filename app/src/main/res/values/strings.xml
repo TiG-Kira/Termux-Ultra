@@ -217,6 +217,9 @@
     <string name="build">Build 1</string>
     <string name="author">Author: Kira</string>
     <string name="license">License: GPL-3.0</string>
+    <string name="termux_ultra_version">Termux Ultra Version</string>
+    <string name="based_on_termux_version">Based on Termux version</string>
+    <string name="items">items</string>
     <string name="termux_settings">Termux Settings</string>
     <string name="termux_settings_description">Open original Termux settings</string>
     <string name="copy">Copy</string>

@@ -29,7 +29,7 @@ import androidx.compose.ui.unit.sp
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.FloatingActionButton
+import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import com.termux.R
@@ -61,17 +61,20 @@ fun TerminalListScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(title = stringResource(R.string.terminal), scrollBehavior = scrollBehavior)
+            TopAppBar(
+                title = stringResource(R.string.terminal),
+                scrollBehavior = scrollBehavior,
+                actions = {
+                    IconButton(onClick = onNewTerminal) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_add),
+                            contentDescription = stringResource(R.string.new_terminal),
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                }
+            )
         },
-        floatingActionButton = {
-            FloatingActionButton(onClick = onNewTerminal) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_add),
-                    contentDescription = stringResource(R.string.new_terminal),
-                    modifier = Modifier.size(24.dp)
-                )
-            }
-        }
     ) { padding ->
         LazyVerticalGrid(
             columns = GridCells.Fixed(2),
