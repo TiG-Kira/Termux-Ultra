@@ -1,0 +1,273 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/background">
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="200dp"
+        android:background="@drawable/about_header_gradient"/>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp"
+        android:layout_marginTop="-100dp">
+
+        <TextView
+            android:id="@+id/app_name"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="KiTerminal UX"
+            android:textSize="28sp"
+            android:textStyle="bold"
+            android:textColor="@color/white"
+            android:gravity="center"
+            android:layout_marginBottom="8dp"/>
+
+        <TextView
+            android:id="@+id/version_name"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="v1.0.0"
+            android:textSize="14sp"
+            android:textColor="@color/white"
+            android:gravity="center"
+            android:layout_marginBottom="24dp"/>
+
+        <fan.miuix.widget.CardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginBottom="12dp">
+
+                    <TextView
+                        android:id="@+id/device_model"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="Device"
+                        android:textSize="16sp"
+                        android:textStyle="bold"/>
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/device_model"
+                        android:textSize="12sp"
+                        android:textColor="@color/gray"/>
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginBottom="12dp">
+
+                    <TextView
+                        android:id="@+id/android_version"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="Android"
+                        android:textSize="16sp"
+                        android:textStyle="bold"/>
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/android_version"
+                        android:textSize="12sp"
+                        android:textColor="@color/gray"/>
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:id="@+id/kernel_version"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="Kernel"
+                        android:textSize="16sp"
+                        android:textStyle="bold"/>
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/kernel_version"
+                        android:textSize="12sp"
+                        android:textColor="@color/gray"/>
+                </LinearLayout>
+            </LinearLayout>
+        </fan.miuix.widget.CardView>
+
+        <fan.miuix.widget.CardView
+            android:id="@+id/developer_card"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:padding="16dp"
+                android:gravity="center_vertical">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/developer_name"
+                        android:textSize="16sp"
+                        android:textStyle="bold"/>
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/developer_username"
+                        android:textSize="13sp"
+                        android:textColor="@color/gray"/>
+                </LinearLayout>
+
+                <androidx.appcompat.widget.AppCompatImageView
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:src="@drawable/ic_arrow_right"
+                    android:tint="@color/gray"/>
+            </LinearLayout>
+        </fan.miuix.widget.CardView>
+
+        <fan.miuix.widget.CardView
+            android:id="@+id/open_source_card"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:padding="16dp"
+                android:gravity="center_vertical">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/open_source_projects"
+                    android:textSize="16sp"
+                    android:textStyle="bold"/>
+
+                <androidx.appcompat.widget.AppCompatImageView
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:src="@drawable/ic_arrow_right"
+                    android:tint="@color/gray"/>
+            </LinearLayout>
+        </fan.miuix.widget.CardView>
+
+        <fan.miuix.widget.CardView
+            android:id="@+id/check_update_card"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:padding="16dp"
+                android:gravity="center_vertical">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/check_update"
+                    android:textSize="16sp"
+                    android:textStyle="bold"/>
+
+                <androidx.appcompat.widget.AppCompatImageView
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:src="@drawable/ic_arrow_right"
+                    android:tint="@color/gray"/>
+            </LinearLayout>
+        </fan.miuix.widget.CardView>
+
+        <fan.miuix.widget.CardView
+            android:id="@+id/about_card"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/app_name"
+                    android:textSize="16sp"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="8dp"/>
+
+                <TextView
+                    android:id="@+id/about_content"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:textSize="13sp"
+                    android:textColor="@color/gray"/>
+            </LinearLayout>
+        </fan.miuix.widget.CardView>
+    </LinearLayout>
+
+    <fan.miuix.widget.CardView
+        android:id="@+id/back_button"
+        android:layout_width="56dp"
+        android:layout_height="56dp"
+        android:layout_gravity="top|start"
+        android:layout_margin="16dp"
+        android:layout_marginTop="8dp"
+        android:elevation="8dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:gravity="center">
+
+            <androidx.appcompat.widget.AppCompatImageView
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:src="@drawable/ic_arrow_back"
+                android:tint="@color/white"/>
+        </LinearLayout>
+    </fan.miuix.widget.CardView>
+
+</LinearLayout>

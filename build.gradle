@@ -1,0 +1,27 @@
+buildscript {
+    repositories {
+        mavenCentral()
+        google()
+    }
+    dependencies {
+        classpath 'com.android.tools.build:gradle:8.10.0'
+        classpath 'org.jetbrains.kotlin:kotlin-gradle-plugin:2.3.10'
+    }
+}
+
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+        maven { url "https://jitpack.io" }
+        maven { url "https://maven.fanmiu.com/nexus/repository/maven-public/" }
+    }
+
+    configurations.all {
+        exclude group: 'com.google.guava', module: 'listenablefuture'
+    }
+}
+
+task clean(type: Delete) {
+    delete rootProject.buildDir
+}

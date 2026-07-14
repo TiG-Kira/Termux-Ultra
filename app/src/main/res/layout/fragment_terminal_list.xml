@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="16dp">
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/terminal_list_title"
+        android:textSize="24sp"
+        android:textStyle="bold"
+        android:layout_marginBottom="24dp"/>
+
+    <Button
+        android:id="@+id/new_terminal_button"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:text="@string/new_terminal"
+        android:textSize="16sp"
+        android:textColor="@color/white"
+        android:background="@drawable/button_primary"
+        android:layout_marginBottom="16dp"/>
+
+    <ListView
+        android:id="@+id/session_list"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:divider="@color/light_gray"
+        android:dividerHeight="1dp"/>
+
+    <TextView
+        android:id="@+id/empty_view"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/no_terminal"
+        android:textSize="14sp"
+        android:textColor="@color/gray"
+        android:textAlignment="center"
+        android:layout_gravity="center"
+        android:visibility="gone"/>
+
+</LinearLayout>
