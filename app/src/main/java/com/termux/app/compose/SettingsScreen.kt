@@ -67,6 +67,7 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
     )
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(title = context.getString(R.string.settings_title), scrollBehavior = scrollBehavior)
         }

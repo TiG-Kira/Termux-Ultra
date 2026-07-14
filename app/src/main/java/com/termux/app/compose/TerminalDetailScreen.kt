@@ -10,6 +10,7 @@ import top.yukonga.miuix.kmp.basic.SmallTopAppBar
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.theme.MiuixTheme
 import com.termux.R
 import com.termux.shared.shell.TermuxSession
 import com.termux.view.TerminalView
@@ -31,7 +32,8 @@ fun TerminalDetailScreen(
                     IconButton(onClick = onBack) {
                         Icon(
                             imageVector = ImageVector.vectorResource(R.drawable.ic_arrow_back),
-                            contentDescription = null
+                            contentDescription = null,
+                            tint = MiuixTheme.colorScheme.onSurface
                         )
                     }
                 },
@@ -39,13 +41,15 @@ fun TerminalDetailScreen(
                     IconButton(onClick = onNewTerminal) {
                         Icon(
                             imageVector = ImageVector.vectorResource(R.drawable.ic_new_session),
-                            contentDescription = null
+                            contentDescription = null,
+                            tint = MiuixTheme.colorScheme.onSurface
                         )
                     }
                     IconButton(onClick = onStopTerminal) {
                         Icon(
                             imageVector = ImageVector.vectorResource(R.drawable.ic_close),
-                            contentDescription = null
+                            contentDescription = null,
+                            tint = MiuixTheme.colorScheme.onSurface
                         )
                     }
                 }

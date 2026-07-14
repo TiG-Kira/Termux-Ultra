@@ -580,6 +580,9 @@ public final class TermuxActivity extends ComponentActivity implements ServiceCo
         com.termux.app.compose.TerminalTopBarKt.setTerminalTopBarContent(
             mTerminalToolbar,
             () -> {
+                Intent intent = new Intent(TermuxActivity.this, MainActivity.class);
+                intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+                startActivity(intent);
                 finish();
                 return kotlin.Unit.INSTANCE;
             },
@@ -595,12 +598,31 @@ public final class TermuxActivity extends ComponentActivity implements ServiceCo
             () -> {
                 TerminalSession currentSession = getCurrentSession();
                 if (currentSession != null) {
+                    List<TermuxSession> sessions = mTermuxService.getTermuxSessions();
+                    int currentIndex = -1;
+                    for (int i = 0; i < sessions.size(); i++) {
+                        if (sessions.get(i).getTerminalSession() == currentSession) {
+                            currentIndex = i;
+                            break;
+                        }
+                    }
+                    TermuxSession targetTermuxSession = null;
+                    if (sessions.size() > 1 && currentIndex >= 0) {
+                        if (currentIndex > 0) {
+                            targetTermuxSession = sessions.get(currentIndex - 1);
+                        } else {
+                            targetTermuxSession = sessions.get(currentIndex + 1);
+                        }
+                    }
                     String sessionName = currentSession.mSessionName;
                     if (sessionName == null || sessionName.isEmpty()) {
                         sessionName = getString(R.string.terminal);
                     }
                     showToast(sessionName + " 已停止，返回代码: 137", true);
                     mTermuxService.removeTermuxSession(currentSession);
+                    if (targetTermuxSession != null) {
+                        mTermuxTerminalSessionClient.setCurrentSession(targetTermuxSession.getTerminalSession());
+                    }
                 }
                 if (mTermuxService.getTermuxSessions().isEmpty()) {
                     finish();

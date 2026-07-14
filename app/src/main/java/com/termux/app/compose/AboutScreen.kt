@@ -2,6 +2,8 @@ package com.termux.app.compose
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
@@ -12,6 +14,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -19,6 +23,8 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
+import androidx.core.graphics.drawable.toBitmap
 import coil.compose.AsyncImage
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
@@ -54,12 +60,22 @@ fun AboutScreen(onBack: () -> Unit) {
         }
     }
 
-    val gradientColors = listOf(
-        Color(0xFFfce7f3),
-        Color(0xFFe0e7ff),
-        Color(0xFFc7d2fe),
-        Color(0xFFfbcfe8)
-    )
+    val darkTheme = isSystemInDarkTheme()
+    val gradientColors = if (darkTheme) {
+        listOf(
+            Color(0xFF1a1a2e),
+            Color(0xFF16213e),
+            Color(0xFF0f3460),
+            Color(0xFF1a1a2e)
+        )
+    } else {
+        listOf(
+            Color(0xFFfce7f3),
+            Color(0xFFe0e7ff),
+            Color(0xFFc7d2fe),
+            Color(0xFFfbcfe8)
+        )
+    }
 
     Box(
         modifier = Modifier
@@ -73,6 +89,7 @@ fun AboutScreen(onBack: () -> Unit) {
             )
     ) {
         Scaffold(
+            contentWindowInsets = WindowInsets(0, 0, 0, 0),
             topBar = {
                 TopAppBar(
                     title = context.getString(R.string.about_preference_title),
@@ -114,6 +131,12 @@ fun AboutScreen(onBack: () -> Unit) {
                         verticalArrangement = Arrangement.Center
                     ) {
                         Spacer(modifier = Modifier.height(40.dp))
+                        val appIcon = remember {
+                            ContextCompat.getDrawable(context, R.mipmap.ic_launcher)
+                                ?.toBitmap()
+                                ?.asImageBitmap()
+                                ?.let { BitmapPainter(it) }
+                        }
                         Box(
                             modifier = Modifier
                                 .size(80.dp)
@@ -121,12 +144,20 @@ fun AboutScreen(onBack: () -> Unit) {
                                 .background(Color.Black),
                             contentAlignment = Alignment.Center
                         ) {
-                            Icon(
-                                painter = painterResource(R.drawable.ic_terminal),
-                                contentDescription = "Logo",
-                                modifier = Modifier.size(44.dp),
-                                tint = Color.White
-                            )
+                            if (appIcon != null) {
+                                Image(
+                                    painter = appIcon,
+                                    contentDescription = "Logo",
+                                    modifier = Modifier.size(80.dp)
+                                )
+                            } else {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_terminal),
+                                    contentDescription = "Logo",
+                                    modifier = Modifier.size(44.dp),
+                                    tint = Color.White
+                                )
+                            }
                         }
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
@@ -134,7 +165,7 @@ fun AboutScreen(onBack: () -> Unit) {
                             style = TextStyle(
                                 fontSize = 24.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = Color.Black
+                                color = MiuixTheme.colorScheme.onSurface
                             )
                         )
                         Spacer(modifier = Modifier.height(8.dp))
@@ -142,7 +173,7 @@ fun AboutScreen(onBack: () -> Unit) {
                             text = getVersionName(context),
                             style = TextStyle(
                                 fontSize = 14.sp,
-                                color = Color.DarkGray
+                                color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                             )
                         )
                         Spacer(modifier = Modifier.height(40.dp))

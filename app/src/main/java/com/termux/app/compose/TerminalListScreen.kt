@@ -60,6 +60,7 @@ fun TerminalListScreen(
     val scrollBehavior = MiuixScrollBehavior()
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
                 title = stringResource(R.string.terminal),
@@ -69,7 +70,8 @@ fun TerminalListScreen(
                         Icon(
                             painter = painterResource(R.drawable.ic_add),
                             contentDescription = stringResource(R.string.new_terminal),
-                            modifier = Modifier.size(24.dp)
+                            modifier = Modifier.size(24.dp),
+                            tint = MiuixTheme.colorScheme.onSurface
                         )
                     }
                 }
@@ -176,46 +178,65 @@ private fun TerminalCard(
             .clip(RoundedCornerShape(16.dp))
             .clickable(onClick = onClick)
     ) {
-        Box(modifier = Modifier.padding(16.dp)) {
-            Column(
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(
                     painter = painterResource(R.drawable.ic_terminal),
                     contentDescription = null,
-                    modifier = Modifier
-                        .size(48.dp)
-                        .padding(bottom = 8.dp),
+                    modifier = Modifier.size(40.dp),
                     tint = MiuixTheme.colorScheme.onSurface
                 )
+                Spacer(modifier = Modifier.width(12.dp))
                 Text(
                     text = session.getTerminalSession().mSessionName ?: stringResource(R.string.terminal),
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold,
-                    color = MiuixTheme.colorScheme.onSurface
+                    color = MiuixTheme.colorScheme.onSurface,
+                    modifier = Modifier.weight(1f)
                 )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.Center
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(MiuixTheme.colorScheme.primary)
+                        .clickable(onClick = onRename),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Button(
-                        onClick = onRename,
-                        modifier = Modifier.padding(end = 8.dp)
-                    ) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_edit),
-                            contentDescription = stringResource(R.string.rename),
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                    Button(onClick = onStop) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_delete),
-                            contentDescription = stringResource(R.string.stop),
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
+                    Icon(
+                        painter = painterResource(R.drawable.ic_edit),
+                        contentDescription = stringResource(R.string.rename),
+                        modifier = Modifier.size(20.dp),
+                        tint = Color.White
+                    )
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(MiuixTheme.colorScheme.primary)
+                        .clickable(onClick = onStop),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_delete),
+                        contentDescription = stringResource(R.string.stop),
+                        modifier = Modifier.size(20.dp),
+                        tint = Color.White
+                    )
                 }
             }
         }

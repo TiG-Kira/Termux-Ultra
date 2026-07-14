@@ -91,6 +91,7 @@ fun ResourcesScreen(onExecuteScript: (String, String) -> Unit) {
     )
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(title = context.getString(R.string.resources), scrollBehavior = scrollBehavior)
         }

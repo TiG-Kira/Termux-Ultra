@@ -9,6 +9,8 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
+import androidx.core.view.WindowCompat
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -46,6 +48,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        WindowCompat.setDecorFitsSystemWindows(window, false)
 
         val intent = Intent(this, TermuxService::class.java)
         startService(intent)
@@ -54,6 +57,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             KiTerminalTheme {
                 if (showAbout) {
+                    BackHandler { showAbout = false }
                     AboutScreen(onBack = { showAbout = false })
                 } else {
                     MainScreen(
@@ -77,7 +81,7 @@ class MainActivity : ComponentActivity() {
                             handler.postDelayed({ updateSessions() }, 500)
                         },
                         onStopTerminal = { session ->
-                            termuxService?.forceRemoveTermuxSession(session)
+                            termuxService?.removeTermuxSession(session.getTerminalSession())
                             updateSessions()
                         },
                         onRenameTerminal = { session, newName ->

@@ -80,6 +80,7 @@ fun FileManagerScreen(
     }
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
                 title = if (isInSelectionMode) {
@@ -97,7 +98,8 @@ fun FileManagerScreen(
                             Icon(
                                 painter = painterResource(R.drawable.ic_close),
                                 contentDescription = null,
-                                modifier = Modifier.size(24.dp)
+                                modifier = Modifier.size(24.dp),
+                                tint = MiuixTheme.colorScheme.onSurface
                             )
                         }
                     } else if (canGoUp) {
@@ -107,7 +109,8 @@ fun FileManagerScreen(
                             Icon(
                                 painter = painterResource(R.drawable.ic_arrow_back),
                                 contentDescription = null,
-                                modifier = Modifier.size(24.dp)
+                                modifier = Modifier.size(24.dp),
+                                tint = MiuixTheme.colorScheme.onSurface
                             )
                         }
                     }
@@ -123,7 +126,8 @@ fun FileManagerScreen(
                             Icon(
                                 painter = painterResource(R.drawable.ic_copy),
                                 contentDescription = stringResource(R.string.copy),
-                                modifier = Modifier.size(24.dp)
+                                modifier = Modifier.size(24.dp),
+                                tint = MiuixTheme.colorScheme.onSurface
                             )
                         }
                         IconButton(onClick = {
@@ -135,7 +139,8 @@ fun FileManagerScreen(
                             Icon(
                                 painter = painterResource(R.drawable.ic_cut),
                                 contentDescription = stringResource(R.string.cut),
-                                modifier = Modifier.size(24.dp)
+                                modifier = Modifier.size(24.dp),
+                                tint = MiuixTheme.colorScheme.onSurface
                             )
                         }
                         if (selectedFiles.size == 1) {
@@ -146,7 +151,8 @@ fun FileManagerScreen(
                                 Icon(
                                     painter = painterResource(R.drawable.ic_edit),
                                     contentDescription = stringResource(R.string.rename),
-                                    modifier = Modifier.size(24.dp)
+                                    modifier = Modifier.size(24.dp),
+                                    tint = MiuixTheme.colorScheme.onSurface
                                 )
                             }
                         }
@@ -156,7 +162,8 @@ fun FileManagerScreen(
                             Icon(
                                 painter = painterResource(R.drawable.ic_delete),
                                 contentDescription = stringResource(R.string.delete),
-                                modifier = Modifier.size(24.dp)
+                                modifier = Modifier.size(24.dp),
+                                tint = MiuixTheme.colorScheme.onSurface
                             )
                         }
                     }
@@ -179,7 +186,8 @@ fun FileManagerScreen(
                             Icon(
                                 painter = painterResource(R.drawable.ic_paste),
                                 contentDescription = stringResource(R.string.paste),
-                                modifier = Modifier.size(24.dp)
+                                modifier = Modifier.size(24.dp),
+                                tint = MiuixTheme.colorScheme.onSurface
                             )
                         }
                     }
@@ -192,7 +200,8 @@ fun FileManagerScreen(
                             Icon(
                                 painter = painterResource(R.drawable.ic_add),
                                 contentDescription = stringResource(R.string.folder),
-                                modifier = Modifier.size(24.dp)
+                                modifier = Modifier.size(24.dp),
+                                tint = MiuixTheme.colorScheme.onSurface
                             )
                         }
                     }
