@@ -2,6 +2,7 @@ package com.termux.app.compose
 
 import android.content.Context
 import android.content.Intent
+import android.content.SharedPreferences
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -9,13 +10,13 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -32,24 +33,62 @@ data class SettingItem(
     val title: String,
     val description: String,
     val iconRes: Int,
-    val action: () -> Unit
+    val action: () -> Unit,
+    val hasSwitch: Boolean = false,
+    val switchValue: Boolean = false,
+    val onSwitchChange: (Boolean) -> Unit = {}
 )
 
 @Composable
 fun SettingsScreen(onAboutClick: () -> Unit) {
     val context = LocalContext.current
     var showLanguageDialog by remember { mutableStateOf(false) }
+    var showRestartDialog by remember { mutableStateOf(false) }
+    val prefs = remember { context.getSharedPreferences("app_settings", Context.MODE_PRIVATE) }
+    var vncEnabled by remember { mutableStateOf(prefs.getBoolean("vnc_enabled", false)) }
+    var pendingRestart by remember { mutableStateOf(false) }
 
     val scrollBehavior = MiuixScrollBehavior()
 
-    val settings = listOf(
-        SettingItem(
+    val vncDescription = if (pendingRestart) {
+        context.getString(R.string.vnc_restart_required)
+    } else {
+        context.getString(R.string.vnc_description)
+    }
+
+    val settings = mutableListOf<SettingItem>().apply {
+        add(SettingItem(
             title = context.getString(R.string.language),
             description = context.getString(R.string.language_description),
             iconRes = R.drawable.ic_language,
             action = { showLanguageDialog = true }
-        ),
-        SettingItem(
+        ))
+        add(SettingItem(
+            title = context.getString(R.string.vnc),
+            description = vncDescription,
+            iconRes = R.drawable.ic_vnc,
+            action = {},
+            hasSwitch = true,
+            switchValue = vncEnabled,
+            onSwitchChange = {
+                vncEnabled = it
+                prefs.edit().putBoolean("vnc_enabled", it).apply()
+                pendingRestart = true
+                showRestartDialog = true
+            }
+        ))
+        if (vncEnabled) {
+            add(SettingItem(
+                title = context.getString(R.string.vnc_settings),
+                description = context.getString(R.string.vnc_settings_desc),
+                iconRes = R.drawable.ic_vnc_settings,
+                action = {
+                    val intent = Intent(context, com.gaurav.avnc.ui.prefs.PrefsActivity::class.java)
+                    context.startActivity(intent)
+                }
+            ))
+        }
+        add(SettingItem(
             title = context.getString(R.string.termux_settings),
             description = context.getString(R.string.termux_settings_description),
             iconRes = R.drawable.ic_settings,
@@ -57,14 +96,14 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
                 val intent = Intent(context, SettingsActivity::class.java)
                 context.startActivity(intent)
             }
-        ),
-        SettingItem(
+        ))
+        add(SettingItem(
             title = context.getString(R.string.about_preference_title),
             description = context.getString(R.string.about_description),
             iconRes = R.drawable.ic_info,
             action = { onAboutClick() }
-        )
-    )
+        ))
+    }
 
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
@@ -103,6 +142,33 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
                     LanguageOption(context.getString(R.string.english), "en", context)
                     LanguageOption(context.getString(R.string.chinese), "zh", context)
                 }
+            }
+        )
+    }
+
+    if (showRestartDialog) {
+        AlertDialog(
+            title = { Text(context.getString(R.string.restart_required)) },
+            onDismissRequest = { showRestartDialog = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    val intent = context.packageManager.getLaunchIntentForPackage(context.packageName)
+                    intent?.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK or Intent.FLAG_ACTIVITY_NEW_TASK)
+                    context.startActivity(intent)
+                    (context as? android.app.Activity)?.finish()
+                }) {
+                    Text(context.getString(R.string.restart_now))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showRestartDialog = false
+                }) {
+                    Text(context.getString(R.string.restart_later))
+                }
+            },
+            text = {
+                Text(context.getString(R.string.restart_message))
             }
         )
     }
@@ -153,12 +219,19 @@ private fun SettingItemCard(item: SettingItem) {
                     color = MiuixTheme.colorScheme.onSurfaceVariantSummary
                 )
             }
-            Icon(
-                painter = painterResource(R.drawable.ic_arrow_right),
-                contentDescription = null,
-                modifier = Modifier.size(20.dp),
-                tint = MiuixTheme.colorScheme.onSurfaceVariantSummary
-            )
+            if (item.hasSwitch) {
+                Switch(
+                    checked = item.switchValue,
+                    onCheckedChange = item.onSwitchChange
+                )
+            } else {
+                Icon(
+                    painter = painterResource(R.drawable.ic_arrow_right),
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp),
+                    tint = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                )
+            }
         }
     }
 }

@@ -12,6 +12,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.core.view.WindowCompat
 import androidx.activity.compose.setContent
+import android.content.SharedPreferences
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -28,6 +29,7 @@ class MainActivity : ComponentActivity() {
     private var sessions by mutableStateOf<List<SharedTermuxSession>>(emptyList())
     private var selectedTab by mutableStateOf(0)
     private var showAbout by mutableStateOf(false)
+    private var showVnc by mutableStateOf(false)
     private val handler = Handler(Looper.getMainLooper())
 
     private val serviceConnection = object : ServiceConnection {
@@ -49,6 +51,9 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
+
+        val prefs = getSharedPreferences("app_settings", Context.MODE_PRIVATE)
+        showVnc = prefs.getBoolean("vnc_enabled", false)
 
         val intent = Intent(this, TermuxService::class.java)
         startService(intent)
@@ -106,7 +111,8 @@ class MainActivity : ComponentActivity() {
                                 startActivity(intent)
                             }
                         },
-                        onAboutClick = { showAbout = true }
+                        onAboutClick = { showAbout = true },
+                        showVnc = showVnc
                     )
                 }
             }
@@ -116,6 +122,8 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         updateSessions()
+        val prefs = getSharedPreferences("app_settings", Context.MODE_PRIVATE)
+        showVnc = prefs.getBoolean("vnc_enabled", false)
     }
 
     override fun onDestroy() {

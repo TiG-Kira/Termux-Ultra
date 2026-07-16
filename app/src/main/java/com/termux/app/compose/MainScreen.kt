@@ -9,6 +9,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.vectorResource
+import androidx.compose.ui.unit.dp
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.NavigationBar
 import top.yukonga.miuix.kmp.basic.NavigationBarItem
@@ -25,12 +26,13 @@ fun MainScreen(
     onStopTerminal: (TermuxSession) -> Unit,
     onRenameTerminal: (TermuxSession, String) -> Unit,
     onExecuteScript: (String, String) -> Unit,
-    onAboutClick: () -> Unit
+    onAboutClick: () -> Unit,
+    showVnc: Boolean
 ) {
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
-            NavigationBar {
+            NavigationBar(modifier = Modifier.padding(horizontal = 12.dp)) {
                 NavigationBarItem(
                     icon = ImageVector.vectorResource(R.drawable.ic_terminal),
                     label = stringResource(R.string.terminal),
@@ -43,18 +45,39 @@ fun MainScreen(
                     selected = selectedTab == 1,
                     onClick = { onTabChange(1) }
                 )
-                NavigationBarItem(
-                    icon = ImageVector.vectorResource(R.drawable.ic_resources),
-                    label = stringResource(R.string.resources),
-                    selected = selectedTab == 2,
-                    onClick = { onTabChange(2) }
-                )
-                NavigationBarItem(
-                    icon = ImageVector.vectorResource(R.drawable.ic_settings),
-                    label = stringResource(R.string.settings),
-                    selected = selectedTab == 3,
-                    onClick = { onTabChange(3) }
-                )
+                if (showVnc) {
+                    NavigationBarItem(
+                        icon = ImageVector.vectorResource(R.drawable.ic_vnc),
+                        label = stringResource(R.string.remote),
+                        selected = selectedTab == 2,
+                        onClick = { onTabChange(2) }
+                    )
+                    NavigationBarItem(
+                        icon = ImageVector.vectorResource(R.drawable.ic_resources),
+                        label = stringResource(R.string.resources),
+                        selected = selectedTab == 3,
+                        onClick = { onTabChange(3) }
+                    )
+                    NavigationBarItem(
+                        icon = ImageVector.vectorResource(R.drawable.ic_settings),
+                        label = stringResource(R.string.settings),
+                        selected = selectedTab == 4,
+                        onClick = { onTabChange(4) }
+                    )
+                } else {
+                    NavigationBarItem(
+                        icon = ImageVector.vectorResource(R.drawable.ic_resources),
+                        label = stringResource(R.string.resources),
+                        selected = selectedTab == 2,
+                        onClick = { onTabChange(2) }
+                    )
+                    NavigationBarItem(
+                        icon = ImageVector.vectorResource(R.drawable.ic_settings),
+                        label = stringResource(R.string.settings),
+                        selected = selectedTab == 3,
+                        onClick = { onTabChange(3) }
+                    )
+                }
             }
         }
     ) { padding ->
@@ -72,8 +95,19 @@ fun MainScreen(
                     onRenameTerminal = onRenameTerminal
                 )
                 1 -> FileManagerScreen(onOpenFile = onExecuteScript)
-                2 -> ResourcesScreen(onExecuteScript = onExecuteScript)
-                3 -> SettingsScreen(onAboutClick = onAboutClick)
+                2 -> if (showVnc) {
+                    com.termux.app.remote.RemoteScreen(showVnc = true)
+                } else {
+                    ResourcesScreen(onExecuteScript = onExecuteScript)
+                }
+                3 -> if (showVnc) {
+                    ResourcesScreen(onExecuteScript = onExecuteScript)
+                } else {
+                    SettingsScreen(onAboutClick = onAboutClick)
+                }
+                4 -> if (showVnc) {
+                    SettingsScreen(onAboutClick = onAboutClick)
+                }
             }
         }
     }

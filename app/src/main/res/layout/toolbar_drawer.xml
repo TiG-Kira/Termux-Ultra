@@ -1,0 +1,168 @@
+<?xml version="1.0" encoding="utf-8"?><!--
+  ~ Copyright (c) 2024  Gaurav Ujjwal.
+  ~
+  ~ SPDX-License-Identifier:  GPL-3.0-or-later
+  ~
+  ~ See COPYING.txt for more details.
+  -->
+
+<layout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <data>
+
+        <import type="com.gaurav.avnc.model.ServerProfile" />
+        <variable
+            name="viewModel"
+            type="com.gaurav.avnc.viewmodel.VncViewModel" />
+    </data>
+
+    <FrameLayout
+        android:layout_width="wrap_content"
+        android:layout_height="match_parent"
+        android:layout_gravity="start">
+
+        <LinearLayout
+            android:id="@+id/primary_buttons"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_vertical"
+            android:animateLayoutChanges="true"
+            tools:ignore="UselessParent"> <!--Its not useless-->
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_round_rect"
+                android:orientation="vertical">
+
+                <ImageButton
+                    android:id="@+id/keyboard_btn"
+                    style="@style/ImageButton"
+                    android:contentDescription="@string/desc_keyboard_btn"
+                    android:src="@drawable/ic_keyboard" />
+
+                <ImageButton
+                    android:id="@+id/virtual_keys_btn"
+                    style="@style/ImageButton"
+                    android:contentDescription="@string/desc_virtual_keys_btn"
+                    android:src="@drawable/ic_keyboard_mini" />
+
+                <ToggleButton
+                    android:id="@+id/view_modes_toggle"
+                    style="@style/ToolbarFlyoutToggle"
+                    android:contentDescription="@string/desc_view_modes_toggle"
+                    android:drawableStart="@drawable/ic_visibility" />
+
+                <ToggleButton
+                    android:id="@+id/gesture_style_toggle"
+                    style="@style/ToolbarFlyoutToggle"
+                    android:contentDescription="@string/pref_gesture_style"
+                    android:drawableStart="@drawable/ic_gesture"
+                    app:isEnabled="@{viewModel.activeViewMode != ServerProfile.VIEW_MODE_NO_VIDEO}"
+                    app:isVisible="@{viewModel.pref.viewer.toolbarShowGestureStyleToggle}" />
+
+                <ToggleButton
+                    android:id="@+id/zoom_options_toggle"
+                    style="@style/ToolbarFlyoutToggle"
+                    android:contentDescription="@string/desc_zoom_options_btn"
+                    android:drawableStart="@drawable/ic_zoom_options" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/zoom_options_group"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="bottom"
+                android:layout_marginHorizontal="@dimen/margin_small"
+                android:background="@drawable/bg_round_rect">
+
+                <ImageButton
+                    android:id="@+id/zoom_reset_btn"
+                    style="@style/ImageButton"
+                    android:contentDescription="@string/desc_reset_zoom_btn"
+                    android:src="@drawable/ic_zoom_reset" />
+
+                <ToggleButton
+                    android:id="@+id/zoom_lock_btn"
+                    style="@style/ImageButton.Toggle"
+                    android:checked="@{viewModel.profileLive.fZoomLocked}"
+                    android:contentDescription="@string/desc_lock_zoom_btn"
+                    android:drawableStart="@drawable/ic_lock"
+                    android:padding="12dp" />
+
+                <ImageButton
+                    android:id="@+id/zoom_save_btn"
+                    style="@style/ImageButton"
+                    android:alpha="@{viewModel.profileLive.ID != 0 ? 1f : .25f}"
+                    android:contentDescription="@string/desc_save_zoom_btn"
+                    android:enabled="@{viewModel.profileLive.ID != 0}"
+                    android:src="@drawable/ic_save" />
+
+            </LinearLayout>
+
+            <RadioGroup
+                android:id="@+id/gesture_style_group"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="bottom"
+                android:layout_marginHorizontal="@dimen/margin_small"
+                android:background="@drawable/bg_round_rect"
+                android:paddingStart="@dimen/padding_small"
+                android:paddingEnd="@dimen/padding_normal">
+
+                <RadioButton
+                    android:id="@+id/gesture_style_auto"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/pref_gesture_style_auto" />
+
+                <RadioButton
+                    android:id="@+id/gesture_style_touchscreen"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/pref_gesture_style_touchscreen" />
+
+                <RadioButton
+                    android:id="@+id/gesture_style_touchpad"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/pref_gesture_style_touchpad" />
+            </RadioGroup>
+
+
+            <com.google.android.material.button.MaterialButtonToggleGroup
+                android:id="@+id/view_mode_group"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="@dimen/margin_small"
+                android:layout_marginTop="96dp"
+                android:background="@drawable/bg_round_rect"
+                android:theme="@style/AppThemeOverlay.SecondaryIsPrimary"
+                app:selectionRequired="true"
+                app:singleSelection="true">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/view_mode_normal"
+                    style="@style/Button.IconOnly"
+                    android:contentDescription="@string/desc_view_mode_normal"
+                    app:icon="@drawable/ic_video_mouse" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/view_mode_no_input"
+                    style="@style/Button.IconOnly"
+                    android:contentDescription="@string/desc_view_mode_no_input"
+                    app:icon="@drawable/ic_input_off" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/view_mode_no_video"
+                    style="@style/Button.IconOnly"
+                    android:contentDescription="@string/desc_view_mode_no_video"
+                    app:icon="@drawable/ic_video_off" />
+            </com.google.android.material.button.MaterialButtonToggleGroup>
+
+        </LinearLayout>
+
+    </FrameLayout>
+</layout>

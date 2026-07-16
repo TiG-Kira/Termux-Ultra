@@ -1,0 +1,13 @@
+<!--
+  ~ Copyright (c) 2020  Gaurav Ujjwal.
+  ~
+  ~ SPDX-License-Identifier:  GPL-3.0-or-later
+  ~
+  ~ See COPYING.txt for more details.
+  -->
+
+<resources>
+    <dimen name="server_card_elevation">1dp</dimen>
+    <dimen name="server_card_stroke_width">1dp</dimen>
+    <dimen name="editor_bottom_bar_elevation">4dp</dimen>
+</resources>

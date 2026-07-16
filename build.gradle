@@ -19,6 +19,7 @@ allprojects {
 
     configurations.all {
         exclude group: 'com.google.guava', module: 'listenablefuture'
+        resolutionStrategy.cacheChangingModulesFor 0, 'seconds'
     }
 }
 

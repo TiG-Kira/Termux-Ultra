@@ -21,6 +21,7 @@
 
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" tools:ignore="ScopedStorage" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
@@ -86,6 +87,37 @@
                 android:name="android.app.shortcuts"
                 android:resource="@xml/shortcuts" />
         </activity>
+
+        <activity
+            android:name="com.gaurav.avnc.ui.vnc.VncActivity"
+            android:theme="@style/AvncAppTheme"
+            android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation"
+            android:resizeableActivity="true"
+            android:supportsPictureInPicture="true"
+            tools:ignore="UnusedAttribute" />
+
+        <activity
+            android:name="com.gaurav.avnc.ui.vnc.IntentReceiverActivity"
+            android:theme="@style/Theme.AppCompat.Light.DarkActionBar" />
+
+        <activity
+            android:name="com.gaurav.avnc.ui.prefs.PrefsActivity"
+            android:theme="@style/AvncAppTheme" />
+
+        <activity-alias
+            android:name=".VncUriReceiverActivity"
+            android:exported="true"
+            android:targetActivity="com.gaurav.avnc.ui.vnc.IntentReceiverActivity">
+
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data android:scheme="vnc" />
+            </intent-filter>
+        </activity-alias>
 
         <activity-alias
             android:name=".HomeActivity"

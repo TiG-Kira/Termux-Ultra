@@ -35,6 +35,7 @@ import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.theme.MiuixTheme
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import com.termux.R
@@ -49,6 +50,7 @@ fun AboutScreen(onBack: () -> Unit) {
     var checkingUpdate by remember { mutableStateOf(false) }
     var showUpdateDialog by remember { mutableStateOf(false) }
     var hasUpdate by remember { mutableStateOf(false) }
+    var latestVersion by remember { mutableStateOf("") }
 
     LaunchedEffect(Unit) {
         scope.launch {
@@ -283,11 +285,17 @@ fun AboutScreen(onBack: () -> Unit) {
                             .clickable {
                                 if (!checkingUpdate) {
                                     checkingUpdate = true
-                                    scope.launch {
-                                        delay(1000)
-                                        hasUpdate = false
-                                        showUpdateDialog = true
+                                    scope.launch(Dispatchers.IO) {
+                                        try {
+                                            val fetchedVersion = fetchLatestVersion()
+                                            latestVersion = fetchedVersion
+                                            val currentVersion = getVersionName(context)
+                                            hasUpdate = compareVersions(currentVersion, fetchedVersion) < 0
+                                        } catch (e: Exception) {
+                                            hasUpdate = false
+                                        }
                                         checkingUpdate = false
+                                        showUpdateDialog = true
                                     }
                                 }
                             }
@@ -383,7 +391,7 @@ fun AboutScreen(onBack: () -> Unit) {
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Text(
-                                text = "Termux Ultra 使用 GPL 3.0 以及 MIT 许可，部分代码使用了 Trae 进行 AI 生成。",
+                                text = "Termux Ultra 使用 GPL 3.0 以及 MIT 许可，部分代码使用了 Trae 进行 AI 生成。本项目 VNC 功能基于 avnc 项目，VNC 版权所属 ©2020  Gaurav Ujjwal。",
                                 style = TextStyle(
                                     fontSize = 13.sp,
                                     color = MiuixTheme.colorScheme.onSurface
@@ -417,20 +425,45 @@ fun AboutScreen(onBack: () -> Unit) {
                             fontSize = 14.sp,
                             color = MiuixTheme.colorScheme.onSurfaceVariantSummary
                         ),
-                        modifier = Modifier.padding(bottom = 12.dp)
+                        modifier = Modifier.padding(bottom = 4.dp)
                     )
+                    if (latestVersion.isNotEmpty()) {
+                        Text(
+                            text = "${context.getString(R.string.latest_version)}: $latestVersion",
+                            style = TextStyle(
+                                fontSize = 14.sp,
+                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                            ),
+                            modifier = Modifier.padding(bottom = 12.dp)
+                        )
+                    }
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.Center
                     ) {
-                        Button(
-                            onClick = { showUpdateDialog = false },
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = ButtonDefaults.buttonColors(
-                                color = MiuixTheme.colorScheme.primary
-                            )
-                        ) {
-                            Text(text = context.getString(R.string.ok), fontWeight = FontWeight.Bold, color = Color.White)
+                        if (hasUpdate) {
+                            Button(
+                                onClick = {
+                                    showUpdateDialog = false
+                                    downloadUpdate(context, latestVersion)
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = ButtonDefaults.buttonColors(
+                                    color = MiuixTheme.colorScheme.primary
+                                )
+                            ) {
+                                Text(text = context.getString(R.string.update), fontWeight = FontWeight.Bold, color = Color.White)
+                            }
+                        } else {
+                            Button(
+                                onClick = { showUpdateDialog = false },
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = ButtonDefaults.buttonColors(
+                                    color = MiuixTheme.colorScheme.primary
+                                )
+                            ) {
+                                Text(text = context.getString(R.string.ok), fontWeight = FontWeight.Bold, color = Color.White)
+                            }
                         }
                     }
                 }
@@ -470,4 +503,72 @@ private fun getVersionName(context: android.content.Context): String {
     } catch (e: android.content.pm.PackageManager.NameNotFoundException) {
         "1.0.0"
     }
+}
+
+private fun fetchLatestVersion(): String {
+    return try {
+        val url = java.net.URL("https://api.github.com/repos/TiG-Kira/Termux-Ultra/releases/latest")
+        val connection = url.openConnection() as java.net.HttpURLConnection
+        connection.connectTimeout = 8000
+        connection.readTimeout = 8000
+        connection.setRequestProperty("Accept", "application/vnd.github.v3+json")
+        connection.setRequestProperty("User-Agent", "Termux-Ultra-App")
+        
+        val response = connection.inputStream.bufferedReader().use { it.readText() }
+        val tagRegex = """"tag_name"\s*:\s*"([^"]+)"""".toRegex()
+        val matchResult = tagRegex.find(response)
+        val tagName = matchResult?.groupValues?.get(1) ?: "0.0.0.0.0"
+        
+        tagName.removePrefix("v").removePrefix("V")
+    } catch (e: Exception) {
+        "0.0.0.0.0"
+    }
+}
+
+private fun compareVersions(version1: String, version2: String): Int {
+    val parts1 = version1.split(".").map { it.toIntOrNull() ?: 0 }
+    val parts2 = version2.split(".").map { it.toIntOrNull() ?: 0 }
+    
+    val maxLength = maxOf(parts1.size, parts2.size)
+    
+    for (i in 0 until maxLength) {
+        val v1 = if (i < parts1.size) parts1[i] else 0
+        val v2 = if (i < parts2.size) parts2[i] else 0
+        
+        if (v1 < v2) return -1
+        if (v1 > v2) return 1
+    }
+    
+    return 0
+}
+
+private fun getDeviceAbi(): String {
+    return try {
+        val abis = android.os.Build.SUPPORTED_ABIS
+        if (abis.isNotEmpty()) {
+            when (abis[0]) {
+                "arm64-v8a" -> "arm64-v8a"
+                "armeabi-v7a" -> "armeabi-v7a"
+                "x86_64" -> "x86_64"
+                "x86" -> "x86"
+                else -> "universal"
+            }
+        } else {
+            "universal"
+        }
+    } catch (e: Exception) {
+        "universal"
+    }
+}
+
+private fun downloadUpdate(context: android.content.Context, version: String) {
+    val abi = getDeviceAbi()
+    val apkFileName = "app-${abi}-debug.apk"
+    val downloadUrl = "https://github.com/TiG-Kira/Termux-Ultra/releases/download/v$version/$apkFileName"
+    
+    val intent = android.content.Intent(
+        android.content.Intent.ACTION_VIEW,
+        android.net.Uri.parse(downloadUrl)
+    )
+    context.startActivity(intent)
 }

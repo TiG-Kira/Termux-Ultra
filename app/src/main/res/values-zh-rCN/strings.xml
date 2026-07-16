@@ -128,9 +128,11 @@
     <string name="termux_terminal_view_terminal_margin_adjustment_off">已禁用</string>
 
     <string name="terminal">终端</string>
+    <string name="vnc">VNC</string>
+    <string name="remote">远程</string>
 
     <string name="error_display_over_other_apps_permission_not_granted">未授予悬浮窗权限</string>
-    <string name="notification_action_exit">退出</string>
+    <string name="notification_action_exit">结束会话</string>
     <string name="notification_action_wake_unlock">解除唤醒</string>
     <string name="notification_action_wake_lock">保持唤醒</string>
     <string name="notification_running_terminals">正运行 %d 个终端</string>

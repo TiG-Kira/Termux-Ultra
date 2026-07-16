@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="utf-8"?><!--
+  ~ Copyright (c) 2021  Gaurav Ujjwal.
+  ~
+  ~ SPDX-License-Identifier:  GPL-3.0-or-later
+  ~
+  ~ See COPYING.txt for more details.
+  -->
+
+<layout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <FrameLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:background="?colorSurface"
+        android:backgroundTint="#cfff"
+        android:backgroundTintMode="multiply"
+        android:contentDescription="Virtual Keys"
+        tools:ignore="HardcodedText">
+
+        <androidx.viewpager.widget.ViewPager
+            android:id="@+id/pager"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content" />
+
+        <!--
+        This is a temporary host for pages. It simplifies the design & inflation of keys.
+        Children of this ViewGroup will be detached at runtime and added to pager above.
+        -->
+        <LinearLayout
+            android:id="@+id/tmp_page_host"
+            android:layout_width="350dp"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <!--~~~~~~~~~~~~~~~~~~~~~~~ Primary keys ~~~~~~~~~~~~~~~~~~~~~~~~-->
+            <com.gaurav.avnc.ui.vnc.NestableHorizontalScrollView
+                android:id="@+id/keys_page"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent">
+
+                <GridLayout
+                    android:id="@+id/keys"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:rowCount="2" />
+            </com.gaurav.avnc.ui.vnc.NestableHorizontalScrollView>
+
+
+            <!--~~~~~~~~~~~~~~~~~~~~~~~ Text box ~~~~~~~~~~~~~~~~~~~~~~~~-->
+            <LinearLayout
+                android:id="@+id/text_page"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:orientation="horizontal"
+                android:paddingStart="@dimen/padding_small"
+                android:paddingEnd="@dimen/padding_normal">
+
+                <ImageButton
+                    android:id="@+id/text_page_back_btn"
+                    style="@style/VirtualKey.Compact"
+                    android:layout_gravity="center_vertical"
+                    android:contentDescription="@string/desc_back_btn"
+                    android:src="@drawable/ic_arrow_back"
+                    app:tint="?colorPrimary" />
+
+                <com.gaurav.avnc.ui.vnc.VkEditText
+                    android:id="@+id/text_box"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="bottom"
+                    android:layout_weight="1"
+                    android:paddingTop="0dp"
+                    android:hint="@string/hint_send_text_to_server"
+                    android:imeOptions="actionSend|flagNoFullscreen|flagNoExtractUi"
+                    android:importantForAutofill="no"
+                    android:inputType="text" />
+
+            </LinearLayout>
+        </LinearLayout>
+    </FrameLayout>
+</layout>
