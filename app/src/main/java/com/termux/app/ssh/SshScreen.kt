@@ -9,10 +9,13 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.shape.RoundedCornerShape
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import java.util.UUID
@@ -28,7 +31,8 @@ import top.yukonga.miuix.kmp.basic.Text
 fun SshScreen(
     connections: MutableList<SshConnection>,
     addRequested: Boolean,
-    onAddRequestedConsumed: () -> Unit
+    onAddRequestedConsumed: () -> Unit,
+    nestedScrollConnection: androidx.compose.ui.input.nestedscroll.NestedScrollConnection? = null
 ) {
     val context = LocalContext.current
     val showAddDialog = remember { mutableStateOf(false) }
@@ -42,7 +46,17 @@ fun SshScreen(
 
     LazyColumn(
         contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = Modifier
+            .fillMaxSize()
+            .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
+            .let {
+                if (nestedScrollConnection != null) {
+                    it.nestedScroll(nestedScrollConnection)
+                } else {
+                    it
+                }
+            }
     ) {
             if (connections.isEmpty()) {
                 item {
@@ -254,11 +268,7 @@ private fun connectToSsh(context: Context, connection: SshConnection) {
     executeIntent.putExtra("com.termux.execute.cwd", "/data/data/com.termux/files/home")
     executeIntent.putExtra("com.termux.execute.session_action", "0")
 
-    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-        context.startForegroundService(executeIntent)
-    } else {
-        context.startService(executeIntent)
-    }
+    context.startService(executeIntent)
 }
 
 private fun buildSshCommand(connection: SshConnection): String {

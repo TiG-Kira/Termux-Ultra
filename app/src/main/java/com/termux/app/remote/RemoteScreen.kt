@@ -31,6 +31,7 @@ import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
+import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 @Composable
@@ -58,10 +59,19 @@ fun RemoteScreen(showVnc: Boolean) {
         }
     }
 
+    val topAppBarTitle = if (showVnc) {
+        context.getString(R.string.remote)
+    } else {
+        context.getString(R.string.ssh)
+    }
+
+    val scrollBehavior = MiuixScrollBehavior()
+
     Scaffold(
         topBar = {
             TopAppBar(
-                title = context.getString(R.string.remote),
+                title = topAppBarTitle,
+                scrollBehavior = scrollBehavior,
                 actions = {
                     if (showVnc && selectedTabIndex.value == 0) {
                         IconButton(
@@ -147,12 +157,14 @@ fun RemoteScreen(showVnc: Boolean) {
                                 addRequested = vncAddRequested.value,
                                 onAddRequestedConsumed = { vncAddRequested.value = false },
                                 scanRequested = vncScanRequested.value,
-                                onScanRequestedConsumed = { vncScanRequested.value = false }
+                                onScanRequestedConsumed = { vncScanRequested.value = false },
+                                nestedScrollConnection = scrollBehavior.nestedScrollConnection
                             )
                             1 -> com.termux.app.ssh.SshScreen(
                                 connections = sshConnections,
                                 addRequested = sshAddRequested.value,
-                                onAddRequestedConsumed = { sshAddRequested.value = false }
+                                onAddRequestedConsumed = { sshAddRequested.value = false },
+                                nestedScrollConnection = scrollBehavior.nestedScrollConnection
                             )
                         }
                     }
@@ -161,7 +173,8 @@ fun RemoteScreen(showVnc: Boolean) {
                 com.termux.app.ssh.SshScreen(
                     connections = sshConnections,
                     addRequested = sshAddRequested.value,
-                    onAddRequestedConsumed = { sshAddRequested.value = false }
+                    onAddRequestedConsumed = { sshAddRequested.value = false },
+                    nestedScrollConnection = scrollBehavior.nestedScrollConnection
                 )
             }
         }

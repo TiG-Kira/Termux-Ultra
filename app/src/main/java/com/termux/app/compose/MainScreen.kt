@@ -45,39 +45,24 @@ fun MainScreen(
                     selected = selectedTab == 1,
                     onClick = { onTabChange(1) }
                 )
-                if (showVnc) {
-                    NavigationBarItem(
-                        icon = ImageVector.vectorResource(R.drawable.ic_vnc),
-                        label = stringResource(R.string.remote),
-                        selected = selectedTab == 2,
-                        onClick = { onTabChange(2) }
-                    )
-                    NavigationBarItem(
-                        icon = ImageVector.vectorResource(R.drawable.ic_resources),
-                        label = stringResource(R.string.resources),
-                        selected = selectedTab == 3,
-                        onClick = { onTabChange(3) }
-                    )
-                    NavigationBarItem(
-                        icon = ImageVector.vectorResource(R.drawable.ic_settings),
-                        label = stringResource(R.string.settings),
-                        selected = selectedTab == 4,
-                        onClick = { onTabChange(4) }
-                    )
-                } else {
-                    NavigationBarItem(
-                        icon = ImageVector.vectorResource(R.drawable.ic_resources),
-                        label = stringResource(R.string.resources),
-                        selected = selectedTab == 2,
-                        onClick = { onTabChange(2) }
-                    )
-                    NavigationBarItem(
-                        icon = ImageVector.vectorResource(R.drawable.ic_settings),
-                        label = stringResource(R.string.settings),
-                        selected = selectedTab == 3,
-                        onClick = { onTabChange(3) }
-                    )
-                }
+                NavigationBarItem(
+                    icon = ImageVector.vectorResource(R.drawable.ic_vnc),
+                    label = stringResource(R.string.remote),
+                    selected = selectedTab == 2,
+                    onClick = { onTabChange(2) }
+                )
+                NavigationBarItem(
+                    icon = ImageVector.vectorResource(R.drawable.ic_resources),
+                    label = stringResource(R.string.resources),
+                    selected = selectedTab == 3,
+                    onClick = { onTabChange(3) }
+                )
+                NavigationBarItem(
+                    icon = ImageVector.vectorResource(R.drawable.ic_settings),
+                    label = stringResource(R.string.settings),
+                    selected = selectedTab == 4,
+                    onClick = { onTabChange(4) }
+                )
             }
         }
     ) { padding ->
@@ -95,19 +80,9 @@ fun MainScreen(
                     onRenameTerminal = onRenameTerminal
                 )
                 1 -> FileManagerScreen(onOpenFile = onExecuteScript)
-                2 -> if (showVnc) {
-                    com.termux.app.remote.RemoteScreen(showVnc = true)
-                } else {
-                    ResourcesScreen(onExecuteScript = onExecuteScript)
-                }
-                3 -> if (showVnc) {
-                    ResourcesScreen(onExecuteScript = onExecuteScript)
-                } else {
-                    SettingsScreen(onAboutClick = onAboutClick)
-                }
-                4 -> if (showVnc) {
-                    SettingsScreen(onAboutClick = onAboutClick)
-                }
+                2 -> com.termux.app.remote.RemoteScreen(showVnc = showVnc)
+                3 -> ResourcesScreen(onExecuteScript = onExecuteScript)
+                4 -> SettingsScreen(onAboutClick = onAboutClick)
             }
         }
     }

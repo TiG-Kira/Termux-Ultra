@@ -427,7 +427,7 @@ fun AboutScreen(onBack: () -> Unit) {
                         ),
                         modifier = Modifier.padding(bottom = 4.dp)
                     )
-                    if (latestVersion.isNotEmpty()) {
+                    if (hasUpdate && latestVersion.isNotEmpty()) {
                         Text(
                             text = "${context.getString(R.string.latest_version)}: $latestVersion",
                             style = TextStyle(
@@ -564,7 +564,7 @@ private fun getDeviceAbi(): String {
 private fun downloadUpdate(context: android.content.Context, version: String) {
     val abi = getDeviceAbi()
     val apkFileName = "app-${abi}-debug.apk"
-    val downloadUrl = "https://github.com/TiG-Kira/Termux-Ultra/releases/download/v$version/$apkFileName"
+    val downloadUrl = "https://github.com/TiG-Kira/Termux-Ultra/releases/download/$version/$apkFileName"
     
     val intent = android.content.Intent(
         android.content.Intent.ACTION_VIEW,

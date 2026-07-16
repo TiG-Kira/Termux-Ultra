@@ -9,10 +9,13 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.shape.RoundedCornerShape
 import java.util.UUID
 import com.termux.R
 import top.yukonga.miuix.kmp.basic.*
@@ -24,7 +27,8 @@ fun VncScreen(
     addRequested: Boolean,
     onAddRequestedConsumed: () -> Unit,
     scanRequested: Boolean,
-    onScanRequestedConsumed: () -> Unit
+    onScanRequestedConsumed: () -> Unit,
+    nestedScrollConnection: androidx.compose.ui.input.nestedscroll.NestedScrollConnection? = null
 ) {
     val context = LocalContext.current
     val showAddDialog = remember { mutableStateOf(false) }
@@ -50,7 +54,17 @@ fun VncScreen(
 
     LazyColumn(
         contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = Modifier
+            .fillMaxSize()
+            .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
+            .let {
+                if (nestedScrollConnection != null) {
+                    it.nestedScroll(nestedScrollConnection)
+                } else {
+                    it
+                }
+            }
     ) {
         if (connections.isEmpty()) {
             item {

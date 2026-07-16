@@ -43,18 +43,10 @@ data class SettingItem(
 fun SettingsScreen(onAboutClick: () -> Unit) {
     val context = LocalContext.current
     var showLanguageDialog by remember { mutableStateOf(false) }
-    var showRestartDialog by remember { mutableStateOf(false) }
     val prefs = remember { context.getSharedPreferences("app_settings", Context.MODE_PRIVATE) }
     var vncEnabled by remember { mutableStateOf(prefs.getBoolean("vnc_enabled", false)) }
-    var pendingRestart by remember { mutableStateOf(false) }
 
     val scrollBehavior = MiuixScrollBehavior()
-
-    val vncDescription = if (pendingRestart) {
-        context.getString(R.string.vnc_restart_required)
-    } else {
-        context.getString(R.string.vnc_description)
-    }
 
     val settings = mutableListOf<SettingItem>().apply {
         add(SettingItem(
@@ -65,7 +57,7 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
         ))
         add(SettingItem(
             title = context.getString(R.string.vnc),
-            description = vncDescription,
+            description = context.getString(R.string.vnc_description),
             iconRes = R.drawable.ic_vnc,
             action = {},
             hasSwitch = true,
@@ -73,8 +65,9 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
             onSwitchChange = {
                 vncEnabled = it
                 prefs.edit().putBoolean("vnc_enabled", it).apply()
-                pendingRestart = true
-                showRestartDialog = true
+                val intent = context.packageManager.getLaunchIntentForPackage(context.packageName)
+                intent?.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                context.startActivity(intent)
             }
         ))
         if (vncEnabled) {
@@ -142,33 +135,6 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
                     LanguageOption(context.getString(R.string.english), "en", context)
                     LanguageOption(context.getString(R.string.chinese), "zh", context)
                 }
-            }
-        )
-    }
-
-    if (showRestartDialog) {
-        AlertDialog(
-            title = { Text(context.getString(R.string.restart_required)) },
-            onDismissRequest = { showRestartDialog = false },
-            confirmButton = {
-                TextButton(onClick = {
-                    val intent = context.packageManager.getLaunchIntentForPackage(context.packageName)
-                    intent?.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK or Intent.FLAG_ACTIVITY_NEW_TASK)
-                    context.startActivity(intent)
-                    (context as? android.app.Activity)?.finish()
-                }) {
-                    Text(context.getString(R.string.restart_now))
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = {
-                    showRestartDialog = false
-                }) {
-                    Text(context.getString(R.string.restart_later))
-                }
-            },
-            text = {
-                Text(context.getString(R.string.restart_message))
             }
         )
     }

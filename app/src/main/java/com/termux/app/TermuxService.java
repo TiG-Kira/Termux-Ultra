@@ -8,6 +8,7 @@ import android.app.Service;
 import android.content.ActivityNotFoundException;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.res.Resources;
 import android.net.Uri;
 import android.net.wifi.WifiManager;
@@ -158,19 +159,30 @@ public final class TermuxService extends Service implements TermuxTask.TermuxTas
 
         // If this service really do get killed, there is no point restarting it automatically - let the user do on next
         // start of {@link Term):
-        return Service.START_NOT_STICKY;
+        return Service.START_STICKY;
     }
 
     @Override
     public void onDestroy() {
-        Logger.logVerbose(LOG_TAG, "onDestroy");
+        Logger.logVerbose(LOG_TAG, "onDestroy - mWantsToStop=" + mWantsToStop);
 
         TermuxShellUtils.clearTermuxTMPDIR(true);
 
-        actionReleaseWakeLock(false);
-        if (!mWantsToStop)
+        if (mWantsToStop) {
+            actionReleaseWakeLock(false);
             killAllTermuxExecutionCommands();
-        runStopForeground();
+            runStopForeground();
+        }
+    }
+
+    @Override
+    public void onTaskRemoved(Intent rootIntent) {
+        Logger.logVerbose(LOG_TAG, "onTaskRemoved");
+        super.onTaskRemoved(rootIntent);
+        
+        if (mTermuxSessions.size() > 0) {
+            runStartForeground();
+        }
     }
 
     @Override
@@ -549,6 +561,11 @@ public final class TermuxService extends Service implements TermuxTask.TermuxTas
         if (mTermuxTerminalSessionClient != null)
             mTermuxTerminalSessionClient.termuxSessionListNotifyUpdated();
 
+        // Auto acquire WakeLock if session is running a server/listening program (VNC, SSH, etc.)
+        if (isServerProgram(executionCommand)) {
+            actionAcquireWakeLock();
+        }
+
         updateNotification();
         TermuxActivity.updateTermuxActivityStyling(this);
 
@@ -873,6 +890,51 @@ public final class TermuxService extends Service implements TermuxTask.TermuxTas
 
     public boolean wantsToStop() {
         return mWantsToStop;
+    }
+
+    /** Check if the execution command is running a server/listening program. */
+    private boolean isServerProgram(ExecutionCommand executionCommand) {
+        if (executionCommand == null) return false;
+
+        String commandStr = executionCommand.executable;
+        if (commandStr != null && isServerCommand(commandStr)) {
+            return true;
+        }
+
+        String[] args = executionCommand.arguments;
+        if (args != null) {
+            for (String arg : args) {
+                if (isServerCommand(arg)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /** Check if a string contains server/listening program keywords. */
+    private boolean isServerCommand(String str) {
+        if (str == null) return false;
+        String lowerStr = str.toLowerCase();
+        return lowerStr.contains("vnc") ||
+               lowerStr.contains("ssh") ||
+               lowerStr.contains("server") ||
+               lowerStr.contains("listen") ||
+               lowerStr.contains("bind") ||
+               lowerStr.contains("port") ||
+               lowerStr.contains("x11") ||
+               lowerStr.contains("rdp") ||
+               lowerStr.contains("httpd") ||
+               lowerStr.contains("nginx") ||
+               lowerStr.contains("apache") ||
+               lowerStr.contains("mysql") ||
+               lowerStr.contains("postgres") ||
+               lowerStr.contains("redis") ||
+               lowerStr.contains("sshd") ||
+               lowerStr.contains("telnet") ||
+               lowerStr.contains("ftp") ||
+               lowerStr.contains("sftp");
     }
 
 }

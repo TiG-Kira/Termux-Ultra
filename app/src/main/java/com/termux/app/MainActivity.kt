@@ -16,6 +16,12 @@ import android.content.SharedPreferences
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import com.termux.app.compose.AboutScreen
 import com.termux.app.compose.KiTerminalTheme
 import com.termux.app.compose.MainScreen
@@ -23,13 +29,22 @@ import com.termux.shared.shell.TermuxSession as SharedTermuxSession
 import com.termux.app.TermuxService
 import com.termux.terminal.TerminalSession
 
+class AppViewModel : ViewModel() {
+    private val _showVnc = MutableStateFlow(false)
+    val showVnc: StateFlow<Boolean> = _showVnc
+
+    fun updateShowVnc(value: Boolean) {
+        _showVnc.value = value
+    }
+}
+
 class MainActivity : ComponentActivity() {
 
     private var termuxService: TermuxService? = null
     private var sessions by mutableStateOf<List<SharedTermuxSession>>(emptyList())
     private var selectedTab by mutableStateOf(0)
     private var showAbout by mutableStateOf(false)
-    private var showVnc by mutableStateOf(false)
+    private lateinit var appViewModel: AppViewModel
     private val handler = Handler(Looper.getMainLooper())
 
     private val serviceConnection = object : ServiceConnection {
@@ -53,7 +68,10 @@ class MainActivity : ComponentActivity() {
         WindowCompat.setDecorFitsSystemWindows(window, false)
 
         val prefs = getSharedPreferences("app_settings", Context.MODE_PRIVATE)
-        showVnc = prefs.getBoolean("vnc_enabled", false)
+        val initialShowVnc = prefs.getBoolean("vnc_enabled", false)
+
+        appViewModel = ViewModelProvider(this)[AppViewModel::class.java]
+        appViewModel.updateShowVnc(initialShowVnc)
 
         val intent = Intent(this, TermuxService::class.java)
         startService(intent)
@@ -61,6 +79,8 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             KiTerminalTheme {
+                val showVnc by appViewModel.showVnc.collectAsState()
+
                 if (showAbout) {
                     BackHandler { showAbout = false }
                     AboutScreen(onBack = { showAbout = false })
@@ -123,7 +143,8 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         updateSessions()
         val prefs = getSharedPreferences("app_settings", Context.MODE_PRIVATE)
-        showVnc = prefs.getBoolean("vnc_enabled", false)
+        val currentShowVnc = prefs.getBoolean("vnc_enabled", false)
+        appViewModel.updateShowVnc(currentShowVnc)
     }
 
     override fun onDestroy() {

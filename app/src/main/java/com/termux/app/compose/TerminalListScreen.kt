@@ -48,12 +48,19 @@ fun TerminalListScreen(
     var renameSession by remember { mutableStateOf<TermuxSession?>(null) }
     var newName by remember { mutableStateOf("") }
     var showWelcomeCard by remember { mutableStateOf(false) }
+    var showKeepAliveWarning by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         val prefs = context.getSharedPreferences("termux_prefs", android.content.Context.MODE_PRIVATE)
         if (!prefs.getBoolean("terminal_welcome_shown", false)) {
             showWelcomeCard = true
             prefs.edit().putBoolean("terminal_welcome_shown", true).apply()
+        }
+
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+            if (!prefs.getBoolean("keep_alive_warning_dismissed", false)) {
+                showKeepAliveWarning = true
+            }
         }
     }
 
@@ -94,6 +101,18 @@ fun TerminalListScreen(
                     WelcomeCard(
                         text = stringResource(R.string.terminal_welcome_message),
                         onClose = { showWelcomeCard = false }
+                    )
+                }
+            }
+
+            if (showKeepAliveWarning) {
+                item(span = { GridItemSpan(2) }) {
+                    KeepAliveWarningCard(
+                        onClose = {
+                            showKeepAliveWarning = false
+                            val prefs = context.getSharedPreferences("termux_prefs", android.content.Context.MODE_PRIVATE)
+                            prefs.edit().putBoolean("keep_alive_warning_dismissed", true).apply()
+                        }
                     )
                 }
             }
@@ -238,6 +257,51 @@ private fun TerminalCard(
                         tint = Color.White
                     )
                 }
+            }
+        }
+    }
+}
+
+@Composable
+fun KeepAliveWarningCard(onClose: () -> Unit) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .clip(RoundedCornerShape(16.dp))
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(R.string.keep_alive_warning_title),
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MiuixTheme.colorScheme.onSurface
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = stringResource(R.string.keep_alive_warning_message),
+                        fontSize = 14.sp,
+                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                    )
+                }
+                Icon(
+                    painter = painterResource(R.drawable.ic_close),
+                    contentDescription = stringResource(R.string.ok),
+                    modifier = Modifier
+                        .size(24.dp)
+                        .clickable(onClick = onClose),
+                    tint = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                )
             }
         }
     }

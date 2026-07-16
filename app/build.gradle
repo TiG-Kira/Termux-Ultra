@@ -21,8 +21,8 @@ android {
         applicationId "com.termux"
         minSdkVersion project.properties.minSdkVersion.toInteger()
         targetSdkVersion project.properties.targetSdkVersion.toInteger()
-        versionCode 1006
-        versionName "0.118.3.1.5"
+        versionCode 1007
+        versionName "0.118.3.1.6"
 
         if (appVersionName) versionName = appVersionName
 
@@ -111,6 +111,7 @@ dependencies {
     implementation "androidx.activity:activity-compose:1.9.3"
     implementation "androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.5"
     implementation "androidx.lifecycle:lifecycle-runtime-ktx:2.8.5"
+    implementation "androidx.lifecycle:lifecycle-viewmodel-compose:2.8.5"
     implementation "androidx.appcompat:appcompat:1.7.0"
     implementation "androidx.core:core-ktx:1.15.0"
     implementation "androidx.preference:preference-ktx:1.2.1"
