@@ -123,6 +123,7 @@ public final class TermuxService extends Service implements TermuxTask.TermuxTas
         Logger.logVerbose(LOG_TAG, "onCreate");
         Process.setThreadPriority(Process.THREAD_PRIORITY_FOREGROUND);
         runStartForeground();
+        startKeepAliveService();
     }
 
     @SuppressLint("Wakelock")
@@ -950,6 +951,19 @@ public final class TermuxService extends Service implements TermuxTask.TermuxTas
                lowerStr.contains("telnet") ||
                lowerStr.contains("ftp") ||
                lowerStr.contains("sftp");
+    }
+
+    private void startKeepAliveService() {
+        try {
+            Intent intent = new Intent(this, KeepAliveService.class);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(intent);
+            } else {
+                startService(intent);
+            }
+        } catch (Exception e) {
+            Logger.logStackTraceWithMessage(LOG_TAG, "Failed to start KeepAliveService", e);
+        }
     }
 
 }

@@ -216,6 +216,17 @@
             android:stopWithTask="false" />
 
         <service
+            android:name=".app.KeepAliveService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse" />
+
+        <receiver android:name=".app.KeepAliveReceiver" android:exported="false">
+            <intent-filter>
+                <action android:name="com.termux.KEEP_ALIVE" />
+            </intent-filter>
+        </receiver>
+
+        <service
             android:name=".app.RunCommandService"
             android:exported="true"
             android:permission="${TERMUX_PACKAGE_NAME}.permission.RUN_COMMAND">

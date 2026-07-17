@@ -1,5 +1,6 @@
 package com.termux.app.compose
 
+import androidx.compose.ui.graphics.Color
 import android.os.Handler
 import android.os.Looper
 import androidx.compose.foundation.layout.Row
@@ -16,7 +17,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -28,6 +28,8 @@ import com.termux.R
 
 object TerminalTopBarState {
     var title by mutableStateOf("")
+    var isKeyboardVisible by mutableStateOf(false)
+    var iconColor by mutableStateOf(Color.White)
 }
 
 private val mainHandler = Handler(Looper.getMainLooper())
@@ -36,7 +38,8 @@ private val mainHandler = Handler(Looper.getMainLooper())
 fun TerminalTopBar(
     onBack: () -> Unit,
     onNewSession: () -> Unit,
-    onCloseSession: () -> Unit
+    onCloseSession: () -> Unit,
+    onToggleKeyboard: () -> Unit
 ) {
     Row(
         modifier = Modifier
@@ -50,12 +53,12 @@ fun TerminalTopBar(
                 painter = painterResource(R.drawable.ic_arrow_back),
                 contentDescription = null,
                 modifier = Modifier.size(24.dp),
-                tint = Color.White
+                tint = TerminalTopBarState.iconColor
             )
         }
         Text(
             text = TerminalTopBarState.title,
-            color = Color.White,
+            color = TerminalTopBarState.iconColor,
             fontSize = 16.sp,
             fontWeight = FontWeight.Medium,
             maxLines = 1,
@@ -65,12 +68,22 @@ fun TerminalTopBar(
                 .weight(1f)
                 .padding(horizontal = 8.dp)
         )
+        if (!TerminalTopBarState.isKeyboardVisible) {
+            IconButton(onClick = onToggleKeyboard) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_keyboard),
+                    contentDescription = null,
+                    modifier = Modifier.size(24.dp),
+                    tint = TerminalTopBarState.iconColor
+                )
+            }
+        }
         IconButton(onClick = onNewSession) {
             Icon(
                 painter = painterResource(R.drawable.ic_add),
                 contentDescription = null,
                 modifier = Modifier.size(24.dp),
-                tint = Color.White
+                tint = TerminalTopBarState.iconColor
             )
         }
         IconButton(onClick = onCloseSession) {
@@ -78,7 +91,7 @@ fun TerminalTopBar(
                 painter = painterResource(R.drawable.ic_delete),
                 contentDescription = null,
                 modifier = Modifier.size(24.dp),
-                tint = Color.White
+                tint = TerminalTopBarState.iconColor
             )
         }
     }
@@ -94,17 +107,49 @@ fun updateTerminalTitle(title: String) {
     }
 }
 
+fun updateKeyboardVisibility(isVisible: Boolean) {
+    if (Looper.myLooper() == Looper.getMainLooper()) {
+        TerminalTopBarState.isKeyboardVisible = isVisible
+    } else {
+        mainHandler.post {
+            TerminalTopBarState.isKeyboardVisible = isVisible
+        }
+    }
+}
+
+fun updateIconColorForBackground(backgroundColor: Int) {
+    val isDark = isColorDark(backgroundColor)
+    val color = if (isDark) Color.White else Color.Black
+    if (Looper.myLooper() == Looper.getMainLooper()) {
+        TerminalTopBarState.iconColor = color
+    } else {
+        mainHandler.post {
+            TerminalTopBarState.iconColor = color
+        }
+    }
+}
+
+fun isColorDark(color: Int): Boolean {
+    val r = android.graphics.Color.red(color)
+    val g = android.graphics.Color.green(color)
+    val b = android.graphics.Color.blue(color)
+    val luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255.0
+    return luminance < 0.5
+}
+
 fun setTerminalTopBarContent(
     composeView: ComposeView,
     onBack: () -> Unit,
     onNewSession: () -> Unit,
-    onCloseSession: () -> Unit
+    onCloseSession: () -> Unit,
+    onToggleKeyboard: () -> Unit
 ) {
     composeView.setContent {
         TerminalTopBar(
             onBack = onBack,
             onNewSession = onNewSession,
-            onCloseSession = onCloseSession
+            onCloseSession = onCloseSession,
+            onToggleKeyboard = onToggleKeyboard
         )
     }
 }

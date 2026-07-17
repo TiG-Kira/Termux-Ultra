@@ -23,6 +23,8 @@ import android.view.Gravity;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
+import android.view.ViewTreeObserver;
+import android.view.inputmethod.InputMethodManager;
 import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.widget.EditText;
@@ -630,9 +632,36 @@ public final class TermuxActivity extends ComponentActivity implements ServiceCo
                     updateTerminalToolbarTitle();
                 }
                 return kotlin.Unit.INSTANCE;
+            },
+            () -> {
+                mTermuxTerminalViewClient.onToggleSoftKeyboardRequest();
+                return kotlin.Unit.INSTANCE;
             }
         );
         updateTerminalToolbarTitle();
+        setupKeyboardVisibilityListener();
+        setupTopBarIconColor();
+    }
+
+    private void setupTopBarIconColor() {
+        int backgroundColor = android.graphics.Color.BLACK;
+        try {
+            android.graphics.drawable.Drawable background = mTerminalToolbar.getBackground();
+            if (background instanceof android.graphics.drawable.ColorDrawable) {
+                backgroundColor = ((android.graphics.drawable.ColorDrawable) background).getColor();
+            }
+        } catch (Exception e) {
+        }
+        com.termux.app.compose.TerminalTopBarKt.updateIconColorForBackground(backgroundColor);
+    }
+
+    private void setupKeyboardVisibilityListener() {
+        final View rootView = findViewById(android.R.id.content);
+        rootView.getViewTreeObserver().addOnGlobalLayoutListener(() -> {
+            int heightDiff = rootView.getRootView().getHeight() - rootView.getHeight();
+            boolean isKeyboardVisible = heightDiff > 200;
+            com.termux.app.compose.TerminalTopBarKt.updateKeyboardVisibility(isKeyboardVisible);
+        });
     }
 
     public void updateTerminalToolbarTitle() {
