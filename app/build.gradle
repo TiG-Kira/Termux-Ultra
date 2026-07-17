@@ -21,8 +21,8 @@ android {
         applicationId "com.termux"
         minSdkVersion project.properties.minSdkVersion.toInteger()
         targetSdkVersion project.properties.targetSdkVersion.toInteger()
-        versionCode 1007
-        versionName "0.118.3.1.6"
+        versionCode 1008
+        versionName "0.118.3.1.7"
 
         if (appVersionName) versionName = appVersionName
 
@@ -53,12 +53,22 @@ android {
         }
     }
 
+    signingConfigs {
+        release {
+            storeFile file("debug_keystore.jks")
+            storePassword "android"
+            keyAlias "androiddebugkey"
+            keyPassword "android"
+        }
+    }
+
     buildTypes {
         debug {
         }
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            signingConfig signingConfigs.release
         }
     }
 

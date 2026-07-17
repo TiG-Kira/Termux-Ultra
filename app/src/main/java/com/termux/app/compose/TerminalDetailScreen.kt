@@ -2,8 +2,11 @@ package com.termux.app.compose
 
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.vectorResource
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.SmallTopAppBar
@@ -13,6 +16,7 @@ import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import com.termux.R
 import com.termux.shared.shell.TermuxSession
+import com.termux.shared.view.KeyboardUtils
 import com.termux.view.TerminalView
 
 @Composable
@@ -23,6 +27,8 @@ fun TerminalDetailScreen(
     onStopTerminal: () -> Unit
 ) {
     val terminalSession = session.getTerminalSession()
+    val context = LocalContext.current
+    val terminalViewRef = remember { mutableStateOf<TerminalView?>(null) }
 
     Scaffold(
         topBar = {
@@ -38,6 +44,18 @@ fun TerminalDetailScreen(
                     }
                 },
                 actions = {
+                    IconButton(onClick = {
+                        val view = terminalViewRef.value
+                        if (view != null) {
+                            KeyboardUtils.showSoftKeyboard(context, view)
+                        }
+                    }) {
+                        Icon(
+                            imageVector = ImageVector.vectorResource(R.drawable.ic_keyboard),
+                            contentDescription = null,
+                            tint = MiuixTheme.colorScheme.onSurface
+                        )
+                    }
                     IconButton(onClick = onNewTerminal) {
                         Icon(
                             imageVector = ImageVector.vectorResource(R.drawable.ic_new_session),
@@ -61,7 +79,7 @@ fun TerminalDetailScreen(
         ) {
             androidx.compose.ui.viewinterop.AndroidView<TerminalView>(
                 factory = { ctx ->
-                    TerminalView(ctx, null)
+                    TerminalView(ctx, null).also { terminalViewRef.value = it }
                 }
             )
         }

@@ -563,7 +563,12 @@ private fun getDeviceAbi(): String {
 
 private fun downloadUpdate(context: android.content.Context, version: String) {
     val abi = getDeviceAbi()
-    val apkFileName = "app-${abi}-debug.apk"
+    val buildType = getBuildType(context)
+    val apkFileName = if (buildType == "release") {
+        "app-${abi}-release.apk"
+    } else {
+        "app-${abi}-debug.apk"
+    }
     val downloadUrl = "https://github.com/TiG-Kira/Termux-Ultra/releases/download/$version/$apkFileName"
     
     val intent = android.content.Intent(
@@ -571,4 +576,18 @@ private fun downloadUpdate(context: android.content.Context, version: String) {
         android.net.Uri.parse(downloadUrl)
     )
     context.startActivity(intent)
+}
+
+private fun getBuildType(context: android.content.Context): String {
+    return try {
+        val packageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
+        val applicationInfo = packageInfo?.applicationInfo
+        if (applicationInfo != null && (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0)) {
+            "debug"
+        } else {
+            "release"
+        }
+    } catch (e: android.content.pm.PackageManager.NameNotFoundException) {
+        "debug"
+    }
 }

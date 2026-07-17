@@ -28,6 +28,8 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
 import com.termux.R
 import com.termux.app.LocaleHelper
 import com.termux.app.activities.SettingsActivity
+import java.io.File
+import kotlinx.coroutines.launch
 
 data class SettingItem(
     val title: String,
@@ -42,7 +44,15 @@ data class SettingItem(
 @Composable
 fun SettingsScreen(onAboutClick: () -> Unit) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var showLanguageDialog by remember { mutableStateOf(false) }
+    var showRestoreDialog by remember { mutableStateOf(false) }
+    var showRestoreConfirmDialog by remember { mutableStateOf(false) }
+    var selectedBackupFile by remember { mutableStateOf<File?>(null) }
+    var backupFiles by remember { mutableStateOf<List<File>>(emptyList()) }
+    var isProcessing by remember { mutableStateOf(false) }
+    var showResultDialog by remember { mutableStateOf(false) }
+    var resultMessage by remember { mutableStateOf("") }
     val prefs = remember { context.getSharedPreferences("app_settings", Context.MODE_PRIVATE) }
     var vncEnabled by remember { mutableStateOf(prefs.getBoolean("vnc_enabled", false)) }
 
@@ -81,6 +91,35 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
                 }
             ))
         }
+        add(SettingItem(
+            title = context.getString(R.string.backup),
+            description = context.getString(R.string.backup_description),
+            iconRes = R.drawable.ic_backup,
+            action = {
+                if (!isProcessing) {
+                    isProcessing = true
+                    scope.launch {
+                        val backupPath = BackupManager.createBackup(context)
+                        isProcessing = false
+                        resultMessage = if (backupPath != null) {
+                            context.getString(R.string.backup_success, backupPath)
+                        } else {
+                            context.getString(R.string.backup_failed)
+                        }
+                        showResultDialog = true
+                    }
+                }
+            }
+        ))
+        add(SettingItem(
+            title = context.getString(R.string.restore),
+            description = context.getString(R.string.restore_description),
+            iconRes = R.drawable.ic_restore,
+            action = {
+                backupFiles = BackupManager.getBackupFiles(context)
+                showRestoreDialog = true
+            }
+        ))
         add(SettingItem(
             title = context.getString(R.string.termux_settings),
             description = context.getString(R.string.termux_settings_description),
@@ -135,6 +174,93 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
                     LanguageOption(context.getString(R.string.english), "en", context)
                     LanguageOption(context.getString(R.string.chinese), "zh", context)
                 }
+            }
+        )
+    }
+
+    if (showRestoreDialog) {
+        AlertDialog(
+            title = { Text(context.getString(R.string.restore)) },
+            onDismissRequest = { showRestoreDialog = false },
+            confirmButton = {
+                TextButton(onClick = { showRestoreDialog = false }) {
+                    Text(context.getString(R.string.cancel))
+                }
+            },
+            text = {
+                Column(modifier = Modifier.heightIn(max = 300.dp)) {
+                    if (backupFiles.isEmpty()) {
+                        Text(context.getString(R.string.no_backup_files))
+                    } else {
+                        backupFiles.forEach { file ->
+                            Text(
+                                text = file.name,
+                                fontSize = 14.sp,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 8.dp)
+                                    .clickable {
+                                        selectedBackupFile = file
+                                        showRestoreDialog = false
+                                        showRestoreConfirmDialog = true
+                                    },
+                                color = MiuixTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
+                }
+            }
+        )
+    }
+
+    if (showRestoreConfirmDialog) {
+        AlertDialog(
+            title = { Text(context.getString(R.string.restore)) },
+            onDismissRequest = { showRestoreConfirmDialog = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    showRestoreConfirmDialog = false
+                    selectedBackupFile?.let { file ->
+                        if (!isProcessing) {
+                            isProcessing = true
+                            scope.launch {
+                                val success = BackupManager.restoreBackup(context, file.absolutePath)
+                                isProcessing = false
+                                resultMessage = if (success) {
+                                    context.getString(R.string.restore_success)
+                                } else {
+                                    context.getString(R.string.restore_failed)
+                                }
+                                showResultDialog = true
+                            }
+                        }
+                    }
+                }) {
+                    Text(context.getString(R.string.confirm))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRestoreConfirmDialog = false }) {
+                    Text(context.getString(R.string.cancel))
+                }
+            },
+            text = {
+                Text(context.getString(R.string.restore_confirm_message))
+            }
+        )
+    }
+
+    if (showResultDialog) {
+        AlertDialog(
+            title = { Text(context.getString(R.string.result)) },
+            onDismissRequest = { showResultDialog = false },
+            confirmButton = {
+                TextButton(onClick = { showResultDialog = false }) {
+                    Text(context.getString(R.string.ok))
+                }
+            },
+            text = {
+                Text(resultMessage)
             }
         )
     }

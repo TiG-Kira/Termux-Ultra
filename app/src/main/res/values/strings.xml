@@ -28,6 +28,17 @@
     <string name="file_manager_description">File management feature</string>
 
     <string name="settings_title">Settings</string>
+    <string name="backup">Backup</string>
+    <string name="backup_description">Backup Termux data to external storage</string>
+    <string name="restore">Restore</string>
+    <string name="restore_description">Restore from backup files</string>
+    <string name="backup_success">Backup successful! File saved to: %1$s</string>
+    <string name="backup_failed">Backup failed</string>
+    <string name="restore_success">Restore successful</string>
+    <string name="restore_failed">Restore failed</string>
+    <string name="no_backup_files">No backup files found</string>
+    <string name="restore_confirm_message">Are you sure you want to restore from this backup? Existing files will be overwritten.</string>
+    <string name="result">Result</string>
     <string name="language">Language</string>
     <string name="english">English</string>
     <string name="chinese">中文</string>
@@ -99,7 +110,7 @@
     <string name="keep_alive_warning_title">请注意会话保活问题</string>
     <string name="keep_alive_warning_message">在 Android 12 及以上版本中，Termux 的会话将会因系统调度原因被频繁杀死，请尝试使用 tmux 工具保活，资源页提供安装。若 tmux 失效，您可能需要自主找寻其他方式保活终端。</string>
     <string name="tmux_resource_title">tmux</string>
-    <string name="tmux_resource_description">对容器等项目进行保活，资源页的所有工具均依赖此工具。使用方法是: tmux new -s &lt;自定义任务名称&gt;</string>
+    <string name="tmux_resource_description">对容器等项目进行保活</string>
     <string name="tmux_not_installed">请先安装 tmux 工具</string>
     <string name="tmux_install_hint">需要先安装 tmux 工具才能执行此操作，请前往资源页安装。</string>
     <string name="termux_logging_header">Logging</string>

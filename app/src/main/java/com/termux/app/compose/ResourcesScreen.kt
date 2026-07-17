@@ -1,16 +1,12 @@
 package com.termux.app.compose
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Icon
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -33,15 +29,17 @@ data class ResourceItem(
     val url: String,
     val scriptUrl: String,
     val iconRes: Int,
-    val isTmux: Boolean = false
+    val isTmux: Boolean = false,
+    val hasHelp: Boolean = false
 )
 
 @Composable
 fun ResourcesScreen(onExecuteScript: (String, String) -> Unit) {
     val context = LocalContext.current
     val scrollBehavior = MiuixScrollBehavior()
-    var showTmuxDialog by remember { mutableStateOf(false) }
-    var pendingCommand by remember { mutableStateOf<Pair<String, String>?>(null) }
+    var showExecuteModeDialog by remember { mutableStateOf(false) }
+    var pendingExecuteItem by remember { mutableStateOf<ResourceItem?>(null) }
+    var pendingExecuteBaseCommand by remember { mutableStateOf("") }
     var showTmuxHelpDialog by remember { mutableStateOf(false) }
 
     val resources = listOf(
@@ -51,7 +49,8 @@ fun ResourcesScreen(onExecuteScript: (String, String) -> Unit) {
             url = "tmux_help",
             scriptUrl = "pkg install tmux -y",
             iconRes = R.drawable.ic_terminal,
-            isTmux = true
+            isTmux = true,
+            hasHelp = true
         ),
         ResourceItem(
             title = "MOE 全能",
@@ -59,6 +58,34 @@ fun ResourcesScreen(onExecuteScript: (String, String) -> Unit) {
             url = "https://github.trss.me/Install/TMOE.html",
             scriptUrl = "https://gitee.com/mo2/linux/raw/2/2.awk",
             iconRes = R.drawable.ic_terminal
+        ),
+        ResourceItem(
+            title = "QEMU 安装",
+            description = "安装 QEMU 虚拟机套件，包括 qemu-system-x86_64 和 qemu-utils",
+            url = "",
+            scriptUrl = "install_qemu",
+            iconRes = R.drawable.ic_server
+        ),
+        ResourceItem(
+            title = "Alpine QEMU",
+            description = "在 QEMU 中安装 Alpine Linux 轻量级发行版",
+            url = "",
+            scriptUrl = "https://raw.githubusercontent.com/sulthonzh/android-docker-qemu/main/install.sh",
+            iconRes = R.drawable.ic_server
+        ),
+        ResourceItem(
+            title = "Debian QEMU",
+            description = "在 QEMU 中安装 Debian Linux 稳定发行版，支持 Docker",
+            url = "",
+            scriptUrl = "https://raw.githubusercontent.com/sulthonzh/android-docker-qemu/main/install.sh",
+            iconRes = R.drawable.ic_server
+        ),
+        ResourceItem(
+            title = "Windows 7 QEMU",
+            description = "在 QEMU 中运行 Windows 7，需先下载镜像文件",
+            url = "",
+            scriptUrl = "win7_qemu",
+            iconRes = R.drawable.ic_server
         ),
         ResourceItem(
             title = context.getString(R.string.resource_termux_setup),
@@ -122,9 +149,10 @@ fun ResourcesScreen(onExecuteScript: (String, String) -> Unit) {
                 ResourceCard(
                     item = item,
                     onExecuteScript = onExecuteScript,
-                    onShowTmuxDialog = { scriptName, command ->
-                        pendingCommand = Pair(scriptName, command)
-                        showTmuxDialog = true
+                    onShowExecuteModeDialog = { item, baseCommand ->
+                        pendingExecuteItem = item
+                        pendingExecuteBaseCommand = baseCommand
+                        showExecuteModeDialog = true
                     },
                     onShowTmuxHelp = { showTmuxHelpDialog = true }
                 )
@@ -132,20 +160,40 @@ fun ResourcesScreen(onExecuteScript: (String, String) -> Unit) {
         }
     }
 
-    if (showTmuxDialog) {
+    if (showExecuteModeDialog && pendingExecuteItem != null) {
         AlertDialog(
-            title = { Text(context.getString(R.string.tmux_not_installed)) },
-            text = { Text(context.getString(R.string.tmux_install_hint)) },
+            containerColor = MiuixTheme.colorScheme.background,
+            title = { Text("选择执行方式") },
+            text = { Text("请选择脚本的执行方式") },
             onDismissRequest = {
-                showTmuxDialog = false
-                pendingCommand = null
+                showExecuteModeDialog = false
+                pendingExecuteItem = null
+                pendingExecuteBaseCommand = ""
             },
             confirmButton = {
                 Button(onClick = {
-                    showTmuxDialog = false
-                    pendingCommand = null
+                    showExecuteModeDialog = false
+                    val item = pendingExecuteItem!!
+                    val baseCommand = pendingExecuteBaseCommand
+                    val tmuxName = item.title.replace(".", "_").replace(" ", "_")
+                    val tmuxCommand = "tmux new -s $tmuxName -d && tmux send-keys -t $tmuxName '$baseCommand' C-m && tmux attach -t $tmuxName"
+                    onExecuteScript(item.title, tmuxCommand)
+                    pendingExecuteItem = null
+                    pendingExecuteBaseCommand = ""
                 }) {
-                    Text(context.getString(R.string.ok))
+                    Text("在 tmux 内运行")
+                }
+            },
+            dismissButton = {
+                Button(onClick = {
+                    showExecuteModeDialog = false
+                    val item = pendingExecuteItem!!
+                    val baseCommand = pendingExecuteBaseCommand
+                    onExecuteScript(item.title, baseCommand)
+                    pendingExecuteItem = null
+                    pendingExecuteBaseCommand = ""
+                }) {
+                    Text("直接运行")
                 }
             }
         )
@@ -153,10 +201,11 @@ fun ResourcesScreen(onExecuteScript: (String, String) -> Unit) {
 
     if (showTmuxHelpDialog) {
         AlertDialog(
+            containerColor = MiuixTheme.colorScheme.background,
             title = { Text("Tmux 使用办法") },
             text = {
                 Column {
-                    Text("新建任务容器：tmux new -s my_task （my_task 可以改为您的任务名，比如“挂脚本”）")
+                    Text("新建任务容器：tmux new -s my_task （my_task 可以改为您的任务名，比如「挂脚本」）")
                     Text("容器挂到后台：按「Ctrl + B」，再按「D」，就能关掉窗口，后台继续运行脚本。")
                     Text("回到任务容器：tmux attach -t my_task")
                 }
@@ -179,7 +228,7 @@ fun ResourcesScreen(onExecuteScript: (String, String) -> Unit) {
 private fun ResourceCard(
     item: ResourceItem,
     onExecuteScript: (String, String) -> Unit,
-    onShowTmuxDialog: (String, String) -> Unit,
+    onShowExecuteModeDialog: (ResourceItem, String) -> Unit,
     onShowTmuxHelp: () -> Unit
 ) {
     val context = LocalContext.current
@@ -260,6 +309,50 @@ private fun ResourceCard(
                 onClick = {
                     if (item.isTmux) {
                         onExecuteScript("tmux", item.scriptUrl)
+                    } else if (item.scriptUrl == "install_qemu") {
+                        val installScriptPath = "/data/data/com.termux/files/home/install_qemu.sh"
+                        try {
+                            val inputStream = context.assets.open("install_qemu.sh")
+                            val outputStream = java.io.FileOutputStream(installScriptPath)
+                            inputStream.copyTo(outputStream)
+                            inputStream.close()
+                            outputStream.close()
+                            java.io.File(installScriptPath).setExecutable(true)
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                        }
+                        if (isTmuxInstalled()) {
+                            onShowExecuteModeDialog(item, "bash $installScriptPath")
+                        } else {
+                            onExecuteScript("QEMU 安装", "bash $installScriptPath")
+                        }
+                    } else if (item.scriptUrl == "win7_qemu") {
+                        val scriptPath = "/data/data/com.termux/files/home/win7_qemu.sh"
+                        val patchPath = "/data/data/com.termux/files/home/win7_patch.zip"
+                        try {
+                            val inputStream = context.assets.open("win7_qemu.sh")
+                            val outputStream = java.io.FileOutputStream(scriptPath)
+                            inputStream.copyTo(outputStream)
+                            inputStream.close()
+                            outputStream.close()
+                            java.io.File(scriptPath).setExecutable(true)
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                        }
+                        try {
+                            val patchStream = context.assets.open("win7_patch.zip")
+                            val patchOutputStream = java.io.FileOutputStream(patchPath)
+                            patchStream.copyTo(patchOutputStream)
+                            patchStream.close()
+                            patchOutputStream.close()
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                        }
+                        if (isTmuxInstalled()) {
+                            onShowExecuteModeDialog(item, "bash $scriptPath")
+                        } else {
+                            onExecuteScript(item.title, "bash $scriptPath")
+                        }
                     } else {
                         val scriptName = item.scriptUrl.substringAfterLast("/")
                         val baseCommand = if (item.scriptUrl.endsWith(".awk")) {
@@ -271,10 +364,9 @@ private fun ResourceCard(
                         }
 
                         if (isTmuxInstalled()) {
-                            val tmuxCommand = "tmux new -s ${scriptName.replace(".", "_")} \"$baseCommand\""
-                            onExecuteScript(scriptName, tmuxCommand)
+                            onShowExecuteModeDialog(item, baseCommand)
                         } else {
-                            onShowTmuxDialog(scriptName, baseCommand)
+                            onExecuteScript(scriptName, baseCommand)
                         }
                     }
                 },

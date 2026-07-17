@@ -16,6 +16,7 @@ import android.os.Binder;
 import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
+import android.os.Process;
 import android.os.PowerManager;
 import android.provider.Settings;
 import android.widget.ArrayAdapter;
@@ -120,6 +121,7 @@ public final class TermuxService extends Service implements TermuxTask.TermuxTas
     @Override
     public void onCreate() {
         Logger.logVerbose(LOG_TAG, "onCreate");
+        Process.setThreadPriority(Process.THREAD_PRIORITY_FOREGROUND);
         runStartForeground();
     }
 
@@ -182,6 +184,19 @@ public final class TermuxService extends Service implements TermuxTask.TermuxTas
         
         if (mTermuxSessions.size() > 0) {
             runStartForeground();
+            
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                Handler handler = new Handler();
+                handler.postDelayed(() -> {
+                    Intent restartIntent = new Intent(this, TermuxService.class);
+                    restartIntent.setAction(TERMUX_SERVICE.ACTION_SERVICE_EXECUTE);
+                    try {
+                        startForegroundService(restartIntent);
+                    } catch (Exception e) {
+                        Logger.logStackTraceWithMessage(LOG_TAG, "Failed to restart service after task removed", e);
+                    }
+                }, 1000);
+            }
         }
     }
 
@@ -815,7 +830,7 @@ public final class TermuxService extends Service implements TermuxTask.TermuxTas
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return;
 
         NotificationUtils.setupNotificationChannel(this, TermuxConstants.TERMUX_APP_NOTIFICATION_CHANNEL_ID,
-            TermuxConstants.TERMUX_APP_NOTIFICATION_CHANNEL_NAME, NotificationManager.IMPORTANCE_LOW);
+            TermuxConstants.TERMUX_APP_NOTIFICATION_CHANNEL_NAME, NotificationManager.IMPORTANCE_DEFAULT);
     }
 
     /** Update the shown foreground service notification after making any changes that affect it. */

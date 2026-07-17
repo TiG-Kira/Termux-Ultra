@@ -28,6 +28,17 @@
     <string name="file_manager_description">文件管理功能</string>
 
     <string name="settings_title">设置</string>
+    <string name="backup">备份</string>
+    <string name="backup_description">备份 Termux 数据到外部存储</string>
+    <string name="restore">恢复</string>
+    <string name="restore_description">从备份文件恢复</string>
+    <string name="backup_success">备份成功！文件已保存到：%1$s</string>
+    <string name="backup_failed">备份失败</string>
+    <string name="restore_success">恢复成功</string>
+    <string name="restore_failed">恢复失败</string>
+    <string name="no_backup_files">未找到备份文件</string>
+    <string name="restore_confirm_message">确定要从此备份恢复吗？现有文件将被覆盖。</string>
+    <string name="result">结果</string>
     <string name="language">语言</string>
     <string name="english">English</string>
     <string name="chinese">中文</string>
