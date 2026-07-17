@@ -146,7 +146,8 @@
     <string name="notification_action_exit">结束会话</string>
     <string name="notification_action_wake_unlock">解除唤醒</string>
     <string name="notification_action_wake_lock">保持唤醒</string>
-    <string name="notification_running_terminals">正运行 %d 个终端</string>
+    <string name="notification_running_terminals">正运行 %d 个会话</string>
+    <string name="notification_no_terminals_running">暂无会话运行</string>
     <string name="notification_task">任务</string>
     <string name="notification_tasks">任务</string>
     <string name="notification_wake_lock_held">保持唤醒</string>

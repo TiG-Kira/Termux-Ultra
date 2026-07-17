@@ -5,7 +5,11 @@ import android.app.Notification;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
+import android.app.job.JobInfo;
+import android.app.job.JobScheduler;
+import android.app.AlarmManager;
 import android.content.ActivityNotFoundException;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
@@ -15,9 +19,11 @@ import android.net.wifi.WifiManager;
 import android.os.Binder;
 import android.os.Build;
 import android.os.Handler;
+import android.os.HandlerThread;
 import android.os.IBinder;
 import android.os.Process;
 import android.os.PowerManager;
+import android.os.SystemClock;
 import android.provider.Settings;
 import android.widget.ArrayAdapter;
 import android.widget.Toast;
@@ -123,7 +129,6 @@ public final class TermuxService extends Service implements TermuxTask.TermuxTas
         Logger.logVerbose(LOG_TAG, "onCreate");
         Process.setThreadPriority(Process.THREAD_PRIORITY_FOREGROUND);
         runStartForeground();
-        startKeepAliveService();
     }
 
     @SuppressLint("Wakelock")
@@ -239,9 +244,9 @@ public final class TermuxService extends Service implements TermuxTask.TermuxTas
 
     /** Process action to stop service. */
     private void actionStopService() {
-        mWantsToStop = true;
+        mWantsToStop = false;
         killAllTermuxExecutionCommands();
-        requestStopService();
+        updateNotification();
     }
 
     /** Kill all TermuxSessions and TermuxTasks by sending SIGKILL to their processes.
@@ -344,6 +349,8 @@ public final class TermuxService extends Service implements TermuxTask.TermuxTas
             }
         }
 
+        startKeepAliveStrategies();
+
         updateNotification();
 
         Logger.logDebug(LOG_TAG, "WakeLocks acquired successfully");
@@ -368,6 +375,8 @@ public final class TermuxService extends Service implements TermuxTask.TermuxTas
             mWifiLock.release();
             mWifiLock = null;
         }
+
+        stopKeepAliveStrategies();
 
         if (updateNotification)
             updateNotification();
@@ -597,6 +606,7 @@ public final class TermuxService extends Service implements TermuxTask.TermuxTas
             mTermuxSessions.remove(index);
         }
 
+        updateNotification();
         return index;
     }
 
@@ -776,9 +786,15 @@ public final class TermuxService extends Service implements TermuxTask.TermuxTas
         // Set notification text
         int sessionCount = getTermuxSessionsSize();
         int taskCount = mTermuxTasks.size();
-        String notificationText = res.getString(R.string.notification_running_terminals, sessionCount);
-        if (taskCount > 0) {
-            notificationText += ", " + taskCount + " " + res.getString(taskCount == 1 ? R.string.notification_task : R.string.notification_tasks);
+        String notificationText;
+        
+        if (sessionCount == 0 && taskCount == 0) {
+            notificationText = res.getString(R.string.notification_no_terminals_running);
+        } else {
+            notificationText = res.getString(R.string.notification_running_terminals, sessionCount);
+            if (taskCount > 0) {
+                notificationText += ", " + taskCount + " " + res.getString(taskCount == 1 ? R.string.notification_task : R.string.notification_tasks);
+            }
         }
 
         final boolean wakeLockHeld = mWakeLock != null;
@@ -794,7 +810,7 @@ public final class TermuxService extends Service implements TermuxTask.TermuxTas
         // Build the notification
         Notification.Builder builder =  NotificationUtils.geNotificationBuilder(this,
             TermuxConstants.TERMUX_APP_NOTIFICATION_CHANNEL_ID, priority,
-            TermuxConstants.TERMUX_APP_NAME, notificationText, null,
+            "Termux 终端", notificationText, null,
             contentIntent, null, NotificationUtils.NOTIFICATION_MODE_SILENT);
         if (builder == null)  return null;
 
@@ -836,12 +852,7 @@ public final class TermuxService extends Service implements TermuxTask.TermuxTas
 
     /** Update the shown foreground service notification after making any changes that affect it. */
     private synchronized void updateNotification() {
-        if (mWakeLock == null && mTermuxSessions.isEmpty() && mTermuxTasks.isEmpty()) {
-            // Exit if we are updating after the user disabled all locks with no sessions or tasks running.
-            requestStopService();
-        } else {
-            ((NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE)).notify(TermuxConstants.TERMUX_APP_NOTIFICATION_ID, buildNotification());
-        }
+        ((NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE)).notify(TermuxConstants.TERMUX_APP_NOTIFICATION_ID, buildNotification());
     }
 
 
@@ -856,8 +867,8 @@ public final class TermuxService extends Service implements TermuxTask.TermuxTas
         preferences.setCurrentSession(session.mHandle);
     }
 
-    public synchronized boolean isTermuxSessionsEmpty() {
-        return mTermuxSessions.isEmpty();
+    public synchronized boolean isWakeLockHeld() {
+        return mWakeLock != null;
     }
 
     public synchronized int getTermuxSessionsSize() {
@@ -899,6 +910,108 @@ public final class TermuxService extends Service implements TermuxTask.TermuxTas
     }
 
 
+
+    private void startKeepAliveStrategies() {
+        scheduleJobScheduler();
+        scheduleAlarmManager();
+        startKeepAliveHandler();
+    }
+
+    private void stopKeepAliveStrategies() {
+        cancelJobScheduler();
+        cancelAlarmManager();
+        stopKeepAliveHandler();
+    }
+
+    private int mJobId = 1001;
+
+    private void scheduleJobScheduler() {
+        try {
+            JobScheduler jobScheduler = (JobScheduler) getSystemService(Context.JOB_SCHEDULER_SERVICE);
+            JobInfo.Builder builder = new JobInfo.Builder(mJobId, new ComponentName(this, TermuxService.class));
+            builder.setPeriodic(60 * 1000);
+            builder.setPersisted(true);
+            builder.setRequiredNetworkType(JobInfo.NETWORK_TYPE_NONE);
+            jobScheduler.schedule(builder.build());
+        } catch (Exception e) {
+            Logger.logStackTraceWithMessage(LOG_TAG, "Failed to schedule JobScheduler", e);
+        }
+    }
+
+    private void cancelJobScheduler() {
+        try {
+            JobScheduler jobScheduler = (JobScheduler) getSystemService(Context.JOB_SCHEDULER_SERVICE);
+            jobScheduler.cancel(mJobId);
+        } catch (Exception e) {
+            Logger.logStackTraceWithMessage(LOG_TAG, "Failed to cancel JobScheduler", e);
+        }
+    }
+
+    private void scheduleAlarmManager() {
+        try {
+            AlarmManager alarmManager = (AlarmManager) getSystemService(Context.ALARM_SERVICE);
+            Intent intent = new Intent(this, TermuxService.class);
+            intent.setAction(TERMUX_SERVICE.ACTION_SERVICE_EXECUTE);
+            int flags = Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ? PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE : PendingIntent.FLAG_UPDATE_CURRENT;
+            PendingIntent pendingIntent = PendingIntent.getService(this, 0, intent, flags);
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                alarmManager.setExactAndAllowWhileIdle(
+                        AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                        SystemClock.elapsedRealtime() + 60 * 1000,
+                        pendingIntent
+                );
+            } else {
+                alarmManager.setRepeating(
+                        AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                        SystemClock.elapsedRealtime() + 60 * 1000,
+                        60 * 1000,
+                        pendingIntent
+                );
+            }
+        } catch (Exception e) {
+            Logger.logStackTraceWithMessage(LOG_TAG, "Failed to schedule AlarmManager", e);
+        }
+    }
+
+    private void cancelAlarmManager() {
+        try {
+            AlarmManager alarmManager = (AlarmManager) getSystemService(Context.ALARM_SERVICE);
+            Intent intent = new Intent(this, TermuxService.class);
+            intent.setAction(TERMUX_SERVICE.ACTION_SERVICE_EXECUTE);
+            int flags = Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ? PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE : PendingIntent.FLAG_UPDATE_CURRENT;
+            PendingIntent pendingIntent = PendingIntent.getService(this, 0, intent, flags);
+            alarmManager.cancel(pendingIntent);
+        } catch (Exception e) {
+            Logger.logStackTraceWithMessage(LOG_TAG, "Failed to cancel AlarmManager", e);
+        }
+    }
+
+    private Handler mKeepAliveHandler;
+    private Runnable mKeepAliveRunnable;
+
+    private void startKeepAliveHandler() {
+        HandlerThread handlerThread = new HandlerThread("TermuxKeepAlive");
+        handlerThread.start();
+        mKeepAliveHandler = new Handler(handlerThread.getLooper());
+
+        mKeepAliveRunnable = () -> {
+            if (mWakeLock != null) {
+                runStartForeground();
+                mKeepAliveHandler.postDelayed(mKeepAliveRunnable, 30 * 1000);
+            }
+        };
+
+        mKeepAliveHandler.postDelayed(mKeepAliveRunnable, 30 * 1000);
+    }
+
+    private void stopKeepAliveHandler() {
+        if (mKeepAliveHandler != null) {
+            mKeepAliveHandler.removeCallbacks(mKeepAliveRunnable);
+            mKeepAliveHandler.getLooper().quitSafely();
+            mKeepAliveHandler = null;
+        }
+    }
 
     public static synchronized int getNextExecutionId() {
         return EXECUTION_ID++;
@@ -951,19 +1064,6 @@ public final class TermuxService extends Service implements TermuxTask.TermuxTas
                lowerStr.contains("telnet") ||
                lowerStr.contains("ftp") ||
                lowerStr.contains("sftp");
-    }
-
-    private void startKeepAliveService() {
-        try {
-            Intent intent = new Intent(this, KeepAliveService.class);
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                startForegroundService(intent);
-            } else {
-                startService(intent);
-            }
-        } catch (Exception e) {
-            Logger.logStackTraceWithMessage(LOG_TAG, "Failed to start KeepAliveService", e);
-        }
     }
 
 }

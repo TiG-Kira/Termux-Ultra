@@ -16,6 +16,9 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.shape.RoundedCornerShape
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.UUID
 import com.termux.R
 import top.yukonga.miuix.kmp.basic.*
@@ -28,16 +31,25 @@ fun VncScreen(
     onAddRequestedConsumed: () -> Unit,
     scanRequested: Boolean,
     onScanRequestedConsumed: () -> Unit,
+    onScanStart: () -> Unit = {},
+    onScanEnd: () -> Unit = {},
     nestedScrollConnection: androidx.compose.ui.input.nestedscroll.NestedScrollConnection? = null
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val showAddDialog = remember { mutableStateOf(false) }
     val showEditDialog = remember { mutableStateOf(false) }
     val editingConnection = remember { mutableStateOf<VncConnection?>(null) }
 
     LaunchedEffect(scanRequested) {
         if (scanRequested) {
-            scanTermuxVnc(context, connections)
+            onScanStart()
+            scope.launch(Dispatchers.IO) {
+                scanTermuxVnc(context, connections)
+                withContext(Dispatchers.Main) {
+                    onScanEnd()
+                }
+            }
             onScanRequestedConsumed()
         }
     }
@@ -45,11 +57,6 @@ fun VncScreen(
     if (addRequested && !showAddDialog.value) {
         showAddDialog.value = true
         onAddRequestedConsumed()
-    }
-
-    if (scanRequested) {
-        scanTermuxVnc(context, connections)
-        onScanRequestedConsumed()
     }
 
     LazyColumn(
@@ -259,16 +266,56 @@ private fun deleteConnection(context: Context, connection: VncConnection, connec
     connections.remove(connection)
 }
 
+private fun isVncPort(port: Int): Boolean {
+    return try {
+        val socket = java.net.Socket()
+        socket.connect(java.net.InetSocketAddress("127.0.0.1", port), 200)
+        socket.soTimeout = 500
+        val input = socket.getInputStream()
+        val output = socket.getOutputStream()
+        val buffer = ByteArray(12)
+        var totalRead = 0
+        val startTime = System.currentTimeMillis()
+        while (totalRead < 12 && System.currentTimeMillis() - startTime < 1000) {
+            val read = input.read(buffer, totalRead, 12 - totalRead)
+            if (read == -1) break
+            totalRead += read
+        }
+        socket.close()
+        if (totalRead >= 12) {
+            val banner = String(buffer, 0, totalRead)
+            banner.startsWith("RFB ")
+        } else {
+            false
+        }
+    } catch (_: Exception) {
+        false
+    }
+}
+
 private fun scanTermuxVnc(context: Context, connections: MutableList<VncConnection>) {
     val manager = VncConnectionManager(context)
-    manager.deleteNonTermuxConnections()
-    connections.removeIf { it.isFromTermux }
-    for (port in 5900..5910) {
-        try {
-            val socket = java.net.Socket()
-            socket.connect(java.net.InetSocketAddress("127.0.0.1", port), 100)
-            socket.close()
-            val sessionName = "Termux VNC $port"
+    manager.deleteTermuxConnections()
+    val iterator = connections.iterator()
+    while (iterator.hasNext()) {
+        if (iterator.next().isFromTermux) {
+            iterator.remove()
+        }
+    }
+    val portsToScan = mutableListOf<Int>()
+    portsToScan.add(0)
+    for (port in 5900..5999) {
+        portsToScan.add(port)
+    }
+    for (port in 5500..5509) {
+        portsToScan.add(port)
+    }
+    for (port in 5800..5899) {
+        portsToScan.add(port)
+    }
+    for (port in portsToScan) {
+        if (isVncPort(port)) {
+            val sessionName = "Termux VNC :$port"
             val existing = connections.find { it.host == "127.0.0.1" && it.port == port }
             if (existing == null) {
                 val conn = VncConnection(
@@ -283,7 +330,6 @@ private fun scanTermuxVnc(context: Context, connections: MutableList<VncConnecti
                 connections.add(conn)
                 manager.saveConnection(conn)
             }
-        } catch (_: Exception) {
         }
     }
 }

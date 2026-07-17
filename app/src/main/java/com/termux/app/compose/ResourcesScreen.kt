@@ -30,7 +30,9 @@ data class ResourceItem(
     val scriptUrl: String,
     val iconRes: Int,
     val isTmux: Boolean = false,
-    val hasHelp: Boolean = false
+    val hasHelp: Boolean = false,
+    val type: String = "default",
+    val needsLinuxContainer: Boolean = false
 )
 
 @Composable
@@ -61,24 +63,27 @@ fun ResourcesScreen(onExecuteScript: (String, String) -> Unit) {
         ),
         ResourceItem(
             title = "QEMU 安装",
-            description = "安装 QEMU 虚拟机套件，包括 qemu-system-x86_64 和 qemu-utils",
+            description = "在 Linux 容器内安装 QEMU 虚拟机套件，包括 qemu-system-x86_64 和 qemu-utils",
             url = "",
             scriptUrl = "install_qemu",
-            iconRes = R.drawable.ic_server
+            iconRes = R.drawable.ic_server,
+            needsLinuxContainer = true
         ),
         ResourceItem(
             title = "Alpine QEMU",
-            description = "在 QEMU 中安装 Alpine Linux 轻量级发行版",
+            description = "在 Linux 容器内的 QEMU 中安装 Alpine Linux 轻量级发行版",
             url = "",
             scriptUrl = "https://raw.githubusercontent.com/sulthonzh/android-docker-qemu/main/install.sh",
-            iconRes = R.drawable.ic_server
+            iconRes = R.drawable.ic_server,
+            needsLinuxContainer = true
         ),
         ResourceItem(
             title = "Debian QEMU",
-            description = "在 QEMU 中安装 Debian Linux 稳定发行版，支持 Docker",
+            description = "在 Linux 容器内的 QEMU 中安装 Debian Linux 稳定发行版，支持 Docker",
             url = "",
             scriptUrl = "https://raw.githubusercontent.com/sulthonzh/android-docker-qemu/main/install.sh",
-            iconRes = R.drawable.ic_server
+            iconRes = R.drawable.ic_server,
+            needsLinuxContainer = true
         ),
         ResourceItem(
             title = "Windows 7 QEMU",
@@ -88,32 +93,28 @@ fun ResourcesScreen(onExecuteScript: (String, String) -> Unit) {
             iconRes = R.drawable.ic_server
         ),
         ResourceItem(
-            title = context.getString(R.string.resource_termux_setup),
-            description = context.getString(R.string.resource_termux_setup_desc),
-            url = "https://termux.dev/en/",
-            scriptUrl = "https://raw.githubusercontent.com/termux/termux-packages/master/packages/bash/build.sh",
-            iconRes = R.drawable.ic_terminal
-        ),
-        ResourceItem(
             title = context.getString(R.string.resource_minecraft_server),
             description = context.getString(R.string.resource_minecraft_server_desc),
             url = "https://github.com/TheRemote/MinecraftBedrockServer",
             scriptUrl = "https://raw.githubusercontent.com/TheRemote/MinecraftBedrockServer/master/SetupMinecraft.sh",
-            iconRes = R.drawable.ic_game
+            iconRes = R.drawable.ic_game,
+            needsLinuxContainer = true
         ),
         ResourceItem(
             title = context.getString(R.string.resource_linux_server),
             description = context.getString(R.string.resource_linux_server_desc),
             url = "https://github.com/teddysun/lamp",
             scriptUrl = "https://raw.githubusercontent.com/teddysun/lamp/master/lamp.sh",
-            iconRes = R.drawable.ic_server
+            iconRes = R.drawable.ic_server,
+            needsLinuxContainer = true
         ),
         ResourceItem(
             title = context.getString(R.string.resource_web_server),
             description = context.getString(R.string.resource_web_server_desc),
             url = "https://nginx.org/",
             scriptUrl = "https://raw.githubusercontent.com/angristan/nginx-autoinstall/master/nginx-autoinstall.sh",
-            iconRes = R.drawable.ic_web
+            iconRes = R.drawable.ic_web,
+            needsLinuxContainer = true
         ),
         ResourceItem(
             title = context.getString(R.string.resource_node_js),
@@ -125,9 +126,10 @@ fun ResourcesScreen(onExecuteScript: (String, String) -> Unit) {
         ResourceItem(
             title = context.getString(R.string.resource_python_env),
             description = context.getString(R.string.resource_python_env_desc),
-            url = "https://python-poetry.org/",
-            scriptUrl = "https://install.python-poetry.org",
-            iconRes = R.drawable.ic_code
+            url = "https://www.python.org/",
+            scriptUrl = "pkg install python -y",
+            iconRes = R.drawable.ic_code,
+            type = "python_pkg"
         )
     )
 
@@ -309,22 +311,11 @@ private fun ResourceCard(
                 onClick = {
                     if (item.isTmux) {
                         onExecuteScript("tmux", item.scriptUrl)
-                    } else if (item.scriptUrl == "install_qemu") {
-                        val installScriptPath = "/data/data/com.termux/files/home/install_qemu.sh"
-                        try {
-                            val inputStream = context.assets.open("install_qemu.sh")
-                            val outputStream = java.io.FileOutputStream(installScriptPath)
-                            inputStream.copyTo(outputStream)
-                            inputStream.close()
-                            outputStream.close()
-                            java.io.File(installScriptPath).setExecutable(true)
-                        } catch (e: Exception) {
-                            e.printStackTrace()
-                        }
+                    } else if (item.type == "python_pkg") {
                         if (isTmuxInstalled()) {
-                            onShowExecuteModeDialog(item, "bash $installScriptPath")
+                            onShowExecuteModeDialog(item, item.scriptUrl)
                         } else {
-                            onExecuteScript("QEMU 安装", "bash $installScriptPath")
+                            onExecuteScript(item.title, item.scriptUrl)
                         }
                     } else if (item.scriptUrl == "win7_qemu") {
                         val scriptPath = "/data/data/com.termux/files/home/win7_qemu.sh"
@@ -352,6 +343,51 @@ private fun ResourceCard(
                             onShowExecuteModeDialog(item, "bash $scriptPath")
                         } else {
                             onExecuteScript(item.title, "bash $scriptPath")
+                        }
+                    } else if (item.needsLinuxContainer) {
+                        val scriptName = item.scriptUrl.substringAfterLast("/")
+                        val containerScriptPath = "/data/data/com.termux/files/home/install_linux_container.sh"
+                        val runInContainerPath = "/data/data/com.termux/files/home/run_in_container.sh"
+                        try {
+                            val inputStream = context.assets.open("install_linux_container.sh")
+                            val outputStream = java.io.FileOutputStream(containerScriptPath)
+                            inputStream.copyTo(outputStream)
+                            inputStream.close()
+                            outputStream.close()
+                            java.io.File(containerScriptPath).setExecutable(true)
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                        }
+                        try {
+                            val inputStream = context.assets.open("run_in_container.sh")
+                            val outputStream = java.io.FileOutputStream(runInContainerPath)
+                            inputStream.copyTo(outputStream)
+                            inputStream.close()
+                            outputStream.close()
+                            java.io.File(runInContainerPath).setExecutable(true)
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                        }
+                        val baseCommand = if (item.scriptUrl == "install_qemu") {
+                            val installScriptPath = "/data/data/com.termux/files/home/install_qemu.sh"
+                            try {
+                                val inputStream = context.assets.open("install_qemu.sh")
+                                val outputStream = java.io.FileOutputStream(installScriptPath)
+                                inputStream.copyTo(outputStream)
+                                inputStream.close()
+                                outputStream.close()
+                                java.io.File(installScriptPath).setExecutable(true)
+                            } catch (e: Exception) {
+                                e.printStackTrace()
+                            }
+                            "bash $containerScriptPath && bash $runInContainerPath $installScriptPath"
+                        } else {
+                            "bash $containerScriptPath && curl -sSL -o /data/data/com.termux/files/home/tmp_script.sh ${item.scriptUrl} && bash $runInContainerPath /data/data/com.termux/files/home/tmp_script.sh"
+                        }
+                        if (isTmuxInstalled()) {
+                            onShowExecuteModeDialog(item, baseCommand)
+                        } else {
+                            onExecuteScript(scriptName, baseCommand)
                         }
                     } else {
                         val scriptName = item.scriptUrl.substringAfterLast("/")

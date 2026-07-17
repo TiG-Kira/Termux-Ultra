@@ -31,6 +31,7 @@ import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
+import top.yukonga.miuix.kmp.basic.Switch
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import com.termux.R
 import com.termux.shared.shell.TermuxSession
@@ -41,7 +42,9 @@ fun TerminalListScreen(
     onSessionClick: (TermuxSession) -> Unit,
     onNewTerminal: () -> Unit,
     onStopTerminal: (TermuxSession) -> Unit,
-    onRenameTerminal: (TermuxSession, String) -> Unit
+    onRenameTerminal: (TermuxSession, String) -> Unit,
+    isWakeLockEnabled: Boolean,
+    onToggleWakeLock: () -> Unit
 ) {
     val context = LocalContext.current
     var showRenameDialog by remember { mutableStateOf(false) }
@@ -73,13 +76,29 @@ fun TerminalListScreen(
                 title = stringResource(R.string.terminal),
                 scrollBehavior = scrollBehavior,
                 actions = {
-                    IconButton(onClick = onNewTerminal) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Icon(
-                            painter = painterResource(R.drawable.ic_add),
-                            contentDescription = stringResource(R.string.new_terminal),
-                            modifier = Modifier.size(24.dp),
+                            painter = painterResource(R.drawable.ic_lock),
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp),
                             tint = MiuixTheme.colorScheme.onSurface
                         )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Switch(
+                            checked = isWakeLockEnabled,
+                            onCheckedChange = { onToggleWakeLock() }
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        IconButton(onClick = onNewTerminal) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_add),
+                                contentDescription = stringResource(R.string.new_terminal),
+                                modifier = Modifier.size(24.dp),
+                                tint = MiuixTheme.colorScheme.onSurface
+                            )
+                        }
                     }
                 }
             )

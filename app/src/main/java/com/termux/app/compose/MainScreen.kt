@@ -27,7 +27,9 @@ fun MainScreen(
     onRenameTerminal: (TermuxSession, String) -> Unit,
     onExecuteScript: (String, String) -> Unit,
     onAboutClick: () -> Unit,
-    showVnc: Boolean
+    showVnc: Boolean,
+    isWakeLockEnabled: Boolean,
+    onToggleWakeLock: () -> Unit
 ) {
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
@@ -77,7 +79,9 @@ fun MainScreen(
                     onSessionClick = onSessionClick,
                     onNewTerminal = onNewTerminal,
                     onStopTerminal = onStopTerminal,
-                    onRenameTerminal = onRenameTerminal
+                    onRenameTerminal = onRenameTerminal,
+                    isWakeLockEnabled = isWakeLockEnabled,
+                    onToggleWakeLock = onToggleWakeLock
                 )
                 1 -> FileManagerScreen(onOpenFile = onExecuteScript)
                 2 -> com.termux.app.remote.RemoteScreen(showVnc = showVnc)

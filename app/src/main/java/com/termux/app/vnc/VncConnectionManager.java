@@ -48,9 +48,9 @@ public class VncConnectionManager {
         saveAll(connections);
     }
 
-    public void deleteNonTermuxConnections() {
+    public void deleteTermuxConnections() {
         List<VncConnection> connections = getConnections();
-        connections.removeIf(c -> !c.isFromTermux);
+        connections.removeIf(c -> c.isFromTermux);
         saveAll(connections);
     }
 

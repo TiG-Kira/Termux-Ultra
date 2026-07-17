@@ -158,7 +158,8 @@
     <string name="notification_action_exit">End Session</string>
     <string name="notification_action_wake_unlock">Wake unlock</string>
     <string name="notification_action_wake_lock">Wake lock</string>
-    <string name="notification_running_terminals">Running %d terminals</string>
+    <string name="notification_running_terminals">Running %d sessions</string>
+    <string name="notification_no_terminals_running">No session running</string>
     <string name="notification_task">task</string>
     <string name="notification_tasks">tasks</string>
     <string name="notification_wake_lock_held">wake lock held</string>

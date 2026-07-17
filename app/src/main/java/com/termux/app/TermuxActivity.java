@@ -35,12 +35,12 @@ import android.widget.Toast;
 
 import java.util.List;
 
+import com.termux.shared.termux.TermuxConstants;
 import com.termux.R;
 import com.termux.app.terminal.TermuxActivityRootView;
 import com.termux.shared.activities.ReportActivity;
 import com.termux.shared.packages.PermissionUtils;
 import com.termux.shared.data.DataUtils;
-import com.termux.shared.termux.TermuxConstants;
 import com.termux.shared.termux.TermuxConstants.TERMUX_APP.TERMUX_ACTIVITY;
 import com.termux.app.activities.HelpActivity;
 import com.termux.app.activities.SettingsActivity;
@@ -374,23 +374,22 @@ public final class TermuxActivity extends ComponentActivity implements ServiceCo
 
         setTermuxSessionsListView();
 
-        if (mTermuxService.isTermuxSessionsEmpty()) {
+        if (mTermuxService.getTermuxSessionsSize() == 0) {
             if (mIsVisible) {
-                TermuxInstaller.setupBootstrapIfNeeded(TermuxActivity.this, () -> {
-                    if (mTermuxService == null) return; // Activity might have been destroyed.
-                    try {
-                        Bundle bundle = getIntent().getExtras();
-                        boolean launchFailsafe = false;
-                        if (bundle != null) {
-                            launchFailsafe = bundle.getBoolean(TERMUX_ACTIVITY.EXTRA_FAILSAFE_SESSION, false);
+                Intent i = getIntent();
+                if (i != null && Intent.ACTION_RUN.equals(i.getAction())) {
+                    TermuxInstaller.setupBootstrapIfNeeded(TermuxActivity.this, () -> {
+                        if (mTermuxService == null) return;
+                        try {
+                            boolean isFailSafe = i.getBooleanExtra(TERMUX_ACTIVITY.EXTRA_FAILSAFE_SESSION, false);
+                            mTermuxTerminalSessionClient.addNewSession(isFailSafe, null);
+                        } catch (WindowManager.BadTokenException e) {
                         }
-                        mTermuxTerminalSessionClient.addNewSession(launchFailsafe, null);
-                    } catch (WindowManager.BadTokenException e) {
-                        // Activity finished - ignore.
-                    }
-                });
+                    });
+                } else {
+                    finishActivityIfNotFinishing();
+                }
             } else {
-                // The service connected while not in foreground - just bail out.
                 finishActivityIfNotFinishing();
             }
         } else {

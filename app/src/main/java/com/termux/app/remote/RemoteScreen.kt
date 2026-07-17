@@ -87,11 +87,8 @@ fun RemoteScreen(showVnc: Boolean) {
                         }
                         IconButton(
                             onClick = {
-                                vncScanRequested.value = true
-                                scope.launch(Dispatchers.IO) {
-                                    isScanning.value = true
-                                    Thread.sleep(1000)
-                                    isScanning.value = false
+                                if (!isScanning.value) {
+                                    vncScanRequested.value = true
                                 }
                             },
                             enabled = !isScanning.value
@@ -158,6 +155,8 @@ fun RemoteScreen(showVnc: Boolean) {
                                 onAddRequestedConsumed = { vncAddRequested.value = false },
                                 scanRequested = vncScanRequested.value,
                                 onScanRequestedConsumed = { vncScanRequested.value = false },
+                                onScanStart = { isScanning.value = true },
+                                onScanEnd = { isScanning.value = false },
                                 nestedScrollConnection = scrollBehavior.nestedScrollConnection
                             )
                             1 -> com.termux.app.ssh.SshScreen(

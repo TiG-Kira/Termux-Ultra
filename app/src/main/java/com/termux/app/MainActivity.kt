@@ -26,6 +26,7 @@ import kotlinx.coroutines.flow.StateFlow
 import com.termux.app.compose.AboutScreen
 import com.termux.app.compose.KiTerminalTheme
 import com.termux.app.compose.MainScreen
+import com.termux.shared.termux.TermuxConstants
 import com.termux.shared.shell.TermuxSession as SharedTermuxSession
 import com.termux.app.TermuxService
 import com.termux.terminal.TerminalSession
@@ -45,6 +46,7 @@ class MainActivity : ComponentActivity() {
     private var sessions by mutableStateOf<List<SharedTermuxSession>>(emptyList())
     private var selectedTab by mutableStateOf(0)
     private var showAbout by mutableStateOf(false)
+    private var isWakeLockEnabled by mutableStateOf(false)
     private lateinit var appViewModel: AppViewModel
     private val handler = Handler(Looper.getMainLooper())
 
@@ -53,6 +55,7 @@ class MainActivity : ComponentActivity() {
             val binder = service as TermuxService.LocalBinder
             termuxService = binder.service
             updateSessions()
+            updateWakeLockState()
         }
 
         override fun onServiceDisconnected(arg0: ComponentName) {
@@ -113,6 +116,7 @@ class MainActivity : ComponentActivity() {
                         onStopTerminal = { session ->
                             termuxService?.removeTermuxSession(session.getTerminalSession())
                             updateSessions()
+                            handler.postDelayed({ updateSessions() }, 300)
                         },
                         onRenameTerminal = { session, newName ->
                             session.getTerminalSession().mSessionName = newName
@@ -120,9 +124,10 @@ class MainActivity : ComponentActivity() {
                         },
                         onExecuteScript = { scriptName, command ->
                             val sessionName = scriptName
+                            val wrappedCommand = command + "; echo ''; echo '脚本执行完成，按回车键退出...'; read"
                             val newSession = termuxService?.createTermuxSession(
                                 null,
-                                arrayOf("-c", command),
+                                arrayOf("-c", wrappedCommand),
                                 null,
                                 null,
                                 false,
@@ -137,7 +142,9 @@ class MainActivity : ComponentActivity() {
                             }
                         },
                         onAboutClick = { showAbout = true },
-                        showVnc = showVnc
+                        showVnc = showVnc,
+                        isWakeLockEnabled = isWakeLockEnabled,
+                        onToggleWakeLock = { toggleWakeLock() }
                     )
                 }
             }
@@ -147,6 +154,7 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         updateSessions()
+        updateWakeLockState()
         val prefs = getSharedPreferences("app_settings", Context.MODE_PRIVATE)
         val currentShowVnc = prefs.getBoolean("vnc_enabled", false)
         appViewModel.updateShowVnc(currentShowVnc)
@@ -160,5 +168,21 @@ class MainActivity : ComponentActivity() {
 
     private fun updateSessions() {
         sessions = termuxService?.getTermuxSessions()?.toList() ?: emptyList()
+    }
+
+    private fun updateWakeLockState() {
+        isWakeLockEnabled = termuxService?.isWakeLockHeld() ?: false
+    }
+
+    private fun toggleWakeLock() {
+        val service = termuxService ?: return
+        val intent = Intent(this, TermuxService::class.java)
+        intent.action = if (service.isWakeLockHeld()) {
+            TermuxConstants.TERMUX_APP.TERMUX_SERVICE.ACTION_WAKE_UNLOCK
+        } else {
+            TermuxConstants.TERMUX_APP.TERMUX_SERVICE.ACTION_WAKE_LOCK
+        }
+        startService(intent)
+        handler.postDelayed({ updateWakeLockState() }, 500)
     }
 }
