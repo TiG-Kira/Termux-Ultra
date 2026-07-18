@@ -3,8 +3,15 @@
 CONTAINER_DIR="$HOME/debian-container"
 
 if [ -d "$CONTAINER_DIR" ] && [ -f "$CONTAINER_DIR/rootfs/bin/bash" ] && [ -f "$CONTAINER_DIR/run.sh" ]; then
-    echo "Linux container already exists, skipping installation."
-    exit 0
+    echo "Linux container already exists."
+    read -p "Do you want to reinstall (delete existing and start fresh)? [y/N] " -n1 -r
+    echo ""
+    if [[ ! "$REPLY" =~ ^[Yy]$ ]]; then
+        echo "Skipping installation, keeping existing container."
+        exit 0
+    fi
+    echo "Removing existing container..."
+    rm -rf "$CONTAINER_DIR"
 fi
 
 echo "============================================"

@@ -44,7 +44,8 @@ data class ResourceItem(
     val isTmux: Boolean = false,
     val hasHelp: Boolean = false,
     val type: String = "default",
-    val needsLinuxContainer: Boolean = false
+    val needsLinuxContainer: Boolean = false,
+    val needsContainerCheck: Boolean = false
 )
 
 data class TerminalSession(val id: String, val name: String)
@@ -110,12 +111,21 @@ fun ResourcesScreen(onExecuteScript: (String, String) -> Unit, onTypeInSession: 
             iconRes = R.drawable.ic_terminal
         ),
         ResourceItem(
+            title = "Debian 容器安装",
+            description = "安装 Debian/Ubuntu Linux 容器（PRoot），为 QEMU 和其他服务提供运行环境",
+            url = "",
+            scriptUrl = "install_debian_container",
+            iconRes = R.drawable.ic_server,
+            type = "install_debian_container"
+        ),
+        ResourceItem(
             title = "QEMU 安装",
-            description = "在 Linux 容器内安装 QEMU 虚拟机套件，包括 qemu-system-x86_64 和 qemu-utils",
+            description = "在 Linux 容器内安装 QEMU 虚拟机套件，包括 qemu-system-x86_64、qemu-utils 和 genisoimage",
             url = "",
             scriptUrl = "install_qemu",
             iconRes = R.drawable.ic_server,
-            needsLinuxContainer = true
+            type = "install_qemu_in_container",
+            needsContainerCheck = true
         ),
         ResourceItem(
             title = "Debian QEMU",
@@ -123,7 +133,8 @@ fun ResourcesScreen(onExecuteScript: (String, String) -> Unit, onTypeInSession: 
             url = "",
             scriptUrl = "debian_qemu",
             iconRes = R.drawable.ic_server,
-            type = "qemu_termux"
+            type = "qemu_termux",
+            needsContainerCheck = true
         ),
         ResourceItem(
             title = "Windows 7 QEMU",
@@ -138,7 +149,9 @@ fun ResourcesScreen(onExecuteScript: (String, String) -> Unit, onTypeInSession: 
             url = "https://github.com/TheRemote/MinecraftBedrockServer",
             scriptUrl = "https://raw.githubusercontent.com/TheRemote/MinecraftBedrockServer/master/SetupMinecraft.sh",
             iconRes = R.drawable.ic_game,
-            needsLinuxContainer = true
+            needsLinuxContainer = true,
+            needsContainerCheck = true,
+            type = "minecraft_server"
         ),
         ResourceItem(
             title = context.getString(R.string.resource_linux_server),
@@ -146,7 +159,8 @@ fun ResourcesScreen(onExecuteScript: (String, String) -> Unit, onTypeInSession: 
             url = "https://github.com/teddysun/lamp",
             scriptUrl = "https://raw.githubusercontent.com/teddysun/lamp/master/lamp.sh",
             iconRes = R.drawable.ic_server,
-            needsLinuxContainer = true
+            needsLinuxContainer = true,
+            needsContainerCheck = true
         ),
         ResourceItem(
             title = context.getString(R.string.resource_web_server),
@@ -154,7 +168,8 @@ fun ResourcesScreen(onExecuteScript: (String, String) -> Unit, onTypeInSession: 
             url = "https://nginx.org/",
             scriptUrl = "https://raw.githubusercontent.com/angristan/nginx-autoinstall/master/nginx-autoinstall.sh",
             iconRes = R.drawable.ic_web,
-            needsLinuxContainer = true
+            needsLinuxContainer = true,
+            needsContainerCheck = true
         ),
         ResourceItem(
             title = context.getString(R.string.resource_node_js),
@@ -385,8 +400,25 @@ private fun ResourceCard(
 
                     val baseCommand = resolveCommand(item, context)
 
+                    fun checkContainerAndExecute(execute: () -> Unit) {
+                        if (item.needsContainerCheck) {
+                            val containerDir = "/data/data/com.termux/files/home/debian-container"
+                            val runScript = java.io.File("$containerDir/run.sh")
+                            val rootfsBash = java.io.File("$containerDir/rootfs/bin/bash")
+                            if (!runScript.exists() || !rootfsBash.exists()) {
+                                android.widget.Toast.makeText(
+                                    context,
+                                    "请先安装 Debian 容器！请到资源页点击\"Debian 容器安装\"",
+                                    android.widget.Toast.LENGTH_LONG
+                                ).show()
+                                return
+                            }
+                        }
+                        execute()
+                    }
+
                     Button(
-                        onClick = { onExecuteInNewSession(baseCommand) },
+                        onClick = { checkContainerAndExecute { onExecuteInNewSession(baseCommand) } },
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(bottom = 8.dp)
@@ -406,7 +438,7 @@ private fun ResourceCard(
 
                     if (canUseTmux) {
                         Button(
-                            onClick = { onExecuteInTmux(baseCommand) },
+                            onClick = { checkContainerAndExecute { onExecuteInTmux(baseCommand) } },
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(bottom = 8.dp)
@@ -441,7 +473,7 @@ private fun ResourceCard(
                         ) {
                             sessions.forEach { session ->
                                 Button(
-                                    onClick = { onExecuteInRunningSession(session.id, baseCommand) },
+                                    onClick = { checkContainerAndExecute { onExecuteInRunningSession(session.id, baseCommand) } },
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .clip(RoundedCornerShape(12.dp)),
@@ -470,6 +502,47 @@ private fun resolveCommand(item: ResourceItem, context: android.content.Context)
     return when {
         item.isTmux -> item.scriptUrl
         item.type == "python_pkg" -> item.scriptUrl
+        item.type == "install_debian_container" -> {
+            val scriptPath = "/data/data/com.termux/files/home/install_linux_container.sh"
+            try {
+                val inputStream = context.assets.open("install_linux_container.sh")
+                val outputStream = java.io.FileOutputStream(scriptPath)
+                inputStream.copyTo(outputStream)
+                inputStream.close()
+                outputStream.close()
+                java.io.File(scriptPath).setExecutable(true)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+            "bash $scriptPath"
+        }
+        item.type == "install_qemu_in_container" -> {
+            val containerDir = "/data/data/com.termux/files/home/debian-container"
+            val runScript = "$containerDir/run.sh"
+            val installScriptPath = "/data/data/com.termux/files/home/install_qemu.sh"
+            val runInContainerPath = "/data/data/com.termux/files/home/run_in_container.sh"
+            try {
+                val inputStream = context.assets.open("install_qemu.sh")
+                val outputStream = java.io.FileOutputStream(installScriptPath)
+                inputStream.copyTo(outputStream)
+                inputStream.close()
+                outputStream.close()
+                java.io.File(installScriptPath).setExecutable(true)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+            try {
+                val inputStream = context.assets.open("run_in_container.sh")
+                val outputStream = java.io.FileOutputStream(runInContainerPath)
+                inputStream.copyTo(outputStream)
+                inputStream.close()
+                outputStream.close()
+                java.io.File(runInContainerPath).setExecutable(true)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+            "bash $runInContainerPath $installScriptPath"
+        }
         item.scriptUrl == "win7_qemu" -> {
             val scriptPath = "/data/data/com.termux/files/home/win7_qemu.sh"
             val patchPath = "/data/data/com.termux/files/home/win7_patch.zip"
@@ -496,7 +569,7 @@ private fun resolveCommand(item: ResourceItem, context: android.content.Context)
         }
         item.type == "qemu_termux" -> {
             val setupScriptPath = "/data/data/com.termux/files/home/qemu_termux_setup.sh"
-            val genisoimageRpmPath = "/data/data/com.termux/files/home/genisoimage.rpm"
+            val genSeedIsoPath = "/data/data/com.termux/files/home/gen_seed_iso.sh"
             try {
                 val inputStream = context.assets.open("qemu_termux_setup.sh")
                 val outputStream = java.io.FileOutputStream(setupScriptPath)
@@ -508,29 +581,44 @@ private fun resolveCommand(item: ResourceItem, context: android.content.Context)
                 e.printStackTrace()
             }
             try {
-                val inputStream = context.assets.open("genisoimage.rpm")
-                val outputStream = java.io.FileOutputStream(genisoimageRpmPath)
+                val inputStream = context.assets.open("gen_seed_iso.sh")
+                val outputStream = java.io.FileOutputStream(genSeedIsoPath)
                 inputStream.copyTo(outputStream)
                 inputStream.close()
                 outputStream.close()
+                java.io.File(genSeedIsoPath).setExecutable(true)
             } catch (e: Exception) {
                 e.printStackTrace()
             }
             "bash $setupScriptPath"
         }
-        item.needsLinuxContainer -> {
-            val containerScriptPath = "/data/data/com.termux/files/home/install_linux_container.sh"
+        item.type == "minecraft_server" -> {
             val runInContainerPath = "/data/data/com.termux/files/home/run_in_container.sh"
+            val wrapperScriptPath = "/data/data/com.termux/files/home/minecraft_server_wrapper.sh"
             try {
-                val inputStream = context.assets.open("install_linux_container.sh")
-                val outputStream = java.io.FileOutputStream(containerScriptPath)
+                val inputStream = context.assets.open("run_in_container.sh")
+                val outputStream = java.io.FileOutputStream(runInContainerPath)
                 inputStream.copyTo(outputStream)
                 inputStream.close()
                 outputStream.close()
-                java.io.File(containerScriptPath).setExecutable(true)
+                java.io.File(runInContainerPath).setExecutable(true)
             } catch (e: Exception) {
                 e.printStackTrace()
             }
+            try {
+                val inputStream = context.assets.open("minecraft_server_wrapper.sh")
+                val outputStream = java.io.FileOutputStream(wrapperScriptPath)
+                inputStream.copyTo(outputStream)
+                inputStream.close()
+                outputStream.close()
+                java.io.File(wrapperScriptPath).setExecutable(true)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+            "curl -sSL -o /data/data/com.termux/files/home/tmp_script.sh ${item.scriptUrl} && CONTAINER_DIR=/data/data/com.termux/files/home/debian-container && SHARED_DIR=\"\$CONTAINER_DIR/rootfs/root/shared\" && mkdir -p \"\$SHARED_DIR\" && cp $wrapperScriptPath \"\$SHARED_DIR/minecraft_wrapper.sh\" && cp /data/data/com.termux/files/home/tmp_script.sh \"\$SHARED_DIR/minecraft_setup.sh\" && chmod +x \"\$SHARED_DIR/minecraft_wrapper.sh\" \"\$SHARED_DIR/minecraft_setup.sh\" && bash \$CONTAINER_DIR/run.sh \"/root/shared/minecraft_wrapper.sh /root/shared/minecraft_setup.sh\""
+        }
+        item.needsLinuxContainer -> {
+            val runInContainerPath = "/data/data/com.termux/files/home/run_in_container.sh"
             try {
                 val inputStream = context.assets.open("run_in_container.sh")
                 val outputStream = java.io.FileOutputStream(runInContainerPath)
@@ -574,9 +662,9 @@ private fun resolveCommand(item: ResourceItem, context: android.content.Context)
                 } catch (e: Exception) {
                     e.printStackTrace()
                 }
-                "bash $containerScriptPath && bash $runInContainerPath $installScriptPath"
+                "bash $runInContainerPath $installScriptPath"
             } else {
-                "bash $containerScriptPath && curl -sSL -o /data/data/com.termux/files/home/tmp_script.sh ${item.scriptUrl} && bash $runInContainerPath /data/data/com.termux/files/home/tmp_script.sh"
+                "curl -sSL -o /data/data/com.termux/files/home/tmp_script.sh ${item.scriptUrl} && bash $runInContainerPath /data/data/com.termux/files/home/tmp_script.sh"
             }
         }
         else -> {

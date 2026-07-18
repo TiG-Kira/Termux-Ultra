@@ -1,23 +1,37 @@
 #!/data/data/com.termux/files/usr/bin/bash
 # QEMU on Termux Setup (Debian)
+# 使用 Debian 容器生成 cloud-init seed.iso
 
 set -e
 
 echo "=== QEMU on Termux Setup (Debian) ==="
 
+# 检测 Debian 容器是否存在
+CONTAINER_DIR="$HOME/debian-container"
+RUN_SCRIPT="$CONTAINER_DIR/run.sh"
+
+if [ ! -f "$RUN_SCRIPT" ] || [ ! -f "$CONTAINER_DIR/rootfs/bin/bash" ]; then
+    echo ""
+    echo "ERROR: Debian container not found!"
+    echo "Please go to Resources page and click \"Debian 容器安装\" first."
+    echo ""
+    exit 1
+fi
+echo "  Debian container found."
+
 echo ""
-echo "[1/5] Installing Termux repository packages..."
+echo "[1/6] Installing Termux repository packages..."
 pkg install -y unstable-repo x11-repo 2>/dev/null || {
     pkg update -y
     pkg install -y unstable-repo x11-repo
 }
 
 echo ""
-echo "[2/5] Updating package list..."
+echo "[2/6] Updating package list..."
 pkg update -y
 
 echo ""
-echo "[3/5] Installing QEMU and dependencies..."
+echo "[3/6] Installing QEMU and dependencies..."
 pkg install -y qemu-system-aarch64 qemu-utils python curl wget openssh termux-api 2>/dev/null || {
     echo "  Trying x86_64 version..."
     pkg install -y qemu-system-x86-64 qemu-utils python curl wget openssh termux-api
@@ -33,11 +47,13 @@ fi
 echo "  Using $QEMU_BIN"
 
 echo ""
-echo "[4/5] Setting up VM environment..."
+echo "[4/6] Setting up VM environment..."
 VM_DIR="$HOME/qemu-vm"
 IMG="$VM_DIR/debian-12-arm64.qcow2"
 DEBIAN_URL="https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-genericcloud-arm64.qcow2"
 MIRROR_URL="https://mirrors.tuna.tsinghua.edu.cn/debian-cloud/images/cloud/bookworm/latest/debian-12-genericcloud-arm64.qcow2"
+
+DOWNLOAD_NEEDED=0
 
 if [[ -f "$IMG" ]]; then
     echo ""
@@ -46,35 +62,26 @@ if [[ -f "$IMG" ]]; then
     echo ""
     if [[ "$REPLY" =~ ^[Yy]$ ]]; then
         echo "  Removing existing container..."
-        if [[ -f "$IMG" ]]; then
-            read -p "  Delete downloaded image file ($(du -h "$IMG" | awk '{print $1}'))? [y/N] " -n1 -r
-            echo ""
-            if [[ "$REPLY" =~ ^[Yy]$ ]]; then
-                rm -rf "$VM_DIR"
-                mkdir -p "$VM_DIR"
-                DOWNLOAD_NEEDED=1
-            else
-                rm -rf "$VM_DIR/seed.iso" "$VM_DIR/edk2-vars.fd" 2>/dev/null || true
-                DOWNLOAD_NEEDED=0
-            fi
-        else
+        read -p "  Delete downloaded image file ($(du -h "$IMG" | awk '{print $1}'))? [y/N] " -n1 -r
+        echo ""
+        if [[ "$REPLY" =~ ^[Yy]$ ]]; then
             rm -rf "$VM_DIR"
             mkdir -p "$VM_DIR"
             DOWNLOAD_NEEDED=1
+        else
+            rm -rf "$VM_DIR/seed.iso" "$VM_DIR/edk2-vars.fd" 2>/dev/null || true
+            DOWNLOAD_NEEDED=0
         fi
     else
         echo "  Skipping download, using existing container..."
-        cd "$VM_DIR" || exit 1
-        create_boot_script
-        exit 0
     fi
 else
     DOWNLOAD_NEEDED=1
     mkdir -p "$VM_DIR"
-    cd "$VM_DIR" || exit 1
 fi
 
 if [[ "$DOWNLOAD_NEEDED" == "1" ]]; then
+    cd "$VM_DIR" || exit 1
     echo "  Downloading Debian 12 arm64 cloud image (~1.2 GB)..."
     echo "  ========================================================"
     curl -L --progress-bar -o "$IMG" "$DEBIAN_URL" || {
@@ -87,179 +94,70 @@ if [[ "$DOWNLOAD_NEEDED" == "1" ]]; then
         }
     }
     echo ""
+else
+    cd "$VM_DIR" || exit 1
 fi
 
 echo "  Resizing to 20 GB..."
 qemu-img resize "$IMG" 20G
 
-echo "  Creating cloud-init seed (password login only)..."
-
-cat > "$HOME/user-data" <<EOF
-#cloud-config
-hostname: docker-phone
-users:
-  - name: debian
-    lock_passwd: false
-    sudo: ALL=(ALL) NOPASSWD:ALL
-    shell: /bin/bash
-chpasswd:
-  list: |
-    root:dockerphone
-    debian:dockerphone
-  expire: False
-ssh_pwauth: true
-disable_root: false
-runcmd:
-  - sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config
-  - sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config
-  - systemctl restart sshd
-package_update: true
-packages:
-  - qemu-guest-agent
-  - ca-certificates
-  - curl
-growpart:
-  mode: auto
-  devices: ['/']
-EOF
-
-cat > "$HOME/meta-data" <<EOF
-instance-id: docker-phone-001
-local-hostname: docker-phone
-EOF
-
-GENISOIMAGE_RPM="$HOME/genisoimage.rpm"
-GENISOIMAGE_BIN="$PREFIX/bin/genisoimage"
-
-if ! command -v genisoimage &>/dev/null; then
-    if [[ -f "$GENISOIMAGE_RPM" ]]; then
-        echo "  Installing genisoimage from rpm package..."
-        if ! command -v rpm &>/dev/null; then
-            echo "  Installing rpm tool..."
-            pkg install -y rpm 2>/dev/null || true
-        fi
-        if command -v rpm &>/dev/null; then
-            rpm -i --nodeps --force "$GENISOIMAGE_RPM" 2>/dev/null || {
-                echo "  rpm install failed, extracting manually..."
-                cd "$PREFIX"
-                rpm2cpio "$GENISOIMAGE_RPM" 2>/dev/null | cpio -idmv 2>/dev/null || {
-                    echo "  Manual extraction failed, trying cpio..."
-                    mkdir -p "$PREFIX/tmp/rpm-extract"
-                    cd "$PREFIX/tmp/rpm-extract"
-                    rpm2cpio "$GENISOIMAGE_RPM" | cpio -idmv
-                    find . -name "genisoimage" -exec cp {} "$GENISOIMAGE_BIN" \;
-                    cd "$PREFIX"
-                    rm -rf "$PREFIX/tmp/rpm-extract"
-                }
-                find "$PREFIX" -name "genisoimage" -not -path "*/home/*" | head -1 | while read -r f; do
-                    cp "$f" "$GENISOIMAGE_BIN"
-                done
-                chmod +x "$GENISOIMAGE_BIN"
-            }
-        else
-            echo "  rpm not available, trying manual extraction..."
-            mkdir -p "$PREFIX/tmp/rpm-extract"
-            cd "$PREFIX/tmp/rpm-extract"
-            rpm2cpio "$GENISOIMAGE_RPM" | cpio -idmv 2>/dev/null
-            find . -name "genisoimage" -exec cp {} "$GENISOIMAGE_BIN" \;
-            cd "$PREFIX"
-            rm -rf "$PREFIX/tmp/rpm-extract"
-            chmod +x "$GENISOIMAGE_BIN"
-        fi
-    else
-        echo "  genisoimage.rpm not found, trying package install..."
-        pkg install -y genisoimage 2>/dev/null || true
-    fi
-fi
-
-if command -v genisoimage &>/dev/null; then
-    GENISOIMAGE_BIN="genisoimage"
-fi
-
-if [[ -f "$GENISOIMAGE_BIN" ]]; then
-    chmod +x "$GENISOIMAGE_BIN"
-fi
-
-if command -v "$GENISOIMAGE_BIN" &>/dev/null || [[ -x "$GENISOIMAGE_BIN" ]]; then
-    "$GENISOIMAGE_BIN" -output "$VM_DIR/seed.iso" -volid "CIDATA" -joliet -rock "$HOME/user-data" "$HOME/meta-data" || {
-        echo "  genisoimage execution failed, trying Python fallback..."
-        python -c "
-import sys, os, io
-
-try:
-    import pycdlib
-except ImportError:
-    os.system('pip install pycdlib -q')
-    import pycdlib
-
-iso = pycdlib.PyCdlib()
-iso.new(vol_ident='CIDATA', joliet=True, rock_ridge='1.09')
-
-with open('$HOME/user-data', 'rb') as f:
-    user_data = f.read()
-with open('$HOME/meta-data', 'rb') as f:
-    meta_data = f.read()
-
-fp = io.BytesIO(user_data)
-iso.add_fp(fp, len(user_data), '/USER-DAT;1', rr_name='user-data', joliet_path='/user-data')
-
-fp = io.BytesIO(meta_data)
-iso.add_fp(fp, len(meta_data), '/META-DAT;1', rr_name='meta-data', joliet_path='/meta-data')
-
-iso.write('$VM_DIR/seed.iso')
-iso.close()
-print('seed.iso created')
-" || {
-            echo "  ERROR: Failed to create seed.iso!"
-            echo "  Please install genisoimage manually and rerun."
-            exit 1
-        }
-    }
-else
-    echo "  genisoimage not available, using Python fallback..."
-    python -c "
-import sys, os, io
-
-try:
-    import pycdlib
-except ImportError:
-    os.system('pip install pycdlib -q')
-    import pycdlib
-
-iso = pycdlib.PyCdlib()
-iso.new(vol_ident='CIDATA', joliet=True, rock_ridge='1.09')
-
-with open('$HOME/user-data', 'rb') as f:
-    user_data = f.read()
-with open('$HOME/meta-data', 'rb') as f:
-    meta_data = f.read()
-
-fp = io.BytesIO(user_data)
-iso.add_fp(fp, len(user_data), '/USER-DAT;1', rr_name='user-data', joliet_path='/user-data')
-
-fp = io.BytesIO(meta_data)
-iso.add_fp(fp, len(meta_data), '/META-DAT;1', rr_name='meta-data', joliet_path='/meta-data')
-
-iso.write('$VM_DIR/seed.iso')
-iso.close()
-print('seed.iso created')
-" || {
-        echo "  ERROR: Failed to create seed.iso!"
-        exit 1
-    }
-fi
-
-rm -f "$HOME/user-data" "$HOME/meta-data"
-echo "  Debian VM ready with credentials"
-
-create_boot_script() {
 echo ""
-echo "[5/5] Creating boot script..."
+echo "[5/6] Generating cloud-init seed.iso using Debian container..."
+
+# 检查生成脚本是否存在
+GEN_SEED_SCRIPT="$HOME/gen_seed_iso.sh"
+if [ ! -f "$GEN_SEED_SCRIPT" ]; then
+    echo "  ERROR: gen_seed_iso.sh not found at $GEN_SEED_SCRIPT"
+    exit 1
+fi
+
+# 准备 shared 目录
+SHARED_DIR="$CONTAINER_DIR/rootfs/root/shared"
+mkdir -p "$SHARED_DIR"
+
+# 复制生成脚本到共享目录
+cp "$GEN_SEED_SCRIPT" "$SHARED_DIR/gen_seed_iso.sh"
+chmod +x "$SHARED_DIR/gen_seed_iso.sh"
+
+# 清理旧的 seed.iso
+rm -f "$SHARED_DIR/seed.iso"
+
+# 在容器内运行生成脚本
+echo "  Running gen_seed_iso.sh in container..."
+"$RUN_SCRIPT" "/root/shared/gen_seed_iso.sh" || {
+    echo "  ERROR: Failed to run gen_seed_iso.sh in container!"
+    echo "  Make sure QEMU (with genisoimage) is installed in container."
+    echo "  Run 'QEMU 安装' in Resources page first."
+    exit 1
+}
+
+# 检查 seed.iso 是否生成成功
+if [ ! -f "$SHARED_DIR/seed.iso" ]; then
+    echo "  ERROR: seed.iso was not generated!"
+    echo "  Possible reasons:"
+    echo "    1. genisoimage not installed in container"
+    echo "    2. Container filesystem error"
+    echo "    3. Script execution failed"
+    echo ""
+    echo "  Please run 'QEMU 安装' first to install genisoimage in container."
+    exit 1
+fi
+
+# 复制 seed.iso 到 VM 目录
+cp "$SHARED_DIR/seed.iso" "$VM_DIR/seed.iso"
+SEED_ISO_SIZE=$(du -h "$VM_DIR/seed.iso" | awk '{print $1}')
+echo "  seed.iso generated successfully ($SEED_ISO_SIZE)"
+
+# 清理共享目录中的临时文件
+rm -f "$SHARED_DIR/seed.iso" "$SHARED_DIR/gen_seed_iso.sh"
+
+echo ""
+echo "[6/6] Creating boot script..."
 
 if [[ "$QEMU_ARCH" == "aarch64" ]]; then
     CODE_FD="$PREFIX/share/qemu/edk2-aarch64-code.fd"
     VARS_FD="$VM_DIR/edk2-vars.fd"
-    
+
     if [[ ! -f "$VARS_FD" ]]; then
         if [[ -f "$PREFIX/share/qemu/edk2-aarch64-vars.fd" ]]; then
             cp "$PREFIX/share/qemu/edk2-aarch64-vars.fd" "$VARS_FD"
@@ -270,7 +168,7 @@ if [[ "$QEMU_ARCH" == "aarch64" ]]; then
             echo "  WARNING: UEFI firmware not found, QEMU may not boot"
         fi
     fi
-    
+
     cat > "$HOME/boot-qemu.sh" <<EOF
 #!/data/data/com.termux/files/usr/bin/bash
 cd "$VM_DIR"
@@ -330,6 +228,3 @@ echo "  ssh debian@localhost -p 2222"
 echo ""
 read -p "Press any key to continue..." -n1 -s
 echo ""
-}
-
-create_boot_script
