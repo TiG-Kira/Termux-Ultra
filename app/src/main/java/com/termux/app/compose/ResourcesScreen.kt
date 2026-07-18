@@ -45,13 +45,18 @@ fun ResourcesScreen(onExecuteScript: (String, String) -> Unit, onTypeInSession: 
     val scrollBehavior = MiuixScrollBehavior()
     var expandedCard by remember { mutableStateOf<String?>(null) }
     var showTmuxHelpDialog by remember { mutableStateOf(false) }
-    var showSessionDialog by remember { mutableStateOf(false) }
-    var pendingExecuteItem by remember { mutableStateOf<ResourceItem?>(null) }
-    var pendingExecuteBaseCommand by remember { mutableStateOf("") }
     var sessions by remember { mutableStateOf<List<TerminalSession>>(emptyList()) }
 
-    LaunchedEffect(Unit) {
+    fun refreshSessions() {
         sessions = getRunningSessions()
+    }
+
+    LaunchedEffect(Unit) {
+        refreshSessions()
+        while (true) {
+            kotlinx.coroutines.delay(3000)
+            refreshSessions()
+        }
     }
 
     val resources = listOf(
@@ -78,14 +83,6 @@ fun ResourcesScreen(onExecuteScript: (String, String) -> Unit, onTypeInSession: 
             scriptUrl = "install_qemu",
             iconRes = R.drawable.ic_server,
             needsLinuxContainer = true
-        ),
-        ResourceItem(
-            title = "Alpine QEMU",
-            description = "在 Termux 的 QEMU 中安装 Alpine Linux 轻量级发行版",
-            url = "",
-            scriptUrl = "alpine_qemu",
-            iconRes = R.drawable.ic_server,
-            type = "qemu_termux"
         ),
         ResourceItem(
             title = "Debian QEMU",
@@ -161,6 +158,8 @@ fun ResourcesScreen(onExecuteScript: (String, String) -> Unit, onTypeInSession: 
                 ResourceCard(
                     item = item,
                     isExpanded = expandedCard == item.title,
+                    hasRunningSessions = sessions.isNotEmpty(),
+                    sessions = sessions,
                     onToggleExpand = {
                         expandedCard = if (expandedCard == item.title) null else item.title
                     },
@@ -174,61 +173,14 @@ fun ResourcesScreen(onExecuteScript: (String, String) -> Unit, onTypeInSession: 
                         onExecuteScript(item.title, tmuxCommand)
                         expandedCard = null
                     },
-                    onExecuteInRunningSession = { command ->
-                        pendingExecuteItem = item
-                        pendingExecuteBaseCommand = command
-                        sessions = getRunningSessions()
-                        showSessionDialog = true
+                    onExecuteInRunningSession = { sessionId, command ->
+                        onTypeInSession(sessionId, command)
                         expandedCard = null
                     },
                     onShowTmuxHelp = { showTmuxHelpDialog = true }
                 )
             }
         }
-    }
-
-    if (showSessionDialog && pendingExecuteItem != null) {
-        AlertDialog(
-            onDismissRequest = {
-                showSessionDialog = false
-                pendingExecuteItem = null
-                pendingExecuteBaseCommand = ""
-            },
-            confirmButton = {
-                Button(onClick = {
-                    showSessionDialog = false
-                    pendingExecuteItem = null
-                    pendingExecuteBaseCommand = ""
-                }) {
-                    Text("取消")
-                }
-            },
-            title = { Text("选择会话") },
-            text = {
-                Column(modifier = Modifier.heightIn(max = 300.dp)) {
-                    if (sessions.isEmpty()) {
-                        Text("没有正在运行的会话")
-                    } else {
-                        sessions.forEach { session ->
-                            Text(
-                                text = session.name,
-                                fontSize = 14.sp,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 8.dp)
-                                    .clickable {
-                                        onTypeInSession(session.id, pendingExecuteBaseCommand)
-                                        showSessionDialog = false
-                                        pendingExecuteItem = null
-                                        pendingExecuteBaseCommand = ""
-                                    },
-                                color = MiuixTheme.colorScheme.onSurface
-                            )
-                        }
-                    }
-                }
-            }
-        )
     }
 
     if (showTmuxHelpDialog) {
@@ -259,15 +211,16 @@ fun ResourcesScreen(onExecuteScript: (String, String) -> Unit, onTypeInSession: 
 private fun ResourceCard(
     item: ResourceItem,
     isExpanded: Boolean,
+    hasRunningSessions: Boolean,
+    sessions: List<TerminalSession>,
     onToggleExpand: () -> Unit,
     onExecuteInNewSession: (String) -> Unit,
     onExecuteInTmux: (String) -> Unit,
-    onExecuteInRunningSession: (String) -> Unit,
+    onExecuteInRunningSession: (String, String) -> Unit,
     onShowTmuxHelp: () -> Unit
 ) {
     val context = LocalContext.current
     val canUseTmux = isTmuxInstalled()
-    val hasRunningSessions = getRunningSessions().isNotEmpty()
 
     Card(
         modifier = Modifier
@@ -338,7 +291,7 @@ private fun ResourceCard(
                             color = MiuixTheme.colorScheme.surfaceVariant
                         )
                     ) {
-                        Text(text = "说明", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        Text(text = "说明", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = MiuixTheme.colorScheme.onSurface)
                     }
                 }
 
@@ -430,22 +383,38 @@ private fun ResourceCard(
                     }
 
                     if (hasRunningSessions) {
-                        Button(
-                            onClick = { onExecuteInRunningSession(baseCommand) },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(12.dp)),
-                            colors = ButtonDefaults.buttonColors(
-                                color = MiuixTheme.colorScheme.surfaceVariant
-                            )
+                        Text(
+                            text = "在运行的会话内执行:",
+                            style = TextStyle(
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                            ),
+                            modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
+                        )
+                        LazyColumn(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
-                            Icon(
-                                painter = painterResource(R.drawable.ic_terminal),
-                                contentDescription = "运行中",
-                                modifier = Modifier.size(18.dp),
-                                tint = MiuixTheme.colorScheme.onSurface
-                            )
-                            Text(text = "在运行的会话内执行", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                            items(sessions) { session ->
+                                Button(
+                                    onClick = { onExecuteInRunningSession(session.id, baseCommand) },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(12.dp)),
+                                    colors = ButtonDefaults.buttonColors(
+                                        color = MiuixTheme.colorScheme.surfaceContainer
+                                    )
+                                ) {
+                                    Icon(
+                                        painter = painterResource(R.drawable.ic_terminal),
+                                        contentDescription = session.name,
+                                        modifier = Modifier.size(18.dp),
+                                        tint = MiuixTheme.colorScheme.onSurface
+                                    )
+                                    Text(text = "复制到 \"${session.name}\"", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
                         }
                     }
                 }
@@ -485,7 +454,6 @@ private fun resolveCommand(item: ResourceItem, context: android.content.Context)
         item.type == "qemu_termux" -> {
             val setupScriptPath = "/data/data/com.termux/files/home/qemu_termux_setup.sh"
             val genisoimagePath = "/data/data/com.termux/files/home/genisoimage"
-            val distro = if (item.scriptUrl == "alpine_qemu") "alpine" else "debian"
             try {
                 val inputStream = context.assets.open("qemu_termux_setup.sh")
                 val outputStream = java.io.FileOutputStream(setupScriptPath)
@@ -506,7 +474,7 @@ private fun resolveCommand(item: ResourceItem, context: android.content.Context)
             } catch (e: Exception) {
                 e.printStackTrace()
             }
-            "bash $setupScriptPath $distro"
+            "bash $setupScriptPath"
         }
         item.needsLinuxContainer -> {
             val containerScriptPath = "/data/data/com.termux/files/home/install_linux_container.sh"
