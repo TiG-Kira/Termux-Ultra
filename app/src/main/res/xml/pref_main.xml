@@ -17,7 +17,7 @@
 
     <Preference
         app:fragment="com.gaurav.avnc.ui.prefs.PrefsActivity$Input"
-        app:icon="@drawable/ic_keyboard"
+        app:icon="@drawable/ic_keyboard_vnc"
         app:summary="@string/pref_input_summary"
         app:title="@string/pref_input" />
 

@@ -175,7 +175,7 @@
     </PreferenceCategory>
 
     <PreferenceCategory
-        app:icon="@drawable/ic_keyboard"
+        app:icon="@drawable/ic_keyboard_vnc"
         app:title="@string/pref_km">
 
         <SwitchPreference

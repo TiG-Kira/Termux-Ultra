@@ -327,7 +327,7 @@ private fun ResourceCard(
             }
 
             if (item.url.isNotEmpty() || item.scriptUrl.isNotEmpty()) {
-                Divider(color = Color.DarkGray)
+                Divider(color = surfaceVariantColor)
                 
                 Row(
                     modifier = Modifier
@@ -379,7 +379,7 @@ private fun ResourceCard(
             }
 
             if (isExpanded) {
-                Divider(color = Color.DarkGray)
+                Divider(color = surfaceVariantColor)
                 
                 Column(
                     modifier = Modifier

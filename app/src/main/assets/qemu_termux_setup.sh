@@ -111,12 +111,10 @@ if [ ! -f "$GEN_SEED_SCRIPT" ]; then
     exit 1
 fi
 
+chmod +x "$GEN_SEED_SCRIPT"
+
 # 准备共享目录 - 使用 Termux 的 $HOME（容器内会挂载为 /root/shared）
 SHARED_DIR="$HOME"
-
-# 复制生成脚本到共享目录
-cp "$GEN_SEED_SCRIPT" "$SHARED_DIR/gen_seed_iso.sh"
-chmod +x "$SHARED_DIR/gen_seed_iso.sh"
 
 # 清理旧的 seed.iso
 rm -f "$SHARED_DIR/seed.iso"
@@ -148,7 +146,7 @@ SEED_ISO_SIZE=$(du -h "$VM_DIR/seed.iso" | awk '{print $1}')
 echo "  seed.iso generated successfully ($SEED_ISO_SIZE)"
 
 # 清理共享目录中的临时文件
-rm -f "$SHARED_DIR/seed.iso" "$SHARED_DIR/gen_seed_iso.sh"
+rm -f "$SHARED_DIR/seed.iso"
 
 echo ""
 echo "[6/6] Creating boot script..."

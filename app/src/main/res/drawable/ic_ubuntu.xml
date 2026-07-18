@@ -3,22 +3,19 @@
     android:height="24dp"
     android:viewportWidth="24"
     android:viewportHeight="24">
-    <!-- Outer circle (Ubuntu logo style) -->
     <path
-        android:fillColor="?colorOnSurface"
-        android:pathData="M12,2C6.48,2 2,6.48 2,12C2,17.52 6.48,22 12,22C17.52,22 22,17.52 22,12C22,6.48 17.52,2 12,2zM12,20C7.58,20 4,16.42 4,12C4,7.58 7.58,4 12,4C16.42,4 20,7.58 20,12C20,16.42 16.42,20 12,20z" />
-    <!-- Center circle -->
+        android:fillColor="@color/white"
+        android:pathData="M12,2C6.48,2 2,6.48 2,12C2,17.52 6.48,22 12,22C17.52,22 22,17.52 22,12C22,6.48 17.52,2 12,2zM12,20C7.59,20 4,16.41 4,12C4,7.59 7.59,4 12,4C16.41,4 20,7.59 20,12C20,16.41 16.41,20 12,20z" />
     <path
-        android:fillColor="?colorOnSurface"
-        android:pathData="M12,10.5A1.5,1.5 0 0,0 10.5,12A1.5,1.5 0 0,0 12,13.5A1.5,1.5 0 0,0 13.5,12A1.5,1.5 0 0,0 12,10.5z" />
-    <!-- Three dots representing Ubuntu logo -->
+        android:fillColor="@color/white"
+        android:pathData="M12,8.5c-1.1,0 -2,0.9 -2,2s0.9,2 2,2s2,-0.9 2,-2S13.1,8.5 12,8.5z" />
     <path
-        android:fillColor="?colorOnSurface"
-        android:pathData="M7.5,6.5A1.5,1.5 0 0,0 6,8A1.5,1.5 0 0,0 7.5,9.5A1.5,1.5 0 0,0 9,8A1.5,1.5 0 0,0 7.5,6.5z" />
+        android:fillColor="@color/white"
+        android:pathData="M6.5,5c-0.83,0 -1.5,0.67 -1.5,1.5s0.67,1.5 1.5,1.5s1.5,-0.67 1.5,-1.5S7.33,5 6.5,5z" />
     <path
-        android:fillColor="?colorOnSurface"
-        android:pathData="M16.5,14.5A1.5,1.5 0 0,0 15,16A1.5,1.5 0 0,0 16.5,17.5A1.5,1.5 0 0,0 18,16A1.5,1.5 0 0,0 16.5,14.5z" />
+        android:fillColor="@color/white"
+        android:pathData="M17.5,14c-0.83,0 -1.5,0.67 -1.5,1.5s0.67,1.5 1.5,1.5s1.5,-0.67 1.5,-1.5S18.33,14 17.5,14z" />
     <path
-        android:fillColor="?colorOnSurface"
-        android:pathData="M7.5,14.5A1.5,1.5 0 0,0 6,16A1.5,1.5 0 0,0 7.5,17.5A1.5,1.5 0 0,0 9,16A1.5,1.5 0 0,0 7.5,14.5z" />
+        android:fillColor="@color/white"
+        android:pathData="M6.5,14c-0.83,0 -1.5,0.67 -1.5,1.5s0.67,1.5 1.5,1.5s1.5,-0.67 1.5,-1.5S7.33,14 6.5,14z" />
 </vector>
