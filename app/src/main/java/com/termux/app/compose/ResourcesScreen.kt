@@ -111,11 +111,11 @@ fun ResourcesScreen(onExecuteScript: (String, String) -> Unit, onTypeInSession: 
             iconRes = R.drawable.ic_terminal
         ),
         ResourceItem(
-            title = "Debian 容器安装",
-            description = "安装 Debian/Ubuntu Linux 容器（PRoot），为 QEMU 和其他服务提供运行环境",
+            title = "Ubuntu 容器安装",
+            description = "安装 Ubuntu Linux 容器（PRoot），为 QEMU 和其他服务提供运行环境",
             url = "",
             scriptUrl = "install_debian_container",
-            iconRes = R.drawable.ic_server,
+            iconRes = R.drawable.ic_ubuntu,
             type = "install_debian_container"
         ),
         ResourceItem(
@@ -408,7 +408,7 @@ private fun ResourceCard(
                             if (!runScript.exists() || !rootfsBash.exists()) {
                                 android.widget.Toast.makeText(
                                     context,
-                                    "请先安装 Debian 容器！请到资源页点击\"Debian 容器安装\"",
+                                    "请先安装 Ubuntu 容器！请到资源页点击\"Ubuntu 容器安装\"",
                                     android.widget.Toast.LENGTH_LONG
                                 ).show()
                                 return

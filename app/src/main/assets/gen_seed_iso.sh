@@ -13,11 +13,13 @@ if ! command -v genisoimage &>/dev/null; then
     exit 1
 fi
 
-# 创建临时目录
-WORK_DIR="/tmp/cloud-init-seed"
-rm -rf "$WORK_DIR"
-mkdir -p "$WORK_DIR"
-cd "$WORK_DIR"
+# 使用共享目录作为工作目录
+SHARED_DIR="/root/shared"
+mkdir -p "$SHARED_DIR"
+cd "$SHARED_DIR"
+
+# 清理旧文件
+rm -f user-data meta-data seed.iso
 
 # 生成 user-data
 cat > user-data <<EOF

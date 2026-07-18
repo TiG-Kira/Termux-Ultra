@@ -1,23 +1,23 @@
 #!/data/data/com.termux/files/usr/bin/bash
 # QEMU on Termux Setup (Debian)
-# 使用 Debian 容器生成 cloud-init seed.iso
+# 使用 Ubuntu 容器生成 cloud-init seed.iso
 
 set -e
 
 echo "=== QEMU on Termux Setup (Debian) ==="
 
-# 检测 Debian 容器是否存在
+# 检测 Ubuntu 容器是否存在
 CONTAINER_DIR="$HOME/debian-container"
 RUN_SCRIPT="$CONTAINER_DIR/run.sh"
 
 if [ ! -f "$RUN_SCRIPT" ] || [ ! -f "$CONTAINER_DIR/rootfs/bin/bash" ]; then
     echo ""
-    echo "ERROR: Debian container not found!"
-    echo "Please go to Resources page and click \"Debian 容器安装\" first."
+    echo "ERROR: Ubuntu container not found!"
+    echo "Please go to Resources page and click \"Ubuntu 容器安装\" first."
     echo ""
     exit 1
 fi
-echo "  Debian container found."
+echo "  Ubuntu container found."
 
 echo ""
 echo "[1/6] Installing Termux repository packages..."
@@ -102,7 +102,7 @@ echo "  Resizing to 20 GB..."
 qemu-img resize "$IMG" 20G
 
 echo ""
-echo "[5/6] Generating cloud-init seed.iso using Debian container..."
+echo "[5/6] Generating cloud-init seed.iso using Ubuntu container..."
 
 # 检查生成脚本是否存在
 GEN_SEED_SCRIPT="$HOME/gen_seed_iso.sh"
@@ -111,9 +111,8 @@ if [ ! -f "$GEN_SEED_SCRIPT" ]; then
     exit 1
 fi
 
-# 准备 shared 目录
-SHARED_DIR="$CONTAINER_DIR/rootfs/root/shared"
-mkdir -p "$SHARED_DIR"
+# 准备共享目录 - 使用 Termux 的 $HOME（容器内会挂载为 /root/shared）
+SHARED_DIR="$HOME"
 
 # 复制生成脚本到共享目录
 cp "$GEN_SEED_SCRIPT" "$SHARED_DIR/gen_seed_iso.sh"
@@ -122,7 +121,7 @@ chmod +x "$SHARED_DIR/gen_seed_iso.sh"
 # 清理旧的 seed.iso
 rm -f "$SHARED_DIR/seed.iso"
 
-# 在容器内运行生成脚本
+# 在容器内运行生成脚本（容器内 /root/shared 映射到 Termux 的 $HOME）
 echo "  Running gen_seed_iso.sh in container..."
 "$RUN_SCRIPT" "/root/shared/gen_seed_iso.sh" || {
     echo "  ERROR: Failed to run gen_seed_iso.sh in container!"
@@ -131,7 +130,7 @@ echo "  Running gen_seed_iso.sh in container..."
     exit 1
 }
 
-# 检查 seed.iso 是否生成成功
+# 检查 seed.iso 是否生成成功（文件在 Termux 的 $HOME/seed.iso）
 if [ ! -f "$SHARED_DIR/seed.iso" ]; then
     echo "  ERROR: seed.iso was not generated!"
     echo "  Possible reasons:"
