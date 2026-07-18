@@ -1,12 +1,10 @@
 #!/data/data/com.termux/files/usr/bin/bash
 # QEMU on Termux Setup (Debian)
-# Uses password login instead of SSH key authentication
 
 set -e
 
 echo "=== QEMU on Termux Setup (Debian) ==="
 
-# Step 1: Install Termux repository packages
 echo ""
 echo "[1/5] Installing Termux repository packages..."
 pkg install -y unstable-repo x11-repo 2>/dev/null || {
@@ -14,12 +12,10 @@ pkg install -y unstable-repo x11-repo 2>/dev/null || {
     pkg install -y unstable-repo x11-repo
 }
 
-# Step 2: Update package list
 echo ""
 echo "[2/5] Updating package list..."
 pkg update -y
 
-# Step 3: Install QEMU and tools
 echo ""
 echo "[3/5] Installing QEMU and dependencies..."
 pkg install -y qemu-system-aarch64 qemu-utils python curl wget openssh termux-api 2>/dev/null || {
@@ -27,7 +23,6 @@ pkg install -y qemu-system-aarch64 qemu-utils python curl wget openssh termux-ap
     pkg install -y qemu-system-x86-64 qemu-utils python curl wget openssh termux-api
 }
 
-# Get QEMU binary name
 if command -v qemu-system-aarch64 &>/dev/null; then
     QEMU_BIN="qemu-system-aarch64"
     QEMU_ARCH="aarch64"
@@ -37,12 +32,12 @@ else
 fi
 echo "  Using $QEMU_BIN"
 
-# Step 4: Setup VM directory and download image
 echo ""
 echo "[4/5] Setting up VM environment..."
 VM_DIR="$HOME/qemu-vm"
 IMG="$VM_DIR/debian-12-arm64.qcow2"
 DEBIAN_URL="https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-genericcloud-arm64.qcow2"
+MIRROR_URL="https://mirrors.tuna.tsinghua.edu.cn/debian-cloud/images/cloud/bookworm/latest/debian-12-genericcloud-arm64.qcow2"
 
 if [[ -f "$IMG" ]]; then
     echo ""
@@ -51,31 +46,48 @@ if [[ -f "$IMG" ]]; then
     echo ""
     if [[ "$REPLY" =~ ^[Yy]$ ]]; then
         echo "  Removing existing container..."
-        rm -rf "$VM_DIR"
-        mkdir -p "$VM_DIR"
+        if [[ -f "$IMG" ]]; then
+            read -p "  Delete downloaded image file ($(du -h "$IMG" | awk '{print $1}'))? [y/N] " -n1 -r
+            echo ""
+            if [[ "$REPLY" =~ ^[Yy]$ ]]; then
+                rm -rf "$VM_DIR"
+                mkdir -p "$VM_DIR"
+                DOWNLOAD_NEEDED=1
+            else
+                rm -rf "$VM_DIR/seed.iso" "$VM_DIR/edk2-vars.fd" 2>/dev/null || true
+                DOWNLOAD_NEEDED=0
+            fi
+        else
+            rm -rf "$VM_DIR"
+            mkdir -p "$VM_DIR"
+            DOWNLOAD_NEEDED=1
+        fi
     else
         echo "  Skipping download, using existing container..."
         cd "$VM_DIR" || exit 1
         create_boot_script
         exit 0
     fi
+else
+    DOWNLOAD_NEEDED=1
+    mkdir -p "$VM_DIR"
+    cd "$VM_DIR" || exit 1
 fi
 
-mkdir -p "$VM_DIR"
-cd "$VM_DIR" || exit 1
-
-echo "  Downloading Debian 12 arm64 cloud image (~1.2 GB)..."
-echo "  ========================================================"
-curl -L --progress-bar -o "$IMG" "$DEBIAN_URL" || {
-    echo ""
-    echo "  Failed to download, trying mirror..."
-    curl -L --progress-bar -o "$IMG" "https://mirrors.tuna.tsinghua.edu.cn/debian-cloud/images/cloud/bookworm/latest/debian-12-genericcloud-arm64.qcow2" || {
+if [[ "$DOWNLOAD_NEEDED" == "1" ]]; then
+    echo "  Downloading Debian 12 arm64 cloud image (~1.2 GB)..."
+    echo "  ========================================================"
+    curl -L --progress-bar -o "$IMG" "$DEBIAN_URL" || {
         echo ""
-        echo "  ERROR: Failed to download Debian image!"
-        exit 1
+        echo "  Failed to download, trying mirror..."
+        curl -L --progress-bar -o "$IMG" "$MIRROR_URL" || {
+            echo ""
+            echo "  ERROR: Failed to download Debian image!"
+            exit 1
+        }
     }
-}
-echo ""
+    echo ""
+fi
 
 echo "  Resizing to 20 GB..."
 qemu-img resize "$IMG" 20G
@@ -116,17 +128,42 @@ instance-id: docker-phone-001
 local-hostname: docker-phone
 EOF
 
+GENISOIMAGE_DEB="$HOME/genisoimage.deb"
 GENISOIMAGE_BIN="$PREFIX/bin/genisoimage"
+
 if ! command -v genisoimage &>/dev/null; then
-    echo "  Using bundled genisoimage..."
-    cp "$HOME/genisoimage" "$GENISOIMAGE_BIN"
+    if [[ -f "$GENISOIMAGE_DEB" ]]; then
+        echo "  Installing genisoimage from deb package..."
+        dpkg -i "$GENISOIMAGE_DEB" 2>/dev/null || {
+            echo "  dpkg install failed, extracting manually..."
+            cd "$PREFIX"
+            dpkg-deb -x "$GENISOIMAGE_DEB" "$PREFIX/tmp/genisoimage-extract"
+            cp "$PREFIX/tmp/genisoimage-extract/data/data/com.termux/files/usr/bin/genisoimage" "$GENISOIMAGE_BIN" 2>/dev/null || \
+            cp "$PREFIX/tmp/genisoimage-extract/usr/bin/genisoimage" "$GENISOIMAGE_BIN" 2>/dev/null || \
+            find "$PREFIX/tmp/genisoimage-extract" -name "genisoimage" -exec cp {} "$GENISOIMAGE_BIN" \;
+            chmod +x "$GENISOIMAGE_BIN"
+            rm -rf "$PREFIX/tmp/genisoimage-extract"
+        }
+    else
+        echo "  genisoimage.deb not found, trying package install..."
+        pkg install -y genisoimage 2>/dev/null || true
+    fi
+fi
+
+if command -v genisoimage &>/dev/null; then
+    GENISOIMAGE_BIN="genisoimage"
+fi
+
+if [[ -f "$GENISOIMAGE_BIN" ]]; then
     chmod +x "$GENISOIMAGE_BIN"
 fi
 
-"$GENISOIMAGE_BIN" -output "$VM_DIR/seed.iso" -volid "CIDATA" -joliet -rock "$HOME/user-data" "$HOME/meta-data" || {
-    echo "  genisoimage failed, trying alternative..."
-    python -c "
-import sys, os
+if command -v "$GENISOIMAGE_BIN" &>/dev/null || [[ -x "$GENISOIMAGE_BIN" ]]; then
+    "$GENISOIMAGE_BIN" -output "$VM_DIR/seed.iso" -volid "CIDATA" -joliet -rock "$HOME/user-data" "$HOME/meta-data" || {
+        echo "  genisoimage execution failed, trying Python fallback..."
+        python -c "
+import sys, os, io
+
 try:
     import pycdlib
 except ImportError:
@@ -141,21 +178,58 @@ with open('$HOME/user-data', 'rb') as f:
 with open('$HOME/meta-data', 'rb') as f:
     meta_data = f.read()
 
-import io
-for name, data in [('user-data', user_data), ('meta-data', meta_data)]:
-    fp = io.BytesIO(data)
-    iso.add_fp(fp, len(data), '/' + name.upper() + ';1', rr_name=name, joliet_path='/' + name)
+fp = io.BytesIO(user_data)
+iso.add_fp(fp, len(user_data), '/USER-DAT;1', rr_name='user-data', joliet_path='/user-data')
+
+fp = io.BytesIO(meta_data)
+iso.add_fp(fp, len(meta_data), '/META-DAT;1', rr_name='meta-data', joliet_path='/meta-data')
 
 iso.write('$VM_DIR/seed.iso')
 iso.close()
 print('seed.iso created')
-"
-}
+" || {
+            echo "  ERROR: Failed to create seed.iso!"
+            echo "  Please install genisoimage manually and rerun."
+            exit 1
+        }
+    }
+else
+    echo "  genisoimage not available, using Python fallback..."
+    python -c "
+import sys, os, io
+
+try:
+    import pycdlib
+except ImportError:
+    os.system('pip install pycdlib -q')
+    import pycdlib
+
+iso = pycdlib.PyCdlib()
+iso.new(vol_ident='CIDATA', joliet=True, rock_ridge='1.09')
+
+with open('$HOME/user-data', 'rb') as f:
+    user_data = f.read()
+with open('$HOME/meta-data', 'rb') as f:
+    meta_data = f.read()
+
+fp = io.BytesIO(user_data)
+iso.add_fp(fp, len(user_data), '/USER-DAT;1', rr_name='user-data', joliet_path='/user-data')
+
+fp = io.BytesIO(meta_data)
+iso.add_fp(fp, len(meta_data), '/META-DAT;1', rr_name='meta-data', joliet_path='/meta-data')
+
+iso.write('$VM_DIR/seed.iso')
+iso.close()
+print('seed.iso created')
+" || {
+        echo "  ERROR: Failed to create seed.iso!"
+        exit 1
+    }
+fi
 
 rm -f "$HOME/user-data" "$HOME/meta-data"
 echo "  Debian VM ready with credentials"
 
-# Step 5: Prepare boot script
 create_boot_script() {
 echo ""
 echo "[5/5] Creating boot script..."
