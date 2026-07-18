@@ -41,27 +41,46 @@ echo "  Using $QEMU_BIN"
 echo ""
 echo "[4/5] Setting up VM environment..."
 VM_DIR="$HOME/qemu-vm"
+IMG="$VM_DIR/debian-12-arm64.qcow2"
+DEBIAN_URL="https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-genericcloud-arm64.qcow2"
+
+if [[ -f "$IMG" ]]; then
+    echo ""
+    echo "  WARNING: Debian QEMU container already exists!"
+    read -p "  Do you want to reinstall (delete existing and start fresh)? [y/N] " -n1 -r
+    echo ""
+    if [[ "$REPLY" =~ ^[Yy]$ ]]; then
+        echo "  Removing existing container..."
+        rm -rf "$VM_DIR"
+        mkdir -p "$VM_DIR"
+    else
+        echo "  Skipping download, using existing container..."
+        cd "$VM_DIR" || exit 1
+        goto_step5
+    fi
+fi
+
 mkdir -p "$VM_DIR"
 cd "$VM_DIR" || exit 1
 
-IMG="debian-12-arm64.qcow2"
-DEBIAN_URL="https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-genericcloud-arm64.qcow2"
-
-if [[ ! -f "$IMG" ]]; then
-    echo "  Downloading Debian 12 arm64 cloud image (~1.2 GB)..."
-    wget -q --show-progress -O "$IMG" "$DEBIAN_URL" || {
-        echo "  Failed to download, trying mirror..."
-        wget -q --show-progress -O "$IMG" "https://mirrors.tuna.tsinghua.edu.cn/debian-cloud/images/cloud/bookworm/latest/debian-12-genericcloud-arm64.qcow2" || {
-            echo "  ERROR: Failed to download Debian image!"
-            exit 1
-        }
+echo "  Downloading Debian 12 arm64 cloud image (~1.2 GB)..."
+echo "  ========================================================"
+curl -L --progress-bar -o "$IMG" "$DEBIAN_URL" || {
+    echo ""
+    echo "  Failed to download, trying mirror..."
+    curl -L --progress-bar -o "$IMG" "https://mirrors.tuna.tsinghua.edu.cn/debian-cloud/images/cloud/bookworm/latest/debian-12-genericcloud-arm64.qcow2" || {
+        echo ""
+        echo "  ERROR: Failed to download Debian image!"
+        exit 1
     }
-    
-    echo "  Resizing to 20 GB..."
-    qemu-img resize "$IMG" 20G
-    
-    echo "  Creating cloud-init seed (password login only)..."
-    python -c "
+}
+echo ""
+
+echo "  Resizing to 20 GB..."
+qemu-img resize "$IMG" 20G
+
+echo "  Creating cloud-init seed (password login only)..."
+python -c "
 import sys, os
 try:
     import pycdlib
@@ -70,7 +89,7 @@ except ImportError:
     import pycdlib
 
 iso = pycdlib.PyCdlib()
-iso.new(vol_ident=b'CIDATA', joliet=True, rock_ridge=True)
+iso.new(vol_ident='CIDATA', joliet=True, rock_ridge='1.09')
 
 user_data = b'''#cloud-config
 hostname: docker-phone
@@ -112,12 +131,10 @@ iso.write('seed.iso')
 iso.close()
 print('seed.iso created')
 "
-    echo "  Debian VM ready with credentials"
-else
-    echo "  Debian image already exists: $IMG"
-fi
+echo "  Debian VM ready with credentials"
 
 # Step 5: Prepare boot script
+goto_step5:
 echo ""
 echo "[5/5] Creating boot script..."
 
@@ -146,7 +163,7 @@ $QEMU_BIN \\
     -drive file="$CODE_FD",format=raw,if=pflash,readonly=on \\
     -drive file="$VARS_FD",format=raw,if=pflash \\
     -drive file="$IMG",format=qcow2 \\
-    -drive file="seed.iso",media=cdrom,format=raw \\
+    -drive file="$VM_DIR/seed.iso",media=cdrom,format=raw \\
     -nic user,model=virtio-net-pci,hostfwd=tcp::2222-:22 \\
     -serial mon:stdio \\
     -nographic

@@ -29,7 +29,7 @@ object NotificationHelper {
         }
     }
 
-    fun showProgressNotification(context: Context, title: String, progress: Int, max: Int, message: String = "") {
+    fun showProgressNotification(context: Context, title: String, progress: Int, max: Int, message: String = "", cancelIntent: PendingIntent? = null) {
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
@@ -38,6 +38,15 @@ object NotificationHelper {
             .setSmallIcon(R.drawable.ic_backup)
             .setProgress(max, progress, false)
             .setOnlyAlertOnce(true)
+            .setOngoing(true)
+        
+        if (cancelIntent != null) {
+            builder.addAction(
+                R.drawable.ic_close,
+                "取消",
+                cancelIntent
+            )
+        }
         
         notificationManager.notify(NOTIFICATION_ID, builder.build())
     }
@@ -50,6 +59,7 @@ object NotificationHelper {
             .setContentText(message)
             .setSmallIcon(if (success) R.drawable.ic_backup else R.drawable.ic_warning)
             .setAutoCancel(true)
+            .setOngoing(false)
         
         notificationManager.notify(NOTIFICATION_ID, builder.build())
     }

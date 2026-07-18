@@ -5,6 +5,9 @@ import android.content.Intent
 import android.content.SharedPreferences
 import android.os.Handler
 import android.os.Looper
+import android.app.PendingIntent
+import android.content.BroadcastReceiver
+import android.content.IntentFilter
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -15,6 +18,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -52,11 +56,15 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
     var showLanguageDialog by remember { mutableStateOf(false) }
     var showRestoreDialog by remember { mutableStateOf(false) }
     var showRestoreConfirmDialog by remember { mutableStateOf(false) }
+    var showRestoreProgressDialog by remember { mutableStateOf(false) }
     var selectedBackupFile by remember { mutableStateOf<File?>(null) }
     var backupFiles by remember { mutableStateOf<List<File>>(emptyList()) }
     var isProcessing by remember { mutableStateOf(false) }
     var showResultDialog by remember { mutableStateOf(false) }
     var resultMessage by remember { mutableStateOf("") }
+    var restoreProgress by remember { mutableStateOf(0) }
+    var restoreTotal by remember { mutableStateOf(100) }
+    var restoreMessage by remember { mutableStateOf("") }
     val prefs = remember { context.getSharedPreferences("app_settings", Context.MODE_PRIVATE) }
     var vncEnabled by remember { mutableStateOf(prefs.getBoolean("vnc_enabled", false)) }
 
@@ -102,22 +110,35 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
             action = {
                 if (!isProcessing) {
                     isProcessing = true
+                    android.widget.Toast.makeText(context, "正在备份，请在通知栏查看进度", android.widget.Toast.LENGTH_SHORT).show()
                     NotificationHelper.createNotificationChannel(context)
-                    NotificationHelper.showProgressNotification(context, "正在备份", 0, 100, "初始化...")
+                    
+                    val cancelIntent = Intent("com.termux.BACKUP_CANCEL")
+                    val pendingCancelIntent = PendingIntent.getBroadcast(context, 0, cancelIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+                    
+                    val cancelReceiver = object : BroadcastReceiver() {
+                        override fun onReceive(context: Context?, intent: Intent?) {
+                            BackupManager.cancelBackup()
+                        }
+                    }
+                    context.registerReceiver(cancelReceiver, IntentFilter("com.termux.BACKUP_CANCEL"))
+                    
+                    NotificationHelper.showProgressNotification(context, "正在备份", 0, 100, "初始化...", pendingCancelIntent)
                     val mainHandler = Handler(Looper.getMainLooper())
                     Thread {
                         val backupPath = BackupManager.createBackup(context) { processed, total, message ->
                             val progress = if (total > 0) (processed * 100 / total) else 0
                             mainHandler.post {
-                                NotificationHelper.showProgressNotification(context, "正在备份", progress, 100, message)
+                                NotificationHelper.showProgressNotification(context, "正在备份", progress, 100, message, pendingCancelIntent)
                             }
                         }
                         mainHandler.post {
                             isProcessing = false
+                            context.unregisterReceiver(cancelReceiver)
                             if (backupPath != null) {
                                 NotificationHelper.showCompleteNotification(context, "备份完成", backupPath, true)
                             } else {
-                                NotificationHelper.showCompleteNotification(context, "备份失败", "备份过程中出现错误", false)
+                                NotificationHelper.showCompleteNotification(context, "备份取消", "备份已取消", false)
                             }
                         }
                     }.start()
@@ -236,17 +257,26 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
                     selectedBackupFile?.let { file ->
                         if (!isProcessing) {
                             isProcessing = true
-                            NotificationHelper.createNotificationChannel(context)
-                            NotificationHelper.showProgressNotification(context, "正在恢复", 0, 100, "初始化...")
+                            restoreProgress = 0
+                            restoreMessage = "初始化..."
+                            showRestoreProgressDialog = true
                             val mainHandler = Handler(Looper.getMainLooper())
                             Thread {
-                                val success = BackupManager.restoreBackup(context, file.absolutePath)
+                                val success = BackupManager.restoreBackup(context, file.absolutePath) { processed, total, message ->
+                                    restoreTotal = total
+                                    val progress = if (total > 0) (processed * 100 / total) else 0
+                                    mainHandler.post {
+                                        restoreProgress = progress
+                                        restoreMessage = message
+                                    }
+                                }
                                 mainHandler.post {
                                     isProcessing = false
+                                    showRestoreProgressDialog = false
                                     if (success) {
-                                        NotificationHelper.showCompleteNotification(context, "恢复完成", "数据已成功恢复", true)
+                                        android.widget.Toast.makeText(context, "恢复完成", android.widget.Toast.LENGTH_SHORT).show()
                                     } else {
-                                        NotificationHelper.showCompleteNotification(context, "恢复失败", "恢复过程中出现错误", false)
+                                        android.widget.Toast.makeText(context, "恢复失败或已取消", android.widget.Toast.LENGTH_SHORT).show()
                                     }
                                 }
                             }.start()
@@ -263,6 +293,41 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
             },
             text = {
                 Text(context.getString(R.string.restore_confirm_message))
+            }
+        )
+    }
+
+    if (showRestoreProgressDialog) {
+        AlertDialog(
+            title = { Text(context.getString(R.string.restore)) },
+            onDismissRequest = {
+                BackupManager.cancelRestore()
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    BackupManager.cancelRestore()
+                }) {
+                    Text(context.getString(R.string.cancel))
+                }
+            },
+            text = {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = restoreMessage,
+                        fontSize = 14.sp,
+                        modifier = Modifier.padding(bottom = 12.dp)
+                    )
+                    LinearProgressIndicator(
+                        progress = { restoreProgress.toFloat() / 100f },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Text(
+                        text = "$restoreProgress%",
+                        fontSize = 12.sp,
+                        modifier = Modifier.padding(top = 8.dp),
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    )
+                }
             }
         )
     }

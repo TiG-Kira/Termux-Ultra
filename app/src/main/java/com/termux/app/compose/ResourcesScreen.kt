@@ -1,18 +1,27 @@
 package com.termux.app.compose
 
+import android.content.ComponentName
+import android.content.Context
+import android.content.Intent
+import android.content.ServiceConnection
+import android.os.IBinder
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Divider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
@@ -24,6 +33,7 @@ import androidx.compose.ui.unit.sp
 import top.yukonga.miuix.kmp.basic.*
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import com.termux.R
+import com.termux.app.TermuxService
 
 data class ResourceItem(
     val title: String,
@@ -46,13 +56,36 @@ fun ResourcesScreen(onExecuteScript: (String, String) -> Unit, onTypeInSession: 
     var expandedCard by remember { mutableStateOf<String?>(null) }
     var showTmuxHelpDialog by remember { mutableStateOf(false) }
     var sessions by remember { mutableStateOf<List<TerminalSession>>(emptyList()) }
+    var termuxService by remember { mutableStateOf<TermuxService?>(null) }
 
     fun refreshSessions() {
-        sessions = getRunningSessions()
+        sessions = getRunningSessions(context, termuxService)
     }
 
-    LaunchedEffect(Unit) {
+    val serviceConnection = remember {
+        object : ServiceConnection {
+            override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
+                val binder = service as TermuxService.LocalBinder
+                termuxService = binder.service
+                refreshSessions()
+            }
+
+            override fun onServiceDisconnected(name: ComponentName?) {
+                termuxService = null
+            }
+        }
+    }
+
+    DisposableEffect(Unit) {
+        val intent = Intent(context, TermuxService::class.java)
+        context.bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE)
         refreshSessions()
+        onDispose {
+            context.unbindService(serviceConnection)
+        }
+    }
+
+    LaunchedEffect(termuxService) {
         while (true) {
             kotlinx.coroutines.delay(3000)
             refreshSessions()
@@ -166,16 +199,19 @@ fun ResourcesScreen(onExecuteScript: (String, String) -> Unit, onTypeInSession: 
                     onExecuteInNewSession = { command ->
                         onExecuteScript(item.title, command)
                         expandedCard = null
+                        refreshSessions()
                     },
                     onExecuteInTmux = { command ->
                         val tmuxName = item.title.replace(".", "_").replace(" ", "_")
                         val tmuxCommand = "tmux new -s $tmuxName -d && tmux send-keys -t $tmuxName '$command' C-m && tmux attach -t $tmuxName"
                         onExecuteScript(item.title, tmuxCommand)
                         expandedCard = null
+                        refreshSessions()
                     },
                     onExecuteInRunningSession = { sessionId, command ->
                         onTypeInSession(sessionId, command)
                         expandedCard = null
+                        refreshSessions()
                     },
                     onShowTmuxHelp = { showTmuxHelpDialog = true }
                 )
@@ -221,6 +257,8 @@ private fun ResourceCard(
 ) {
     val context = LocalContext.current
     val canUseTmux = isTmuxInstalled()
+    val onSurfaceColor = MiuixTheme.colorScheme.onSurface
+    val surfaceVariantColor = MiuixTheme.colorScheme.surfaceVariant
 
     Card(
         modifier = Modifier
@@ -229,20 +267,21 @@ private fun ResourceCard(
     ) {
         Column {
             Row(
-                modifier = Modifier.padding(16.dp),
+                modifier = Modifier
+                    .padding(16.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Box(
                     modifier = Modifier
-                        .size(56.dp)
-                        .clip(RoundedCornerShape(16.dp))
+                        .size(48.dp)
+                        .clip(RoundedCornerShape(12.dp))
                         .background(MiuixTheme.colorScheme.primary),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         painter = painterResource(item.iconRes),
                         contentDescription = item.title,
-                        modifier = Modifier.size(28.dp),
+                        modifier = Modifier.size(24.dp),
                         tint = Color.White
                     )
                 }
@@ -250,7 +289,7 @@ private fun ResourceCard(
                 Column(
                     modifier = Modifier
                         .weight(1f)
-                        .padding(start = 16.dp),
+                        .padding(start = 12.dp),
                     verticalArrangement = Arrangement.Center
                 ) {
                     Text(
@@ -258,9 +297,9 @@ private fun ResourceCard(
                         style = TextStyle(
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Bold,
-                            color = MiuixTheme.colorScheme.onSurface
+                            color = onSurfaceColor
                         ),
-                        modifier = Modifier.padding(bottom = 4.dp)
+                        modifier = Modifier.padding(bottom = 2.dp)
                     )
                     Text(
                         text = item.description,
@@ -270,62 +309,66 @@ private fun ResourceCard(
                         )
                     )
                 }
+            }
 
-                if (item.url.isNotEmpty()) {
+            if (item.url.isNotEmpty() || item.scriptUrl.isNotEmpty()) {
+                Divider(color = Color.DarkGray)
+                
+                Row(
+                    modifier = Modifier
+                        .padding(12.dp)
+                        .fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (item.url.isNotEmpty()) {
+                        Button(
+                            onClick = {
+                                if (item.url == "tmux_help") {
+                                    onShowTmuxHelp()
+                                } else {
+                                    val intent = android.content.Intent(
+                                        android.content.Intent.ACTION_VIEW,
+                                        android.net.Uri.parse(item.url)
+                                    )
+                                    context.startActivity(intent)
+                                }
+                            },
+                            modifier = Modifier
+                                .padding(end = 8.dp)
+                                .clip(RoundedCornerShape(8.dp)),
+                            colors = ButtonDefaults.buttonColors(
+                                color = surfaceVariantColor
+                            )
+                        ) {
+                            Text(text = "说明", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = onSurfaceColor)
+                        }
+                    }
+
                     Button(
-                        onClick = {
-                            if (item.url == "tmux_help") {
-                                onShowTmuxHelp()
-                            } else {
-                                val intent = android.content.Intent(
-                                    android.content.Intent.ACTION_VIEW,
-                                    android.net.Uri.parse(item.url)
-                                )
-                                context.startActivity(intent)
-                            }
-                        },
-                        modifier = Modifier
-                            .padding(end = 8.dp)
-                            .clip(RoundedCornerShape(12.dp)),
+                        onClick = onToggleExpand,
+                        modifier = Modifier.clip(RoundedCornerShape(8.dp)),
                         colors = ButtonDefaults.buttonColors(
-                            color = MiuixTheme.colorScheme.surfaceVariant
+                            color = MiuixTheme.colorScheme.primary
                         )
                     ) {
-                        Text(text = "说明", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = MiuixTheme.colorScheme.onSurface)
-                    }
-                }
-
-                Button(
-                    onClick = onToggleExpand,
-                    modifier = Modifier.clip(RoundedCornerShape(12.dp)),
-                    colors = ButtonDefaults.buttonColors(
-                        color = MiuixTheme.colorScheme.primary
-                    )
-                ) {
-                    if (isExpanded) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_arrow_right),
-                            contentDescription = "收起",
-                            modifier = Modifier.size(18.dp),
-                            tint = Color.White
-                        )
-                        Text(text = "收起", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                    } else {
                         Icon(
                             painter = painterResource(R.drawable.ic_play),
                             contentDescription = context.getString(R.string.execute),
-                            modifier = Modifier.size(18.dp),
+                            modifier = Modifier.size(16.dp),
                             tint = Color.White
                         )
-                        Text(text = context.getString(R.string.execute), fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        Text(text = context.getString(R.string.execute), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
                     }
                 }
             }
 
             if (isExpanded) {
+                Divider(color = Color.DarkGray)
+                
                 Column(
                     modifier = Modifier
-                        .padding(start = 16.dp, end = 16.dp, bottom = 16.dp)
+                        .padding(16.dp)
                         .background(MiuixTheme.colorScheme.surfaceContainer)
                         .clip(RoundedCornerShape(12.dp))
                         .padding(12.dp)
@@ -335,7 +378,7 @@ private fun ResourceCard(
                         style = TextStyle(
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Bold,
-                            color = MiuixTheme.colorScheme.onSurface
+                            color = onSurfaceColor
                         ),
                         modifier = Modifier.padding(bottom = 8.dp)
                     )
@@ -369,16 +412,16 @@ private fun ResourceCard(
                                 .padding(bottom = 8.dp)
                                 .clip(RoundedCornerShape(12.dp)),
                             colors = ButtonDefaults.buttonColors(
-                                color = MiuixTheme.colorScheme.surfaceVariant
+                                color = surfaceVariantColor
                             )
                         ) {
                             Icon(
                                 painter = painterResource(R.drawable.ic_terminal),
                                 contentDescription = "tmux",
                                 modifier = Modifier.size(18.dp),
-                                tint = MiuixTheme.colorScheme.onSurface
+                                tint = onSurfaceColor
                             )
-                            Text(text = "在新会话执行 (tmux)", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                            Text(text = "在新会话执行 (tmux)", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = onSurfaceColor)
                         }
                     }
 
@@ -392,27 +435,27 @@ private fun ResourceCard(
                             ),
                             modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
                         )
-                        LazyColumn(
+                        Column(
                             modifier = Modifier.fillMaxWidth(),
                             verticalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
-                            items(sessions) { session ->
+                            sessions.forEach { session ->
                                 Button(
                                     onClick = { onExecuteInRunningSession(session.id, baseCommand) },
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .clip(RoundedCornerShape(12.dp)),
                                     colors = ButtonDefaults.buttonColors(
-                                        color = MiuixTheme.colorScheme.surfaceContainer
+                                        color = surfaceVariantColor
                                     )
                                 ) {
                                     Icon(
                                         painter = painterResource(R.drawable.ic_terminal),
                                         contentDescription = session.name,
                                         modifier = Modifier.size(18.dp),
-                                        tint = MiuixTheme.colorScheme.onSurface
+                                        tint = onSurfaceColor
                                     )
-                                    Text(text = "复制到 \"${session.name}\"", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                                    Text(text = "复制到 \"${session.name}\"", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = onSurfaceColor)
                                 }
                             }
                         }
@@ -554,21 +597,17 @@ private fun isTmuxInstalled(): Boolean {
     return java.io.File(tmuxPath).exists()
 }
 
-private fun getRunningSessions(): List<TerminalSession> {
-    return try {
-        val process = Runtime.getRuntime().exec("tmux list-sessions -F '#{session_id} #{session_name}'")
-        val reader = java.io.BufferedReader(java.io.InputStreamReader(process.inputStream))
-        val sessions = mutableListOf<TerminalSession>()
-        var line: String?
-        while (reader.readLine().also { line = it } != null) {
-            val parts = line?.split(" ", limit = 2) ?: continue
-            if (parts.size >= 2) {
-                sessions.add(TerminalSession(parts[0], parts[1]))
+private fun getRunningSessions(context: Context, termuxService: TermuxService?): List<TerminalSession> {
+    return if (termuxService != null) {
+        try {
+            val sessions = termuxService.getTermuxSessions()
+            sessions.map {
+                TerminalSession(it.getTerminalSession().mHandle, it.getTerminalSession().mSessionName ?: "Terminal")
             }
+        } catch (e: Exception) {
+            emptyList()
         }
-        process.waitFor()
-        sessions
-    } catch (e: Exception) {
+    } else {
         emptyList()
     }
 }

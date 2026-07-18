@@ -144,11 +144,11 @@ class MainActivity : ComponentActivity() {
                         onTypeInSession = { sessionId, command ->
                             try {
                                 val session = sessions.find {
-                                    it.getTerminalSession().mSessionName == sessionId.substring(1) ||
-                                    it.getTerminalSession().mHandle.toString() == sessionId.substring(1)
+                                    it.getTerminalSession().mSessionName == sessionId ||
+                                    it.getTerminalSession().mHandle.toString() == sessionId
                                 }
                                 session?.let {
-                                    it.getTerminalSession().write(command)
+                                    it.getTerminalSession().write(command + "\n")
                                 }
                             } catch (e: Exception) {
                                 e.printStackTrace()

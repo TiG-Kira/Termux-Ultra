@@ -10,8 +10,15 @@ object BackupManager {
 
     private const val TERMUX_DATA_DIR = "/data/data/com.termux/files"
     private const val EXCLUDE_DIR = "$TERMUX_DATA_DIR/home/storage/shared"
+    
+    @Volatile
+    private var isBackupCancelled = false
+    
+    @Volatile
+    private var isRestoreCancelled = false
 
     fun createBackup(context: Context, onProgress: ((Int, Int, String) -> Unit)? = null): String? {
+        isBackupCancelled = false
         return try {
             val backupDir = context.getExternalFilesDir("backups")
             backupDir?.mkdirs() ?: return null
@@ -28,6 +35,9 @@ object BackupManager {
                 val totalFiles = countFiles(termuxDir)
                 var processedFiles = 0
                 addDirectoryToZip(zos, termuxDir, TERMUX_DATA_DIR) {
+                    if (isBackupCancelled) {
+                        throw InterruptedException("Backup cancelled")
+                    }
                     processedFiles++
                     onProgress?.invoke(processedFiles, totalFiles, "正在备份: ${it.name}")
                 }
@@ -37,10 +47,20 @@ object BackupManager {
             fos.close()
 
             backupFilePath
+        } catch (e: InterruptedException) {
+            null
         } catch (e: Exception) {
             e.printStackTrace()
             null
         }
+    }
+
+    fun cancelBackup() {
+        isBackupCancelled = true
+    }
+
+    fun isBackupRunning(): Boolean {
+        return !isBackupCancelled
     }
 
     private fun addDirectoryToZip(zos: ZipOutputStream, dir: File, basePath: String, onFileProcessed: ((File) -> Unit)? = null) {
@@ -106,7 +126,8 @@ object BackupManager {
         return baos.toByteArray()
     }
 
-    fun restoreBackup(context: Context, backupPath: String): Boolean {
+    fun restoreBackup(context: Context, backupPath: String, onProgress: ((Int, Int, String) -> Unit)? = null): Boolean {
+        isRestoreCancelled = false
         return try {
             val zipFile = File(backupPath)
             if (!zipFile.exists()) return false
@@ -115,7 +136,15 @@ object BackupManager {
             val zis = java.util.zip.ZipInputStream(fis)
 
             var entry: ZipEntry?
+            
+            val totalEntries = countZipEntries(zipFile)
+            var processedEntries = 0
+            
             while (zis.nextEntry.also { entry = it } != null) {
+                if (isRestoreCancelled) {
+                    throw InterruptedException("Restore cancelled")
+                }
+                
                 entry?.let {
                     val entryPath = "$TERMUX_DATA_DIR/${it.name}"
                     val destFile = File(entryPath)
@@ -142,6 +171,9 @@ object BackupManager {
                         }
                     }
                 }
+                
+                processedEntries++
+                onProgress?.invoke(processedEntries, totalEntries, "正在恢复: ${entry?.name}")
                 zis.closeEntry()
             }
 
@@ -149,10 +181,37 @@ object BackupManager {
             fis.close()
 
             true
+        } catch (e: InterruptedException) {
+            false
         } catch (e: Exception) {
             e.printStackTrace()
             false
         }
+    }
+
+    fun cancelRestore() {
+        isRestoreCancelled = true
+    }
+
+    fun isRestoreRunning(): Boolean {
+        return !isRestoreCancelled
+    }
+    
+    private fun countZipEntries(zipFile: File): Int {
+        var count = 0
+        try {
+            val fis = FileInputStream(zipFile)
+            val zis = java.util.zip.ZipInputStream(fis)
+            while (zis.nextEntry != null) {
+                count++
+                zis.closeEntry()
+            }
+            zis.close()
+            fis.close()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        return count
     }
 
     private fun String.getFileStat(): Int {
