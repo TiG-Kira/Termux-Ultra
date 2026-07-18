@@ -496,7 +496,7 @@ private fun resolveCommand(item: ResourceItem, context: android.content.Context)
         }
         item.type == "qemu_termux" -> {
             val setupScriptPath = "/data/data/com.termux/files/home/qemu_termux_setup.sh"
-            val genisoimageDebPath = "/data/data/com.termux/files/home/genisoimage.deb"
+            val genisoimageRpmPath = "/data/data/com.termux/files/home/genisoimage.rpm"
             try {
                 val inputStream = context.assets.open("qemu_termux_setup.sh")
                 val outputStream = java.io.FileOutputStream(setupScriptPath)
@@ -508,8 +508,8 @@ private fun resolveCommand(item: ResourceItem, context: android.content.Context)
                 e.printStackTrace()
             }
             try {
-                val inputStream = context.assets.open("genisoimage.deb")
-                val outputStream = java.io.FileOutputStream(genisoimageDebPath)
+                val inputStream = context.assets.open("genisoimage.rpm")
+                val outputStream = java.io.FileOutputStream(genisoimageRpmPath)
                 inputStream.copyTo(outputStream)
                 inputStream.close()
                 outputStream.close()

@@ -128,24 +128,46 @@ instance-id: docker-phone-001
 local-hostname: docker-phone
 EOF
 
-GENISOIMAGE_DEB="$HOME/genisoimage.deb"
+GENISOIMAGE_RPM="$HOME/genisoimage.rpm"
 GENISOIMAGE_BIN="$PREFIX/bin/genisoimage"
 
 if ! command -v genisoimage &>/dev/null; then
-    if [[ -f "$GENISOIMAGE_DEB" ]]; then
-        echo "  Installing genisoimage from deb package..."
-        dpkg -i "$GENISOIMAGE_DEB" 2>/dev/null || {
-            echo "  dpkg install failed, extracting manually..."
+    if [[ -f "$GENISOIMAGE_RPM" ]]; then
+        echo "  Installing genisoimage from rpm package..."
+        if ! command -v rpm &>/dev/null; then
+            echo "  Installing rpm tool..."
+            pkg install -y rpm 2>/dev/null || true
+        fi
+        if command -v rpm &>/dev/null; then
+            rpm -i --nodeps --force "$GENISOIMAGE_RPM" 2>/dev/null || {
+                echo "  rpm install failed, extracting manually..."
+                cd "$PREFIX"
+                rpm2cpio "$GENISOIMAGE_RPM" 2>/dev/null | cpio -idmv 2>/dev/null || {
+                    echo "  Manual extraction failed, trying cpio..."
+                    mkdir -p "$PREFIX/tmp/rpm-extract"
+                    cd "$PREFIX/tmp/rpm-extract"
+                    rpm2cpio "$GENISOIMAGE_RPM" | cpio -idmv
+                    find . -name "genisoimage" -exec cp {} "$GENISOIMAGE_BIN" \;
+                    cd "$PREFIX"
+                    rm -rf "$PREFIX/tmp/rpm-extract"
+                }
+                find "$PREFIX" -name "genisoimage" -not -path "*/home/*" | head -1 | while read -r f; do
+                    cp "$f" "$GENISOIMAGE_BIN"
+                done
+                chmod +x "$GENISOIMAGE_BIN"
+            }
+        else
+            echo "  rpm not available, trying manual extraction..."
+            mkdir -p "$PREFIX/tmp/rpm-extract"
+            cd "$PREFIX/tmp/rpm-extract"
+            rpm2cpio "$GENISOIMAGE_RPM" | cpio -idmv 2>/dev/null
+            find . -name "genisoimage" -exec cp {} "$GENISOIMAGE_BIN" \;
             cd "$PREFIX"
-            dpkg-deb -x "$GENISOIMAGE_DEB" "$PREFIX/tmp/genisoimage-extract"
-            cp "$PREFIX/tmp/genisoimage-extract/data/data/com.termux/files/usr/bin/genisoimage" "$GENISOIMAGE_BIN" 2>/dev/null || \
-            cp "$PREFIX/tmp/genisoimage-extract/usr/bin/genisoimage" "$GENISOIMAGE_BIN" 2>/dev/null || \
-            find "$PREFIX/tmp/genisoimage-extract" -name "genisoimage" -exec cp {} "$GENISOIMAGE_BIN" \;
+            rm -rf "$PREFIX/tmp/rpm-extract"
             chmod +x "$GENISOIMAGE_BIN"
-            rm -rf "$PREFIX/tmp/genisoimage-extract"
-        }
+        fi
     else
-        echo "  genisoimage.deb not found, trying package install..."
+        echo "  genisoimage.rpm not found, trying package install..."
         pkg install -y genisoimage 2>/dev/null || true
     fi
 fi
