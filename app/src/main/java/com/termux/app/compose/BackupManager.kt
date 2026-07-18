@@ -11,7 +11,7 @@ object BackupManager {
     private const val TERMUX_DATA_DIR = "/data/data/com.termux/files"
     private const val EXCLUDE_DIR = "$TERMUX_DATA_DIR/home/storage/shared"
 
-    fun createBackup(context: Context): String? {
+    fun createBackup(context: Context, onProgress: ((Int, Int, String) -> Unit)? = null): String? {
         return try {
             val backupDir = context.getExternalFilesDir("backups")
             backupDir?.mkdirs() ?: return null
@@ -25,7 +25,12 @@ object BackupManager {
 
             val termuxDir = File(TERMUX_DATA_DIR)
             if (termuxDir.exists()) {
-                addDirectoryToZip(zos, termuxDir, TERMUX_DATA_DIR)
+                val totalFiles = countFiles(termuxDir)
+                var processedFiles = 0
+                addDirectoryToZip(zos, termuxDir, TERMUX_DATA_DIR) {
+                    processedFiles++
+                    onProgress?.invoke(processedFiles, totalFiles, "正在备份: ${it.name}")
+                }
             }
 
             zos.close()
@@ -38,7 +43,7 @@ object BackupManager {
         }
     }
 
-    private fun addDirectoryToZip(zos: ZipOutputStream, dir: File, basePath: String) {
+    private fun addDirectoryToZip(zos: ZipOutputStream, dir: File, basePath: String, onFileProcessed: ((File) -> Unit)? = null) {
         val files = dir.listFiles() ?: return
 
         for (file in files) {
@@ -54,7 +59,7 @@ object BackupManager {
                 entry.time = file.lastModified()
                 zos.putNextEntry(entry)
                 zos.closeEntry()
-                addDirectoryToZip(zos, file, basePath)
+                addDirectoryToZip(zos, file, basePath, onFileProcessed)
             } else {
                 val entry = ZipEntry(entryName)
                 entry.time = file.lastModified()
@@ -70,8 +75,26 @@ object BackupManager {
                 }
                 fis.close()
                 zos.closeEntry()
+                onFileProcessed?.invoke(file)
             }
         }
+    }
+
+    private fun countFiles(dir: File): Int {
+        var count = 0
+        val files = dir.listFiles() ?: return 0
+        for (file in files) {
+            val filePath = file.absolutePath
+            if (filePath.startsWith(EXCLUDE_DIR)) {
+                continue
+            }
+            if (file.isDirectory) {
+                count += countFiles(file)
+            } else {
+                count++
+            }
+        }
+        return count
     }
 
     private fun getFileStat(file: File): ByteArray {

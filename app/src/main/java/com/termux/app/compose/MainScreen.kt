@@ -26,6 +26,7 @@ fun MainScreen(
     onStopTerminal: (TermuxSession) -> Unit,
     onRenameTerminal: (TermuxSession, String) -> Unit,
     onExecuteScript: (String, String) -> Unit,
+    onTypeInSession: (String, String) -> Unit,
     onAboutClick: () -> Unit,
     showVnc: Boolean,
     isWakeLockEnabled: Boolean,
@@ -85,7 +86,7 @@ fun MainScreen(
                 )
                 1 -> FileManagerScreen(onOpenFile = onExecuteScript)
                 2 -> com.termux.app.remote.RemoteScreen(showVnc = showVnc)
-                3 -> ResourcesScreen(onExecuteScript = onExecuteScript)
+                3 -> ResourcesScreen(onExecuteScript = onExecuteScript, onTypeInSession = onTypeInSession)
                 4 -> SettingsScreen(onAboutClick = onAboutClick)
             }
         }

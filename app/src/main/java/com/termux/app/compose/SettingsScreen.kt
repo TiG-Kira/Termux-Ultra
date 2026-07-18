@@ -3,6 +3,8 @@ package com.termux.app.compose
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
+import android.os.Handler
+import android.os.Looper
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -29,7 +31,9 @@ import com.termux.R
 import com.termux.app.LocaleHelper
 import com.termux.app.activities.SettingsActivity
 import java.io.File
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 data class SettingItem(
     val title: String,
@@ -98,16 +102,25 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
             action = {
                 if (!isProcessing) {
                     isProcessing = true
-                    scope.launch {
-                        val backupPath = BackupManager.createBackup(context)
-                        isProcessing = false
-                        resultMessage = if (backupPath != null) {
-                            context.getString(R.string.backup_success, backupPath)
-                        } else {
-                            context.getString(R.string.backup_failed)
+                    NotificationHelper.createNotificationChannel(context)
+                    NotificationHelper.showProgressNotification(context, "正在备份", 0, 100, "初始化...")
+                    val mainHandler = Handler(Looper.getMainLooper())
+                    Thread {
+                        val backupPath = BackupManager.createBackup(context) { processed, total, message ->
+                            val progress = if (total > 0) (processed * 100 / total) else 0
+                            mainHandler.post {
+                                NotificationHelper.showProgressNotification(context, "正在备份", progress, 100, message)
+                            }
                         }
-                        showResultDialog = true
-                    }
+                        mainHandler.post {
+                            isProcessing = false
+                            if (backupPath != null) {
+                                NotificationHelper.showCompleteNotification(context, "备份完成", backupPath, true)
+                            } else {
+                                NotificationHelper.showCompleteNotification(context, "备份失败", "备份过程中出现错误", false)
+                            }
+                        }
+                    }.start()
                 }
             }
         ))
@@ -223,16 +236,20 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
                     selectedBackupFile?.let { file ->
                         if (!isProcessing) {
                             isProcessing = true
-                            scope.launch {
+                            NotificationHelper.createNotificationChannel(context)
+                            NotificationHelper.showProgressNotification(context, "正在恢复", 0, 100, "初始化...")
+                            val mainHandler = Handler(Looper.getMainLooper())
+                            Thread {
                                 val success = BackupManager.restoreBackup(context, file.absolutePath)
-                                isProcessing = false
-                                resultMessage = if (success) {
-                                    context.getString(R.string.restore_success)
-                                } else {
-                                    context.getString(R.string.restore_failed)
+                                mainHandler.post {
+                                    isProcessing = false
+                                    if (success) {
+                                        NotificationHelper.showCompleteNotification(context, "恢复完成", "数据已成功恢复", true)
+                                    } else {
+                                        NotificationHelper.showCompleteNotification(context, "恢复失败", "恢复过程中出现错误", false)
+                                    }
                                 }
-                                showResultDialog = true
-                            }
+                            }.start()
                         }
                     }
                 }) {

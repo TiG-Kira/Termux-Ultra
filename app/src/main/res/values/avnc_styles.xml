@@ -103,6 +103,7 @@
         <item name="android:layout_width">@dimen/action_btn_size</item>
         <item name="android:layout_height">@dimen/action_btn_size</item>
         <item name="android:background">?attr/selectableItemBackgroundBorderless</item>
+        <item name="android:tint">#FF37474F</item>
     </style>
 
     <style name="ImageButton.Toggle">

@@ -141,6 +141,19 @@ class MainActivity : ComponentActivity() {
                                 startActivity(intent)
                             }
                         },
+                        onTypeInSession = { sessionId, command ->
+                            try {
+                                val session = sessions.find {
+                                    it.getTerminalSession().mSessionName == sessionId.substring(1) ||
+                                    it.getTerminalSession().mHandle.toString() == sessionId.substring(1)
+                                }
+                                session?.let {
+                                    it.getTerminalSession().write(command)
+                                }
+                            } catch (e: Exception) {
+                                e.printStackTrace()
+                            }
+                        },
                         onAboutClick = { showAbout = true },
                         showVnc = showVnc,
                         isWakeLockEnabled = isWakeLockEnabled,
