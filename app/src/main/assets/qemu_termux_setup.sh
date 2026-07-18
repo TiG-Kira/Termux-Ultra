@@ -56,7 +56,8 @@ if [[ -f "$IMG" ]]; then
     else
         echo "  Skipping download, using existing container..."
         cd "$VM_DIR" || exit 1
-        goto_step5
+        create_boot_script
+        exit 0
     fi
 fi
 
@@ -80,11 +81,82 @@ echo "  Resizing to 20 GB..."
 qemu-img resize "$IMG" 20G
 
 echo "  Creating cloud-init seed (password login only)..."
-cp "$HOME/seed.iso" "$VM_DIR/seed.iso"
+
+cat > "$HOME/user-data" <<EOF
+#cloud-config
+hostname: docker-phone
+users:
+  - name: debian
+    lock_passwd: false
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    shell: /bin/bash
+chpasswd:
+  list: |
+    root:dockerphone
+    debian:dockerphone
+  expire: False
+ssh_pwauth: true
+disable_root: false
+runcmd:
+  - sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config
+  - sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config
+  - systemctl restart sshd
+package_update: true
+packages:
+  - qemu-guest-agent
+  - ca-certificates
+  - curl
+growpart:
+  mode: auto
+  devices: ['/']
+EOF
+
+cat > "$HOME/meta-data" <<EOF
+instance-id: docker-phone-001
+local-hostname: docker-phone
+EOF
+
+GENISOIMAGE_BIN="$PREFIX/bin/genisoimage"
+if ! command -v genisoimage &>/dev/null; then
+    echo "  Using bundled genisoimage..."
+    cp "$HOME/genisoimage" "$GENISOIMAGE_BIN"
+    chmod +x "$GENISOIMAGE_BIN"
+fi
+
+"$GENISOIMAGE_BIN" -output "$VM_DIR/seed.iso" -volid "CIDATA" -joliet -rock "$HOME/user-data" "$HOME/meta-data" || {
+    echo "  genisoimage failed, trying alternative..."
+    python -c "
+import sys, os
+try:
+    import pycdlib
+except ImportError:
+    os.system('pip install pycdlib -q')
+    import pycdlib
+
+iso = pycdlib.PyCdlib()
+iso.new(vol_ident='CIDATA', joliet=True, rock_ridge='1.09')
+
+with open('$HOME/user-data', 'rb') as f:
+    user_data = f.read()
+with open('$HOME/meta-data', 'rb') as f:
+    meta_data = f.read()
+
+import io
+for name, data in [('user-data', user_data), ('meta-data', meta_data)]:
+    fp = io.BytesIO(data)
+    iso.add_fp(fp, len(data), '/' + name.upper() + ';1', rr_name=name, joliet_path='/' + name)
+
+iso.write('$VM_DIR/seed.iso')
+iso.close()
+print('seed.iso created')
+"
+}
+
+rm -f "$HOME/user-data" "$HOME/meta-data"
 echo "  Debian VM ready with credentials"
 
 # Step 5: Prepare boot script
-goto_step5:
+create_boot_script() {
 echo ""
 echo "[5/5] Creating boot script..."
 
@@ -162,3 +234,6 @@ echo "  ssh debian@localhost -p 2222"
 echo ""
 read -p "Press any key to continue..." -n1 -s
 echo ""
+}
+
+create_boot_script

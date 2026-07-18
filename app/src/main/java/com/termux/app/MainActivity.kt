@@ -151,7 +151,14 @@ class MainActivity : ComponentActivity() {
                                 session?.let { ts ->
                                     val terminalSession = ts.getTerminalSession()
                                     if (!terminalSession.isRunning()) {
-                                        Toast.makeText(this, "请先进入\"${ts.getTerminalSession().mSessionName ?: "会话"}\"，在会话初始化后再执行", Toast.LENGTH_LONG).show()
+                                        val intent = Intent(this, TermuxActivity::class.java)
+                                        intent.putExtra("sessionHandle", terminalSession.mHandle)
+                                        startActivity(intent)
+                                        android.os.Handler().postDelayed({
+                                            if (terminalSession.isRunning()) {
+                                                terminalSession.write(command + "\n")
+                                            }
+                                        }, 2000)
                                     } else {
                                         terminalSession.write(command + "\n")
                                         val intent = Intent(this, TermuxActivity::class.java)
