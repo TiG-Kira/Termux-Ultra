@@ -138,7 +138,6 @@ def create_iso(output_path, volume_id, files):
         root_dir_padded = root_dir_data
 
     # Fix "." entry size in root dir
-    # We need to rebuild with correct size
     root_dir_sectors = (root_dir_size + SECTOR_SIZE - 1) // SECTOR_SIZE
     dot_entry = make_dir_entry('.', root_dir_sector, root_dir_size, is_dir=True)
     dotdot_entry = make_dir_entry('..', root_dir_sector, root_dir_size, is_dir=True)
@@ -148,16 +147,39 @@ def create_iso(output_path, volume_id, files):
     root_dir_data += dotdot_entry
     for _, _, entry, _ in file_entries:
         root_dir_data += entry
-    root_dir_padded = root_dir_data + b'\x00' * (SECTOR_SIZE - (len(root_dir_data) % SECTOR_SIZE))
-    if len(root_dir_data) % SECTOR_SIZE == 0:
+    
+    root_dir_size = len(root_dir_data)
+    root_dir_sectors = (root_dir_size + SECTOR_SIZE - 1) // SECTOR_SIZE
+    root_dir_padded = root_dir_data + b'\x00' * (SECTOR_SIZE - (root_dir_size % SECTOR_SIZE))
+    if root_dir_size % SECTOR_SIZE == 0:
         root_dir_padded = root_dir_data
 
-    # Actually we need to recalculate since "." entry size might change things
-    # For simplicity, let's just use the size we have and accept minor waste
-    # It's a minimal ISO, it will work fine
+    # Recalculate with correct root dir size
+    dot_entry = make_dir_entry('.', root_dir_sector, root_dir_size, is_dir=True)
+    dotdot_entry = make_dir_entry('..', root_dir_sector, root_dir_size, is_dir=True)
+    
+    root_dir_data = bytearray()
+    root_dir_data += dot_entry
+    root_dir_data += dotdot_entry
+    for _, _, entry, _ in file_entries:
+        root_dir_data += entry
+    
+    root_dir_size = len(root_dir_data)
+    root_dir_sectors = (root_dir_size + SECTOR_SIZE - 1) // SECTOR_SIZE
+    root_dir_padded = root_dir_data + b'\x00' * (SECTOR_SIZE - (root_dir_size % SECTOR_SIZE))
+    if root_dir_size % SECTOR_SIZE == 0:
+        root_dir_padded = root_dir_data
 
-    # Total sectors
-    total_sectors = current_data_sector
+    # Build file entries with correct data sector positions
+    file_entries = []
+    current_data_sector = root_dir_sector + root_dir_sectors
+
+    for fname, data in file_data:
+        iso_name = fname.upper() + ';1'
+        entry = make_dir_entry(iso_name, current_data_sector, len(data))
+        file_entries.append((fname, data, entry, current_data_sector))
+        sectors_needed = (len(data) + SECTOR_SIZE - 1) // SECTOR_SIZE
+        current_data_sector += sectors_needed
 
     # Build Primary Volume Descriptor
     pvd = bytearray(SECTOR_SIZE)

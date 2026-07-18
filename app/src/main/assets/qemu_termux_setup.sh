@@ -80,57 +80,7 @@ echo "  Resizing to 20 GB..."
 qemu-img resize "$IMG" 20G
 
 echo "  Creating cloud-init seed (password login only)..."
-python -c "
-import sys, os
-try:
-    import pycdlib
-except ImportError:
-    os.system('pip install pycdlib -q')
-    import pycdlib
-
-iso = pycdlib.PyCdlib()
-iso.new(vol_ident='CIDATA', joliet=True, rock_ridge='1.09')
-
-user_data = b'''#cloud-config
-hostname: docker-phone
-users:
-  - name: debian
-    lock_passwd: false
-    sudo: ALL=(ALL) NOPASSWD:ALL
-    shell: /bin/bash
-chpasswd:
-  list: |
-    root:dockerphone
-    debian:dockerphone
-  expire: False
-ssh_pwauth: true
-disable_root: false
-runcmd:
-  - sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config
-  - sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config
-  - systemctl restart sshd
-package_update: true
-packages:
-  - qemu-guest-agent
-  - ca-certificates
-  - curl
-growpart:
-  mode: auto
-  devices: ['/']
-'''
-meta_data = b'''instance-id: docker-phone-001
-local-hostname: docker-phone
-'''
-
-import io
-for name, data in [('user-data', user_data), ('meta-data', meta_data)]:
-    fp = io.BytesIO(data)
-    iso.add_fp(fp, len(data), '/' + name.upper() + ';1', joliet_path='/' + name)
-
-iso.write('seed.iso')
-iso.close()
-print('seed.iso created')
-"
+cp "$HOME/seed.iso" "$VM_DIR/seed.iso"
 echo "  Debian VM ready with credentials"
 
 # Step 5: Prepare boot script

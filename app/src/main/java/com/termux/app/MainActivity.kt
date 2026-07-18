@@ -14,6 +14,7 @@ import androidx.activity.compose.BackHandler
 import androidx.core.view.WindowCompat
 import androidx.activity.compose.setContent
 import android.content.SharedPreferences
+import android.widget.Toast
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -147,8 +148,16 @@ class MainActivity : ComponentActivity() {
                                     it.getTerminalSession().mSessionName == sessionId ||
                                     it.getTerminalSession().mHandle.toString() == sessionId
                                 }
-                                session?.let {
-                                    it.getTerminalSession().write(command + "\n")
+                                session?.let { ts ->
+                                    val terminalSession = ts.getTerminalSession()
+                                    if (!terminalSession.isRunning()) {
+                                        Toast.makeText(this, "请先进入\"${ts.getTerminalSession().mSessionName ?: "会话"}\"，在会话初始化后再执行", Toast.LENGTH_LONG).show()
+                                    } else {
+                                        terminalSession.write(command + "\n")
+                                        val intent = Intent(this, TermuxActivity::class.java)
+                                        intent.putExtra("sessionHandle", terminalSession.mHandle)
+                                        startActivity(intent)
+                                    }
                                 }
                             } catch (e: Exception) {
                                 e.printStackTrace()
