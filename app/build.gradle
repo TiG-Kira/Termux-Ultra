@@ -22,7 +22,7 @@ android {
         minSdkVersion project.properties.minSdkVersion.toInteger()
         targetSdkVersion project.properties.targetSdkVersion.toInteger()
         versionCode 1030
-versionName "0.118.3.2.22"
+versionName "0.118.3.3.1"
 
         if (appVersionName) versionName = appVersionName
 

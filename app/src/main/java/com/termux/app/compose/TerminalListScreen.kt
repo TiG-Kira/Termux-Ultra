@@ -258,7 +258,8 @@ private fun TerminalCard(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
-            .clickable(onClick = onClick)
+            .clickable(onClick = onClick),
+        colors = CardDefaults.cardColors(containerColor = if (isSystemInDarkTheme()) Color(0xFF1A1A1A) else Color.White)
     ) {
         Column(
             modifier = Modifier
