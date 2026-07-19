@@ -2,9 +2,12 @@ package com.termux.app.compose
 
 import android.app.Activity
 import android.view.View
+import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
@@ -29,6 +32,14 @@ fun KiTerminalTheme(
     }
     MiuixTheme(
         controller = ThemeController(colorSchemeMode = ColorSchemeMode.System),
-        content = content
+        content = {
+            androidx.compose.foundation.layout.Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.White)
+            ) {
+                content()
+            }
+        }
     )
 }

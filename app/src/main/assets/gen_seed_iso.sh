@@ -13,16 +13,14 @@ if ! command -v genisoimage &>/dev/null; then
     exit 1
 fi
 
-# 使用共享目录作为工作目录
-SHARED_DIR="/root/shared"
-mkdir -p "$SHARED_DIR"
-cd "$SHARED_DIR"
-
-# 清理旧文件
-rm -f user-data meta-data seed.iso
+# 使用临时工作目录
+WORK_DIR="/tmp/seed_iso_work"
+rm -rf "$WORK_DIR"
+mkdir -p "$WORK_DIR"
+cd "$WORK_DIR"
 
 # 生成 user-data
-cat > user-data <<EOF
+cat > user-data <<'EOF'
 #cloud-config
 hostname: docker-phone
 users:
@@ -52,7 +50,7 @@ growpart:
 EOF
 
 # 生成 meta-data
-cat > meta-data <<EOF
+cat > meta-data <<'EOF'
 instance-id: docker-phone-001
 local-hostname: docker-phone
 EOF
@@ -68,8 +66,8 @@ cp seed.iso "$SHARED_DIR/seed.iso"
 
 echo ""
 echo "seed.iso generated successfully at: $SHARED_DIR/seed.iso"
-echo "Size: $(ls -lh seed.iso | awk '{print $2}')"
+echo "Size: $(ls -lh "$SHARED_DIR/seed.iso" | awk '{print $5}')"
 
-# 清理
+# 清理工作目录
 rm -rf "$WORK_DIR"
 echo "=== seed.iso generation complete ==="

@@ -68,7 +68,6 @@ fun FileManagerScreen(
         val prefs = context.getSharedPreferences("termux_prefs", android.content.Context.MODE_PRIVATE)
         if (!prefs.getBoolean("files_warning_shown", false)) {
             showWarningCard = true
-            prefs.edit().putBoolean("files_warning_shown", true).apply()
         }
     }
 
@@ -243,7 +242,11 @@ fun FileManagerScreen(
                                 contentDescription = stringResource(R.string.ok),
                                 modifier = Modifier
                                     .size(24.dp)
-                                    .clickable { showWarningCard = false },
+                                    .clickable {
+                                        showWarningCard = false
+                                        val prefs = context.getSharedPreferences("termux_prefs", android.content.Context.MODE_PRIVATE)
+                                        prefs.edit().putBoolean("files_warning_shown", true).apply()
+                                    },
                                 tint = MiuixTheme.colorScheme.onSurfaceVariantSummary
                             )
                         }

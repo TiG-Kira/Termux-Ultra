@@ -1,7 +1,13 @@
 package com.termux.app.compose
 
+import android.content.ComponentName
+import android.content.Context
+import android.content.Intent
+import android.content.ServiceConnection
+import android.os.IBinder
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
@@ -10,30 +16,39 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.CheckCircleOutline
+import androidx.compose.material.icons.rounded.ErrorOutline
+import androidx.compose.material.icons.rounded.Info
+import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.TopAppBar
-import top.yukonga.miuix.kmp.basic.Card
+import androidx.compose.material3.Card
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.Switch
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import com.termux.R
+import com.termux.app.TermuxService
 import com.termux.shared.shell.TermuxSession
 
 @Composable
@@ -52,18 +67,39 @@ fun TerminalListScreen(
     var newName by remember { mutableStateOf("") }
     var showWelcomeCard by remember { mutableStateOf(false) }
     var showKeepAliveWarning by remember { mutableStateOf(false) }
+    var termuxService by remember { mutableStateOf<TermuxService?>(null) }
 
     LaunchedEffect(Unit) {
         val prefs = context.getSharedPreferences("termux_prefs", android.content.Context.MODE_PRIVATE)
         if (!prefs.getBoolean("terminal_welcome_shown", false)) {
             showWelcomeCard = true
-            prefs.edit().putBoolean("terminal_welcome_shown", true).apply()
         }
 
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
             if (!prefs.getBoolean("keep_alive_warning_dismissed", false)) {
                 showKeepAliveWarning = true
             }
+        }
+    }
+
+    val serviceConnection = remember {
+        object : ServiceConnection {
+            override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
+                val binder = service as TermuxService.LocalBinder
+                termuxService = binder.service
+            }
+
+            override fun onServiceDisconnected(name: ComponentName?) {
+                termuxService = null
+            }
+        }
+    }
+
+    DisposableEffect(Unit) {
+        val intent = Intent(context, TermuxService::class.java)
+        context.bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE)
+        onDispose {
+            context.unbindService(serviceConnection)
         }
     }
 
@@ -86,7 +122,7 @@ fun TerminalListScreen(
                             tint = MiuixTheme.colorScheme.onSurface
                         )
                         Spacer(modifier = Modifier.width(4.dp))
-                        Switch(
+                        top.yukonga.miuix.kmp.basic.Switch(
                             checked = isWakeLockEnabled,
                             onCheckedChange = { onToggleWakeLock() }
                         )
@@ -119,7 +155,11 @@ fun TerminalListScreen(
                 item(span = { GridItemSpan(2) }) {
                     WelcomeCard(
                         text = stringResource(R.string.terminal_welcome_message),
-                        onClose = { showWelcomeCard = false }
+                        onClose = {
+                            showWelcomeCard = false
+                            val prefs = context.getSharedPreferences("termux_prefs", android.content.Context.MODE_PRIVATE)
+                            prefs.edit().putBoolean("terminal_welcome_shown", true).apply()
+                        }
                     )
                 }
             }
@@ -134,6 +174,10 @@ fun TerminalListScreen(
                         }
                     )
                 }
+            }
+
+            item(span = { GridItemSpan(2) }) {
+                ServiceStatusCard(isRunning = termuxService != null, isWakeLockActive = isWakeLockEnabled)
             }
 
             if (sessions.isEmpty()) {
@@ -283,43 +327,59 @@ private fun TerminalCard(
 
 @Composable
 fun KeepAliveWarningCard(onClose: () -> Unit) {
+    val isDark = isSystemInDarkTheme()
+    val cardColor = if (isDark) Color(0xFF3D3514) else Color(0xFFFFF9C4)
+    val iconColor = Color(0xFFFDD835)
+    val textColor = if (isDark) Color.White else Color.Black
+    
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp)
-            .clip(RoundedCornerShape(16.dp))
+            .padding(vertical = 8.dp),
+        colors = CardDefaults.cardColors(containerColor = cardColor)
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Top
+        Box(modifier = Modifier.fillMaxSize()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .offset(30.dp, 60.dp),
+                contentAlignment = Alignment.BottomEnd
             ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = stringResource(R.string.keep_alive_warning_title),
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MiuixTheme.colorScheme.onSurface
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = stringResource(R.string.keep_alive_warning_message),
-                        fontSize = 14.sp,
-                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                    )
-                }
+                Icon(
+                    modifier = Modifier.size(120.dp).alpha(0.8f),
+                    imageVector = Icons.Rounded.Warning,
+                    tint = iconColor,
+                    contentDescription = null
+                )
+            }
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(all = 16.dp)
+            ) {
                 Icon(
                     painter = painterResource(R.drawable.ic_close),
                     contentDescription = stringResource(R.string.ok),
                     modifier = Modifier
                         .size(24.dp)
+                        .align(Alignment.End)
                         .clickable(onClick = onClose),
-                    tint = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                    tint = textColor.copy(alpha = 0.6f)
+                )
+                Text(
+                    modifier = Modifier.fillMaxWidth(),
+                    text = stringResource(R.string.keep_alive_warning_title),
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = textColor
+                )
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    modifier = Modifier.fillMaxWidth(),
+                    text = stringResource(R.string.keep_alive_warning_message),
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = textColor
                 )
             }
         }
@@ -328,33 +388,111 @@ fun KeepAliveWarningCard(onClose: () -> Unit) {
 
 @Composable
 fun WelcomeCard(text: String, onClose: () -> Unit) {
+    val isDark = isSystemInDarkTheme()
+    val cardColor = if (isDark) Color(0xFF1A1A1A) else Color.White
+    val iconColor = if (isDark) Color(0xFF666666) else Color(0xFFCCCCCC)
+    val textColor = if (isDark) Color.White else Color.Black
+    
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp)
-            .clip(RoundedCornerShape(16.dp))
+            .padding(vertical = 8.dp),
+        colors = CardDefaults.cardColors(containerColor = cardColor)
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Text(
-                text = text,
-                fontSize = 14.sp,
-                modifier = Modifier.weight(1f),
-                color = MiuixTheme.colorScheme.onSurface
-            )
-            Icon(
-                painter = painterResource(R.drawable.ic_close),
-                contentDescription = stringResource(R.string.ok),
+        Box(modifier = Modifier.fillMaxSize()) {
+            Box(
                 modifier = Modifier
-                    .size(24.dp)
-                    .clickable(onClick = onClose),
-                tint = MiuixTheme.colorScheme.onSurfaceVariantSummary
-            )
+                    .fillMaxSize()
+                    .offset(30.dp, 30.dp),
+                contentAlignment = Alignment.BottomEnd
+            ) {
+                Icon(
+                    modifier = Modifier.size(120.dp).alpha(0.8f),
+                    imageVector = Icons.Rounded.Info,
+                    tint = iconColor,
+                    contentDescription = null
+                )
+            }
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(all = 16.dp)
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_close),
+                    contentDescription = stringResource(R.string.ok),
+                    modifier = Modifier
+                        .size(24.dp)
+                        .align(Alignment.End)
+                        .clickable(onClick = onClose),
+                    tint = textColor.copy(alpha = 0.6f)
+                )
+                Text(
+                    modifier = Modifier.fillMaxWidth(),
+                    text = text,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = textColor
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun ServiceStatusCard(isRunning: Boolean, isWakeLockActive: Boolean) {
+    val isDark = isSystemInDarkTheme()
+    val (cardColor, iconColor) = if (isRunning) {
+        Pair(if (isDark) Color(0xFF1A3825) else Color(0xFFDFFAE4), Color(0xFF36D167))
+    } else {
+        Pair(if (isDark) Color(0xFF3B1414) else Color(0xFFFFEBEE), Color(0xFFFF5252))
+    }
+    val textColor = if (isDark) Color.White else Color.Black
+    
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        colors = CardDefaults.cardColors(containerColor = cardColor)
+    ) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .offset(35.dp, 35.dp),
+                contentAlignment = Alignment.BottomEnd
+            ) {
+                Icon(
+                    modifier = Modifier.size(120.dp).alpha(0.8f),
+                    imageVector = if (isRunning) Icons.Rounded.CheckCircleOutline 
+                        else Icons.Rounded.ErrorOutline,
+                    tint = iconColor,
+                    contentDescription = null
+                )
+            }
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(all = 16.dp)
+            ) {
+                Text(
+                    modifier = Modifier.fillMaxWidth(),
+                    text = if (isRunning) {
+                        if (isWakeLockActive) "Termux 服务正常 (已激活唤醒锁)" else "Termux 服务正常"
+                    } else "Termux 服务异常",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = textColor
+                )
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    modifier = Modifier.fillMaxWidth(),
+                    text = if (isRunning) "当前服务正常，会话可以保持运行" else "当前服务被退出，若您有正在进行的进程，运行状态可能会丢失",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = textColor
+                )
+            }
         }
     }
 }

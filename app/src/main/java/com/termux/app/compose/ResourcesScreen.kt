@@ -7,6 +7,7 @@ import android.content.ServiceConnection
 import android.os.IBinder
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -15,11 +16,16 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Divider
 import androidx.compose.material3.Text
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Info
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
@@ -30,7 +36,13 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import top.yukonga.miuix.kmp.basic.*
+import top.yukonga.miuix.kmp.basic.Scaffold
+import top.yukonga.miuix.kmp.basic.TopAppBar
+import top.yukonga.miuix.kmp.basic.IconButton
+import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
+import top.yukonga.miuix.kmp.basic.Switch
+import top.yukonga.miuix.kmp.basic.Icon
+import androidx.compose.material3.Card
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import com.termux.R
 import com.termux.app.TermuxService
@@ -45,7 +57,8 @@ data class ResourceItem(
     val hasHelp: Boolean = false,
     val type: String = "default",
     val needsLinuxContainer: Boolean = false,
-    val needsContainerCheck: Boolean = false
+    val needsContainerCheck: Boolean = false,
+    val copyToClipboard: Boolean = false
 )
 
 data class TerminalSession(val id: String, val name: String)
@@ -147,29 +160,31 @@ fun ResourcesScreen(onExecuteScript: (String, String) -> Unit, onTypeInSession: 
             title = context.getString(R.string.resource_minecraft_server),
             description = context.getString(R.string.resource_minecraft_server_desc),
             url = "https://github.com/TheRemote/MinecraftBedrockServer",
-            scriptUrl = "https://raw.githubusercontent.com/TheRemote/MinecraftBedrockServer/master/SetupMinecraft.sh",
+            scriptUrl = "curl -sSL https://raw.githubusercontent.com/TheRemote/MinecraftBedrockServer/master/SetupMinecraft.sh | bash",
             iconRes = R.drawable.ic_game,
             needsLinuxContainer = true,
             needsContainerCheck = true,
-            type = "minecraft_server"
+            copyToClipboard = true
         ),
         ResourceItem(
             title = context.getString(R.string.resource_linux_server),
             description = context.getString(R.string.resource_linux_server_desc),
             url = "https://github.com/teddysun/lamp",
-            scriptUrl = "https://raw.githubusercontent.com/teddysun/lamp/master/lamp.sh",
+            scriptUrl = "curl -sSL https://raw.githubusercontent.com/teddysun/lamp/master/lamp.sh | bash",
             iconRes = R.drawable.ic_server,
             needsLinuxContainer = true,
-            needsContainerCheck = true
+            needsContainerCheck = true,
+            copyToClipboard = true
         ),
         ResourceItem(
             title = context.getString(R.string.resource_web_server),
             description = context.getString(R.string.resource_web_server_desc),
             url = "https://nginx.org/",
-            scriptUrl = "https://raw.githubusercontent.com/angristan/nginx-autoinstall/master/nginx-autoinstall.sh",
+            scriptUrl = "curl -sSL https://raw.githubusercontent.com/angristan/nginx-autoinstall/master/nginx-autoinstall.sh | bash",
             iconRes = R.drawable.ic_web,
             needsLinuxContainer = true,
-            needsContainerCheck = true
+            needsContainerCheck = true,
+            copyToClipboard = true
         ),
         ResourceItem(
             title = context.getString(R.string.resource_node_js),
@@ -202,6 +217,10 @@ fun ResourcesScreen(onExecuteScript: (String, String) -> Unit, onTypeInSession: 
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            item {
+                PersistentHintCard()
+            }
+            
             items(resources) { item ->
                 ResourceCard(
                     item = item,
@@ -274,11 +293,15 @@ private fun ResourceCard(
     val canUseTmux = isTmuxInstalled()
     val onSurfaceColor = MiuixTheme.colorScheme.onSurface
     val surfaceVariantColor = MiuixTheme.colorScheme.surfaceVariant
+    val dividerColor = onSurfaceColor.copy(alpha = 0.15f)
+    val isDark = isSystemInDarkTheme()
+    val cardBackgroundColor = if (isDark) Color(0xFF1A1A1A) else Color.White
 
-    Card(
+    androidx.compose.material3.Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(16.dp)),
+        colors = CardDefaults.cardColors(containerColor = cardBackgroundColor)
     ) {
         Column {
             Row(
@@ -327,7 +350,7 @@ private fun ResourceCard(
             }
 
             if (item.url.isNotEmpty() || item.scriptUrl.isNotEmpty()) {
-                Divider(color = surfaceVariantColor)
+                Divider(color = dividerColor)
                 
                 Row(
                     modifier = Modifier
@@ -353,33 +376,56 @@ private fun ResourceCard(
                                 .padding(end = 8.dp)
                                 .clip(RoundedCornerShape(8.dp)),
                             colors = ButtonDefaults.buttonColors(
-                                color = surfaceVariantColor
+                                containerColor = if (isDark) Color(0xFF424242) else Color(0xFFE0E0E0)
                             )
                         ) {
                             Text(text = "说明", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = onSurfaceColor)
                         }
                     }
 
-                    Button(
-                        onClick = onToggleExpand,
-                        modifier = Modifier.clip(RoundedCornerShape(8.dp)),
-                        colors = ButtonDefaults.buttonColors(
-                            color = MiuixTheme.colorScheme.primary
-                        )
-                    ) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_play),
-                            contentDescription = context.getString(R.string.execute),
-                            modifier = Modifier.size(16.dp),
-                            tint = Color.White
-                        )
-                        Text(text = context.getString(R.string.execute), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                    if (item.copyToClipboard) {
+                        Button(
+                            onClick = {
+                                val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                                val clip = android.content.ClipData.newPlainText("执行指令", item.scriptUrl)
+                                clipboard.setPrimaryClip(clip)
+                                android.widget.Toast.makeText(context, "指令已复制到剪贴板", android.widget.Toast.LENGTH_SHORT).show()
+                            },
+                            modifier = Modifier.clip(RoundedCornerShape(8.dp)),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MiuixTheme.colorScheme.primary
+                            )
+                        ) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_copy),
+                                contentDescription = "复制指令",
+                                modifier = Modifier.size(16.dp),
+                                tint = Color.White
+                            )
+                            Text(text = "复制指令", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        }
+                    } else {
+                        Button(
+                            onClick = onToggleExpand,
+                            modifier = Modifier.clip(RoundedCornerShape(8.dp)),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MiuixTheme.colorScheme.primary
+                            )
+                        ) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_play),
+                                contentDescription = context.getString(R.string.execute),
+                                modifier = Modifier.size(16.dp),
+                                tint = Color.White
+                            )
+                            Text(text = context.getString(R.string.execute), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        }
                     }
                 }
             }
 
-            if (isExpanded) {
-                Divider(color = surfaceVariantColor)
+            if (isExpanded && !item.copyToClipboard) {
+                Divider(color = dividerColor)
                 
                 Column(
                     modifier = Modifier
@@ -424,7 +470,7 @@ private fun ResourceCard(
                             .padding(bottom = 8.dp)
                             .clip(RoundedCornerShape(12.dp)),
                         colors = ButtonDefaults.buttonColors(
-                            color = MiuixTheme.colorScheme.primary
+                            containerColor = MiuixTheme.colorScheme.primary
                         )
                     ) {
                         Icon(
@@ -444,7 +490,7 @@ private fun ResourceCard(
                                 .padding(bottom = 8.dp)
                                 .clip(RoundedCornerShape(12.dp)),
                             colors = ButtonDefaults.buttonColors(
-                                color = surfaceVariantColor
+                                containerColor = surfaceVariantColor
                             )
                         ) {
                             Icon(
@@ -478,7 +524,7 @@ private fun ResourceCard(
                                         .fillMaxWidth()
                                         .clip(RoundedCornerShape(12.dp)),
                                     colors = ButtonDefaults.buttonColors(
-                                        color = surfaceVariantColor
+                                        containerColor = surfaceVariantColor
                                     )
                                 ) {
                                     Icon(
@@ -592,32 +638,7 @@ private fun resolveCommand(item: ResourceItem, context: android.content.Context)
             }
             "bash $setupScriptPath"
         }
-        item.type == "minecraft_server" -> {
-            val runInContainerPath = "/data/data/com.termux/files/home/run_in_container.sh"
-            val wrapperScriptPath = "/data/data/com.termux/files/home/minecraft_server_wrapper.sh"
-            try {
-                val inputStream = context.assets.open("run_in_container.sh")
-                val outputStream = java.io.FileOutputStream(runInContainerPath)
-                inputStream.copyTo(outputStream)
-                inputStream.close()
-                outputStream.close()
-                java.io.File(runInContainerPath).setExecutable(true)
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
-            try {
-                val inputStream = context.assets.open("minecraft_server_wrapper.sh")
-                val outputStream = java.io.FileOutputStream(wrapperScriptPath)
-                inputStream.copyTo(outputStream)
-                inputStream.close()
-                outputStream.close()
-                java.io.File(wrapperScriptPath).setExecutable(true)
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
-            "curl -sSL -o /data/data/com.termux/files/home/tmp_script.sh ${item.scriptUrl} && CONTAINER_DIR=/data/data/com.termux/files/home/debian-container && SHARED_DIR=\"\$CONTAINER_DIR/rootfs/root/shared\" && mkdir -p \"\$SHARED_DIR\" && cp $wrapperScriptPath \"\$SHARED_DIR/minecraft_wrapper.sh\" && cp /data/data/com.termux/files/home/tmp_script.sh \"\$SHARED_DIR/minecraft_setup.sh\" && chmod +x \"\$SHARED_DIR/minecraft_wrapper.sh\" \"\$SHARED_DIR/minecraft_setup.sh\" && bash \$CONTAINER_DIR/run.sh \"/root/shared/minecraft_wrapper.sh /root/shared/minecraft_setup.sh\""
-        }
-        item.needsLinuxContainer -> {
+        item.needsLinuxContainer && !item.copyToClipboard -> {
             val runInContainerPath = "/data/data/com.termux/files/home/run_in_container.sh"
             try {
                 val inputStream = context.assets.open("run_in_container.sh")
@@ -696,5 +717,56 @@ private fun getRunningSessions(context: Context, termuxService: TermuxService?):
         }
     } else {
         emptyList()
+    }
+}
+
+@Composable
+fun PersistentHintCard() {
+    val isDark = isSystemInDarkTheme()
+    val cardColor = if (isDark) Color(0xFF2C2C2C) else Color(0xFFF0F0F0)
+    val iconColor = if (isDark) Color(0xFF666666) else Color(0xFFCCCCCC)
+    val textColor = if (isDark) Color.White else Color.Black
+    
+    Card(
+        modifier = Modifier
+            .fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = cardColor)
+    ) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .offset(30.dp, 65.dp),
+                contentAlignment = Alignment.BottomEnd
+            ) {
+                Icon(
+                    modifier = Modifier.size(120.dp).alpha(0.8f),
+                    imageVector = Icons.Rounded.Info,
+                    tint = iconColor,
+                    contentDescription = null
+                )
+            }
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(all = 16.dp)
+            ) {
+                Text(
+                    modifier = Modifier.fillMaxWidth(),
+                    text = "欢迎访问 Termux Ultra 资源中心",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = textColor
+                )
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    modifier = Modifier.fillMaxWidth(),
+                    text = "资源中心内资源部分来自于第三方仓库，来自于第三方仓库的资源不在 Termux Ultra 项目的维护范围之内。另请注意，部分资源需要特定容器或环境下才可运行。资源中心为此类资源提供执行指令复制功能，您需要自行返回终端粘贴命令来执行。",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = textColor
+                )
+            }
+        }
     }
 }

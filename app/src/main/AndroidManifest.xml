@@ -213,7 +213,8 @@
             android:name=".app.TermuxService"
             android:exported="false"
             android:foregroundServiceType="mediaPlayback|remoteMessaging|specialUse"
-            android:stopWithTask="false" />
+            android:stopWithTask="false"
+            android:permission="android.permission.BIND_JOB_SERVICE" />
 
         <service
             android:name=".app.RunCommandService"
