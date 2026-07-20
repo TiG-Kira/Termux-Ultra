@@ -269,4 +269,26 @@
     <string name="latest_version">最新版本</string>
     <string name="developer_avatar">开发者头像</string>
     <string name="arrow">箭头</string>
+
+    <string name="memory_warning_title">内存占用过大预警</string>
+    <string name="memory_warning_message">会话内进程的占用内存过大，请立刻保存会话内的所有工作，并减少部分占用较大的进程以免被会话异常终止。</string>
+    <string name="memory_kill_title">内存占用已达上限</string>
+    <string name="memory_kill_message">会话内进程的占用内存大小已达系统支持的上限，Termux 已将会话冻结以防止丢失数据。</string>
+    <string name="service_status_normal">终端状态正常</string>
+    <string name="service_status_normal_desc">Termux 服务检测将持续检查终端运行状态。当前未开启唤醒锁，会话的后台留存能力偏弱，如需要加强后台留存能力，请开启唤醒锁。</string>
+    <string name="service_status_wake_lock">唤醒锁已开启</string>
+    <string name="service_status_wake_lock_desc">Termux 服务检测将持续检查终端运行状态。</string>
+    <string name="service_status_stopped">服务被停止</string>
+    <string name="service_status_stopped_desc">当前终端服务被停止，终端所有会话内未保存的更改会丢失。</string>
+    <string name="service_status_killed">有会话被系统关闭</string>
+    <string name="service_status_killed_desc">检测到%1$s被系统关闭，此会话内未保存的更改会丢失。</string>
+    <string name="shell_script_warning">请谨慎运行脚本，先查看脚本内是否存在针对设备的危险操作，特别是以 ROOT 权限执行脚本，执行危险脚本有可能导致内核 Panic 或设备无法启动。请记住：能力越大，责任越大。Termux 原作者或 Termux Ultra 开发人员不对用户执行未知脚本造成的软硬件损坏或数据丢失负责。</string>
+    <string name="copy_exec_command">复制执行命令</string>
+    <string name="session_frozen">会话已冻结</string>
+    <string name="session_thaw">解冻会话</string>
+    <string name="select_open_method">选择打开方式：</string>
+    <string name="view_content">查看内容 (cat)</string>
+    <string name="edit_file">编辑 (vi)</string>
+    <string name="execute_bash">执行 (bash)</string>
+    <string name="copy_path">复制路径</string>
 </resources>

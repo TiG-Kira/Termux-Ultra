@@ -7,13 +7,18 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.activity.compose.BackHandler
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
+import androidx.compose.ui.graphics.Color
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -74,6 +79,10 @@ fun FileManagerScreen(
     val scrollBehavior = MiuixScrollBehavior()
     val canGoUp = currentPath.parentFile != null && !currentPath.absolutePath.equals(ROOT_PATH)
 
+    BackHandler(enabled = canGoUp) {
+        currentPath = currentPath.parentFile!!
+    }
+
     fun refreshFiles() {
         files = currentPath.listFiles()?.sortedWith(compareBy({ !it.isDirectory }, { it.name })) ?: emptyList()
     }
@@ -106,7 +115,7 @@ fun FileManagerScreen(
                             currentPath = currentPath.parentFile!!
                         }) {
                             Icon(
-                                painter = painterResource(R.drawable.ic_arrow_back),
+                                painter = painterResource(R.drawable.ic_arrow_up),
                                 contentDescription = null,
                                 modifier = Modifier.size(24.dp),
                                 tint = MiuixTheme.colorScheme.onSurface
@@ -222,7 +231,10 @@ fun FileManagerScreen(
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(16.dp))
+                            .clip(RoundedCornerShape(16.dp)),
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (isSystemInDarkTheme()) Color(0xFF2C2C2C) else Color.White
+                        )
                     ) {
                         Row(
                             modifier = Modifier
@@ -257,7 +269,10 @@ fun FileManagerScreen(
             item {
                 Card(
                     modifier = Modifier
-                        .fillMaxWidth()
+                        .fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (isSystemInDarkTheme()) Color(0xFF2C2C2C) else Color.White
+                    )
                 ) {
                     Text(
                         text = currentPath.absolutePath,
@@ -327,6 +342,9 @@ fun FileManagerScreen(
 
     if (showOpenWithDialog && fileToOpen != null) {
         val file = fileToOpen!!
+        val isShFile = file.name.endsWith(".sh", ignoreCase = true)
+        val isDark = isSystemInDarkTheme()
+        
         AlertDialog(
             title = { Text(file.name) },
             text = {
@@ -339,7 +357,28 @@ fun FileManagerScreen(
                         color = MiuixTheme.colorScheme.onSurfaceVariantSummary
                     )
                     Spacer(modifier = Modifier.height(8.dp))
-                    Text("选择打开方式:", fontSize = 14.sp)
+                    
+                    if (isShFile) {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (isDark) Color(0xFF3D3514) else Color(0xFFFFF9C4)
+                            )
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(12.dp)
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.shell_script_warning),
+                                    fontSize = 12.sp,
+                                    color = if (isDark) Color.White else Color.Black
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+                    
+                    Text(stringResource(R.string.select_open_method), fontSize = 14.sp)
                     Spacer(modifier = Modifier.height(4.dp))
                     Row(
                         modifier = Modifier
@@ -359,7 +398,7 @@ fun FileManagerScreen(
                             tint = MiuixTheme.colorScheme.onSurface
                         )
                         Spacer(modifier = Modifier.width(16.dp))
-                        Text("查看内容 (cat)")
+                        Text(stringResource(R.string.view_content))
                     }
                     Row(
                         modifier = Modifier
@@ -379,8 +418,34 @@ fun FileManagerScreen(
                             tint = MiuixTheme.colorScheme.onSurface
                         )
                         Spacer(modifier = Modifier.width(16.dp))
-                        Text("编辑 (vi)")
+                        Text(stringResource(R.string.edit_file))
                     }
+                    
+                    if (isShFile) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                                    val clip = android.content.ClipData.newPlainText("exec_command", "bash \"${file.absolutePath}\"")
+                                    clipboard.setPrimaryClip(clip)
+                                    showOpenWithDialog = false
+                                    fileToOpen = null
+                                }
+                                .padding(vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_copy),
+                                contentDescription = null,
+                                modifier = Modifier.size(24.dp),
+                                tint = MiuixTheme.colorScheme.onSurface
+                            )
+                            Spacer(modifier = Modifier.width(16.dp))
+                            Text(stringResource(R.string.copy_exec_command))
+                        }
+                    }
+                    
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -399,7 +464,7 @@ fun FileManagerScreen(
                             tint = MiuixTheme.colorScheme.onSurface
                         )
                         Spacer(modifier = Modifier.width(16.dp))
-                        Text("执行 (bash)")
+                        Text(stringResource(R.string.execute_bash))
                     }
                     Row(
                         modifier = Modifier
@@ -421,7 +486,7 @@ fun FileManagerScreen(
                             tint = MiuixTheme.colorScheme.onSurface
                         )
                         Spacer(modifier = Modifier.width(16.dp))
-                        Text("复制路径")
+                        Text(stringResource(R.string.copy_path))
                     }
                 }
             },
@@ -543,8 +608,8 @@ private fun FileItem(
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
             .combinedClickable(onClick = onClick, onLongClick = onLongClick),
-        colors = CardDefaults.defaultColors(
-            color = if (isSelected) MiuixTheme.colorScheme.surfaceVariant else MiuixTheme.colorScheme.surface
+        colors = CardDefaults.cardColors(
+            containerColor = if (isSelected) MiuixTheme.colorScheme.surfaceVariant else MiuixTheme.colorScheme.surface
         )
     ) {
         Row(

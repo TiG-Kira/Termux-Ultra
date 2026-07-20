@@ -282,6 +282,28 @@
     <string name="developer_avatar">Developer Avatar</string>
     <string name="arrow">Arrow</string>
 
+    <string name="memory_warning_title">Memory Usage Warning</string>
+    <string name="memory_warning_message">Processes in the session are consuming too much memory. Please save all work immediately and reduce memory-intensive processes to prevent abnormal termination.</string>
+    <string name="memory_kill_title">Memory Limit Reached</string>
+    <string name="memory_kill_message">Process memory usage has reached the system limit. Termux has frozen the session to prevent data loss.</string>
+    <string name="service_status_normal">Terminal Status Normal</string>
+    <string name="service_status_normal_desc">Termux service detection will continuously check terminal running status. Wake lock is currently disabled, session background persistence capability is weak. If you need stronger background persistence, please enable wake lock.</string>
+    <string name="service_status_wake_lock">Wake Lock Enabled</string>
+    <string name="service_status_wake_lock_desc">Termux service detection will continuously check terminal running status.</string>
+    <string name="service_status_stopped">Service Stopped</string>
+    <string name="service_status_stopped_desc">Current terminal service is stopped, all unsaved changes in terminal sessions will be lost.</string>
+    <string name="service_status_killed">Session Killed by System</string>
+    <string name="service_status_killed_desc">Detected that %1$s was closed by system, unsaved changes in this session will be lost.</string>
+    <string name="shell_script_warning">Please run scripts with caution. First check if the script contains dangerous operations targeting your device, especially when executing scripts with ROOT privileges. Executing dangerous scripts may cause kernel panic or device boot failure. Remember: with great power comes great responsibility. Neither the original Termux author nor Termux Ultra developers are responsible for hardware or software damage or data loss caused by users executing unknown scripts.</string>
+    <string name="copy_exec_command">Copy Execution Command</string>
+    <string name="session_frozen">Session Frozen</string>
+    <string name="session_thaw">Thaw Session</string>
+    <string name="select_open_method">Select open method:</string>
+    <string name="view_content">View Content (cat)</string>
+    <string name="edit_file">Edit (vi)</string>
+    <string name="execute_bash">Execute (bash)</string>
+    <string name="copy_path">Copy Path</string>
+
     <string name="vnc_address_caption">Address</string>
     <string name="vnc_alt_check">Alt</string>
     <string name="vnc_arrow_down">Down Arrow</string>

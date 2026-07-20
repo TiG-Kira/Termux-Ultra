@@ -33,6 +33,8 @@ import androidx.annotation.Nullable;
 import com.termux.R;
 import com.termux.app.settings.properties.TermuxAppSharedProperties;
 import com.termux.app.terminal.TermuxTerminalSessionClient;
+import com.termux.app.receiver.MemoryBroadcastReceiver;
+import com.termux.app.utils.DomesticOSDetector;
 import com.termux.app.utils.PluginUtils;
 import com.termux.shared.data.IntentUtils;
 import com.termux.shared.models.errors.Errno;
@@ -55,6 +57,12 @@ import com.termux.terminal.TerminalEmulator;
 import com.termux.terminal.TerminalSession;
 import com.termux.terminal.TerminalSessionClient;
 
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.ObjectOutputStream;
+import java.io.ObjectInputStream;
+import java.io.FileInputStream;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -124,11 +132,24 @@ public final class TermuxService extends Service implements TermuxTask.TermuxTas
 
     private static final String LOG_TAG = "TermuxService";
 
+    private MemoryBroadcastReceiver mMemoryBroadcastReceiver;
+    private boolean mIsMemoryWarningActive = false;
+    private boolean mIsMemoryKillActive = false;
+    private boolean mAreSessionsFrozen = false;
+    private String mKilledSessionName = null;
+
+    private Handler mMemoryCheckHandler;
+    private Runnable mMemoryCheckRunnable;
+    private static final long MEMORY_CHECK_INTERVAL = 5000;
+
+    private static final String FROZEN_SESSIONS_DIR = "frozen_sessions";
+
     @Override
     public void onCreate() {
         Logger.logVerbose(LOG_TAG, "onCreate");
         Process.setThreadPriority(Process.THREAD_PRIORITY_FOREGROUND);
         runStartForeground();
+        registerMemoryBroadcastReceiver();
     }
 
     @SuppressLint("Wakelock")
@@ -159,6 +180,18 @@ public final class TermuxService extends Service implements TermuxTask.TermuxTas
                     Logger.logDebug(LOG_TAG, "ACTION_SERVICE_EXECUTE intent received");
                     actionServiceExecute(intent);
                     break;
+                case TERMUX_SERVICE.ACTION_MEMORY_WARNING:
+                    Logger.logDebug(LOG_TAG, "ACTION_MEMORY_WARNING intent received");
+                    actionMemoryWarning();
+                    break;
+                case TERMUX_SERVICE.ACTION_MEMORY_KILL:
+                    Logger.logDebug(LOG_TAG, "ACTION_MEMORY_KILL intent received");
+                    actionMemoryKill();
+                    break;
+                case TERMUX_SERVICE.ACTION_THAW_SESSION:
+                    Logger.logDebug(LOG_TAG, "ACTION_THAW_SESSION intent received");
+                    actionThawSessions();
+                    break;
                 default:
                     Logger.logError(LOG_TAG, "Invalid action: \"" + action + "\"");
                     break;
@@ -181,6 +214,9 @@ public final class TermuxService extends Service implements TermuxTask.TermuxTas
             killAllTermuxExecutionCommands();
             runStopForeground();
         }
+
+        unregisterMemoryBroadcastReceiver();
+        stopMemoryCheck();
     }
 
     @Override
@@ -643,6 +679,16 @@ public final class TermuxService extends Service implements TermuxTask.TermuxTas
 
             Logger.logVerbose(LOG_TAG, "The onTermuxSessionExited() callback called for \"" + executionCommand.getCommandIdAndLabelLogString() + "\" TermuxSession command");
 
+            int exitCode = termuxSession.getTerminalSession().getExitStatus();
+            if (exitCode == 137 && !mIsMemoryKillActive && !MemoryBroadcastReceiver.isMemoryKillReceived()) {
+                String sessionName = termuxSession.getTerminalSession().mSessionName;
+                if (sessionName == null || sessionName.isEmpty()) {
+                    sessionName = getString(R.string.terminal);
+                }
+                mKilledSessionName = sessionName;
+                Logger.logDebug(LOG_TAG, "Session killed by system: " + sessionName);
+            }
+
             // If the execution command was started for a plugin, then process the results
             if (executionCommand != null && executionCommand.isPluginExecutionCommand)
                 PluginUtils.processPluginExecutionCommandResult(this, LOG_TAG, executionCommand);
@@ -1064,6 +1110,234 @@ public final class TermuxService extends Service implements TermuxTask.TermuxTas
                lowerStr.contains("telnet") ||
                lowerStr.contains("ftp") ||
                lowerStr.contains("sftp");
+    }
+
+    private void registerMemoryBroadcastReceiver() {
+        if (!DomesticOSDetector.isDomesticOS()) {
+            Logger.logDebug(LOG_TAG, "Not a domestic OS, skipping memory broadcast receiver registration");
+            return;
+        }
+
+        mMemoryBroadcastReceiver = new MemoryBroadcastReceiver();
+        IntentFilter filter = new IntentFilter();
+        filter.addAction(MemoryBroadcastReceiver.ACTION_MEMORY_TRIM);
+        filter.addAction(MemoryBroadcastReceiver.ACTION_MEMORY_KILL);
+        filter.addAction(MemoryBroadcastReceiver.ACTION_XIAOMI_MEMORY_TRIM);
+        filter.addAction(MemoryBroadcastReceiver.ACTION_XIAOMI_MEMORY_KILL);
+        filter.addAction(MemoryBroadcastReceiver.ACTION_OPPO_MEMORY_TRIM);
+        filter.addAction(MemoryBroadcastReceiver.ACTION_OPPO_MEMORY_KILL);
+        filter.addAction(MemoryBroadcastReceiver.ACTION_VIVO_MEMORY_TRIM);
+        filter.addAction(MemoryBroadcastReceiver.ACTION_VIVO_MEMORY_KILL);
+        filter.addAction(MemoryBroadcastReceiver.ACTION_HONOR_MEMORY_TRIM);
+        filter.addAction(MemoryBroadcastReceiver.ACTION_HONOR_MEMORY_KILL);
+        registerReceiver(mMemoryBroadcastReceiver, filter);
+        Logger.logDebug(LOG_TAG, "Memory broadcast receiver registered");
+    }
+
+    private void unregisterMemoryBroadcastReceiver() {
+        if (mMemoryBroadcastReceiver != null) {
+            try {
+                unregisterReceiver(mMemoryBroadcastReceiver);
+            } catch (Exception e) {
+                Logger.logStackTraceWithMessage(LOG_TAG, "Failed to unregister memory broadcast receiver", e);
+            }
+            mMemoryBroadcastReceiver = null;
+        }
+    }
+
+    private void actionMemoryWarning() {
+        if (!DomesticOSDetector.isDomesticOS()) return;
+
+        mIsMemoryWarningActive = true;
+        mIsMemoryKillActive = false;
+        showMemoryWarningNotification();
+        startMemoryCheck();
+    }
+
+    private void actionMemoryKill() {
+        if (!DomesticOSDetector.isDomesticOS()) return;
+
+        mIsMemoryKillActive = true;
+        mIsMemoryWarningActive = false;
+        stopMemoryCheck();
+        freezeAllSessions();
+        showMemoryKillNotification();
+    }
+
+    private void actionThawSessions() {
+        thawAllSessions();
+    }
+
+    private void showMemoryWarningNotification() {
+        Notification.Builder builder = NotificationUtils.geNotificationBuilder(this,
+            TermuxConstants.TERMUX_APP_NOTIFICATION_CHANNEL_ID, Notification.PRIORITY_HIGH,
+            getString(R.string.memory_warning_title), getString(R.string.memory_warning_message), null,
+            PendingIntent.getActivity(this, 0, TermuxActivity.newInstance(this),
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ? PendingIntent.FLAG_IMMUTABLE : 0),
+            null, NotificationUtils.NOTIFICATION_MODE_ALL);
+        if (builder != null) {
+            builder.setSmallIcon(R.drawable.ic_service_notification);
+            ((NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE))
+                .notify(TermuxConstants.TERMUX_APP_NOTIFICATION_ID + 1, builder.build());
+        }
+    }
+
+    private void showMemoryKillNotification() {
+        Notification.Builder builder = NotificationUtils.geNotificationBuilder(this,
+            TermuxConstants.TERMUX_APP_NOTIFICATION_CHANNEL_ID, Notification.PRIORITY_HIGH,
+            getString(R.string.memory_kill_title), getString(R.string.memory_kill_message), null,
+            PendingIntent.getActivity(this, 0, TermuxActivity.newInstance(this),
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ? PendingIntent.FLAG_IMMUTABLE : 0),
+            null, NotificationUtils.NOTIFICATION_MODE_ALL);
+        if (builder != null) {
+            builder.setSmallIcon(R.drawable.ic_service_notification);
+            ((NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE))
+                .notify(TermuxConstants.TERMUX_APP_NOTIFICATION_ID + 2, builder.build());
+        }
+    }
+
+    private void startMemoryCheck() {
+        stopMemoryCheck();
+
+        HandlerThread handlerThread = new HandlerThread("TermuxMemoryCheck");
+        handlerThread.start();
+        mMemoryCheckHandler = new Handler(handlerThread.getLooper());
+
+        mMemoryCheckRunnable = new Runnable() {
+            @Override
+            public void run() {
+                if (mIsMemoryWarningActive) {
+                    long memoryUsage = getCurrentMemoryUsage();
+                    if (memoryUsage < getMemoryThreshold()) {
+                        mIsMemoryWarningActive = false;
+                        MemoryBroadcastReceiver.resetMemoryWarning();
+                        stopMemoryCheck();
+                    }
+                }
+                if (mMemoryCheckHandler != null) {
+                    mMemoryCheckHandler.postDelayed(this, MEMORY_CHECK_INTERVAL);
+                }
+            }
+        };
+
+        mMemoryCheckHandler.postDelayed(mMemoryCheckRunnable, MEMORY_CHECK_INTERVAL);
+    }
+
+    private void stopMemoryCheck() {
+        if (mMemoryCheckHandler != null) {
+            mMemoryCheckHandler.removeCallbacks(mMemoryCheckRunnable);
+            mMemoryCheckHandler.getLooper().quitSafely();
+            mMemoryCheckHandler = null;
+        }
+    }
+
+    private long getCurrentMemoryUsage() {
+        Runtime runtime = Runtime.getRuntime();
+        return runtime.totalMemory() - runtime.freeMemory();
+    }
+
+    private long getMemoryThreshold() {
+        Runtime runtime = Runtime.getRuntime();
+        return (long) (runtime.maxMemory() * 0.7);
+    }
+
+    private synchronized void freezeAllSessions() {
+        if (mAreSessionsFrozen) return;
+
+        Logger.logDebug(LOG_TAG, "Freezing all Termux sessions");
+        mAreSessionsFrozen = true;
+
+        File frozenDir = new File(getFilesDir(), FROZEN_SESSIONS_DIR);
+        if (!frozenDir.exists()) {
+            frozenDir.mkdirs();
+        }
+
+        for (TermuxSession session : mTermuxSessions) {
+            freezeSession(session);
+        }
+
+        mTermuxSessions.clear();
+        updateNotification();
+    }
+
+    private void freezeSession(TermuxSession session) {
+        try {
+            String sessionName = session.getTerminalSession().mSessionName;
+            if (sessionName == null || sessionName.isEmpty()) {
+                sessionName = "terminal";
+            }
+
+            File freezeFile = new File(getFilesDir(), FROZEN_SESSIONS_DIR + "/" + sessionName + ".frozen");
+            ObjectOutputStream oos = new ObjectOutputStream(new FileOutputStream(freezeFile));
+            oos.writeObject(session);
+            oos.close();
+
+            session.getTerminalSession().finishIfRunning();
+            Logger.logDebug(LOG_TAG, "Frozen session: " + sessionName);
+        } catch (IOException e) {
+            Logger.logStackTraceWithMessage(LOG_TAG, "Failed to freeze session", e);
+        }
+    }
+
+    private synchronized void thawAllSessions() {
+        if (!mAreSessionsFrozen) return;
+
+        Logger.logDebug(LOG_TAG, "Thawing all frozen Termux sessions");
+        mAreSessionsFrozen = false;
+        mIsMemoryKillActive = false;
+        MemoryBroadcastReceiver.resetMemoryKill();
+
+        File frozenDir = new File(getFilesDir(), FROZEN_SESSIONS_DIR);
+        if (!frozenDir.exists()) {
+            return;
+        }
+
+        File[] frozenFiles = frozenDir.listFiles();
+        if (frozenFiles != null) {
+            for (File freezeFile : frozenFiles) {
+                thawSession(freezeFile);
+                freezeFile.delete();
+            }
+        }
+
+        updateNotification();
+    }
+
+    private void thawSession(File freezeFile) {
+        try {
+            ObjectInputStream ois = new ObjectInputStream(new FileInputStream(freezeFile));
+            TermuxSession session = (TermuxSession) ois.readObject();
+            ois.close();
+
+            mTermuxSessions.add(session);
+            Logger.logDebug(LOG_TAG, "Thawed session: " + session.getTerminalSession().mSessionName);
+        } catch (IOException | ClassNotFoundException e) {
+            Logger.logStackTraceWithMessage(LOG_TAG, "Failed to thaw session", e);
+        }
+    }
+
+    public boolean isMemoryWarningActive() {
+        return mIsMemoryWarningActive;
+    }
+
+    public boolean isMemoryKillActive() {
+        return mIsMemoryKillActive;
+    }
+
+    public boolean areSessionsFrozen() {
+        return mAreSessionsFrozen;
+    }
+
+    public String getKilledSessionName() {
+        return mKilledSessionName;
+    }
+
+    public void setKilledSessionName(String name) {
+        mKilledSessionName = name;
+    }
+
+    public void clearKilledSessionName() {
+        mKilledSessionName = null;
     }
 
 }

@@ -68,6 +68,7 @@ fun TerminalListScreen(
     var showWelcomeCard by remember { mutableStateOf(false) }
     var showKeepAliveWarning by remember { mutableStateOf(false) }
     var termuxService by remember { mutableStateOf<TermuxService?>(null) }
+    var killedSessionName by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
         val prefs = context.getSharedPreferences("termux_prefs", android.content.Context.MODE_PRIVATE)
@@ -177,7 +178,17 @@ fun TerminalListScreen(
             }
 
             item(span = { GridItemSpan(2) }) {
-                ServiceStatusCard(isRunning = termuxService != null, isWakeLockActive = isWakeLockEnabled)
+                val serviceStatus = remember(termuxService, isWakeLockEnabled, killedSessionName) {
+                    when {
+                        termuxService?.isMemoryKillActive() == true -> ServiceStatus.MEMORY_KILL
+                        termuxService?.isMemoryWarningActive() == true -> ServiceStatus.MEMORY_WARNING
+                        killedSessionName != null -> ServiceStatus.SESSION_KILLED
+                        termuxService == null -> ServiceStatus.SERVICE_STOPPED
+                        isWakeLockEnabled -> ServiceStatus.WAKE_LOCK_ACTIVE
+                        else -> ServiceStatus.NORMAL
+                    }
+                }
+                ServiceStatusCard(status = serviceStatus, killedSessionName = killedSessionName)
             }
 
             if (sessions.isEmpty()) {
@@ -440,15 +451,63 @@ fun WelcomeCard(text: String, onClose: () -> Unit) {
     }
 }
 
+enum class ServiceStatus {
+    NORMAL,
+    WAKE_LOCK_ACTIVE,
+    SERVICE_STOPPED,
+    MEMORY_WARNING,
+    MEMORY_KILL,
+    SESSION_KILLED
+}
+
 @Composable
-fun ServiceStatusCard(isRunning: Boolean, isWakeLockActive: Boolean) {
+fun ServiceStatusCard(
+    status: ServiceStatus,
+    killedSessionName: String? = null
+) {
     val isDark = isSystemInDarkTheme()
-    val (cardColor, iconColor) = if (isRunning) {
-        Pair(if (isDark) Color(0xFF1A3825) else Color(0xFFDFFAE4), Color(0xFF36D167))
-    } else {
-        Pair(if (isDark) Color(0xFF3B1414) else Color(0xFFFFEBEE), Color(0xFFFF5252))
+    val (cardColor, iconColor, icon) = when (status) {
+        ServiceStatus.NORMAL -> {
+            Triple(if (isDark) Color(0xFF1A3825) else Color(0xFFDFFAE4), Color(0xFF36D167), Icons.Rounded.CheckCircleOutline)
+        }
+        ServiceStatus.WAKE_LOCK_ACTIVE -> {
+            Triple(if (isDark) Color(0xFF1A3825) else Color(0xFFDFFAE4), Color(0xFF36D167), Icons.Rounded.CheckCircleOutline)
+        }
+        ServiceStatus.SERVICE_STOPPED -> {
+            Triple(if (isDark) Color(0xFF3B1414) else Color(0xFFFFEBEE), Color(0xFFFF5252), Icons.Rounded.ErrorOutline)
+        }
+        ServiceStatus.MEMORY_WARNING -> {
+            Triple(if (isDark) Color(0xFF3D3514) else Color(0xFFFFF9C4), Color(0xFFFDD835), Icons.Rounded.Warning)
+        }
+        ServiceStatus.MEMORY_KILL -> {
+            Triple(if (isDark) Color(0xFF3B1414) else Color(0xFFFFEBEE), Color(0xFFFF5252), Icons.Rounded.Warning)
+        }
+        ServiceStatus.SESSION_KILLED -> {
+            Triple(if (isDark) Color(0xFF3B1414) else Color(0xFFFFEBEE), Color(0xFFFF5252), Icons.Rounded.Warning)
+        }
     }
     val textColor = if (isDark) Color.White else Color.Black
+    
+    val title = when (status) {
+        ServiceStatus.NORMAL -> stringResource(R.string.service_status_normal)
+        ServiceStatus.WAKE_LOCK_ACTIVE -> stringResource(R.string.service_status_wake_lock)
+        ServiceStatus.SERVICE_STOPPED -> stringResource(R.string.service_status_stopped)
+        ServiceStatus.MEMORY_WARNING -> stringResource(R.string.memory_warning_title)
+        ServiceStatus.MEMORY_KILL -> stringResource(R.string.memory_kill_title)
+        ServiceStatus.SESSION_KILLED -> stringResource(R.string.service_status_killed)
+    }
+    
+    val description = when (status) {
+        ServiceStatus.NORMAL -> stringResource(R.string.service_status_normal_desc)
+        ServiceStatus.WAKE_LOCK_ACTIVE -> stringResource(R.string.service_status_wake_lock_desc)
+        ServiceStatus.SERVICE_STOPPED -> stringResource(R.string.service_status_stopped_desc)
+        ServiceStatus.MEMORY_WARNING -> stringResource(R.string.memory_warning_message)
+        ServiceStatus.MEMORY_KILL -> stringResource(R.string.memory_kill_message)
+        ServiceStatus.SESSION_KILLED -> {
+            val name = killedSessionName ?: "unknown"
+            stringResource(R.string.service_status_killed_desc, name)
+        }
+    }
     
     Card(
         modifier = Modifier
@@ -465,8 +524,7 @@ fun ServiceStatusCard(isRunning: Boolean, isWakeLockActive: Boolean) {
             ) {
                 Icon(
                     modifier = Modifier.size(120.dp).alpha(0.8f),
-                    imageVector = if (isRunning) Icons.Rounded.CheckCircleOutline 
-                        else Icons.Rounded.ErrorOutline,
+                    imageVector = icon,
                     tint = iconColor,
                     contentDescription = null
                 )
@@ -478,9 +536,7 @@ fun ServiceStatusCard(isRunning: Boolean, isWakeLockActive: Boolean) {
             ) {
                 Text(
                     modifier = Modifier.fillMaxWidth(),
-                    text = if (isRunning) {
-                        if (isWakeLockActive) "Termux 服务正常 (已激活唤醒锁)" else "Termux 服务正常"
-                    } else "Termux 服务异常",
+                    text = title,
                     fontSize = 18.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = textColor
@@ -488,7 +544,7 @@ fun ServiceStatusCard(isRunning: Boolean, isWakeLockActive: Boolean) {
                 Spacer(Modifier.height(2.dp))
                 Text(
                     modifier = Modifier.fillMaxWidth(),
-                    text = if (isRunning) "当前服务正常，会话可以保持运行" else "当前服务被退出，若您有正在进行的进程，运行状态可能会丢失",
+                    text = description,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Medium,
                     color = textColor

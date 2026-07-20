@@ -884,6 +884,15 @@ public final class TermuxConstants {
             /** Intent action to execute command with TERMUX_SERVICE */
             public static final String ACTION_SERVICE_EXECUTE = TERMUX_PACKAGE_NAME + ".service_execute"; // Default: "com.termux.service_execute"
 
+            /** Intent action for memory warning from fair runtime memory mechanism */
+            public static final String ACTION_MEMORY_WARNING = TERMUX_PACKAGE_NAME + ".memory_warning"; // Default: "com.termux.memory_warning"
+
+            /** Intent action for memory kill from fair runtime memory mechanism */
+            public static final String ACTION_MEMORY_KILL = TERMUX_PACKAGE_NAME + ".memory_kill"; // Default: "com.termux.memory_kill"
+
+            /** Intent action to thaw a frozen session */
+            public static final String ACTION_THAW_SESSION = TERMUX_PACKAGE_NAME + ".thaw_session"; // Default: "com.termux.thaw_session"
+
             /** Uri scheme for paths sent via intent to TERMUX_SERVICE */
             public static final String URI_SCHEME_SERVICE_EXECUTE = TERMUX_PACKAGE_NAME + ".file"; // Default: "com.termux.file"
             /** Intent {@code String[]} extra for arguments to the executable of the command for the TERMUX_SERVICE.ACTION_SERVICE_EXECUTE intent */
