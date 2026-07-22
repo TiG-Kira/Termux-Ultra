@@ -1,6 +1,8 @@
 package com.termux.app.compose
 
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -37,16 +39,19 @@ fun TerminalDetailScreen(
             SmallTopAppBar(
                 title = terminalSession.mSessionName ?: "Terminal",
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            imageVector = ImageVector.vectorResource(R.drawable.ic_arrow_back),
-                            contentDescription = null,
-                            tint = MiuixTheme.colorScheme.onSurface,
-                            modifier = Modifier.size(24.dp)
-                        )
+                    Row(modifier = Modifier.padding(start = 16.dp)) {
+                        IconButton(onClick = onBack) {
+                            Icon(
+                                imageVector = ImageVector.vectorResource(R.drawable.ic_arrow_back),
+                                contentDescription = null,
+                                tint = MiuixTheme.colorScheme.onSurface,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
                     }
                 },
                 actions = {
+                    Row(modifier = Modifier.padding(end = 16.dp)) {
                     IconButton(onClick = {
                         val view = terminalViewRef.value
                         if (view != null) {
@@ -75,6 +80,7 @@ fun TerminalDetailScreen(
                             tint = MiuixTheme.colorScheme.onSurface,
                             modifier = Modifier.size(24.dp)
                         )
+                    }
                     }
                 }
             )

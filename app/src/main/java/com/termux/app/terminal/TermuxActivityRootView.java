@@ -3,6 +3,7 @@ package com.termux.app.terminal;
 import android.content.Context;
 import android.graphics.Rect;
 import android.inputmethodservice.InputMethodService;
+import android.os.Build;
 import android.util.AttributeSet;
 import android.view.View;
 import android.view.ViewGroup;
@@ -68,6 +69,7 @@ public class TermuxActivityRootView extends LinearLayout implements ViewTreeObse
     public Integer lastMarginBottom;
     public long lastMarginBottomTime;
     public long lastMarginBottomExtraTime;
+    public long lastOnGlobalLayoutTime;
 
     /** Log root view events. */
     private boolean ROOT_VIEW_LOGGING_ENABLED = false;
@@ -75,6 +77,8 @@ public class TermuxActivityRootView extends LinearLayout implements ViewTreeObse
     private static final String LOG_TAG = "TermuxActivityRootView";
 
     private static int mStatusBarHeight;
+
+    private static final long GLOBAL_LAYOUT_DEBOUNCE_MS = 100;
 
     public TermuxActivityRootView(Context context) {
         super(context);
@@ -120,8 +124,18 @@ public class TermuxActivityRootView extends LinearLayout implements ViewTreeObse
     public void onGlobalLayout() {
         if (mActivity == null || !mActivity.isVisible()) return;
 
+        long currentTime = System.currentTimeMillis();
+        if ((currentTime - lastOnGlobalLayoutTime) < GLOBAL_LAYOUT_DEBOUNCE_MS) {
+            return;
+        }
+        lastOnGlobalLayoutTime = currentTime;
+
         View bottomSpaceView = mActivity.getTermuxActivityBottomSpaceView();
         if (bottomSpaceView == null) return;
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && mActivity.isInMultiWindowMode()) {
+            return;
+        }
 
         boolean root_view_logging_enabled = ROOT_VIEW_LOGGING_ENABLED;
 

@@ -114,7 +114,8 @@ fun TerminalListScreen(
                 scrollBehavior = scrollBehavior,
                 actions = {
                     Row(
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(end = 16.dp)
                     ) {
                         Icon(
                             painter = painterResource(R.drawable.ic_lock),

@@ -78,6 +78,10 @@
             android:label="@string/application_name" />
 
         <activity
+            android:name=".app.ftp.FtpInfoActivity"
+            android:label="FTP 连接信息" />
+
+        <activity
             android:name=".app.TermuxActivity"
             android:configChanges="orientation|screenSize|smallestScreenSize|density|screenLayout|uiMode|keyboard|keyboardHidden|navigation"
             android:label="@string/application_name"
@@ -203,8 +207,7 @@
             android:name=".app.TermuxOpenReceiver$ContentProvider"
             android:authorities="${TERMUX_PACKAGE_NAME}.files"
             android:exported="true"
-            android:grantUriPermissions="true"
-            android:permission="${TERMUX_PACKAGE_NAME}.permission.RUN_COMMAND" />
+            android:grantUriPermissions="true" />
 
         <receiver android:name=".app.TermuxOpenReceiver" android:exported="false" />
 

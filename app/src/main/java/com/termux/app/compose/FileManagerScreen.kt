@@ -9,6 +9,14 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.activity.compose.BackHandler
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.content.Context
+import android.content.Intent
+import android.os.Build
+import androidx.core.app.NotificationCompat
+import com.termux.shared.shell.TermuxShellUtils
+import com.termux.app.ftp.FtpServer
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -66,17 +74,53 @@ fun FileManagerScreen(
     var showOpenWithDialog by remember { mutableStateOf(false) }
     var fileToOpen by remember { mutableStateOf<File?>(null) }
     var forwardHistory by remember { mutableStateOf<List<File>>(emptyList()) }
+    var isSftpEnabled by remember { mutableStateOf(false) }
+    var sftpNotificationId = 1001
+    var sftpChannelId = "sftp_service"
+    var showSftpInfoDialog by remember { mutableStateOf(false) }
+    var isEditingSftpCredentials by remember { mutableStateOf(false) }
+    var sftpUsername by remember { mutableStateOf("") }
+    var sftpPassword by remember { mutableStateOf("") }
+    var ftpServer: FtpServer? by remember { mutableStateOf(null) }
 
     LaunchedEffect(currentPath) {
         files = currentPath.listFiles()?.sortedWith(compareBy({ !it.isDirectory }, { it.name })) ?: emptyList()
         selectedFiles = emptySet()
         isInSelectionMode = false
     }
+    
+    fun isPortInUse(port: Int): Boolean {
+        try {
+            java.net.Socket("127.0.0.1", port).use {
+                it.close()
+                return true
+            }
+        } catch (e: java.net.ConnectException) {
+            return false
+        } catch (e: Exception) {
+            return false
+        }
+    }
 
     LaunchedEffect(Unit) {
         val prefs = context.getSharedPreferences("termux_prefs", android.content.Context.MODE_PRIVATE)
         if (!prefs.getBoolean("files_warning_shown", false)) {
             showWarningCard = true
+        }
+        sftpUsername = prefs.getString("sftp_username", "termux") ?: "termux"
+        sftpPassword = prefs.getString("sftp_password", "termux123") ?: "termux123"
+        
+        val appPrefs = context.getSharedPreferences("app_settings", android.content.Context.MODE_PRIVATE)
+        if (appPrefs.getBoolean("showSftpInfo", false)) {
+            showSftpInfoDialog = true
+            appPrefs.edit().putBoolean("showSftpInfo", false).apply()
+        }
+        
+        if (appPrefs.getBoolean("ftp_enabled", false) && isPortInUse(8021)) {
+            val rootDir = "/data/data/com.termux/files/home"
+            ftpServer = FtpServer(8021, sftpUsername, sftpPassword, rootDir)
+            ftpServer?.start()
+            isSftpEnabled = true
         }
     }
 
@@ -92,6 +136,108 @@ fun FileManagerScreen(
         files = currentPath.listFiles()?.sortedWith(compareBy({ !it.isDirectory }, { it.name })) ?: emptyList()
     }
 
+    fun createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val name = "FTP 服务"
+            val descriptionText = "FTP 服务通知"
+            val importance = NotificationManager.IMPORTANCE_LOW
+            val channel = NotificationChannel(sftpChannelId, name, importance).apply {
+                description = descriptionText
+            }
+            val notificationManager: NotificationManager =
+                context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            notificationManager.createNotificationChannel(channel)
+        }
+    }
+
+    fun getLocalIpAddress(): String {
+        try {
+            val interfaces = java.net.NetworkInterface.getNetworkInterfaces()
+            while (interfaces.hasMoreElements()) {
+                val networkInterface = interfaces.nextElement()
+                val addresses = networkInterface.inetAddresses
+                while (addresses.hasMoreElements()) {
+                    val address = addresses.nextElement()
+                    if (!address.isLoopbackAddress && address is java.net.Inet4Address) {
+                        return address.hostAddress
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        return "127.0.0.1"
+    }
+
+    fun showSftpNotification() {
+        createNotificationChannel()
+        val ipAddress = getLocalIpAddress()
+        
+        val intent = android.content.Intent(context, com.termux.app.ftp.FtpInfoActivity::class.java)
+        intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+        val pendingIntent = android.app.PendingIntent.getActivity(
+            context,
+            0,
+            intent,
+            android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+        )
+        
+        val notification = NotificationCompat.Builder(context, sftpChannelId)
+            .setContentTitle("正在使用 FTP 服务")
+            .setContentText("地址: ftp://$ipAddress:8021\n点击通知显示 FTP 详情")
+            .setSmallIcon(R.drawable.ic_web)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setOngoing(true)
+            .setContentIntent(pendingIntent)
+            .build()
+
+        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        notificationManager.notify(sftpNotificationId, notification)
+    }
+
+    fun hideSftpNotification() {
+        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        notificationManager.cancel(sftpNotificationId)
+    }
+
+    fun saveSftpCredentials() {
+        val prefs = context.getSharedPreferences("termux_prefs", android.content.Context.MODE_PRIVATE)
+        prefs.edit()
+            .putString("sftp_username", sftpUsername)
+            .putString("sftp_password", sftpPassword)
+            .apply()
+    }
+
+    fun toggleSftp() {
+        isSftpEnabled = !isSftpEnabled
+        val appPrefs = context.getSharedPreferences("app_settings", android.content.Context.MODE_PRIVATE)
+        
+        if (isSftpEnabled) {
+            try {
+                val rootDir = "/data/data/com.termux/files/home"
+                ftpServer = FtpServer(8021, sftpUsername, sftpPassword, rootDir)
+                ftpServer?.start()
+                Thread.sleep(500)
+                showSftpNotification()
+                appPrefs.edit().putBoolean("ftp_enabled", true).apply()
+            } catch (e: Exception) {
+                e.printStackTrace()
+                isSftpEnabled = false
+                ftpServer = null
+                appPrefs.edit().putBoolean("ftp_enabled", false).apply()
+            }
+        } else {
+            try {
+                ftpServer?.stop()
+                ftpServer = null
+                hideSftpNotification()
+                appPrefs.edit().putBoolean("ftp_enabled", false).apply()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
@@ -104,7 +250,7 @@ fun FileManagerScreen(
                 scrollBehavior = scrollBehavior,
                 navigationIcon = {
                     if (isInSelectionMode) {
-                        Row {
+                        Row(modifier = Modifier.padding(start = 16.dp)) {
                             IconButton(onClick = {
                                 selectedFiles = emptySet()
                                 isInSelectionMode = false
@@ -118,7 +264,7 @@ fun FileManagerScreen(
                             }
                         }
                     } else {
-                        Row {
+                        Row(modifier = Modifier.padding(start = 16.dp)) {
                             IconButton(onClick = {
                                 if (canGoUp) {
                                     forwardHistory = forwardHistory + currentPath
@@ -150,6 +296,7 @@ fun FileManagerScreen(
                     }
                 },
                 actions = {
+                    Row(modifier = Modifier.padding(end = 16.dp)) {
                     if (isInSelectionMode && selectedFiles.isNotEmpty()) {
                         IconButton(onClick = {
                             clipboardMode = ClipboardMode.COPY
@@ -227,16 +374,35 @@ fun FileManagerScreen(
                     }
 
                     if (!isInSelectionMode) {
-                        IconButton(onClick = {
-                            showNewTypeDialog = true
-                        }) {
-                            Icon(
-                                painter = painterResource(R.drawable.ic_add),
-                                contentDescription = stringResource(R.string.folder),
-                                modifier = Modifier.size(24.dp),
-                                tint = MiuixTheme.colorScheme.onSurface
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            IconButton(onClick = { showSftpInfoDialog = true }) {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_web),
+                                    contentDescription = "FTP 信息",
+                                    modifier = Modifier.size(20.dp),
+                                    tint = MiuixTheme.colorScheme.onSurface
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(4.dp))
+                            top.yukonga.miuix.kmp.basic.Switch(
+                                checked = isSftpEnabled,
+                                onCheckedChange = { toggleSftp() }
                             )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            IconButton(onClick = {
+                                showNewTypeDialog = true
+                            }) {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_add),
+                                    contentDescription = stringResource(R.string.folder),
+                                    modifier = Modifier.size(24.dp),
+                                    tint = MiuixTheme.colorScheme.onSurface
+                                )
+                            }
                         }
+                    }
                     }
                 }
             )
@@ -608,6 +774,92 @@ fun FileManagerScreen(
             dismissButton = {
                 TextButton(onClick = { showDeleteDialog = false }) {
                     Text(stringResource(R.string.cancel), color = dialogTextColor)
+                }
+            }
+        )
+    }
+
+    if (showSftpInfoDialog) {
+        val dialogTextColor = MiuixTheme.colorScheme.onSurface
+        val dialogBackgroundColor = MiuixTheme.colorScheme.surface
+        
+        AlertDialog(
+            containerColor = dialogBackgroundColor,
+            title = { Text("FTP 连接信息", color = dialogTextColor) },
+            text = {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text(
+                        text = "地址: ftp://${getLocalIpAddress()}:8021",
+                        fontSize = 14.sp,
+                        color = dialogTextColor
+                    )
+                    
+                    if (isEditingSftpCredentials) {
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            TextField(
+                                value = sftpUsername,
+                                onValueChange = { sftpUsername = it },
+                                label = { Text("用户名") },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            TextField(
+                                value = sftpPassword,
+                                onValueChange = { sftpPassword = it },
+                                label = { Text("密码") },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                    } else {
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(
+                                text = "用户名: $sftpUsername",
+                                fontSize = 14.sp,
+                                color = dialogTextColor
+                            )
+                            Text(
+                                text = "密码: $sftpPassword",
+                                fontSize = 14.sp,
+                                color = dialogTextColor
+                            )
+                        }
+                    }
+                }
+            },
+            onDismissRequest = { showSftpInfoDialog = false },
+            confirmButton = {
+                if (isEditingSftpCredentials) {
+                    Button(onClick = {
+                        saveSftpCredentials()
+                        isEditingSftpCredentials = false
+                        showSftpInfoDialog = false
+                    }) {
+                        Text("保存", color = dialogTextColor)
+                    }
+                } else {
+                    Button(onClick = {
+                        isEditingSftpCredentials = true
+                    }) {
+                        Text("修改", color = dialogTextColor)
+                    }
+                }
+            },
+            dismissButton = {
+                if (isEditingSftpCredentials) {
+                    TextButton(onClick = {
+                        isEditingSftpCredentials = false
+                    }) {
+                        Text("取消修改", color = dialogTextColor)
+                    }
+                } else {
+                    TextButton(onClick = { showSftpInfoDialog = false }) {
+                        Text("关闭", color = dialogTextColor)
+                    }
                 }
             }
         )

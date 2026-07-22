@@ -58,7 +58,8 @@ data class ResourceItem(
     val type: String = "default",
     val needsLinuxContainer: Boolean = false,
     val needsContainerCheck: Boolean = false,
-    val copyToClipboard: Boolean = false
+    val copyToClipboard: Boolean = false,
+    val fallbackScriptUrl: String = ""
 )
 
 data class TerminalSession(val id: String, val name: String)
@@ -160,7 +161,8 @@ fun ResourcesScreen(onExecuteScript: (String, String) -> Unit, onTypeInSession: 
             title = "朱雀面板",
             description = "一款专为轻量 Linux 设备设计的极致轻量服务器管理面板，单二进制、零依赖、无 Docker，支持应用商店、进程守护、日志管理、系统监控等功能，完美适配 OpenWrt、Termux、ARM 设备等所有 Linux 环境",
             url = "https://github.com/MyUI0/lightpanel",
-            scriptUrl = "curl -L https://gh.llkk.cc/https://github.com/MyUI0/lightpanel/releases/latest/download/install.sh | bash",
+            scriptUrl = "https://github.com/MyUI0/lightpanel/releases/latest/download/install.sh",
+            fallbackScriptUrl = "https://gh.llkk.cc/https://github.com/MyUI0/lightpanel/releases/latest/download/install.sh",
             iconRes = R.drawable.ic_web,
             needsLinuxContainer = true,
             needsContainerCheck = true
@@ -692,7 +694,13 @@ private fun resolveCommand(item: ResourceItem, context: android.content.Context)
                 }
                 "bash $runInContainerPath $installScriptPath"
             } else {
-                "curl -sSL -o /data/data/com.termux/files/home/tmp_script.sh ${item.scriptUrl} && bash $runInContainerPath /data/data/com.termux/files/home/tmp_script.sh"
+                val tmpScriptPath = "/data/data/com.termux/files/home/tmp_script.sh"
+                val downloadCmd = if (item.fallbackScriptUrl.isNotEmpty()) {
+                    "(curl -fsSL -o $tmpScriptPath ${item.scriptUrl} || curl -fsSL -o $tmpScriptPath ${item.fallbackScriptUrl})"
+                } else {
+                    "curl -sSL -o $tmpScriptPath ${item.scriptUrl}"
+                }
+                "$downloadCmd && bash $runInContainerPath $tmpScriptPath"
             }
         }
         else -> {

@@ -74,6 +74,11 @@ class MainActivity : ComponentActivity() {
 
         val prefs = getSharedPreferences("app_settings", Context.MODE_PRIVATE)
         val initialShowVnc = prefs.getBoolean("vnc_enabled", false)
+        
+        if ("SHOW_SFTP_INFO" == intent?.action) {
+            prefs.edit().putBoolean("showSftpInfo", true).apply()
+            selectedTab = 1
+        }
 
         appViewModel = ViewModelProvider(this)[AppViewModel::class.java]
         appViewModel.updateShowVnc(initialShowVnc)

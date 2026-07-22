@@ -123,7 +123,7 @@ add_library(termux-bootstrap SHARED
 )
 
 target_include_directories(termux-bootstrap PRIVATE ${TERMUX_CPP_DIR})
-set_source_files_properties(${TERMUX_CPP_DIR}/termux-bootstrap-zip.S PROPERTIES COMPILE_FLAGS "-I${TERMUX_CPP_DIR}")
+set_source_files_properties(${TERMUX_CPP_DIR}/termux-bootstrap-zip.S PROPERTIES COMPILE_FLAGS "-I\"${TERMUX_CPP_DIR}\"")
 
 find_library(LIB_LOG log)
 target_link_libraries(termux-bootstrap ${LIB_LOG})
