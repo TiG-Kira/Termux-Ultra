@@ -67,8 +67,17 @@ echo "[3/5] 正在解压..."
 tar -xzf "$TARBALL"
 echo "    解压完成"
 
-# 步骤4: 赋予执行权限
+# 步骤4: 进入解压后的子目录并赋予执行权限
 echo "[4/5] 正在配置执行权限..."
+UNPACK_DIR="lightpanel-${VERSION}-linux-arm64"
+if [ -d "$UNPACK_DIR" ]; then
+    cd "$UNPACK_DIR"
+    echo "    进入目录: $UNPACK_DIR"
+else
+    echo "错误: 解压目录 $UNPACK_DIR 不存在"
+    exit 1
+fi
+
 chmod +x lightpanel
 echo "    权限配置完成"
 
