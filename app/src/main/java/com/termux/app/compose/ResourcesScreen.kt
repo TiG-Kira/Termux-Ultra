@@ -161,8 +161,7 @@ fun ResourcesScreen(onExecuteScript: (String, String) -> Unit, onTypeInSession: 
             title = "朱雀面板",
             description = "一款专为轻量 Linux 设备设计的极致轻量服务器管理面板，单二进制、零依赖、无 Docker，支持应用商店、进程守护、日志管理、系统监控等功能，完美适配 OpenWrt、Termux、ARM 设备等所有 Linux 环境",
             url = "https://github.com/MyUI0/lightpanel",
-            scriptUrl = "https://github.com/MyUI0/lightpanel/releases/latest/download/install.sh",
-            fallbackScriptUrl = "https://gh.llkk.cc/https://github.com/MyUI0/lightpanel/releases/latest/download/install.sh",
+            scriptUrl = "install_lightpanel",
             iconRes = R.drawable.ic_web,
             needsLinuxContainer = true,
             needsContainerCheck = true
@@ -684,6 +683,19 @@ private fun resolveCommand(item: ResourceItem, context: android.content.Context)
                 val installScriptPath = "/data/data/com.termux/files/home/install_qemu.sh"
                 try {
                     val inputStream = context.assets.open("install_qemu.sh")
+                    val outputStream = java.io.FileOutputStream(installScriptPath)
+                    inputStream.copyTo(outputStream)
+                    inputStream.close()
+                    outputStream.close()
+                    java.io.File(installScriptPath).setExecutable(true)
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+                "bash $runInContainerPath $installScriptPath"
+            } else if (item.scriptUrl == "install_lightpanel") {
+                val installScriptPath = "/data/data/com.termux/files/home/install_lightpanel.sh"
+                try {
+                    val inputStream = context.assets.open("install_lightpanel.sh")
                     val outputStream = java.io.FileOutputStream(installScriptPath)
                     inputStream.copyTo(outputStream)
                     inputStream.close()

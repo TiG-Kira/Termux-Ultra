@@ -1,5 +1,4 @@
 name: Unit tests
-
 on:
   push:
     branches:
@@ -9,13 +8,14 @@ on:
     branches:
       - master
       - android-10
-
 jobs:
   testing:
     runs-on: ubuntu-latest
     steps:
     - name: Clone repository
       uses: actions/checkout@v4
+    - name: Make gradlew executable
+      run: chmod +x ./gradlew
     - name: Execute tests
       run: |
         ./gradlew test

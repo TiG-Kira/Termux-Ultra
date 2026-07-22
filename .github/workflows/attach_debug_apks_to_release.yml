@@ -1,10 +1,11 @@
 name: Attach Debug APKs To Release
-
 on:
   release:
     types:
       - published
 
+permissions:
+  contents: write
 jobs:
   attach-apks:
     runs-on: ubuntu-latest
@@ -12,9 +13,17 @@ jobs:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - name: Clone repository
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
         with:
           ref: ${{ env.GITHUB_REF }}
+
+      # 修复1：给gradlew执行权限
+      - name: Grant gradlew execute permission
+        run: chmod +x ./gradlew
+
+      # 修复2：gh cli 自动鉴权（内置token）
+      - name: Auth gh cli
+        run: gh auth token $GITHUB_TOKEN
 
       - name: Build and attach APKs to release
         shell: bash {0}
@@ -22,27 +31,24 @@ jobs:
           exit_on_error() {
               echo "$1"
               echo "Deleting '$RELEASE_VERSION_NAME' release and '$GITHUB_REF' tag"
-              hub release delete "$RELEASE_VERSION_NAME"
+              # 修复：hub → gh 官方命令
+              gh release delete "$RELEASE_VERSION_NAME" -y
               git push --delete origin "$GITHUB_REF"
               exit 1
           }
-
           echo "Setting vars"
           RELEASE_VERSION_NAME="${GITHUB_REF/refs\/tags\//}"
           if ! printf "%s" "${RELEASE_VERSION_NAME/v/}" | grep -qP '^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$'; then
            exit_on_error "The versionName '${RELEASE_VERSION_NAME/v/}' is not a valid version as per semantic version '2.0.0' spec in the format 'major.minor.patch(-prerelease)(+buildmetadata)'. https://semver.org/spec/v2.0.0.html."
           fi
-
           APK_DIR_PATH="./app/build/outputs/apk/debug"
           APK_VERSION_TAG="$RELEASE_VERSION_NAME+github-debug"
           APK_BASENAME_PREFIX="termux-app_$APK_VERSION_TAG"
-
           echo "Building APKs for '$RELEASE_VERSION_NAME' release"
           export TERMUX_APK_VERSION_TAG="$APK_VERSION_TAG" # Used by app/build.gradle
           if ! ./gradlew assembleDebug; then
             exit_on_error "Build failed for '$RELEASE_VERSION_NAME' release."
           fi
-
           echo "Validating APKs"
           for abi in universal arm64-v8a armeabi-v7a x86_64 x86; do
             if ! test -f "$APK_DIR_PATH/${APK_BASENAME_PREFIX}_$abi.apk"; then
@@ -50,7 +56,6 @@ jobs:
               exit_on_error "Failed to find built APK at '$APK_DIR_PATH/${APK_BASENAME_PREFIX}_$abi.apk'. Files found: "$'\n'"$files_found"
             fi
           done
-
           echo "Generating sha25sums file"
           if ! (cd "$APK_DIR_PATH"; sha256sum \
             "${APK_BASENAME_PREFIX}_universal.apk" \
@@ -61,7 +66,6 @@ jobs:
             > "${APK_BASENAME_PREFIX}_sha256sums"); then
             exit_on_error "Generate sha25sums failed for '$RELEASE_VERSION_NAME' release."
           fi
-
           echo "Attaching APKs to github release"
           if ! gh release upload "$RELEASE_VERSION_NAME" \
             "$APK_DIR_PATH/${APK_BASENAME_PREFIX}_universal.apk" \
