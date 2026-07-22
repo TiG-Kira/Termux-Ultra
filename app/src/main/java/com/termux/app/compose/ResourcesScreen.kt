@@ -157,6 +157,15 @@ fun ResourcesScreen(onExecuteScript: (String, String) -> Unit, onTypeInSession: 
             iconRes = R.drawable.ic_server
         ),
         ResourceItem(
+            title = "朱雀面板",
+            description = "一款专为轻量 Linux 设备设计的极致轻量服务器管理面板，单二进制、零依赖、无 Docker，支持应用商店、进程守护、日志管理、系统监控等功能，完美适配 OpenWrt、Termux、ARM 设备等所有 Linux 环境",
+            url = "https://github.com/MyUI0/lightpanel",
+            scriptUrl = "curl -L https://gh.llkk.cc/https://github.com/MyUI0/lightpanel/releases/latest/download/install.sh | bash",
+            iconRes = R.drawable.ic_web,
+            needsLinuxContainer = true,
+            needsContainerCheck = true
+        ),
+        ResourceItem(
             title = context.getString(R.string.resource_minecraft_server),
             description = context.getString(R.string.resource_minecraft_server_desc),
             url = "https://github.com/TheRemote/MinecraftBedrockServer",
@@ -295,7 +304,7 @@ private fun ResourceCard(
     val surfaceVariantColor = MiuixTheme.colorScheme.surfaceVariant
     val dividerColor = onSurfaceColor.copy(alpha = 0.15f)
     val isDark = isSystemInDarkTheme()
-    val cardBackgroundColor = if (isDark) Color(0xFF1A1A1A) else Color.White
+    val cardBackgroundColor = if (isDark) Color(0xFF1A1A1A) else Color(0xFFFAFAFA)
 
     androidx.compose.material3.Card(
         modifier = Modifier
@@ -413,24 +422,22 @@ private fun ResourceCard(
                             )
                         ) {
                             Icon(
-                                painter = painterResource(R.drawable.ic_play),
-                                contentDescription = context.getString(R.string.execute),
+                                painter = painterResource(if (isExpanded) R.drawable.ic_collapse else R.drawable.ic_play),
+                                contentDescription = if (isExpanded) "收起" else context.getString(R.string.execute),
                                 modifier = Modifier.size(16.dp),
                                 tint = Color.White
                             )
-                            Text(text = context.getString(R.string.execute), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                            Text(text = if (isExpanded) "收起" else context.getString(R.string.execute), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
                         }
                     }
                 }
             }
 
             if (isExpanded && !item.copyToClipboard) {
-                Divider(color = dividerColor)
-                
                 Column(
                     modifier = Modifier
                         .padding(16.dp)
-                        .background(MiuixTheme.colorScheme.surfaceContainer)
+                        .background(cardBackgroundColor)
                         .clip(RoundedCornerShape(12.dp))
                         .padding(12.dp)
                 ) {

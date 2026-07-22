@@ -160,6 +160,11 @@ public final class TermuxService extends Service implements TermuxTask.TermuxTas
         // Run again in case service is already started and onCreate() is not called
         runStartForeground();
 
+        if (intent == null) {
+            Logger.logDebug(LOG_TAG, "onStartCommand called with null intent");
+            return START_STICKY;
+        }
+
         String action = intent.getAction();
 
         if (action != null) {
@@ -853,38 +858,44 @@ public final class TermuxService extends Service implements TermuxTask.TermuxTas
         int priority = (wakeLockHeld) ? Notification.PRIORITY_HIGH : Notification.PRIORITY_LOW;
 
 
-        // Build the notification
-        Notification.Builder builder =  NotificationUtils.geNotificationBuilder(this,
-            TermuxConstants.TERMUX_APP_NOTIFICATION_CHANNEL_ID, priority,
-            "Termux 终端", notificationText, null,
-            contentIntent, null, NotificationUtils.NOTIFICATION_MODE_SILENT);
-        if (builder == null)  return null;
+        Notification.Builder builder;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            builder = new Notification.Builder(this, TermuxConstants.TERMUX_APP_NOTIFICATION_CHANNEL_ID);
+        } else {
+            builder = new Notification.Builder(this);
+        }
 
-        // No need to show a timestamp:
+        builder.setContentTitle("Termux 终端");
+        builder.setContentText(notificationText);
+        builder.setContentIntent(contentIntent);
+        builder.setPriority(priority);
         builder.setShowWhen(false);
-
-        // Set notification icon
         builder.setSmallIcon(R.drawable.ic_service_notification);
-
-        // Set background color for small notification icon
-        builder.setColor(0xFF607D8B);
-
-        // TermuxSessions are always ongoing
         builder.setOngoing(true);
 
-
-        // Set Exit button action
         Intent exitIntent = new Intent(this, TermuxService.class).setAction(TERMUX_SERVICE.ACTION_STOP_SERVICE);
         builder.addAction(android.R.drawable.ic_delete, res.getString(R.string.notification_action_exit), PendingIntent.getService(this, 0, exitIntent, pendingIntentFlags));
 
-
-        // Set Wakelock button actions
         String newWakeAction = wakeLockHeld ? TERMUX_SERVICE.ACTION_WAKE_UNLOCK : TERMUX_SERVICE.ACTION_WAKE_LOCK;
         Intent toggleWakeLockIntent = new Intent(this, TermuxService.class).setAction(newWakeAction);
         String actionTitle = res.getString(wakeLockHeld ? R.string.notification_action_wake_unlock : R.string.notification_action_wake_lock);
         int actionIcon = wakeLockHeld ? android.R.drawable.ic_lock_idle_lock : android.R.drawable.ic_lock_lock;
         builder.addAction(actionIcon, actionTitle, PendingIntent.getService(this, 0, toggleWakeLockIntent, pendingIntentFlags));
 
+        if (Build.VERSION.SDK_INT >= 35) {
+            try {
+                builder.setPriority(Notification.PRIORITY_HIGH);
+                
+                if (sessionCount > 0) {
+                    builder.setStyle(new Notification.BigTextStyle().bigText(notificationText));
+                }
+                
+                builder.getClass().getMethod("setRequestPromotedOngoing", boolean.class).invoke(builder, true);
+                builder.getClass().getMethod("setShortCriticalText", String.class).invoke(builder, sessionCount + " 会话");
+            } catch (Exception e) {
+                Logger.logDebug(LOG_TAG, "Failed to set Live Update notification properties: " + e.getMessage());
+            }
+        }
 
         return builder.build();
     }

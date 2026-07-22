@@ -59,9 +59,13 @@ fun FileManagerScreen(
     var newFileName by remember { mutableStateOf("") }
     var showNewFolderDialog by remember { mutableStateOf(false) }
     var newFolderName by remember { mutableStateOf("") }
+    var showNewFileDialog by remember { mutableStateOf(false) }
+    var newFileInputName by remember { mutableStateOf("") }
+    var showNewTypeDialog by remember { mutableStateOf(false) }
     var showWarningCard by remember { mutableStateOf(false) }
     var showOpenWithDialog by remember { mutableStateOf(false) }
     var fileToOpen by remember { mutableStateOf<File?>(null) }
+    var forwardHistory by remember { mutableStateOf<List<File>>(emptyList()) }
 
     LaunchedEffect(currentPath) {
         files = currentPath.listFiles()?.sortedWith(compareBy({ !it.isDirectory }, { it.name })) ?: emptyList()
@@ -80,6 +84,7 @@ fun FileManagerScreen(
     val canGoUp = currentPath.parentFile != null && !currentPath.absolutePath.equals(ROOT_PATH)
 
     BackHandler(enabled = canGoUp) {
+        forwardHistory = forwardHistory + currentPath
         currentPath = currentPath.parentFile!!
     }
 
@@ -99,27 +104,48 @@ fun FileManagerScreen(
                 scrollBehavior = scrollBehavior,
                 navigationIcon = {
                     if (isInSelectionMode) {
-                        IconButton(onClick = {
-                            selectedFiles = emptySet()
-                            isInSelectionMode = false
-                        }) {
-                            Icon(
-                                painter = painterResource(R.drawable.ic_close),
-                                contentDescription = null,
-                                modifier = Modifier.size(24.dp),
-                                tint = MiuixTheme.colorScheme.onSurface
-                            )
+                        Row {
+                            IconButton(onClick = {
+                                selectedFiles = emptySet()
+                                isInSelectionMode = false
+                            }) {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_close),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(24.dp),
+                                    tint = MiuixTheme.colorScheme.onSurface
+                                )
+                            }
                         }
-                    } else if (canGoUp) {
-                        IconButton(onClick = {
-                            currentPath = currentPath.parentFile!!
-                        }) {
-                            Icon(
-                                painter = painterResource(R.drawable.ic_arrow_up),
-                                contentDescription = null,
-                                modifier = Modifier.size(24.dp),
-                                tint = MiuixTheme.colorScheme.onSurface
-                            )
+                    } else {
+                        Row {
+                            IconButton(onClick = {
+                                if (canGoUp) {
+                                    forwardHistory = forwardHistory + currentPath
+                                    currentPath = currentPath.parentFile!!
+                                }
+                            }, enabled = canGoUp) {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_arrow_up),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(24.dp),
+                                    tint = if (canGoUp) MiuixTheme.colorScheme.onSurface else MiuixTheme.colorScheme.onSurfaceVariantSummary
+                                )
+                            }
+                            IconButton(onClick = {
+                                if (forwardHistory.isNotEmpty()) {
+                                    val nextPath = forwardHistory.last()
+                                    forwardHistory = forwardHistory.dropLast(1)
+                                    currentPath = nextPath
+                                }
+                            }, enabled = forwardHistory.isNotEmpty()) {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_arrow_down),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(24.dp),
+                                    tint = if (forwardHistory.isNotEmpty()) MiuixTheme.colorScheme.onSurface else MiuixTheme.colorScheme.onSurfaceVariantSummary
+                                )
+                            }
                         }
                     }
                 },
@@ -202,8 +228,7 @@ fun FileManagerScreen(
 
                     if (!isInSelectionMode) {
                         IconButton(onClick = {
-                            newFolderName = ""
-                            showNewFolderDialog = true
+                            showNewTypeDialog = true
                         }) {
                             Icon(
                                 painter = painterResource(R.drawable.ic_add),
@@ -315,6 +340,7 @@ fun FileManagerScreen(
                                 if (selectedFiles.isEmpty()) isInSelectionMode = false
                             } else {
                                 if (fileItem.isDirectory) {
+                                    forwardHistory = emptyList()
                                     currentPath = fileItem
                                 } else {
                                     fileToOpen = fileItem
@@ -343,10 +369,16 @@ fun FileManagerScreen(
     if (showOpenWithDialog && fileToOpen != null) {
         val file = fileToOpen!!
         val isShFile = file.name.endsWith(".sh", ignoreCase = true)
-        val isDark = isSystemInDarkTheme()
-        
+        val dialogTextColor = MiuixTheme.colorScheme.onSurface
+        val dialogBackgroundColor = MiuixTheme.colorScheme.surface
+
         AlertDialog(
-            title = { Text(file.name) },
+            onDismissRequest = {
+                showOpenWithDialog = false
+                fileToOpen = null
+            },
+            containerColor = dialogBackgroundColor,
+            title = { Text(file.name, color = dialogTextColor) },
             text = {
                 Column(
                     verticalArrangement = Arrangement.spacedBy(4.dp)
@@ -357,12 +389,12 @@ fun FileManagerScreen(
                         color = MiuixTheme.colorScheme.onSurfaceVariantSummary
                     )
                     Spacer(modifier = Modifier.height(8.dp))
-                    
+
                     if (isShFile) {
                         Card(
                             modifier = Modifier.fillMaxWidth(),
                             colors = CardDefaults.cardColors(
-                                containerColor = if (isDark) Color(0xFF3D3514) else Color(0xFFFFF9C4)
+                                containerColor = if (isSystemInDarkTheme()) Color(0xFF3D3514) else Color(0xFFFFF9C4)
                             )
                         ) {
                             Column(
@@ -371,60 +403,74 @@ fun FileManagerScreen(
                                 Text(
                                     text = stringResource(R.string.shell_script_warning),
                                     fontSize = 12.sp,
-                                    color = if (isDark) Color.White else Color.Black
+                                    color = dialogTextColor
                                 )
                             }
                         }
                         Spacer(modifier = Modifier.height(8.dp))
                     }
-                    
+
                     Text(stringResource(R.string.select_open_method), fontSize = 14.sp)
                     Spacer(modifier = Modifier.height(4.dp))
+
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
                             .clickable {
                                 onOpenFile(file.absolutePath, "cat \"${file.absolutePath}\"")
                                 showOpenWithDialog = false
                                 fileToOpen = null
                             }
-                            .padding(vertical = 12.dp),
+                            .padding(vertical = 12.dp, horizontal = 16.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
                             painter = painterResource(R.drawable.ic_copy),
                             contentDescription = null,
                             modifier = Modifier.size(24.dp),
-                            tint = MiuixTheme.colorScheme.onSurface
+                            tint = dialogTextColor
                         )
                         Spacer(modifier = Modifier.width(16.dp))
-                        Text(stringResource(R.string.view_content))
+                        Text(stringResource(R.string.view_content), color = dialogTextColor)
                     }
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
                             .clickable {
-                                onOpenFile(file.absolutePath, "vi \"${file.absolutePath}\"")
+                                val vimPath = "/data/data/com.termux/files/usr/bin/vim"
+                                if (File(vimPath).exists()) {
+                                    onOpenFile(file.absolutePath, "vi \"${file.absolutePath}\"")
+                                } else {
+                                    onOpenFile(file.absolutePath, "pkg install vim -y && vi \"${file.absolutePath}\"")
+                                }
                                 showOpenWithDialog = false
                                 fileToOpen = null
                             }
-                            .padding(vertical = 12.dp),
+                            .padding(vertical = 12.dp, horizontal = 16.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
                             painter = painterResource(R.drawable.ic_edit),
                             contentDescription = null,
                             modifier = Modifier.size(24.dp),
-                            tint = MiuixTheme.colorScheme.onSurface
+                            tint = dialogTextColor
                         )
                         Spacer(modifier = Modifier.width(16.dp))
-                        Text(stringResource(R.string.edit_file))
+                        Text(stringResource(R.string.edit_file), color = dialogTextColor)
                     }
-                    
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
                     if (isShFile) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
                                 .clickable {
                                     val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
                                     val clip = android.content.ClipData.newPlainText("exec_command", "bash \"${file.absolutePath}\"")
@@ -432,43 +478,49 @@ fun FileManagerScreen(
                                     showOpenWithDialog = false
                                     fileToOpen = null
                                 }
-                                .padding(vertical = 12.dp),
+                                .padding(vertical = 12.dp, horizontal = 16.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(
                                 painter = painterResource(R.drawable.ic_copy),
                                 contentDescription = null,
                                 modifier = Modifier.size(24.dp),
-                                tint = MiuixTheme.colorScheme.onSurface
+                                tint = dialogTextColor
                             )
                             Spacer(modifier = Modifier.width(16.dp))
-                            Text(stringResource(R.string.copy_exec_command))
+                            Text(stringResource(R.string.copy_exec_command), color = dialogTextColor)
                         }
+                        Spacer(modifier = Modifier.height(4.dp))
                     }
-                    
+
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
                             .clickable {
                                 onOpenFile(file.absolutePath, "bash \"${file.absolutePath}\"")
                                 showOpenWithDialog = false
                                 fileToOpen = null
                             }
-                            .padding(vertical = 12.dp),
+                            .padding(vertical = 12.dp, horizontal = 16.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
                             painter = painterResource(R.drawable.ic_terminal),
                             contentDescription = null,
                             modifier = Modifier.size(24.dp),
-                            tint = MiuixTheme.colorScheme.onSurface
+                            tint = dialogTextColor
                         )
                         Spacer(modifier = Modifier.width(16.dp))
-                        Text(stringResource(R.string.execute_bash))
+                        Text(stringResource(R.string.execute_bash), color = dialogTextColor)
                     }
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
                             .clickable {
                                 val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
                                 val clip = android.content.ClipData.newPlainText("path", file.absolutePath)
@@ -476,30 +528,55 @@ fun FileManagerScreen(
                                 showOpenWithDialog = false
                                 fileToOpen = null
                             }
-                            .padding(vertical = 12.dp),
+                            .padding(vertical = 12.dp, horizontal = 16.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
                             painter = painterResource(R.drawable.ic_copy),
                             contentDescription = null,
                             modifier = Modifier.size(24.dp),
-                            tint = MiuixTheme.colorScheme.onSurface
+                            tint = dialogTextColor
                         )
                         Spacer(modifier = Modifier.width(16.dp))
-                        Text(stringResource(R.string.copy_path))
+                        Text(stringResource(R.string.copy_path), color = dialogTextColor)
+                    }
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable {
+                                val uri = android.net.Uri.parse("content://com.termux.files" + file.absolutePath)
+                                val intent = android.content.Intent(android.content.Intent.ACTION_VIEW)
+                                intent.setDataAndType(uri, "*/*")
+                                intent.addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                val chooser = android.content.Intent.createChooser(intent, "选择应用打开")
+                                context.startActivity(chooser)
+                                showOpenWithDialog = false
+                                fileToOpen = null
+                            }
+                            .padding(vertical = 12.dp, horizontal = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_launch),
+                            contentDescription = null,
+                            modifier = Modifier.size(24.dp),
+                            tint = dialogTextColor
+                        )
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Text("用其他方式打开", color = dialogTextColor)
                     }
                 }
-            },
-            onDismissRequest = {
-                showOpenWithDialog = false
-                fileToOpen = null
             },
             confirmButton = {
                 TextButton(onClick = {
                     showOpenWithDialog = false
                     fileToOpen = null
                 }) {
-                    Text(stringResource(R.string.cancel))
+                    Text(stringResource(R.string.cancel), color = dialogTextColor)
                 }
             },
             dismissButton = {}
@@ -507,9 +584,13 @@ fun FileManagerScreen(
     }
 
     if (showDeleteDialog) {
+        val dialogTextColor = MiuixTheme.colorScheme.onSurface
+        val dialogBackgroundColor = MiuixTheme.colorScheme.surface
+        
         AlertDialog(
-            title = { Text(stringResource(R.string.delete_confirm_title)) },
-            text = { Text("${stringResource(R.string.delete_confirm_message)} (${selectedFiles.size})") },
+            containerColor = dialogBackgroundColor,
+            title = { Text(stringResource(R.string.delete_confirm_title), color = dialogTextColor) },
+            text = { Text("${stringResource(R.string.delete_confirm_message)} (${selectedFiles.size})", color = dialogTextColor) },
             onDismissRequest = { showDeleteDialog = false },
             confirmButton = {
                 Button(onClick = {
@@ -521,12 +602,12 @@ fun FileManagerScreen(
                     refreshFiles()
                     showDeleteDialog = false
                 }) {
-                    Text(stringResource(R.string.delete_confirm))
+                    Text(stringResource(R.string.delete_confirm), color = dialogTextColor)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showDeleteDialog = false }) {
-                    Text(stringResource(R.string.cancel))
+                    Text(stringResource(R.string.cancel), color = dialogTextColor)
                 }
             }
         )
@@ -534,8 +615,12 @@ fun FileManagerScreen(
 
     if (showRenameDialog) {
         val renameFile = File(selectedFiles.first())
+        val dialogTextColor = MiuixTheme.colorScheme.onSurface
+        val dialogBackgroundColor = MiuixTheme.colorScheme.surface
+        
         AlertDialog(
-            title = { Text(stringResource(R.string.rename)) },
+            containerColor = dialogBackgroundColor,
+            title = { Text(stringResource(R.string.rename), color = dialogTextColor) },
             onDismissRequest = { showRenameDialog = false },
             confirmButton = {
                 Button(onClick = {
@@ -546,27 +631,31 @@ fun FileManagerScreen(
                     refreshFiles()
                     showRenameDialog = false
                 }) {
-                    Text(stringResource(R.string.ok))
+                    Text(stringResource(R.string.ok), color = dialogTextColor)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showRenameDialog = false }) {
-                    Text(stringResource(R.string.cancel))
+                    Text(stringResource(R.string.cancel), color = dialogTextColor)
                 }
             },
             text = {
                 TextField(
                     value = newFileName,
                     onValueChange = { newFileName = it },
-                    label = { Text(stringResource(R.string.file_name)) }
+                    label = { Text(stringResource(R.string.file_name), color = dialogTextColor) }
                 )
             }
         )
     }
 
     if (showNewFolderDialog) {
+        val dialogTextColor = MiuixTheme.colorScheme.onSurface
+        val dialogBackgroundColor = MiuixTheme.colorScheme.surface
+        
         AlertDialog(
-            title = { Text(stringResource(R.string.folder)) },
+            containerColor = dialogBackgroundColor,
+            title = { Text(stringResource(R.string.folder), color = dialogTextColor) },
             onDismissRequest = { showNewFolderDialog = false },
             confirmButton = {
                 Button(onClick = {
@@ -575,21 +664,124 @@ fun FileManagerScreen(
                     refreshFiles()
                     showNewFolderDialog = false
                 }) {
-                    Text(stringResource(R.string.ok))
+                    Text(stringResource(R.string.ok), color = dialogTextColor)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showNewFolderDialog = false }) {
-                    Text(stringResource(R.string.cancel))
+                    Text(stringResource(R.string.cancel), color = dialogTextColor)
                 }
             },
             text = {
                 TextField(
                     value = newFolderName,
                     onValueChange = { newFolderName = it },
-                    label = { Text(stringResource(R.string.file_name)) }
+                    label = { Text(stringResource(R.string.file_name), color = dialogTextColor) }
                 )
             }
+        )
+    }
+
+    if (showNewFileDialog) {
+        val dialogTextColor = MiuixTheme.colorScheme.onSurface
+        val dialogBackgroundColor = MiuixTheme.colorScheme.surface
+        
+        AlertDialog(
+            containerColor = dialogBackgroundColor,
+            title = { Text("新建文件", color = dialogTextColor) },
+            onDismissRequest = { showNewFileDialog = false },
+            confirmButton = {
+                Button(onClick = {
+                    val newFile = File(currentPath, newFileInputName)
+                    newFile.createNewFile()
+                    refreshFiles()
+                    showNewFileDialog = false
+                }) {
+                    Text(stringResource(R.string.ok), color = dialogTextColor)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showNewFileDialog = false }) {
+                    Text(stringResource(R.string.cancel), color = dialogTextColor)
+                }
+            },
+            text = {
+                TextField(
+                    value = newFileInputName,
+                    onValueChange = { newFileInputName = it },
+                    label = { Text(stringResource(R.string.file_name), color = dialogTextColor) }
+                )
+            }
+        )
+    }
+
+    if (showNewTypeDialog) {
+        val rowTextColor = MiuixTheme.colorScheme.onSurface
+        val dialogBackgroundColor = MiuixTheme.colorScheme.surface
+
+        AlertDialog(
+            containerColor = dialogBackgroundColor,
+            onDismissRequest = {
+                showNewTypeDialog = false
+            },
+            title = { Text("新建", color = rowTextColor) },
+            text = {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable {
+                                newFolderName = ""
+                                showNewTypeDialog = false
+                                showNewFolderDialog = true
+                            }
+                            .padding(vertical = 12.dp, horizontal = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_folder),
+                            contentDescription = null,
+                            modifier = Modifier.size(24.dp),
+                            tint = rowTextColor
+                        )
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Text(stringResource(R.string.folder), color = rowTextColor)
+                    }
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable {
+                                newFileInputName = ""
+                                showNewTypeDialog = false
+                                showNewFileDialog = true
+                            }
+                            .padding(vertical = 12.dp, horizontal = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_file),
+                            contentDescription = null,
+                            modifier = Modifier.size(24.dp),
+                            tint = rowTextColor
+                        )
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Text("文件", color = rowTextColor)
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showNewTypeDialog = false
+                }) {
+                    Text(stringResource(R.string.cancel), color = rowTextColor)
+                }
+            },
+            dismissButton = {}
         )
     }
 }

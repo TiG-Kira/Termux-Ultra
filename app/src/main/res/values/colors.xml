@@ -9,4 +9,5 @@
     <color name="light_gray">#EEEEEE</color>
     <color name="green">#4CAF50</color>
     <color name="background">#FFFFFF</color>
+    <color name="icon_color">#000000</color>
 </resources>

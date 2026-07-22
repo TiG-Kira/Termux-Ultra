@@ -3,11 +3,14 @@ package com.termux.app.compose
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
+import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.IntentFilter
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -65,10 +68,68 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
     var restoreProgress by remember { mutableStateOf(0) }
     var restoreTotal by remember { mutableStateOf(100) }
     var restoreMessage by remember { mutableStateOf("") }
+    var launchRestore by remember { mutableStateOf(false) }
     val prefs = remember { context.getSharedPreferences("app_settings", Context.MODE_PRIVATE) }
     var vncEnabled by remember { mutableStateOf(prefs.getBoolean("vnc_enabled", false)) }
 
     val scrollBehavior = MiuixScrollBehavior()
+
+    val restoreFileLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri?.let {
+            if (!isProcessing) {
+                isProcessing = true
+                android.widget.Toast.makeText(context, "正在恢复，请在通知栏查看进度", android.widget.Toast.LENGTH_SHORT).show()
+                NotificationHelper.createNotificationChannel(context)
+                
+                val cancelIntent = Intent("com.termux.RESTORE_CANCEL")
+                val pendingCancelIntent = PendingIntent.getBroadcast(context, 0, cancelIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+                
+                val cancelReceiver = object : BroadcastReceiver() {
+                    override fun onReceive(context: Context?, intent: Intent?) {
+                        BackupManager.cancelRestore()
+                    }
+                }
+                context.registerReceiver(cancelReceiver, IntentFilter("com.termux.RESTORE_CANCEL"))
+                
+                NotificationHelper.showProgressNotification(context, "正在恢复", 0, 100, "初始化...", pendingCancelIntent)
+                val mainHandler = Handler(Looper.getMainLooper())
+                Thread {
+                    val inputStream = context.contentResolver.openInputStream(uri)
+                    val tempFile = File(context.cacheDir, "temp_backup.zip")
+                    inputStream?.use { input ->
+                        tempFile.outputStream().use { output ->
+                            input.copyTo(output)
+                        }
+                    }
+                    
+                    val result = BackupManager.restoreBackup(context, tempFile.absolutePath) { processed, total, message ->
+                        val progress = if (total > 0) (processed * 100 / total) else 0
+                        mainHandler.post {
+                            NotificationHelper.showProgressNotification(context, "正在恢复", progress, 100, message, pendingCancelIntent)
+                        }
+                    }
+                    tempFile.delete()
+                    
+                    mainHandler.post {
+                        isProcessing = false
+                        context.unregisterReceiver(cancelReceiver)
+                        if (result) {
+                            NotificationHelper.showCompleteNotification(context, "恢复完成", "备份已成功恢复", true)
+                        } else {
+                            NotificationHelper.showCompleteNotification(context, "恢复失败", "恢复过程中出现错误", false)
+                        }
+                    }
+                }.start()
+            }
+        }
+    }
+
+    LaunchedEffect(launchRestore) {
+        if (launchRestore) {
+            restoreFileLauncher.launch(arrayOf("application/zip"))
+            launchRestore = false
+        }
+    }
 
     val settings = mutableListOf<SettingItem>().apply {
         add(SettingItem(
@@ -150,8 +211,7 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
             description = context.getString(R.string.restore_description),
             iconRes = R.drawable.ic_restore,
             action = {
-                backupFiles = BackupManager.getBackupFiles(context)
-                showRestoreDialog = true
+                launchRestore = true
             }
         ))
         add(SettingItem(

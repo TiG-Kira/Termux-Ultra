@@ -3,13 +3,16 @@ package com.termux.app.compose
 import android.content.Context
 import android.os.Environment
 import java.io.*
+import java.nio.file.Files
+import java.nio.file.Path
+import java.nio.file.Paths
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 
 object BackupManager {
 
     private const val TERMUX_DATA_DIR = "/data/data/com.termux/files"
-    private const val EXCLUDE_DIR = "$TERMUX_DATA_DIR/home/storage/shared"
+    private const val EXCLUDE_STORAGE_DIR = "$TERMUX_DATA_DIR/home/storage"
     
     @Volatile
     private var isBackupCancelled = false
@@ -20,8 +23,8 @@ object BackupManager {
     fun createBackup(context: Context, onProgress: ((Int, Int, String) -> Unit)? = null): String? {
         isBackupCancelled = false
         return try {
-            val backupDir = context.getExternalFilesDir("backups")
-            backupDir?.mkdirs() ?: return null
+            val backupDir = File(Environment.getExternalStorageDirectory(), "TermuxBackup")
+            backupDir.mkdirs()
 
             val timestamp = System.currentTimeMillis()
             val backupFileName = "termuxbackup_$timestamp.zip"
@@ -68,7 +71,12 @@ object BackupManager {
 
         for (file in files) {
             val filePath = file.absolutePath
-            if (filePath.startsWith(EXCLUDE_DIR)) {
+            
+            if (filePath.startsWith(EXCLUDE_STORAGE_DIR)) {
+                continue
+            }
+            
+            if (isPointingToExternalStorage(file)) {
                 continue
             }
 
@@ -99,13 +107,52 @@ object BackupManager {
             }
         }
     }
+    
+    private fun isPointingToExternalStorage(file: File): Boolean {
+        try {
+            val canonicalPath = file.canonicalPath
+            val externalStoragePath = Environment.getExternalStorageDirectory().canonicalPath
+            
+            if (canonicalPath.startsWith(externalStoragePath)) {
+                return true
+            }
+            
+            if (file.isDirectory) {
+                val storageDirs = arrayOf(
+                    "/storage/emulated/0",
+                    "/mnt/sdcard",
+                    "/sdcard",
+                    "/storage/sdcard0",
+                    "/storage/sdcard1",
+                    "/mnt/external_sd",
+                    "/mnt/media_rw"
+                )
+                for (storageDir in storageDirs) {
+                    if (canonicalPath.startsWith(storageDir)) {
+                        return true
+                    }
+                }
+            }
+            
+            if (file.exists() && Files.isSymbolicLink(file.toPath())) {
+                val targetPath = Files.readSymbolicLink(file.toPath())
+                return isPointingToExternalStorage(targetPath.toFile())
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        return false
+    }
 
     private fun countFiles(dir: File): Int {
         var count = 0
         val files = dir.listFiles() ?: return 0
         for (file in files) {
             val filePath = file.absolutePath
-            if (filePath.startsWith(EXCLUDE_DIR)) {
+            if (filePath.startsWith(EXCLUDE_STORAGE_DIR)) {
+                continue
+            }
+            if (isPointingToExternalStorage(file)) {
                 continue
             }
             if (file.isDirectory) {
@@ -130,7 +177,10 @@ object BackupManager {
         isRestoreCancelled = false
         return try {
             val zipFile = File(backupPath)
-            if (!zipFile.exists()) return false
+            if (!zipFile.exists()) {
+                onProgress?.invoke(0, 1, "备份文件不存在")
+                return false
+            }
 
             val fis = FileInputStream(zipFile)
             val zis = java.util.zip.ZipInputStream(fis)
@@ -139,6 +189,8 @@ object BackupManager {
             
             val totalEntries = countZipEntries(zipFile)
             var processedEntries = 0
+            
+            onProgress?.invoke(0, totalEntries, "开始恢复...")
             
             while (zis.nextEntry.also { entry = it } != null) {
                 if (isRestoreCancelled) {
@@ -149,26 +201,48 @@ object BackupManager {
                     val entryPath = "$TERMUX_DATA_DIR/${it.name}"
                     val destFile = File(entryPath)
 
-                    if (it.isDirectory) {
-                        destFile.mkdirs()
-                    } else {
-                        destFile.parentFile?.mkdirs()
+                    try {
+                        if (it.isDirectory) {
+                            if (!destFile.exists()) {
+                                destFile.mkdirs()
+                            }
+                        } else {
+                            val parentDir = destFile.parentFile
+                            if (parentDir != null && !parentDir.exists()) {
+                                parentDir.mkdirs()
+                            }
 
-                        val fos = FileOutputStream(destFile)
-                        val buffer = ByteArray(8192)
-                        var bytesRead: Int
-                        while (zis.read(buffer).also { bytesRead = it } != -1) {
-                            fos.write(buffer, 0, bytesRead)
-                        }
-                        fos.close()
+                            if (destFile.exists()) {
+                                destFile.setWritable(true)
+                                destFile.delete()
+                            }
 
-                        if (it.extra != null && it.extra.size >= 4) {
-                            val dis = DataInputStream(ByteArrayInputStream(it.extra))
-                            val mode = dis.readInt()
-                            destFile.setExecutable((mode and 0x49) != 0)
-                            destFile.setReadable((mode and 0x41) != 0)
-                            destFile.setWritable((mode and 0x22) != 0)
+                            if (Files.isSymbolicLink(destFile.toPath())) {
+                                Files.delete(destFile.toPath())
+                            }
+
+                            val fos = FileOutputStream(destFile)
+                            val buffer = ByteArray(8192)
+                            var bytesRead: Int
+                            while (zis.read(buffer).also { bytesRead = it } != -1) {
+                                fos.write(buffer, 0, bytesRead)
+                            }
+                            fos.flush()
+                            fos.close()
+
+                            if (it.extra != null && it.extra.size >= 4) {
+                                val dis = DataInputStream(ByteArrayInputStream(it.extra))
+                                val mode = dis.readInt()
+                                destFile.setExecutable((mode and 0x49) != 0)
+                                destFile.setReadable((mode and 0x41) != 0)
+                                destFile.setWritable((mode and 0x22) != 0)
+                            } else {
+                                destFile.setReadable(true)
+                                destFile.setWritable(true)
+                            }
                         }
+                    } catch (e: Exception) {
+                        onProgress?.invoke(processedEntries, totalEntries, "跳过文件: ${it.name} (${e.message})")
                     }
                 }
                 
@@ -180,10 +254,13 @@ object BackupManager {
             zis.close()
             fis.close()
 
+            onProgress?.invoke(totalEntries, totalEntries, "恢复完成")
             true
         } catch (e: InterruptedException) {
+            onProgress?.invoke(0, 1, "恢复已取消")
             false
         } catch (e: Exception) {
+            onProgress?.invoke(0, 1, "恢复失败: ${e.message}")
             e.printStackTrace()
             false
         }

@@ -36,7 +36,7 @@ fun KiTerminalTheme(
             androidx.compose.foundation.layout.Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Color.White)
+                    .background(MiuixTheme.colorScheme.background)
             ) {
                 content()
             }

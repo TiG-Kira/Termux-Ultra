@@ -9,4 +9,5 @@
 <resources>
     <color name="colorBorder">#464646</color>
     <color name="colorUrlBarBackground">#464646</color>
+    <color name="icon_color">#FFFFFF</color>
 </resources>

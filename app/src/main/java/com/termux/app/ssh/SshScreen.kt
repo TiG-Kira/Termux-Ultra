@@ -272,7 +272,7 @@ private fun connectToSsh(context: Context, connection: SshConnection) {
 }
 
 private fun buildSshCommand(connection: SshConnection): String {
-    val installCheck = "command -v ssh >/dev/null 2>&1 || pkg install -y openssh"
+    val installCheck = "command -v ssh >/dev/null 2>&1 || pkg install -y openssh; command -v sshpass >/dev/null 2>&1 || pkg install -y sshpass"
     val host = connection.host
     val port = connection.port
     val user = connection.username
@@ -284,8 +284,7 @@ private fun buildSshCommand(connection: SshConnection): String {
     }
 
     if (password.isNotEmpty()) {
-        sshCmd += "pass=${password.replace("'", "'\\''")}"
-        sshCmd = "sshpass -p '$password' $sshCmd"
+        sshCmd = "sshpass -p '${password.replace("'", "'\\''")}' $sshCmd"
     }
 
     sshCmd += " $user@$host"
