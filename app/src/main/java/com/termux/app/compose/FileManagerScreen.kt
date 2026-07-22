@@ -77,8 +77,7 @@ fun FileManagerScreen(
     var isSftpEnabled by remember { mutableStateOf(false) }
     var sftpNotificationId = 1001
     var sftpChannelId = "sftp_service"
-    var showSftpInfoDialog by remember { mutableStateOf(false) }
-    var isEditingSftpCredentials by remember { mutableStateOf(false) }
+    var sftpPort by remember { mutableStateOf(8021) }
     var sftpUsername by remember { mutableStateOf("") }
     var sftpPassword by remember { mutableStateOf("") }
     var ftpServer: FtpServer? by remember { mutableStateOf(null) }
@@ -109,18 +108,18 @@ fun FileManagerScreen(
         }
         sftpUsername = prefs.getString("sftp_username", "termux") ?: "termux"
         sftpPassword = prefs.getString("sftp_password", "termux123") ?: "termux123"
+        sftpPort = prefs.getInt("sftp_port", 8021)
         
         val appPrefs = context.getSharedPreferences("app_settings", android.content.Context.MODE_PRIVATE)
-        if (appPrefs.getBoolean("showSftpInfo", false)) {
-            showSftpInfoDialog = true
-            appPrefs.edit().putBoolean("showSftpInfo", false).apply()
-        }
-        
-        if (appPrefs.getBoolean("ftp_enabled", false) && isPortInUse(8021)) {
-            val rootDir = "/data/data/com.termux/files/home"
-            ftpServer = FtpServer(8021, sftpUsername, sftpPassword, rootDir)
-            ftpServer?.start()
-            isSftpEnabled = true
+        if (appPrefs.getBoolean("ftp_enabled", false)) {
+            if (isPortInUse(sftpPort)) {
+                val rootDir = "/data/data/com.termux/files/home"
+                ftpServer = FtpServer(sftpPort, sftpUsername, sftpPassword, rootDir)
+                ftpServer?.start()
+                isSftpEnabled = true
+            } else {
+                appPrefs.edit().putBoolean("ftp_enabled", false).apply()
+            }
         }
     }
 
@@ -184,7 +183,7 @@ fun FileManagerScreen(
         
         val notification = NotificationCompat.Builder(context, sftpChannelId)
             .setContentTitle("正在使用 FTP 服务")
-            .setContentText("地址: ftp://$ipAddress:8021\n点击通知显示 FTP 详情")
+            .setContentText("地址: ftp://$ipAddress:$sftpPort\n点击通知显示 FTP 详情")
             .setSmallIcon(R.drawable.ic_web)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setOngoing(true)
@@ -208,6 +207,13 @@ fun FileManagerScreen(
             .apply()
     }
 
+    fun saveSftpPort() {
+        val prefs = context.getSharedPreferences("termux_prefs", android.content.Context.MODE_PRIVATE)
+        prefs.edit()
+            .putInt("sftp_port", sftpPort)
+            .apply()
+    }
+
     fun toggleSftp() {
         isSftpEnabled = !isSftpEnabled
         val appPrefs = context.getSharedPreferences("app_settings", android.content.Context.MODE_PRIVATE)
@@ -215,7 +221,7 @@ fun FileManagerScreen(
         if (isSftpEnabled) {
             try {
                 val rootDir = "/data/data/com.termux/files/home"
-                ftpServer = FtpServer(8021, sftpUsername, sftpPassword, rootDir)
+                ftpServer = FtpServer(sftpPort, sftpUsername, sftpPassword, rootDir)
                 ftpServer?.start()
                 Thread.sleep(500)
                 showSftpNotification()
@@ -377,7 +383,9 @@ fun FileManagerScreen(
                         Row(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            IconButton(onClick = { showSftpInfoDialog = true }) {
+                            IconButton(onClick = {
+                                com.termux.app.ftp.FtpInfoActivity.start(context)
+                            }) {
                                 Icon(
                                     painter = painterResource(R.drawable.ic_web),
                                     contentDescription = "FTP 信息",
@@ -774,92 +782,6 @@ fun FileManagerScreen(
             dismissButton = {
                 TextButton(onClick = { showDeleteDialog = false }) {
                     Text(stringResource(R.string.cancel), color = dialogTextColor)
-                }
-            }
-        )
-    }
-
-    if (showSftpInfoDialog) {
-        val dialogTextColor = MiuixTheme.colorScheme.onSurface
-        val dialogBackgroundColor = MiuixTheme.colorScheme.surface
-        
-        AlertDialog(
-            containerColor = dialogBackgroundColor,
-            title = { Text("FTP 连接信息", color = dialogTextColor) },
-            text = {
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Text(
-                        text = "地址: ftp://${getLocalIpAddress()}:8021",
-                        fontSize = 14.sp,
-                        color = dialogTextColor
-                    )
-                    
-                    if (isEditingSftpCredentials) {
-                        Column(
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            TextField(
-                                value = sftpUsername,
-                                onValueChange = { sftpUsername = it },
-                                label = { Text("用户名") },
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                            TextField(
-                                value = sftpPassword,
-                                onValueChange = { sftpPassword = it },
-                                label = { Text("密码") },
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                        }
-                    } else {
-                        Column(
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            Text(
-                                text = "用户名: $sftpUsername",
-                                fontSize = 14.sp,
-                                color = dialogTextColor
-                            )
-                            Text(
-                                text = "密码: $sftpPassword",
-                                fontSize = 14.sp,
-                                color = dialogTextColor
-                            )
-                        }
-                    }
-                }
-            },
-            onDismissRequest = { showSftpInfoDialog = false },
-            confirmButton = {
-                if (isEditingSftpCredentials) {
-                    Button(onClick = {
-                        saveSftpCredentials()
-                        isEditingSftpCredentials = false
-                        showSftpInfoDialog = false
-                    }) {
-                        Text("保存", color = dialogTextColor)
-                    }
-                } else {
-                    Button(onClick = {
-                        isEditingSftpCredentials = true
-                    }) {
-                        Text("修改", color = dialogTextColor)
-                    }
-                }
-            },
-            dismissButton = {
-                if (isEditingSftpCredentials) {
-                    TextButton(onClick = {
-                        isEditingSftpCredentials = false
-                    }) {
-                        Text("取消修改", color = dialogTextColor)
-                    }
-                } else {
-                    TextButton(onClick = { showSftpInfoDialog = false }) {
-                        Text("关闭", color = dialogTextColor)
-                    }
                 }
             }
         )

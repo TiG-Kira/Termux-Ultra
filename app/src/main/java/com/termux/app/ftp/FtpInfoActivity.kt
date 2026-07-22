@@ -61,6 +61,7 @@ fun FtpInfoScreen() {
     
     var username by remember { mutableStateOf(prefs.getString("sftp_username", "termux") ?: "termux") }
     var password by remember { mutableStateOf(prefs.getString("sftp_password", "termux123") ?: "termux123") }
+    var port by remember { mutableStateOf(prefs.getInt("sftp_port", 8021)) }
     var isEditing by remember { mutableStateOf(false) }
     
     val ipAddress = getLocalIpAddress(context)
@@ -105,7 +106,7 @@ fun FtpInfoScreen() {
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Text(
-                        text = "地址: ftp://$ipAddress:8021",
+                        text = "地址: ftp://$ipAddress:$port",
                         style = TextStyle(
                             fontSize = 16.sp,
                             color = MiuixTheme.colorScheme.onSurface,
@@ -114,6 +115,34 @@ fun FtpInfoScreen() {
                     )
                     
                     if (isEditing) {
+                        TextField(
+                            label = { Text("端口", color = MiuixTheme.colorScheme.onSurface) },
+                            value = port.toString(),
+                            onValueChange = {
+                                it.toIntOrNull()?.let { p ->
+                                    if (p in 1024..65535) port = p
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            textStyle = TextStyle(
+                                fontSize = 14.sp,
+                                color = MiuixTheme.colorScheme.onSurface
+                            ),
+                            colors = TextFieldDefaults.colors(
+                                focusedContainerColor = MiuixTheme.colorScheme.surface,
+                                unfocusedContainerColor = MiuixTheme.colorScheme.surface,
+                                disabledContainerColor = MiuixTheme.colorScheme.surface,
+                                focusedIndicatorColor = MiuixTheme.colorScheme.primary,
+                                unfocusedIndicatorColor = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.3f),
+                                disabledIndicatorColor = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.12f),
+                                cursorColor = MiuixTheme.colorScheme.primary,
+                                focusedLabelColor = MiuixTheme.colorScheme.primary,
+                                unfocusedLabelColor = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                                disabledLabelColor = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                            ),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            keyboardActions = KeyboardActions()
+                        )
                         TextField(
                             label = { Text("用户名", color = MiuixTheme.colorScheme.onSurface) },
                             value = username,
@@ -164,6 +193,13 @@ fun FtpInfoScreen() {
                         )
                     } else {
                         Text(
+                            text = "端口: $port",
+                            style = TextStyle(
+                                fontSize = 14.sp,
+                                color = MiuixTheme.colorScheme.onSurface
+                            )
+                        )
+                        Text(
                             text = "用户名: $username",
                             style = TextStyle(
                                 fontSize = 14.sp,
@@ -189,6 +225,7 @@ fun FtpInfoScreen() {
                     Button(
                         onClick = {
                             prefs.edit()
+                                .putInt("sftp_port", port)
                                 .putString("sftp_username", username)
                                 .putString("sftp_password", password)
                                 .apply()
@@ -204,6 +241,7 @@ fun FtpInfoScreen() {
                     Button(
                         onClick = {
                             isEditing = false
+                            port = prefs.getInt("sftp_port", 8021)
                             username = prefs.getString("sftp_username", "termux") ?: "termux"
                             password = prefs.getString("sftp_password", "termux123") ?: "termux123"
                         },
@@ -217,21 +255,12 @@ fun FtpInfoScreen() {
                 } else {
                     Button(
                         onClick = { isEditing = true },
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier.fillMaxWidth(),
                         colors = ButtonDefaults.buttonColors(
                             color = MiuixTheme.colorScheme.primary
                         )
                     ) {
                         Text("修改", fontWeight = FontWeight.Bold, color = Color.White)
-                    }
-                    Button(
-                        onClick = { (context as FtpInfoActivity).finish() },
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.buttonColors(
-                            color = MiuixTheme.colorScheme.surfaceVariant
-                        )
-                    ) {
-                        Text("关闭", fontWeight = FontWeight.Bold, color = MiuixTheme.colorScheme.onSurface)
                     }
                 }
             }

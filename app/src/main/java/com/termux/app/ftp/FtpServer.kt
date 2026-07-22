@@ -5,9 +5,13 @@ import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.InputStreamReader
+import java.io.OutputStreamWriter
 import java.io.PrintWriter
 import java.net.ServerSocket
 import java.net.Socket
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.concurrent.thread
 
@@ -67,16 +71,17 @@ class FtpClientHandler(
     private var currentDir = "/"
     private var authenticated = false
     private var dataPort: Int = 0
-    private var dataSocket: ServerSocket? = null
+    private var dataServerSocket: ServerSocket? = null
+    private var dataSocket: Socket? = null
     private var passiveMode = false
     private var userOk = false
 
     fun handle() {
         try {
-            val reader = BufferedReader(InputStreamReader(clientSocket.getInputStream()))
-            val writer = PrintWriter(clientSocket.getOutputStream(), true)
+            val reader = BufferedReader(InputStreamReader(clientSocket.getInputStream(), "UTF-8"))
+            val writer = PrintWriter(OutputStreamWriter(clientSocket.getOutputStream(), "UTF-8"), true)
             sendResponse(writer, 220, "FTP Server Ready")
-            
+
             var line: String? = reader.readLine()
             while (line != null) {
                 val command = line ?: break
@@ -89,6 +94,7 @@ class FtpClientHandler(
             e.printStackTrace()
         } finally {
             try {
+                dataServerSocket?.close()
                 dataSocket?.close()
                 clientSocket.close()
             } catch (e: Exception) {}
@@ -101,22 +107,33 @@ class FtpClientHandler(
             "PASS" -> handlePass(writer, args)
             "QUIT" -> handleQuit(writer)
             "PWD" -> handlePwd(writer)
+            "XPWD" -> handlePwd(writer)
             "CWD" -> handleCwd(writer, args)
+            "XCWD" -> handleCwd(writer, args)
             "CDUP" -> handleCdup(writer)
-            "LIST" -> handleList(writer)
-            "NLST" -> handleNlst(writer)
+            "XCUP" -> handleCdup(writer)
+            "LIST" -> handleList(writer, args)
+            "NLST" -> handleNlst(writer, args)
             "RETR" -> handleRetr(writer, args)
             "STOR" -> handleStor(writer, args)
             "DELE" -> handleDele(writer, args)
             "MKD" -> handleMkd(writer, args)
+            "XMKD" -> handleMkd(writer, args)
             "RMD" -> handleRmd(writer, args)
+            "XRMD" -> handleRmd(writer, args)
             "SIZE" -> handleSize(writer, args)
             "SYST" -> sendResponse(writer, 215, "UNIX Type: L8")
             "TYPE" -> sendResponse(writer, 200, "Type set to I")
             "PASV" -> handlePasv(writer)
+            "EPSV" -> handleEpsv(writer)
             "PORT" -> handlePort(writer, args)
+            "EPRT" -> handlePort(writer, args)
             "NOOP" -> sendResponse(writer, 200, "OK")
-            "FEAT" -> sendResponse(writer, 211, "End")
+            "FEAT" -> handleFeat(writer)
+            "OPTS" -> handleOpts(writer, args)
+            "REST" -> sendResponse(writer, 350, "Restarting at 0. Ready for transfer.")
+            "ABOR" -> sendResponse(writer, 226, "Abort successful")
+            "STAT" -> sendResponse(writer, 211, "Status OK")
             else -> sendResponse(writer, 502, "Command not implemented")
         }
     }
@@ -163,11 +180,12 @@ class FtpClientHandler(
             sendResponse(writer, 530, "Not logged in")
             return
         }
-        val newDir = if (args.startsWith("/")) args else normalizePath("$currentDir/$args")
+        val target = if (args.isEmpty()) "/" else args
+        val newDir = if (target.startsWith("/")) normalizePath(target) else normalizePath("$currentDir/$target")
         val file = File(rootDir + newDir)
         if (file.exists() && file.isDirectory) {
             currentDir = newDir
-            sendResponse(writer, 250, "Directory changed")
+            sendResponse(writer, 250, "Directory successfully changed")
         } else {
             sendResponse(writer, 550, "Failed to change directory")
         }
@@ -178,11 +196,15 @@ class FtpClientHandler(
             sendResponse(writer, 530, "Not logged in")
             return
         }
-        val parent = File(currentDir).parent ?: "/"
+        if (currentDir == "/") {
+            sendResponse(writer, 250, "Directory successfully changed")
+            return
+        }
+        val parent = normalizePath(currentDir).let { if (it == "/") "/" else File(it).parent?.let { p -> if (p.isEmpty() || p == "\\") "/" else p.replace("\\", "/") } ?: "/" }
         val file = File(rootDir + parent)
         if (file.exists() && file.isDirectory) {
-            currentDir = parent
-            sendResponse(writer, 250, "Directory changed")
+            currentDir = if (parent == "") "/" else parent
+            sendResponse(writer, 250, "Directory successfully changed")
         } else {
             sendResponse(writer, 550, "Failed to change directory")
         }
@@ -194,13 +216,29 @@ class FtpClientHandler(
             return
         }
         try {
-            dataSocket?.close()
-            dataSocket = ServerSocket(0)
-            dataPort = dataSocket!!.localPort
-            val localAddr = clientSocket.inetAddress.hostAddress.replace(".", ",")
+            dataServerSocket?.close()
+            dataServerSocket = ServerSocket(0, 1)
+            dataPort = dataServerSocket!!.localPort
+            val localAddr = clientSocket.inetAddress.hostAddress?.replace(".", ",") ?: "127,0,0,1"
             val p1 = dataPort / 256
             val p2 = dataPort % 256
             sendResponse(writer, 227, "Entering Passive Mode ($localAddr,$p1,$p2)")
+            passiveMode = true
+        } catch (e: Exception) {
+            sendResponse(writer, 425, "Can't open data connection")
+        }
+    }
+
+    private fun handleEpsv(writer: PrintWriter) {
+        if (!authenticated) {
+            sendResponse(writer, 530, "Not logged in")
+            return
+        }
+        try {
+            dataServerSocket?.close()
+            dataServerSocket = ServerSocket(0, 1)
+            dataPort = dataServerSocket!!.localPort
+            sendResponse(writer, 229, "Entering Extended Passive Mode (|||$dataPort|)")
             passiveMode = true
         } catch (e: Exception) {
             sendResponse(writer, 425, "Can't open data connection")
@@ -215,10 +253,31 @@ class FtpClientHandler(
         sendResponse(writer, 502, "PORT not supported, use PASV")
     }
 
+    private fun handleFeat(writer: PrintWriter) {
+        writer.println("211-Features:")
+        writer.println(" PASV")
+        writer.println(" EPSV")
+        writer.println(" SIZE")
+        writer.println(" MDTM")
+        writer.println(" UTF8")
+        writer.println("211 End")
+        writer.flush()
+    }
+
+    private fun handleOpts(writer: PrintWriter, args: String) {
+        if (args.uppercase(Locale.ROOT).startsWith("UTF8")) {
+            sendResponse(writer, 200, "UTF8 option accepted")
+        } else {
+            sendResponse(writer, 501, "Option not recognized")
+        }
+    }
+
     private fun openDataConnection(writer: PrintWriter): Socket? {
         return try {
-            if (passiveMode && dataSocket != null) {
-                dataSocket!!.accept()
+            if (passiveMode && dataServerSocket != null) {
+                val socket = dataServerSocket!!.accept()
+                dataSocket = socket
+                socket
             } else {
                 null
             }
@@ -228,7 +287,24 @@ class FtpClientHandler(
         }
     }
 
-    private fun handleList(writer: PrintWriter) {
+    private fun closeDataConnection() {
+        try {
+            dataSocket?.close()
+        } catch (e: Exception) {}
+        try {
+            dataServerSocket?.close()
+        } catch (e: Exception) {}
+        dataSocket = null
+        dataServerSocket = null
+        passiveMode = false
+    }
+
+    private fun getRealPath(args: String): String {
+        val target = if (args.isEmpty()) currentDir else args
+        return if (target.startsWith("/")) normalizePath(target) else normalizePath("$currentDir/$target")
+    }
+
+    private fun handleList(writer: PrintWriter, args: String) {
         if (!authenticated) {
             sendResponse(writer, 530, "Not logged in")
             return
@@ -237,34 +313,41 @@ class FtpClientHandler(
         val dataConn = openDataConnection(writer)
         try {
             if (dataConn != null) {
-                val file = File(rootDir + currentDir)
-                val files = file.listFiles() ?: emptyArray()
-                val out = PrintWriter(dataConn.getOutputStream(), true)
+                val dirPath = getRealPath(args)
+                val dir = File(rootDir + dirPath)
+                val files = if (dir.exists() && dir.isDirectory) {
+                    dir.listFiles() ?: emptyArray()
+                } else {
+                    emptyArray()
+                }
+                val out = PrintWriter(OutputStreamWriter(dataConn.getOutputStream(), "UTF-8"), false)
+                val dateFormat = SimpleDateFormat("MMM dd yyyy", Locale.ENGLISH)
                 for (f in files) {
                     val perms = if (f.isDirectory) "drwxr-xr-x" else "-rw-r--r--"
                     val size = f.length()
-                    val date = android.text.format.DateFormat.format("MMM dd HH:mm", f.lastModified())
+                    val dateStr = dateFormat.format(Date(f.lastModified()))
                     val name = f.name
-                    out.println("$perms 1 ftp ftp $size $date $name")
+                    out.println("$perms 1 ftp ftp $size $dateStr $name")
                 }
                 out.flush()
+                try {
+                    dataConn.shutdownOutput()
+                } catch (e: Exception) {}
                 sendResponse(writer, 226, "Directory send OK")
             } else {
                 sendResponse(writer, 425, "Can't open data connection")
             }
         } catch (e: Exception) {
-            sendResponse(writer, 451, "Requested action aborted")
-        } finally {
+            e.printStackTrace()
             try {
-                dataConn?.close()
-            } catch (e: Exception) {}
-            dataSocket?.close()
-            dataSocket = null
-            passiveMode = false
+                sendResponse(writer, 451, "Requested action aborted")
+            } catch (e2: Exception) {}
+        } finally {
+            closeDataConnection()
         }
     }
 
-    private fun handleNlst(writer: PrintWriter) {
+    private fun handleNlst(writer: PrintWriter, args: String) {
         if (!authenticated) {
             sendResponse(writer, 530, "Not logged in")
             return
@@ -273,26 +356,32 @@ class FtpClientHandler(
         val dataConn = openDataConnection(writer)
         try {
             if (dataConn != null) {
-                val file = File(rootDir + currentDir)
-                val files = file.listFiles() ?: emptyArray()
-                val out = PrintWriter(dataConn.getOutputStream(), true)
+                val dirPath = getRealPath(args)
+                val dir = File(rootDir + dirPath)
+                val files = if (dir.exists() && dir.isDirectory) {
+                    dir.listFiles() ?: emptyArray()
+                } else {
+                    emptyArray()
+                }
+                val out = PrintWriter(OutputStreamWriter(dataConn.getOutputStream(), "UTF-8"), false)
                 for (f in files) {
                     out.println(f.name)
                 }
                 out.flush()
+                try {
+                    dataConn.shutdownOutput()
+                } catch (e: Exception) {}
                 sendResponse(writer, 226, "Directory send OK")
             } else {
                 sendResponse(writer, 425, "Can't open data connection")
             }
         } catch (e: Exception) {
-            sendResponse(writer, 451, "Requested action aborted")
-        } finally {
+            e.printStackTrace()
             try {
-                dataConn?.close()
-            } catch (e: Exception) {}
-            dataSocket?.close()
-            dataSocket = null
-            passiveMode = false
+                sendResponse(writer, 451, "Requested action aborted")
+            } catch (e2: Exception) {}
+        } finally {
+            closeDataConnection()
         }
     }
 
@@ -301,13 +390,13 @@ class FtpClientHandler(
             sendResponse(writer, 530, "Not logged in")
             return
         }
-        val filePath = if (args.startsWith("/")) rootDir + args else rootDir + normalizePath("$currentDir/$args")
-        val file = File(filePath)
+        val filePath = getRealPath(args)
+        val file = File(rootDir + filePath)
         if (!file.exists() || !file.isFile) {
             sendResponse(writer, 550, "Failed to open file")
             return
         }
-        sendResponse(writer, 150, "Opening BINARY mode data connection for $args")
+        sendResponse(writer, 150, "Opening BINARY mode data connection for ${file.name}")
         val dataConn = openDataConnection(writer)
         try {
             if (dataConn != null) {
@@ -325,14 +414,12 @@ class FtpClientHandler(
                 sendResponse(writer, 425, "Can't open data connection")
             }
         } catch (e: Exception) {
-            sendResponse(writer, 451, "Requested action aborted")
-        } finally {
+            e.printStackTrace()
             try {
-                dataConn?.close()
-            } catch (e: Exception) {}
-            dataSocket?.close()
-            dataSocket = null
-            passiveMode = false
+                sendResponse(writer, 451, "Requested action aborted")
+            } catch (e2: Exception) {}
+        } finally {
+            closeDataConnection()
         }
     }
 
@@ -341,8 +428,9 @@ class FtpClientHandler(
             sendResponse(writer, 530, "Not logged in")
             return
         }
-        val filePath = if (args.startsWith("/")) rootDir + args else rootDir + normalizePath("$currentDir/$args")
-        val file = File(filePath)
+        val filePath = getRealPath(args)
+        val file = File(rootDir + filePath)
+        file.parentFile?.mkdirs()
         sendResponse(writer, 150, "Ok to send data")
         val dataConn = openDataConnection(writer)
         try {
@@ -362,14 +450,12 @@ class FtpClientHandler(
                 sendResponse(writer, 425, "Can't open data connection")
             }
         } catch (e: Exception) {
-            sendResponse(writer, 451, "Requested action aborted")
-        } finally {
+            e.printStackTrace()
             try {
-                dataConn?.close()
-            } catch (e: Exception) {}
-            dataSocket?.close()
-            dataSocket = null
-            passiveMode = false
+                sendResponse(writer, 451, "Requested action aborted")
+            } catch (e2: Exception) {}
+        } finally {
+            closeDataConnection()
         }
     }
 
@@ -378,8 +464,8 @@ class FtpClientHandler(
             sendResponse(writer, 530, "Not logged in")
             return
         }
-        val filePath = if (args.startsWith("/")) rootDir + args else rootDir + normalizePath("$currentDir/$args")
-        val file = File(filePath)
+        val filePath = getRealPath(args)
+        val file = File(rootDir + filePath)
         if (file.exists() && file.isFile && file.delete()) {
             sendResponse(writer, 250, "Delete operation successful")
         } else {
@@ -392,10 +478,10 @@ class FtpClientHandler(
             sendResponse(writer, 530, "Not logged in")
             return
         }
-        val dirPath = if (args.startsWith("/")) rootDir + args else rootDir + normalizePath("$currentDir/$args")
-        val dir = File(dirPath)
+        val dirPath = getRealPath(args)
+        val dir = File(rootDir + dirPath)
         if (dir.mkdirs()) {
-            sendResponse(writer, 257, "\"$args\" directory created")
+            sendResponse(writer, 257, "\"$dirPath\" directory created")
         } else {
             sendResponse(writer, 550, "Create directory operation failed")
         }
@@ -406,8 +492,8 @@ class FtpClientHandler(
             sendResponse(writer, 530, "Not logged in")
             return
         }
-        val dirPath = if (args.startsWith("/")) rootDir + args else rootDir + normalizePath("$currentDir/$args")
-        val dir = File(dirPath)
+        val dirPath = getRealPath(args)
+        val dir = File(rootDir + dirPath)
         if (dir.exists() && dir.isDirectory && dir.deleteRecursively()) {
             sendResponse(writer, 250, "Remove directory operation successful")
         } else {
@@ -420,8 +506,8 @@ class FtpClientHandler(
             sendResponse(writer, 530, "Not logged in")
             return
         }
-        val filePath = if (args.startsWith("/")) rootDir + args else rootDir + normalizePath("$currentDir/$args")
-        val file = File(filePath)
+        val filePath = getRealPath(args)
+        val file = File(rootDir + filePath)
         if (file.exists() && file.isFile) {
             sendResponse(writer, 213, file.length().toString())
         } else {
