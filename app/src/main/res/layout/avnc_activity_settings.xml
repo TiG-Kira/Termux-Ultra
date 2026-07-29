@@ -11,24 +11,31 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:fitsSystemWindows="true">
+    android:fitsSystemWindows="true"
+    android:background="?android:attr/colorBackground">
 
     <com.google.android.material.appbar.AppBarLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="@android:color/white">
+        android:background="?android:attr/colorBackground"
+        android:elevation="0dp"
+        app:elevation="0dp">
 
         <com.google.android.material.appbar.MaterialToolbar
             android:id="@+id/toolbar"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:background="@android:color/white"
-            app:titleTextColor="@android:color/black"
-            app:navigationIconTint="@android:color/black" />
+            android:layout_height="?attr/actionBarSize"
+            android:background="?android:attr/colorBackground"
+            android:elevation="0dp"
+            app:titleCentered="true"
+            app:titleTextColor="?android:attr/textColorPrimary"
+            app:navigationIconTint="?android:attr/textColorPrimary"
+            app:elevation="0dp" />
     </com.google.android.material.appbar.AppBarLayout>
 
     <FrameLayout
         android:id="@+id/fragment_host"
         android:layout_width="match_parent"
-        android:layout_height="match_parent" />
+        android:layout_height="match_parent"
+        android:background="?android:attr/colorBackground" />
 </LinearLayout>

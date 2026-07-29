@@ -99,7 +99,6 @@ fun AboutScreen(onBack: () -> Unit) {
                     navigationIcon = {
                         Box(
                             modifier = Modifier
-                                .padding(horizontal = 12.dp)
                                 .size(40.dp)
                                 .clip(CircleShape)
                                 .clickable { onBack() },
@@ -366,7 +365,7 @@ fun AboutScreen(onBack: () -> Unit) {
                                 )
                             )
                             Text(
-                                text = "${context.getString(R.string.based_on_termux_version)} 0.118.3",
+                                text = "${context.getString(R.string.based_on_termux_version)} 0.118.3 稳定版",
                                 style = TextStyle(
                                     fontSize = 12.sp,
                                     color = MiuixTheme.colorScheme.onSurfaceVariantSummary
@@ -391,7 +390,7 @@ fun AboutScreen(onBack: () -> Unit) {
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Text(
-                                text = "Termux Ultra 使用 GPL 3.0 以及 MIT 许可，部分代码使用了 Trae 进行 AI 生成。本项目 VNC 功能基于 avnc 项目，VNC 版权所属 ©2020  Gaurav Ujjwal。",
+                                text = "Termux Ultra 使用 GPL 3.0 以及 MIT 许可。Termux 团队拥有 Termux Ultra 终端模块的版权，VNC 功能模块的版权所属 ©2020 Gaurav Ujjwal，感谢开源贡献。",
                                 style = TextStyle(
                                     fontSize = 13.sp,
                                     color = MiuixTheme.colorScheme.onSurface

@@ -14,13 +14,7 @@ import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TextField
+import androidx.compose.material3.Icon as Material3Icon
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CheckCircleOutline
 import androidx.compose.material.icons.rounded.ErrorOutline
@@ -32,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -43,13 +38,25 @@ import androidx.compose.ui.unit.sp
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.Switch
+import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.basic.TextButton
+import top.yukonga.miuix.kmp.basic.ButtonDefaults
+import top.yukonga.miuix.kmp.basic.TextField
+import top.yukonga.miuix.kmp.basic.SearchBar
+import top.yukonga.miuix.kmp.basic.InputField
+import top.yukonga.miuix.kmp.basic.PullToRefresh
+import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import com.termux.R
 import com.termux.app.TermuxService
 import com.termux.shared.shell.TermuxSession
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 
 @Composable
 fun TerminalListScreen(
@@ -62,6 +69,7 @@ fun TerminalListScreen(
     onToggleWakeLock: () -> Unit
 ) {
     val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
     var showRenameDialog by remember { mutableStateOf(false) }
     var renameSession by remember { mutableStateOf<TermuxSession?>(null) }
     var newName by remember { mutableStateOf("") }
@@ -69,6 +77,9 @@ fun TerminalListScreen(
     var showKeepAliveWarning by remember { mutableStateOf(false) }
     var termuxService by remember { mutableStateOf<TermuxService?>(null) }
     var killedSessionName by remember { mutableStateOf<String?>(null) }
+    var searchExpanded by remember { mutableStateOf(false) }
+    var searchQuery by remember { mutableStateOf("") }
+    var isRefreshing by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         val prefs = context.getSharedPreferences("termux_prefs", android.content.Context.MODE_PRIVATE)
@@ -114,8 +125,7 @@ fun TerminalListScreen(
                 scrollBehavior = scrollBehavior,
                 actions = {
                     Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(end = 16.dp)
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
                             painter = painterResource(R.drawable.ic_lock),
@@ -128,7 +138,7 @@ fun TerminalListScreen(
                             checked = isWakeLockEnabled,
                             onCheckedChange = { onToggleWakeLock() }
                         )
-                        Spacer(modifier = Modifier.width(8.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
                         IconButton(onClick = onNewTerminal) {
                             Icon(
                                 painter = painterResource(R.drawable.ic_add),
@@ -142,17 +152,158 @@ fun TerminalListScreen(
             )
         },
     ) { padding ->
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(2),
+        Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(horizontal = 16.dp)
-                .nestedScroll(scrollBehavior.nestedScrollConnection),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            contentPadding = PaddingValues(vertical = 8.dp)
         ) {
+            val filteredSessions = sessions.filter {
+                val name = it.getTerminalSession().mSessionName ?: ""
+                name.contains(searchQuery, ignoreCase = true) ||
+                    searchQuery.isEmpty()
+            }
+            SearchBar(
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = if (searchExpanded) 8.dp else 0.dp),
+                inputField = {
+                    InputField(
+                        query = searchQuery,
+                        onQueryChange = { searchQuery = it },
+                        onSearch = { },
+                        expanded = searchExpanded,
+                        onExpandedChange = {
+                            searchExpanded = it
+                            if (!it) searchQuery = ""
+                        },
+                        label = stringResource(R.string.search)
+                    )
+                },
+                expanded = searchExpanded,
+                onExpandedChange = {
+                    searchExpanded = it
+                    if (!it) searchQuery = ""
+                },
+                outsideEndAction = {
+                    if (searchExpanded) {
+                        Text(
+                            modifier = Modifier
+                                .padding(start = 12.dp)
+                                .clickable(
+                                    interactionSource = null,
+                                    indication = null
+                                ) {
+                                    searchExpanded = false
+                                    searchQuery = ""
+                                },
+                            text = stringResource(R.string.cancel),
+                            color = MiuixTheme.colorScheme.primary
+                        )
+                    }
+                }
+            ) {
+                if (searchExpanded) {
+                    when {
+                        searchQuery.isEmpty() -> {
+                            Spacer(Modifier.height(24.dp))
+                            Box(
+                                modifier = Modifier.fillMaxWidth(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.search_hint_input),
+                                    color = androidx.compose.ui.graphics.Color.Gray,
+                                    fontSize = 14.sp
+                                )
+                            }
+                        }
+                        filteredSessions.isEmpty() -> {
+                            Spacer(Modifier.height(24.dp))
+                            Box(
+                                modifier = Modifier.fillMaxWidth(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.search_no_result),
+                                    color = androidx.compose.ui.graphics.Color.Gray,
+                                    fontSize = 14.sp
+                                )
+                            }
+                        }
+                        else -> {
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                filteredSessions.forEach { session ->
+                                    val sName = session.getTerminalSession().mSessionName
+                                        ?: stringResource(R.string.terminal)
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .clickable {
+                                                onSessionClick(session)
+                                                searchExpanded = false
+                                                searchQuery = ""
+                                            }
+                                            .padding(vertical = 12.dp, horizontal = 16.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            painter = painterResource(R.drawable.ic_terminal),
+                                            contentDescription = null,
+                                            tint = MiuixTheme.colorScheme.onSurface,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                        Spacer(Modifier.width(12.dp))
+                                        Text(
+                                            text = sName,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MiuixTheme.colorScheme.onSurface
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .then(
+                        if (searchExpanded) Modifier.graphicsLayer {
+                            translationY = 1_000_000f
+                        } else Modifier
+                    )
+            ) {
+                PullToRefresh(
+                    isRefreshing = isRefreshing,
+                    onRefresh = {
+                        isRefreshing = true
+                        coroutineScope.launch(kotlinx.coroutines.Dispatchers.Main) {
+                            delay(600)
+                            isRefreshing = false
+                        }
+                    },
+                    refreshTexts = listOf(
+                        stringResource(R.string.pull_down_to_refresh),
+                        stringResource(R.string.release_to_refresh),
+                        stringResource(R.string.refreshing),
+                        stringResource(R.string.refresh_successful)
+                    ),
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(2),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 16.dp)
+                        .nestedScroll(scrollBehavior.nestedScrollConnection),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    contentPadding = PaddingValues(vertical = 8.dp)
+                ) {
             if (showWelcomeCard) {
                 item(span = { GridItemSpan(2) }) {
                     WelcomeCard(
@@ -223,36 +374,48 @@ fun TerminalListScreen(
                 }
             }
         }
+        }
+    }
+    }
     }
 
     if (showRenameDialog && renameSession != null) {
-        AlertDialog(
-            title = { Text(stringResource(R.string.rename_terminal)) },
+        OverlayDialog(
+            show = showRenameDialog,
             onDismissRequest = { showRenameDialog = false },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        renameSession?.let { session ->
-                            onRenameTerminal(session, newName)
-                        }
-                        showRenameDialog = false
-                    }
-                ) {
-                    Text(stringResource(R.string.ok))
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showRenameDialog = false }) {
-                    Text(stringResource(R.string.cancel))
-                }
-            },
-            text = {
-                Column {
+            title = stringResource(R.string.rename_terminal),
+            content = {
+                Column(modifier = Modifier.fillMaxWidth()) {
                     TextField(
                         value = newName,
                         onValueChange = { newName = it },
-                        label = { Text(stringResource(R.string.terminal_name)) }
+                        label = stringResource(R.string.terminal_name)
                     )
+
+                    Spacer(Modifier.height(12.dp))
+
+                    Row(
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        TextButton(
+                            text = stringResource(R.string.cancel),
+                            onClick = { showRenameDialog = false },
+                            modifier = Modifier.weight(1f)
+                        )
+                        Spacer(Modifier.width(20.dp))
+                        TextButton(
+                            text = stringResource(R.string.ok),
+                            onClick = {
+                                renameSession?.let { session ->
+                                    onRenameTerminal(session, newName)
+                                }
+                                showRenameDialog = false
+                            },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.textButtonColorsPrimary()
+                        )
+                    }
                 }
             }
         )
@@ -358,7 +521,7 @@ fun KeepAliveWarningCard(onClose: () -> Unit) {
                     .offset(30.dp, 60.dp),
                 contentAlignment = Alignment.BottomEnd
             ) {
-                Icon(
+                Material3Icon(
                     modifier = Modifier.size(120.dp).alpha(0.8f),
                     imageVector = Icons.Rounded.Warning,
                     tint = iconColor,
@@ -419,7 +582,7 @@ fun WelcomeCard(text: String, onClose: () -> Unit) {
                     .offset(30.dp, 30.dp),
                 contentAlignment = Alignment.BottomEnd
             ) {
-                Icon(
+                Material3Icon(
                     modifier = Modifier.size(120.dp).alpha(0.8f),
                     imageVector = Icons.Rounded.Info,
                     tint = iconColor,
@@ -523,7 +686,7 @@ fun ServiceStatusCard(
                     .offset(35.dp, 35.dp),
                 contentAlignment = Alignment.BottomEnd
             ) {
-                Icon(
+                Material3Icon(
                     modifier = Modifier.size(120.dp).alpha(0.8f),
                     imageVector = icon,
                     tint = iconColor,

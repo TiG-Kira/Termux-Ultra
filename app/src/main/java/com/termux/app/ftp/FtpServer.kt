@@ -210,6 +210,23 @@ class FtpClientHandler(
         }
     }
 
+    private fun getServerIpAddress(): String {
+        try {
+            val interfaces = java.net.NetworkInterface.getNetworkInterfaces()
+            while (interfaces.hasMoreElements()) {
+                val networkInterface = interfaces.nextElement()
+                val addresses = networkInterface.inetAddresses
+                while (addresses.hasMoreElements()) {
+                    val address = addresses.nextElement()
+                    if (!address.isLoopbackAddress && address is java.net.Inet4Address) {
+                        return address.hostAddress
+                    }
+                }
+            }
+        } catch (e: Exception) {}
+        return "127.0.0.1"
+    }
+
     private fun handlePasv(writer: PrintWriter) {
         if (!authenticated) {
             sendResponse(writer, 530, "Not logged in")
@@ -217,9 +234,10 @@ class FtpClientHandler(
         }
         try {
             dataServerSocket?.close()
-            dataServerSocket = ServerSocket(0, 1)
+            dataServerSocket = ServerSocket(0, 5)
             dataPort = dataServerSocket!!.localPort
-            val localAddr = clientSocket.inetAddress.hostAddress?.replace(".", ",") ?: "127,0,0,1"
+            val serverIp = getServerIpAddress()
+            val localAddr = serverIp.replace(".", ",")
             val p1 = dataPort / 256
             val p2 = dataPort % 256
             sendResponse(writer, 227, "Entering Passive Mode ($localAddr,$p1,$p2)")
@@ -236,7 +254,7 @@ class FtpClientHandler(
         }
         try {
             dataServerSocket?.close()
-            dataServerSocket = ServerSocket(0, 1)
+            dataServerSocket = ServerSocket(0, 5)
             dataPort = dataServerSocket!!.localPort
             sendResponse(writer, 229, "Entering Extended Passive Mode (|||$dataPort|)")
             passiveMode = true
@@ -275,14 +293,18 @@ class FtpClientHandler(
     private fun openDataConnection(writer: PrintWriter): Socket? {
         return try {
             if (passiveMode && dataServerSocket != null) {
+                dataServerSocket!!.soTimeout = 30000
                 val socket = dataServerSocket!!.accept()
+                socket.soTimeout = 30000
                 dataSocket = socket
                 socket
             } else {
                 null
             }
         } catch (e: Exception) {
-            sendResponse(writer, 425, "Can't open data connection")
+            try {
+                sendResponse(writer, 425, "Can't open data connection")
+            } catch (e2: Exception) {}
             null
         }
     }
@@ -299,6 +321,12 @@ class FtpClientHandler(
         passiveMode = false
     }
 
+    private fun parseListArgs(args: String): String {
+        val parts = args.trim().split("\\s+".toRegex())
+        val pathPart = parts.firstOrNull { !it.startsWith("-") } ?: ""
+        return pathPart
+    }
+
     private fun getRealPath(args: String): String {
         val target = if (args.isEmpty()) currentDir else args
         return if (target.startsWith("/")) normalizePath(target) else normalizePath("$currentDir/$target")
@@ -313,7 +341,7 @@ class FtpClientHandler(
         val dataConn = openDataConnection(writer)
         try {
             if (dataConn != null) {
-                val dirPath = getRealPath(args)
+                val dirPath = getRealPath(parseListArgs(args))
                 val dir = File(rootDir + dirPath)
                 val files = if (dir.exists() && dir.isDirectory) {
                     dir.listFiles() ?: emptyArray()
@@ -356,7 +384,7 @@ class FtpClientHandler(
         val dataConn = openDataConnection(writer)
         try {
             if (dataConn != null) {
-                val dirPath = getRealPath(args)
+                val dirPath = getRealPath(parseListArgs(args))
                 val dir = File(rootDir + dirPath)
                 val files = if (dir.exists() && dir.isDirectory) {
                     dir.listFiles() ?: emptyArray()

@@ -15,6 +15,7 @@ allprojects {
         mavenCentral()
         maven { url "https://jitpack.io" }
         maven { url "https://maven.fanmiu.com/nexus/repository/maven-public/" }
+        maven { url "https://maven.pkg.github.com/compose-miuix-ui/miuix" }
     }
 
     configurations.all {

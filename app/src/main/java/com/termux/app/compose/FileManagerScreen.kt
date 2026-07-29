@@ -1,4 +1,4 @@
-package com.termux.app.compose
+﻿package com.termux.app.compose
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
@@ -8,6 +8,11 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.activity.compose.BackHandler
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -17,15 +22,9 @@ import android.os.Build
 import androidx.core.app.NotificationCompat
 import com.termux.shared.shell.TermuxShellUtils
 import com.termux.app.ftp.FtpServer
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.Icon
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TextField
 import androidx.compose.ui.graphics.Color
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -38,11 +37,25 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import top.yukonga.miuix.kmp.basic.*
+import top.yukonga.miuix.kmp.basic.Scaffold
+import top.yukonga.miuix.kmp.basic.TopAppBar
+import top.yukonga.miuix.kmp.basic.Icon
+import top.yukonga.miuix.kmp.basic.IconButton
+import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
+import top.yukonga.miuix.kmp.basic.Switch
+import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.basic.TextButton
+import top.yukonga.miuix.kmp.basic.ButtonDefaults
+import top.yukonga.miuix.kmp.basic.TextField
+import top.yukonga.miuix.kmp.basic.PullToRefresh
+import top.yukonga.miuix.kmp.overlay.OverlayDialog
+import top.yukonga.miuix.kmp.overlay.OverlayBottomSheet
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import com.termux.R
 import java.io.File
 import java.util.Date
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 
 enum class ClipboardMode {
     NONE, COPY, CUT
@@ -56,6 +69,7 @@ fun FileManagerScreen(
     onOpenFile: (String, String) -> Unit = { _, _ -> }
 ) {
     val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
     var currentPath by remember { mutableStateOf(File("/data/data/com.termux/files")) }
     var files by remember { mutableStateOf<List<File>>(emptyList()) }
     var selectedFiles by remember { mutableStateOf<Set<String>>(emptySet()) }
@@ -80,7 +94,7 @@ fun FileManagerScreen(
     var sftpPort by remember { mutableStateOf(8021) }
     var sftpUsername by remember { mutableStateOf("") }
     var sftpPassword by remember { mutableStateOf("") }
-    var ftpServer: FtpServer? by remember { mutableStateOf(null) }
+    var isFileRefreshing by remember { mutableStateOf(false) }
 
     LaunchedEffect(currentPath) {
         files = currentPath.listFiles()?.sortedWith(compareBy({ !it.isDirectory }, { it.name })) ?: emptyList()
@@ -111,15 +125,16 @@ fun FileManagerScreen(
         sftpPort = prefs.getInt("sftp_port", 8021)
         
         val appPrefs = context.getSharedPreferences("app_settings", android.content.Context.MODE_PRIVATE)
-        if (appPrefs.getBoolean("ftp_enabled", false)) {
-            if (isPortInUse(sftpPort)) {
-                val rootDir = "/data/data/com.termux/files/home"
-                ftpServer = FtpServer(sftpPort, sftpUsername, sftpPassword, rootDir)
-                ftpServer?.start()
-                isSftpEnabled = true
-            } else {
-                appPrefs.edit().putBoolean("ftp_enabled", false).apply()
-            }
+        val ftpEnabled = appPrefs.getBoolean("ftp_enabled", false)
+        val ftpRunning = com.termux.app.ftp.FtpServiceManager.isRunning()
+        
+        if (ftpEnabled && !ftpRunning) {
+            com.termux.app.ftp.FtpServiceManager.start(context)
+        }
+        
+        isSftpEnabled = com.termux.app.ftp.FtpServiceManager.isRunning()
+        if (!isSftpEnabled && ftpEnabled) {
+            appPrefs.edit().putBoolean("ftp_enabled", false).apply()
         }
     }
 
@@ -205,6 +220,9 @@ fun FileManagerScreen(
             .putString("sftp_username", sftpUsername)
             .putString("sftp_password", sftpPassword)
             .apply()
+        if (com.termux.app.ftp.FtpServiceManager.isRunning()) {
+            com.termux.app.ftp.FtpServiceManager.restartWithNewConfig(context)
+        }
     }
 
     fun saveSftpPort() {
@@ -212,35 +230,25 @@ fun FileManagerScreen(
         prefs.edit()
             .putInt("sftp_port", sftpPort)
             .apply()
+        if (com.termux.app.ftp.FtpServiceManager.isRunning()) {
+            com.termux.app.ftp.FtpServiceManager.restartWithNewConfig(context)
+            hideSftpNotification()
+            showSftpNotification()
+        }
     }
 
     fun toggleSftp() {
-        isSftpEnabled = !isSftpEnabled
-        val appPrefs = context.getSharedPreferences("app_settings", android.content.Context.MODE_PRIVATE)
-        
-        if (isSftpEnabled) {
-            try {
-                val rootDir = "/data/data/com.termux/files/home"
-                ftpServer = FtpServer(sftpPort, sftpUsername, sftpPassword, rootDir)
-                ftpServer?.start()
-                Thread.sleep(500)
+        val newState = !isSftpEnabled
+        if (newState) {
+            val started = com.termux.app.ftp.FtpServiceManager.start(context)
+            isSftpEnabled = started
+            if (started) {
                 showSftpNotification()
-                appPrefs.edit().putBoolean("ftp_enabled", true).apply()
-            } catch (e: Exception) {
-                e.printStackTrace()
-                isSftpEnabled = false
-                ftpServer = null
-                appPrefs.edit().putBoolean("ftp_enabled", false).apply()
             }
         } else {
-            try {
-                ftpServer?.stop()
-                ftpServer = null
-                hideSftpNotification()
-                appPrefs.edit().putBoolean("ftp_enabled", false).apply()
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
+            com.termux.app.ftp.FtpServiceManager.stop(context)
+            isSftpEnabled = false
+            hideSftpNotification()
         }
     }
 
@@ -256,7 +264,7 @@ fun FileManagerScreen(
                 scrollBehavior = scrollBehavior,
                 navigationIcon = {
                     if (isInSelectionMode) {
-                        Row(modifier = Modifier.padding(start = 16.dp)) {
+                        Row {
                             IconButton(onClick = {
                                 selectedFiles = emptySet()
                                 isInSelectionMode = false
@@ -270,7 +278,7 @@ fun FileManagerScreen(
                             }
                         }
                     } else {
-                        Row(modifier = Modifier.padding(start = 16.dp)) {
+                        Row {
                             IconButton(onClick = {
                                 if (canGoUp) {
                                     forwardHistory = forwardHistory + currentPath
@@ -302,7 +310,7 @@ fun FileManagerScreen(
                     }
                 },
                 actions = {
-                    Row(modifier = Modifier.padding(end = 16.dp)) {
+                    Row {
                     if (isInSelectionMode && selectedFiles.isNotEmpty()) {
                         IconButton(onClick = {
                             clipboardMode = ClipboardMode.COPY
@@ -416,15 +424,32 @@ fun FileManagerScreen(
             )
         }
     ) { padding ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(horizontal = 16.dp)
-                .nestedScroll(scrollBehavior.nestedScrollConnection),
-            contentPadding = PaddingValues(vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+        PullToRefresh(
+            isRefreshing = isFileRefreshing,
+            onRefresh = {
+                isFileRefreshing = true
+                refreshFiles()
+                coroutineScope.launch(kotlinx.coroutines.Dispatchers.Main) {
+                    delay(500)
+                    isFileRefreshing = false
+                }
+            },
+            refreshTexts = listOf(
+                stringResource(R.string.pull_down_to_refresh),
+                stringResource(R.string.release_to_refresh),
+                stringResource(R.string.refreshing),
+                stringResource(R.string.refresh_successful)
+            )
         ) {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .padding(horizontal = 16.dp)
+                    .nestedScroll(scrollBehavior.nestedScrollConnection),
+                contentPadding = PaddingValues(vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
             if (showWarningCard) {
                 item {
                     Card(
@@ -538,22 +563,22 @@ fun FileManagerScreen(
                 }
             }
         }
+        }
     }
 
     if (showOpenWithDialog && fileToOpen != null) {
         val file = fileToOpen!!
         val isShFile = file.name.endsWith(".sh", ignoreCase = true)
         val dialogTextColor = MiuixTheme.colorScheme.onSurface
-        val dialogBackgroundColor = MiuixTheme.colorScheme.surface
 
-        AlertDialog(
+        OverlayBottomSheet(
+            show = showOpenWithDialog,
             onDismissRequest = {
                 showOpenWithDialog = false
                 fileToOpen = null
             },
-            containerColor = dialogBackgroundColor,
-            title = { Text(file.name, color = dialogTextColor) },
-            text = {
+            title = file.name,
+            content = {
                 Column(
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
@@ -562,28 +587,24 @@ fun FileManagerScreen(
                         fontSize = 12.sp,
                         color = MiuixTheme.colorScheme.onSurfaceVariantSummary
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
-
                     if (isShFile) {
+                        Spacer(Modifier.height(8.dp))
                         Card(
                             modifier = Modifier.fillMaxWidth(),
                             colors = CardDefaults.cardColors(
                                 containerColor = if (isSystemInDarkTheme()) Color(0xFF3D3514) else Color(0xFFFFF9C4)
                             )
                         ) {
-                            Column(
+                            Text(
+                                text = stringResource(R.string.shell_script_warning),
+                                fontSize = 12.sp,
+                                color = dialogTextColor,
                                 modifier = Modifier.padding(12.dp)
-                            ) {
-                                Text(
-                                    text = stringResource(R.string.shell_script_warning),
-                                    fontSize = 12.sp,
-                                    color = dialogTextColor
-                                )
-                            }
+                            )
                         }
-                        Spacer(modifier = Modifier.height(8.dp))
                     }
 
+                    Spacer(Modifier.height(8.dp))
                     Text(stringResource(R.string.select_open_method), fontSize = 14.sp)
                     Spacer(modifier = Modifier.height(4.dp))
 
@@ -743,45 +764,62 @@ fun FileManagerScreen(
                         Spacer(modifier = Modifier.width(16.dp))
                         Text("用其他方式打开", color = dialogTextColor)
                     }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    TextButton(
+                        text = stringResource(R.string.cancel),
+                        onClick = {
+                            showOpenWithDialog = false
+                            fileToOpen = null
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Spacer(
+                        Modifier.height(
+                            WindowInsets.navigationBars
+                                .only(WindowInsetsSides.Bottom)
+                                .asPaddingValues()
+                                .calculateBottomPadding()
+                        )
+                    )
                 }
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    showOpenWithDialog = false
-                    fileToOpen = null
-                }) {
-                    Text(stringResource(R.string.cancel), color = dialogTextColor)
-                }
-            },
-            dismissButton = {}
+            }
         )
     }
 
     if (showDeleteDialog) {
-        val dialogTextColor = MiuixTheme.colorScheme.onSurface
-        val dialogBackgroundColor = MiuixTheme.colorScheme.surface
-        
-        AlertDialog(
-            containerColor = dialogBackgroundColor,
-            title = { Text(stringResource(R.string.delete_confirm_title), color = dialogTextColor) },
-            text = { Text("${stringResource(R.string.delete_confirm_message)} (${selectedFiles.size})", color = dialogTextColor) },
+        OverlayDialog(
+            show = showDeleteDialog,
             onDismissRequest = { showDeleteDialog = false },
-            confirmButton = {
-                Button(onClick = {
-                    selectedFiles.forEach { path ->
-                        File(path).deleteRecursively()
-                    }
-                    selectedFiles = emptySet()
-                    isInSelectionMode = false
-                    refreshFiles()
-                    showDeleteDialog = false
-                }) {
-                    Text(stringResource(R.string.delete_confirm), color = dialogTextColor)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDeleteDialog = false }) {
-                    Text(stringResource(R.string.cancel), color = dialogTextColor)
+            title = stringResource(R.string.delete_confirm_title),
+            summary = "${stringResource(R.string.delete_confirm_message)} (${selectedFiles.size})",
+            content = {
+                Row(
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    TextButton(
+                        text = stringResource(R.string.cancel),
+                        onClick = { showDeleteDialog = false },
+                        modifier = Modifier.weight(1f)
+                    )
+                    Spacer(Modifier.width(20.dp))
+                    TextButton(
+                        text = stringResource(R.string.delete_confirm),
+                        onClick = {
+                            selectedFiles.forEach { path ->
+                                File(path).deleteRecursively()
+                            }
+                            selectedFiles = emptySet()
+                            isInSelectionMode = false
+                            refreshFiles()
+                            showDeleteDialog = false
+                        },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.textButtonColorsPrimary()
+                    )
                 }
             }
         )
@@ -789,118 +827,142 @@ fun FileManagerScreen(
 
     if (showRenameDialog) {
         val renameFile = File(selectedFiles.first())
-        val dialogTextColor = MiuixTheme.colorScheme.onSurface
-        val dialogBackgroundColor = MiuixTheme.colorScheme.surface
-        
-        AlertDialog(
-            containerColor = dialogBackgroundColor,
-            title = { Text(stringResource(R.string.rename), color = dialogTextColor) },
+        OverlayDialog(
+            show = showRenameDialog,
             onDismissRequest = { showRenameDialog = false },
-            confirmButton = {
-                Button(onClick = {
-                    val newFile = File(renameFile.parentFile, newFileName)
-                    renameFile.renameTo(newFile)
-                    selectedFiles = emptySet()
-                    isInSelectionMode = false
-                    refreshFiles()
-                    showRenameDialog = false
-                }) {
-                    Text(stringResource(R.string.ok), color = dialogTextColor)
+            title = stringResource(R.string.rename),
+            content = {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    TextField(
+                        value = newFileName,
+                        onValueChange = { newFileName = it },
+                        label = stringResource(R.string.file_name)
+                    )
+
+                    Spacer(Modifier.height(12.dp))
+
+                    Row(
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        TextButton(
+                            text = stringResource(R.string.cancel),
+                            onClick = { showRenameDialog = false },
+                            modifier = Modifier.weight(1f)
+                        )
+                        Spacer(Modifier.width(20.dp))
+                        TextButton(
+                            text = stringResource(R.string.ok),
+                            onClick = {
+                                val newFile = File(renameFile.parentFile, newFileName)
+                                renameFile.renameTo(newFile)
+                                selectedFiles = emptySet()
+                                isInSelectionMode = false
+                                refreshFiles()
+                                showRenameDialog = false
+                            },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.textButtonColorsPrimary()
+                        )
+                    }
                 }
-            },
-            dismissButton = {
-                TextButton(onClick = { showRenameDialog = false }) {
-                    Text(stringResource(R.string.cancel), color = dialogTextColor)
-                }
-            },
-            text = {
-                TextField(
-                    value = newFileName,
-                    onValueChange = { newFileName = it },
-                    label = { Text(stringResource(R.string.file_name), color = dialogTextColor) }
-                )
             }
         )
     }
 
     if (showNewFolderDialog) {
-        val dialogTextColor = MiuixTheme.colorScheme.onSurface
-        val dialogBackgroundColor = MiuixTheme.colorScheme.surface
-        
-        AlertDialog(
-            containerColor = dialogBackgroundColor,
-            title = { Text(stringResource(R.string.folder), color = dialogTextColor) },
+        OverlayDialog(
+            show = showNewFolderDialog,
             onDismissRequest = { showNewFolderDialog = false },
-            confirmButton = {
-                Button(onClick = {
-                    val newFolder = File(currentPath, newFolderName)
-                    newFolder.mkdirs()
-                    refreshFiles()
-                    showNewFolderDialog = false
-                }) {
-                    Text(stringResource(R.string.ok), color = dialogTextColor)
+            title = stringResource(R.string.folder),
+            content = {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    TextField(
+                        value = newFolderName,
+                        onValueChange = { newFolderName = it },
+                        label = stringResource(R.string.file_name)
+                    )
+
+                    Spacer(Modifier.height(12.dp))
+
+                    Row(
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        TextButton(
+                            text = stringResource(R.string.cancel),
+                            onClick = { showNewFolderDialog = false },
+                            modifier = Modifier.weight(1f)
+                        )
+                        Spacer(Modifier.width(20.dp))
+                        TextButton(
+                            text = stringResource(R.string.ok),
+                            onClick = {
+                                val newFolder = File(currentPath, newFolderName)
+                                newFolder.mkdirs()
+                                refreshFiles()
+                                showNewFolderDialog = false
+                            },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.textButtonColorsPrimary()
+                        )
+                    }
                 }
-            },
-            dismissButton = {
-                TextButton(onClick = { showNewFolderDialog = false }) {
-                    Text(stringResource(R.string.cancel), color = dialogTextColor)
-                }
-            },
-            text = {
-                TextField(
-                    value = newFolderName,
-                    onValueChange = { newFolderName = it },
-                    label = { Text(stringResource(R.string.file_name), color = dialogTextColor) }
-                )
             }
         )
     }
 
     if (showNewFileDialog) {
-        val dialogTextColor = MiuixTheme.colorScheme.onSurface
-        val dialogBackgroundColor = MiuixTheme.colorScheme.surface
-        
-        AlertDialog(
-            containerColor = dialogBackgroundColor,
-            title = { Text("新建文件", color = dialogTextColor) },
+        OverlayDialog(
+            show = showNewFileDialog,
             onDismissRequest = { showNewFileDialog = false },
-            confirmButton = {
-                Button(onClick = {
-                    val newFile = File(currentPath, newFileInputName)
-                    newFile.createNewFile()
-                    refreshFiles()
-                    showNewFileDialog = false
-                }) {
-                    Text(stringResource(R.string.ok), color = dialogTextColor)
+            title = "新建文件",
+            content = {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    TextField(
+                        value = newFileInputName,
+                        onValueChange = { newFileInputName = it },
+                        label = stringResource(R.string.file_name)
+                    )
+
+                    Spacer(Modifier.height(12.dp))
+
+                    Row(
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        TextButton(
+                            text = stringResource(R.string.cancel),
+                            onClick = { showNewFileDialog = false },
+                            modifier = Modifier.weight(1f)
+                        )
+                        Spacer(Modifier.width(20.dp))
+                        TextButton(
+                            text = stringResource(R.string.ok),
+                            onClick = {
+                                val newFile = File(currentPath, newFileInputName)
+                                newFile.createNewFile()
+                                refreshFiles()
+                                showNewFileDialog = false
+                            },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.textButtonColorsPrimary()
+                        )
+                    }
                 }
-            },
-            dismissButton = {
-                TextButton(onClick = { showNewFileDialog = false }) {
-                    Text(stringResource(R.string.cancel), color = dialogTextColor)
-                }
-            },
-            text = {
-                TextField(
-                    value = newFileInputName,
-                    onValueChange = { newFileInputName = it },
-                    label = { Text(stringResource(R.string.file_name), color = dialogTextColor) }
-                )
             }
         )
     }
 
     if (showNewTypeDialog) {
         val rowTextColor = MiuixTheme.colorScheme.onSurface
-        val dialogBackgroundColor = MiuixTheme.colorScheme.surface
-
-        AlertDialog(
-            containerColor = dialogBackgroundColor,
-            onDismissRequest = {
-                showNewTypeDialog = false
-            },
-            title = { Text("新建", color = rowTextColor) },
-            text = {
+        OverlayDialog(
+            show = showNewTypeDialog,
+            onDismissRequest = { showNewTypeDialog = false },
+            title = "新建",
+            content = {
                 Column(
+                    modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     Row(
@@ -946,16 +1008,16 @@ fun FileManagerScreen(
                         Spacer(modifier = Modifier.width(16.dp))
                         Text("文件", color = rowTextColor)
                     }
+
+                    Spacer(Modifier.height(12.dp))
+
+                    TextButton(
+                        text = stringResource(R.string.cancel),
+                        onClick = { showNewTypeDialog = false },
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    showNewTypeDialog = false
-                }) {
-                    Text(stringResource(R.string.cancel), color = rowTextColor)
-                }
-            },
-            dismissButton = {}
+            }
         )
     }
 }

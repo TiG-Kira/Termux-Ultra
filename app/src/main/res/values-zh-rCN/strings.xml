@@ -3,7 +3,7 @@
     <string name="app_name">Termux Ultra</string>
     <string name="application_name">Termux Ultra</string>
     <string name="shared_user_label">Termux Ultra</string>
-    <string name="title_activity_termux_settings">设置</string>
+    <string name="title_activity_termux_settings">终端设置</string>
 
     <string name="oobe_title">欢迎使用 Termux Ultra</string>
     <string name="oobe_description">要使用 Termux Ultra，您需要授予必要的权限。\n这将允许应用访问文件并正常运行。</string>
@@ -23,6 +23,8 @@
     <string name="no_terminal">没有运行中的终端</string>
     <string name="terminal_1">终端 1</string>
     <string name="close_terminal">关闭终端</string>
+    <string name="search">搜索</string>
+    <string name="language_restart_title">需要重启</string>
 
     <string name="file_manager_title">文件管理</string>
     <string name="file_manager_description">文件管理功能</string>
@@ -234,8 +236,8 @@
     <string name="termux_ultra_version">Termux Ultra 版本</string>
     <string name="based_on_termux_version">基于 Termux 版本</string>
     <string name="items">项</string>
-    <string name="termux_settings">Termux 原生设置</string>
-    <string name="termux_settings_description">打开 Termux 原生设置界面</string>
+    <string name="termux_settings">终端设置</string>
+    <string name="termux_settings_description">打开终端设置界面</string>
     <string name="copy">复制</string>
     <string name="cut">剪切</string>
     <string name="paste">粘贴</string>
@@ -291,4 +293,51 @@
     <string name="edit_file">编辑 (vi)</string>
     <string name="execute_bash">执行 (bash)</string>
     <string name="copy_path">复制路径</string>
+
+    <!-- Keep-alive & tmux -->
+    <string name="keep_alive_warning_title">请注意会话保活问题</string>
+    <string name="keep_alive_warning_message">在 Android 12 及以上版本中，Termux 的会话将会因系统调度原因被频繁杀死，请尝试使用 tmux 工具保活，资源页提供安装。若 tmux 失效，您可能需要自主找寻其他方式保活终端。</string>
+    <string name="tmux_resource_title">tmux</string>
+    <string name="tmux_resource_description">对容器等项目进行保活</string>
+    <string name="tmux_not_installed">请先安装 tmux 工具</string>
+    <string name="tmux_install_hint">需要先安装 tmux 工具才能执行此操作，请前往资源页安装。</string>
+
+    <!-- VNC -->
+    <string name="vnc_description">启用VNC远程桌面功能</string>
+    <string name="vnc_restart_required">重启应用后生效</string>
+    <string name="restart_required">需要重启</string>
+    <string name="restart_now">立即重启</string>
+    <string name="restart_later">暂不重启</string>
+    <string name="restart_message">修改VNC设置需要重启应用才能生效。</string>
+    <string name="vnc_repeater_caption">仅当您使用 UltraVNC 类型中继器时，才输入中继器地址</string>
+    <string name="vnc_settings">VNC 设置</string>
+    <string name="vnc_settings_desc">配置 VNC 连接参数和显示设置</string>
+    <string name="ssh">SSH</string>
+
+    <string name="appearance">外观</string>
+    <string name="backup_category">备份与恢复</string>
+    <string name="system_category">系统</string>
+    <string name="language_restart_message">语言变更将在重启应用后生效。</string>
+
+    <!-- PullToRefresh -->
+    <string name="pull_down_to_refresh">下拉刷新</string>
+    <string name="release_to_refresh">松开刷新</string>
+    <string name="refreshing">正在刷新...</string>
+    <string name="refresh_successful">刷新成功</string>
+
+    <!-- Search -->
+    <string name="search_hint_input">输入相关标题来搜索</string>
+    <string name="search_no_result">未找到</string>
+
+    <!-- SSH connection UI -->
+    <string name="ssh_action_edit">编辑</string>
+    <string name="ssh_action_delete">删除</string>
+    <string name="ssh_edit_connection">编辑连接</string>
+    <string name="ssh_add_connection">添加连接</string>
+    <string name="ssh_field_name">名称</string>
+    <string name="ssh_field_host">主机地址</string>
+    <string name="ssh_field_port">端口</string>
+    <string name="ssh_field_username">用户名</string>
+    <string name="ssh_field_password_optional">密码（可选）</string>
+    <string name="ssh_save">保存</string>
 </resources>

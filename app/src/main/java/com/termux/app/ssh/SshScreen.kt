@@ -13,6 +13,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -26,6 +27,10 @@ import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.basic.TextButton
+import top.yukonga.miuix.kmp.basic.ButtonDefaults
+import top.yukonga.miuix.kmp.basic.TextField
+import top.yukonga.miuix.kmp.overlay.OverlayDialog
 
 @Composable
 fun SshScreen(
@@ -137,13 +142,13 @@ fun SshConnectionCard(
                 IconButton(onClick = { onEdit() }) {
                     Icon(
                         painter = painterResource(R.drawable.ic_edit),
-                        contentDescription = "编辑"
+                        contentDescription = stringResource(R.string.ssh_action_edit)
                     )
                 }
                 IconButton(onClick = { onDelete() }) {
                     Icon(
                         painter = painterResource(R.drawable.ic_delete),
-                        contentDescription = "删除"
+                        contentDescription = stringResource(R.string.ssh_action_delete)
                     )
                 }
             }
@@ -163,66 +168,80 @@ fun SshEditDialog(
     val port = remember { mutableStateOf((connection?.port ?: 22).toString()) }
     val username = remember { mutableStateOf(connection?.username ?: "") }
     val password = remember { mutableStateOf(connection?.password ?: "") }
+    val showDialog = remember { mutableStateOf(true) }
 
-    androidx.compose.material3.AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { androidx.compose.material3.Text(if (isEdit) "编辑连接" else "添加连接") },
-        text = {
-            Column(modifier = Modifier.fillMaxWidth()) {
-                androidx.compose.material3.OutlinedTextField(
+    OverlayDialog(
+        show = showDialog.value,
+        onDismissRequest = {
+            showDialog.value = false
+            onDismiss()
+        },
+        title = if (isEdit) stringResource(R.string.ssh_edit_connection) else stringResource(R.string.ssh_add_connection),
+        content = {
+            Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                TextField(
                     value = name.value,
                     onValueChange = { name.value = it },
-                    label = { androidx.compose.material3.Text("名称") },
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
+                    label = stringResource(R.string.ssh_field_name)
                 )
 
-                androidx.compose.material3.OutlinedTextField(
+                TextField(
                     value = host.value,
                     onValueChange = { host.value = it },
-                    label = { androidx.compose.material3.Text("主机地址") },
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
+                    label = stringResource(R.string.ssh_field_host)
                 )
 
-                androidx.compose.material3.OutlinedTextField(
+                TextField(
                     value = port.value,
                     onValueChange = { port.value = it },
-                    label = { androidx.compose.material3.Text("端口") },
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
+                    label = stringResource(R.string.ssh_field_port)
                 )
 
-                androidx.compose.material3.OutlinedTextField(
+                TextField(
                     value = username.value,
                     onValueChange = { username.value = it },
-                    label = { androidx.compose.material3.Text("用户名") },
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
+                    label = stringResource(R.string.ssh_field_username)
                 )
 
-                androidx.compose.material3.OutlinedTextField(
+                TextField(
                     value = password.value,
                     onValueChange = { password.value = it },
-                    label = { androidx.compose.material3.Text("密码（可选）") },
+                    label = stringResource(R.string.ssh_field_password_optional)
+                )
+
+                Spacer(Modifier.height(12.dp))
+
+                Row(
+                    horizontalArrangement = Arrangement.SpaceBetween,
                     modifier = Modifier.fillMaxWidth()
-                )
-            }
-        },
-        confirmButton = {
-            androidx.compose.material3.TextButton(onClick = {
-                val conn = SshConnection(
-                    id = connection?.id ?: UUID.randomUUID().toString(),
-                    name = name.value,
-                    host = host.value,
-                    port = port.value.toIntOrNull() ?: 22,
-                    username = username.value,
-                    password = password.value
-                )
-                onSave(conn)
-            }) {
-                androidx.compose.material3.Text("保存")
-            }
-        },
-        dismissButton = {
-            androidx.compose.material3.TextButton(onClick = onDismiss) {
-                androidx.compose.material3.Text("取消")
+                ) {
+                    TextButton(
+                        text = stringResource(R.string.cancel),
+                        onClick = {
+                            showDialog.value = false
+                            onDismiss()
+                        },
+                        modifier = Modifier.weight(1f)
+                    )
+                    Spacer(Modifier.width(20.dp))
+                    TextButton(
+                        text = stringResource(R.string.ssh_save),
+                        onClick = {
+                            val conn = SshConnection(
+                                id = connection?.id ?: UUID.randomUUID().toString(),
+                                name = name.value,
+                                host = host.value,
+                                port = port.value.toIntOrNull() ?: 22,
+                                username = username.value,
+                                password = password.value
+                            )
+                            showDialog.value = false
+                            onSave(conn)
+                        },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.textButtonColorsPrimary()
+                    )
+                }
             }
         }
     )
@@ -251,7 +270,7 @@ private fun deleteConnection(context: Context, connection: SshConnection, connec
     connections.remove(connection)
 }
 
-private fun connectToSsh(context: Context, connection: SshConnection) {
+internal fun connectToSsh(context: Context, connection: SshConnection) {
     val sshCommand = buildSshCommand(connection)
 
     val executableUri = android.net.Uri.Builder()

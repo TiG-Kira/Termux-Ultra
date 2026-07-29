@@ -8,22 +8,21 @@
 
 <resources xmlns:tools="http://schemas.android.com/tools">
 
-    <style name="AvncAppTheme" parent="Theme.MaterialComponents.Light.NoActionBar">
-        <item name="android:statusBarColor">@android:color/white</item>
-        <item name="android:windowLightStatusBar">true</item>
-        <item name="colorPrimary">#FF37474F</item>
-        <item name="colorPrimaryDark">#FF263238</item>
-        <item name="colorSecondary">#FF00897B</item>
-        <item name="android:windowBackground">@android:color/white</item>
+    <!-- Miuix-style theme for VNC settings, supports DayNight -->
+    <style name="AvncAppTheme" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="colorPrimary">#FF3D3D3D</item>
+        <item name="colorPrimaryDark">#FF262626</item>
+        <item name="colorSecondary">#FF007AFF</item>
+        <item name="android:windowBackground">?android:attr/colorBackground</item>
         <item name="android:windowActionModeOverlay">true</item>
         <item name="android:windowTranslucentStatus">false</item>
-        <item name="android:windowTranslucentNavigation">true</item>
+        <item name="android:windowTranslucentNavigation">false</item>
     </style>
 
     <!--
       When app is launched, Android shows a temporary window until the app is ready.
       The background color for this temporary window is selected from the theme specified
-      for the activity in app manifest. E.g. it will be white for a Light theme.
+      for app manifest. E.g. it will be white for a Light theme.
 
       If we specify DayNight theme in manifest for startup activity, but user has selected
       dark theme in AVNC, they may see a white flash before activity starts drawing. To

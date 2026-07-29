@@ -1,4 +1,4 @@
-#!/data/data/com.termux/files/usr/bin/bash
+#!/data/data/com.termux.ultra/files/usr/bin/bash
 set -e
 
 CONTAINER_DIR="$HOME/debian-container"

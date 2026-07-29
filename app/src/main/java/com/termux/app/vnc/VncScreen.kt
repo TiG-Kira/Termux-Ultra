@@ -21,7 +21,14 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.UUID
 import com.termux.R
-import top.yukonga.miuix.kmp.basic.*
+import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.Icon
+import top.yukonga.miuix.kmp.basic.IconButton
+import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.basic.TextButton
+import top.yukonga.miuix.kmp.basic.ButtonDefaults
+import top.yukonga.miuix.kmp.basic.TextField
+import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 @Composable
@@ -186,58 +193,73 @@ fun VncEditDialog(
     val host = remember { mutableStateOf(connection?.host ?: "") }
     val port = remember { mutableStateOf((connection?.port ?: 5900).toString()) }
     val password = remember { mutableStateOf(connection?.password ?: "") }
+    val showDialog = remember { mutableStateOf(true) }
 
-    androidx.compose.material3.AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { androidx.compose.material3.Text(if (isEdit) "编辑连接" else "添加连接") },
-        text = {
-            Column(modifier = Modifier.fillMaxWidth()) {
-                androidx.compose.material3.OutlinedTextField(
+    OverlayDialog(
+        show = showDialog.value,
+        onDismissRequest = {
+            showDialog.value = false
+            onDismiss()
+        },
+        title = if (isEdit) "编辑连接" else "添加连接",
+        content = {
+            Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                TextField(
                     value = name.value,
                     onValueChange = { name.value = it },
-                    label = { androidx.compose.material3.Text("名称") },
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
+                    label = "名称"
                 )
 
-                androidx.compose.material3.OutlinedTextField(
+                TextField(
                     value = host.value,
                     onValueChange = { host.value = it },
-                    label = { androidx.compose.material3.Text("主机地址") },
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
+                    label = "主机地址"
                 )
 
-                androidx.compose.material3.OutlinedTextField(
+                TextField(
                     value = port.value,
                     onValueChange = { port.value = it },
-                    label = { androidx.compose.material3.Text("端口") },
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
+                    label = "端口"
                 )
 
-                androidx.compose.material3.OutlinedTextField(
+                TextField(
                     value = password.value,
                     onValueChange = { password.value = it },
-                    label = { androidx.compose.material3.Text("密码") },
+                    label = "密码"
+                )
+
+                Spacer(Modifier.height(12.dp))
+
+                Row(
+                    horizontalArrangement = Arrangement.SpaceBetween,
                     modifier = Modifier.fillMaxWidth()
-                )
-            }
-        },
-        confirmButton = {
-            androidx.compose.material3.TextButton(onClick = {
-                val conn = VncConnection(
-                    id = connection?.id ?: UUID.randomUUID().toString(),
-                    name = name.value,
-                    host = host.value,
-                    port = port.value.toIntOrNull() ?: 5900,
-                    password = password.value
-                )
-                onSave(conn)
-            }) {
-                androidx.compose.material3.Text("保存")
-            }
-        },
-        dismissButton = {
-            androidx.compose.material3.TextButton(onClick = onDismiss) {
-                androidx.compose.material3.Text("取消")
+                ) {
+                    TextButton(
+                        text = "取消",
+                        onClick = {
+                            showDialog.value = false
+                            onDismiss()
+                        },
+                        modifier = Modifier.weight(1f)
+                    )
+                    Spacer(Modifier.width(20.dp))
+                    TextButton(
+                        text = "保存",
+                        onClick = {
+                            val conn = VncConnection(
+                                id = connection?.id ?: UUID.randomUUID().toString(),
+                                name = name.value,
+                                host = host.value,
+                                port = port.value.toIntOrNull() ?: 5900,
+                                password = password.value
+                            )
+                            showDialog.value = false
+                            onSave(conn)
+                        },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.textButtonColorsPrimary()
+                    )
+                }
             }
         }
     )
@@ -334,7 +356,7 @@ private fun scanTermuxVnc(context: Context, connections: MutableList<VncConnecti
     }
 }
 
-private fun connectToVnc(context: Context, connection: VncConnection) {
+internal fun connectToVnc(context: Context, connection: VncConnection) {
     val serviceIntent = Intent(context, com.termux.app.TermuxService::class.java)
     context.startService(serviceIntent)
 

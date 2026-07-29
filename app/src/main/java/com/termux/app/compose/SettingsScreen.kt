@@ -17,12 +17,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.runtime.*
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -32,8 +27,21 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import top.yukonga.miuix.kmp.basic.*
+import top.yukonga.miuix.kmp.basic.Scaffold
+import top.yukonga.miuix.kmp.basic.TopAppBar
+import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.Icon
+import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
+import top.yukonga.miuix.kmp.basic.SmallTitle
+import top.yukonga.miuix.kmp.basic.Switch
+import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.basic.TextButton
+import top.yukonga.miuix.kmp.basic.ButtonDefaults
+import top.yukonga.miuix.kmp.overlay.OverlayDialog
+import top.yukonga.miuix.kmp.preference.SwitchPreference
+import top.yukonga.miuix.kmp.preference.OverlayDropdownPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
+import androidx.compose.material3.LinearProgressIndicator
 import com.termux.R
 import com.termux.app.LocaleHelper
 import com.termux.app.activities.SettingsActivity
@@ -56,7 +64,6 @@ data class SettingItem(
 fun SettingsScreen(onAboutClick: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var showLanguageDialog by remember { mutableStateOf(false) }
     var showRestoreDialog by remember { mutableStateOf(false) }
     var showRestoreConfirmDialog by remember { mutableStateOf(false) }
     var showRestoreProgressDialog by remember { mutableStateOf(false) }
@@ -69,8 +76,17 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
     var restoreTotal by remember { mutableStateOf(100) }
     var restoreMessage by remember { mutableStateOf("") }
     var launchRestore by remember { mutableStateOf(false) }
+    var showRestartPrompt by remember { mutableStateOf(false) }
     val prefs = remember { context.getSharedPreferences("app_settings", Context.MODE_PRIVATE) }
     var vncEnabled by remember { mutableStateOf(prefs.getBoolean("vnc_enabled", false)) }
+
+    val languageOptions = listOf(
+        context.getString(R.string.chinese),
+        context.getString(R.string.english)
+    )
+    var languageSelectedIndex by remember {
+        mutableStateOf(if (LocaleHelper.isChinese(context)) 0 else 1)
+    }
 
     val scrollBehavior = MiuixScrollBehavior()
 
@@ -131,40 +147,21 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
         }
     }
 
-    val settings = mutableListOf<SettingItem>().apply {
-        add(SettingItem(
-            title = context.getString(R.string.language),
-            description = context.getString(R.string.language_description),
-            iconRes = R.drawable.ic_language,
-            action = { showLanguageDialog = true }
-        ))
-        add(SettingItem(
-            title = context.getString(R.string.vnc),
-            description = context.getString(R.string.vnc_description),
-            iconRes = R.drawable.ic_vnc,
-            action = {},
-            hasSwitch = true,
-            switchValue = vncEnabled,
-            onSwitchChange = {
-                vncEnabled = it
-                prefs.edit().putBoolean("vnc_enabled", it).apply()
-                val intent = context.packageManager.getLaunchIntentForPackage(context.packageName)
-                intent?.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
+    // ArrowPreference-only settings (language and VNC switch are handled inline with Miuix components)
+    val remoteSettings = if (vncEnabled) listOf(
+        SettingItem(
+            title = context.getString(R.string.vnc_settings),
+            description = context.getString(R.string.vnc_settings_desc),
+            iconRes = R.drawable.ic_vnc_settings,
+            action = {
+                val intent = Intent(context, com.gaurav.avnc.ui.prefs.PrefsActivity::class.java)
                 context.startActivity(intent)
             }
-        ))
-        if (vncEnabled) {
-            add(SettingItem(
-                title = context.getString(R.string.vnc_settings),
-                description = context.getString(R.string.vnc_settings_desc),
-                iconRes = R.drawable.ic_vnc_settings,
-                action = {
-                    val intent = Intent(context, com.gaurav.avnc.ui.prefs.PrefsActivity::class.java)
-                    context.startActivity(intent)
-                }
-            ))
-        }
-        add(SettingItem(
+        )
+    ) else emptyList()
+
+    val dataSettings = listOf(
+        SettingItem(
             title = context.getString(R.string.backup),
             description = context.getString(R.string.backup_description),
             iconRes = R.drawable.ic_backup,
@@ -173,17 +170,17 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
                     isProcessing = true
                     android.widget.Toast.makeText(context, "正在备份，请在通知栏查看进度", android.widget.Toast.LENGTH_SHORT).show()
                     NotificationHelper.createNotificationChannel(context)
-                    
+
                     val cancelIntent = Intent("com.termux.BACKUP_CANCEL")
                     val pendingCancelIntent = PendingIntent.getBroadcast(context, 0, cancelIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-                    
+
                     val cancelReceiver = object : BroadcastReceiver() {
                         override fun onReceive(context: Context?, intent: Intent?) {
                             BackupManager.cancelBackup()
                         }
                     }
                     context.registerReceiver(cancelReceiver, IntentFilter("com.termux.BACKUP_CANCEL"))
-                    
+
                     NotificationHelper.showProgressNotification(context, "正在备份", 0, 100, "初始化...", pendingCancelIntent)
                     val mainHandler = Handler(Looper.getMainLooper())
                     Thread {
@@ -205,16 +202,19 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
                     }.start()
                 }
             }
-        ))
-        add(SettingItem(
+        ),
+        SettingItem(
             title = context.getString(R.string.restore),
             description = context.getString(R.string.restore_description),
             iconRes = R.drawable.ic_restore,
             action = {
                 launchRestore = true
             }
-        ))
-        add(SettingItem(
+        )
+    )
+
+    val systemSettings = listOf(
+        SettingItem(
             title = context.getString(R.string.termux_settings),
             description = context.getString(R.string.termux_settings_description),
             iconRes = R.drawable.ic_settings,
@@ -222,14 +222,14 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
                 val intent = Intent(context, SettingsActivity::class.java)
                 context.startActivity(intent)
             }
-        ))
-        add(SettingItem(
+        ),
+        SettingItem(
             title = context.getString(R.string.about_preference_title),
             description = context.getString(R.string.about_description),
             iconRes = R.drawable.ic_info,
             action = { onAboutClick() }
-        ))
-    }
+        )
+    )
 
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
@@ -243,76 +243,173 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
                 .padding(padding)
                 .nestedScroll(scrollBehavior.nestedScrollConnection)
         ) {
-            items(settings) { item ->
-                SettingItemCard(item = item)
+            // ---------- Appearance ----------
+            item { SmallTitle(text = context.getString(R.string.appearance)) }
+            item {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                ) {
+                    OverlayDropdownPreference(
+                        title = context.getString(R.string.language),
+                        summary = context.getString(R.string.language_description),
+                        items = languageOptions,
+                        selectedIndex = languageSelectedIndex,
+                        onSelectedIndexChange = { idx ->
+                            languageSelectedIndex = idx
+                            // Apply without restarting; show prompt so users restart.
+                            if (idx == 0) {
+                                LocaleHelper.setChinese(context)
+                            } else {
+                                LocaleHelper.setEnglish(context)
+                            }
+                            showRestartPrompt = true
+                        },
+                        startAction = {
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(MiuixTheme.colorScheme.surfaceVariant),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_language),
+                                    contentDescription = context.getString(R.string.language),
+                                    modifier = Modifier.size(24.dp),
+                                    tint = MiuixTheme.colorScheme.onSurface
+                                )
+                            }
+                        }
+                    )
+                }
             }
+
+            // ---------- Remote ----------
+            item { SmallTitle(text = context.getString(R.string.remote)) }
+            item {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                ) {
+                    SwitchPreference(
+                        title = context.getString(R.string.vnc),
+                        summary = context.getString(R.string.vnc_description),
+                        checked = vncEnabled,
+                        onCheckedChange = {
+                            vncEnabled = it
+                            prefs.edit().putBoolean("vnc_enabled", it).apply()
+                            val intent = context.packageManager.getLaunchIntentForPackage(context.packageName)
+                            intent?.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                            context.startActivity(intent)
+                        },
+                        startAction = {
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(MiuixTheme.colorScheme.surfaceVariant),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_vnc),
+                                    contentDescription = context.getString(R.string.vnc),
+                                    modifier = Modifier.size(24.dp),
+                                    tint = MiuixTheme.colorScheme.onSurface
+                                )
+                            }
+                        }
+                    )
+                }
+            }
+            items(remoteSettings) { SettingItemCard(it) }
+
+            // ---------- Data Backup ----------
+            item { SmallTitle(text = context.getString(R.string.backup_category)) }
+            items(dataSettings) { SettingItemCard(it) }
+
+            // ---------- System ----------
+            item { SmallTitle(text = context.getString(R.string.system_category)) }
+            items(systemSettings) { SettingItemCard(it) }
         }
     }
 
-    if (showLanguageDialog) {
-        AlertDialog(
-            title = { Text(context.getString(R.string.language)) },
-            onDismissRequest = { showLanguageDialog = false },
-            confirmButton = {
-                TextButton(onClick = { showLanguageDialog = false }) {
-                    Text(context.getString(R.string.ok))
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showLanguageDialog = false }) {
-                    Text(context.getString(R.string.cancel))
-                }
-            },
-            text = {
-                Column {
-                    LanguageOption(context.getString(R.string.english), "en", context)
-                    LanguageOption(context.getString(R.string.chinese), "zh", context)
-                }
-            }
+    // ---------- Language restart prompt ----------
+    OverlayDialog(
+        title = context.getString(R.string.restart_required),
+        summary = context.getString(R.string.language_restart_message),
+        show = showRestartPrompt,
+        onDismissRequest = { showRestartPrompt = false }
+    ) {
+        TextButton(
+            text = context.getString(R.string.ok),
+            onClick = { showRestartPrompt = false },
+            modifier = Modifier.fillMaxWidth()
         )
     }
 
-    if (showRestoreDialog) {
-        AlertDialog(
-            title = { Text(context.getString(R.string.restore)) },
-            onDismissRequest = { showRestoreDialog = false },
-            confirmButton = {
-                TextButton(onClick = { showRestoreDialog = false }) {
-                    Text(context.getString(R.string.cancel))
-                }
-            },
-            text = {
-                Column(modifier = Modifier.heightIn(max = 300.dp)) {
-                    if (backupFiles.isEmpty()) {
-                        Text(context.getString(R.string.no_backup_files))
-                    } else {
-                        backupFiles.forEach { file ->
-                            Text(
-                                text = file.name,
-                                fontSize = 14.sp,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 8.dp)
-                                    .clickable {
-                                        selectedBackupFile = file
-                                        showRestoreDialog = false
-                                        showRestoreConfirmDialog = true
-                                    },
-                                color = MiuixTheme.colorScheme.onSurface
-                            )
-                        }
-                    }
+    // ---------- Restore: choose backup file ----------
+    OverlayDialog(
+        title = context.getString(R.string.restore),
+        show = showRestoreDialog,
+        onDismissRequest = { showRestoreDialog = false }
+    ) {
+        Column(modifier = Modifier.heightIn(max = 300.dp)) {
+            if (backupFiles.isEmpty()) {
+                Text(
+                    text = context.getString(R.string.no_backup_files),
+                    fontSize = 14.sp,
+                    color = MiuixTheme.colorScheme.onSurface
+                )
+            } else {
+                backupFiles.forEach { file ->
+                    Text(
+                        text = file.name,
+                        fontSize = 14.sp,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp)
+                            .clickable {
+                                selectedBackupFile = file
+                                showRestoreDialog = false
+                                showRestoreConfirmDialog = true
+                            },
+                        color = MiuixTheme.colorScheme.onSurface
+                    )
                 }
             }
-        )
+        }
+        Spacer(Modifier.height(12.dp))
+        Row(horizontalArrangement = Arrangement.SpaceBetween) {
+            TextButton(
+                text = context.getString(R.string.cancel),
+                onClick = { showRestoreDialog = false },
+                modifier = Modifier.weight(1f)
+            )
+        }
     }
 
-    if (showRestoreConfirmDialog) {
-        AlertDialog(
-            title = { Text(context.getString(R.string.restore)) },
-            onDismissRequest = { showRestoreConfirmDialog = false },
-            confirmButton = {
-                TextButton(onClick = {
+    // ---------- Restore: confirm ----------
+    OverlayDialog(
+        title = context.getString(R.string.restore),
+        summary = context.getString(R.string.restore_confirm_message),
+        show = showRestoreConfirmDialog,
+        onDismissRequest = { showRestoreConfirmDialog = false }
+    ) {
+        Row(horizontalArrangement = Arrangement.SpaceBetween) {
+            TextButton(
+                text = context.getString(R.string.cancel),
+                onClick = { showRestoreConfirmDialog = false },
+                modifier = Modifier.weight(1f)
+            )
+            Spacer(Modifier.width(16.dp))
+            TextButton(
+                text = context.getString(R.string.confirm),
+                onClick = {
                     showRestoreConfirmDialog = false
                     selectedBackupFile?.let { file ->
                         if (!isProcessing) {
@@ -342,68 +439,54 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
                             }.start()
                         }
                     }
-                }) {
-                    Text(context.getString(R.string.confirm))
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showRestoreConfirmDialog = false }) {
-                    Text(context.getString(R.string.cancel))
-                }
-            },
-            text = {
-                Text(context.getString(R.string.restore_confirm_message))
-            }
+                },
+                modifier = Modifier.weight(1f),
+                colors = ButtonDefaults.textButtonColorsPrimary()
+            )
+        }
+    }
+
+    // ---------- Restore: progress ----------
+    OverlayDialog(
+        title = context.getString(R.string.restore),
+        summary = restoreMessage,
+        show = showRestoreProgressDialog,
+        onDismissRequest = { BackupManager.cancelRestore() }
+    ) {
+        Column(modifier = Modifier.padding(vertical = 8.dp)) {
+            LinearProgressIndicator(
+                progress = { restoreProgress.toFloat() / 100f },
+                modifier = Modifier.fillMaxWidth()
+            )
+            Text(
+                text = "$restoreProgress%",
+                fontSize = 12.sp,
+                modifier = Modifier
+                    .padding(top = 8.dp)
+                    .fillMaxWidth(),
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                color = MiuixTheme.colorScheme.onSurface
+            )
+        }
+        Spacer(Modifier.height(12.dp))
+        TextButton(
+            text = context.getString(R.string.cancel),
+            onClick = { BackupManager.cancelRestore() },
+            modifier = Modifier.fillMaxWidth()
         )
     }
 
-    if (showRestoreProgressDialog) {
-        AlertDialog(
-            title = { Text(context.getString(R.string.restore)) },
-            onDismissRequest = {
-                BackupManager.cancelRestore()
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    BackupManager.cancelRestore()
-                }) {
-                    Text(context.getString(R.string.cancel))
-                }
-            },
-            text = {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        text = restoreMessage,
-                        fontSize = 14.sp,
-                        modifier = Modifier.padding(bottom = 12.dp)
-                    )
-                    LinearProgressIndicator(
-                        progress = { restoreProgress.toFloat() / 100f },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Text(
-                        text = "$restoreProgress%",
-                        fontSize = 12.sp,
-                        modifier = Modifier.padding(top = 8.dp),
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                    )
-                }
-            }
-        )
-    }
-
-    if (showResultDialog) {
-        AlertDialog(
-            title = { Text(context.getString(R.string.result)) },
-            onDismissRequest = { showResultDialog = false },
-            confirmButton = {
-                TextButton(onClick = { showResultDialog = false }) {
-                    Text(context.getString(R.string.ok))
-                }
-            },
-            text = {
-                Text(resultMessage)
-            }
+    // ---------- Result ----------
+    OverlayDialog(
+        title = context.getString(R.string.result),
+        summary = resultMessage,
+        show = showResultDialog,
+        onDismissRequest = { showResultDialog = false }
+    ) {
+        TextButton(
+            text = context.getString(R.string.ok),
+            onClick = { showResultDialog = false },
+            modifier = Modifier.fillMaxWidth()
         )
     }
 }
@@ -415,57 +498,74 @@ private fun SettingItemCard(item: SettingItem) {
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 8.dp)
             .clip(RoundedCornerShape(16.dp))
-            .clickable(onClick = item.action)
     ) {
-        Row(
-            modifier = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
+        if (item.hasSwitch) {
+            Row(
                 modifier = Modifier
-                    .size(40.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(MiuixTheme.colorScheme.surfaceVariant),
-                contentAlignment = Alignment.Center
+                    .fillMaxWidth()
+                    .padding(16.dp)
+                    .clickable(onClick = item.action),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    painter = painterResource(item.iconRes),
-                    contentDescription = item.title,
-                    modifier = Modifier.size(24.dp),
-                    tint = MiuixTheme.colorScheme.onSurface
-                )
-            }
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(start = 16.dp)
-            ) {
-                Text(
-                    text = item.title,
-                    fontSize = 16.sp,
-                    modifier = Modifier.padding(bottom = 4.dp),
-                    fontWeight = FontWeight.Bold,
-                    color = MiuixTheme.colorScheme.onSurface
-                )
-                Text(
-                    text = item.description,
-                    fontSize = 14.sp,
-                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                )
-            }
-            if (item.hasSwitch) {
-                top.yukonga.miuix.kmp.basic.Switch(
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MiuixTheme.colorScheme.surfaceVariant),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        painter = painterResource(item.iconRes),
+                        contentDescription = item.title,
+                        modifier = Modifier.size(24.dp),
+                        tint = MiuixTheme.colorScheme.onSurface
+                    )
+                }
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(start = 16.dp)
+                ) {
+                    Text(
+                        text = item.title,
+                        fontSize = 16.sp,
+                        modifier = Modifier.padding(bottom = 4.dp),
+                        fontWeight = FontWeight.Bold,
+                        color = MiuixTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = item.description,
+                        fontSize = 14.sp,
+                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                    )
+                }
+                Switch(
                     checked = item.switchValue,
                     onCheckedChange = item.onSwitchChange
                 )
-            } else {
-                Icon(
-                    painter = painterResource(R.drawable.ic_arrow_right),
-                    contentDescription = null,
-                    modifier = Modifier.size(20.dp),
-                    tint = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                )
             }
+        } else {
+            top.yukonga.miuix.kmp.preference.ArrowPreference(
+                title = item.title,
+                summary = item.description,
+                onClick = item.action,
+                startAction = {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(MiuixTheme.colorScheme.surfaceVariant),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            painter = painterResource(item.iconRes),
+                            contentDescription = item.title,
+                            modifier = Modifier.size(24.dp),
+                            tint = MiuixTheme.colorScheme.onSurface
+                        )
+                    }
+                }
+            )
         }
     }
 }

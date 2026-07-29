@@ -2,7 +2,7 @@
 <resources>
     <string name="title_add_server_profile">添加服务器</string>
     <string name="title_hide_remote_cursor">隐藏远程指针</string>
-    <string name="title_vnc_login">VNC登录</string>
+    <string name="title_vnc_login">VNC 登录</string>
     <string name="title_edit_server_profile">编辑服务器</string>
     <string name="title_duplicate">生成副本</string>
     <string name="title_edit">编辑</string>
@@ -114,6 +114,7 @@
     <string name="pref_keycode_map">键码映射</string>
     <string name="title_advanced">高级</string>
     <string name="title_settings">VNC 设置</string>
+    <string name="vnc_settings_title">VNC 设置</string>
     <string name="title_export">导出</string>
     <string name="title_unknown_ssh_host">未知 SSH 主机</string>
     <string name="title_source_code">源代码</string>

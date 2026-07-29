@@ -3,7 +3,7 @@
     <string name="app_name">Termux Ultra</string>
     <string name="application_name">Termux Ultra</string>
     <string name="shared_user_label">Termux Ultra</string>
-    <string name="title_activity_termux_settings">Settings</string>
+    <string name="title_activity_termux_settings">Terminal Settings</string>
 
     <string name="oobe_title">Welcome to Termux Ultra</string>
     <string name="oobe_description">To use Termux Ultra, you need to grant the necessary permissions.\nThis will allow the app to access files and function properly.</string>
@@ -23,6 +23,8 @@
     <string name="no_terminal">No terminals running</string>
     <string name="terminal_1">Terminal 1</string>
     <string name="close_terminal">Close Terminal</string>
+    <string name="search">Search</string>
+    <string name="language_restart_title">Restart Required</string>
 
     <string name="file_manager_title">File Manager</string>
     <string name="file_manager_description">File management feature</string>
@@ -107,12 +109,12 @@
     <string name="termux_debugging_preferences_summary">Debugging settings</string>
     <string name="termux_terminal_io_preferences_title">Terminal I/O</string>
     <string name="termux_terminal_view_preferences_title">Terminal View</string>
-    <string name="keep_alive_warning_title">请注意会话保活问题</string>
-    <string name="keep_alive_warning_message">在 Android 12 及以上版本中，Termux 的会话将会因系统调度原因被频繁杀死，请尝试使用 tmux 工具保活，资源页提供安装。若 tmux 失效，您可能需要自主找寻其他方式保活终端。</string>
+    <string name="keep_alive_warning_title">Note on Session Keep-Alive</string>
+    <string name="keep_alive_warning_message">On Android 12 and above, Termux sessions may be frequently killed by the system scheduler. Try using tmux to keep them alive (available on the Resources page). If tmux does not work, you may need to find other ways to keep the terminal alive.</string>
     <string name="tmux_resource_title">tmux</string>
-    <string name="tmux_resource_description">对容器等项目进行保活</string>
-    <string name="tmux_not_installed">请先安装 tmux 工具</string>
-    <string name="tmux_install_hint">需要先安装 tmux 工具才能执行此操作，请前往资源页安装。</string>
+    <string name="tmux_resource_description">Keep containers and other projects alive</string>
+    <string name="tmux_not_installed">Please install tmux first</string>
+    <string name="tmux_install_hint">tmux must be installed before performing this action. Please install it from the Resources page.</string>
     <string name="termux_logging_header">Logging</string>
     <string name="termux_log_level_title">Log level</string>
     <string name="termux_terminal_view_key_logging_enabled_off">Key logging enabled</string>
@@ -147,12 +149,12 @@
     <string name="terminal">Terminal</string>
     <string name="vnc">VNC</string>
     <string name="remote">Remote</string>
-    <string name="vnc_description">启用VNC远程桌面功能</string>
-    <string name="vnc_restart_required">重启应用后生效</string>
-    <string name="restart_required">需要重启</string>
-    <string name="restart_now">立即重启</string>
-    <string name="restart_later">暂不重启</string>
-    <string name="restart_message">修改VNC设置需要重启应用才能生效。</string>
+    <string name="vnc_description">Enable VNC remote desktop</string>
+    <string name="vnc_restart_required">Takes effect after app restart</string>
+    <string name="restart_required">Restart required</string>
+    <string name="restart_now">Restart now</string>
+    <string name="restart_later">Restart later</string>
+    <string name="restart_message">Restart the app for VNC setting changes to take effect.</string>
 
     <string name="error_display_over_other_apps_permission_not_granted">Display over other apps permission not granted</string>
     <string name="notification_action_exit">End Session</string>
@@ -246,8 +248,8 @@
     <string name="termux_ultra_version">Termux Ultra Version</string>
     <string name="based_on_termux_version">Based on Termux version</string>
     <string name="items">items</string>
-    <string name="termux_settings">Termux Settings</string>
-    <string name="termux_settings_description">Open original Termux settings</string>
+    <string name="termux_settings">Terminal Settings</string>
+    <string name="termux_settings_description">Open terminal settings</string>
     <string name="copy">Copy</string>
     <string name="cut">Cut</string>
     <string name="paste">Paste</string>
@@ -272,8 +274,8 @@
     <string name="resource_python_env_desc">Setup Python with Poetry</string>
     <string name="info">Info</string>
     <string name="execute">Execute</string>
-    <string name="terminal_welcome_message">第一次进入终端页，请先立即创建新的会话并进入来完成 Termux 配置。</string>
-    <string name="files_warning_message">请谨慎操作文件，误操作可能会影响Termux 容器内以外的文件。</string>
+    <string name="terminal_welcome_message">This is your first time on the Terminal page. Please create a new session and open it to complete the Termux setup.</string>
+    <string name="files_warning_message">Handle files with care. Improper operations may affect files outside the Termux container.</string>
     <string name="termux_report">Termux Report</string>
     <string name="new_version_found">New Version Found</string>
     <string name="up_to_date">Up to Date</string>
@@ -356,7 +358,7 @@
     <string name="vnc_password_caption">Password</string>
     <string name="vnc_port_caption">Port</string>
     <string name="vnc_repeater_button">Repeater</string>
-    <string name="vnc_repeater_caption">仅当您使用 UltraVNC 类型中继器时，才输入中继器地址</string>
+    <string name="vnc_repeater_caption">Enter repeater address only when using an UltraVNC-type repeater</string>
     <string name="vnc_repeater_clear">Don\'t use repeater</string>
     <string name="vnc_repeater_dialog_title">Repeater Information</string>
     <string name="vnc_repeater_empty_text">No repeater</string>
@@ -379,7 +381,33 @@
     <string name="vnc_special_keys">Send Keys</string>
     <string name="vnc_settings_title">VNC Settings</string>
     <string name="vnc_settings_description">VNC viewer settings</string>
-    <string name="vnc_settings">VNC 设置</string>
-    <string name="vnc_settings_desc">配置 VNC 连接参数和显示设置</string>
+    <string name="vnc_settings">VNC Settings</string>
+    <string name="vnc_settings_desc">Configure VNC connection and display settings</string>
     <string name="ssh">SSH</string>
+    <string name="appearance">Appearance</string>
+    <string name="backup_category">Backup &amp; Restore</string>
+    <string name="system_category">System</string>
+    <string name="language_restart_message">Language changes will take effect after the app is restarted.</string>
+
+    <!-- PullToRefresh -->
+    <string name="pull_down_to_refresh">Pull down to refresh</string>
+    <string name="release_to_refresh">Release to refresh</string>
+    <string name="refreshing">Refreshing...</string>
+    <string name="refresh_successful">Refreshed successfully</string>
+
+    <!-- Search -->
+    <string name="search_hint_input">Enter a title to search</string>
+    <string name="search_no_result">Not found</string>
+
+    <!-- SSH connection UI -->
+    <string name="ssh_action_edit">Edit</string>
+    <string name="ssh_action_delete">Delete</string>
+    <string name="ssh_edit_connection">Edit Connection</string>
+    <string name="ssh_add_connection">Add Connection</string>
+    <string name="ssh_field_name">Name</string>
+    <string name="ssh_field_host">Host</string>
+    <string name="ssh_field_port">Port</string>
+    <string name="ssh_field_username">Username</string>
+    <string name="ssh_field_password_optional">Password (optional)</string>
+    <string name="ssh_save">Save</string>
 </resources>

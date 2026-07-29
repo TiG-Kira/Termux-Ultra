@@ -18,6 +18,7 @@ import android.net.Uri;
 import android.net.wifi.WifiManager;
 import android.os.Binder;
 import android.os.Build;
+import android.os.Bundle;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.IBinder;
@@ -882,7 +883,7 @@ public final class TermuxService extends Service implements TermuxTask.TermuxTas
         int actionIcon = wakeLockHeld ? android.R.drawable.ic_lock_idle_lock : android.R.drawable.ic_lock_lock;
         builder.addAction(actionIcon, actionTitle, PendingIntent.getService(this, 0, toggleWakeLockIntent, pendingIntentFlags));
 
-        if (Build.VERSION.SDK_INT >= 35) {
+        if (Build.VERSION.SDK_INT >= 36) {
             try {
                 builder.setPriority(Notification.PRIORITY_HIGH);
                 
@@ -890,8 +891,14 @@ public final class TermuxService extends Service implements TermuxTask.TermuxTas
                     builder.setStyle(new Notification.BigTextStyle().bigText(notificationText));
                 }
                 
-                builder.getClass().getMethod("setRequestPromotedOngoing", boolean.class).invoke(builder, true);
-                builder.getClass().getMethod("setShortCriticalText", String.class).invoke(builder, sessionCount + " 会话");
+                if (sessionCount > 0) {
+                    // Android 16+ Live Update (Promoted Ongoing): opt in via extras + short critical text.
+                    // Requires an ongoing notification with a Style (BigTextStyle set above).
+                    Bundle promotedExtras = new Bundle();
+                    promotedExtras.putBoolean(Notification.EXTRA_REQUEST_PROMOTED_ONGOING, true);
+                    builder.addExtras(promotedExtras);
+                    builder.setShortCriticalText(sessionCount + " 会话");
+                }
             } catch (Exception e) {
                 Logger.logDebug(LOG_TAG, "Failed to set Live Update notification properties: " + e.getMessage());
             }

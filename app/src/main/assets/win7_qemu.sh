@@ -1,4 +1,4 @@
-#!/data/data/com.termux/files/usr/bin/bash
+#!/data/data/com.termux.ultra/files/usr/bin/bash
 
 echo "=== Windows 7 QEMU 启动器 ==="
 

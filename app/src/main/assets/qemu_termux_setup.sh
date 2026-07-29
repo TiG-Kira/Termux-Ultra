@@ -1,4 +1,4 @@
-#!/data/data/com.termux/files/usr/bin/bash
+#!/data/data/com.termux.ultra/files/usr/bin/bash
 # QEMU on Termux Setup (Debian)
 # 使用 Ubuntu 容器生成 cloud-init seed.iso
 
@@ -167,7 +167,7 @@ if [[ "$QEMU_ARCH" == "aarch64" ]]; then
     fi
 
     cat > "$HOME/boot-qemu.sh" <<EOF
-#!/data/data/com.termux/files/usr/bin/bash
+#!/data/data/com.termux.ultra/files/usr/bin/bash
 cd "$VM_DIR"
 termux-wake-lock 2>/dev/null
 
@@ -183,7 +183,7 @@ $QEMU_BIN \\
 EOF
 else
     cat > "$HOME/boot-qemu.sh" <<EOF
-#!/data/data/com.termux/files/usr/bin/bash
+#!/data/data/com.termux.ultra/files/usr/bin/bash
 cd "$VM_DIR"
 termux-wake-lock 2>/dev/null
 
