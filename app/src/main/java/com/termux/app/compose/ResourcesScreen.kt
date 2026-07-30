@@ -70,6 +70,7 @@ fun ResourcesScreen(onExecuteScript: (String, String) -> Unit, onTypeInSession: 
     val scrollBehavior = MiuixScrollBehavior()
     var expandedCard by remember { mutableStateOf<String?>(null) }
     var showTmuxHelpDialog by remember { mutableStateOf(false) }
+    var showQemuSheet by remember { mutableStateOf(false) }
     var sessions by remember { mutableStateOf<List<TerminalSession>>(emptyList()) }
     var termuxService by remember { mutableStateOf<TermuxService?>(null) }
 
@@ -151,11 +152,12 @@ fun ResourcesScreen(onExecuteScript: (String, String) -> Unit, onTypeInSession: 
             needsContainerCheck = true
         ),
         ResourceItem(
-            title = "Windows 7 QEMU",
-            description = "在 QEMU 中运行 Windows 7，需先下载镜像文件",
+            title = "QEMU With VNC",
+            description = "在 Termux 中运行 QEMU 来运行虚拟机，并通过 VNC 功能远程访问桌面",
             url = "",
-            scriptUrl = "win7_qemu",
-            iconRes = R.drawable.ic_server
+            scriptUrl = "qemu_on_vnc",
+            iconRes = R.drawable.ic_server,
+            type = "qemu_on_vnc"
         ),
         ResourceItem(
             title = "朱雀面板",
@@ -238,7 +240,11 @@ fun ResourcesScreen(onExecuteScript: (String, String) -> Unit, onTypeInSession: 
                     hasRunningSessions = sessions.isNotEmpty(),
                     sessions = sessions,
                     onToggleExpand = {
-                        expandedCard = if (expandedCard == item.title) null else item.title
+                        if (item.type == "qemu_on_vnc") {
+                            showQemuSheet = true
+                        } else {
+                            expandedCard = if (expandedCard == item.title) null else item.title
+                        }
                     },
                     onExecuteInNewSession = { command ->
                         onExecuteScript(item.title, command)
@@ -285,6 +291,12 @@ fun ResourcesScreen(onExecuteScript: (String, String) -> Unit, onTypeInSession: 
             }
         )
     }
+
+    QemuOnVncSheet(
+        show = showQemuSheet,
+        onDismiss = { showQemuSheet = false },
+        onExecuteScript = onExecuteScript
+    )
 }
 
 @Composable
@@ -415,6 +427,8 @@ private fun ResourceCard(
                             Text(text = "复制指令", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
                         }
                     } else {
+                        val isQemuOnVnc = item.type == "qemu_on_vnc"
+                        val buttonText = if (isExpanded) "收起" else if (isQemuOnVnc) "配置" else context.getString(R.string.execute)
                         Button(
                             onClick = onToggleExpand,
                             modifier = Modifier.clip(RoundedCornerShape(8.dp)),
@@ -424,11 +438,11 @@ private fun ResourceCard(
                         ) {
                             Icon(
                                 painter = painterResource(if (isExpanded) R.drawable.ic_collapse else R.drawable.ic_play),
-                                contentDescription = if (isExpanded) "收起" else context.getString(R.string.execute),
+                                contentDescription = buttonText,
                                 modifier = Modifier.size(16.dp),
                                 tint = Color.White
                             )
-                            Text(text = if (isExpanded) "收起" else context.getString(R.string.execute), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                            Text(text = buttonText, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
                         }
                     }
                 }
@@ -596,30 +610,6 @@ private fun resolveCommand(item: ResourceItem, context: android.content.Context)
                 e.printStackTrace()
             }
             "bash $runInContainerPath $installScriptPath"
-        }
-        item.scriptUrl == "win7_qemu" -> {
-            val scriptPath = "/data/data/com.termux/files/home/win7_qemu.sh"
-            val patchPath = "/data/data/com.termux/files/home/win7_patch.zip"
-            try {
-                val inputStream = context.assets.open("win7_qemu.sh")
-                val outputStream = java.io.FileOutputStream(scriptPath)
-                inputStream.copyTo(outputStream)
-                inputStream.close()
-                outputStream.close()
-                java.io.File(scriptPath).setExecutable(true)
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
-            try {
-                val patchStream = context.assets.open("win7_patch.zip")
-                val patchOutputStream = java.io.FileOutputStream(patchPath)
-                patchStream.copyTo(patchOutputStream)
-                patchStream.close()
-                patchOutputStream.close()
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
-            "bash $scriptPath"
         }
         item.type == "qemu_termux" -> {
             val setupScriptPath = "/data/data/com.termux/files/home/qemu_termux_setup.sh"

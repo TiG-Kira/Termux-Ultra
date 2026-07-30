@@ -53,7 +53,8 @@ fun MainScreen(
     onAboutClick: () -> Unit,
     showVnc: Boolean,
     isWakeLockEnabled: Boolean,
-    onToggleWakeLock: () -> Unit
+    onToggleWakeLock: () -> Unit,
+    onRefreshSessions: () -> Unit = {}
 ) {
     val scope = rememberCoroutineScope()
     var remoteSubTab by remember { mutableStateOf(0) }
@@ -231,7 +232,8 @@ fun MainScreen(
                         onStopTerminal = onStopTerminal,
                         onRenameTerminal = onRenameTerminal,
                         isWakeLockEnabled = isWakeLockEnabled,
-                        onToggleWakeLock = onToggleWakeLock
+                        onToggleWakeLock = onToggleWakeLock,
+                        onRefresh = onRefreshSessions
                     )
                     1 -> FileManagerScreen(onOpenFile = onExecuteScript)
                     2 -> com.termux.app.remote.RemoteScreen(

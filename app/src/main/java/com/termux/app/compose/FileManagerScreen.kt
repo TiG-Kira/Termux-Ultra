@@ -1,4 +1,4 @@
-﻿package com.termux.app.compose
+package com.termux.app.compose
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
@@ -47,7 +47,7 @@ import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.TextField
-import top.yukonga.miuix.kmp.basic.PullToRefresh
+import top.yukonga.miuix.kmp.basic.LinearProgressIndicator
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.overlay.OverlayBottomSheet
 import top.yukonga.miuix.kmp.theme.MiuixTheme
@@ -95,13 +95,16 @@ fun FileManagerScreen(
     var sftpUsername by remember { mutableStateOf("") }
     var sftpPassword by remember { mutableStateOf("") }
     var isFileRefreshing by remember { mutableStateOf(false) }
+    var showOperationProgress by remember { mutableStateOf(false) }
+    var operationProgressText by remember { mutableStateOf("") }
+    var operationProgress by remember { mutableFloatStateOf(0f) }
 
     LaunchedEffect(currentPath) {
         files = currentPath.listFiles()?.sortedWith(compareBy({ !it.isDirectory }, { it.name })) ?: emptyList()
         selectedFiles = emptySet()
         isInSelectionMode = false
     }
-    
+
     fun isPortInUse(port: Int): Boolean {
         try {
             java.net.Socket("127.0.0.1", port).use {
@@ -123,15 +126,15 @@ fun FileManagerScreen(
         sftpUsername = prefs.getString("sftp_username", "termux") ?: "termux"
         sftpPassword = prefs.getString("sftp_password", "termux123") ?: "termux123"
         sftpPort = prefs.getInt("sftp_port", 8021)
-        
+
         val appPrefs = context.getSharedPreferences("app_settings", android.content.Context.MODE_PRIVATE)
         val ftpEnabled = appPrefs.getBoolean("ftp_enabled", false)
         val ftpRunning = com.termux.app.ftp.FtpServiceManager.isRunning()
-        
+
         if (ftpEnabled && !ftpRunning) {
             com.termux.app.ftp.FtpServiceManager.start(context)
         }
-        
+
         isSftpEnabled = com.termux.app.ftp.FtpServiceManager.isRunning()
         if (!isSftpEnabled && ftpEnabled) {
             appPrefs.edit().putBoolean("ftp_enabled", false).apply()
@@ -186,7 +189,7 @@ fun FileManagerScreen(
     fun showSftpNotification() {
         createNotificationChannel()
         val ipAddress = getLocalIpAddress()
-        
+
         val intent = android.content.Intent(context, com.termux.app.ftp.FtpInfoActivity::class.java)
         intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
         val pendingIntent = android.app.PendingIntent.getActivity(
@@ -195,7 +198,7 @@ fun FileManagerScreen(
             intent,
             android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
         )
-        
+
         val notification = NotificationCompat.Builder(context, sftpChannelId)
             .setContentTitle("正在使用 FTP 服务")
             .setContentText("地址: ftp://$ipAddress:$sftpPort\n点击通知显示 FTP 详情")
@@ -365,18 +368,27 @@ fun FileManagerScreen(
 
                     if (clipboardMode != ClipboardMode.NONE && clipboardFiles.isNotEmpty()) {
                         IconButton(onClick = {
-                            clipboardFiles.forEach { srcPath ->
-                                val srcFile = File(srcPath)
-                                val destFile = File(currentPath, srcFile.name)
-                                if (clipboardMode == ClipboardMode.CUT) {
-                                    srcFile.renameTo(destFile)
-                                } else {
-                                    copyFile(srcFile, destFile)
+                            showOperationProgress = true
+                            operationProgressText = if (clipboardMode == ClipboardMode.CUT) "移动中..." else "复制中..."
+                            operationProgress = 0f
+                            coroutineScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                                clipboardFiles.forEachIndexed { index, srcPath ->
+                                    val srcFile = File(srcPath)
+                                    val destFile = File(currentPath, srcFile.name)
+                                    if (clipboardMode == ClipboardMode.CUT) {
+                                        srcFile.renameTo(destFile)
+                                    } else {
+                                        copyFile(srcFile, destFile)
+                                    }
+                                    operationProgress = (index + 1).toFloat() / clipboardFiles.size
+                                }
+                                clipboardMode = ClipboardMode.NONE
+                                clipboardFiles = emptySet()
+                                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                    refreshFiles()
+                                    showOperationProgress = false
                                 }
                             }
-                            clipboardMode = ClipboardMode.NONE
-                            clipboardFiles = emptySet()
-                            refreshFiles()
                         }) {
                             Icon(
                                 painter = painterResource(R.drawable.ic_paste),
@@ -424,32 +436,15 @@ fun FileManagerScreen(
             )
         }
     ) { padding ->
-        PullToRefresh(
-            isRefreshing = isFileRefreshing,
-            onRefresh = {
-                isFileRefreshing = true
-                refreshFiles()
-                coroutineScope.launch(kotlinx.coroutines.Dispatchers.Main) {
-                    delay(500)
-                    isFileRefreshing = false
-                }
-            },
-            refreshTexts = listOf(
-                stringResource(R.string.pull_down_to_refresh),
-                stringResource(R.string.release_to_refresh),
-                stringResource(R.string.refreshing),
-                stringResource(R.string.refresh_successful)
-            )
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .padding(horizontal = 16.dp)
+                .nestedScroll(scrollBehavior.nestedScrollConnection),
+            contentPadding = PaddingValues(vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding)
-                    .padding(horizontal = 16.dp)
-                    .nestedScroll(scrollBehavior.nestedScrollConnection),
-                contentPadding = PaddingValues(vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
             if (showWarningCard) {
                 item {
                     Card(
@@ -562,7 +557,6 @@ fun FileManagerScreen(
                     )
                 }
             }
-        }
         }
     }
 
@@ -809,13 +803,23 @@ fun FileManagerScreen(
                     TextButton(
                         text = stringResource(R.string.delete_confirm),
                         onClick = {
-                            selectedFiles.forEach { path ->
-                                File(path).deleteRecursively()
-                            }
-                            selectedFiles = emptySet()
-                            isInSelectionMode = false
-                            refreshFiles()
                             showDeleteDialog = false
+                            showOperationProgress = true
+                            operationProgressText = "删除中..."
+                            operationProgress = 0f
+                            val filesToDelete = selectedFiles.toList()
+                            coroutineScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                                filesToDelete.forEachIndexed { index, path ->
+                                    File(path).deleteRecursively()
+                                    operationProgress = (index + 1).toFloat() / filesToDelete.size
+                                }
+                                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                    selectedFiles = emptySet()
+                                    isInSelectionMode = false
+                                    refreshFiles()
+                                    showOperationProgress = false
+                                }
+                            }
                         },
                         modifier = Modifier.weight(1f),
                         colors = ButtonDefaults.textButtonColorsPrimary()
@@ -898,10 +902,20 @@ fun FileManagerScreen(
                         TextButton(
                             text = stringResource(R.string.ok),
                             onClick = {
-                                val newFolder = File(currentPath, newFolderName)
-                                newFolder.mkdirs()
-                                refreshFiles()
                                 showNewFolderDialog = false
+                                showOperationProgress = true
+                                operationProgressText = "创建文件夹中..."
+                                operationProgress = 0f
+                                coroutineScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                                    val newFolder = File(currentPath, newFolderName)
+                                    newFolder.mkdirs()
+                                    operationProgress = 1f
+                                    kotlinx.coroutines.delay(200)
+                                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                        refreshFiles()
+                                        showOperationProgress = false
+                                    }
+                                }
                             },
                             modifier = Modifier.weight(1f),
                             colors = ButtonDefaults.textButtonColorsPrimary()
@@ -940,10 +954,20 @@ fun FileManagerScreen(
                         TextButton(
                             text = stringResource(R.string.ok),
                             onClick = {
-                                val newFile = File(currentPath, newFileInputName)
-                                newFile.createNewFile()
-                                refreshFiles()
                                 showNewFileDialog = false
+                                showOperationProgress = true
+                                operationProgressText = "创建文件中..."
+                                operationProgress = 0f
+                                coroutineScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                                    val newFile = File(currentPath, newFileInputName)
+                                    newFile.createNewFile()
+                                    operationProgress = 1f
+                                    kotlinx.coroutines.delay(200)
+                                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                        refreshFiles()
+                                        showOperationProgress = false
+                                    }
+                                }
                             },
                             modifier = Modifier.weight(1f),
                             colors = ButtonDefaults.textButtonColorsPrimary()
@@ -1015,6 +1039,33 @@ fun FileManagerScreen(
                         text = stringResource(R.string.cancel),
                         onClick = { showNewTypeDialog = false },
                         modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+        )
+    }
+
+    if (showOperationProgress) {
+        OverlayDialog(
+            show = showOperationProgress,
+            onDismissRequest = {},
+            title = operationProgressText,
+            content = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    LinearProgressIndicator(
+                        progress = operationProgress,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(Modifier.height(16.dp))
+                    Text(
+                        text = "${(operationProgress * 100).toInt()}%",
+                        fontSize = 14.sp,
+                        color = MiuixTheme.colorScheme.onSurface
                     )
                 }
             }

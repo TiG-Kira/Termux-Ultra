@@ -178,7 +178,8 @@ class MainActivity : ComponentActivity() {
                         onAboutClick = { showAbout = true },
                         showVnc = showVnc,
                         isWakeLockEnabled = isWakeLockEnabled,
-                        onToggleWakeLock = { toggleWakeLock() }
+                        onToggleWakeLock = { toggleWakeLock() },
+                        onRefreshSessions = { updateSessions() }
                     )
                 }
             }

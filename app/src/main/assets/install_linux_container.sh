@@ -1,9 +1,17 @@
-#!/data/data/com.termux.ultra/files/usr/bin/bash
+#!/data/data/com.termux/files/usr/bin/bash
 
 CONTAINER_DIR="$HOME/debian-container"
 
 if [ -d "$CONTAINER_DIR" ] && [ -f "$CONTAINER_DIR/rootfs/bin/bash" ] && [ -f "$CONTAINER_DIR/run.sh" ]; then
     echo "Linux container already exists."
+
+    # 自动修复 run.sh 中的旧包名路径
+    if grep -q "com.termux.ultra" "$CONTAINER_DIR/run.sh" 2>/dev/null; then
+        echo "  Fixing old package name references in run.sh..."
+        sed -i 's/com\.termux\.ultra/com.termux/g' "$CONTAINER_DIR/run.sh"
+        echo "  run.sh updated successfully."
+    fi
+
     read -p "Do you want to reinstall (delete existing and start fresh)? [y/N] " -n1 -r
     echo ""
     if [[ ! "$REPLY" =~ ^[Yy]$ ]]; then
@@ -186,14 +194,14 @@ else
     echo "  ERROR: container_run.sh not found in \$HOME!"
     echo "  Falling back to inline generation..."
     cat > "$CONTAINER_DIR/run.sh" << 'FALLBACK'
-#!/data/data/com.termux.ultra/files/usr/bin/bash
+#!/data/data/com.termux/files/usr/bin/bash
 cd "$(dirname "$0")" || exit 1
 unset LD_PRELOAD
 mkdir -p rootfs/etc 2>/dev/null
 if [ ! -s rootfs/etc/resolv.conf ]; then
     printf "nameserver 8.8.8.8\nnameserver 8.8.4.4\n" > rootfs/etc/resolv.conf 2>/dev/null || true
 fi
-exec proot --link2symlink -0 -r rootfs -b /dev -b /proc -b /sys -b /data/data/com.termux.ultra/files/home:/root/shared -w /root /usr/bin/env -i HOME=/root PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin TERM="${TERM:-xterm-256color}" LANG=C.UTF-8 /bin/bash --login "$@"
+exec proot --link2symlink -0 -r rootfs -b /dev -b /proc -b /sys -b /data/data/com.termux/files/home:/root/shared -w /root /usr/bin/env -i HOME=/root PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin TERM="${TERM:-xterm-256color}" LANG=C.UTF-8 /bin/bash --login "$@"
 FALLBACK
 fi
 

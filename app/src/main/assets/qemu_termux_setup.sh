@@ -1,4 +1,4 @@
-#!/data/data/com.termux.ultra/files/usr/bin/bash
+#!/data/data/com.termux/files/usr/bin/bash
 # QEMU on Termux Setup (Debian)
 # 使用 Ubuntu 容器生成 cloud-init seed.iso
 
@@ -18,6 +18,16 @@ if [ ! -f "$RUN_SCRIPT" ] || [ ! -f "$CONTAINER_DIR/rootfs/bin/bash" ]; then
     exit 1
 fi
 echo "  Ubuntu container found."
+
+# 自动修复 run.sh 中的旧包名路径
+RUN_SCRIPT="$CONTAINER_DIR/run.sh"
+if [ -f "$RUN_SCRIPT" ]; then
+    if grep -q "com.termux.ultra" "$RUN_SCRIPT" 2>/dev/null; then
+        echo "  Fixing old package name references in run.sh..."
+        sed -i 's/com\.termux\.ultra/com.termux/g' "$RUN_SCRIPT"
+        echo "  run.sh updated successfully."
+    fi
+fi
 
 echo ""
 echo "[1/6] Installing Termux repository packages..."
@@ -167,7 +177,7 @@ if [[ "$QEMU_ARCH" == "aarch64" ]]; then
     fi
 
     cat > "$HOME/boot-qemu.sh" <<EOF
-#!/data/data/com.termux.ultra/files/usr/bin/bash
+#!/data/data/com.termux/files/usr/bin/bash
 cd "$VM_DIR"
 termux-wake-lock 2>/dev/null
 
@@ -183,7 +193,7 @@ $QEMU_BIN \\
 EOF
 else
     cat > "$HOME/boot-qemu.sh" <<EOF
-#!/data/data/com.termux.ultra/files/usr/bin/bash
+#!/data/data/com.termux/files/usr/bin/bash
 cd "$VM_DIR"
 termux-wake-lock 2>/dev/null
 

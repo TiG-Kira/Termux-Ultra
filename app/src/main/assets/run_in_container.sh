@@ -1,4 +1,4 @@
-#!/data/data/com.termux.ultra/files/usr/bin/bash
+#!/data/data/com.termux/files/usr/bin/bash
 set -e
 
 CONTAINER_DIR="$HOME/debian-container"
@@ -9,6 +9,13 @@ if [ ! -f "$RUN_SCRIPT" ]; then
     echo "Error: Container not found."
     echo "Please install the container first by running install_linux_container.sh"
     exit 1
+fi
+
+# 自动修复 run.sh 中的旧包名路径
+if grep -q "com.termux.ultra" "$RUN_SCRIPT" 2>/dev/null; then
+    echo "Fixing old package name references in run.sh..."
+    sed -i 's/com\.termux\.ultra/com.termux/g' "$RUN_SCRIPT"
+    echo "run.sh updated successfully."
 fi
 
 if [ -z "$SCRIPT_TO_RUN" ]; then

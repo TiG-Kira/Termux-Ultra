@@ -66,7 +66,8 @@ fun TerminalListScreen(
     onStopTerminal: (TermuxSession) -> Unit,
     onRenameTerminal: (TermuxSession, String) -> Unit,
     isWakeLockEnabled: Boolean,
-    onToggleWakeLock: () -> Unit
+    onToggleWakeLock: () -> Unit,
+    onRefresh: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -281,6 +282,7 @@ fun TerminalListScreen(
                     isRefreshing = isRefreshing,
                     onRefresh = {
                         isRefreshing = true
+                        onRefresh()
                         coroutineScope.launch(kotlinx.coroutines.Dispatchers.Main) {
                             delay(600)
                             isRefreshing = false
