@@ -29,6 +29,7 @@ import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.basic.Switch
+import top.yukonga.miuix.kmp.basic.LinearProgressIndicator
 import top.yukonga.miuix.kmp.overlay.OverlayBottomSheet
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.preference.RadioButtonPreference
@@ -39,6 +40,10 @@ import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import com.termux.R
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 
 private enum class SheetMode { LIST, WIZARD, EDIT }
 
@@ -64,9 +69,9 @@ fun QemuOnVncSheet(
 
     if (show) {
         val title = when (sheetMode) {
-            SheetMode.LIST -> "QEMU on VNC"
+            SheetMode.LIST -> "QEMU With VNC"
             SheetMode.WIZARD -> "配置 QEMU 虚拟机"
-            SheetMode.EDIT -> "编辑虚拟机"
+            SheetMode.EDIT -> "编辑 QEMU 虚拟机"
         }
 
         OverlayBottomSheet(
@@ -309,6 +314,7 @@ private fun VmWizardContent(
     onCancel: () -> Unit
 ) {
     val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
     var wizardStep by remember { mutableStateOf(1) }
 
     // 配置状态
@@ -332,23 +338,53 @@ private fun VmWizardContent(
     }
     var vncPort by remember { mutableStateOf((existingVm?.vncPort ?: 5900).toString()) }
 
+    // 复制进度状态
+    var showCopyProgress by remember { mutableStateOf(false) }
+    var copyProgress by remember { mutableFloatStateOf(0f) }
+    var copyProgressText by remember { mutableStateOf("正在复制到虚拟机目录...") }
+
     // install_iso 模式下强制开启 CD-ROM
     if (mode == "install_iso") {
         hasCdrom = true
+    }
+
+    // 统一的文件选择处理：先尝试快速解析，失败则在后台复制并显示进度
+    fun handleFileSelected(uri: Uri, defaultName: String, onResult: (String) -> Unit) {
+        // 先尝试快速解析（不复制）
+        val quick = tryQuickResolvePath(context, uri)
+        if (quick != null) {
+            onResult(quick)
+            return
+        }
+        // 需要复制：启动协程显示进度
+        coroutineScope.launch {
+            showCopyProgress = true
+            copyProgress = 0f
+            copyProgressText = "正在复制到虚拟机目录..."
+            val result = withContext(Dispatchers.IO) {
+                copyToSharedDir(context, uri, defaultName) { p ->
+                    copyProgress = p
+                }
+            }
+            showCopyProgress = false
+            if (result != null) {
+                onResult(result)
+            }
+        }
     }
 
     // 文件选择器：磁盘文件
     val diskFileLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri ->
-        uri?.let { resolveFilePath(context, it) }?.let { diskPath = it }
+        uri?.let { handleFileSelected(it, "disk.img") { diskPath = it } }
     }
 
     // 文件选择器：ISO 文件
     val isoFileLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri ->
-        uri?.let { resolveFilePath(context, it) }?.let { isoPath = it }
+        uri?.let { handleFileSelected(it, "image.iso") { isoPath = it } }
     }
 
     Column(
@@ -793,55 +829,213 @@ private fun VmWizardContent(
 
         Spacer(Modifier.height(16.dp))
     }
+
+    // 复制进度对话框
+    if (showCopyProgress) {
+        OverlayDialog(
+            show = showCopyProgress,
+            onDismissRequest = {},
+            title = copyProgressText,
+            content = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    LinearProgressIndicator(
+                        progress = copyProgress,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(Modifier.height(16.dp))
+                    Text(
+                        text = "${(copyProgress * 100).toInt()}%",
+                        fontSize = 14.sp,
+                        color = MiuixTheme.colorScheme.onSurface
+                    )
+                }
+            }
+        )
+    }
 }
 
-// ==================== 文件路径解析 ====================
-
 /**
- * 从 URI 解析文件路径。
- * 尝试获取真实路径，如果路径在内部存储中则转换为 Termux 的 shared 路径。
- * 如果无法获取真实路径，则将文件复制到 shared 目录。
+ * 快速解析 URI 到 Termux shared 路径（不复制文件）。
+ * 成功返回路径字符串；需要复制时返回 null（由调用方再走 [copyToSharedDir]）。
  */
-private fun resolveFilePath(context: Context, uri: Uri): String? {
-    // 尝试获取文件名
-    var fileName: String? = null
-    context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
-        val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-        if (nameIndex >= 0 && cursor.moveToFirst()) {
-            fileName = cursor.getString(nameIndex)
-        }
-    }
+private fun tryQuickResolvePath(context: Context, uri: Uri): String? {
+    val scheme = uri.scheme
 
-    if (fileName.isNullOrBlank()) {
-        fileName = uri.lastPathSegment ?: "unknown"
-    }
-
-    // 尝试从 URI 获取真实路径
-    val path = uri.path
-    if (path != null) {
-        // file:// URI
-        if (path.startsWith("/sdcard/") || path.startsWith("/storage/emulated/0/")) {
-            val relativePath = path.substringAfter("/sdcard/").substringAfter("/storage/emulated/0/")
-            return "\$HOME/storage/shared/$relativePath"
-        }
-        if (path.startsWith("/data/data/com.termux/files/home/")) {
-            return path
-        }
-    }
-
-    // 无法直接获取路径，复制文件到 shared 目录
-    val targetDir = java.io.File("${context.filesDir.absolutePath}/../../home/storage/shared/qemu")
-    if (!targetDir.exists()) targetDir.mkdirs()
-    val targetFile = java.io.File(targetDir, fileName)
-
+    // 1. 通过 ContentResolver DATA 列查询真实文件路径
     try {
-        context.contentResolver.openInputStream(uri)?.use { input ->
-            targetFile.outputStream().use { output ->
-                input.copyTo(output)
+        context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+            if (cursor.moveToFirst()) {
+                val dataIndex = cursor.getColumnIndex(android.provider.MediaStore.MediaColumns.DATA)
+                if (dataIndex >= 0) {
+                    val dataPath = cursor.getString(dataIndex)
+                    if (!dataPath.isNullOrBlank()) {
+                        val mapped = mapInternalPathToShared(dataPath)
+                        if (mapped != null) return mapped
+                        // DATA 列返回了但不是内部存储路径（如 app 私有目录），不直接用
+                    }
+                }
             }
         }
-        return "\$HOME/storage/shared/qemu/$fileName"
+    } catch (_: Exception) { }
+
+    // 2. file:// scheme
+    if ("file".equals(scheme, ignoreCase = true)) {
+        val rawPath = uri.path
+        if (rawPath != null) {
+            return mapInternalPathToShared(rawPath) ?: rawPath
+        }
+    }
+
+    // 3. content:// scheme：检查常见的 document 路径格式
+    //    URI 路径是 URL 编码的，必须先解码才能匹配
+    //    例: /document/primary%3ADownload%2FTermux%2Fwin8.1.qcow2
+    //       -> /document/primary:Download/Termux/win8.1.qcow2
+    if ("content".equals(scheme, ignoreCase = true)) {
+        val rawPath = uri.path
+        if (rawPath != null) {
+            val docPath = android.net.Uri.decode(rawPath)
+            // 提取出 primary: / raw: 之后的子路径
+            // 注意：sub 可能是相对路径（Download/x.iso），也可能是绝对路径（/storage/emulated/0/Download/x.iso）
+            val subPath: String? = sequenceOf(
+                "primary:",
+                "raw:/storage/emulated/0/",
+                "raw:/sdcard/",
+                "raw:"
+            ).map { token ->
+                val m = token.toRegex().find(docPath)
+                if (m != null) docPath.substring(m.range.last + 1) else null
+            }.firstOrNull { !it.isNullOrBlank() }
+
+            if (subPath != null) {
+                return normalizeToSharedPath(subPath)
+            }
+        }
+    }
+
+    // 需要复制
+    return null
+}
+
+/**
+ * 将子路径归一化为 Termux shared 映射路径。
+ * 支持三种输入：
+ *  - 相对路径: "Download/Termux/x.iso"  -> $HOME/storage/shared/Download/Termux/x.iso
+ *  - 绝对内部存储路径: "/storage/emulated/0/Download/x.iso" 或 "/sdcard/Download/x.iso" -> 同上
+ *  - 带前导斜杠的相对路径: "/Download/x.iso" -> $HOME/storage/shared/Download/x.iso
+ */
+private fun normalizeToSharedPath(subPath: String): String {
+    val trimmed = subPath.trim()
+    // 先尝试绝对路径映射
+    mapInternalPathToShared(trimmed)?.let { return it }
+    // 否则按相对路径处理：去掉前导斜杠，避免双斜杠
+    val relative = trimmed.trimStart('/')
+    return "\$HOME/storage/shared/$relative"
+}
+
+/**
+ * 从 URI 获取安全的文件名。
+ */
+private fun queryFileName(context: Context, uri: Uri, defaultFileName: String): String {
+    var fileName: String? = null
+    try {
+        context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+            if (cursor.moveToFirst()) {
+                val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                if (nameIndex >= 0) {
+                    fileName = cursor.getString(nameIndex)
+                }
+            }
+        }
+    } catch (_: Exception) { }
+    if (fileName.isNullOrBlank()) {
+        fileName = uri.lastPathSegment?.substringAfterLast('/')?.ifBlank { null } ?: defaultFileName
+    }
+    return fileName.replace("[^a-zA-Z0-9._\\-]".toRegex(), "_").ifBlank { defaultFileName }
+}
+
+/**
+ * 从 URI 获取文件大小（字节）。
+ */
+private fun queryFileSize(context: Context, uri: Uri): Long {
+    try {
+        context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+            if (cursor.moveToFirst()) {
+                val sizeIndex = cursor.getColumnIndex(OpenableColumns.SIZE)
+                if (sizeIndex >= 0) {
+                    return cursor.getLong(sizeIndex)
+                }
+            }
+        }
+    } catch (_: Exception) { }
+    return -1L
+}
+
+/**
+ * 将 uri 对应的文件流复制到 /sdcard/Download/qemu/ 目录，带进度回调。
+ * 返回 Termux shared 映射路径。在 IO 调度器中调用。
+ */
+private suspend fun copyToSharedDir(
+    context: Context,
+    uri: Uri,
+    defaultFileName: String,
+    onProgress: (Float) -> Unit
+): String? {
+    val fileName = queryFileName(context, uri, defaultFileName)
+    val totalSize = queryFileSize(context, uri)
+
+    // 目标目录：优先 /sdcard/Download/qemu/
+    val sdcard = android.os.Environment.getExternalStorageDirectory().absolutePath
+    var targetDir = java.io.File("$sdcard/Download/qemu")
+    if (!targetDir.exists() && !targetDir.mkdirs()) {
+        // 回退到 app 外部 files 目录
+        val extDir = context.getExternalFilesDir(null)
+            ?: java.io.File("${context.filesDir.absolutePath}/shared_qemu_fallback")
+        targetDir = java.io.File(extDir, "qemu")
+        targetDir.mkdirs()
+    }
+    val targetFile = java.io.File(targetDir, fileName)
+
+    return try {
+        context.contentResolver.openInputStream(uri)?.use { input ->
+            targetFile.outputStream().use { output ->
+                val buffer = ByteArray(8192 * 4)
+                var copied = 0L
+                while (true) {
+                    val read = input.read(buffer)
+                    if (read <= 0) break
+                    output.write(buffer, 0, read)
+                    copied += read
+                    if (totalSize > 0) {
+                        onProgress((copied.toFloat() / totalSize).coerceIn(0f, 1f))
+                    }
+                }
+                output.flush()
+            }
+        }
+        onProgress(1f)
+        // 返回 shared 映射路径（统一归一化，避免双斜杠）
+        normalizeToSharedPath(targetFile.absolutePath)
     } catch (e: Exception) {
+        null
+    }
+}
+
+/**
+ * 将绝对内部存储路径转换为 Termux 的 shared 映射路径。
+ */
+private fun mapInternalPathToShared(absPath: String): String? {
+    var p = absPath
+    if (p.startsWith("/storage/emulated/0/")) {
+        p = p.removePrefix("/storage/emulated/0/")
+    } else if (p.startsWith("/sdcard/")) {
+        p = p.removePrefix("/sdcard/")
+    } else {
         return null
     }
+    return "\$HOME/storage/shared/$p"
 }

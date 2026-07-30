@@ -1,4 +1,4 @@
-package com.termux.app.compose
+﻿package com.termux.app.compose
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
@@ -371,20 +371,23 @@ fun FileManagerScreen(
                             showOperationProgress = true
                             operationProgressText = if (clipboardMode == ClipboardMode.CUT) "移动中..." else "复制中..."
                             operationProgress = 0f
+                            val filesToProcess = clipboardFiles.toList()
+                            val modeAtStart = clipboardMode
+                            val targetPath = currentPath
                             coroutineScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-                                clipboardFiles.forEachIndexed { index, srcPath ->
+                                filesToProcess.forEachIndexed { index, srcPath ->
                                     val srcFile = File(srcPath)
-                                    val destFile = File(currentPath, srcFile.name)
-                                    if (clipboardMode == ClipboardMode.CUT) {
-                                        srcFile.renameTo(destFile)
+                                    val destFile = File(targetPath, srcFile.name)
+                                    if (modeAtStart == ClipboardMode.CUT) {
+                                        moveFile(srcFile, destFile)
                                     } else {
                                         copyFile(srcFile, destFile)
                                     }
-                                    operationProgress = (index + 1).toFloat() / clipboardFiles.size
+                                    operationProgress = (index + 1).toFloat() / filesToProcess.size
                                 }
-                                clipboardMode = ClipboardMode.NONE
-                                clipboardFiles = emptySet()
                                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                    clipboardMode = ClipboardMode.NONE
+                                    clipboardFiles = emptySet()
                                     refreshFiles()
                                     showOperationProgress = false
                                 }
@@ -1163,5 +1166,28 @@ private fun copyFile(src: File, dest: File) {
         }
     } else {
         src.copyTo(dest, overwrite = true)
+    }
+}
+
+/**
+ * 可靠的文件移动：先尝试 renameTo（同文件系统），失败则复制后删除（跨文件系统）。
+ */
+private fun moveFile(src: File, dest: File): Boolean {
+    return try {
+        // 同文件系统直接重命名
+        if (src.renameTo(dest)) {
+            return true
+        }
+        // 跨文件系统：复制后删除
+        if (src.isDirectory) {
+            copyFile(src, dest)
+            src.deleteRecursively()
+        } else {
+            src.copyTo(dest, overwrite = true)
+            src.delete()
+        }
+        true
+    } catch (e: Exception) {
+        false
     }
 }
