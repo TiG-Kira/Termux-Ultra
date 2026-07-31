@@ -17,6 +17,8 @@ import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.unit.dp
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.SmallTopAppBar
+import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import com.termux.R
 import com.termux.shared.shell.TermuxSession
@@ -42,7 +44,7 @@ fun TerminalDetailScreen(
                     Row(modifier = Modifier.padding(start = 16.dp)) {
                         IconButton(onClick = onBack) {
                             Icon(
-                                imageVector = ImageVector.vectorResource(R.drawable.ic_arrow_back),
+                                imageVector = MiuixIcons.Back,
                                 contentDescription = null,
                                 tint = MiuixTheme.colorScheme.onSurface,
                                 modifier = Modifier.size(24.dp)

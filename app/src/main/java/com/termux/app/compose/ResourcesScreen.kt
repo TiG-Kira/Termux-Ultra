@@ -32,6 +32,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -152,7 +153,7 @@ fun ResourcesScreen(onExecuteScript: (String, String) -> Unit, onTypeInSession: 
             needsContainerCheck = true
         ),
         ResourceItem(
-            title = "QEMU With VNC",
+            title = "QEMU with VNC",
             description = "在 Termux 中运行 QEMU 来运行虚拟机，并通过 VNC 功能远程访问桌面",
             url = "",
             scriptUrl = "qemu_on_vnc",
@@ -218,9 +219,9 @@ fun ResourcesScreen(onExecuteScript: (String, String) -> Unit, onTypeInSession: 
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
-            TopAppBar(title = context.getString(R.string.resources), scrollBehavior = scrollBehavior)
-        }
-    ) { padding ->
+            TopAppBar(title = stringResource(R.string.resources_center), scrollBehavior = scrollBehavior)
+        },
+        content = { padding ->
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
@@ -232,75 +233,123 @@ fun ResourcesScreen(onExecuteScript: (String, String) -> Unit, onTypeInSession: 
             item {
                 PersistentHintCard()
             }
-            
-            items(resources) { item ->
-                ResourceCard(
-                    item = item,
-                    isExpanded = expandedCard == item.title,
-                    hasRunningSessions = sessions.isNotEmpty(),
-                    sessions = sessions,
-                    onToggleExpand = {
-                        if (item.type == "qemu_on_vnc") {
-                            showQemuSheet = true
-                        } else {
-                            expandedCard = if (expandedCard == item.title) null else item.title
+
+            // 两大板块入口卡片
+            item {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            val intent = Intent(context, com.termux.app.activities.UtilityCenterActivity::class.java)
+                            context.startActivity(intent)
+                        },
+                    colors = CardDefaults.cardColors(containerColor = MiuixTheme.colorScheme.primaryContainer)
+                ) {
+                    Column(modifier = Modifier.padding(20.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier.size(56.dp).clip(RoundedCornerShape(14.dp))
+                                    .background(MiuixTheme.colorScheme.primary),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_server),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(28.dp),
+                                    tint = Color.White
+                                )
+                            }
+                            Column(
+                                modifier = Modifier.weight(1f).padding(start = 16.dp),
+                                verticalArrangement = Arrangement.Center
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.utility_center),
+                                    style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.Bold, color = MiuixTheme.colorScheme.onPrimaryContainer)
+                                )
+                                Text(
+                                    text = stringResource(R.string.utility_center_desc),
+                                    style = TextStyle(fontSize = 13.sp, color = MiuixTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f)),
+                                    modifier = Modifier.padding(top = 4.dp)
+                                )
+                            }
                         }
-                    },
-                    onExecuteInNewSession = { command ->
-                        onExecuteScript(item.title, command)
-                        expandedCard = null
-                        refreshSessions()
-                    },
-                    onExecuteInTmux = { command ->
-                        val tmuxName = item.title.replace(".", "_").replace(" ", "_")
-                        val tmuxCommand = "tmux new -s $tmuxName -d && tmux send-keys -t $tmuxName '$command' C-m && tmux attach -t $tmuxName"
-                        onExecuteScript(item.title, tmuxCommand)
-                        expandedCard = null
-                        refreshSessions()
-                    },
-                    onExecuteInRunningSession = { sessionId, command ->
-                        onTypeInSession(sessionId, command)
-                        expandedCard = null
-                        refreshSessions()
-                    },
-                    onShowTmuxHelp = { showTmuxHelpDialog = true }
-                )
+                        Text(
+                            text = stringResource(R.string.click_to_enter),
+                            style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Bold, color = MiuixTheme.colorScheme.onPrimaryContainer),
+                            modifier = Modifier.padding(top = 12.dp)
+                        )
+                    }
+                }
+            }
+
+            item {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            val intent = Intent(context, com.termux.app.activities.ThirdPartyCenterActivity::class.java)
+                            context.startActivity(intent)
+                        },
+                    colors = CardDefaults.cardColors(containerColor = MiuixTheme.colorScheme.surfaceVariant)
+                ) {
+                    Column(modifier = Modifier.padding(20.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier.size(56.dp).clip(RoundedCornerShape(14.dp))
+                                    .background(Color(0xFF7C4DFF)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_code),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(28.dp),
+                                    tint = Color.White
+                                )
+                            }
+                            Column(
+                                modifier = Modifier.weight(1f).padding(start = 16.dp),
+                                verticalArrangement = Arrangement.Center
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.third_party_center),
+                                    style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.Bold, color = MiuixTheme.colorScheme.onSurface)
+                                )
+                                Text(
+                                    text = stringResource(R.string.third_party_center_desc),
+                                    style = TextStyle(fontSize = 13.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary),
+                                    modifier = Modifier.padding(top = 4.dp)
+                                )
+                            }
+                        }
+                        Text(
+                            text = stringResource(R.string.click_to_enter),
+                            style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Bold, color = MiuixTheme.colorScheme.onSurface),
+                            modifier = Modifier.padding(top = 12.dp)
+                        )
+                    }
+                }
+            }
+
+            item {
+                androidx.compose.material3.Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFFFEBEE))
+                ) {
+                    Text(
+                        text = stringResource(R.string.resource_center_warning),
+                        style = TextStyle(fontSize = 12.sp, color = Color(0xFFC62828)),
+                        modifier = Modifier.padding(12.dp)
+                    )
+                }
             }
         }
     }
-
-    if (showTmuxHelpDialog) {
-        AlertDialog(
-            title = { Text("Tmux 使用办法") },
-            text = {
-                Column {
-                    Text("新建任务容器：tmux new -s my_task （my_task 可以改为您的任务名，比如「挂脚本」）")
-                    Text("容器挂到后台：按「Ctrl + B」，再按「D」，就能关掉窗口，后台继续运行脚本。")
-                    Text("回到任务容器：tmux attach -t my_task")
-                }
-            },
-            onDismissRequest = {
-                showTmuxHelpDialog = false
-            },
-            confirmButton = {
-                Button(onClick = {
-                    showTmuxHelpDialog = false
-                }) {
-                    Text(context.getString(R.string.ok))
-                }
-            }
-        )
-    }
-
-    QemuOnVncSheet(
-        show = showQemuSheet,
-        onDismiss = { showQemuSheet = false },
-        onExecuteScript = onExecuteScript
     )
 }
 
 @Composable
-private fun ResourceCard(
+fun ResourceCard(
     item: ResourceItem,
     isExpanded: Boolean,
     hasRunningSessions: Boolean,
@@ -371,7 +420,7 @@ private fun ResourceCard(
                 }
             }
 
-            if (item.url.isNotEmpty() || item.scriptUrl.isNotEmpty()) {
+            if (item.url.isNotEmpty() || item.scriptUrl.isNotEmpty() || item.type == "qemu_on_vnc" || item.hasHelp) {
                 Divider(color = dividerColor)
                 
                 Row(
@@ -566,7 +615,7 @@ private fun ResourceCard(
     }
 }
 
-private fun resolveCommand(item: ResourceItem, context: android.content.Context): String {
+fun resolveCommand(item: ResourceItem, context: android.content.Context): String {
     return when {
         item.isTmux -> item.scriptUrl
         item.type == "python_pkg" -> item.scriptUrl
@@ -717,12 +766,12 @@ private fun resolveCommand(item: ResourceItem, context: android.content.Context)
     }
 }
 
-private fun isTmuxInstalled(): Boolean {
+fun isTmuxInstalled(): Boolean {
     val tmuxPath = "/data/data/com.termux/files/usr/bin/tmux"
     return java.io.File(tmuxPath).exists()
 }
 
-private fun getRunningSessions(context: Context, termuxService: TermuxService?): List<TerminalSession> {
+fun getRunningSessions(context: Context, termuxService: TermuxService?): List<TerminalSession> {
     return if (termuxService != null) {
         try {
             val sessions = termuxService.getTermuxSessions()
@@ -758,7 +807,7 @@ fun PersistentHintCard() {
             ) {
                 Icon(
                     modifier = Modifier.size(120.dp).alpha(0.8f),
-                    imageVector = Icons.Rounded.Info,
+                    painter = painterResource(R.drawable.ic_info),
                     tint = iconColor,
                     contentDescription = null
                 )

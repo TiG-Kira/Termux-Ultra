@@ -34,6 +34,8 @@ import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TopAppBar
+import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -105,7 +107,7 @@ fun AboutScreen(onBack: () -> Unit) {
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
-                                painter = painterResource(R.drawable.ic_arrow_back),
+                                imageVector = MiuixIcons.Back,
                                 contentDescription = context.getString(R.string.back),
                                 tint = MiuixTheme.colorScheme.onSurface,
                                 modifier = Modifier.size(24.dp)

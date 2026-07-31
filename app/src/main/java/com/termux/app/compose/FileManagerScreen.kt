@@ -1,4 +1,4 @@
-﻿package com.termux.app.compose
+package com.termux.app.compose
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable

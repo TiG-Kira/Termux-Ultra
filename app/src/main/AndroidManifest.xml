@@ -74,6 +74,16 @@
             android:launchMode="singleTask" />
 
         <activity
+            android:name=".app.activities.UtilityCenterActivity"
+            android:label="@string/utility_center"
+            android:exported="false" />
+
+        <activity
+            android:name=".app.activities.ThirdPartyCenterActivity"
+            android:label="@string/third_party_center"
+            android:exported="false" />
+
+        <activity
             android:name=".app.TerminalDetailActivity"
             android:label="@string/application_name" />
 

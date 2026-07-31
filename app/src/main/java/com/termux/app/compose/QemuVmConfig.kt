@@ -28,7 +28,7 @@ data class QemuVmConfig(
     fun generateScript(): String {
         val sb = StringBuilder()
         sb.append("#!/data/data/com.termux/files/usr/bin/bash\n")
-        sb.append("echo \"=== QEMU on VNC: $name ===\"\n\n")
+        sb.append("echo \"=== QEMU with VNC: $name ===\"\n\n")
 
         // 1. 检查并安装 qemu-system-x86_64
         sb.append("# 检查并安装 qemu-system-x86_64\n")
@@ -78,7 +78,7 @@ data class QemuVmConfig(
             sb.append("echo \"硬盘已就绪: $diskPath\"\n\n")
         }
 
-        // 5. 构建 QEMU 启动命令
+        // 5. 构建并启动 QEMU 命令
         sb.append("# 启动 QEMU\n")
         sb.append("killall -9 qemu-system-x86_64 2>/dev/null\n")
         sb.append("sleep 1\n\n")
@@ -86,31 +86,38 @@ data class QemuVmConfig(
         val vncDisplay = vncPort - 5900
         val bootOrderStr = bootOrder.joinToString("")
 
-        sb.append("CMD=\"qemu-system-x86_64")
-        sb.append(" -M q35")
-        sb.append(" -cpu core2duo")
-        sb.append(" -accel tcg,thread=multi")
-        sb.append(" -smp $cpuCores,cores=$cpuCores,threads=1,sockets=1")
-        sb.append(" -m $memoryMB")
-        sb.append(" -net user -net nic,model=virtio")
+        // 将参数放入 bash 数组，避免 eval/引号嵌套造成的语法错误
+        sb.append("QEMU_ARGS=(\n")
+        sb.append("    -M q35\n")
+        sb.append("    -cpu core2duo\n")
+        sb.append("    -accel tcg,thread=multi\n")
+        sb.append("    -smp $cpuCores,cores=$cpuCores,threads=1,sockets=1\n")
+        sb.append("    -m $memoryMB\n")
+        sb.append("    -net user -net nic,model=virtio\n")
         if (hasSound) {
-            sb.append(" -audio sdl,model=hda")
+            sb.append("    -audio sdl,model=hda\n")
         }
-        sb.append(" -vga virtio")
-        sb.append(" -usb -device usb-tablet")
-        sb.append(" -vnc localhost:$vncDisplay")
-        sb.append(" -hda \\\"$diskPath\\\"")
+        sb.append("    -vga virtio\n")
+        sb.append("    -usb -device usb-tablet\n")
+        sb.append("    -vnc localhost:$vncDisplay\n")
+        sb.append("    -hda \"$diskPath\"\n")
         if (hasCdrom && isoPath != null) {
-            sb.append(" -cdrom \\\"$isoPath\\\"")
+            sb.append("    -cdrom \"$isoPath\"\n")
         }
-        sb.append(" -rtc base=localtime")
-        sb.append(" -boot order=$bootOrderStr")
-        sb.append("\"\n\n")
+        sb.append("    -rtc base=localtime\n")
+        sb.append("    -boot order=$bootOrderStr\n")
+        sb.append(")\n\n")
 
         sb.append("echo \"正在启动 QEMU 虚拟机...\"\n")
         sb.append("echo \"VNC 端口: $vncPort (display :$vncDisplay)\"\n")
         sb.append("echo \"请使用 VNC 客户端连接 localhost:$vncPort\"\n")
-        sb.append("eval \$CMD\n")
+        sb.append("qemu-system-x86_64 \"${'$'}{QEMU_ARGS[@]}\"\n\n")
+
+        sb.append("echo ''\n")
+        sb.append("echo '========================================'\n")
+        sb.append("echo 'QEMU 虚拟机已停止'\n")
+        sb.append("echo '脚本执行完成'\n")
+        sb.append("echo '========================================'\n")
 
         return sb.toString()
     }

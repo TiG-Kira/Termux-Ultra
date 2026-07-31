@@ -48,7 +48,7 @@ import kotlinx.coroutines.launch
 private enum class SheetMode { LIST, WIZARD, EDIT }
 
 /**
- * QEMU on VNC 主弹窗。
+ * QEMU with VNC 主弹窗。
  * 无已配置虚拟机时直接进入配置向导；有虚拟机时显示列表。
  */
 @Composable
@@ -67,20 +67,19 @@ fun QemuOnVncSheet(
         vms = QemuVmManager.loadVms(context)
     }
 
-    if (show) {
-        val title = when (sheetMode) {
-            SheetMode.LIST -> "QEMU With VNC"
-            SheetMode.WIZARD -> "配置 QEMU 虚拟机"
-            SheetMode.EDIT -> "编辑 QEMU 虚拟机"
-        }
+    val title = when (sheetMode) {
+        SheetMode.LIST -> "QEMU with VNC"
+        SheetMode.WIZARD -> "配置 QEMU 虚拟机"
+        SheetMode.EDIT -> "编辑 QEMU 虚拟机"
+    }
 
-        OverlayBottomSheet(
-            show = show,
-            onDismissRequest = {
-                onDismiss()
-            },
-            title = title,
-            content = {
+    OverlayBottomSheet(
+        show = show,
+        onDismissRequest = {
+            onDismiss()
+        },
+        title = title,
+        content = {
                 when (sheetMode) {
                     SheetMode.LIST -> VmListContent(
                         vms = vms,
@@ -135,38 +134,36 @@ fun QemuOnVncSheet(
                 }
             }
         )
-    }
 
     // 删除确认对话框
-    if (showDeleteConfirm != null) {
-        val vm = showDeleteConfirm!!
-        OverlayDialog(
-            show = true,
-            title = "删除虚拟机",
-            summary = "确定删除 \"${vm.name}\" 的配置吗？\n注意：磁盘和镜像文件不会被删除，如需彻底删除请手动清除。",
-            onDismissRequest = { showDeleteConfirm = null }
-        ) {
-            Row(horizontalArrangement = Arrangement.SpaceBetween) {
-                TextButton(
-                    text = "取消",
-                    onClick = { showDeleteConfirm = null },
-                    modifier = Modifier.weight(1f)
-                )
-                Spacer(Modifier.width(16.dp))
-                TextButton(
-                    text = "删除",
-                    onClick = {
+    OverlayDialog(
+        show = showDeleteConfirm != null,
+        title = "删除虚拟机",
+        summary = showDeleteConfirm?.let { "确定删除 \"${it.name}\" 的配置吗？\n注意：磁盘和镜像文件不会被删除，如需彻底删除请手动清除。" } ?: "",
+        onDismissRequest = { showDeleteConfirm = null }
+    ) {
+        Row(horizontalArrangement = Arrangement.SpaceBetween) {
+            TextButton(
+                text = "取消",
+                onClick = { showDeleteConfirm = null },
+                modifier = Modifier.weight(1f)
+            )
+            Spacer(Modifier.width(16.dp))
+            TextButton(
+                text = "删除",
+                onClick = {
+                    showDeleteConfirm?.let { vm ->
                         QemuVmManager.deleteVm(context, vm.id)
                         refreshVms()
                         showDeleteConfirm = null
                         if (vms.isEmpty()) {
                             sheetMode = SheetMode.WIZARD
                         }
-                    },
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.textButtonColorsPrimary()
-                )
-            }
+                    }
+                },
+                modifier = Modifier.weight(1f),
+                colors = ButtonDefaults.textButtonColorsPrimary()
+            )
         }
     }
 }

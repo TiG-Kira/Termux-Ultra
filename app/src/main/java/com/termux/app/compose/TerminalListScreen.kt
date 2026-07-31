@@ -294,6 +294,7 @@ fun TerminalListScreen(
                         stringResource(R.string.refreshing),
                         stringResource(R.string.refresh_successful)
                     ),
+                    contentPadding = PaddingValues(top = 12.dp),
                     modifier = Modifier.fillMaxSize()
                 ) {
                 LazyVerticalGrid(

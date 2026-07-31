@@ -25,6 +25,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.termux.R
+import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.Back
 
 object TerminalTopBarState {
     var title by mutableStateOf("")
@@ -50,7 +52,7 @@ fun TerminalTopBar(
     ) {
         IconButton(onClick = onBack) {
             Icon(
-                painter = painterResource(R.drawable.ic_arrow_back),
+                imageVector = MiuixIcons.Back,
                 contentDescription = null,
                 modifier = Modifier.size(24.dp),
                 tint = TerminalTopBarState.iconColor

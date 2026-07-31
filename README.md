@@ -1,3 +1,254 @@
+# Termux Ultra
+
+[![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](./LICENSE)
+[![Platform: Android](https://img.shields.io/badge/Platform-Android%207.0%2B-green.svg)]()
+[![Based on Termux](https://img.shields.io/badge/Based%20on-Termux%20v0.118.x-orange.svg)](https://github.com/termux/termux-app)
+
+[![Build status](https://github.com/TiG-Kira/Termux-Ultra/workflows/Build/badge.svg)](https://github.com/TiG-Kira/Termux-Ultra/actions)
+
+**Termux Ultra** 是一款基于 [Termux](https://github.com/termux/termux-app) 二次开发的 Android 终端模拟器与 Linux 环境应用。它在保留 Termux 原生终端能力的基础上，集成了 VNC 远程桌面、SSH 连接管理、文件管理器、一键资源部署等增强功能，并采用 Jetpack Compose + Miuix 设计语言打造了现代化的全新 UI。
+
+> 本仓库为应用本体（用户界面、终端模拟及扩展功能）。应用内可安装的软件包请参见 [termux/termux-packages](https://github.com/termux/termux-packages)。
+
+***
+
+## 目录
+
+- [功能特性](#功能特性)
+- [应用与插件](#应用与插件)
+- [系统要求](#系统要求)
+- [安装](#安装)
+- [卸载](#卸载)
+- [项目结构](#项目结构)
+- [构建](#构建)
+- [技术栈](#技术栈)
+- [调试](#调试)
+- [维护者与贡献者](#维护者与贡献者)
+- [致谢](#致谢)
+- [开源许可](#开源许可)
+
+## 功能特性
+
+### 终端
+- 多会话管理：新建、重命名、关闭、切换会话
+- 搜索框实时过滤（输入标题搜索，无结果显示“未找到”）
+- 服务状态检测：持续监控终端运行状态，支持 Wake Lock 保活
+- 内存监控与保护：内存超限时冻结会话，防止数据丢失
+- 会话保活提示：Android 12+ 配合 tmux 实现后台持久化
+
+### 文件管理
+- 完整的文件 / 文件夹操作：新建、复制、剪切、粘贴、删除、重命名
+- 多种打开方式：查看内容（cat）、编辑（vi）、执行（bash）、复制路径
+- 深色模式适配的文件详情面板
+- 拉取刷新
+
+### 远程管理
+- **VNC 远程桌面**：基于 AVNC + libvncserver，支持手势缩放、多种输入模式、特殊按键、色彩格式配置
+- **SSH 连接管理**：基于 connectbot sshlib，可保存、编辑、删除多个连接配置
+- 统一的搜索 UI 与卡片式管理
+
+### 资源页（一键部署）
+内置常用环境与服务的一键安装脚本：
+- Termux 环境初始化
+- Minecraft 基岩版服务器
+- Linux 服务器（LAMP）
+- Web 服务器（Nginx）
+- Node.js 与 npm
+- Python 环境（Poetry）
+- tmux（保持容器与项目存活）
+
+### 仪表盘与设置
+- 网络信息卡片：实时刷新公网 IP 与所属国家
+- 设备信息：机型、Android 版本、内核版本
+- 备份 / 恢复 Termux 数据
+- 多语言支持（中文 / 英文，100% 中文覆盖）
+- 深色 / 浅色模式自适应
+- Miuix 风格设置页（ArrowPreference 套件）
+
+### 交互与动画
+- 首页横滑手势切换页面（终端 → 文件 → 远程 → 资源）
+- 页面切换叠加动画与左右切换动画，支持预测式返回
+- 卡片圆角与点击反馈裁剪统一
+- 底部导航避让与边距修正，防止误触
+
+## 应用与插件
+
+Termux Ultra 核心应用兼容以下可选的 Termux 插件应用（需使用相同签名来源安装）：
+
+- [Termux:API](https://github.com/termux/termux-api)
+- [Termux:Boot](https://github.com/termux/termux-boot)
+- [Termux:Float](https://github.com/termux/termux-float)
+- [Termux:Styling](https://github.com/termux/termux-styling)
+- [Termux:Tasker](https://github.com/termux/termux-tasker)
+- [Termux:Widget](https://github.com/termux/termux-widget)
+
+## 系统要求
+
+- Android `>= 7.0`（API 24）
+- targetSdk `28`，compileSdk `37`
+- 支持架构：`arm64-v8a`、`armeabi-v7a`、`x86`、`x86_64`
+
+## 安装
+
+Termux Ultra 与原版 Termux 及其所有插件共享 `sharedUserId`（`com.termux`），因此设备上安装的本应用与所有插件 APK **必须使用同一签名来源**，否则将无法协同工作，安装时也会出现 `INSTALL_FAILED_SHARED_USER_INCOMPATIBLE`、`signatures do not match` 等错误。
+
+- 请勿混用来源（例如 F-Droid 装一个、GitHub 装另一个）。
+- 如需更换来源，请先**卸载所有已安装的 Termux 及其插件 APK**，再从同一新来源全部安装。卸载前建议参考 [Backing up Termux](https://wiki.termux.com/wiki/Backing_up_Termux) 备份数据。
+
+> “bootstrap” 指 `termux-app` 自带的用于启动最小 shell 环境的最小包集合，其 zip 由 [termux/termux-packages releases](https://github.com/termux/termux-packages/releases) 构建发布。
+
+### APK 来源
+
+| 来源 | 说明 |
+| --- | --- |
+| GitHub Releases | 稳定版本，发布页 `Assets` 下提供各架构 APK |
+| GitHub Build | 每次 commit 自动构建，适合尝鲜与测试 PR，需登录 GitHub 账号下载 Artifacts |
+
+- Debug 版本仅输出 universal APK（`termux-ultra_debug_universal.apk`），安装包 + bootstrap 约 `~180MB`。
+- Release 版本输出各架构独立 APK，使用架构包约 `~120MB`。
+- GitHub 来源的 APK 均为 `debuggable`，彼此兼容，但与其他来源不兼容。
+
+### 关于 Google Play 商店（已弃用）
+
+原版 Termux 及其插件因 [Android 10 问题](https://github.com/termux/termux-packages/wiki/Termux-and-Android-10) 已在 Play Store 停止更新，最后版本为 `v0.101`。**强烈建议不再从 Play Store 安装 Termux 系应用**，请迁移至 GitHub 或 F-Droid 来源。
+
+## 卸载
+
+如需彻底卸载，必须卸载设备上**所有** Termux 或其插件 APK（参见 [应用与插件](#应用与插件)）。
+
+进入 `Android 设置` → `应用`，搜索 `termux`，逐个卸载。即便未安装过插件，也建议在应用列表中再次确认。
+
+## 项目结构
+
+```
+Termux-Ultra/
+├── app/                        # 主应用模块
+│   ├── src/main/
+│   │   ├── assets/             # 容器脚本（container_run.sh、qemu、seed.iso 等）
+│   │   ├── cpp/                # CMake 原生构建（termux-bootstrap）
+│   │   ├── cpp_avnc/           # AVNC 原生 VNC 客户端
+│   │   ├── java/com/termux/    # 应用 Kotlin/Java 源码
+│   │   ├── jniLibs/            # 预编译 .so 库
+│   │   └── res/                # 资源（布局、drawable、strings、xml 偏好）
+│   ├── extern/                 # 第三方原生库源码
+│   │   ├── libjpeg-turbo/      # JPEG 编解码
+│   │   ├── libvncserver/       # VNC 服务端库
+│   │   └── wolfssl/            # TLS/SSL 库
+│   └── CMakeLists.txt          # 原生构建配置
+├── terminal-emulator/          # 终端模拟器模块
+├── terminal-view/              # 终端视图模块
+├── termux-shared/              # 共享常量与工具库
+├── art/                        # 图标与宣传图脚本
+├── build.gradle
+├── settings.gradle
+└── gradle.properties
+```
+
+## 构建
+
+### 环境要求
+
+- JDK 8
+- Android SDK，compileSdk 37
+- NDK `22.1.7171670`
+- CMake `3.22.1`
+
+### 构建命令
+
+为避免路径中的空格导致 NDK 编译问题，请通过无空格的硬链接路径访问项目（如 `D:\KiTerminal-UX`）。
+
+```bash
+# Debug 版本（仅输出 universal APK）
+./gradlew assembleDebug
+
+# Release 版本（输出各架构 APK）
+./gradlew assembleRelease
+```
+
+构建产物：
+- Debug：`app/build/outputs/apk/debug/termux-ultra_debug_universal.apk`
+- Release：`app/build/outputs/apk/release/` 下各架构 APK
+
+> 构建时不要使用 `-q` 参数，以便观察构建进度。
+
+### 签名
+
+项目内置 `ki-terminal-release.jks` 签名配置（alias: `ki-terminal`），Debug 与 Release 均使用该签名。
+
+## 技术栈
+
+| 类别 | 技术 |
+| --- | --- |
+| 语言 | Kotlin、Java、C/C++ |
+| UI | Jetpack Compose、Material 3、Miuix KMP（ui / icons / preference） |
+| 架构组件 | AndroidX、Lifecycle、ViewModel、Navigation、Room、DataBinding |
+| 终端 | terminal-emulator、terminal-view |
+| VNC | AVNC、libvncserver、libjpeg-turbo、wolfssl |
+| SSH | connectbot sshlib |
+| 序列化 | Gson、kotlinx-serialization |
+| 构建 | Gradle、CMake、NDK |
+| 包名 | `com.termux`（sharedUserId） |
+
+## 调试
+
+可在应用 `设置` → `调试` 中配置 `logcat` 日志级别（需应用版本 `>= 0.118.0`）。日志级别默认为 `Normal`，`Verbose` 会记录额外信息。调试完成后请恢复 `Normal`，避免敏感数据写入 logcat 并降低性能。
+
+查看日志：
+
+```bash
+# 终端内实时查看（Ctrl+c 停止）
+logcat
+
+# 导出日志快照
+logcat -d > logcat.txt
+```
+
+也可通过长按终端菜单 `More` → `Report Issue` 自动生成 stat 信息与 logcat 快照，便于反馈问题。反馈时请附上完整报告（可去除敏感信息），仅截图的报告通常会被关闭。
+
+### 日志级别
+
+- `Off` — 不记录
+- `Normal` — 记录 error / warn / info 及堆栈
+- `Debug` — 记录 debug 信息
+- `Verbose` — 记录 verbose 信息
+
+## 维护者与贡献者
+
+Termux Ultra 由 **Kira**（[@TiG-Kira](https://github.com/TiG-Kira)）开发维护，基于 Termux 原作者 @termux 的工作。
+
+`termux-shared` 库定义了应用与插件共享的常量与工具类，主常量位于 [`TermuxConstants`](termux-shared/src/main/java/com/termux/shared/termux/TermuxConstants.java)。提交代码时请遵循：
+
+- 共享常量与工具请定义在 `termux-shared` 中，**禁止硬编码路径**，否则 PR 不予接受。
+- 提交信息遵循 [Conventional Commits](https://www.conventionalcommits.org) 规范（如 `Added: 新增功能`、`Fixed: 修复问题`、`Changed!: 破坏性变更`），冒号后需有空格。
+- `versionName` 遵循 [语义化版本 2.0.0](https://semver.org/spec/v2.0.0.html)，格式 `major.minor.patch(-prerelease)(+buildmetadata)`，如 `v0.1.0`。
+
+### Fork 注意事项
+
+- 修改包名需重新编译对应 `$PREFIX` 的 bootstrap zip，参见 [Building Packages](https://github.com/termux/termux-packages/wiki/Building-packages)。
+- 部分插件尚未完全迁移到 `termux-shared` 的 `TermuxConstants`，仍存在硬编码 `com.termux`，需手动 patch。
+
+## 致谢
+
+- [Termux](https://github.com/termux/termux-app) — 终端模拟器与 Linux 环境基础
+- [AVNC](https://github.com/gujjwal00/avnc) — Android VNC 客户端
+- [libvncserver](https://github.com/LibVNC/libvncserver) — VNC 库
+- [wolfSSL](https://github.com/wolfSSL/wolfssl) — 嵌入式 TLS 库
+- [libjpeg-turbo](https://github.com/libjpeg-turbo/libjpeg-turbo) — JPEG 编解码
+- [connectbot sshlib](https://github.com/connectbot/sshlib) — SSH 库
+- [Miuix KMP](https://github.com/miuix-kotlin-multiplatform/miuix) — UI 设计组件
+
+## 开源许可
+
+本项目基于 [GNU Affero General Public License v3.0](./LICENSE) 开源。使用、修改与分发须遵守该协议条款，并保留原作者署名。
+
+Termux 原项目版权归其原作者所有，本项目仅在其基础上进行二次开发。第三方原生库（libvncserver、wolfssl、libjpeg-turbo 等）请遵循各自许可证。
+
+***
+
+# 附录：原 Termux README
+
+> 以下为上游项目 [termux/termux-app](https://github.com/termux/termux-app) 的原始 README 内容，保留以供参考。
+
 # Termux application
 
 [![Build status](https://github.com/termux/termux-app/workflows/Build/badge.svg)](https://github.com/termux/termux-app/actions)

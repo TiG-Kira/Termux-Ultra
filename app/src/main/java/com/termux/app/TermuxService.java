@@ -22,6 +22,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.IBinder;
+import android.os.Looper;
 import android.os.Process;
 import android.os.PowerManager;
 import android.os.SystemClock;
@@ -289,6 +290,19 @@ public final class TermuxService extends Service implements TermuxTask.TermuxTas
         mWantsToStop = false;
         killAllTermuxExecutionCommands();
         updateNotification();
+
+        // 结束反馈：toast 通知用户已结束所有会话
+        int remainingSessions = getTermuxSessionsSize();
+        int remainingTasks = mTermuxTasks.size();
+        final String toastMsg;
+        if (remainingSessions == 0 && remainingTasks == 0) {
+            toastMsg = "已结束所有会话";
+        } else {
+            toastMsg = "已结束所有会话";
+        }
+        new Handler(Looper.getMainLooper()).post(() ->
+            android.widget.Toast.makeText(TermuxService.this, toastMsg, android.widget.Toast.LENGTH_SHORT).show()
+        );
     }
 
     /** Kill all TermuxSessions and TermuxTasks by sending SIGKILL to their processes.

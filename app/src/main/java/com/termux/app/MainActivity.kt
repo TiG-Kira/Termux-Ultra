@@ -130,10 +130,9 @@ class MainActivity : ComponentActivity() {
                         },
                         onExecuteScript = { scriptName, command ->
                             val sessionName = scriptName
-                            val wrappedCommand = command + "; echo ''; echo '脚本执行完成，按回车键退出...'; read"
                             val newSession = termuxService?.createTermuxSession(
                                 null,
-                                arrayOf("-c", wrappedCommand),
+                                arrayOf("-c", command),
                                 null,
                                 null,
                                 false,
@@ -193,6 +192,13 @@ class MainActivity : ComponentActivity() {
         val prefs = getSharedPreferences("app_settings", Context.MODE_PRIVATE)
         val currentShowVnc = prefs.getBoolean("vnc_enabled", false)
         appViewModel.updateShowVnc(currentShowVnc)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        // 防止外部/系统重新派发的 ACTION_SERVICE_EXECUTE 等 intent 被错误地当成新会话请求
+        setIntent(intent)
+        updateSessions()
     }
 
     override fun onDestroy() {
