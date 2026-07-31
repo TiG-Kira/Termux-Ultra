@@ -704,7 +704,7 @@ private fun ThirdPartyResourceCard(
                         contentColor = onSurfaceColor
                     )
 
-                    // Info button
+                    // Info button (icon on top, text below, centered)
                     if (item.url.isNotBlank()) {
                         Button(
                             onClick = {
@@ -714,83 +714,103 @@ private fun ThirdPartyResourceCard(
                             modifier = Modifier.padding(end = 8.dp),
                             colors = grayButtonColors
                         ) {
-                            Icon(
-                                painter = painterResource(R.drawable.ic_info),
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp),
-                                tint = onSurfaceColor
-                            )
-                            Spacer(Modifier.width(4.dp))
-                            Text(
-                                text = stringResource(R.string.view_reference),
-                                color = onSurfaceColor,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold
-                            )
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_info),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp),
+                                    tint = onSurfaceColor
+                                )
+                                Spacer(Modifier.height(2.dp))
+                                Text(
+                                    text = stringResource(R.string.view_reference),
+                                    color = onSurfaceColor,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                )
+                            }
                         }
                     }
 
-                    // Edit button
+                    // Edit button (icon on top, text below, centered)
                     Button(
                         onClick = onEdit,
                         modifier = Modifier.padding(end = 8.dp),
                         colors = grayButtonColors
                     ) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_edit),
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp),
-                            tint = onSurfaceColor
-                        )
-                        Spacer(Modifier.width(4.dp))
-                        Text(
-                            text = stringResource(R.string.edit),
-                            color = onSurfaceColor,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold
-                        )
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_edit),
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp),
+                                tint = onSurfaceColor
+                            )
+                            Spacer(Modifier.height(2.dp))
+                            Text(
+                                text = stringResource(R.string.edit),
+                                color = onSurfaceColor,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                            )
+                        }
                     }
 
-                    // Delete button
+                    // Delete button (icon on top, text below, centered)
                     Button(
                         onClick = onDelete,
                         modifier = Modifier.padding(end = 8.dp),
                         colors = grayButtonColors
                     ) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_delete),
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp),
-                            tint = onSurfaceColor
-                        )
-                        Spacer(Modifier.width(4.dp))
-                        Text(
-                            text = stringResource(R.string.delete),
-                            color = onSurfaceColor,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold
-                        )
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_delete),
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp),
+                                tint = onSurfaceColor
+                            )
+                            Spacer(Modifier.height(2.dp))
+                            Text(
+                                text = stringResource(R.string.delete),
+                                color = onSurfaceColor,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                            )
+                        }
                     }
 
-                    // Execute/Copy button
+                    // Execute/Copy button (icon on top, text below, centered)
                     if (item.copyToClipboard) {
                         Button(
                             onClick = onExecute,
                             colors = ButtonDefaults.buttonColorsPrimary()
                         ) {
-                            Icon(
-                                painter = painterResource(R.drawable.ic_copy),
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp),
-                                tint = Color.White
-                            )
-                            Spacer(Modifier.width(4.dp))
-                            Text(
-                                text = stringResource(R.string.copy_resource),
-                                color = Color.White,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold
-                            )
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_copy),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp),
+                                    tint = Color.White
+                                )
+                                Spacer(Modifier.height(2.dp))
+                                Text(
+                                    text = stringResource(R.string.copy_resource),
+                                    color = Color.White,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                )
+                            }
                         }
                     } else {
                         val buttonText = if (isExpanded) stringResource(R.string.collapse) else stringResource(R.string.execute)
@@ -798,19 +818,24 @@ private fun ThirdPartyResourceCard(
                             onClick = onToggleExpand,
                             colors = ButtonDefaults.buttonColorsPrimary()
                         ) {
-                            Icon(
-                                painter = painterResource(if (isExpanded) R.drawable.ic_collapse else R.drawable.ic_play),
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp),
-                                tint = Color.White
-                            )
-                            Spacer(Modifier.width(4.dp))
-                            Text(
-                                text = buttonText,
-                                color = Color.White,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold
-                            )
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Icon(
+                                    painter = painterResource(if (isExpanded) R.drawable.ic_collapse else R.drawable.ic_play),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp),
+                                    tint = Color.White
+                                )
+                                Spacer(Modifier.height(2.dp))
+                                Text(
+                                    text = buttonText,
+                                    color = Color.White,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                )
+                            }
                         }
                     }
                 }

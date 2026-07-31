@@ -2,6 +2,7 @@ package com.termux.app.vnc
 
 import android.content.Context
 import android.content.Intent
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -9,10 +10,13 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -82,12 +86,10 @@ fun VncScreen(
     ) {
         if (connections.isEmpty()) {
             item {
-                Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text("没有项目")
-                    }
+                EmptyConnectionsState(
+                    iconRes = R.drawable.ic_vnc,
+                    message = "没有 VNC 连接"
+                )
             }
         } else {
             items(connections) { conn ->
@@ -139,46 +141,111 @@ fun VncConnectionCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
             .clickable { onConnect() }
     ) {
         Row(
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(MiuixTheme.colorScheme.primary.copy(alpha = 0.12f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_vnc),
+                    contentDescription = null,
+                    modifier = Modifier.size(24.dp),
+                    tint = MiuixTheme.colorScheme.primary
+                )
+            }
+
+            Spacer(Modifier.width(14.dp))
+
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = connection.name,
-                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MiuixTheme.colorScheme.onSurface,
+                    lineHeight = 22.sp
                 )
+                Spacer(Modifier.height(2.dp))
                 Text(
                     text = "${connection.host}:${connection.port}",
-                    fontSize = 12.sp
+                    fontSize = 13.sp,
+                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                    lineHeight = 18.sp
                 )
                 if (connection.isFromTermux) {
+                    Spacer(Modifier.height(4.dp))
                     Text(
-                        text = "来自Termux",
-                        fontSize = 10.sp,
+                        text = "来自 Termux",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium,
                         color = MiuixTheme.colorScheme.primary
                     )
                 }
             }
+
             if (!connection.isFromTermux) {
                 Row {
                     IconButton(onClick = { onEdit() }) {
                         Icon(
                             painter = painterResource(R.drawable.ic_edit),
-                            contentDescription = "编辑"
+                            contentDescription = "编辑",
+                            tint = MiuixTheme.colorScheme.onSurface
                         )
                     }
                     IconButton(onClick = { onDelete() }) {
                         Icon(
                             painter = painterResource(R.drawable.ic_delete),
-                            contentDescription = "删除"
+                            contentDescription = "删除",
+                            tint = MiuixTheme.colorScheme.onSurface
                         )
                     }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun EmptyConnectionsState(iconRes: Int, message: String) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 120.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Box(
+            modifier = Modifier
+                .size(72.dp)
+                .clip(RoundedCornerShape(24.dp))
+                .background(MiuixTheme.colorScheme.surfaceVariant),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                painter = painterResource(iconRes),
+                contentDescription = null,
+                modifier = Modifier.size(36.dp).alpha(0.6f),
+                tint = MiuixTheme.colorScheme.onSurfaceVariantSummary
+            )
+        }
+        Spacer(Modifier.height(16.dp))
+        Text(
+            text = message,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Medium,
+            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+            lineHeight = 22.sp
+        )
     }
 }
 

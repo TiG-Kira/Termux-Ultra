@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Launcher Icons -->
+    <string name="action_enable_launcher_icon">启用启动器图标</string>
+    <string name="action_disable_launcher_icon">禁用启动器图标</string>
+    <string name="msg_enabling_launcher_icon">正在启用 %1$s 应用启动器图标"</string>
+    <string name="msg_disabling_launcher_icon">正在禁用 %1$s 应用启动器图标"</string>
+    <string name="setting_launcher_icon_title">已启用启动器图标</string>
+    <string name="setting_launcher_icon_enabled_off">将禁用启动器图标。</string>
+    <string name="setting_launcher_icon_enabled_on">将启用启动器图标。（默认）</string>
+</resources>

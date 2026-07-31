@@ -1,0 +1,32 @@
+{
+  "data": [
+    {
+      "id": "page-resources-center",
+      "title": "资源中心",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1754092800000,
+      "canvasData": {
+        "x": 0,
+        "y": 0,
+        "group": 0,
+        "layoutSnapshot": {
+          "version": 1,
+          "contentHeight": 900,
+          "viewportWidth": 375,
+          "sourceHash": "fnv1a-3bac8702",
+          "measuredAt": 1785525090110
+        }
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/index.html",
+        "interactions": []
+      }
+    }
+  ],
+  "config": {
+    "autoLayout": true,
+    "deviceType": "mobile",
+    "projectName": "Termux Ultra 资源中心重设计"
+  }
+}

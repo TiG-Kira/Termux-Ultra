@@ -420,7 +420,14 @@
     <string name="utility_center_desc">Officially maintained tools: QEMU with VNC, Debian QEMU, Ubuntu container, tmux, QEMU installation, etc.</string>
     <string name="third_party_center_desc">Script resources maintained by third-party developers. You can add, delete, and modify them. Assess risks before use.</string>
     <string name="click_to_enter">Tap to enter</string>
-    <string name="resource_center_warning">⚠️ Utility Center features are maintained by Termux Ultra officially; Third-Party Center scripts are maintained by third-party developers. Please assess security risks before use.</string>
+    <string name="resource_center_warning">Utility Center features are maintained by Termux Ultra officially; Third-Party Center scripts are maintained by third-party developers. Please assess security risks before use.</string>
+    <string name="resource_quick_entry">Quick Entry</string>
+    <string name="resource_tips">Tips</string>
+    <string name="resource_center_welcome_subtitle">Explore Termux Ultra Resource Center</string>
+    <string name="resource_center_welcome_desc">Official tools and third-party scripts. Choose as needed and use safely.</string>
+    <string name="enter">Enter</string>
+    <string name="official_maintained_short">Official</string>
+    <string name="third_party_maintained_short">Community</string>
     <string name="official_maintained">Officially maintained utilities</string>
     <string name="official_maintained_desc">The following tools are maintained by the Termux Ultra team, ensuring availability and compatibility.</string>
     <string name="third_party_maintained">Maintained by third-party developers</string>
@@ -459,4 +466,58 @@
     <string name="execute_in_tmux">Execute in tmux</string>
     <string name="execute_in_running_session">Execute in running session:</string>
     <string name="copy_to_session">Copy to \"%1$s\"</string>
+
+    <!-- Backup & Restore progress (uses termux-backup / termux-restore) -->
+    <string name="backup_notification_channel_name">Backup progress</string>
+    <string name="backup_notification_channel_desc">Shows backup and restore progress</string>
+    <string name="backup_in_progress">Backing up</string>
+    <string name="restore_in_progress">Restoring</string>
+    <string name="backup_complete">Backup complete</string>
+    <string name="backup_cancelled">Backup cancelled</string>
+    <string name="restore_complete">Restore complete</string>
+    <string name="restore_failed_error">An error occurred during restore</string>
+    <string name="cancel_action">Cancel</string>
+    <string name="initializing">Initializing…</string>
+    <string name="backed_up_size">Backed up: %1$d MB</string>
+    <string name="restored_size">Restored: %1$d MB</string>
+    <string name="backup_view_progress_toast">Backing up, check the notification bar for progress</string>
+    <string name="restore_view_progress_toast">Restoring, check the notification bar for progress</string>
+    <string name="restore_restart_hint">Restore finished. Please restart the app.</string>
+
+    <!-- Integrated Termux tools -->
+    <string name="integrated_tools_category">Integrated Tools</string>
+    <string name="integrated_tools_summary">Enable built-in Termux add-on tools so you don\'t need to install separate apps</string>
+    <string name="termux_api_tool">Termux:API</string>
+    <string name="termux_api_tool_summary">Access Android device features (battery, camera, sensors, notifications, etc.) from the terminal</string>
+    <string name="termux_boot_tool">Termux:Boot</string>
+    <string name="termux_boot_tool_summary">Run scripts automatically on device boot</string>
+    <string name="termux_styling_tool">Termux:Styling</string>
+    <string name="termux_styling_tool_summary">Customize terminal color schemes and fonts</string>
+    <string name="termux_tasker_tool">Termux:Tasker</string>
+    <string name="termux_tasker_tool_summary">Run Termux commands from Tasker</string>
+    <string name="termux_widget_tool">Termux:Widget</string>
+    <string name="termux_widget_tool_summary">Add shortcut widgets to run scripts from the home screen</string>
+
+    <!-- Tool configuration entries (shown when the corresponding tool is enabled) -->
+    <string name="tool_config_category">Tool Configuration</string>
+    <string name="termux_styling_config">Colors &amp; Fonts</string>
+    <string name="termux_styling_config_summary">Choose terminal color scheme and font</string>
+    <string name="termux_tasker_config">Tasker Plugin</string>
+    <string name="termux_tasker_config_summary">Edit Tasker command configurations</string>
+    <string name="termux_widget_config">Shortcuts &amp; Widgets</string>
+    <string name="termux_widget_config_summary">Manage home screen shortcuts and widgets</string>
+    <string name="termux_api_help">API Usage Guide</string>
+    <string name="termux_api_help_summary">View common Termux:API commands</string>
+    <string name="termux_boot_help">Boot Startup Guide</string>
+    <string name="termux_boot_help_summary">Learn how to add boot scripts</string>
+    <string name="termux_api_help_content">Termux:API provides commands to access Android features from the terminal. Common commands:\n\n• termux-battery-status — battery info\n• termux-camera-photo — take a photo\n• termux-clipboard-get / termux-clipboard-set — clipboard\n• termux-notification — post a notification\n• termux-toast — show a toast\n• termux-vibrate — vibrate device\n• termux-location — get GPS location\n• termux-sms-list / termux-sms-send — SMS\n• termux-tts-speak — text to speech\n• termux-wifi-connectioninfo — WiFi info\n\nInstall the termux-api package first:\npkg install termux-api</string>
+    <string name="termux_boot_help_content">Termux:Boot runs scripts automatically when the device starts.\n\nTo add a boot script:\n\n1. Create the directory:\n   mkdir -p ~/.termux/boot\n2. Place executable scripts in ~/.termux/boot/\n3. Scripts run in sorted order on boot.\n\nExample (~/.termux/boot/start-ssh):\n   #!/data/data/com.termux/files/usr/bin/sh\n   termux-wake-lock\n   sshd</string>
+    <string name="feature_not_enabled_title">Feature not enabled</string>
+    <string name="feature_not_enabled_message">\"%1$s\" is not enabled. Go to Settings to enable it?</string>
+    <string name="go_to_settings">Go to Settings</string>
+
+    <!-- Official standalone APK conflict detection -->
+    <string name="standalone_plugin_installed_title">Official plugin installed</string>
+    <string name="standalone_plugin_installed_message">The official standalone \"%1$s\" plugin (package %2$s) is already installed on this device. It is not recommended to install the standalone plugin separately; please use the one built into this app instead.</string>
+    <string name="standalone_plugin_installed_summary">Replaced by the official standalone plugin</string>
 </resources>

@@ -1,33 +1,27 @@
 package com.termux.app.compose
 
-import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.content.ServiceConnection
-import android.os.IBinder
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.AlertDialog
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowForward
 import androidx.compose.material3.Button
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Divider
 import androidx.compose.material3.Text
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Info
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
@@ -37,13 +31,12 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import top.yukonga.miuix.kmp.basic.Scaffold
-import top.yukonga.miuix.kmp.basic.TopAppBar
-import top.yukonga.miuix.kmp.basic.IconButton
-import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
-import top.yukonga.miuix.kmp.basic.Switch
+import top.yukonga.miuix.kmp.basic.Card as MiuixCard
 import top.yukonga.miuix.kmp.basic.Icon
-import androidx.compose.material3.Card
+import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
+import top.yukonga.miuix.kmp.basic.Scaffold
+import top.yukonga.miuix.kmp.basic.SmallTitle
+import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import com.termux.R
 import com.termux.app.TermuxService
@@ -66,155 +59,9 @@ data class ResourceItem(
 data class TerminalSession(val id: String, val name: String)
 
 @Composable
-fun ResourcesScreen(onExecuteScript: (String, String) -> Unit, onTypeInSession: (String, String) -> Unit) {
+fun ResourcesScreen() {
     val context = LocalContext.current
     val scrollBehavior = MiuixScrollBehavior()
-    var expandedCard by remember { mutableStateOf<String?>(null) }
-    var showTmuxHelpDialog by remember { mutableStateOf(false) }
-    var showQemuSheet by remember { mutableStateOf(false) }
-    var sessions by remember { mutableStateOf<List<TerminalSession>>(emptyList()) }
-    var termuxService by remember { mutableStateOf<TermuxService?>(null) }
-
-    fun refreshSessions() {
-        sessions = getRunningSessions(context, termuxService)
-    }
-
-    val serviceConnection = remember {
-        object : ServiceConnection {
-            override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
-                val binder = service as TermuxService.LocalBinder
-                termuxService = binder.service
-                refreshSessions()
-            }
-
-            override fun onServiceDisconnected(name: ComponentName?) {
-                termuxService = null
-            }
-        }
-    }
-
-    DisposableEffect(Unit) {
-        val intent = Intent(context, TermuxService::class.java)
-        context.bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE)
-        refreshSessions()
-        onDispose {
-            context.unbindService(serviceConnection)
-        }
-    }
-
-    LaunchedEffect(termuxService) {
-        while (true) {
-            kotlinx.coroutines.delay(3000)
-            refreshSessions()
-        }
-    }
-
-    val resources = listOf(
-        ResourceItem(
-            title = context.getString(R.string.tmux_resource_title),
-            description = context.getString(R.string.tmux_resource_description),
-            url = "tmux_help",
-            scriptUrl = "pkg install tmux -y",
-            iconRes = R.drawable.ic_terminal,
-            isTmux = true,
-            hasHelp = true
-        ),
-        ResourceItem(
-            title = "MOE 全能",
-            description = "TMOE Linux 管理器，一键配置 chroot/PRoot 容器、安装各种 Linux 发行版",
-            url = "https://github.trss.me/Install/TMOE.html",
-            scriptUrl = "https://gitee.com/mo2/linux/raw/2/2.awk",
-            iconRes = R.drawable.ic_terminal
-        ),
-        ResourceItem(
-            title = "Ubuntu 容器安装",
-            description = "安装 Ubuntu Linux 容器（PRoot），为 QEMU 和其他服务提供运行环境",
-            url = "",
-            scriptUrl = "install_debian_container",
-            iconRes = R.drawable.ic_ubuntu,
-            type = "install_debian_container"
-        ),
-        ResourceItem(
-            title = "QEMU 安装",
-            description = "在 Linux 容器内安装 QEMU 虚拟机套件，包括 qemu-system-x86_64、qemu-utils 和 genisoimage",
-            url = "",
-            scriptUrl = "install_qemu",
-            iconRes = R.drawable.ic_server,
-            type = "install_qemu_in_container",
-            needsContainerCheck = true
-        ),
-        ResourceItem(
-            title = "Debian QEMU",
-            description = "在 Termux 的 QEMU 中安装 Debian Linux 稳定发行版，支持 Docker",
-            url = "",
-            scriptUrl = "debian_qemu",
-            iconRes = R.drawable.ic_server,
-            type = "qemu_termux",
-            needsContainerCheck = true
-        ),
-        ResourceItem(
-            title = "QEMU with VNC",
-            description = "在 Termux 中运行 QEMU 来运行虚拟机，并通过 VNC 功能远程访问桌面",
-            url = "",
-            scriptUrl = "qemu_on_vnc",
-            iconRes = R.drawable.ic_server,
-            type = "qemu_on_vnc"
-        ),
-        ResourceItem(
-            title = "朱雀面板",
-            description = "一款专为轻量 Linux 设备设计的极致轻量服务器管理面板，单二进制、零依赖、无 Docker，支持应用商店、进程守护、日志管理、系统监控等功能，完美适配 OpenWrt、Termux、ARM 设备等所有 Linux 环境",
-            url = "https://github.com/MyUI0/lightpanel",
-            scriptUrl = "install_lightpanel",
-            iconRes = R.drawable.ic_web,
-            needsLinuxContainer = true,
-            needsContainerCheck = true
-        ),
-        ResourceItem(
-            title = context.getString(R.string.resource_minecraft_server),
-            description = context.getString(R.string.resource_minecraft_server_desc),
-            url = "https://github.com/TheRemote/MinecraftBedrockServer",
-            scriptUrl = "curl -sSL https://raw.githubusercontent.com/TheRemote/MinecraftBedrockServer/master/SetupMinecraft.sh | bash",
-            iconRes = R.drawable.ic_game,
-            needsLinuxContainer = true,
-            needsContainerCheck = true,
-            copyToClipboard = true
-        ),
-        ResourceItem(
-            title = context.getString(R.string.resource_linux_server),
-            description = context.getString(R.string.resource_linux_server_desc),
-            url = "https://github.com/teddysun/lamp",
-            scriptUrl = "curl -sSL https://raw.githubusercontent.com/teddysun/lamp/master/lamp.sh | bash",
-            iconRes = R.drawable.ic_server,
-            needsLinuxContainer = true,
-            needsContainerCheck = true,
-            copyToClipboard = true
-        ),
-        ResourceItem(
-            title = context.getString(R.string.resource_web_server),
-            description = context.getString(R.string.resource_web_server_desc),
-            url = "https://nginx.org/",
-            scriptUrl = "curl -sSL https://raw.githubusercontent.com/angristan/nginx-autoinstall/master/nginx-autoinstall.sh | bash",
-            iconRes = R.drawable.ic_web,
-            needsLinuxContainer = true,
-            needsContainerCheck = true,
-            copyToClipboard = true
-        ),
-        ResourceItem(
-            title = context.getString(R.string.resource_node_js),
-            description = context.getString(R.string.resource_node_js_desc),
-            url = "https://nodejs.org/",
-            scriptUrl = "https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh",
-            iconRes = R.drawable.ic_code
-        ),
-        ResourceItem(
-            title = context.getString(R.string.resource_python_env),
-            description = context.getString(R.string.resource_python_env_desc),
-            url = "https://www.python.org/",
-            scriptUrl = "pkg install python -y",
-            iconRes = R.drawable.ic_code,
-            type = "python_pkg"
-        )
-    )
 
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
@@ -222,129 +69,76 @@ fun ResourcesScreen(onExecuteScript: (String, String) -> Unit, onTypeInSession: 
             TopAppBar(title = stringResource(R.string.resources_center), scrollBehavior = scrollBehavior)
         },
         content = { padding ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .nestedScroll(scrollBehavior.nestedScrollConnection),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            item {
-                PersistentHintCard()
-            }
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .nestedScroll(scrollBehavior.nestedScrollConnection)
+            ) {
+                item {
+                    HeroWelcomeCard(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                    )
+                }
 
-            // 两大板块入口卡片
-            item {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable {
-                            val intent = Intent(context, com.termux.app.activities.UtilityCenterActivity::class.java)
-                            context.startActivity(intent)
-                        },
-                    colors = CardDefaults.cardColors(containerColor = MiuixTheme.colorScheme.primaryContainer)
-                ) {
-                    Column(modifier = Modifier.padding(20.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier.size(56.dp).clip(RoundedCornerShape(14.dp))
-                                    .background(MiuixTheme.colorScheme.primary),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    painter = painterResource(R.drawable.ic_server),
-                                    contentDescription = null,
-                                    modifier = Modifier.size(28.dp),
-                                    tint = Color.White
-                                )
-                            }
-                            Column(
-                                modifier = Modifier.weight(1f).padding(start = 16.dp),
-                                verticalArrangement = Arrangement.Center
-                            ) {
-                                Text(
-                                    text = stringResource(R.string.utility_center),
-                                    style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.Bold, color = MiuixTheme.colorScheme.onPrimaryContainer)
-                                )
-                                Text(
-                                    text = stringResource(R.string.utility_center_desc),
-                                    style = TextStyle(fontSize = 13.sp, color = MiuixTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f)),
-                                    modifier = Modifier.padding(top = 4.dp)
-                                )
-                            }
-                        }
-                        Text(
-                            text = stringResource(R.string.click_to_enter),
-                            style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Bold, color = MiuixTheme.colorScheme.onPrimaryContainer),
-                            modifier = Modifier.padding(top = 12.dp)
+                item {
+                    SmallTitle(
+                        text = stringResource(R.string.resource_quick_entry),
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                }
+
+                item {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        EntryCard(
+                            title = stringResource(R.string.utility_center),
+                            subtitle = stringResource(R.string.official_maintained_short),
+                            iconRes = R.drawable.ic_server,
+                            iconBackground = MiuixTheme.colorScheme.primary.copy(alpha = 0.15f),
+                            iconTint = MiuixTheme.colorScheme.primary,
+                            accentColor = MiuixTheme.colorScheme.primary,
+                            onClick = {
+                                val intent = Intent(context, com.termux.app.activities.UtilityCenterActivity::class.java)
+                                context.startActivity(intent)
+                            },
+                            modifier = Modifier.weight(1f)
+                        )
+                        EntryCard(
+                            title = stringResource(R.string.third_party_center),
+                            subtitle = stringResource(R.string.third_party_maintained_short),
+                            iconRes = R.drawable.ic_code,
+                            iconBackground = Color(0xFF7C4DFF).copy(alpha = 0.15f),
+                            iconTint = Color(0xFF7C4DFF),
+                            accentColor = Color(0xFF7C4DFF),
+                            onClick = {
+                                val intent = Intent(context, com.termux.app.activities.ThirdPartyCenterActivity::class.java)
+                                context.startActivity(intent)
+                            },
+                            modifier = Modifier.weight(1f)
                         )
                     }
                 }
-            }
 
-            item {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable {
-                            val intent = Intent(context, com.termux.app.activities.ThirdPartyCenterActivity::class.java)
-                            context.startActivity(intent)
-                        },
-                    colors = CardDefaults.cardColors(containerColor = MiuixTheme.colorScheme.surfaceVariant)
-                ) {
-                    Column(modifier = Modifier.padding(20.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier.size(56.dp).clip(RoundedCornerShape(14.dp))
-                                    .background(Color(0xFF7C4DFF)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    painter = painterResource(R.drawable.ic_code),
-                                    contentDescription = null,
-                                    modifier = Modifier.size(28.dp),
-                                    tint = Color.White
-                                )
-                            }
-                            Column(
-                                modifier = Modifier.weight(1f).padding(start = 16.dp),
-                                verticalArrangement = Arrangement.Center
-                            ) {
-                                Text(
-                                    text = stringResource(R.string.third_party_center),
-                                    style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.Bold, color = MiuixTheme.colorScheme.onSurface)
-                                )
-                                Text(
-                                    text = stringResource(R.string.third_party_center_desc),
-                                    style = TextStyle(fontSize = 13.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary),
-                                    modifier = Modifier.padding(top = 4.dp)
-                                )
-                            }
-                        }
-                        Text(
-                            text = stringResource(R.string.click_to_enter),
-                            style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Bold, color = MiuixTheme.colorScheme.onSurface),
-                            modifier = Modifier.padding(top = 12.dp)
-                        )
-                    }
+                item {
+                    SmallTitle(text = stringResource(R.string.resource_tips))
                 }
-            }
 
-            item {
-                androidx.compose.material3.Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFFFFEBEE))
-                ) {
-                    Text(
-                        text = stringResource(R.string.resource_center_warning),
-                        style = TextStyle(fontSize = 12.sp, color = Color(0xFFC62828)),
-                        modifier = Modifier.padding(12.dp)
+                item {
+                    WarningNoteCard(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp)
                     )
                 }
             }
         }
-    }
     )
 }
 
@@ -787,52 +581,166 @@ fun getRunningSessions(context: Context, termuxService: TermuxService?): List<Te
 }
 
 @Composable
-fun PersistentHintCard() {
-    val isDark = isSystemInDarkTheme()
-    val cardColor = if (isDark) Color(0xFF2C2C2C) else Color(0xFFF0F0F0)
-    val iconColor = if (isDark) Color(0xFF666666) else Color(0xFFCCCCCC)
-    val textColor = if (isDark) Color.White else Color.Black
-    
-    Card(
-        modifier = Modifier
-            .fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = cardColor)
+fun HeroWelcomeCard(modifier: Modifier = Modifier) {
+    val gradient = Brush.linearGradient(
+        colors = listOf(
+            Color(0xFF2563EB),
+            Color(0xFF4F46E5),
+            Color(0xFF7C3AED)
+        )
+    )
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(24.dp))
+            .background(gradient)
+            .padding(20.dp)
     ) {
-        Box(modifier = Modifier.fillMaxSize()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .offset(30.dp, 65.dp),
-                contentAlignment = Alignment.BottomEnd
-            ) {
-                Icon(
-                    modifier = Modifier.size(120.dp).alpha(0.8f),
-                    painter = painterResource(R.drawable.ic_info),
-                    tint = iconColor,
-                    contentDescription = null
+        Box(
+            modifier = Modifier
+                .size(120.dp)
+                .offset(30.dp, (-40).dp)
+                .align(Alignment.TopEnd)
+                .alpha(0.12f)
+                .background(Color.White, RoundedCornerShape(60.dp))
+        )
+        Column {
+            Text(
+                text = "Termux Ultra",
+                style = TextStyle(
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = Color.White.copy(alpha = 0.8f)
                 )
-            }
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(all = 16.dp)
-            ) {
-                Text(
-                    modifier = Modifier.fillMaxWidth(),
-                    text = "欢迎访问 Termux Ultra 资源中心",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = textColor
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = stringResource(R.string.resource_center_welcome_subtitle),
+                style = TextStyle(
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
                 )
-                Spacer(Modifier.height(2.dp))
-                Text(
-                    modifier = Modifier.fillMaxWidth(),
-                    text = "资源中心内资源部分来自于第三方仓库，来自于第三方仓库的资源不在 Termux Ultra 项目的维护范围之内。另请注意，部分资源需要特定容器或环境下才可运行。资源中心为此类资源提供执行指令复制功能，您需要自行返回终端粘贴命令来执行。",
+            )
+            Spacer(Modifier.height(10.dp))
+            Text(
+                text = stringResource(R.string.resource_center_welcome_desc),
+                style = TextStyle(
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Medium,
-                    color = textColor
+                    color = Color.White.copy(alpha = 0.85f),
+                    lineHeight = 22.sp
+                )
+            )
+        }
+    }
+}
+
+@Composable
+fun EntryCard(
+    title: String,
+    subtitle: String,
+    iconRes: Int,
+    iconBackground: Color,
+    iconTint: Color,
+    accentColor: Color,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    MiuixCard(
+        modifier = modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(iconBackground),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    painter = painterResource(iconRes),
+                    contentDescription = title,
+                    modifier = Modifier.size(24.dp),
+                    tint = iconTint
                 )
             }
+            Spacer(Modifier.height(12.dp))
+            Text(
+                text = title,
+                style = TextStyle(
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MiuixTheme.colorScheme.onSurface
+                ),
+                lineHeight = 20.sp
+            )
+            Spacer(Modifier.height(3.dp))
+            Text(
+                text = subtitle,
+                style = TextStyle(
+                    fontSize = 12.sp,
+                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                ),
+                lineHeight = 17.sp
+            )
+            Spacer(Modifier.height(12.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = stringResource(R.string.enter),
+                    style = TextStyle(
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = accentColor
+                    )
+                )
+                Spacer(Modifier.width(2.dp))
+                Icon(
+                    imageVector = Icons.AutoMirrored.Rounded.ArrowForward,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                    tint = accentColor
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun WarningNoteCard(modifier: Modifier = Modifier) {
+    val iconColor = Color(0xFFFFA000)
+    MiuixCard(
+        modifier = modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(32.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(iconColor.copy(alpha = 0.12f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_info),
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                    tint = iconColor
+                )
+            }
+            Text(
+                text = stringResource(R.string.resource_center_warning),
+                style = TextStyle(
+                    fontSize = 13.sp,
+                    lineHeight = 20.sp,
+                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                ),
+                modifier = Modifier.weight(1f)
+            )
         }
     }
 }

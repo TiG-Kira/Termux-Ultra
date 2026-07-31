@@ -8,6 +8,7 @@ import android.content.ActivityNotFoundException;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
+import com.termux.app.compose.IntegratedTools;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.ServiceConnection;
@@ -832,15 +833,16 @@ public final class TermuxActivity extends ComponentActivity implements ServiceCo
     }
 
     private void showStylingDialog() {
+        if (!IntegratedTools.isEnabled(this, IntegratedTools.Tool.TERMUX_STYLING)) {
+            IntegratedTools.showEnablePrompt(this, IntegratedTools.Tool.TERMUX_STYLING);
+            return;
+        }
         Intent stylingIntent = new Intent();
-        stylingIntent.setClassName(TermuxConstants.TERMUX_STYLING_PACKAGE_NAME, TermuxConstants.TERMUX_STYLING.TERMUX_STYLING_ACTIVITY_NAME);
+        stylingIntent.setClassName(getPackageName(), "com.termux.styling.TermuxStyleActivity");
         try {
             startActivity(stylingIntent);
         } catch (ActivityNotFoundException | IllegalArgumentException e) {
-            // The startActivity() call is not documented to throw IllegalArgumentException.
-            // However, crash reporting shows that it sometimes does, so catch it here.
-            new AlertDialog.Builder(this).setMessage(getString(R.string.error_styling_not_installed))
-                .setPositiveButton(R.string.action_styling_install, (dialog, which) -> startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(TermuxConstants.TERMUX_STYLING_FDROID_PACKAGE_URL)))).setNegativeButton(android.R.string.cancel, null).show();
+            IntegratedTools.showEnablePrompt(this, IntegratedTools.Tool.TERMUX_STYLING);
         }
     }
     private void toggleKeepScreenOn() {

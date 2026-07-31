@@ -146,34 +146,6 @@ class MainActivity : ComponentActivity() {
                                 startActivity(intent)
                             }
                         },
-                        onTypeInSession = { sessionId, command ->
-                            try {
-                                val session = sessions.find {
-                                    it.getTerminalSession().mSessionName == sessionId ||
-                                    it.getTerminalSession().mHandle.toString() == sessionId
-                                }
-                                session?.let { ts ->
-                                    val terminalSession = ts.getTerminalSession()
-                                    if (!terminalSession.isRunning()) {
-                                        val intent = Intent(this, TermuxActivity::class.java)
-                                        intent.putExtra("sessionHandle", terminalSession.mHandle)
-                                        startActivity(intent)
-                                        android.os.Handler().postDelayed({
-                                            if (terminalSession.isRunning()) {
-                                                terminalSession.write(command + "\n")
-                                            }
-                                        }, 2000)
-                                    } else {
-                                        terminalSession.write(command + "\n")
-                                        val intent = Intent(this, TermuxActivity::class.java)
-                                        intent.putExtra("sessionHandle", terminalSession.mHandle)
-                                        startActivity(intent)
-                                    }
-                                }
-                            } catch (e: Exception) {
-                                e.printStackTrace()
-                            }
-                        },
                         onAboutClick = { showAbout = true },
                         showVnc = showVnc,
                         isWakeLockEnabled = isWakeLockEnabled,

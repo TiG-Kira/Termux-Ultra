@@ -38,6 +38,7 @@
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" tools:ignore="ProtectedPermissions" />
     <uses-permission android:name="com.android.alarm.permission.SET_ALARM" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <application
         android:name=".app.TermuxApplication"
@@ -254,6 +255,35 @@
         <meta-data
             android:name="com.sec.android.support.multiwindow"
             android:value="true" />
+
+        <!-- Termux:Boot integration. Disabled by default; enabled at runtime when the
+             integrated tool toggle is turned on in Settings. On boot it runs the scripts
+             placed in ~/.termux/boot/ . -->
+        <receiver
+            android:name=".app.BootReceiver"
+            android:enabled="false"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Override termux-boot library components to disabled-by-default -->
+        <activity
+            android:name="com.termux.boot.BootActivity"
+            android:enabled="false" />
+        <receiver
+            android:name="com.termux.boot.BootReceiver"
+            android:enabled="false"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
+        <service
+            android:name="com.termux.boot.BootJobService"
+            android:enabled="false"
+            android:permission="android.permission.BIND_JOB_SERVICE" />
 
     </application>
 

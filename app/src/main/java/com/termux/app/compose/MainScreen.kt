@@ -49,7 +49,6 @@ fun MainScreen(
     onStopTerminal: (TermuxSession) -> Unit,
     onRenameTerminal: (TermuxSession, String) -> Unit,
     onExecuteScript: (String, String) -> Unit,
-    onTypeInSession: (String, String) -> Unit,
     onAboutClick: () -> Unit,
     showVnc: Boolean,
     isWakeLockEnabled: Boolean,
@@ -249,7 +248,7 @@ fun MainScreen(
                             onTabChange(3)
                         }
                     )
-                    3 -> ResourcesScreen(onExecuteScript = onExecuteScript, onTypeInSession = onTypeInSession)
+                    3 -> ResourcesScreen()
                     4 -> SettingsScreen(onAboutClick = onAboutClick)
                 }
             }

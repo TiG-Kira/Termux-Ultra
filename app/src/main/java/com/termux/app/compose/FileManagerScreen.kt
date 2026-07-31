@@ -1,6 +1,7 @@
 package com.termux.app.compose
 
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
@@ -463,13 +464,28 @@ fun FileManagerScreen(
                                 .fillMaxWidth()
                                 .padding(16.dp),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clip(RoundedCornerShape(18.dp))
+                                    .background(MiuixTheme.colorScheme.primary.copy(alpha = 0.15f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_info),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(20.dp),
+                                    tint = MiuixTheme.colorScheme.primary
+                                )
+                            }
                             Text(
                                 text = stringResource(R.string.files_warning_message),
                                 fontSize = 14.sp,
                                 modifier = Modifier.weight(1f),
-                                color = MiuixTheme.colorScheme.onSurface
+                                color = MiuixTheme.colorScheme.onSurface,
+                                lineHeight = 20.sp
                             )
                             Icon(
                                 painter = painterResource(R.drawable.ic_close),
@@ -491,17 +507,33 @@ fun FileManagerScreen(
             item {
                 Card(
                     modifier = Modifier
-                        .fillMaxWidth(),
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp)),
                     colors = CardDefaults.cardColors(
                         containerColor = if (isSystemInDarkTheme()) Color(0xFF2C2C2C) else Color.White
                     )
                 ) {
-                    Text(
-                        text = currentPath.absolutePath,
-                        fontSize = 14.sp,
-                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                        modifier = Modifier.padding(12.dp)
-                    )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_folder),
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                            tint = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = currentPath.absolutePath,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                            lineHeight = 18.sp
+                        )
+                    }
                 }
             }
 
@@ -516,8 +548,10 @@ fun FileManagerScreen(
                     ) {
                         Text(
                             text = stringResource(R.string.empty_folder),
-                            fontSize = 16.sp,
-                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                            lineHeight = 22.sp
                         )
                     }
                 }
@@ -1095,43 +1129,56 @@ private fun FileItem(
         )
     ) {
         Row(
-            modifier = Modifier.padding(12.dp),
+            modifier = Modifier.padding(14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             if (isInSelectionMode) {
                 Checkbox(
                     checked = isSelected,
                     onCheckedChange = { onClick() },
-                    modifier = Modifier.padding(end = 8.dp)
+                    modifier = Modifier.padding(end = 10.dp)
                 )
             }
 
-            Icon(
-                painter = painterResource(if (file.isDirectory) R.drawable.ic_folder else R.drawable.ic_file),
-                contentDescription = null,
+            Box(
                 modifier = Modifier
-                    .size(32.dp)
-                    .padding(end = 12.dp),
-                tint = MiuixTheme.colorScheme.onSurface
-            )
+                    .size(42.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(
+                        if (file.isDirectory) MiuixTheme.colorScheme.primary.copy(alpha = 0.12f)
+                        else MiuixTheme.colorScheme.surfaceVariant
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    painter = painterResource(if (file.isDirectory) R.drawable.ic_folder else R.drawable.ic_file),
+                    contentDescription = null,
+                    modifier = Modifier.size(22.dp),
+                    tint = if (file.isDirectory) MiuixTheme.colorScheme.primary else MiuixTheme.colorScheme.onSurface
+                )
+            }
+
+            Spacer(Modifier.width(14.dp))
 
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = file.name,
-                    fontSize = 16.sp,
-                    modifier = Modifier.padding(bottom = 2.dp),
+                    fontSize = 15.sp,
+                    modifier = Modifier.padding(bottom = 3.dp),
                     fontWeight = FontWeight.Bold,
-                    color = MiuixTheme.colorScheme.onSurface
+                    color = MiuixTheme.colorScheme.onSurface,
+                    lineHeight = 20.sp
                 )
                 Text(
                     text = if (file.isDirectory) {
                         val count = file.listFiles()?.size ?: 0
                         "$count ${stringResource(R.string.items)}"
                     } else {
-                        "${formatFileSize(file.length())} - ${Date(file.lastModified()).toString()}"
+                        "${formatFileSize(file.length())} · ${Date(file.lastModified()).toString()}"
                     },
                     fontSize = 12.sp,
-                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                    lineHeight = 16.sp
                 )
             }
 

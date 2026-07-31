@@ -1,1 +1,0 @@
-task ':drawerlayout:drawerlayout:writeVersionFile' property 'version'

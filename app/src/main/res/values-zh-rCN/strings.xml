@@ -350,7 +350,14 @@
     <string name="utility_center_desc">官方维护的实用工具：QEMU with VNC、Debian QEMU、Ubuntu 容器、tmux、QEMU 安装等</string>
     <string name="third_party_center_desc">由第三方开发者维护的脚本资源，可自行添加、删除、修改。注意风险评估。</string>
     <string name="click_to_enter">👉 点击进入</string>
-    <string name="resource_center_warning">⚠️ 实用功能中心的功能由 Termux Ultra 官方维护；第三方资源中心的脚本由第三方开发者维护，使用前请自行评估安全性。</string>
+    <string name="resource_center_warning">实用功能中心的功能由 Termux Ultra 官方维护；第三方资源中心的脚本由第三方开发者维护，使用前请自行评估安全性。</string>
+    <string name="resource_quick_entry">快速入口</string>
+    <string name="resource_tips">使用提示</string>
+    <string name="resource_center_welcome_subtitle">探索 Termux Ultra 资源中心</string>
+    <string name="resource_center_welcome_desc">汇集官方维护工具与第三方脚本资源，按需选择，安全使用。</string>
+    <string name="enter">进入</string>
+    <string name="official_maintained_short">官方维护</string>
+    <string name="third_party_maintained_short">社区资源</string>
     <string name="official_maintained">官方维护的实用功能</string>
     <string name="official_maintained_desc">以下工具由 Termux Ultra 团队维护，保证可用性和兼容性。</string>
     <string name="third_party_maintained">第三方开发者维护</string>
@@ -389,4 +396,58 @@
     <string name="execute_in_tmux">在 tmux 执行</string>
     <string name="execute_in_running_session">在运行的会话内执行：</string>
     <string name="copy_to_session">复制到「%1$s」</string>
+
+    <!-- 备份与恢复进度（使用 termux-backup / termux-restore） -->
+    <string name="backup_notification_channel_name">备份进度</string>
+    <string name="backup_notification_channel_desc">显示备份和恢复的进度</string>
+    <string name="backup_in_progress">正在备份</string>
+    <string name="restore_in_progress">正在恢复</string>
+    <string name="backup_complete">备份完成</string>
+    <string name="backup_cancelled">备份已取消</string>
+    <string name="restore_complete">恢复完成</string>
+    <string name="restore_failed_error">恢复过程中出现错误</string>
+    <string name="cancel_action">取消</string>
+    <string name="initializing">初始化…</string>
+    <string name="backed_up_size">已备份：%1$d MB</string>
+    <string name="restored_size">已恢复：%1$d MB</string>
+    <string name="backup_view_progress_toast">正在备份，请在通知栏查看进度</string>
+    <string name="restore_view_progress_toast">正在恢复，请在通知栏查看进度</string>
+    <string name="restore_restart_hint">恢复完成，请重启应用。</string>
+
+    <!-- 整合的 Termux 工具 -->
+    <string name="integrated_tools_category">集成工具</string>
+    <string name="integrated_tools_summary">启用内置的 Termux 附加工具，无需再安装独立应用</string>
+    <string name="termux_api_tool">Termux:API</string>
+    <string name="termux_api_tool_summary">在终端中访问 Android 设备功能（电池、相机、传感器、通知等）</string>
+    <string name="termux_boot_tool">Termux:Boot</string>
+    <string name="termux_boot_tool_summary">设备开机时自动运行脚本</string>
+    <string name="termux_styling_tool">Termux:Styling</string>
+    <string name="termux_styling_tool_summary">自定义终端配色方案和字体</string>
+    <string name="termux_tasker_tool">Termux:Tasker</string>
+    <string name="termux_tasker_tool_summary">从 Tasker 调用 Termux 命令</string>
+    <string name="termux_widget_tool">Termux:Widget</string>
+    <string name="termux_widget_tool_summary">添加快捷方式小部件，从主屏幕运行脚本</string>
+
+    <!-- 工具配置入口（对应工具启用后显示） -->
+    <string name="tool_config_category">工具配置</string>
+    <string name="termux_styling_config">颜色与字体</string>
+    <string name="termux_styling_config_summary">选择终端配色方案和字体</string>
+    <string name="termux_tasker_config">Tasker 插件</string>
+    <string name="termux_tasker_config_summary">编辑 Tasker 命令配置</string>
+    <string name="termux_widget_config">快捷方式与微件</string>
+    <string name="termux_widget_config_summary">管理主屏幕快捷方式与微件</string>
+    <string name="termux_api_help">API 使用说明</string>
+    <string name="termux_api_help_summary">查看常用 Termux:API 命令</string>
+    <string name="termux_boot_help">开机自启说明</string>
+    <string name="termux_boot_help_summary">了解如何添加开机自启脚本</string>
+    <string name="termux_api_help_content">Termux:API 提供在终端中访问 Android 功能的命令。常用命令：\n\n• termux-battery-status — 电池信息\n• termux-camera-photo — 拍照\n• termux-clipboard-get / termux-clipboard-set — 剪贴板\n• termux-notification — 发送通知\n• termux-toast — 显示提示\n• termux-vibrate — 震动\n• termux-location — 获取定位\n• termux-sms-list / termux-sms-send — 短信\n• termux-tts-speak — 语音朗读\n• termux-wifi-connectioninfo — WiFi 信息\n\n需先安装 termux-api 包：\npkg install termux-api</string>
+    <string name="termux_boot_help_content">Termux:Boot 可在设备开机时自动运行脚本。\n\n添加开机脚本方法：\n\n1. 创建目录：\n   mkdir -p ~/.termux/boot\n2. 将可执行脚本放入 ~/.termux/boot/\n3. 脚本将按排序顺序在开机时执行。\n\n示例（~/.termux/boot/start-ssh）：\n   #!/data/data/com.termux/files/usr/bin/sh\n   termux-wake-lock\n   sshd</string>
+    <string name="feature_not_enabled_title">功能未开启</string>
+    <string name="feature_not_enabled_message">「%1$s」未开启，是否前往设置开启？</string>
+    <string name="go_to_settings">前往设置</string>
+
+    <!-- 官方独立插件 APK 冲突检测 -->
+    <string name="standalone_plugin_installed_title">官方插件已安装</string>
+    <string name="standalone_plugin_installed_message">本设备上已安装官方独立的「%1$s」插件（包名 %2$s）。不建议再安装对应插件，请使用本应用内置的插件功能。</string>
+    <string name="standalone_plugin_installed_summary">已由官方插件替代</string>
 </resources>

@@ -22,7 +22,7 @@ android {
         minSdkVersion project.properties.minSdkVersion.toInteger()
         targetSdkVersion project.properties.targetSdkVersion.toInteger()
         versionCode 1045
-        versionName "118.3.52"
+        versionName "118.3.55"
 
         if (appVersionName) versionName = appVersionName
 
@@ -42,21 +42,20 @@ android {
             }
         }
 
+        // ABI splits: enabled only for release builds (per-architecture APKs); disabled for
+        // debug so a single universal APK is produced (faster builds, matches project
+        // preference). Detection uses the requested Gradle task name. The previous
+        // variantFilter was ineffective for ABI splits (splits do not create separate
+        // variants), so it has been removed.
+        def isReleaseBuild = gradle.startParameter.taskNames.any {
+            it.toLowerCase().contains('release')
+        }
         splits {
             abi {
-                enable true
+                enable isReleaseBuild
                 reset ()
                 include 'x86', 'x86_64', 'armeabi-v7a', 'arm64-v8a'
                 universalApk true
-            }
-        }
-
-        variantFilter { variant ->
-            if (variant.buildType.name == "debug") {
-                def name = variant.name.toLowerCase()
-                if (name.contains("x86") || name.contains("armeabi") || name.contains("arm64")) {
-                    variant.ignore = true
-                }
             }
         }
     }
@@ -82,6 +81,7 @@ android {
     }
 
     compileOptions {
+        coreLibraryDesugaringEnabled true
         sourceCompatibility JavaVersion.VERSION_1_8
         targetCompatibility JavaVersion.VERSION_1_8
     }
@@ -122,6 +122,7 @@ android {
 
 dependencies {
     implementation fileTree(dir: 'libs', include: ['*.jar'])
+    coreLibraryDesugaring "com.android.tools:desugar_jdk_libs:1.1.5"
     implementation "top.yukonga.miuix.kmp:miuix-ui-android:0.9.3"
     implementation "top.yukonga.miuix.kmp:miuix-icons-android:0.9.3"
     implementation "top.yukonga.miuix.kmp:miuix-preference-android:0.9.3"
@@ -143,6 +144,11 @@ dependencies {
 
     implementation project(':terminal-view')
     implementation project(':termux-shared')
+    // Integrated Termux add-on tools
+    implementation project(':termux-api')
+    implementation project(':termux-styling')
+    implementation project(':termux-tasker')
+    implementation project(':termux-widget')
 
     implementation("com.google.guava:guava:24.1-jre") {
         exclude group: 'com.google.guava', module: 'listenablefuture'

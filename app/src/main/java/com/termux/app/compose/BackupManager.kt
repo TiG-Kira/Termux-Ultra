@@ -2,24 +2,52 @@ package com.termux.app.compose
 
 import android.content.Context
 import android.os.Environment
-import java.io.*
-import java.nio.file.Files
-import java.nio.file.Path
-import java.nio.file.Paths
-import java.util.zip.ZipEntry
-import java.util.zip.ZipOutputStream
+import com.termux.shared.shell.TermuxShellEnvironmentClient
+import com.termux.shared.termux.TermuxConstants
+import java.io.BufferedReader
+import java.io.File
+import java.io.InputStreamReader
+import java.util.concurrent.atomic.AtomicInteger
 
+/**
+ * Backup & restore manager backed by Termux's own `termux-backup` / `termux-restore` commands.
+ *
+ * The commands run in a background shell process (using the Termux environment), so they never
+ * appear in the terminal page or any foreground terminal session. Output is streamed line by line
+ * to report progress, and the process exits immediately on completion, returning the result via
+ * the exit code.
+ *
+ * Reference: https://wiki.termux.com/wiki/Backing_up_Termux
+ */
 object BackupManager {
 
-    private const val TERMUX_DATA_DIR = "/data/data/com.termux/files"
-    private const val EXCLUDE_STORAGE_DIR = "$TERMUX_DATA_DIR/home/storage"
-    
+    private const val TERMUX_SHELL = TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/sh"
+    private const val TERMUX_HOME = TermuxConstants.TERMUX_HOME_DIR_PATH
+
     @Volatile
     private var isBackupCancelled = false
-    
+
     @Volatile
     private var isRestoreCancelled = false
 
+    @Volatile
+    private var backupProcess: Process? = null
+
+    @Volatile
+    private var restoreProcess: Process? = null
+
+    private val envClient = TermuxShellEnvironmentClient()
+
+    /** Build the Termux shell environment array for [Runtime.exec]. */
+    private fun buildEnv(context: Context): Array<String> {
+        return envClient.buildEnvironment(context, false, TERMUX_HOME)
+    }
+
+    /**
+     * Create a backup by running `termux-backup <path>`.
+     *
+     * @return the absolute path of the created backup file on success, or `null` on failure/cancel.
+     */
     fun createBackup(context: Context, onProgress: ((Int, Int, String) -> Unit)? = null): String? {
         isBackupCancelled = false
         return try {
@@ -27,281 +55,172 @@ object BackupManager {
             backupDir.mkdirs()
 
             val timestamp = System.currentTimeMillis()
-            val backupFileName = "termuxbackup_$timestamp.zip"
-            val backupFilePath = File(backupDir, backupFileName).absolutePath
+            val backupFile = File(backupDir, "termuxbackup_$timestamp.tar.xz")
+            val backupPath = backupFile.absolutePath
 
-            val fos = FileOutputStream(backupFilePath)
-            val zos = ZipOutputStream(fos)
+            val env = buildEnv(context)
+            // Escape the path for the inner shell.
+            val command = "termux-backup \"$backupPath\""
+            val process = Runtime.getRuntime().exec(arrayOf(TERMUX_SHELL, "-c", command), env, File(TERMUX_HOME))
+            backupProcess = process
 
-            val termuxDir = File(TERMUX_DATA_DIR)
-            if (termuxDir.exists()) {
-                val totalFiles = countFiles(termuxDir)
-                var processedFiles = 0
-                addDirectoryToZip(zos, termuxDir, TERMUX_DATA_DIR) {
-                    if (isBackupCancelled) {
-                        throw InterruptedException("Backup cancelled")
+            val currentSizeMB = AtomicInteger(0)
+            onProgress?.invoke(0, -1, "")
+
+            // Stream stdout/stderr lines as progress messages.
+            val readerThread = Thread {
+                try {
+                    val stdout = BufferedReader(InputStreamReader(process.inputStream, Charsets.UTF_8))
+                    val stderr = BufferedReader(InputStreamReader(process.errorStream, Charsets.UTF_8))
+                    var line: String?
+                    while (stdout.readLine().also { line = it } != null) {
+                        if (isBackupCancelled) return@Thread
+                        line?.takeIf { it.isNotBlank() }?.let { onProgress?.invoke(currentSizeMB.get(), -1, it) }
                     }
-                    processedFiles++
-                    onProgress?.invoke(processedFiles, totalFiles, "正在备份: ${it.name}")
+                    while (stderr.readLine().also { line = it } != null) {
+                        if (isBackupCancelled) return@Thread
+                        line?.takeIf { it.isNotBlank() }?.let { onProgress?.invoke(currentSizeMB.get(), -1, it) }
+                    }
+                } catch (_: Exception) {
+                    // ignore
                 }
             }
 
-            zos.close()
-            fos.close()
+            // Monitor the growing backup file size as a coarse progress indicator.
+            val monitorThread = Thread {
+                try {
+                    while (process.isAlive) {
+                        if (isBackupCancelled) return@Thread
+                        val sizeMB = (backupFile.length() / (1024L * 1024L)).toInt()
+                        currentSizeMB.set(sizeMB)
+                        onProgress?.invoke(sizeMB, -1, "")
+                        Thread.sleep(1000)
+                    }
+                } catch (_: Exception) {
+                    // ignore
+                }
+            }
 
-            backupFilePath
-        } catch (e: InterruptedException) {
-            null
+            readerThread.start()
+            monitorThread.start()
+
+            val exitCode = process.waitFor()
+            readerThread.join(2000)
+            monitorThread.join(2000)
+            backupProcess = null
+
+            if (isBackupCancelled) {
+                backupFile.delete()
+                return null
+            }
+            if (exitCode != 0) {
+                return null
+            }
+            backupPath
         } catch (e: Exception) {
             e.printStackTrace()
+            backupProcess = null
             null
         }
     }
 
     fun cancelBackup() {
         isBackupCancelled = true
+        backupProcess?.destroy()
+        backupProcess = null
     }
 
     fun isBackupRunning(): Boolean {
         return !isBackupCancelled
     }
 
-    private fun addDirectoryToZip(zos: ZipOutputStream, dir: File, basePath: String, onFileProcessed: ((File) -> Unit)? = null) {
-        val files = dir.listFiles() ?: return
-
-        for (file in files) {
-            val filePath = file.absolutePath
-            
-            if (filePath.startsWith(EXCLUDE_STORAGE_DIR)) {
-                continue
-            }
-            
-            if (isPointingToExternalStorage(file)) {
-                continue
-            }
-
-            val entryName = filePath.substring(basePath.length).removePrefix("/")
-            
-            if (file.isDirectory) {
-                val entry = ZipEntry("$entryName/")
-                entry.time = file.lastModified()
-                zos.putNextEntry(entry)
-                zos.closeEntry()
-                addDirectoryToZip(zos, file, basePath, onFileProcessed)
-            } else {
-                val entry = ZipEntry(entryName)
-                entry.time = file.lastModified()
-                val fileStat = getFileStat(file)
-                entry.setExtra(fileStat)
-                zos.putNextEntry(entry)
-
-                val fis = FileInputStream(file)
-                val buffer = ByteArray(8192)
-                var bytesRead: Int
-                while (fis.read(buffer).also { bytesRead = it } != -1) {
-                    zos.write(buffer, 0, bytesRead)
-                }
-                fis.close()
-                zos.closeEntry()
-                onFileProcessed?.invoke(file)
-            }
-        }
-    }
-    
-    private fun isPointingToExternalStorage(file: File): Boolean {
-        try {
-            val canonicalPath = file.canonicalPath
-            val externalStoragePath = Environment.getExternalStorageDirectory().canonicalPath
-            
-            if (canonicalPath.startsWith(externalStoragePath)) {
-                return true
-            }
-            
-            if (file.isDirectory) {
-                val storageDirs = arrayOf(
-                    "/storage/emulated/0",
-                    "/mnt/sdcard",
-                    "/sdcard",
-                    "/storage/sdcard0",
-                    "/storage/sdcard1",
-                    "/mnt/external_sd",
-                    "/mnt/media_rw"
-                )
-                for (storageDir in storageDirs) {
-                    if (canonicalPath.startsWith(storageDir)) {
-                        return true
-                    }
-                }
-            }
-            
-            if (file.exists() && Files.isSymbolicLink(file.toPath())) {
-                val targetPath = Files.readSymbolicLink(file.toPath())
-                return isPointingToExternalStorage(targetPath.toFile())
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-        return false
-    }
-
-    private fun countFiles(dir: File): Int {
-        var count = 0
-        val files = dir.listFiles() ?: return 0
-        for (file in files) {
-            val filePath = file.absolutePath
-            if (filePath.startsWith(EXCLUDE_STORAGE_DIR)) {
-                continue
-            }
-            if (isPointingToExternalStorage(file)) {
-                continue
-            }
-            if (file.isDirectory) {
-                count += countFiles(file)
-            } else {
-                count++
-            }
-        }
-        return count
-    }
-
-    private fun getFileStat(file: File): ByteArray {
-        val stat = file.absolutePath.getFileStat()
-        val baos = ByteArrayOutputStream()
-        val dos = DataOutputStream(baos)
-        dos.writeInt(stat)
-        dos.flush()
-        return baos.toByteArray()
-    }
-
+    /**
+     * Restore from [backupPath] by running `termux-restore <path>`.
+     *
+     * @return `true` on success, `false` on failure/cancel.
+     */
     fun restoreBackup(context: Context, backupPath: String, onProgress: ((Int, Int, String) -> Unit)? = null): Boolean {
         isRestoreCancelled = false
         return try {
             val zipFile = File(backupPath)
             if (!zipFile.exists()) {
-                onProgress?.invoke(0, 1, "备份文件不存在")
+                onProgress?.invoke(0, 1, "")
                 return false
             }
 
-            val fis = FileInputStream(zipFile)
-            val zis = java.util.zip.ZipInputStream(fis)
+            val env = buildEnv(context)
+            val command = "termux-restore \"$backupPath\""
+            val process = Runtime.getRuntime().exec(arrayOf(TERMUX_SHELL, "-c", command), env, File(TERMUX_HOME))
+            restoreProcess = process
 
-            var entry: ZipEntry?
-            
-            val totalEntries = countZipEntries(zipFile)
-            var processedEntries = 0
-            
-            onProgress?.invoke(0, totalEntries, "开始恢复...")
-            
-            while (zis.nextEntry.also { entry = it } != null) {
-                if (isRestoreCancelled) {
-                    throw InterruptedException("Restore cancelled")
-                }
-                
-                entry?.let {
-                    val entryPath = "$TERMUX_DATA_DIR/${it.name}"
-                    val destFile = File(entryPath)
+            val totalMB = AtomicInteger((zipFile.length() / (1024L * 1024L)).toInt())
+            onProgress?.invoke(0, -1, "")
 
-                    try {
-                        if (it.isDirectory) {
-                            if (!destFile.exists()) {
-                                destFile.mkdirs()
-                            }
-                        } else {
-                            val parentDir = destFile.parentFile
-                            if (parentDir != null && !parentDir.exists()) {
-                                parentDir.mkdirs()
-                            }
-
-                            if (destFile.exists()) {
-                                destFile.setWritable(true)
-                                destFile.delete()
-                            }
-
-                            if (Files.isSymbolicLink(destFile.toPath())) {
-                                Files.delete(destFile.toPath())
-                            }
-
-                            val fos = FileOutputStream(destFile)
-                            val buffer = ByteArray(8192)
-                            var bytesRead: Int
-                            while (zis.read(buffer).also { bytesRead = it } != -1) {
-                                fos.write(buffer, 0, bytesRead)
-                            }
-                            fos.flush()
-                            fos.close()
-
-                            if (it.extra != null && it.extra.size >= 4) {
-                                val dis = DataInputStream(ByteArrayInputStream(it.extra))
-                                val mode = dis.readInt()
-                                destFile.setExecutable((mode and 0x49) != 0)
-                                destFile.setReadable((mode and 0x41) != 0)
-                                destFile.setWritable((mode and 0x22) != 0)
-                            } else {
-                                destFile.setReadable(true)
-                                destFile.setWritable(true)
-                            }
-                        }
-                    } catch (e: Exception) {
-                        onProgress?.invoke(processedEntries, totalEntries, "跳过文件: ${it.name} (${e.message})")
+            // Stream stdout/stderr lines as progress messages.
+            val readerThread = Thread {
+                try {
+                    val stdout = BufferedReader(InputStreamReader(process.inputStream, Charsets.UTF_8))
+                    val stderr = BufferedReader(InputStreamReader(process.errorStream, Charsets.UTF_8))
+                    var line: String?
+                    while (stdout.readLine().also { line = it } != null) {
+                        if (isRestoreCancelled) return@Thread
+                        line?.takeIf { it.isNotBlank() }?.let { onProgress?.invoke(totalMB.get(), -1, it) }
                     }
+                    while (stderr.readLine().also { line = it } != null) {
+                        if (isRestoreCancelled) return@Thread
+                        line?.takeIf { it.isNotBlank() }?.let { onProgress?.invoke(totalMB.get(), -1, it) }
+                    }
+                } catch (_: Exception) {
+                    // ignore
                 }
-                
-                processedEntries++
-                onProgress?.invoke(processedEntries, totalEntries, "正在恢复: ${entry?.name}")
-                zis.closeEntry()
             }
 
-            zis.close()
-            fis.close()
+            // Heartbeat so the notification keeps showing the restore is ongoing.
+            val monitorThread = Thread {
+                try {
+                    while (process.isAlive) {
+                        if (isRestoreCancelled) return@Thread
+                        onProgress?.invoke(totalMB.get(), -1, "")
+                        Thread.sleep(1000)
+                    }
+                } catch (_: Exception) {
+                    // ignore
+                }
+            }
 
-            onProgress?.invoke(totalEntries, totalEntries, "恢复完成")
-            true
-        } catch (e: InterruptedException) {
-            onProgress?.invoke(0, 1, "恢复已取消")
-            false
+            readerThread.start()
+            monitorThread.start()
+
+            val exitCode = process.waitFor()
+            readerThread.join(2000)
+            monitorThread.join(2000)
+            restoreProcess = null
+
+            if (isRestoreCancelled) {
+                return false
+            }
+            exitCode == 0
         } catch (e: Exception) {
-            onProgress?.invoke(0, 1, "恢复失败: ${e.message}")
             e.printStackTrace()
+            restoreProcess = null
             false
         }
     }
 
     fun cancelRestore() {
         isRestoreCancelled = true
+        restoreProcess?.destroy()
+        restoreProcess = null
     }
 
     fun isRestoreRunning(): Boolean {
         return !isRestoreCancelled
     }
-    
-    private fun countZipEntries(zipFile: File): Int {
-        var count = 0
-        try {
-            val fis = FileInputStream(zipFile)
-            val zis = java.util.zip.ZipInputStream(fis)
-            while (zis.nextEntry != null) {
-                count++
-                zis.closeEntry()
-            }
-            zis.close()
-            fis.close()
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-        return count
-    }
-
-    private fun String.getFileStat(): Int {
-        val file = File(this)
-        var mode = 0
-        if (file.canRead()) mode = mode or 0x41
-        if (file.canWrite()) mode = mode or 0x22
-        if (file.canExecute()) mode = mode or 0x49
-        return mode
-    }
 
     fun getBackupFiles(context: Context): List<File> {
-        val backupDir = context.getExternalFilesDir("backups")
-        return backupDir?.listFiles { _, name -> name.startsWith("termuxbackup_") && name.endsWith(".zip") }?.toList() ?: emptyList()
+        val backupDir = File(Environment.getExternalStorageDirectory(), "TermuxBackup")
+        return backupDir.listFiles { _, name ->
+            name.startsWith("termuxbackup_") && (name.endsWith(".zip") || name.endsWith(".tar.xz") || name.endsWith(".tar.gz") || name.endsWith(".tar"))
+        }?.toList() ?: emptyList()
     }
 }

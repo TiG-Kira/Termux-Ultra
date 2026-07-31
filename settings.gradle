@@ -7,3 +7,13 @@ pluginManagement {
 }
 
 include ':app', ':termux-shared', ':terminal-emulator', ':terminal-view'
+
+// Integrated Termux add-on tools (cloned under vendor/termux-addons)
+include ':termux-api'
+project(':termux-api').projectDir = new File(rootDir, 'vendor/termux-addons/termux-api/app')
+include ':termux-styling'
+project(':termux-styling').projectDir = new File(rootDir, 'vendor/termux-addons/termux-styling/app')
+include ':termux-tasker'
+project(':termux-tasker').projectDir = new File(rootDir, 'vendor/termux-addons/termux-tasker/app')
+include ':termux-widget'
+project(':termux-widget').projectDir = new File(rootDir, 'vendor/termux-addons/termux-widget/app')

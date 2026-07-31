@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>资源中心 - Termux Ultra</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;700&display=swap');
+    body { font-family: 'Inter', 'Noto Sans SC', sans-serif; }
+  </style>
+</head>
+<body class="bg-[#0d0d0d] text-white min-h-screen">
+  <div class="max-w-md mx-auto min-h-screen bg-[#0d0d0d] shadow-2xl">
+    <!-- Top App Bar -->
+    <div class="sticky top-0 z-10 bg-[#0d0d0d]/90 backdrop-blur-md border-b border-white/5 px-4 h-14 flex items-center justify-center">
+      <h1 class="text-lg font-semibold tracking-tight">资源中心</h1>
+    </div>
+
+    <main class="px-4 pb-24 pt-3 space-y-5">
+      <!-- Hero Welcome -->
+      <section class="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#2563eb] via-[#4f46e5] to-[#7c3aed] p-5">
+        <div class="absolute top-0 right-0 w-40 h-40 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/4 blur-2xl"></div>
+        <div class="relative z-10">
+          <p class="text-white/80 text-xs font-medium mb-1">Termux Ultra</p>
+          <h2 class="text-[22px] font-bold leading-tight mb-3">探索 Termux Ultra 资源中心</h2>
+          <p class="text-white/85 text-sm leading-relaxed max-w-[92%]">
+            汇集官方维护工具与第三方脚本资源，按需选择，安全使用。
+          </p>
+        </div>
+      </section>
+
+      <!-- Quick Entry -->
+      <section>
+        <h3 class="text-sm font-medium text-white/50 mb-3 px-1">快速入口</h3>
+        <div class="grid grid-cols-2 gap-3">
+          <!-- Utility Center -->
+          <button class="group relative overflow-hidden rounded-2xl bg-[#1a1a1a] border border-white/5 p-4 text-left transition active:scale-[0.98]">
+            <div class="w-11 h-11 rounded-xl bg-[#2563eb]/15 flex items-center justify-center mb-3">
+              <svg class="w-6 h-6 text-[#3b82f6]" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"/></svg>
+            </div>
+            <h4 class="text-[15px] font-semibold mb-1">实用功能</h4>
+            <p class="text-xs text-white/50 leading-relaxed">官方维护的工具与容器</p>
+            <div class="mt-3 flex items-center text-xs text-[#3b82f6] font-medium">
+              进入 <svg class="w-3.5 h-3.5 ml-0.5 group-hover:translate-x-0.5 transition" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+            </div>
+          </button>
+
+          <!-- Third Party Center -->
+          <button class="group relative overflow-hidden rounded-2xl bg-[#1a1a1a] border border-white/5 p-4 text-left transition active:scale-[0.98]">
+            <div class="w-11 h-11 rounded-xl bg-[#7c3aed]/15 flex items-center justify-center mb-3">
+              <svg class="w-6 h-6 text-[#8b5cf6]" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/></svg>
+            </div>
+            <h4 class="text-[15px] font-semibold mb-1">第三方资源</h4>
+            <p class="text-xs text-white/50 leading-relaxed">社区脚本与自定义资源</p>
+            <div class="mt-3 flex items-center text-xs text-[#8b5cf6] font-medium">
+              进入 <svg class="w-3.5 h-3.5 ml-0.5 group-hover:translate-x-0.5 transition" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+            </div>
+          </button>
+        </div>
+      </section>
+
+      <!-- Tips -->
+      <section>
+        <h3 class="text-sm font-medium text-white/50 mb-3 px-1">使用提示</h3>
+        <div class="rounded-2xl bg-[#141414] border border-white/5 p-4">
+          <div class="flex gap-3">
+            <div class="shrink-0 w-8 h-8 rounded-full bg-yellow-500/10 flex items-center justify-center mt-0.5">
+              <svg class="w-4 h-4 text-yellow-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+            </div>
+            <p class="text-sm text-white/60 leading-relaxed">
+              实用功能由官方维护；第三方脚本由社区提供，使用前请自行评估风险。
+            </p>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Bottom Navigation -->
+    <nav class="fixed bottom-0 left-0 right-0 bg-[#0d0d0d]/95 backdrop-blur-md border-t border-white/5">
+      <div class="max-w-md mx-auto grid grid-cols-5 h-16">
+        <button class="flex flex-col items-center justify-center gap-1 text-white/40"><svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg><span class="text-[10px]">终端</span></button>
+        <button class="flex flex-col items-center justify-center gap-1 text-white/40"><svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg><span class="text-[10px]">文件</span></button>
+        <button class="flex flex-col items-center justify-center gap-1 text-white/40"><svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"/></svg><span class="text-[10px]">远程</span></button>
+        <button class="flex flex-col items-center justify-center gap-1 text-[#3b82f6]"><svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg><span class="text-[10px] font-medium">资源</span></button>
+        <button class="flex flex-col items-center justify-center gap-1 text-white/40"><svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg><span class="text-[10px]">设置</span></button>
+      </div>
+    </nav>
+  </div>
+</body>
+</html>

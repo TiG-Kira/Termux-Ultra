@@ -37,8 +37,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.TopAppBar
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
@@ -357,8 +356,10 @@ fun TerminalListScreen(
                     ) {
                         Text(
                             text = stringResource(R.string.no_terminal),
-                            fontSize = 16.sp,
-                            color = Color.Gray
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                            lineHeight = 22.sp
                         )
                     }
                 }
@@ -435,9 +436,8 @@ private fun TerminalCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .clickable(onClick = onClick),
-        colors = CardDefaults.cardColors(containerColor = if (isSystemInDarkTheme()) Color(0xFF1A1A1A) else Color.White)
+            .clip(RoundedCornerShape(20.dp))
+            .clickable(onClick = onClick)
     ) {
         Column(
             modifier = Modifier
@@ -448,33 +448,40 @@ private fun TerminalCard(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_terminal),
-                    contentDescription = null,
-                    modifier = Modifier.size(40.dp),
-                    tint = MiuixTheme.colorScheme.onSurface
-                )
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MiuixTheme.colorScheme.surfaceVariant),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_terminal),
+                        contentDescription = null,
+                        modifier = Modifier.size(24.dp),
+                        tint = MiuixTheme.colorScheme.primary
+                    )
+                }
                 Spacer(modifier = Modifier.width(12.dp))
                 Text(
                     text = session.getTerminalSession().mSessionName ?: stringResource(R.string.terminal),
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold,
                     color = MiuixTheme.colorScheme.onSurface,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f),
+                    lineHeight = 22.sp
                 )
             }
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(14.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End
+                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)
             ) {
-                Box(
+                IconButton(
+                    onClick = onRename,
                     modifier = Modifier
                         .size(36.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(MiuixTheme.colorScheme.primary)
-                        .clickable(onClick = onRename),
-                    contentAlignment = Alignment.Center
+                        .background(MiuixTheme.colorScheme.primary, RoundedCornerShape(10.dp))
                 ) {
                     Icon(
                         painter = painterResource(R.drawable.ic_edit),
@@ -483,14 +490,11 @@ private fun TerminalCard(
                         tint = Color.White
                     )
                 }
-                Spacer(modifier = Modifier.width(8.dp))
-                Box(
+                IconButton(
+                    onClick = onStop,
                     modifier = Modifier
                         .size(36.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(MiuixTheme.colorScheme.primary)
-                        .clickable(onClick = onStop),
-                    contentAlignment = Alignment.Center
+                        .background(MiuixTheme.colorScheme.primary, RoundedCornerShape(10.dp))
                 ) {
                     Icon(
                         painter = painterResource(R.drawable.ic_delete),
@@ -510,12 +514,12 @@ fun KeepAliveWarningCard(onClose: () -> Unit) {
     val cardColor = if (isDark) Color(0xFF3D3514) else Color(0xFFFFF9C4)
     val iconColor = Color(0xFFFDD835)
     val textColor = if (isDark) Color.White else Color.Black
-    
-    Card(
+
+    androidx.compose.material3.Card(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 8.dp),
-        colors = CardDefaults.cardColors(containerColor = cardColor)
+        colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = cardColor)
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
             Box(
@@ -534,7 +538,7 @@ fun KeepAliveWarningCard(onClose: () -> Unit) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(all = 16.dp)
+                    .padding(all = 18.dp)
             ) {
                 Icon(
                     painter = painterResource(R.drawable.ic_close),
@@ -550,15 +554,17 @@ fun KeepAliveWarningCard(onClose: () -> Unit) {
                     text = stringResource(R.string.keep_alive_warning_title),
                     fontSize = 18.sp,
                     fontWeight = FontWeight.SemiBold,
-                    color = textColor
+                    color = textColor,
+                    lineHeight = 26.sp
                 )
-                Spacer(Modifier.height(2.dp))
+                Spacer(Modifier.height(6.dp))
                 Text(
                     modifier = Modifier.fillMaxWidth(),
                     text = stringResource(R.string.keep_alive_warning_message),
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Medium,
-                    color = textColor
+                    color = textColor,
+                    lineHeight = 21.sp
                 )
             }
         }
@@ -571,12 +577,12 @@ fun WelcomeCard(text: String, onClose: () -> Unit) {
     val cardColor = if (isDark) Color(0xFF1A1A1A) else Color.White
     val iconColor = if (isDark) Color(0xFF666666) else Color(0xFFCCCCCC)
     val textColor = if (isDark) Color.White else Color.Black
-    
-    Card(
+
+    androidx.compose.material3.Card(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 8.dp),
-        colors = CardDefaults.cardColors(containerColor = cardColor)
+        colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = cardColor)
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
             Box(
@@ -595,7 +601,7 @@ fun WelcomeCard(text: String, onClose: () -> Unit) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(all = 16.dp)
+                    .padding(all = 18.dp)
             ) {
                 Icon(
                     painter = painterResource(R.drawable.ic_close),
@@ -609,9 +615,10 @@ fun WelcomeCard(text: String, onClose: () -> Unit) {
                 Text(
                     modifier = Modifier.fillMaxWidth(),
                     text = text,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = textColor
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = textColor,
+                    lineHeight = 22.sp
                 )
             }
         }
@@ -654,7 +661,7 @@ fun ServiceStatusCard(
         }
     }
     val textColor = if (isDark) Color.White else Color.Black
-    
+
     val title = when (status) {
         ServiceStatus.NORMAL -> stringResource(R.string.service_status_normal)
         ServiceStatus.WAKE_LOCK_ACTIVE -> stringResource(R.string.service_status_wake_lock)
@@ -676,11 +683,11 @@ fun ServiceStatusCard(
         }
     }
     
-    Card(
+    androidx.compose.material3.Card(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 8.dp),
-        colors = CardDefaults.cardColors(containerColor = cardColor)
+        colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = cardColor)
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
             Box(
@@ -699,22 +706,24 @@ fun ServiceStatusCard(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(all = 16.dp)
+                    .padding(all = 18.dp)
             ) {
                 Text(
                     modifier = Modifier.fillMaxWidth(),
                     text = title,
                     fontSize = 18.sp,
                     fontWeight = FontWeight.SemiBold,
-                    color = textColor
+                    color = textColor,
+                    lineHeight = 26.sp
                 )
-                Spacer(Modifier.height(2.dp))
+                Spacer(Modifier.height(6.dp))
                 Text(
                     modifier = Modifier.fillMaxWidth(),
                     text = description,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Medium,
-                    color = textColor
+                    color = textColor,
+                    lineHeight = 21.sp
                 )
             }
         }
