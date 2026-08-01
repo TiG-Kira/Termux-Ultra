@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Termux Ultra — 远程</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style id="theme-vars">
+    :root {
+      --termux-primary: #2563EB;
+      --termux-primary-foreground: #FFFFFF;
+      --termux-primary-hover: #1D4ED8;
+      --termux-background: #F5F5F5;
+      --termux-background-dark: #121212;
+      --termux-surface: #FFFFFF;
+      --termux-surface-dark: #1A1A1A;
+      --termux-surface-variant: #F0F0F0;
+      --termux-surface-variant-dark: #2C2C2C;
+      --termux-on-surface: #1A1A1A;
+      --termux-on-surface-dark: #FFFFFF;
+      --termux-on-surface-variant: #666666;
+      --termux-on-surface-variant-dark: #AAAAAA;
+      --termux-on-surface-summary: #888888;
+      --termux-on-surface-summary-dark: #999999;
+      --termux-success: #36D167;
+      --termux-success-container: #DFFAE4;
+      --termux-success-container-dark: #1A3825;
+      --termux-error: #FF5252;
+      --termux-error-container: #FFEBEE;
+      --termux-error-container-dark: #3B1414;
+      --termux-warning: #FDD835;
+      --termux-warning-container: #FFF9C4;
+      --termux-warning-container-dark: #3D3514;
+      --termux-border: #E0E0E0;
+      --termux-border-dark: #333333;
+      --termux-input: #FFFFFF;
+      --termux-input-dark: #2C2C2C;
+      --termux-ring: #2563EB;
+      --termux-muted: #F5F5F5;
+      --termux-muted-dark: #2C2C2C;
+      --termux-secondary: #E0E0E0;
+      --termux-secondary-dark: #424242;
+      --termux-secondary-foreground: #1A1A1A;
+      --termux-secondary-foreground-dark: #FFFFFF;
+      --termux-radius-sm: 8px;
+      --termux-radius-md: 12px;
+      --termux-radius-lg: 16px;
+      --termux-radius-xl: 20px;
+      --termux-radius-2xl: 24px;
+      --termux-page-horizontal: 16px;
+      --termux-page-bottom: 96px;
+      --termux-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+      --termux-font-mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace;
+    }
+    * { font-family: var(--termux-font-family); -webkit-tap-highlight-color: transparent; }
+    body { margin: 0; background-color: var(--termux-background); color: var(--termux-on-surface); }
+    .dark body { background-color: var(--termux-background-dark); color: var(--termux-on-surface-dark); }
+  </style>
+</head>
+<body class="antialiased">
+  <main id="main-content" data-page="remote" class="min-h-screen pb-24 remote-bg remote-text">
+    <style>
+      [data-page="remote"] .remote-bg { background-color: var(--termux-background); }
+      .dark [data-page="remote"] .remote-bg { background-color: var(--termux-background-dark); }
+
+      [data-page="remote"] .remote-surface { background-color: var(--termux-surface); }
+      .dark [data-page="remote"] .remote-surface { background-color: var(--termux-surface-dark); }
+
+      [data-page="remote"] .remote-surface-variant { background-color: var(--termux-surface-variant); }
+      .dark [data-page="remote"] .remote-surface-variant { background-color: var(--termux-surface-variant-dark); }
+
+      [data-page="remote"] .remote-text { color: var(--termux-on-surface); }
+      .dark [data-page="remote"] .remote-text { color: var(--termux-on-surface-dark); }
+
+      [data-page="remote"] .remote-text-variant { color: var(--termux-on-surface-variant); }
+      .dark [data-page="remote"] .remote-text-variant { color: var(--termux-on-surface-variant-dark); }
+
+      [data-page="remote"] .remote-text-summary { color: var(--termux-on-surface-summary); }
+      .dark [data-page="remote"] .remote-text-summary { color: var(--termux-on-surface-summary-dark); }
+
+      [data-page="remote"] .remote-border { border-color: var(--termux-border); }
+      .dark [data-page="remote"] .remote-border { border-color: var(--termux-border-dark); }
+
+      [data-page="remote"] .remote-input { background-color: var(--termux-input); }
+      .dark [data-page="remote"] .remote-input { background-color: var(--termux-input-dark); }
+
+      [data-page="remote"] .remote-primary { color: var(--termux-primary); }
+      [data-page="remote"] .remote-primary-bg { background-color: var(--termux-primary); }
+      [data-page="remote"] .remote-primary-bg-alpha { background-color: color-mix(in srgb, var(--termux-primary) 12%, transparent); }
+
+      [data-page="remote"] .tab-indicator { background-color: #1A1A1A; }
+      .dark [data-page="remote"] .tab-indicator { background-color: #FFFFFF; }
+    </style>
+
+    <!-- Tab state -->
+    <input type="radio" name="remote-tab" id="tab-vnc-input" class="peer/vnc hidden" checked>
+    <input type="radio" name="remote-tab" id="tab-ssh-input" class="peer/ssh hidden">
+
+    <!-- TopAppBar -->
+    <header class="sticky top-0 z-50 remote-surface border-b remote-border">
+      <div class="h-14 flex items-center px-2">
+        <div class="w-10" aria-hidden="true"></div>
+        <h1 class="flex-1 text-center text-base font-medium remote-text">远程</h1>
+        <div class="flex items-center">
+          <button data-dom-id="add-connection" class="w-10 h-10 flex items-center justify-center rounded-full transition-opacity active:opacity-60 remote-text" aria-label="添加连接">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+          </button>
+          <button data-dom-id="scan-vnc" class="w-10 h-10 flex items-center justify-center rounded-full transition-opacity active:opacity-60 remote-text" aria-label="扫描 VNC">
+            <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/><path d="M21 3v5h-5"/></svg>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- TabRow -->
+    <nav class="sticky top-14 z-40 remote-surface border-b remote-border">
+      <div class="flex">
+        <label for="tab-vnc-input" data-dom-id="tab-vnc" class="flex-1 flex items-center justify-center gap-2 py-3 text-sm font-medium cursor-pointer transition-colors remote-text-variant peer-checked/vnc:remote-text peer-checked/vnc:font-semibold">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+          <span>VNC</span>
+        </label>
+        <label for="tab-ssh-input" data-dom-id="tab-ssh" class="flex-1 flex items-center justify-center gap-2 py-3 text-sm font-medium cursor-pointer transition-colors remote-text-variant peer-checked/ssh:remote-text peer-checked/ssh:font-semibold">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+          <span>SSH</span>
+        </label>
+      </div>
+      <div class="relative h-0.5">
+        <div class="absolute top-0 left-0 w-1/2 h-full tab-indicator transition-transform duration-200 translate-x-0 peer-checked/ssh:translate-x-full"></div>
+      </div>
+    </nav>
+
+    <!-- SearchBar -->
+    <div class="px-4 py-3">
+      <div data-dom-id="search-bar" class="flex items-center gap-3 px-4 py-2.5 rounded-[var(--termux-radius-lg)] remote-surface-variant">
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="remote-text-summary"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="text" placeholder="输入相关标题来搜索 (VNC/SSH)" class="flex-1 bg-transparent text-sm outline-none remote-text placeholder:remote-text-variant" aria-label="搜索连接">
+      </div>
+    </div>
+
+    <!-- VNC Content -->
+    <section class="hidden peer-checked/vnc:block px-4 pb-6 space-y-3">
+      <article data-dom-id="vnc-card-1" class="remote-surface rounded-[var(--termux-radius-lg)] p-4 shadow-sm transition-shadow active:shadow-md">
+        <div class="flex items-center gap-3.5">
+          <div class="w-11 h-11 rounded-xl remote-primary-bg-alpha flex items-center justify-center remote-primary shrink-0">
+            <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+          </div>
+          <div class="flex-1 min-w-0">
+            <h3 class="text-base font-semibold remote-text truncate">Termux VNC :5901</h3>
+            <p class="text-sm remote-text-summary truncate">127.0.0.1:5901</p>
+            <span class="inline-block mt-1 text-xs font-medium remote-primary">来自 Termux</span>
+          </div>
+          <div class="flex items-center -mr-2 shrink-0">
+            <button data-dom-id="edit-connection" class="w-10 h-10 flex items-center justify-center rounded-full transition-opacity active:opacity-60 remote-text-variant" aria-label="编辑">
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
+            </button>
+            <button data-dom-id="delete-connection" class="w-10 h-10 flex items-center justify-center rounded-full transition-opacity active:opacity-60 remote-text-variant" aria-label="删除">
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+            </button>
+          </div>
+        </div>
+      </article>
+
+      <div class="flex flex-col items-center justify-center py-20">
+        <div class="w-[72px] h-[72px] rounded-3xl remote-surface-variant flex items-center justify-center">
+          <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="remote-text-summary"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+        </div>
+        <p class="mt-4 text-base font-medium remote-text-summary">没有 VNC 连接</p>
+      </div>
+    </section>
+
+    <!-- SSH Content -->
+    <section class="hidden peer-checked/ssh:block px-4 pb-6 space-y-3">
+      <article data-dom-id="ssh-card-1" class="remote-surface rounded-[var(--termux-radius-lg)] p-4 shadow-sm transition-shadow active:shadow-md">
+        <div class="flex items-center gap-3.5">
+          <div class="w-11 h-11 rounded-xl remote-primary-bg-alpha flex items-center justify-center remote-primary shrink-0">
+            <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+          </div>
+          <div class="flex-1 min-w-0">
+            <h3 class="text-base font-semibold remote-text truncate">Home Server</h3>
+            <p class="text-sm remote-text-summary truncate">root@192.168.1.100:22</p>
+          </div>
+          <div class="flex items-center -mr-2 shrink-0">
+            <button data-dom-id="edit-connection" class="w-10 h-10 flex items-center justify-center rounded-full transition-opacity active:opacity-60 remote-text-variant" aria-label="编辑">
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
+            </button>
+            <button data-dom-id="delete-connection" class="w-10 h-10 flex items-center justify-center rounded-full transition-opacity active:opacity-60 remote-text-variant" aria-label="删除">
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+            </button>
+          </div>
+        </div>
+      </article>
+
+      <div class="flex flex-col items-center justify-center py-20">
+        <div class="w-[72px] h-[72px] rounded-3xl remote-surface-variant flex items-center justify-center">
+          <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="remote-text-summary"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+        </div>
+        <p class="mt-4 text-base font-medium remote-text-summary">没有 SSH 连接</p>
+      </div>
+    </section>
+
+    <!-- Add/Edit Dialog -->
+    <div class="fixed inset-0 z-[100] bg-black/40 flex items-center justify-center p-6" role="dialog" aria-modal="true" aria-labelledby="remote-dialog-title">
+      <div class="w-full max-w-sm remote-surface rounded-[var(--termux-radius-xl)] p-5 shadow-xl">
+        <h2 id="remote-dialog-title" class="text-lg font-semibold mb-4 remote-text">添加连接</h2>
+        <div class="space-y-3">
+          <input type="text" placeholder="名称" class="w-full px-4 py-3 rounded-[var(--termux-radius-md)] text-sm remote-input remote-text outline-none border remote-border focus:border-[var(--termux-ring)]">
+          <input type="text" placeholder="主机地址" class="w-full px-4 py-3 rounded-[var(--termux-radius-md)] text-sm remote-input remote-text outline-none border remote-border focus:border-[var(--termux-ring)]">
+          <input type="text" placeholder="端口" class="w-full px-4 py-3 rounded-[var(--termux-radius-md)] text-sm remote-input remote-text outline-none border remote-border focus:border-[var(--termux-ring)]">
+          <input type="password" placeholder="密码" class="w-full px-4 py-3 rounded-[var(--termux-radius-md)] text-sm remote-input remote-text outline-none border remote-border focus:border-[var(--termux-ring)]">
+        </div>
+        <div class="flex gap-3 mt-6">
+          <button class="flex-1 py-2.5 rounded-[var(--termux-radius-md)] text-sm font-medium remote-surface-variant remote-text transition-opacity active:opacity-70">取消</button>
+          <button data-dom-id="save-connection" class="flex-1 py-2.5 rounded-[var(--termux-radius-md)] text-sm font-medium remote-primary-bg text-white transition-opacity active:opacity-80">保存</button>
+        </div>
+      </div>
+    </div>
+  </main>
+</body>
+</html>

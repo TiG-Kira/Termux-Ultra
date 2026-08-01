@@ -56,6 +56,19 @@ public class TermuxApplication extends Application {
         setLogLevel();
 
         startTermuxApiListener(getApplicationContext());
+
+        // Keep the am-wrapper hook in sync with the Termux:API switch state, even if the user has
+        // never toggled the preference in this app process (e.g. pkg upgrade erased the hook, or
+        // the user upgraded the app without re-opening settings).
+        try {
+            if (com.termux.app.compose.IntegratedTools.INSTANCE.isEnabled(getApplicationContext(), com.termux.app.compose.IntegratedTools.Tool.TERMUX_API)) {
+                com.termux.app.compose.TermuxApiBroadcastFix.applyAmWrapper(getApplicationContext());
+            } else {
+                com.termux.app.compose.TermuxApiBroadcastFix.removeAmWrapper();
+            }
+        } catch (Throwable t) {
+            android.util.Log.e(LOG_TAG, "Failed to sync Termux:API am wrapper", t);
+        }
     }
 
     private static void startTermuxApiListener(final Context context) {

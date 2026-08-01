@@ -1,0 +1,299 @@
+{
+  "data": [
+    {
+      "id": "page-terminal",
+      "title": "终端",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1754121600000,
+      "canvasData": {
+        "x": 0,
+        "y": 0,
+        "group": 0,
+        "layoutSnapshot": {
+          "version": 1,
+          "contentHeight": 900,
+          "viewportWidth": 375,
+          "sourceHash": "fnv1a-7cd80441",
+          "measuredAt": 1785606237264
+        }
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/terminal.html",
+        "interactions": [
+          {
+            "domId": "nav-files",
+            "targetPageId": "page-files",
+            "hideEdge": true,
+            "transitionLabel": "切换到文件"
+          },
+          {
+            "domId": "nav-remote",
+            "targetPageId": "page-remote",
+            "hideEdge": true,
+            "transitionLabel": "切换到远程"
+          },
+          {
+            "domId": "nav-resources",
+            "targetPageId": "page-resources",
+            "hideEdge": true,
+            "transitionLabel": "切换到资源中心"
+          },
+          {
+            "domId": "nav-settings",
+            "targetPageId": "page-settings",
+            "hideEdge": true,
+            "transitionLabel": "切换到设置"
+          },
+          {
+            "domId": "session-card-1",
+            "targetPageId": "page-terminal-detail",
+            "transitionLabel": "打开终端会话"
+          },
+          {
+            "domId": "session-card-2",
+            "targetPageId": "page-terminal-detail",
+            "transitionLabel": "打开终端会话"
+          },
+          {
+            "domId": "session-card-3",
+            "targetPageId": "page-terminal-detail",
+            "transitionLabel": "打开终端会话"
+          },
+          {
+            "domId": "session-card-4",
+            "targetPageId": "page-terminal-detail",
+            "transitionLabel": "打开终端会话"
+          }
+        ]
+      }
+    },
+    {
+      "id": "page-files",
+      "title": "文件",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1754121600000,
+      "canvasData": {
+        "x": 0,
+        "y": 376,
+        "group": 0,
+        "layoutSnapshot": {
+          "version": 1,
+          "contentHeight": 1021,
+          "viewportWidth": 375,
+          "sourceHash": "fnv1a-fe1b111e",
+          "measuredAt": 1785613333483
+        }
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/files.html",
+        "interactions": [
+          {
+            "domId": "nav-terminal",
+            "targetPageId": "page-terminal",
+            "hideEdge": true,
+            "transitionLabel": "切换到终端"
+          },
+          {
+            "domId": "nav-remote",
+            "targetPageId": "page-remote",
+            "hideEdge": true,
+            "transitionLabel": "切换到远程"
+          },
+          {
+            "domId": "nav-resources",
+            "targetPageId": "page-resources",
+            "hideEdge": true,
+            "transitionLabel": "切换到资源中心"
+          },
+          {
+            "domId": "nav-settings",
+            "targetPageId": "page-settings",
+            "hideEdge": true,
+            "transitionLabel": "切换到设置"
+          }
+        ]
+      }
+    },
+    {
+      "id": "page-remote",
+      "title": "远程",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1754121600000,
+      "canvasData": {
+        "x": 309,
+        "y": 376,
+        "group": 0,
+        "layoutSnapshot": {
+          "version": 1,
+          "contentHeight": 956,
+          "viewportWidth": 375,
+          "sourceHash": "fnv1a-944663b3",
+          "measuredAt": 1785613333483
+        }
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/remote.html",
+        "interactions": [
+          {
+            "domId": "nav-terminal",
+            "targetPageId": "page-terminal",
+            "hideEdge": true,
+            "transitionLabel": "切换到终端"
+          },
+          {
+            "domId": "nav-files",
+            "targetPageId": "page-files",
+            "hideEdge": true,
+            "transitionLabel": "切换到文件"
+          },
+          {
+            "domId": "nav-resources",
+            "targetPageId": "page-resources",
+            "hideEdge": true,
+            "transitionLabel": "切换到资源中心"
+          },
+          {
+            "domId": "nav-settings",
+            "targetPageId": "page-settings",
+            "hideEdge": true,
+            "transitionLabel": "切换到设置"
+          }
+        ]
+      }
+    },
+    {
+      "id": "page-resources",
+      "title": "资源中心",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1754121600000,
+      "canvasData": {
+        "x": 618,
+        "y": 376,
+        "group": 0,
+        "layoutSnapshot": {
+          "version": 1,
+          "contentHeight": 1034,
+          "viewportWidth": 375,
+          "sourceHash": "fnv1a-b063f262",
+          "measuredAt": 1785613333483
+        }
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/resources.html",
+        "interactions": [
+          {
+            "domId": "nav-terminal",
+            "targetPageId": "page-terminal",
+            "hideEdge": true,
+            "transitionLabel": "切换到终端"
+          },
+          {
+            "domId": "nav-files",
+            "targetPageId": "page-files",
+            "hideEdge": true,
+            "transitionLabel": "切换到文件"
+          },
+          {
+            "domId": "nav-remote",
+            "targetPageId": "page-remote",
+            "hideEdge": true,
+            "transitionLabel": "切换到远程"
+          },
+          {
+            "domId": "nav-settings",
+            "targetPageId": "page-settings",
+            "hideEdge": true,
+            "transitionLabel": "切换到设置"
+          }
+        ]
+      }
+    },
+    {
+      "id": "page-settings",
+      "title": "设置",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1754121600000,
+      "canvasData": {
+        "x": 948,
+        "y": -12,
+        "group": 0,
+        "layoutSnapshot": {
+          "version": 1,
+          "contentHeight": 1869,
+          "viewportWidth": 375,
+          "sourceHash": "fnv1a-ec92d4b3",
+          "measuredAt": 1785613333483
+        }
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/settings.html",
+        "interactions": [
+          {
+            "domId": "nav-terminal",
+            "targetPageId": "page-terminal",
+            "hideEdge": true,
+            "transitionLabel": "切换到终端"
+          },
+          {
+            "domId": "nav-files",
+            "targetPageId": "page-files",
+            "hideEdge": true,
+            "transitionLabel": "切换到文件"
+          },
+          {
+            "domId": "nav-remote",
+            "targetPageId": "page-remote",
+            "hideEdge": true,
+            "transitionLabel": "切换到远程"
+          },
+          {
+            "domId": "nav-resources",
+            "targetPageId": "page-resources",
+            "hideEdge": true,
+            "transitionLabel": "切换到资源中心"
+          }
+        ]
+      }
+    },
+    {
+      "id": "page-terminal-detail",
+      "title": "终端会话",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1754121600000,
+      "canvasData": {
+        "x": 309,
+        "y": 0,
+        "group": 0,
+        "layoutSnapshot": {
+          "version": 1,
+          "contentHeight": 901,
+          "viewportWidth": 375,
+          "sourceHash": "fnv1a-86a4ddf7",
+          "measuredAt": 1785606237264
+        }
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/terminal-detail.html",
+        "interactions": [
+          {
+            "domId": "back-terminal",
+            "targetPageId": "page-terminal",
+            "hideEdge": true,
+            "transitionLabel": "返回终端"
+          }
+        ]
+      }
+    }
+  ],
+  "config": {
+    "autoLayout": false,
+    "deviceType": "mobile",
+    "projectName": "Termux Ultra UI 重设计"
+  }
+}

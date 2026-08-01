@@ -47,6 +47,9 @@ import top.yukonga.miuix.kmp.preference.OverlayDropdownPreference
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import androidx.compose.material3.LinearProgressIndicator
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.widget.Toast
 import com.termux.R
 import com.termux.app.LocaleHelper
 import com.termux.app.activities.SettingsActivity
@@ -62,6 +65,61 @@ data class SettingItem(
     val switchValue: Boolean = false,
     val onSwitchChange: (Boolean) -> Unit = {}
 )
+
+/** Copy a command string to the system clipboard and show a short toast. */
+private fun clipCopy(context: Context, command: String) {
+    runCatching {
+        val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        cm.setPrimaryClip(ClipData.newPlainText("termux-cmd", command))
+    }.onFailure { /* ignore */ }
+    val message = if (command.length > 48) command.take(48) + "…" else command
+    Toast.makeText(context, "Copied: $message", Toast.LENGTH_SHORT).show()
+}
+
+/** One row of Termux:API / Boot help: clickable (whole-row) command block + 1-line description on the right. */
+@Composable
+private fun CopyCommandRow(
+    command: String,
+    description: String,
+    onClickCopy: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(MiuixTheme.colorScheme.surface)
+            .clickable { onClickCopy() }
+            .padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = command,
+                fontSize = 13.sp,
+                lineHeight = 18.sp,
+                color = MiuixTheme.colorScheme.primary,
+                fontWeight = FontWeight.Medium
+            )
+            if (description.isNotBlank()) {
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = description,
+                    fontSize = 12.sp,
+                    lineHeight = 18.sp,
+                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                )
+            }
+        }
+        Spacer(Modifier.width(8.dp))
+        Text(
+            text = "COPY",
+            fontSize = 11.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = MiuixTheme.colorScheme.primary
+        )
+    }
+}
 
 @Composable
 fun SettingsScreen(onAboutClick: () -> Unit) {
@@ -546,13 +604,48 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
         show = showApiHelpDialog,
         onDismissRequest = { showApiHelpDialog = false }
     ) {
-        Column(modifier = Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
+        Column(modifier = Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState())) {
+            // Install hint
             Text(
-                text = context.getString(R.string.termux_api_help_content),
-                fontSize = 14.sp,
-                color = MiuixTheme.colorScheme.onSurface,
-                lineHeight = 22.sp
+                text = context.getString(R.string.termux_api_setup_hint),
+                fontSize = 13.sp,
+                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                lineHeight = 20.sp
             )
+            CopyCommandRow(
+                command = "pkg install termux-api",
+                description = "",
+                onClickCopy = { clipCopy(context, "pkg install termux-api") }
+            )
+            Spacer(Modifier.height(10.dp))
+            Text(
+                text = context.getString(R.string.termux_api_commands_title),
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = MiuixTheme.colorScheme.onSurface
+            )
+            Spacer(Modifier.height(4.dp))
+            val apiCmds = listOf(
+                "termux-battery-status" to context.getString(R.string.cmd_battery_status),
+                "termux-camera-photo -c 0 photo.jpg" to context.getString(R.string.cmd_camera_photo),
+                "termux-clipboard-get" to context.getString(R.string.cmd_clipboard_get),
+                "termux-clipboard-set \"hello\"" to context.getString(R.string.cmd_clipboard_set),
+                "termux-notification --title Hi --content Hello" to context.getString(R.string.cmd_notification),
+                "termux-toast \"message\"" to context.getString(R.string.cmd_toast),
+                "termux-vibrate -d 500" to context.getString(R.string.cmd_vibrate),
+                "termux-location" to context.getString(R.string.cmd_location),
+                "termux-sms-list -l 5" to context.getString(R.string.cmd_sms_list),
+                "termux-sms-send -n 10086 \"hello\"" to context.getString(R.string.cmd_sms_send),
+                "termux-tts-speak \"hello world\"" to context.getString(R.string.cmd_tts_speak),
+                "termux-wifi-connectioninfo" to context.getString(R.string.cmd_wifi_info)
+            )
+            apiCmds.forEach { (cmd, desc) ->
+                CopyCommandRow(
+                    command = cmd,
+                    description = desc,
+                    onClickCopy = { clipCopy(context, cmd) }
+                )
+            }
         }
         Spacer(Modifier.height(12.dp))
         TextButton(
@@ -568,13 +661,34 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
         show = showBootHelpDialog,
         onDismissRequest = { showBootHelpDialog = false }
     ) {
-        Column(modifier = Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
+        Column(modifier = Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState())) {
             Text(
                 text = context.getString(R.string.termux_boot_help_content),
                 fontSize = 14.sp,
                 color = MiuixTheme.colorScheme.onSurface,
                 lineHeight = 22.sp
             )
+            Spacer(Modifier.height(10.dp))
+            Text(
+                text = context.getString(R.string.boot_clickable_examples_title),
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = MiuixTheme.colorScheme.onSurface
+            )
+            Spacer(Modifier.height(4.dp))
+            val bootCmds = listOf(
+                "mkdir -p ~/.termux/boot" to context.getString(R.string.boot_cmd_mkdir_desc),
+                "#!/data/data/com.termux/files/usr/bin/sh" to context.getString(R.string.boot_cmd_shebang_desc),
+                "termux-wake-lock" to context.getString(R.string.boot_cmd_wakelock_desc),
+                "sshd" to context.getString(R.string.boot_cmd_sshd_desc)
+            )
+            bootCmds.forEach { (cmd, desc) ->
+                CopyCommandRow(
+                    command = cmd,
+                    description = desc,
+                    onClickCopy = { clipCopy(context, cmd) }
+                )
+            }
         }
         Spacer(Modifier.height(12.dp))
         TextButton(

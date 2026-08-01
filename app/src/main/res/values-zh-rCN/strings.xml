@@ -295,6 +295,12 @@
     <string name="edit_file">编辑 (vi)</string>
     <string name="execute_bash">执行 (bash)</string>
     <string name="copy_path">复制路径</string>
+    <string name="open_file">打开文件</string>
+    <string name="open_with_other">用其他方式打开</string>
+    <string name="file_path">路径</string>
+    <string name="file_permission">权限</string>
+    <string name="file_modified_time">修改时间</string>
+    <string name="create_new">新建</string>
 
     <!-- Keep-alive & tmux -->
     <string name="keep_alive_warning_title">请注意会话保活问题</string>
@@ -444,6 +450,25 @@
     <string name="termux_boot_help_content">Termux:Boot 可在设备开机时自动运行脚本。\n\n添加开机脚本方法：\n\n1. 创建目录：\n   mkdir -p ~/.termux/boot\n2. 将可执行脚本放入 ~/.termux/boot/\n3. 脚本将按排序顺序在开机时执行。\n\n示例（~/.termux/boot/start-ssh）：\n   #!/data/data/com.termux/files/usr/bin/sh\n   termux-wake-lock\n   sshd</string>
     <string name="feature_not_enabled_title">功能未开启</string>
     <string name="feature_not_enabled_message">「%1$s」未开启，是否前往设置开启？</string>
+    <string name="termux_api_setup_hint">先安装 termux-api 命令包，然后点击下方任一命令即可复制到剪贴板。</string>
+    <string name="termux_api_commands_title">常用 Termux:API 命令</string>
+    <string name="cmd_battery_status">查看电池电量、温度、健康状态等信息。</string>
+    <string name="cmd_camera_photo">使用 0 号摄像头（后置）拍摄一张 JPEG 照片。</string>
+    <string name="cmd_clipboard_get">将当前剪贴板文本输出到标准输出。</string>
+    <string name="cmd_clipboard_set">将给定字符串写入剪贴板。</string>
+    <string name="cmd_notification">发送一条带标题和内容的本地通知。</string>
+    <string name="cmd_toast">显示一条简短的 Android 提示。</string>
+    <string name="cmd_vibrate">让设备震动 500 毫秒。</string>
+    <string name="cmd_location">获取当前 GPS / 网络定位信息。</string>
+    <string name="cmd_sms_list">列出最近 5 条短信。</string>
+    <string name="cmd_sms_send">向指定号码发送一条短信。</string>
+    <string name="cmd_tts_speak">使用系统 TTS 朗读给定文本。</string>
+    <string name="cmd_wifi_info">查看当前 Wi-Fi 连接信息（SSID、IP、信号强度等）。</string>
+    <string name="boot_clickable_examples_title">可点击示例</string>
+    <string name="boot_cmd_mkdir_desc">创建开机脚本目录。</string>
+    <string name="boot_cmd_shebang_desc">开机脚本必须包含的 shebang 首行。</string>
+    <string name="boot_cmd_wakelock_desc">持有唤醒锁，避免设备立刻进入休眠。</string>
+    <string name="boot_cmd_sshd_desc">开机时启动 SSH 守护进程。</string>
     <string name="go_to_settings">前往设置</string>
 
     <!-- 官方独立插件 APK 冲突检测 -->

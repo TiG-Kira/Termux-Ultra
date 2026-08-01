@@ -1,0 +1,470 @@
+/* Termux Ultra — 项目级设计令牌与 miuix 控件样式 */
+
+:root {
+  /* 主色 */
+  --tu-primary: #2563EB;
+  --tu-primary-hover: #1D4ED8;
+  --tu-primary-foreground: #FFFFFF;
+
+  /* 背景 */
+  --tu-background: #F5F5F5;
+  --tu-background-dark: #121212;
+
+  /* 表面 */
+  --tu-surface: #FFFFFF;
+  --tu-surface-dark: #1A1A1A;
+  --tu-surface-variant: #F0F0F0;
+  --tu-surface-variant-dark: #2C2C2C;
+
+  /* 文字 */
+  --tu-on-surface: #1A1A1A;
+  --tu-on-surface-dark: #FFFFFF;
+  --tu-on-surface-variant: #666666;
+  --tu-on-surface-variant-dark: #AAAAAA;
+  --tu-on-surface-summary: #888888;
+  --tu-on-surface-summary-dark: #999999;
+
+  /* 状态色 */
+  --tu-success: #36D167;
+  --tu-success-container: #DFFAE4;
+  --tu-success-container-dark: #1A3825;
+  --tu-error: #FF5252;
+  --tu-error-container: #FFEBEE;
+  --tu-error-container-dark: #3B1414;
+  --tu-warning: #FDD835;
+  --tu-warning-container: #FFF9C4;
+  --tu-warning-container-dark: #3D3514;
+  --tu-info: #448AFF;
+  --tu-info-container: #E3F2FD;
+  --tu-info-container-dark: #102E4C;
+
+  /* 边框/输入 */
+  --tu-border: #E0E0E0;
+  --tu-border-dark: #333333;
+  --tu-input: #FFFFFF;
+  --tu-input-dark: #2C2C2C;
+  --tu-ring: #2563EB;
+
+  /* 次要 */
+  --tu-secondary: #E0E0E0;
+  --tu-secondary-dark: #424242;
+  --tu-secondary-foreground: #1A1A1A;
+  --tu-secondary-foreground-dark: #FFFFFF;
+
+  /* 圆角 */
+  --tu-radius-sm: 8px;
+  --tu-radius-md: 12px;
+  --tu-radius-lg: 16px;
+  --tu-radius-xl: 20px;
+  --tu-radius-2xl: 24px;
+
+  /* 间距 */
+  --tu-page-horizontal: 16px;
+  --tu-page-bottom: 96px;
+
+  /* 字体 */
+  --tu-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --tu-font-mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace;
+}
+
+/* miuix Switch */
+.miuix-switch {
+  appearance: none;
+  position: relative;
+  width: 52px;
+  height: 32px;
+  border-radius: 9999px;
+  background-color: var(--tu-secondary);
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+  outline: none;
+  flex-shrink: 0;
+}
+.dark .miuix-switch {
+  background-color: var(--tu-secondary-dark);
+}
+.miuix-switch::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background-color: #fff;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+  transition: transform 0.2s ease;
+}
+.miuix-switch:checked {
+  background-color: var(--tu-primary);
+}
+.miuix-switch:checked::after {
+  transform: translateX(20px);
+}
+
+/* miuix Checkbox */
+.miuix-checkbox {
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  border: 2px solid var(--tu-border);
+  background-color: var(--tu-input);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  position: relative;
+  flex-shrink: 0;
+}
+.dark .miuix-checkbox {
+  border-color: var(--tu-border-dark);
+  background-color: var(--tu-input-dark);
+}
+.miuix-checkbox:checked {
+  background-color: var(--tu-primary);
+  border-color: var(--tu-primary);
+}
+.miuix-checkbox:checked::after {
+  content: '';
+  position: absolute;
+  left: 6px;
+  top: 2px;
+  width: 5px;
+  height: 10px;
+  border: solid white;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+/* miuix Radio */
+.miuix-radio {
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid var(--tu-border);
+  background-color: var(--tu-input);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  position: relative;
+  flex-shrink: 0;
+}
+.dark .miuix-radio {
+  border-color: var(--tu-border-dark);
+  background-color: var(--tu-input-dark);
+}
+.miuix-radio:checked {
+  border-color: var(--tu-primary);
+  border-width: 6px;
+}
+
+/* miuix Button */
+.miuix-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 40px;
+  padding: 0 16px;
+  border-radius: var(--tu-radius-md);
+  font-size: 14px;
+  font-weight: 500;
+  border: none;
+  cursor: pointer;
+  transition: opacity 0.15s ease, transform 0.1s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.miuix-btn:active {
+  opacity: 0.85;
+  transform: scale(0.98);
+}
+.miuix-btn-primary {
+  background-color: var(--tu-primary);
+  color: var(--tu-primary-foreground);
+}
+.miuix-btn-secondary {
+  background-color: var(--tu-secondary);
+  color: var(--tu-secondary-foreground);
+}
+.dark .miuix-btn-secondary {
+  background-color: var(--tu-secondary-dark);
+  color: var(--tu-secondary-foreground-dark);
+}
+.miuix-btn-ghost {
+  background-color: transparent;
+  color: var(--tu-on-surface);
+}
+.dark .miuix-btn-ghost {
+  color: var(--tu-on-surface-dark);
+}
+
+/* miuix Card */
+.miuix-card {
+  border-radius: var(--tu-radius-lg);
+  background-color: var(--tu-surface);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+}
+.dark .miuix-card {
+  background-color: var(--tu-surface-dark);
+}
+
+/* miuix List Item */
+.miuix-list-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-radius: var(--tu-radius-md);
+  background-color: var(--tu-surface);
+  transition: background-color 0.15s ease;
+}
+.dark .miuix-list-item {
+  background-color: var(--tu-surface-dark);
+}
+.miuix-list-item:active {
+  opacity: 0.85;
+}
+
+/* miuix Search Box */
+.miuix-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: var(--tu-radius-lg);
+  background-color: var(--tu-input);
+  color: var(--tu-on-surface);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+.dark .miuix-search {
+  background-color: var(--tu-input-dark);
+  color: var(--tu-on-surface-dark);
+}
+.miuix-search input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  font-size: 14px;
+  color: inherit;
+}
+.miuix-search input::placeholder {
+  color: var(--tu-on-surface-variant);
+}
+.dark .miuix-search input::placeholder {
+  color: var(--tu-on-surface-variant-dark);
+}
+
+/* miuix TabRow */
+.miuix-tabrow {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border-radius: var(--tu-radius-md);
+  background-color: var(--tu-surface-variant);
+}
+.dark .miuix-tabrow {
+  background-color: var(--tu-surface-variant-dark);
+}
+.miuix-tab {
+  flex: 1;
+  height: 36px;
+  border-radius: var(--tu-radius-sm);
+  border: none;
+  background: transparent;
+  color: var(--tu-on-surface-variant);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.dark .miuix-tab {
+  color: var(--tu-on-surface-variant-dark);
+}
+.miuix-tab.active {
+  background-color: var(--tu-surface);
+  color: var(--tu-on-surface);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.08);
+}
+.dark .miuix-tab.active {
+  background-color: var(--tu-surface-dark);
+  color: var(--tu-on-surface-dark);
+}
+
+/* miuix Overlay Dialog */
+.miuix-overlay-dialog {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background-color: rgba(0,0,0,0.45);
+}
+.miuix-dialog-sheet {
+  width: 100%;
+  max-height: 85vh;
+  overflow-y: auto;
+  border-radius: var(--tu-radius-xl) var(--tu-radius-xl) 0 0;
+  background-color: var(--tu-surface);
+  padding: 12px var(--tu-page-horizontal) 24px;
+}
+.dark .miuix-dialog-sheet {
+  background-color: var(--tu-surface-dark);
+}
+.miuix-dialog-handle {
+  width: 36px;
+  height: 4px;
+  border-radius: 2px;
+  background-color: var(--tu-border);
+  margin: 0 auto 16px;
+}
+.dark .miuix-dialog-handle {
+  background-color: var(--tu-border-dark);
+}
+
+/* miuix Arrow Preference */
+.miuix-preference {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: var(--tu-radius-md);
+  background-color: var(--tu-surface);
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+.dark .miuix-preference {
+  background-color: var(--tu-surface-dark);
+}
+.miuix-preference:active {
+  opacity: 0.85;
+}
+.miuix-preference-icon {
+  width: 24px;
+  height: 24px;
+  color: var(--tu-on-surface-variant);
+  flex-shrink: 0;
+}
+.dark .miuix-preference-icon {
+  color: var(--tu-on-surface-variant-dark);
+}
+.miuix-preference-body {
+  flex: 1;
+  min-width: 0;
+}
+.miuix-preference-title {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--tu-on-surface);
+}
+.dark .miuix-preference-title {
+  color: var(--tu-on-surface-dark);
+}
+.miuix-preference-summary {
+  font-size: 13px;
+  color: var(--tu-on-surface-summary);
+  margin-top: 2px;
+}
+.dark .miuix-preference-summary {
+  color: var(--tu-on-surface-summary-dark);
+}
+.miuix-preference-arrow {
+  width: 20px;
+  height: 20px;
+  color: var(--tu-on-surface-summary);
+  flex-shrink: 0;
+}
+.dark .miuix-preference-arrow {
+  color: var(--tu-on-surface-summary-dark);
+}
+
+/* TopAppBar（固定不变） */
+.tu-top-appbar {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  display: flex;
+  height: 56px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 4px;
+  background-color: var(--tu-background);
+}
+.dark .tu-top-appbar {
+  background-color: var(--tu-background-dark);
+}
+.tu-top-appbar-title {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--tu-on-surface);
+}
+.dark .tu-top-appbar-title {
+  color: var(--tu-on-surface-dark);
+}
+.tu-top-appbar-btn {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  color: var(--tu-on-surface);
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+.dark .tu-top-appbar-btn {
+  color: var(--tu-on-surface-dark);
+}
+.tu-top-appbar-btn:active {
+  background-color: var(--tu-surface-variant);
+}
+.dark .tu-top-appbar-btn:active {
+  background-color: var(--tu-surface-variant-dark);
+}
+
+/* 通用工具类 */
+.tu-bg { background-color: var(--tu-background); }
+.dark .tu-bg { background-color: var(--tu-background-dark); }
+.tu-surface { background-color: var(--tu-surface); }
+.dark .tu-surface { background-color: var(--tu-surface-dark); }
+.tu-surface-variant { background-color: var(--tu-surface-variant); }
+.dark .tu-surface-variant { background-color: var(--tu-surface-variant-dark); }
+.tu-text { color: var(--tu-on-surface); }
+.dark .tu-text { color: var(--tu-on-surface-dark); }
+.tu-text-variant { color: var(--tu-on-surface-variant); }
+.dark .tu-text-variant { color: var(--tu-on-surface-variant-dark); }
+.tu-text-summary { color: var(--tu-on-surface-summary); }
+.dark .tu-text-summary { color: var(--tu-on-surface-summary-dark); }
+.tu-border { border-color: var(--tu-border); }
+.dark .tu-border { border-color: var(--tu-border-dark); }
+
+/* 软键盘按键 */
+.key-btn {
+  min-width: 36px;
+  height: 40px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: none;
+  background-color: var(--tu-surface-variant);
+  color: var(--tu-on-surface);
+  font-size: 14px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: opacity 0.1s ease;
+}
+.dark .key-btn {
+  background-color: var(--tu-surface-variant-dark);
+  color: var(--tu-on-surface-dark);
+}
+.key-btn:active {
+  opacity: 0.7;
+}

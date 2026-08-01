@@ -6,7 +6,7 @@
 
 [![Build status](https://github.com/TiG-Kira/Termux-Ultra/workflows/Build/badge.svg)](https://github.com/TiG-Kira/Termux-Ultra/actions)
 
-**Termux Ultra** 是一款基于 [Termux](https://github.com/termux/termux-app) 二次开发的 Android 终端模拟器与 Linux 环境应用。它在保留 Termux 原生终端能力的基础上，集成了 VNC 远程桌面、SSH 连接管理、文件管理器、一键资源部署等增强功能，并采用 Jetpack Compose + Miuix 设计语言打造了现代化的全新 UI。
+**Termux Ultra** 是一款基于 [Termux](https://github.com/termux/termux-app) 二次开发的 Android 终端模拟器与 Linux 环境应用。它在保留 Termux 原生终端能力的基础上，集成了 VNC 远程桌面、SSH 连接管理、文件管理器、Linux 容器（proot）、QEMU 虚拟机、一键资源部署等增强功能，并将 5 款 Termux 插件（API、Boot、Styling、Tasker、Widget）内置为可开关的集成工具，无需额外安装。UI 采用 Jetpack Compose + Miuix 设计语言打造。
 
 > 本仓库为应用本体（用户界面、终端模拟及扩展功能）。应用内可安装的软件包请参见 [termux/termux-packages](https://github.com/termux/termux-packages)。
 
@@ -31,36 +31,56 @@
 
 ### 终端
 - 多会话管理：新建、重命名、关闭、切换会话
-- 搜索框实时过滤（输入标题搜索，无结果显示“未找到”）
+- 搜索框实时过滤（输入标题搜索，无结果显示"未找到"）
 - 服务状态检测：持续监控终端运行状态，支持 Wake Lock 保活
 - 内存监控与保护：内存超限时冻结会话，防止数据丢失
 - 会话保活提示：Android 12+ 配合 tmux 实现后台持久化
+
+### 集成工具管理
+5 款 Termux 插件已内置到应用中，无需额外安装独立 APK，在 `设置` 中按需开关：
+- **Termux:API** — 提供 Android 系统功能调用（传感器、通知、TTS 等）
+- **Termux:Boot** — 开机自动执行 `~/.termux/boot/` 下的脚本
+- **Termux:Styling** — 终端配色方案与字体管理（使用合并包名 `com.termux`）
+- **Termux:Tasker** — Tasker 自动化集成
+- **Termux:Widget** — 桌面快捷方式与小组件
+
+> 工具默认关闭，开启时通过 `PackageManager.setComponentEnabledSetting()` 动态启用对应组件，关闭时禁用。若设备已安装官方独立 APK，开关将自动禁用并提示冲突。
 
 ### 文件管理
 - 完整的文件 / 文件夹操作：新建、复制、剪切、粘贴、删除、重命名
 - 多种打开方式：查看内容（cat）、编辑（vi）、执行（bash）、复制路径
 - 深色模式适配的文件详情面板
+- 内置 FTP 服务器：支持局域网文件传输
 - 拉取刷新
 
 ### 远程管理
-- **VNC 远程桌面**：基于 AVNC + libvncserver，支持手势缩放、多种输入模式、特殊按键、色彩格式配置
-- **SSH 连接管理**：基于 connectbot sshlib，可保存、编辑、删除多个连接配置
+- **VNC 远程桌面**：基于 AVNC + libvncserver，支持手势缩放、多种输入模式、特殊按键、色彩格式配置，自动扫描本地 VNC 端口
+- **SSH 连接管理**：基于 connectbot sshlib，可保存、编辑、删除多个连接配置，自动安装 `ssh`/`sshpass`
+- **SSH 隧道**：支持本地端口转发、主机密钥验证、多 IP 重试
 - 统一的搜索 UI 与卡片式管理
 
+### Linux 容器与虚拟机
+- **Linux 容器**：基于 proot 一键安装 Ubuntu（Noble/Jammy）或 Debian（Bookworm）环境，共享 Termux 主目录
+- **QEMU 虚拟机**：支持在容器内或 Termux 内安装 QEMU，提供完整系统虚拟化
+- **QEMU on VNC**：通过 QEMU 启动虚拟机并通过 VNC 显示桌面，支持自定义 VM 配置（CPU、内存、磁盘、ISO）
+- **Seed ISO**：自动生成 seed ISO 用于虚拟机初始化配置
+
 ### 资源页（一键部署）
-内置常用环境与服务的一键安装脚本：
-- Termux 环境初始化
-- Minecraft 基岩版服务器
-- Linux 服务器（LAMP）
-- Web 服务器（Nginx）
-- Node.js 与 npm
-- Python 环境（Poetry）
+内置常用环境与服务的一键安装脚本，分为实用工具中心与第三方资源中心：
+- Linux 容器安装（Ubuntu / Debian）
+- QEMU 安装（容器内 / Termux 内）
+- QEMU on VNC（虚拟机 + VNC 桌面）
+- 朱雀面板（LightPanel）— 一键部署 Web 管理面板
+- Python 环境部署
 - tmux（保持容器与项目存活）
+- 第三方资源中心：社区维护的扩展资源
 
 ### 仪表盘与设置
 - 网络信息卡片：实时刷新公网 IP 与所属国家
 - 设备信息：机型、Android 版本、内核版本
 - 备份 / 恢复 Termux 数据
+- 集成工具开关面板（含独立 APK 冲突检测）
+- 生物识别认证（指纹解锁）
 - 多语言支持（中文 / 英文，100% 中文覆盖）
 - 深色 / 浅色模式自适应
 - Miuix 风格设置页（ArrowPreference 套件）
@@ -73,14 +93,19 @@
 
 ## 应用与插件
 
-Termux Ultra 核心应用兼容以下可选的 Termux 插件应用（需使用相同签名来源安装）：
+Termux Ultra 将以下 5 款 Termux 插件的源码集成到主应用中（位于 `vendor/termux-addons/`），作为可开关的内置工具，无需额外安装独立 APK：
 
-- [Termux:API](https://github.com/termux/termux-api)
-- [Termux:Boot](https://github.com/termux/termux-boot)
-- [Termux:Float](https://github.com/termux/termux-float)
-- [Termux:Styling](https://github.com/termux/termux-styling)
-- [Termux:Tasker](https://github.com/termux/termux-tasker)
-- [Termux:Widget](https://github.com/termux/termux-widget)
+- [Termux:API](https://github.com/termux/termux-api) — 已集成
+- [Termux:Boot](https://github.com/termux/termux-boot) — 已集成
+- [Termux:Styling](https://github.com/termux/termux-styling) — 已集成（使用合并包名 `com.termux`）
+- [Termux:Tasker](https://github.com/termux/termux-tasker) — 已集成
+- [Termux:Widget](https://github.com/termux/termux-widget) — 已集成
+
+> 集成工具默认关闭，在 `设置` → `集成工具` 中按需开启。若设备已安装对应的官方独立 APK，开关将自动禁用以避免冲突。
+
+以下插件尚未集成，仍需作为独立应用安装（需使用相同签名来源）：
+
+- [Termux:Float](https://github.com/termux/termux-float) — 悬浮终端窗口
 
 ## 系统要求
 
@@ -124,10 +149,27 @@ Termux Ultra 与原版 Termux 及其所有插件共享 `sharedUserId`（`com.ter
 Termux-Ultra/
 ├── app/                        # 主应用模块
 │   ├── src/main/
-│   │   ├── assets/             # 容器脚本（container_run.sh、qemu、seed.iso 等）
+│   │   ├── assets/             # 容器与部署脚本
+│   │   │   ├── container_run.sh          # proot 容器启动脚本
+│   │   │   ├── install_linux_container.sh # Linux 容器安装（Ubuntu/Debian）
+│   │   │   ├── install_qemu.sh           # 容器内 QEMU 安装
+│   │   │   ├── install_lightpanel.sh     # 朱雀面板安装脚本
+│   │   │   ├── qemu_termux_setup.sh      # Termux 内 QEMU 配置
+│   │   │   ├── gen_seed_iso.sh           # Seed ISO 生成
+│   │   │   ├── run_in_container.sh       # 容器内脚本执行入口
+│   │   │   ├── minecraft_server_wrapper.sh
+│   │   │   ├── seed.iso                  # 预生成 Seed ISO
+│   │   │   └── resolv.conf               # DNS 配置
 │   │   ├── cpp/                # CMake 原生构建（termux-bootstrap）
 │   │   ├── cpp_avnc/           # AVNC 原生 VNC 客户端
 │   │   ├── java/com/termux/    # 应用 Kotlin/Java 源码
+│   │   │   ├── app/            # 核心逻辑（TermuxActivity、TermuxService 等）
+│   │   │   ├── app/compose/    # Jetpack Compose UI（主页、文件、远程、资源、设置等）
+│   │   │   ├── app/vnc/        # VNC 连接管理
+│   │   │   ├── app/ssh/        # SSH 连接管理
+│   │   │   ├── app/remote/     # 远程管理综合页
+│   │   │   ├── app/ftp/        # 内置 FTP 服务器
+│   │   │   └── app/activities/ # 第三方资源中心、实用工具中心等
 │   │   ├── jniLibs/            # 预编译 .so 库
 │   │   └── res/                # 资源（布局、drawable、strings、xml 偏好）
 │   ├── extern/                 # 第三方原生库源码
@@ -135,6 +177,12 @@ Termux-Ultra/
 │   │   ├── libvncserver/       # VNC 服务端库
 │   │   └── wolfssl/            # TLS/SSL 库
 │   └── CMakeLists.txt          # 原生构建配置
+├── vendor/termux-addons/       # 集成的 Termux 插件源码
+│   ├── termux-api/             # Termux:API
+│   ├── termux-boot/            # Termux:Boot
+│   ├── termux-styling/         # Termux:Styling
+│   ├── termux-tasker/          # Termux:Tasker
+│   └── termux-widget/          # Termux:Widget
 ├── terminal-emulator/          # 终端模拟器模块
 ├── terminal-view/              # 终端视图模块
 ├── termux-shared/              # 共享常量与工具库
@@ -167,7 +215,9 @@ Termux-Ultra/
 
 构建产物：
 - Debug：`app/build/outputs/apk/debug/termux-ultra_debug_universal.apk`
-- Release：`app/build/outputs/apk/release/` 下各架构 APK
+- Release：`app/build/outputs/apk/release/` 下各架构 APK（`arm64-v8a`、`armeabi-v7a`、`x86`、`x86_64`）
+
+原生构建目标（CMake）：`native-vnc`、`vncclient`、`turbojpeg-static`、`wolfssl`、`termux-bootstrap`
 
 > 构建时不要使用 `-q` 参数，以便观察构建进度。
 
@@ -180,13 +230,16 @@ Termux-Ultra/
 | 类别 | 技术 |
 | --- | --- |
 | 语言 | Kotlin、Java、C/C++ |
-| UI | Jetpack Compose、Material 3、Miuix KMP（ui / icons / preference） |
-| 架构组件 | AndroidX、Lifecycle、ViewModel、Navigation、Room、DataBinding |
+| UI | Jetpack Compose 1.8.3、Material 3 1.3.0、Miuix KMP 0.9.3（ui / icons / preference） |
+| 架构组件 | AndroidX、Lifecycle 2.8.5、ViewModel、Navigation、Room 2.7.2、DataBinding |
 | 终端 | terminal-emulator、terminal-view |
 | VNC | AVNC、libvncserver、libjpeg-turbo、wolfssl |
-| SSH | connectbot sshlib |
-| 序列化 | Gson、kotlinx-serialization |
-| 构建 | Gradle、CMake、NDK |
+| SSH | connectbot sshlib 2.2.36 |
+| 图片加载 | Coil Compose 2.7.0 |
+| 生物识别 | AndroidX Biometric 1.2.0-alpha05 |
+| 序列化 | Gson 2.10.1、kotlinx-serialization 1.9.0 |
+| 构建 | Gradle、CMake 3.22.1、NDK 22.1.7171670 |
+| 集成插件 | termux-api、termux-boot、termux-styling、termux-tasker、termux-widget |
 | 包名 | `com.termux`（sharedUserId） |
 
 ## 调试
@@ -219,12 +272,16 @@ Termux Ultra 由 **Kira**（[@TiG-Kira](https://github.com/TiG-Kira)）开发维
 `termux-shared` 库定义了应用与插件共享的常量与工具类，主常量位于 [`TermuxConstants`](termux-shared/src/main/java/com/termux/shared/termux/TermuxConstants.java)。提交代码时请遵循：
 
 - 共享常量与工具请定义在 `termux-shared` 中，**禁止硬编码路径**，否则 PR 不予接受。
+- 集成工具的启停统一通过 `IntegratedTools` 单例管理，禁止直接调用 `PackageManager.setComponentEnabledSetting()`，需通过 `IntegratedTools.setEnabled()` + `IntegratedTools.applyComponentState()` 完成。
+- 集成工具的 Android 组件必须在 `AndroidManifest.xml` 中声明 `android:enabled="false"`，并在 `IntegratedTools.componentsFor()` 中注册。
 - 提交信息遵循 [Conventional Commits](https://www.conventionalcommits.org) 规范（如 `Added: 新增功能`、`Fixed: 修复问题`、`Changed!: 破坏性变更`），冒号后需有空格。
 - `versionName` 遵循 [语义化版本 2.0.0](https://semver.org/spec/v2.0.0.html)，格式 `major.minor.patch(-prerelease)(+buildmetadata)`，如 `v0.1.0`。
 
 ### Fork 注意事项
 
 - 修改包名需重新编译对应 `$PREFIX` 的 bootstrap zip，参见 [Building Packages](https://github.com/termux/termux-packages/wiki/Building-packages)。
+- 集成插件（`vendor/termux-addons/`）的组件在 `AndroidManifest.xml` 中默认以 `android:enabled="false"` 声明，运行时通过 `IntegratedTools.applyComponentState()` 动态启停，Fork 时需保持此模式。
+- Termux:Styling 使用合并包名 `com.termux` 而非原始 `com.termux.styling`，修改包名时需同步更新 `IntegratedTools.kt` 中的组件映射。
 - 部分插件尚未完全迁移到 `termux-shared` 的 `TermuxConstants`，仍存在硬编码 `com.termux`，需手动 patch。
 
 ## 致谢
@@ -236,6 +293,8 @@ Termux Ultra 由 **Kira**（[@TiG-Kira](https://github.com/TiG-Kira)）开发维
 - [libjpeg-turbo](https://github.com/libjpeg-turbo/libjpeg-turbo) — JPEG 编解码
 - [connectbot sshlib](https://github.com/connectbot/sshlib) — SSH 库
 - [Miuix KMP](https://github.com/miuix-kotlin-multiplatform/miuix) — UI 设计组件
+- [LightPanel](https://github.com/MyUI0/lightpanel) — 朱雀面板 Web 管理面板
+- [Termux Add-ons](https://github.com/termux) — API、Boot、Styling、Tasker、Widget 插件源码
 
 ## 开源许可
 

@@ -307,6 +307,12 @@
     <string name="edit_file">Edit (vi)</string>
     <string name="execute_bash">Execute (bash)</string>
     <string name="copy_path">Copy Path</string>
+    <string name="open_file">Open File</string>
+    <string name="open_with_other">Open With Other App</string>
+    <string name="file_path">Path</string>
+    <string name="file_permission">Permission</string>
+    <string name="file_modified_time">Modified</string>
+    <string name="create_new">New</string>
 
     <string name="vnc_address_caption">Address</string>
     <string name="vnc_alt_check">Alt</string>
@@ -514,6 +520,25 @@
     <string name="termux_boot_help_content">Termux:Boot runs scripts automatically when the device starts.\n\nTo add a boot script:\n\n1. Create the directory:\n   mkdir -p ~/.termux/boot\n2. Place executable scripts in ~/.termux/boot/\n3. Scripts run in sorted order on boot.\n\nExample (~/.termux/boot/start-ssh):\n   #!/data/data/com.termux/files/usr/bin/sh\n   termux-wake-lock\n   sshd</string>
     <string name="feature_not_enabled_title">Feature not enabled</string>
     <string name="feature_not_enabled_message">\"%1$s\" is not enabled. Go to Settings to enable it?</string>
+    <string name="termux_api_setup_hint">First install the termux-api command package, then tap any command row below to copy it to the clipboard.</string>
+    <string name="termux_api_commands_title">Common Termux:API commands</string>
+    <string name="cmd_battery_status">Show battery health, temperature, level, etc.</string>
+    <string name="cmd_camera_photo">Take a JPEG photo with camera 0 (rear).</string>
+    <string name="cmd_clipboard_get">Print the current clipboard text to stdout.</string>
+    <string name="cmd_clipboard_set">Set clipboard to the given string.</string>
+    <string name="cmd_notification">Post a local notification with title and message.</string>
+    <string name="cmd_toast">Show a short Android toast message.</string>
+    <string name="cmd_vibrate">Vibrate the device for 500 ms.</string>
+    <string name="cmd_location">Return current GPS / network location.</string>
+    <string name="cmd_sms_list">List the 5 most recent SMS messages.</string>
+    <string name="cmd_sms_send">Send an SMS to the given number.</string>
+    <string name="cmd_tts_speak">Text-to-speech: speak the given text.</string>
+    <string name="cmd_wifi_info">Show current Wi-Fi connection info (SSID, IP, RSSI…).</string>
+    <string name="boot_clickable_examples_title">Clickable examples</string>
+    <string name="boot_cmd_mkdir_desc">Create the boot directory.</string>
+    <string name="boot_cmd_shebang_desc">Mandatory shebang line for the boot script.</string>
+    <string name="boot_cmd_wakelock_desc">Hold a wake-lock so the device does not immediately sleep.</string>
+    <string name="boot_cmd_sshd_desc">Start the SSH daemon on boot.</string>
     <string name="go_to_settings">Go to Settings</string>
 
     <!-- Official standalone APK conflict detection -->

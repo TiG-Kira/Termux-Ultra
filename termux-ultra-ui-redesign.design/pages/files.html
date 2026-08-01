@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="antialiased">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Termux Ultra — 文件</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="../colors_and_type.css">
+  <style>
+    body { font-family: var(--tu-font-family); -webkit-tap-highlight-color: transparent; }
+    .tu-warning-bg { background-color: var(--tu-warning-container); }
+    .dark .tu-warning-bg { background-color: var(--tu-warning-container-dark); }
+    .tu-warning-text { color: var(--tu-on-surface); }
+    .dark .tu-warning-text { color: var(--tu-on-surface-dark); }
+    .tu-text-mono { font-family: var(--tu-font-mono); }
+    .bottom-sheet {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 72px;
+      z-index: 40;
+      border-radius: var(--tu-radius-xl) var(--tu-radius-xl) 0 0;
+      background-color: var(--tu-surface);
+      box-shadow: 0 -4px 20px rgba(0,0,0,0.08);
+    }
+    .dark .bottom-sheet { background-color: var(--tu-surface-dark); }
+    .bottom-nav {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 50;
+      height: 72px;
+      padding-bottom: env(safe-area-inset-bottom, 0px);
+      background-color: var(--tu-surface);
+      border-top: 1px solid var(--tu-border);
+    }
+    .dark .bottom-nav {
+      background-color: var(--tu-surface-dark);
+      border-color: var(--tu-border-dark);
+    }
+    .nav-item.active { color: var(--tu-primary); }
+    .nav-item:not(.active) { color: var(--tu-on-surface-variant); }
+    .dark .nav-item:not(.active) { color: var(--tu-on-surface-variant-dark); }
+  </style>
+  <script>
+    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+      document.documentElement.classList.add('dark');
+    }
+  </script>
+</head>
+<body class="tu-bg tu-text min-h-screen">
+
+  <!-- TopAppBar -->
+  <header class="tu-top-appbar">
+    <div class="flex items-center">
+      <button class="tu-top-appbar-btn" aria-label="返回上级"><svg viewBox="0 0 24 24" fill="currentColor" class="w-6 h-6"><path d="M7.41 15.41L12 10.83l4.59 4.58L18 14l-6-6-6 6z"/></svg></button>
+      <button class="tu-top-appbar-btn" aria-label="前进" disabled><svg viewBox="0 0 24 24" fill="currentColor" class="w-6 h-6"><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6z"/></svg></button>
+    </div>
+    <h1 class="tu-top-appbar-title">文件</h1>
+    <div class="flex items-center gap-1 pr-1">
+      <button class="tu-top-appbar-btn" data-dom-id="ftp-info" aria-label="FTP 信息"><svg viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm3.5-9c.83 0 1.5-.67 1.5-1.5S16.33 8 15.5 8 14 8.67 14 9.5s.67 1.5 1.5 1.5zm-7 0c.83 0 1.5-.67 1.5-1.5S9.33 8 8.5 8 7 8.67 7 9.5 7.67 11 8.5 11zm3.5 6.5c2.33 0 4.31-1.46 5.11-3.5H6.89c.8 2.04 2.78 3.5 5.11 3.5z"/></svg></button>
+      <input type="checkbox" class="miuix-switch" data-dom-id="ftp-toggle" aria-label="FTP 开关">
+      <button class="tu-top-appbar-btn" data-dom-id="new-file" aria-label="新建"><svg viewBox="0 0 24 24" fill="currentColor" class="w-6 h-6"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg></button>
+    </div>
+  </header>
+
+  <!-- Main content -->
+  <main class="px-4 pt-3 pb-[340px] space-y-3">
+
+    <!-- Warning card -->
+    <section class="tu-warning-bg rounded-[var(--tu-radius-lg)] p-3.5 flex items-start gap-3">
+      <svg viewBox="0 0 24 24" fill="currentColor" class="w-6 h-6 text-[var(--tu-warning)] flex-shrink-0 mt-0.5"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></svg>
+      <p class="flex-1 text-sm leading-5 tu-warning-text">
+        文件管理操作具有风险，删除或修改系统文件可能导致应用无法正常工作。请谨慎操作。
+      </p>
+      <button class="tu-top-appbar-btn w-8 h-8 flex-shrink-0" aria-label="关闭警告">
+        <svg viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5 tu-text-variant"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+      </button>
+    </section>
+
+    <!-- Path breadcrumb card -->
+    <section class="miuix-card p-3 flex items-center gap-2.5">
+      <svg viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5 tu-text-variant flex-shrink-0"><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>
+      <span class="text-[13px] font-medium truncate tu-text-variant tu-text-mono">/data/data/com.termux/files</span>
+    </section>
+
+    <!-- File list -->
+    <section class="miuix-card overflow-hidden" aria-label="文件列表">
+
+      <!-- Folder: bin (selection mode, checked) -->
+      <div class="miuix-list-item border-b border-[var(--tu-border)] dark:border-[var(--tu-border-dark)]" data-dom-id="folder-bin">
+        <input type="checkbox" class="miuix-checkbox" checked aria-label="选择 bin">
+        <div class="w-10 h-10 rounded-[var(--tu-radius-md)] bg-[var(--tu-primary)]/10 flex items-center justify-center flex-shrink-0">
+          <svg viewBox="0 0 24 24" fill="currentColor" class="w-6 h-6 text-[var(--tu-primary)]"><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>
+        </div>
+        <div class="flex-1 min-w-0">
+          <h3 class="text-[15px] font-medium truncate tu-text">bin</h3>
+          <p class="text-xs tu-text-summary mt-0.5">12 项 · 文件夹</p>
+        </div>
+      </div>
+
+      <!-- Folder: home (normal mode) -->
+      <div class="miuix-list-item border-b border-[var(--tu-border)] dark:border-[var(--tu-border-dark)]" data-dom-id="folder-home">
+        <div class="w-10 h-10 rounded-[var(--tu-radius-md)] bg-[var(--tu-primary)]/10 flex items-center justify-center flex-shrink-0">
+          <svg viewBox="0 0 24 24" fill="currentColor" class="w-6 h-6 text-[var(--tu-primary)]"><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>
+        </div>
+        <div class="flex-1 min-w-0">
+          <h3 class="text-[15px] font-medium truncate tu-text">home</h3>
+          <p class="text-xs tu-text-summary mt-0.5">5 项 · 文件夹</p>
+        </div>
+        <svg viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5 tu-text-summary flex-shrink-0"><path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6z"/></svg>
+      </div>
+
+      <!-- File: bootstrap.sh (selection mode, unchecked) -->
+      <div class="miuix-list-item border-b border-[var(--tu-border)] dark:border-[var(--tu-border-dark)]" data-dom-id="file-bootstrap">
+        <input type="checkbox" class="miuix-checkbox" aria-label="选择 bootstrap.sh">
+        <div class="w-10 h-10 rounded-[var(--tu-radius-md)] bg-[var(--tu-surface-variant)] dark:bg-[var(--tu-surface-variant-dark)] flex items-center justify-center flex-shrink-0">
+          <svg viewBox="0 0 24 24" fill="currentColor" class="w-6 h-6 tu-text-variant"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>
+        </div>
+        <div class="flex-1 min-w-0">
+          <h3 class="text-[15px] font-medium truncate tu-text">bootstrap.sh</h3>
+          <p class="text-xs tu-text-summary mt-0.5">1.24 KB · 2026-07-28 14:32</p>
+        </div>
+      </div>
+
+      <!-- File: README.md (normal mode) -->
+      <div class="miuix-list-item border-b border-[var(--tu-border)] dark:border-[var(--tu-border-dark)]" data-dom-id="file-readme">
+        <div class="w-10 h-10 rounded-[var(--tu-radius-md)] bg-[var(--tu-surface-variant)] dark:bg-[var(--tu-surface-variant-dark)] flex items-center justify-center flex-shrink-0">
+          <svg viewBox="0 0 24 24" fill="currentColor" class="w-6 h-6 tu-text-variant"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>
+        </div>
+        <div class="flex-1 min-w-0">
+          <h3 class="text-[15px] font-medium truncate tu-text">README.md</h3>
+          <p class="text-xs tu-text-summary mt-0.5">3.68 KB · 2026-07-25 09:15</p>
+        </div>
+      </div>
+
+      <!-- File: .bashrc (normal mode) -->
+      <div class="miuix-list-item border-b border-[var(--tu-border)] dark:border-[var(--tu-border-dark)]" data-dom-id="file-bashrc">
+        <div class="w-10 h-10 rounded-[var(--tu-radius-md)] bg-[var(--tu-surface-variant)] dark:bg-[var(--tu-surface-variant-dark)] flex items-center justify-center flex-shrink-0">
+          <svg viewBox="0 0 24 24" fill="currentColor" class="w-6 h-6 tu-text-variant"><path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-1 9h-4v2h4v2h-4v2h4v2H9V5h10v6z"/></svg>
+        </div>
+        <div class="flex-1 min-w-0">
+          <h3 class="text-[15px] font-medium truncate tu-text">.bashrc</h3>
+          <p class="text-xs tu-text-summary mt-0.5">856 B · 2026-07-20 18:40</p>
+        </div>
+      </div>
+
+      <!-- Folder: tmp (selection mode, checked) -->
+      <div class="miuix-list-item border-b border-[var(--tu-border)] dark:border-[var(--tu-border-dark)]" data-dom-id="folder-tmp">
+        <input type="checkbox" class="miuix-checkbox" checked aria-label="选择 tmp">
+        <div class="w-10 h-10 rounded-[var(--tu-radius-md)] bg-[var(--tu-primary)]/10 flex items-center justify-center flex-shrink-0">
+          <svg viewBox="0 0 24 24" fill="currentColor" class="w-6 h-6 text-[var(--tu-primary)]"><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>
+        </div>
+        <div class="flex-1 min-w-0">
+          <h3 class="text-[15px] font-medium truncate tu-text">tmp</h3>
+          <p class="text-xs tu-text-summary mt-0.5">8 项 · 文件夹</p>
+        </div>
+      </div>
+
+      <!-- File: install.sh (normal mode) -->
+      <div class="miuix-list-item" data-dom-id="file-install">
+        <div class="w-10 h-10 rounded-[var(--tu-radius-md)] bg-[var(--tu-surface-variant)] dark:bg-[var(--tu-surface-variant-dark)] flex items-center justify-center flex-shrink-0">
+          <svg viewBox="0 0 24 24" fill="currentColor" class="w-6 h-6 tu-text-variant"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>
+        </div>
+        <div class="flex-1 min-w-0">
+          <h3 class="text-[15px] font-medium truncate tu-text">install.sh</h3>
+          <p class="text-xs tu-text-summary mt-0.5">4.12 KB · 2026-07-30 11:08</p>
+        </div>
+      </div>
+
+    </section>
+
+  </main>
+
+  <!-- Bottom sheet detail panel -->
+  <section class="bottom-sheet p-4" data-dom-id="file-detail-sheet" aria-label="文件详情">
+    <div class="miuix-dialog-handle mb-4"></div>
+    <div class="flex items-center gap-3 mb-4">
+      <div class="w-12 h-12 rounded-[var(--tu-radius-lg)] bg-[var(--tu-surface-variant)] dark:bg-[var(--tu-surface-variant-dark)] flex items-center justify-center flex-shrink-0">
+        <svg viewBox="0 0 24 24" fill="currentColor" class="w-7 h-7 tu-text-variant"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>
+      </div>
+      <div class="flex-1 min-w-0">
+        <h2 class="text-base font-medium truncate tu-text">bootstrap.sh</h2>
+        <p class="text-xs tu-text-summary">Shell 脚本 · 1.24 KB</p>
+      </div>
+    </div>
+    <div class="space-y-2 text-sm mb-4">
+      <div class="flex justify-between py-1.5 border-b border-[var(--tu-border)] dark:border-[var(--tu-border-dark)]">
+        <span class="tu-text-summary">路径</span>
+        <span class="tu-text-mono tu-text truncate max-w-[60%]">/data/data/com.termux/files/bootstrap.sh</span>
+      </div>
+      <div class="flex justify-between py-1.5 border-b border-[var(--tu-border)] dark:border-[var(--tu-border-dark)]">
+        <span class="tu-text-summary">大小</span>
+        <span class="tu-text">1.24 KB</span>
+      </div>
+      <div class="flex justify-between py-1.5 border-b border-[var(--tu-border)] dark:border-[var(--tu-border-dark)]">
+        <span class="tu-text-summary">权限</span>
+        <span class="tu-text-mono tu-text">-rwxr-xr-x</span>
+      </div>
+      <div class="flex justify-between py-1.5">
+        <span class="tu-text-summary">修改时间</span>
+        <span class="tu-text">2026-07-28 14:32</span>
+      </div>
+    </div>
+    <div class="grid grid-cols-2 gap-3">
+      <button class="miuix-btn miuix-btn-secondary text-sm" data-dom-id="detail-copy-path">复制路径</button>
+      <button class="miuix-btn miuix-btn-primary text-sm" data-dom-id="detail-open">打开文件</button>
+    </div>
+  </section>
+
+  <!-- Bottom navigation bar -->
+  <nav class="bottom-nav flex items-center justify-around px-2" aria-label="底部导航">
+    <button class="nav-item flex flex-col items-center justify-center gap-1 flex-1 h-full" data-dom-id="nav-terminal">
+      <svg viewBox="0 0 24 24" fill="currentColor" class="w-6 h-6"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zM4 18V6h16v12H4zM7.41 8.59L5.99 10l4.58 4.59L6 19.41 7.41 20.83l5.58-5.59L7.41 8.59z"/></svg>
+      <span class="text-[11px] font-medium">终端</span>
+    </button>
+    <button class="nav-item active flex flex-col items-center justify-center gap-1 flex-1 h-full" data-dom-id="nav-files">
+      <svg viewBox="0 0 24 24" fill="currentColor" class="w-6 h-6"><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>
+      <span class="text-[11px] font-medium">文件</span>
+    </button>
+    <button class="nav-item flex flex-col items-center justify-center gap-1 flex-1 h-full" data-dom-id="nav-remote">
+      <svg viewBox="0 0 24 24" fill="currentColor" class="w-6 h-6"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>
+      <span class="text-[11px] font-medium">远程</span>
+    </button>
+    <button class="nav-item flex flex-col items-center justify-center gap-1 flex-1 h-full" data-dom-id="nav-resources">
+      <svg viewBox="0 0 24 24" fill="currentColor" class="w-6 h-6"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14zM7 10h2v7H7zm4-3h2v10h-2zm4 6h2v4h-2z"/></svg>
+      <span class="text-[11px] font-medium">资源</span>
+    </button>
+    <button class="nav-item flex flex-col items-center justify-center gap-1 flex-1 h-full" data-dom-id="nav-settings">
+      <svg viewBox="0 0 24 24" fill="currentColor" class="w-6 h-6"><path d="M19.14 12.94c.04-.31.06-.63.06-.94 0-.31-.02-.63-.06-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L3.16 8.27c-.12.21-.08.47.12.61l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>
+      <span class="text-[11px] font-medium">设置</span>
+    </button>
+  </nav>
+
+</body>
+</html>

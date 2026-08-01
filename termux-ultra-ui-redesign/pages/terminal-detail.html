@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Termux Ultra — 终端会话</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style id="theme-vars">
+    :root {
+      --termux-primary: #2563EB;
+      --termux-primary-foreground: #FFFFFF;
+      --termux-primary-hover: #1D4ED8;
+      --termux-background: #F5F5F5;
+      --termux-background-dark: #121212;
+      --termux-surface: #FFFFFF;
+      --termux-surface-dark: #1A1A1A;
+      --termux-surface-variant: #F0F0F0;
+      --termux-surface-variant-dark: #2C2C2C;
+      --termux-on-surface: #1A1A1A;
+      --termux-on-surface-dark: #FFFFFF;
+      --termux-on-surface-variant: #666666;
+      --termux-on-surface-variant-dark: #AAAAAA;
+      --termux-on-surface-summary: #888888;
+      --termux-on-surface-summary-dark: #999999;
+      --termux-success: #36D167;
+      --termux-success-container: #DFFAE4;
+      --termux-success-container-dark: #1A3825;
+      --termux-error: #FF5252;
+      --termux-error-container: #FFEBEE;
+      --termux-error-container-dark: #3B1414;
+      --termux-warning: #FDD835;
+      --termux-warning-container: #FFF9C4;
+      --termux-warning-container-dark: #3D3514;
+      --termux-border: #E0E0E0;
+      --termux-border-dark: #333333;
+      --termux-input: #FFFFFF;
+      --termux-input-dark: #2C2C2C;
+      --termux-ring: #2563EB;
+      --termux-muted: #F5F5F5;
+      --termux-muted-dark: #2C2C2C;
+      --termux-secondary: #E0E0E0;
+      --termux-secondary-dark: #424242;
+      --termux-secondary-foreground: #1A1A1A;
+      --termux-secondary-foreground-dark: #FFFFFF;
+      --termux-radius-sm: 8px;
+      --termux-radius-md: 12px;
+      --termux-radius-lg: 16px;
+      --termux-radius-xl: 20px;
+      --termux-radius-2xl: 24px;
+      --termux-page-horizontal: 16px;
+      --termux-page-bottom: 96px;
+      --termux-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+      --termux-font-mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace;
+    }
+    * { font-family: var(--termux-font-family); -webkit-tap-highlight-color: transparent; }
+    body { margin: 0; background-color: var(--termux-background); color: var(--termux-on-surface); }
+    .dark body { background-color: var(--termux-background-dark); color: var(--termux-on-surface-dark); }
+  </style>
+</head>
+<body class="antialiased">
+  <main id="main-content" data-page="terminal-detail" class="min-h-screen pb-24 flex flex-col" style="background-color: var(--termux-background-dark);">
+    <!-- 状态栏占位：透明并与 TopBar 融为一体 -->
+    <div class="w-full h-6 shrink-0" style="background: transparent;"></div>
+
+    <!-- TerminalTopBar -->
+    <header class="w-full h-14 flex items-center px-4 shrink-0" style="background: transparent;">
+      <button data-dom-id="back-button" class="w-10 h-10 flex items-center justify-center rounded-full active:opacity-60" aria-label="返回">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--termux-on-surface-dark);">
+          <path d="M15 18l-6-6 6-6"/>
+        </svg>
+      </button>
+      <h1 class="flex-1 text-center text-base font-medium truncate px-2" style="color: var(--termux-on-surface-dark);">Session 1</h1>
+      <div class="flex items-center gap-1">
+        <button data-dom-id="toggle-keyboard" class="w-10 h-10 flex items-center justify-center rounded-full active:opacity-60" aria-label="切换软键盘">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--termux-on-surface-dark);">
+            <rect x="2" y="4" width="20" height="16" rx="2"/>
+            <path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01M8 12h.01M12 12h.01M16 12h.01M7 16h10"/>
+          </svg>
+        </button>
+        <button data-dom-id="new-session" class="w-10 h-10 flex items-center justify-center rounded-full active:opacity-60" aria-label="新建会话">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--termux-on-surface-dark);">
+            <path d="M12 5v14M5 12h14"/>
+          </svg>
+        </button>
+        <button data-dom-id="close-session" class="w-10 h-10 flex items-center justify-center rounded-full active:opacity-60" aria-label="关闭会话">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--termux-error);">
+            <path d="M18 6L6 18M6 6l12 12"/>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- 终端仿真器视图 -->
+    <section data-dom-id="terminal-view" class="flex-1 relative min-h-0 overflow-auto mx-3 mb-3 rounded-xl border" style="background-color: #0D0D0D; border-color: #333333; font-family: var(--termux-font-mono);">
+      <div class="p-3 text-sm leading-5 whitespace-pre-wrap select-text" style="color: #E0E0E0;">
+        <span style="color: #36D167;">~ $</span> pkg update && pkg upgrade
+        <br/>Hit:1 https://packages.termux.dev/termux-main stable InRelease
+        <br/>Reading package lists... Done
+        <br/>Building dependency tree... Done
+        <br/><span style="color: #36D167;">~ $</span> termux-setup-storage
+        <br/>storage permission granted
+        <br/><span style="color: #36D167;">~ $</span> ls -la
+        <br/>total 56
+        <br/>drwx------  4 u0_a123 u0_a123 4096 Aug  2 10:00 <span style="color: #2563EB;">.</span>
+        <br/>drwxr-xr-x 18 root    root    4096 Aug  1 09:00 <span style="color: #2563EB;">..</span>
+        <br/>-rw-------  1 u0_a123 u0_a123  220 Aug  1 09:30 .bash_history
+        <br/>-rw-r--r--  1 u0_a123 u0_a123  120 Aug  1 09:30 .bashrc
+        <br/>drwxr-xr-x  2 u0_a123 u0_a123 4096 Aug  2 09:50 <span style="color: #2563EB;">storage</span>
+        <br/>drwxr-xr-x  3 u0_a123 u0_a123 4096 Aug  2 09:55 <span style="color: #2563EB;">projects</span>
+        <br/><span style="color: #36D167;">~ $</span> cd projects/termux-ultra-ui-redesign
+        <br/><span style="color: #36D167;">~/projects/termux-ultra-ui-redesign $</span> git status
+        <br/>On branch main
+        <br/>Your branch is up to date with 'origin/main'.
+        <br/>
+        <br/>nothing to commit, working tree clean
+        <br/><span style="color: #36D167;">~/projects/termux-ultra-ui-redesign $</span> <span class="inline-block w-2 h-4 align-middle bg-current animate-pulse" style="color: #36D167;"></span>
+      </div>
+      <!-- 滚动条示意 -->
+      <div class="absolute right-1 top-2 bottom-2 w-1 rounded-full opacity-40" style="background-color: #555555;"></div>
+    </section>
+
+    <!-- 软键盘切换状态示意 -->
+    <div class="mx-3 mb-2 px-3 py-1.5 rounded-lg flex items-center justify-between text-xs" style="background-color: var(--termux-surface-variant-dark); color: var(--termux-on-surface-variant-dark);">
+      <span>软键盘</span>
+      <span class="flex items-center gap-1.5">
+        <span class="w-2 h-2 rounded-full" style="background-color: var(--termux-success);"></span>
+        已显示
+      </span>
+    </div>
+
+    <!-- ExtraKeys 工具栏 -->
+    <section class="mx-3 mb-2 p-2 rounded-xl grid grid-cols-7 gap-1.5 shrink-0" style="background-color: #1A1A1A; border: 1px solid #333333;">
+      <button data-dom-id="extra-key-ctrl" class="extra-key px-1 py-2 rounded-md text-xs font-medium active:opacity-70" style="background-color: #2C2C2C; color: var(--termux-on-surface-dark);">Ctrl</button>
+      <button class="extra-key px-1 py-2 rounded-md text-xs font-medium active:opacity-70" style="background-color: #2C2C2C; color: var(--termux-on-surface-dark);">Alt</button>
+      <button data-dom-id="extra-key-tab" class="extra-key px-1 py-2 rounded-md text-xs font-medium active:opacity-70" style="background-color: #2C2C2C; color: var(--termux-on-surface-dark);">Tab</button>
+      <button class="extra-key px-1 py-2 rounded-md text-xs font-medium active:opacity-70" style="background-color: #2C2C2C; color: var(--termux-on-surface-dark);">Esc</button>
+      <button class="extra-key px-1 py-2 rounded-md text-xs font-medium active:opacity-70" style="background-color: #2C2C2C; color: var(--termux-on-surface-dark);">/</button>
+      <button class="extra-key px-1 py-2 rounded-md text-xs font-medium active:opacity-70" style="background-color: #2C2C2C; color: var(--termux-on-surface-dark);">-</button>
+      <button class="extra-key px-1 py-2 rounded-md text-xs font-medium active:opacity-70" style="background-color: #2C2C2C; color: var(--termux-on-surface-dark);">|</button>
+      <button class="extra-key px-1 py-2 rounded-md text-xs font-medium active:opacity-70" style="background-color: #2C2C2C; color: var(--termux-on-surface-dark);">HOME</button>
+      <button data-dom-id="extra-key-up" class="extra-key px-1 py-2 rounded-md text-xs font-medium active:opacity-70" style="background-color: #2C2C2C; color: var(--termux-on-surface-dark);">UP</button>
+      <button class="extra-key px-1 py-2 rounded-md text-xs font-medium active:opacity-70" style="background-color: #2C2C2C; color: var(--termux-on-surface-dark);">END</button>
+      <button class="extra-key px-1 py-2 rounded-md text-xs font-medium active:opacity-70" style="background-color: #2C2C2C; color: var(--termux-on-surface-dark);">PGUP</button>
+      <button class="extra-key px-1 py-2 rounded-md text-xs font-medium active:opacity-70" style="background-color: #2C2C2C; color: var(--termux-on-surface-dark);">LEFT</button>
+      <button data-dom-id="extra-key-down" class="extra-key px-1 py-2 rounded-md text-xs font-medium active:opacity-70" style="background-color: #2C2C2C; color: var(--termux-on-surface-dark);">DOWN</button>
+      <button class="extra-key px-1 py-2 rounded-md text-xs font-medium active:opacity-70" style="background-color: #2C2C2C; color: var(--termux-on-surface-dark);">RIGHT</button>
+      <button class="extra-key col-span-7 px-1 py-2 rounded-md text-xs font-medium active:opacity-70" style="background-color: #2C2C2C; color: var(--termux-on-surface-dark);">PGDN</button>
+    </section>
+
+    <!-- 悬浮/底部输入条 -->
+    <div class="mx-3 mb-3 px-3 py-2 rounded-xl flex items-center gap-2 shrink-0" style="background-color: #1A1A1A; border: 1px solid #333333;">
+      <span class="text-sm" style="color: var(--termux-success);">~ $</span>
+      <input data-dom-id="command-input" type="text" placeholder="输入命令..." class="flex-1 bg-transparent text-sm outline-none" style="color: var(--termux-on-surface-dark); font-family: var(--termux-font-mono);" />
+      <button class="px-3 py-1.5 rounded-lg text-xs font-medium active:opacity-80" style="background-color: var(--termux-primary); color: var(--termux-primary-foreground);">执行</button>
+    </div>
+
+    <!-- 底部 NavigationBar / 键盘空间 -->
+    <div class="w-full h-14 shrink-0" style="background: transparent;"></div>
+    <div class="w-full h-6 shrink-0" style="background: transparent;"></div>
+  </main>
+</body>
+</html>

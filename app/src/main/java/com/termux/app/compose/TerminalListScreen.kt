@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.sp
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.CardDefaults
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
@@ -249,7 +250,7 @@ fun TerminalListScreen(
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         Icon(
-                                            painter = painterResource(R.drawable.ic_terminal),
+                                            painter = painterResource(R.drawable.ic_terminal_session),
                                             contentDescription = null,
                                             tint = MiuixTheme.colorScheme.onSurface,
                                             modifier = Modifier.size(20.dp)
@@ -347,21 +348,7 @@ fun TerminalListScreen(
 
             if (sessions.isEmpty()) {
                 item(span = { GridItemSpan(2) }) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 100.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        Text(
-                            text = stringResource(R.string.no_terminal),
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                            lineHeight = 22.sp
-                        )
-                    }
+                    EmptyTerminalCard(onNewTerminal = onNewTerminal)
                 }
             } else {
                 items(sessions) { session ->
@@ -456,7 +443,7 @@ private fun TerminalCard(
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        painter = painterResource(R.drawable.ic_terminal),
+                        painter = painterResource(R.drawable.ic_terminal_session),
                         contentDescription = null,
                         modifier = Modifier.size(24.dp),
                         tint = MiuixTheme.colorScheme.primary
@@ -504,6 +491,56 @@ private fun TerminalCard(
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun EmptyTerminalCard(onNewTerminal: () -> Unit) {
+    val isDark = isSystemInDarkTheme()
+    val cardColor = if (isDark) Color(0xFF2C2C2C) else Color.White
+    val textColor = if (isDark) Color.White else Color.Black
+    val iconColor = if (isDark) Color(0xFF888888) else Color(0xFFBBBBBB)
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp)
+            .clip(RoundedCornerShape(20.dp))
+            .clickable(onClick = onNewTerminal),
+        colors = CardDefaults.defaultColors(
+            color = cardColor,
+            contentColor = textColor
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 48.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Icon(
+                painter = painterResource(R.drawable.ic_terminal_session),
+                contentDescription = null,
+                modifier = Modifier.size(48.dp),
+                tint = iconColor
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(
+                text = stringResource(R.string.no_terminal),
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Medium,
+                color = textColor.copy(alpha = 0.7f),
+                lineHeight = 22.sp
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = stringResource(R.string.new_terminal),
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+                color = MiuixTheme.colorScheme.primary
+            )
         }
     }
 }

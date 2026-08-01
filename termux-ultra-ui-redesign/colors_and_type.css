@@ -1,0 +1,94 @@
+:root {
+  --tu-primary: #2563eb;
+  --tu-primary-foreground: #ffffff;
+  --tu-primary-hover: #1d4ed8;
+  --tu-primary-subtle: rgba(37, 99, 235, 0.12);
+
+  --tu-background: #f2f2f6;
+  --tu-foreground: #1a1a1c;
+  --tu-card: #ffffff;
+  --tu-card-foreground: #1a1a1c;
+  --tu-popover: #ffffff;
+  --tu-popover-foreground: #1a1a1c;
+  --tu-muted: #f2f2f6;
+  --tu-muted-foreground: #8e8e93;
+  --tu-border: rgba(120, 120, 128, 0.16);
+  --tu-input: rgba(120, 120, 128, 0.16);
+  --tu-ring: #2563eb;
+
+  --tu-success: #34c759;
+  --tu-warning: #ff9500;
+  --tu-error: #ff3b30;
+  --tu-info: #007aff;
+
+  --tu-radius-sm: 4px;
+  --tu-radius-md: 8px;
+  --tu-radius-lg: 12px;
+  --tu-radius-xl: 16px;
+  --tu-radius-full: 9999px;
+
+  --tu-font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans SC", sans-serif;
+  --tu-font-mono: "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --tu-primary: #3b82f6;
+    --tu-primary-foreground: #ffffff;
+    --tu-primary-hover: #2563eb;
+    --tu-primary-subtle: rgba(59, 130, 246, 0.15);
+
+    --tu-background: #000000;
+    --tu-foreground: #ffffff;
+    --tu-card: #1c1c1e;
+    --tu-card-foreground: #ffffff;
+    --tu-popover: #1c1c1e;
+    --tu-popover-foreground: #ffffff;
+    --tu-muted: #2c2c2e;
+    --tu-muted-foreground: #8e8e93;
+    --tu-border: rgba(120, 120, 128, 0.24);
+    --tu-input: rgba(120, 120, 128, 0.24);
+    --tu-ring: #3b82f6;
+
+    --tu-success: #30d158;
+    --tu-warning: #ff9f0a;
+    --tu-error: #ff453a;
+    --tu-info: #0a84ff;
+  }
+}
+
+/* Semantic aliases without prefix for compatibility */
+:root {
+  --color-primary: var(--tu-primary);
+  --color-primary-foreground: var(--tu-primary-foreground);
+  --color-background: var(--tu-background);
+  --color-foreground: var(--tu-foreground);
+  --color-card: var(--tu-card);
+  --color-card-foreground: var(--tu-card-foreground);
+  --color-popover: var(--tu-popover);
+  --color-popover-foreground: var(--tu-popover-foreground);
+  --color-muted: var(--tu-muted);
+  --color-muted-foreground: var(--tu-muted-foreground);
+  --color-border: var(--tu-border);
+  --color-input: var(--tu-input);
+  --color-ring: var(--tu-ring);
+  --color-success: var(--tu-success);
+  --color-warning: var(--tu-warning);
+  --color-error: var(--tu-error);
+  --color-info: var(--tu-info);
+
+  --radius-sm: var(--tu-radius-sm);
+  --radius-md: var(--tu-radius-md);
+  --radius-lg: var(--tu-radius-lg);
+  --radius-xl: var(--tu-radius-xl);
+  --radius-full: var(--tu-radius-full);
+
+  --font-sans: var(--tu-font-sans);
+  --font-mono: var(--tu-font-mono);
+}
+
+body {
+  font-family: var(--tu-font-sans);
+  background-color: var(--tu-background);
+  color: var(--tu-foreground);
+}

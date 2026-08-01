@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="antialiased">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Termux Ultra — 远程</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="../colors_and_type.css">
+  <style>
+    * { font-family: var(--tu-font-family); -webkit-tap-highlight-color: transparent; }
+    body { margin: 0; color: var(--tu-on-surface); }
+    .dark body { color: var(--tu-on-surface-dark); }
+
+    /* miuix Input */
+    .miuix-input {
+      width: 100%;
+      height: 44px;
+      padding: 0 14px;
+      border-radius: var(--tu-radius-md);
+      border: 1px solid var(--tu-border);
+      background-color: var(--tu-input);
+      color: var(--tu-on-surface);
+      font-size: 14px;
+      outline: none;
+      transition: border-color 0.15s ease;
+    }
+    .dark .miuix-input {
+      border-color: var(--tu-border-dark);
+      background-color: var(--tu-input-dark);
+      color: var(--tu-on-surface-dark);
+    }
+    .miuix-input::placeholder { color: var(--tu-on-surface-variant); }
+    .dark .miuix-input::placeholder { color: var(--tu-on-surface-variant-dark); }
+    .miuix-input:focus { border-color: var(--tu-ring); }
+
+    /* 卡片仅顶部圆角 */
+    .remote-card {
+      border-radius: var(--tu-radius-lg) var(--tu-radius-lg) 0 0;
+      background-color: var(--tu-surface);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    }
+    .dark .remote-card { background-color: var(--tu-surface-dark); }
+
+    /* 状态指示器 */
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+    }
+    .status-online { background-color: var(--tu-success); }
+    .status-offline { background-color: var(--tu-error); }
+    .status-idle { background-color: var(--tu-warning); }
+
+    /* 底部导航 */
+    .bottom-nav {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      z-index: 60;
+      display: flex;
+      align-items: center;
+      justify-content: space-around;
+      padding: 6px 0 calc(6px + env(safe-area-inset-bottom));
+      background-color: var(--tu-surface);
+      border-top: 1px solid var(--tu-border);
+    }
+    .dark .bottom-nav {
+      background-color: var(--tu-surface-dark);
+      border-color: var(--tu-border-dark);
+    }
+    .bottom-nav-item {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+      padding: 4px 0;
+      color: var(--tu-on-surface-variant);
+      font-size: 11px;
+      font-weight: 500;
+      border: none;
+      background: transparent;
+      cursor: pointer;
+      transition: color 0.15s ease;
+    }
+    .dark .bottom-nav-item { color: var(--tu-on-surface-variant-dark); }
+    .bottom-nav-item.active { color: var(--tu-primary); }
+    .bottom-nav-item svg { color: currentColor; }
+
+    /* 图标按钮 */
+    .icon-btn {
+      width: 36px;
+      height: 36px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: var(--tu-radius-md);
+      border: none;
+      background: transparent;
+      color: var(--tu-on-surface-variant);
+      cursor: pointer;
+      transition: background-color 0.15s ease, color 0.15s ease;
+    }
+    .dark .icon-btn { color: var(--tu-on-surface-variant-dark); }
+    .icon-btn:active { background-color: var(--tu-surface-variant); }
+    .dark .icon-btn:active { background-color: var(--tu-surface-variant-dark); }
+    .icon-btn-primary {
+      color: var(--tu-primary);
+    }
+    .icon-btn-danger {
+      color: var(--tu-error);
+    }
+  </style>
+</head>
+<body class="tu-bg">
+  <!-- TopAppBar -->
+  <header class="tu-top-appbar">
+    <div class="w-10"></div>
+    <h1 class="tu-top-appbar-title">远程</h1>
+    <div class="flex items-center gap-1 pr-1">
+      <button class="tu-top-appbar-btn" data-dom-id="remote-search" aria-label="搜索"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg></button>
+      <button class="tu-top-appbar-btn" data-dom-id="remote-add" aria-label="添加"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg></button>
+    </div>
+  </header>
+
+  <main class="min-h-screen px-4" style="padding-bottom: var(--tu-page-bottom);">
+    <!-- TabRow -->
+    <div class="pt-3 pb-3">
+      <nav class="miuix-tabrow" role="tablist" aria-label="远程连接类型">
+        <button class="miuix-tab active" data-dom-id="tab-vnc" role="tab" aria-selected="true" aria-controls="panel-vnc">VNC</button>
+        <button class="miuix-tab" data-dom-id="tab-ssh" role="tab" aria-selected="false" aria-controls="panel-ssh">SSH</button>
+      </nav>
+    </div>
+
+    <!-- VNC 连接列表 -->
+    <section id="panel-vnc" class="space-y-0" role="tabpanel" aria-labelledby="tab-vnc">
+      <!-- VNC 卡片 1 -->
+      <article class="remote-card p-4 mb-3" data-dom-id="vnc-card-1">
+        <div class="flex items-start justify-between gap-3">
+          <div class="flex items-center gap-3 min-w-0">
+            <div class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style="background-color: color-mix(in srgb, var(--tu-primary) 12%, transparent);">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--tu-primary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
+            </div>
+            <div class="min-w-0">
+              <h3 class="text-[15px] font-semibold tu-text truncate">本地 VNC 桌面</h3>
+              <p class="text-[13px] tu-text-summary truncate">127.0.0.1:5901</p>
+              <div class="flex items-center gap-1.5 mt-1">
+                <span class="status-dot status-online"></span>
+                <span class="text-xs tu-text-summary">在线</span>
+              </div>
+            </div>
+          </div>
+          <div class="flex items-center gap-0.5 shrink-0">
+            <button class="icon-btn icon-btn-primary" data-dom-id="vnc-connect-1" aria-label="连接">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+            </button>
+            <button class="icon-btn" data-dom-id="vnc-edit-1" aria-label="编辑">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"></path></svg>
+            </button>
+            <button class="icon-btn icon-btn-danger" data-dom-id="vnc-delete-1" aria-label="删除">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path></svg>
+            </button>
+          </div>
+        </div>
+      </article>
+
+      <!-- VNC 卡片 2 -->
+      <article class="remote-card p-4 mb-3" data-dom-id="vnc-card-2">
+        <div class="flex items-start justify-between gap-3">
+          <div class="flex items-center gap-3 min-w-0">
+            <div class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style="background-color: color-mix(in srgb, var(--tu-primary) 12%, transparent);">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--tu-primary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
+            </div>
+            <div class="min-w-0">
+              <h3 class="text-[15px] font-semibold tu-text truncate">家庭服务器</h3>
+              <p class="text-[13px] tu-text-summary truncate">192.168.1.100:5900</p>
+              <div class="flex items-center gap-1.5 mt-1">
+                <span class="status-dot status-idle"></span>
+                <span class="text-xs tu-text-summary">空闲</span>
+              </div>
+            </div>
+          </div>
+          <div class="flex items-center gap-0.5 shrink-0">
+            <button class="icon-btn icon-btn-primary" data-dom-id="vnc-connect-2" aria-label="连接">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+            </button>
+            <button class="icon-btn" data-dom-id="vnc-edit-2" aria-label="编辑">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"></path></svg>
+            </button>
+            <button class="icon-btn icon-btn-danger" data-dom-id="vnc-delete-2" aria-label="删除">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path></svg>
+            </button>
+          </div>
+        </div>
+      </article>
+
+      <!-- VNC 卡片 3 -->
+      <article class="remote-card p-4 mb-3" data-dom-id="vnc-card-3">
+        <div class="flex items-start justify-between gap-3">
+          <div class="flex items-center gap-3 min-w-0">
+            <div class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style="background-color: color-mix(in srgb, var(--tu-primary) 12%, transparent);">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--tu-primary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
+            </div>
+            <div class="min-w-0">
+              <h3 class="text-[15px] font-semibold tu-text truncate">工作电脑</h3>
+              <p class="text-[13px] tu-text-summary truncate">10.0.0.5:5902</p>
+              <div class="flex items-center gap-1.5 mt-1">
+                <span class="status-dot status-offline"></span>
+                <span class="text-xs tu-text-summary">离线</span>
+              </div>
+            </div>
+          </div>
+          <div class="flex items-center gap-0.5 shrink-0">
+            <button class="icon-btn icon-btn-primary" data-dom-id="vnc-connect-3" aria-label="连接">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+            </button>
+            <button class="icon-btn" data-dom-id="vnc-edit-3" aria-label="编辑">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"></path></svg>
+            </button>
+            <button class="icon-btn icon-btn-danger" data-dom-id="vnc-delete-3" aria-label="删除">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path></svg>
+            </button>
+          </div>
+        </div>
+      </article>
+
+      <!-- SSH 提示占位 -->
+      <article class="remote-card p-4 mb-3" data-dom-id="ssh-placeholder">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 tu-surface-variant">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="tu-text-variant"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
+          </div>
+          <div class="min-w-0">
+            <h3 class="text-[15px] font-medium tu-text">SSH 连接</h3>
+            <p class="text-[13px] tu-text-summary truncate">切换到 SSH 标签可查看类似的连接卡片列表</p>
+          </div>
+        </div>
+      </article>
+    </section>
+
+    <!-- SSH 内容示意（默认隐藏，仅作说明） -->
+    <section id="panel-ssh" class="hidden" role="tabpanel" aria-labelledby="tab-ssh">
+      <div class="remote-card p-8 mb-3 flex flex-col items-center justify-center text-center">
+        <div class="w-14 h-14 rounded-2xl flex items-center justify-center tu-surface-variant mb-3">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="tu-text-variant"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
+        </div>
+        <p class="text-[15px] font-medium tu-text">SSH 标签内容</p>
+        <p class="text-[13px] tu-text-summary mt-1">结构与 VNC 卡片相同，展示 SSH 主机、端口及状态</p>
+      </div>
+    </section>
+  </main>
+
+  <!-- 底部导航栏 -->
+  <nav class="bottom-nav" aria-label="底部导航">
+    <button class="bottom-nav-item" data-dom-id="nav-terminal" aria-label="终端">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
+      <span>终端</span>
+    </button>
+    <button class="bottom-nav-item" data-dom-id="nav-files" aria-label="文件">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+      <span>文件</span>
+    </button>
+    <button class="bottom-nav-item active" data-dom-id="nav-remote" aria-label="远程">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
+      <span>远程</span>
+    </button>
+    <button class="bottom-nav-item" data-dom-id="nav-resources" aria-label="资源">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect><rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect><line x1="6" y1="6" x2="6.01" y2="6"></line><line x1="6" y1="18" x2="6.01" y2="18"></line></svg>
+      <span>资源</span>
+    </button>
+    <button class="bottom-nav-item" data-dom-id="nav-settings" aria-label="设置">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+      <span>设置</span>
+    </button>
+  </nav>
+
+  <!-- 添加/编辑远程连接对话框 -->
+  <div class="miuix-overlay-dialog" data-dom-id="remote-dialog" role="dialog" aria-modal="true" aria-labelledby="remote-dialog-title">
+    <div class="miuix-dialog-sheet">
+      <div class="miuix-dialog-handle"></div>
+      <h2 id="remote-dialog-title" class="text-lg font-semibold mb-4 tu-text">添加远程连接</h2>
+      <form class="space-y-3" onsubmit="return false;">
+        <div>
+          <label class="block text-xs font-medium tu-text-summary mb-1.5" for="remote-name">连接名称</label>
+          <input type="text" id="remote-name" class="miuix-input" placeholder="例如：家庭服务器">
+        </div>
+        <div>
+          <label class="block text-xs font-medium tu-text-summary mb-1.5" for="remote-host">主机地址</label>
+          <input type="text" id="remote-host" class="miuix-input" placeholder="例如：192.168.1.100">
+        </div>
+        <div>
+          <label class="block text-xs font-medium tu-text-summary mb-1.5" for="remote-port">端口</label>
+          <input type="number" id="remote-port" class="miuix-input" placeholder="例如：5900 或 22">
+        </div>
+        <div>
+          <label class="block text-xs font-medium tu-text-summary mb-1.5" for="remote-username">用户名</label>
+          <input type="text" id="remote-username" class="miuix-input" placeholder="例如：root">
+        </div>
+        <div>
+          <label class="block text-xs font-medium tu-text-summary mb-1.5" for="remote-password">密码</label>
+          <input type="password" id="remote-password" class="miuix-input" placeholder="输入连接密码">
+        </div>
+        <div class="flex gap-3 pt-3">
+          <button type="button" class="miuix-btn miuix-btn-secondary flex-1">取消</button>
+          <button type="submit" class="miuix-btn miuix-btn-primary flex-1">保存</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    // 跟随系统暗色模式
+    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+      document.documentElement.classList.add('dark');
+    }
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
+      document.documentElement.classList.toggle('dark', e.matches);
+    });
+  </script>
+</body>
+</html>
