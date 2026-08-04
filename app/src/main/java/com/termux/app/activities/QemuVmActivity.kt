@@ -117,7 +117,7 @@ private suspend fun countRunningQemuVms(context: Context): Int {
             val envClient = TermuxShellEnvironmentClient()
             val env = envClient.buildEnvironment(context, false, home)
             val process = Runtime.getRuntime().exec(
-                arrayOf(shell, "-c", "pgrep -c -f [q]emu-system-x86_64 || echo 0"),
+                arrayOf(shell, "-c", "pgrep -c -x qemu-system-x86_64 || echo 0"),
                 env,
                 java.io.File(home)
             )

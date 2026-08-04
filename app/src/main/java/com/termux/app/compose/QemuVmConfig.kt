@@ -106,11 +106,17 @@ data class QemuVmConfig(
         }
         sb.append("    -rtc base=localtime\n")
         sb.append("    -boot order=$bootOrderStr\n")
+        // 9p virtio 文件夹共享：把 $shareDir 直接挂载到虚拟机
+        sb.append("    -fsdev local,security_model=mapped-file,id=fsdev_shared,path=\"$shareDir\"\n")
+        sb.append("    -device virtio-9p-pci,id=fs0,fsdev=fsdev_shared,mount_tag=hostshare\n")
         sb.append(")\n\n")
 
         sb.append("echo \"正在启动 QEMU 虚拟机...\"\n")
         sb.append("echo \"VNC 端口: $vncPort (display :$vncDisplay)\"\n")
         sb.append("echo \"请使用 VNC 客户端连接 localhost:$vncPort\"\n")
+        sb.append("echo \"共享文件夹挂载方法（虚拟机内执行）：\"\n")
+        sb.append("echo \"  Linux:   sudo mkdir -p /mnt/share && sudo mount -t 9p -o trans=virtio hostshare /mnt/share\"\n")
+        sb.append("echo \"  Windows: 需要安装 9P 客户端驱动后使用\\\\?\\mnt\\hostshare 或第三方工具\"\n")
         sb.append("qemu-system-x86_64 \"\${QEMU_ARGS[@]}\"\n\n")
 
         sb.append("echo ''\n")
