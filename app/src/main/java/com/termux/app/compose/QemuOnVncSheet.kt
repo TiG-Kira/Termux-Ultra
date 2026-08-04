@@ -8,8 +8,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -22,13 +20,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.Icon
-import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.TextField
-import top.yukonga.miuix.kmp.basic.Switch
 import top.yukonga.miuix.kmp.basic.LinearProgressIndicator
 import top.yukonga.miuix.kmp.overlay.OverlayBottomSheet
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
@@ -36,273 +31,48 @@ import top.yukonga.miuix.kmp.preference.RadioButtonPreference
 import top.yukonga.miuix.kmp.preference.SwitchPreference
 import top.yukonga.miuix.kmp.preference.WindowDropdownPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
-import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.res.stringResource
-import com.termux.R
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
 
-private enum class SheetMode { LIST, WIZARD, EDIT }
-
 /**
- * QEMU with VNC 主弹窗。
- * 无已配置虚拟机时直接进入配置向导；有虚拟机时显示列表。
+ * 新建/编辑 QEMU 虚拟机底部弹窗（Dialog）。
+ * 支持选择现有磁盘、从 ISO 安装并新建磁盘、或仅新建空白磁盘。
+ * 选定的硬盘镜像/光盘映像文件路径逻辑与现有实现保持一致。
  */
 @Composable
 fun QemuOnVncSheet(
     show: Boolean,
+    existingVm: QemuVmConfig? = null,
     onDismiss: () -> Unit,
     onExecuteScript: (String, String) -> Unit
 ) {
+    val isEditMode = existingVm != null
+    val title = if (isEditMode) "编辑 QEMU 虚拟机" else "新建 QEMU 虚拟机"
     val context = LocalContext.current
-    var vms by remember { mutableStateOf(QemuVmManager.loadVms(context)) }
-    var sheetMode by remember { mutableStateOf(if (vms.isEmpty()) SheetMode.WIZARD else SheetMode.LIST) }
-    var editingVm by remember { mutableStateOf<QemuVmConfig?>(null) }
-    var showDeleteConfirm by remember { mutableStateOf<QemuVmConfig?>(null) }
-
-    fun refreshVms() {
-        vms = QemuVmManager.loadVms(context)
-    }
-
-    val title = when (sheetMode) {
-        SheetMode.LIST -> "QEMU with VNC"
-        SheetMode.WIZARD -> "配置 QEMU 虚拟机"
-        SheetMode.EDIT -> "编辑 QEMU 虚拟机"
-    }
 
     OverlayBottomSheet(
         show = show,
-        onDismissRequest = {
-            onDismiss()
-        },
+        onDismissRequest = onDismiss,
         title = title,
         content = {
-                when (sheetMode) {
-                    SheetMode.LIST -> VmListContent(
-                        vms = vms,
-                        onStart = { vm ->
-                            onDismiss()
-                            onExecuteScript(vm.name, vm.generateScript())
-                        },
-                        onEdit = { vm ->
-                            editingVm = vm
-                            sheetMode = SheetMode.EDIT
-                        },
-                        onDelete = { vm ->
-                            showDeleteConfirm = vm
-                        },
-                        onNewVm = {
-                            editingVm = null
-                            sheetMode = SheetMode.WIZARD
-                        }
-                    )
-                    SheetMode.WIZARD -> VmWizardContent(
-                        existingVm = null,
-                        onComplete = { config ->
-                            QemuVmManager.saveVm(context, config)
-                            refreshVms()
-                            onDismiss()
-                            onExecuteScript(config.name, config.generateScript())
-                        },
-                        onCancel = {
-                            if (vms.isNotEmpty()) {
-                                sheetMode = SheetMode.LIST
-                            } else {
-                                onDismiss()
-                            }
-                        }
-                    )
-                    SheetMode.EDIT -> {
-                        val vm = editingVm
-                        if (vm != null) {
-                            VmWizardContent(
-                                existingVm = vm,
-                                onComplete = { config ->
-                                    QemuVmManager.saveVm(context, config)
-                                    refreshVms()
-                                    sheetMode = SheetMode.LIST
-                                },
-                                onCancel = {
-                                    sheetMode = SheetMode.LIST
-                                }
-                            )
-                        }
-                    }
-                }
-            }
-        )
-
-    // 删除确认对话框
-    OverlayDialog(
-        show = showDeleteConfirm != null,
-        title = "删除虚拟机",
-        summary = showDeleteConfirm?.let { "确定删除 \"${it.name}\" 的配置吗？\n注意：磁盘和镜像文件不会被删除，如需彻底删除请手动清除。" } ?: "",
-        onDismissRequest = { showDeleteConfirm = null }
-    ) {
-        Row(horizontalArrangement = Arrangement.SpaceBetween) {
-            TextButton(
-                text = "取消",
-                onClick = { showDeleteConfirm = null },
-                modifier = Modifier.weight(1f)
-            )
-            Spacer(Modifier.width(16.dp))
-            TextButton(
-                text = "删除",
-                onClick = {
-                    showDeleteConfirm?.let { vm ->
-                        QemuVmManager.deleteVm(context, vm.id)
-                        refreshVms()
-                        showDeleteConfirm = null
-                        if (vms.isEmpty()) {
-                            sheetMode = SheetMode.WIZARD
-                        }
+            VmWizardContent(
+                existingVm = existingVm,
+                onComplete = { config ->
+                    QemuVmManager.saveVm(context, config)
+                    onDismiss()
+                    if (isEditMode) {
+                        // 编辑模式仅保存配置，不自动启动
+                    } else {
+                        onExecuteScript(config.name, config.generateScript())
                     }
                 },
-                modifier = Modifier.weight(1f),
-                colors = ButtonDefaults.textButtonColorsPrimary()
+                onCancel = onDismiss
             )
         }
-    }
+    )
 }
-
-// ==================== VM 列表 ====================
-
-@Composable
-private fun VmListContent(
-    vms: List<QemuVmConfig>,
-    onStart: (QemuVmConfig) -> Unit,
-    onEdit: (QemuVmConfig) -> Unit,
-    onDelete: (QemuVmConfig) -> Unit,
-    onNewVm: () -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        vms.forEach { vm ->
-            VmCard(
-                vm = vm,
-                onStart = { onStart(vm) },
-                onEdit = { onEdit(vm) },
-                onDelete = { onDelete(vm) }
-            )
-        }
-
-        Spacer(Modifier.height(4.dp))
-
-        // 新建虚拟机按钮
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(16.dp))
-                .clickable { onNewVm() }
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_add),
-                    contentDescription = null,
-                    modifier = Modifier.size(20.dp),
-                    tint = MiuixTheme.colorScheme.primary
-                )
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    text = "新建虚拟机",
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MiuixTheme.colorScheme.primary
-                )
-            }
-        }
-
-        Spacer(Modifier.height(16.dp))
-    }
-}
-
-@Composable
-private fun VmCard(
-    vm: QemuVmConfig,
-    onStart: () -> Unit,
-    onEdit: () -> Unit,
-    onDelete: () -> Unit
-) {
-    val isDark = androidx.compose.foundation.isSystemInDarkTheme()
-    val cardColor = if (isDark) androidx.compose.ui.graphics.Color(0xFF1A1A1A) else androidx.compose.ui.graphics.Color(0xFFFAFAFA)
-
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(cardColor)
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = vm.name,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MiuixTheme.colorScheme.onSurface
-                    )
-                    Text(
-                        text = "${vm.cpuCores}核 / ${vm.memoryMB}MB / VNC:${vm.vncPort}",
-                        fontSize = 13.sp,
-                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                    )
-                    Text(
-                        text = if (vm.mode == "install_iso") "安装镜像模式" else "现有磁盘模式",
-                        fontSize = 12.sp,
-                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                    )
-                }
-            }
-
-            Spacer(Modifier.height(12.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                TextButton(
-                    text = "删除",
-                    onClick = onDelete,
-                    modifier = Modifier.weight(1f)
-                )
-                Spacer(Modifier.width(12.dp))
-                TextButton(
-                    text = "编辑",
-                    onClick = onEdit,
-                    modifier = Modifier.weight(1f)
-                )
-                Spacer(Modifier.width(12.dp))
-                TextButton(
-                    text = "启动",
-                    onClick = onStart,
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.textButtonColorsPrimary()
-                )
-            }
-        }
-    }
-}
-
-// ==================== 配置向导 ====================
 
 @Composable
 private fun VmWizardContent(
@@ -312,18 +82,18 @@ private fun VmWizardContent(
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
-    var wizardStep by remember { mutableStateOf(1) }
 
     // 配置状态
     var vmName by remember { mutableStateOf(existingVm?.name ?: "") }
     var mode by remember { mutableStateOf(existingVm?.mode ?: "existing_disk") }
     var diskPath by remember { mutableStateOf(existingVm?.diskPath ?: "") }
     var newDiskSizeGB by remember { mutableStateOf(existingVm?.newDiskSizeGB ?: 20) }
+    var newDiskFormat by remember { mutableStateOf(existingVm?.newDiskFormat ?: "qcow2") }
     var isoPath by remember { mutableStateOf(existingVm?.isoPath ?: "") }
+    var mountIso by remember { mutableStateOf(existingVm?.isoPath != null) }
     var cpuCores by remember { mutableStateOf(existingVm?.cpuCores ?: 2) }
     var memoryMB by remember { mutableStateOf(existingVm?.memoryMB ?: 1024) }
     var hasSound by remember { mutableStateOf(existingVm?.hasSound ?: false) }
-    var hasCdrom by remember { mutableStateOf(existingVm?.hasCdrom ?: false) }
     var shareDir by remember {
         mutableStateOf(existingVm?.shareDir ?: "\$HOME/storage/shared/qemu_share")
     }
@@ -340,20 +110,18 @@ private fun VmWizardContent(
     var copyProgress by remember { mutableFloatStateOf(0f) }
     var copyProgressText by remember { mutableStateOf("正在复制到虚拟机目录...") }
 
-    // install_iso 模式下强制开启 CD-ROM
+    // install_iso 模式强制挂载 ISO
     if (mode == "install_iso") {
-        hasCdrom = true
+        mountIso = true
     }
 
     // 统一的文件选择处理：先尝试快速解析，失败则在后台复制并显示进度
     fun handleFileSelected(uri: Uri, defaultName: String, onResult: (String) -> Unit) {
-        // 先尝试快速解析（不复制）
         val quick = tryQuickResolvePath(context, uri)
         if (quick != null) {
             onResult(quick)
             return
         }
-        // 需要复制：启动协程显示进度
         coroutineScope.launch {
             showCopyProgress = true
             copyProgress = 0f
@@ -384,156 +152,118 @@ private fun VmWizardContent(
         uri?.let { handleFileSelected(it, "image.iso") { isoPath = it } }
     }
 
+    // 新建磁盘路径（仅在新建模式且未指定路径时自动生成）
+    fun ensureCreateDiskPath(): String {
+        return if (diskPath.isBlank() || !diskPath.contains("/qemu_disks/")) {
+            "\$HOME/storage/shared/qemu_disks/${existingVm?.id ?: java.util.UUID.randomUUID().toString()}.${newDiskFormat}"
+        } else {
+            diskPath
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        if (wizardStep == 1) {
-            // ===== 步骤1: 选择类型 + 名称 =====
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(16.dp))
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        text = "虚拟机名称",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MiuixTheme.colorScheme.primary
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    TextField(
-                        value = vmName,
-                        onValueChange = { vmName = it },
-                        label = "请输入虚拟机名称"
-                    )
-                }
-            }
-
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(16.dp))
-            ) {
-                Column {
-                    Row(modifier = Modifier.padding(16.dp, 16.dp, 16.dp, 0.dp)) {
-                        Text(
-                            text = "选择提供方式",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MiuixTheme.colorScheme.primary
-                        )
-                    }
-                    RadioButtonPreference(
-                        title = "提供现有磁盘",
-                        summary = "使用已有的磁盘镜像文件直接启动",
-                        selected = mode == "existing_disk",
-                        onClick = {
-                            mode = "existing_disk"
-                            hasCdrom = false
-                        }
-                    )
-                    RadioButtonPreference(
-                        title = "提供安装镜像",
-                        summary = "使用 ISO 镜像安装系统，将创建新硬盘",
-                        selected = mode == "install_iso",
-                        onClick = {
-                            mode = "install_iso"
-                            hasCdrom = true
-                        }
-                    )
-                }
-            }
-
-            Spacer(Modifier.height(8.dp))
-            Row(horizontalArrangement = Arrangement.SpaceBetween) {
-                if (existingVm != null) {
-                    TextButton(
-                        text = "取消",
-                        onClick = onCancel,
-                        modifier = Modifier.weight(1f)
-                    )
-                    Spacer(Modifier.width(16.dp))
-                }
-                TextButton(
-                    text = "下一步",
-                    onClick = {
-                        if (vmName.isBlank()) {
-                            vmName = if (mode == "install_iso") "新虚拟机" else "Windows VM"
-                        }
-                        wizardStep = 2
-                    },
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.textButtonColorsPrimary()
+        // 名称
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(16.dp))
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = "虚拟机名称",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MiuixTheme.colorScheme.primary
+                )
+                Spacer(Modifier.height(8.dp))
+                TextField(
+                    value = vmName,
+                    onValueChange = { vmName = it },
+                    label = "请输入虚拟机名称"
                 )
             }
-        } else {
-            // ===== 步骤2: 配置参数 =====
-            val isInstallMode = mode == "install_iso"
-            val isEditMode = existingVm != null
+        }
 
-            // 磁盘/ISO 文件
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(16.dp))
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
+        // 提供方式
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(16.dp))
+        ) {
+            Column {
+                Row(modifier = Modifier.padding(16.dp, 16.dp, 16.dp, 0.dp)) {
                     Text(
-                        text = if (isInstallMode) "安装镜像 (ISO)" else "磁盘文件",
+                        text = "选择提供方式",
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Bold,
                         color = MiuixTheme.colorScheme.primary
                     )
-                    Spacer(Modifier.height(8.dp))
-                    if (isInstallMode) {
-                        Text(
-                            text = if (isoPath.isBlank()) "未选择 ISO 文件" else isoPath,
-                            fontSize = 13.sp,
-                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        TextButton(
-                            text = "选择 ISO 文件",
-                            onClick = { isoFileLauncher.launch(arrayOf("*/*")) },
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = ButtonDefaults.textButtonColorsPrimary()
-                        )
-                    } else {
-                        Text(
-                            text = if (diskPath.isBlank()) "未选择磁盘文件" else diskPath,
-                            fontSize = 13.sp,
-                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        TextButton(
-                            text = "选择磁盘文件",
-                            onClick = { diskFileLauncher.launch(arrayOf("*/*")) },
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = ButtonDefaults.textButtonColorsPrimary()
-                        )
-                    }
                 }
-            }
-
-            // 新建硬盘容量（仅 install_iso 模式且非编辑模式）
-            if (isInstallMode && !isEditMode) {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(16.dp))
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text(
-                            text = "新建硬盘容量",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MiuixTheme.colorScheme.primary
-                        )
+                RadioButtonPreference(
+                    title = "提供现有磁盘",
+                    summary = "使用已有的磁盘镜像文件直接启动",
+                    selected = mode == "existing_disk",
+                    onClick = {
+                        mode = "existing_disk"
+                        mountIso = isoPath.isNotBlank()
                     }
+                )
+                RadioButtonPreference(
+                    title = "提供安装镜像",
+                    summary = "使用 ISO 镜像安装系统，将创建新硬盘",
+                    selected = mode == "install_iso",
+                    onClick = {
+                        mode = "install_iso"
+                        mountIso = true
+                    }
+                )
+                RadioButtonPreference(
+                    title = "新建空白磁盘",
+                    summary = "创建新的空白磁盘镜像，不挂载 ISO",
+                    selected = mode == "create_disk",
+                    onClick = {
+                        mode = "create_disk"
+                        mountIso = false
+                    }
+                )
+            }
+        }
+
+        // 磁盘镜像
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(16.dp))
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = "磁盘镜像",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MiuixTheme.colorScheme.primary
+                )
+                Spacer(Modifier.height(8.dp))
+
+                if (mode == "existing_disk") {
+                    Text(
+                        text = if (diskPath.isBlank()) "未选择磁盘文件" else diskPath,
+                        fontSize = 13.sp,
+                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    TextButton(
+                        text = "选择磁盘文件",
+                        onClick = { diskFileLauncher.launch(arrayOf("*/*")) },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.textButtonColorsPrimary()
+                    )
+                } else {
+                    // 新建磁盘：显示大小、格式、路径
                     WindowDropdownPreference(
                         title = "硬盘大小",
                         items = listOf("10 GB", "20 GB", "40 GB", "60 GB", "80 GB"),
@@ -542,123 +272,26 @@ private fun VmWizardContent(
                             newDiskSizeGB = listOf(10, 20, 40, 60, 80)[it]
                         }
                     )
-                }
-            }
-
-            // 磁盘路径（install_iso 模式且编辑模式下显示，不可更改）
-            if (isInstallMode && isEditMode) {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(16.dp))
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text(
-                            text = "硬盘位置（不可更改）",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MiuixTheme.colorScheme.primary
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        Text(
-                            text = diskPath,
-                            fontSize = 13.sp,
-                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                        )
-                    }
-                }
-            }
-
-            // CPU 核心数 + 内存
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(16.dp))
-            ) {
-                Column {
-                    // 分组标题
-                    Row(modifier = Modifier.padding(16.dp, 16.dp, 16.dp, 0.dp)) {
-                        Text(
-                            text = "CPU 与内存",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MiuixTheme.colorScheme.primary
-                        )
-                    }
                     WindowDropdownPreference(
-                        title = "CPU 核心数",
-                        items = listOf("1 核", "2 核", "4 核", "8 核"),
-                        selectedIndex = listOf(1, 2, 4, 8).indexOf(cpuCores).coerceAtLeast(0),
-                        onSelectedIndexChange = { cpuCores = listOf(1, 2, 4, 8)[it] }
-                    )
-                    WindowDropdownPreference(
-                        title = "内存大小",
-                        items = listOf("512 MB", "1024 MB", "2048 MB", "4096 MB"),
-                        selectedIndex = listOf(512, 1024, 2048, 4096).indexOf(memoryMB).coerceAtLeast(0),
-                        onSelectedIndexChange = { memoryMB = listOf(512, 1024, 2048, 4096)[it] }
-                    )
-                }
-            }
-
-            // 声音与 CD-ROM
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(16.dp))
-            ) {
-                Column {
-                    Row(modifier = Modifier.padding(16.dp, 16.dp, 16.dp, 0.dp)) {
-                        Text(
-                            text = "设备选项",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MiuixTheme.colorScheme.primary
-                        )
-                    }
-                    SwitchPreference(
-                        title = "配备声音",
-                        summary = "使用 HDA 音频设备",
-                        checked = hasSound,
-                        onCheckedChange = { hasSound = it }
-                    )
-                    SwitchPreference(
-                        title = "载入 CD-ROM",
-                        summary = if (isInstallMode) "安装镜像模式下必须载入" else "载入 ISO 镜像",
-                        checked = hasCdrom,
-                        onCheckedChange = {
-                            if (!isInstallMode) {
-                                hasCdrom = it
-                            }
+                        title = "硬盘格式",
+                        items = listOf("qcow2", "raw", "vmdk"),
+                        selectedIndex = listOf("qcow2", "raw", "vmdk").indexOf(newDiskFormat).coerceAtLeast(0),
+                        onSelectedIndexChange = {
+                            newDiskFormat = listOf("qcow2", "raw", "vmdk")[it]
                         }
                     )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = "将创建到：${ensureCreateDiskPath()}",
+                        fontSize = 12.sp,
+                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                    )
                 }
             }
+        }
 
-            // CD-ROM 镜像选择（existing_disk 模式下且开启 CD-ROM）
-            if (hasCdrom && !isInstallMode) {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(16.dp))
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text(
-                            text = if (isoPath.isBlank()) "未选择 ISO 文件" else isoPath,
-                            fontSize = 13.sp,
-                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        TextButton(
-                            text = "选择 ISO 文件",
-                            onClick = { isoFileLauncher.launch(arrayOf("*/*")) },
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = ButtonDefaults.textButtonColorsPrimary()
-                        )
-                    }
-                }
-            }
-
-            // 共享目录
+        // ISO 镜像（install_iso 模式必填；existing_disk / create_disk 可选）
+        if (mode == "install_iso" || mountIso) {
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -666,162 +299,265 @@ private fun VmWizardContent(
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(
-                        text = "共享目录",
+                        text = if (mode == "install_iso") "安装镜像 (ISO)" else "ISO 镜像（可选）",
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Bold,
                         color = MiuixTheme.colorScheme.primary
                     )
-                    Spacer(Modifier.height(4.dp))
+                    Spacer(Modifier.height(8.dp))
                     Text(
-                        text = "使用内部存储在 Termux 中的映射目录（shared）来访问",
-                        fontSize = 12.sp,
+                        text = if (isoPath.isBlank()) "未选择 ISO 文件" else isoPath,
+                        fontSize = 13.sp,
                         color = MiuixTheme.colorScheme.onSurfaceVariantSummary
                     )
                     Spacer(Modifier.height(8.dp))
-                    TextField(
-                        value = shareDir,
-                        onValueChange = { shareDir = it },
-                        label = "共享目录路径"
+                    TextButton(
+                        text = "选择 ISO 文件",
+                        onClick = { isoFileLauncher.launch(arrayOf("*/*")) },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.textButtonColorsPrimary()
                     )
                 }
             }
+        }
 
-            // 引导顺序
+        // existing_disk / create_disk 模式下可开关 ISO 挂载
+        if (mode != "install_iso") {
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(16.dp))
             ) {
-                Column {
-                    Row(modifier = Modifier.padding(16.dp, 16.dp, 16.dp, 0.dp)) {
-                        Text(
-                            text = "引导顺序",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MiuixTheme.colorScheme.primary
-                        )
+                SwitchPreference(
+                    title = "挂载 ISO 镜像",
+                    summary = if (mountIso) "启动时挂载 ISO" else "不挂载 ISO",
+                    checked = mountIso,
+                    onCheckedChange = {
+                        mountIso = it
+                        if (!it) isoPath = ""
                     }
-                    if (isInstallMode) {
-                        WindowDropdownPreference(
-                            title = "第一启动设备",
-                            items = listOf("CD-ROM"),
-                            selectedIndex = 0,
-                            onSelectedIndexChange = {}
-                        )
-                    } else {
-                        val bootOptions = listOf("硬盘", "CD-ROM", "无")
-                        val bootValues = listOf("c", "d", "")
-                        WindowDropdownPreference(
-                            title = "第一启动设备",
-                            items = bootOptions,
-                            selectedIndex = bootValues.indexOf(bootDevice1).coerceAtLeast(0),
-                            onSelectedIndexChange = { bootDevice1 = bootValues[it] }
-                        )
-                    }
+                )
+            }
+        }
 
-                    val bootOptions2 = if (hasCdrom) {
-                        listOf("硬盘", "CD-ROM", "无")
-                    } else {
-                        listOf("硬盘", "无")
-                    }
-                    val bootValues2 = if (hasCdrom) {
-                        listOf("c", "d", "")
-                    } else {
-                        listOf("c", "")
-                    }
+        // CPU 核心数 + 内存
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(16.dp))
+        ) {
+            Column {
+                Row(modifier = Modifier.padding(16.dp, 16.dp, 16.dp, 0.dp)) {
+                    Text(
+                        text = "CPU 与内存",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MiuixTheme.colorScheme.primary
+                    )
+                }
+                WindowDropdownPreference(
+                    title = "CPU 核心数",
+                    items = listOf("1 核", "2 核", "4 核", "8 核"),
+                    selectedIndex = listOf(1, 2, 4, 8).indexOf(cpuCores).coerceAtLeast(0),
+                    onSelectedIndexChange = { cpuCores = listOf(1, 2, 4, 8)[it] }
+                )
+                WindowDropdownPreference(
+                    title = "内存大小",
+                    items = listOf("512 MB", "1024 MB", "2048 MB", "4096 MB"),
+                    selectedIndex = listOf(512, 1024, 2048, 4096).indexOf(memoryMB).coerceAtLeast(0),
+                    onSelectedIndexChange = { memoryMB = listOf(512, 1024, 2048, 4096)[it] }
+                )
+            }
+        }
+
+        // 设备选项
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(16.dp))
+        ) {
+            Column {
+                Row(modifier = Modifier.padding(16.dp, 16.dp, 16.dp, 0.dp)) {
+                    Text(
+                        text = "设备选项",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MiuixTheme.colorScheme.primary
+                    )
+                }
+                SwitchPreference(
+                    title = "配备声音",
+                    summary = "使用 HDA 音频设备",
+                    checked = hasSound,
+                    onCheckedChange = { hasSound = it }
+                )
+            }
+        }
+
+        // 共享目录
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(16.dp))
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = "共享目录",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MiuixTheme.colorScheme.primary
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = "使用内部存储在 Termux 中的映射目录（shared）来访问",
+                    fontSize = 12.sp,
+                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                )
+                Spacer(Modifier.height(8.dp))
+                TextField(
+                    value = shareDir,
+                    onValueChange = { shareDir = it },
+                    label = "共享目录路径"
+                )
+            }
+        }
+
+        // 引导顺序
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(16.dp))
+        ) {
+            Column {
+                Row(modifier = Modifier.padding(16.dp, 16.dp, 16.dp, 0.dp)) {
+                    Text(
+                        text = "引导顺序",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MiuixTheme.colorScheme.primary
+                    )
+                }
+                if (mode == "install_iso") {
                     WindowDropdownPreference(
-                        title = "第二启动设备",
-                        items = bootOptions2,
-                        selectedIndex = bootValues2.indexOf(bootDevice2).coerceAtLeast(0),
-                        onSelectedIndexChange = { bootDevice2 = bootValues2[it] }
+                        title = "第一启动设备",
+                        items = listOf("CD-ROM"),
+                        selectedIndex = 0,
+                        onSelectedIndexChange = {}
+                    )
+                } else {
+                    val bootOptions = listOf("硬盘", "CD-ROM", "无")
+                    val bootValues = listOf("c", "d", "")
+                    WindowDropdownPreference(
+                        title = "第一启动设备",
+                        items = bootOptions,
+                        selectedIndex = bootValues.indexOf(bootDevice1).coerceAtLeast(0),
+                        onSelectedIndexChange = { bootDevice1 = bootValues[it] }
                     )
                 }
-            }
 
-            // VNC 端口
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(16.dp))
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        text = "VNC 端口",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MiuixTheme.colorScheme.primary
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        text = "留空或填写端口号，默认 5900",
-                        fontSize = 12.sp,
-                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    TextField(
-                        value = vncPort,
-                        onValueChange = { vncPort = it.filter { c -> c.isDigit() } },
-                        label = "VNC 端口号"
-                    )
+                val hasIso = mode == "install_iso" || (mode != "install_iso" && mountIso && isoPath.isNotBlank())
+                val bootOptions2 = if (hasIso) {
+                    listOf("硬盘", "CD-ROM", "无")
+                } else {
+                    listOf("硬盘", "无")
                 }
-            }
-
-            Spacer(Modifier.height(8.dp))
-
-            // 底部按钮
-            Row(horizontalArrangement = Arrangement.SpaceBetween) {
-                TextButton(
-                    text = "上一步",
-                    onClick = {
-                        if (isEditMode) {
-                            onCancel()
-                        } else {
-                            wizardStep = 1
-                        }
-                    },
-                    modifier = Modifier.weight(1f)
-                )
-                Spacer(Modifier.width(16.dp))
-                TextButton(
-                    text = if (isEditMode) "保存" else "完成",
-                    onClick = {
-                        val port = vncPort.toIntOrNull() ?: 5900
-                        val bootList = mutableListOf<String>()
-                        if (isInstallMode) {
-                            bootList.add("d") // CD-ROM first
-                        } else {
-                            if (bootDevice1.isNotEmpty()) bootList.add(bootDevice1)
-                        }
-                        if (bootDevice2.isNotEmpty()) bootList.add(bootDevice2)
-                        if (bootList.isEmpty()) bootList.add("c")
-
-                        val actualDiskPath = if (isInstallMode && !isEditMode) {
-                            "\$HOME/storage/shared/qemu_disks/${existingVm?.id ?: java.util.UUID.randomUUID().toString()}.qcow2"
-                        } else {
-                            diskPath
-                        }
-
-                        val config = QemuVmConfig(
-                            id = existingVm?.id ?: java.util.UUID.randomUUID().toString(),
-                            name = vmName.ifBlank { "QEMU VM" },
-                            mode = mode,
-                            diskPath = actualDiskPath,
-                            newDiskSizeGB = newDiskSizeGB,
-                            isoPath = isoPath.ifBlank { null },
-                            cpuCores = cpuCores,
-                            memoryMB = memoryMB,
-                            hasSound = hasSound,
-                            hasCdrom = hasCdrom,
-                            shareDir = shareDir,
-                            bootOrder = bootList,
-                            vncPort = port
-                        )
-                        onComplete(config)
-                    },
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.textButtonColorsPrimary()
+                val bootValues2 = if (hasIso) {
+                    listOf("c", "d", "")
+                } else {
+                    listOf("c", "")
+                }
+                WindowDropdownPreference(
+                    title = "第二启动设备",
+                    items = bootOptions2,
+                    selectedIndex = bootValues2.indexOf(bootDevice2).coerceAtLeast(0),
+                    onSelectedIndexChange = { bootDevice2 = bootValues2[it] }
                 )
             }
+        }
+
+        // VNC 端口
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(16.dp))
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = "VNC 端口",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MiuixTheme.colorScheme.primary
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = "留空或填写端口号，默认 5900",
+                    fontSize = 12.sp,
+                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                )
+                Spacer(Modifier.height(8.dp))
+                TextField(
+                    value = vncPort,
+                    onValueChange = { vncPort = it.filter { c -> c.isDigit() } },
+                    label = "VNC 端口号"
+                )
+            }
+        }
+
+        Spacer(Modifier.height(8.dp))
+
+        // 底部按钮
+        Row(horizontalArrangement = Arrangement.SpaceBetween) {
+            TextButton(
+                text = "取消",
+                onClick = onCancel,
+                modifier = Modifier.weight(1f)
+            )
+            Spacer(Modifier.width(16.dp))
+            TextButton(
+                text = if (existingVm != null) "保存" else "完成",
+                onClick = {
+                    val port = vncPort.toIntOrNull() ?: 5900
+                    val bootList = mutableListOf<String>()
+                    if (mode == "install_iso") {
+                        bootList.add("d")
+                    } else {
+                        if (bootDevice1.isNotEmpty()) bootList.add(bootDevice1)
+                    }
+                    if (bootDevice2.isNotEmpty()) bootList.add(bootDevice2)
+                    if (bootList.isEmpty()) bootList.add("c")
+
+                    val actualDiskPath = if (mode == "install_iso" || mode == "create_disk") {
+                        ensureCreateDiskPath()
+                    } else {
+                        diskPath
+                    }
+
+                    val actualIsoPath = when {
+                        mode == "install_iso" -> isoPath.ifBlank { null }
+                        mountIso -> isoPath.ifBlank { null }
+                        else -> null
+                    }
+
+                    val config = QemuVmConfig(
+                        id = existingVm?.id ?: java.util.UUID.randomUUID().toString(),
+                        name = vmName.ifBlank { "QEMU VM" },
+                        mode = mode,
+                        diskPath = actualDiskPath,
+                        newDiskSizeGB = newDiskSizeGB,
+                        newDiskFormat = newDiskFormat,
+                        isoPath = actualIsoPath,
+                        cpuCores = cpuCores,
+                        memoryMB = memoryMB,
+                        hasSound = hasSound,
+                        shareDir = shareDir,
+                        bootOrder = bootList,
+                        vncPort = port
+                    )
+                    onComplete(config)
+                },
+                modifier = Modifier.weight(1f),
+                colors = ButtonDefaults.textButtonColorsPrimary()
+            )
         }
 
         Spacer(Modifier.height(16.dp))
@@ -873,7 +609,6 @@ private fun tryQuickResolvePath(context: Context, uri: Uri): String? {
                     if (!dataPath.isNullOrBlank()) {
                         val mapped = mapInternalPathToShared(dataPath)
                         if (mapped != null) return mapped
-                        // DATA 列返回了但不是内部存储路径（如 app 私有目录），不直接用
                     }
                 }
             }
@@ -889,15 +624,10 @@ private fun tryQuickResolvePath(context: Context, uri: Uri): String? {
     }
 
     // 3. content:// scheme：检查常见的 document 路径格式
-    //    URI 路径是 URL 编码的，必须先解码才能匹配
-    //    例: /document/primary%3ADownload%2FTermux%2Fwin8.1.qcow2
-    //       -> /document/primary:Download/Termux/win8.1.qcow2
     if ("content".equals(scheme, ignoreCase = true)) {
         val rawPath = uri.path
         if (rawPath != null) {
             val docPath = android.net.Uri.decode(rawPath)
-            // 提取出 primary: / raw: 之后的子路径
-            // 注意：sub 可能是相对路径（Download/x.iso），也可能是绝对路径（/storage/emulated/0/Download/x.iso）
             val subPath: String? = sequenceOf(
                 "primary:",
                 "raw:/storage/emulated/0/",
@@ -914,22 +644,15 @@ private fun tryQuickResolvePath(context: Context, uri: Uri): String? {
         }
     }
 
-    // 需要复制
     return null
 }
 
 /**
  * 将子路径归一化为 Termux shared 映射路径。
- * 支持三种输入：
- *  - 相对路径: "Download/Termux/x.iso"  -> $HOME/storage/shared/Download/Termux/x.iso
- *  - 绝对内部存储路径: "/storage/emulated/0/Download/x.iso" 或 "/sdcard/Download/x.iso" -> 同上
- *  - 带前导斜杠的相对路径: "/Download/x.iso" -> $HOME/storage/shared/Download/x.iso
  */
 private fun normalizeToSharedPath(subPath: String): String {
     val trimmed = subPath.trim()
-    // 先尝试绝对路径映射
     mapInternalPathToShared(trimmed)?.let { return it }
-    // 否则按相对路径处理：去掉前导斜杠，避免双斜杠
     val relative = trimmed.trimStart('/')
     return "\$HOME/storage/shared/$relative"
 }
@@ -985,11 +708,9 @@ private suspend fun copyToSharedDir(
     val fileName = queryFileName(context, uri, defaultFileName)
     val totalSize = queryFileSize(context, uri)
 
-    // 目标目录：优先 /sdcard/Download/qemu/
     val sdcard = android.os.Environment.getExternalStorageDirectory().absolutePath
     var targetDir = java.io.File("$sdcard/Download/qemu")
     if (!targetDir.exists() && !targetDir.mkdirs()) {
-        // 回退到 app 外部 files 目录
         val extDir = context.getExternalFilesDir(null)
             ?: java.io.File("${context.filesDir.absolutePath}/shared_qemu_fallback")
         targetDir = java.io.File(extDir, "qemu")
@@ -1015,7 +736,6 @@ private suspend fun copyToSharedDir(
             }
         }
         onProgress(1f)
-        // 返回 shared 映射路径（统一归一化，避免双斜杠）
         normalizeToSharedPath(targetFile.absolutePath)
     } catch (e: Exception) {
         null

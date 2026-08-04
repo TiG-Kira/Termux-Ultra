@@ -8,14 +8,14 @@ import java.util.UUID
 data class QemuVmConfig(
     val id: String = UUID.randomUUID().toString(),
     val name: String,
-    val mode: String,            // "existing_disk" | "install_iso"
+    val mode: String,            // "existing_disk" | "install_iso" | "create_disk"
     val diskPath: String,        // 磁盘文件路径（shared 路径）
-    val newDiskSizeGB: Int = 0,  // 新建硬盘容量（install_iso 模式使用）
-    val isoPath: String? = null, // ISO 镜像路径（hasCdrom=true 时使用）
+    val newDiskSizeGB: Int = 20, // 新建硬盘容量（install_iso / create_disk 模式使用）
+    val newDiskFormat: String = "qcow2", // 新建硬盘格式（qcow2 / raw / vmdk）
+    val isoPath: String? = null, // ISO 镜像路径（install_iso 或手动挂载时使用）
     val cpuCores: Int = 2,
     val memoryMB: Int = 1024,
     val hasSound: Boolean = false,
-    val hasCdrom: Boolean = false,
     val shareDir: String = "\$HOME/storage/shared/qemu_share",
     val bootOrder: List<String> = listOf("c"),
     val vncPort: Int = 5900
@@ -33,10 +33,10 @@ data class QemuVmConfig(
         // 1. 检查并安装 qemu-system-x86_64
         sb.append("# 检查并安装 qemu-system-x86_64\n")
         sb.append("if ! command -v qemu-system-x86_64 &> /dev/null; then\n")
-        sb.append("    echo \"正在安装 qemu-system-x86_64...\"\n")
-        sb.append("    pkg install -y qemu-system-x86_64\n")
+        sb.append("    echo \"正在安装 qemu-system-x86-64...\"\n")
+        sb.append("    pkg install -y qemu-system-x86-64\n")
         sb.append("    if ! command -v qemu-system-x86_64 &> /dev/null; then\n")
-        sb.append("        echo \"错误: qemu-system-x86_64 安装失败\"\n")
+        sb.append("        echo \"错误: qemu-system-x86-64 安装失败\"\n")
         sb.append("        sleep 3\n")
         sb.append("        exit 1\n")
         sb.append("    fi\n")
@@ -63,12 +63,12 @@ data class QemuVmConfig(
         sb.append("echo \"共享目录: $shareDir\"\n")
         sb.append("echo \"提示: 您可以将文件放入此目录以便在虚拟机中使用\"\n\n")
 
-        // 4. 如果是 install_iso 模式，创建新硬盘
-        if (mode == "install_iso") {
+        // 4. 如果是 install_iso / create_disk 模式，创建新硬盘
+        if (mode == "install_iso" || mode == "create_disk") {
             sb.append("# 创建新硬盘\n")
             sb.append("if [ ! -f \"$diskPath\" ]; then\n")
-            sb.append("    echo \"正在创建新硬盘 (${newDiskSizeGB}GB)...\"\n")
-            sb.append("    qemu-img create -f qcow2 \"$diskPath\" ${newDiskSizeGB}G\n")
+            sb.append("    echo \"正在创建新硬盘 (${newDiskSizeGB}GB, 格式 $newDiskFormat)...\"\n")
+            sb.append("    qemu-img create -f $newDiskFormat \"$diskPath\" ${newDiskSizeGB}G\n")
             sb.append("    if [ ! -f \"$diskPath\" ]; then\n")
             sb.append("        echo \"错误: 硬盘创建失败\"\n")
             sb.append("        sleep 3\n")
@@ -101,7 +101,7 @@ data class QemuVmConfig(
         sb.append("    -usb -device usb-tablet\n")
         sb.append("    -vnc localhost:$vncDisplay\n")
         sb.append("    -hda \"$diskPath\"\n")
-        if (hasCdrom && isoPath != null) {
+        if (isoPath != null) {
             sb.append("    -cdrom \"$isoPath\"\n")
         }
         sb.append("    -rtc base=localtime\n")
@@ -111,7 +111,7 @@ data class QemuVmConfig(
         sb.append("echo \"正在启动 QEMU 虚拟机...\"\n")
         sb.append("echo \"VNC 端口: $vncPort (display :$vncDisplay)\"\n")
         sb.append("echo \"请使用 VNC 客户端连接 localhost:$vncPort\"\n")
-        sb.append("qemu-system-x86_64 \"${'$'}{QEMU_ARGS[@]}\"\n\n")
+        sb.append("qemu-system-x86_64 \"\${QEMU_ARGS[@]}\"\n\n")
 
         sb.append("echo ''\n")
         sb.append("echo '========================================'\n")

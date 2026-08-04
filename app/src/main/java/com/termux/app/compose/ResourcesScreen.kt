@@ -3,7 +3,6 @@ package com.termux.app.compose
 import android.content.Context
 import android.content.Intent
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -649,8 +648,9 @@ fun EntryCard(
 ) {
     MiuixCard(
         modifier = modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .fillMaxWidth(),
+        onClick = onClick,
+        showIndication = true
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Box(

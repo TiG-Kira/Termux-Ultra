@@ -1,4 +1,4 @@
-﻿package com.termux.app.activities
+package com.termux.app.activities
 
 import android.content.ComponentName
 import android.content.ClipData

@@ -21,8 +21,8 @@ android {
         applicationId "com.termux"
         minSdkVersion project.properties.minSdkVersion.toInteger()
         targetSdkVersion project.properties.targetSdkVersion.toInteger()
-        versionCode 1046
-        versionName "118.3.56"
+        versionCode 1047
+        versionName "118.3.57"
 
         if (appVersionName) versionName = appVersionName
 
@@ -108,6 +108,7 @@ android {
     }
 
     packaging {
+        jniLibs.useLegacyPackaging = true
         resources.excludes += "META-INF/LICENSE.md"
         resources.excludes += "META-INF/LICENSE-notice.md"
         resources.excludes += "META-INF/DEPENDENCIES"

@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>虚拟机操作</title>
+    <style id="theme-vars">
+:root {
+  --miuix-primary: #3482FF;
+  --miuix-primary-foreground: #FFFFFF;
+  --miuix-primary-50: #EDF4FF;
+  --miuix-primary-100: #DBEAFF;
+  --miuix-primary-600: #1A68E5;
+  --miuix-neutral-50: #F7F7F8;
+  --miuix-neutral-100: #F2F2F3;
+  --miuix-neutral-200: #E5E5E7;
+  --miuix-neutral-300: #D4D4D8;
+  --miuix-neutral-400: #A1A1AA;
+  --miuix-neutral-500: #71717A;
+  --miuix-neutral-900: #18181B;
+  --miuix-background: #FFFFFF;
+  --miuix-foreground: #111111;
+  --miuix-card: #FFFFFF;
+  --miuix-card-foreground: #111111;
+  --miuix-popover: #FFFFFF;
+  --miuix-popover-foreground: #111111;
+  --miuix-muted: #F7F7F8;
+  --miuix-muted-foreground: #71717A;
+  --miuix-border: #E5E5E7;
+  --miuix-input: #F2F2F3;
+  --miuix-ring: #3482FF;
+  --miuix-state-success: #34C759;
+  --miuix-state-success-bg: #E8F9ED;
+  --miuix-state-warning: #FF9500;
+  --miuix-state-warning-bg: #FFF4E5;
+  --miuix-state-error: #FF3B30;
+  --miuix-state-error-bg: #FFEBEA;
+  --miuix-state-info: #3482FF;
+  --miuix-state-info-bg: #EDF4FF;
+  --miuix-radius-small: 4px;
+  --miuix-radius-medium: 8px;
+  --miuix-radius-large: 16px;
+  --miuix-radius-pill: 999px;
+  --miuix-shadow-1: 0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 1px rgba(15, 23, 42, 0.02);
+  --miuix-shadow-2: 0 4px 12px -4px rgba(15, 23, 42, 0.10);
+  --miuix-shadow-3: 0 16px 40px -12px rgba(15, 23, 42, 0.22);
+  --miuix-space-1: 4px;
+  --miuix-space-2: 8px;
+  --miuix-space-3: 12px;
+  --miuix-space-4: 16px;
+  --miuix-space-5: 24px;
+  --miuix-font-sans: "Inter", "MiSans", "PingFang SC", "Noto Sans SC", "Microsoft YaHei", system-ui, -apple-system, sans-serif;
+  --miuix-font-mono: "SF Mono", "Fira Code", "JetBrains Mono", ui-monospace, monospace;
+  --miuix-text-xs: 12px;
+  --miuix-text-sm: 13px;
+  --miuix-text-base: 15px;
+  --miuix-text-lg: 17px;
+  --miuix-text-xl: 20px;
+  --miuix-text-2xl: 24px;
+  --miuix-header-height: 56px;
+  --miuix-list-row-height: 80px;
+  --miuix-button-height: 40px;
+  --miuix-input-height: 44px;
+}
+.miuix-h1 { font-size: var(--miuix-text-2xl); font-weight: 700; line-height: 1.15; letter-spacing: -0.015em; }
+.miuix-h2 { font-size: var(--miuix-text-xl); font-weight: 600; line-height: 1.2; }
+.miuix-h3 { font-size: var(--miuix-text-lg); font-weight: 600; line-height: 1.25; }
+.miuix-body { font-size: var(--miuix-text-base); line-height: 1.5; }
+.miuix-body-sm { font-size: var(--miuix-text-sm); line-height: 1.5; }
+.miuix-caption { font-size: var(--miuix-text-xs); line-height: 1.4; }
+.miuix-text-secondary { color: var(--miuix-muted-foreground); }
+.miuix-text-tertiary { color: var(--miuix-neutral-400); }
+.miuix-text-success { color: var(--miuix-state-success); }
+.miuix-text-error { color: var(--miuix-state-error); }
+.miuix-surface-muted { background-color: var(--miuix-muted); }
+.miuix-icon-btn { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: var(--miuix-radius-medium); border: none; background-color: transparent; color: var(--miuix-muted-foreground); cursor: pointer; transition: background-color 120ms ease, color 120ms ease; }
+.miuix-icon-btn:hover { background-color: var(--miuix-muted); color: var(--miuix-foreground); }
+.miuix-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: var(--miuix-button-height); padding: 0 18px; font-size: var(--miuix-text-base); font-weight: 600; line-height: 1; border-radius: var(--miuix-radius-large); border: none; cursor: pointer; transition: transform 120ms cubic-bezier(.2,.8,.2,1), background-color 120ms cubic-bezier(.2,.8,.2,1); }
+.miuix-btn:active { transform: scale(0.98); }
+.miuix-btn-primary { background-color: var(--miuix-primary); color: var(--miuix-primary-foreground); }
+.miuix-btn-primary:hover { background-color: var(--miuix-primary-600); }
+.miuix-btn-secondary { background-color: var(--miuix-muted); color: var(--miuix-foreground); }
+.miuix-card { background-color: var(--miuix-card); border-radius: var(--miuix-radius-large); border: 1px solid var(--miuix-border); overflow: hidden; }
+.miuix-scrim { position: fixed; inset: 0; background-color: rgba(0, 0, 0, 0.40); backdrop-filter: blur(2px); z-index: 40; }
+.miuix-sheet { background-color: var(--miuix-popover); border-radius: var(--miuix-radius-large) var(--miuix-radius-large) 0 0; box-shadow: var(--miuix-shadow-3); }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.3.1/dist/index.global.js"></script>
+    <script src="https://unpkg.com/lucide@1.8.0/dist/umd/lucide.min.js"></script>
+    <style type="text/tailwindcss">
+      @theme inline {
+        --color-background: var(--miuix-background);
+        --color-foreground: var(--miuix-foreground);
+        --color-card: var(--miuix-card);
+        --color-card-foreground: var(--miuix-card-foreground);
+        --color-popover: var(--miuix-popover);
+        --color-popover-foreground: var(--miuix-popover-foreground);
+        --color-primary: var(--miuix-primary);
+        --color-primary-foreground: var(--miuix-primary-foreground);
+        --color-muted: var(--miuix-muted);
+        --color-muted-foreground: var(--miuix-muted-foreground);
+        --color-border: var(--miuix-border);
+        --color-input: var(--miuix-input);
+        --color-ring: var(--miuix-ring);
+        --radius-sm: var(--miuix-radius-small);
+        --radius-md: var(--miuix-radius-medium);
+        --radius-lg: var(--miuix-radius-large);
+      }
+      @layer base { body { background: var(--miuix-background); color: var(--miuix-foreground); } }
+    </style>
+    <style id="semantic-token-fallback">
+      .bg-background { background-color: var(--miuix-background); }
+      .text-foreground { color: var(--miuix-foreground); }
+      .bg-card { background-color: var(--miuix-card); }
+      .text-card-foreground { color: var(--miuix-card-foreground); }
+      .bg-popover { background-color: var(--miuix-popover); }
+      .text-popover-foreground { color: var(--miuix-popover-foreground); }
+      .bg-primary { background-color: var(--miuix-primary); }
+      .text-primary { color: var(--miuix-primary); }
+      .text-primary-foreground { color: var(--miuix-primary-foreground); }
+      .bg-muted { background-color: var(--miuix-muted); }
+      .text-muted-foreground { color: var(--miuix-muted-foreground); }
+      .border-border { border-color: var(--miuix-border); }
+      .bg-input { background-color: var(--miuix-input); }
+      .ring-ring { --tw-ring-color: var(--miuix-ring); }
+    </style>
+    <style>
+      .no-scrollbar::-webkit-scrollbar { display: none; }
+      .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+</head>
+<body class="min-h-screen antialiased" style="font-family: var(--miuix-font-sans); background-color: var(--miuix-muted);">
+    <main class="relative mx-auto w-full max-w-md min-h-screen bg-background shadow-2xl">
+        <!-- Background: VM List (dimmed) -->
+        <div class="pointer-events-none opacity-40">
+            <header class="sticky top-0 z-20 flex h-14 items-center justify-between px-4 bg-background/95 backdrop-blur" style="border-bottom: 1px solid var(--miuix-border);">
+                <div class="flex items-center gap-3">
+                    <button class="miuix-icon-btn" aria-label="返回"><i data-lucide="chevron-left" class="h-5 w-5"></i></button>
+                    <h1 class="miuix-h1">虚拟机</h1>
+                </div>
+                <div class="flex items-center gap-1">
+                    <button class="miuix-icon-btn" aria-label="帮助"><i data-lucide="help-circle" class="h-5 w-5"></i></button>
+                    <button class="miuix-icon-btn" aria-label="设置"><i data-lucide="settings" class="h-5 w-5"></i></button>
+                </div>
+            </header>
+            <div class="p-4 space-y-4">
+                <section class="miuix-card p-4" style="box-shadow: var(--miuix-shadow-1);">
+                    <div class="flex items-center justify-between">
+                        <div><p class="miuix-body-sm miuix-text-secondary">虚拟机总数</p><p class="miuix-h1 mt-1">4</p></div>
+                        <div class="text-right"><p class="miuix-body-sm miuix-text-secondary">运行中</p><p class="miuix-h2 mt-1 miuix-text-success">2</p></div>
+                    </div>
+                </section>
+                <section>
+                    <div class="flex items-center justify-between px-1 mb-3"><h2 class="miuix-h3">全部虚拟机</h2></div>
+                    <div class="miuix-card" style="box-shadow: var(--miuix-shadow-1);">
+                        <article class="flex items-center gap-3 p-4" style="border-bottom: 1px solid var(--miuix-border);">
+                            <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl miuix-surface-muted"><i data-lucide="monitor" class="h-5 w-5" style="color: var(--miuix-primary);"></i></div>
+                            <div class="min-w-0 flex-1"><h3 class="miuix-h3 truncate">Ubuntu Server 22.04</h3><p class="miuix-body-sm miuix-text-secondary truncate mt-0.5">x86_64 · 2 核 · 4 GB</p></div>
+                        </article>
+                    </div>
+                </section>
+            </div>
+        </div>
+
+        <!-- Scrim -->
+        <div class="miuix-scrim" data-dom-id="menu-scrim"></div>
+
+        <!-- Bottom Sheet: Actions -->
+        <section class="miuix-sheet fixed bottom-0 left-1/2 z-50 w-full max-w-md -translate-x-1/2">
+            <!-- Handle -->
+            <div class="flex items-center justify-center pt-3 pb-2">
+                <div class="h-1 w-10 rounded-full" style="background-color: var(--miuix-neutral-300);"></div>
+            </div>
+
+            <!-- VM Info -->
+            <div class="px-5 pb-4 flex items-center gap-3">
+                <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl miuix-surface-muted">
+                    <i data-lucide="monitor" class="h-5 w-5" style="color: var(--miuix-primary);"></i>
+                </div>
+                <div class="min-w-0 flex-1">
+                    <h3 class="miuix-h3 truncate">Ubuntu Server 22.04</h3>
+                    <p class="miuix-caption miuix-text-secondary truncate">运行中 · x86_64 · 2 核 · 4 GB</p>
+                </div>
+            </div>
+
+            <!-- Actions -->
+            <div class="px-5 pb-6 space-y-2">
+                <button type="button" class="w-full miuix-btn miuix-btn-secondary h-12 justify-start px-4 gap-3" data-dom-id="btn-toggle-run">
+                    <i data-lucide="pause" class="h-5 w-5"></i>
+                    停止虚拟机
+                </button>
+                <button type="button" class="w-full miuix-btn miuix-btn-secondary h-12 justify-start px-4 gap-3" data-dom-id="btn-edit">
+                    <i data-lucide="pencil" class="h-5 w-5"></i>
+                    编辑配置
+                </button>
+                <button type="button" class="w-full miuix-btn h-12 justify-start px-4 gap-3" data-dom-id="btn-delete" style="background-color: var(--miuix-state-error-bg); color: var(--miuix-state-error);">
+                    <i data-lucide="trash-2" class="h-5 w-5"></i>
+                    删除虚拟机
+                </button>
+                <button type="button" class="w-full miuix-btn miuix-btn-secondary h-12 justify-center mt-2" data-dom-id="btn-cancel-menu">取消</button>
+            </div>
+        </section>
+    </main>
+    <script>lucide.createIcons();</script>
+</body>
+</html>

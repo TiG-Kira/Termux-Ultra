@@ -6,7 +6,6 @@ import android.content.Intent
 import android.content.ServiceConnection
 import android.os.Bundle
 import android.os.IBinder
-import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
@@ -111,7 +110,6 @@ class UtilityCenterActivity : ComponentActivity() {
 
                 var expandedCard by remember { mutableStateOf<String?>(null) }
                 var showTmuxHelpDialog by remember { mutableStateOf(false) }
-                var showQemuSheet by remember { mutableStateOf(false) }
                 var sessions by remember { mutableStateOf<List<TerminalSession>>(emptyList()) }
                 var termuxService by remember { mutableStateOf<TermuxService?>(null) }
 
@@ -256,9 +254,8 @@ class UtilityCenterActivity : ComponentActivity() {
                                 sessions = sessions,
                                 onToggleExpand = {
                                     if (item.type == "qemu_on_vnc") {
-                                        Log.d("UtilityCenter", "QEMU config button clicked, showQemuSheet=true")
-                                        showQemuSheet = true
-                                        Log.d("UtilityCenter", "showQemuSheet=$showQemuSheet")
+                                        val intent = Intent(context, QemuVmActivity::class.java)
+                                        context.startActivity(intent)
                                     } else {
                                         expandedCard = if (expandedCard == item.title) null else item.title
                                     }
@@ -319,11 +316,6 @@ class UtilityCenterActivity : ComponentActivity() {
                         }
                     }
 
-                    QemuOnVncSheet(
-                        show = showQemuSheet,
-                        onDismiss = { showQemuSheet = false },
-                        onExecuteScript = onExecuteScript
-                    )
                 }
             }
         }
