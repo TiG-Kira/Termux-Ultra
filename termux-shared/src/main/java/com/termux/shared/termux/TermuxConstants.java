@@ -838,6 +838,16 @@ public final class TermuxConstants {
             /** Intent extra for if termux failsafe session needs to be started and is used by {@link TERMUX_ACTIVITY} and {@link TERMUX_SERVICE#ACTION_STOP_SERVICE} */
             public static final String EXTRA_FAILSAFE_SESSION = TermuxConstants.TERMUX_PACKAGE_NAME + ".app.failsafe_session"; // Default: "com.termux.app.failsafe_session"
 
+            /** Intent extra set when TermuxActivity is launched from notification "end session" button.
+             *  When true, TermuxActivity should detect QEMU/container processes and show a data-loss
+             *  warning dialog before telling TermuxService to actually stop everything. */
+            public static final String EXTRA_TRIGGER_STOP_SERVICE = TermuxConstants.TERMUX_PACKAGE_NAME + ".app.trigger_stop_service"; // Default: "com.termux.app.trigger_stop_service"
+
+            /** Intent extra set when MainActivity is launched from notification "quit app" button.
+             *  When true, MainActivity should detect QEMU/container processes and show a data-loss
+             *  warning dialog before telling TermuxService to quit the entire app. */
+            public static final String EXTRA_TRIGGER_QUIT_APP = TermuxConstants.TERMUX_PACKAGE_NAME + ".app.trigger_quit_app"; // Default: "com.termux.app.trigger_quit_app"
+
 
             /** Intent action to make termux request storage permissions */
             public static final String ACTION_REQUEST_PERMISSIONS = TermuxConstants.TERMUX_PACKAGE_NAME + ".app.request_storage_permissions"; // Default: "com.termux.app.request_storage_permissions"
@@ -872,6 +882,17 @@ public final class TermuxConstants {
             /** Intent action to stop TERMUX_SERVICE */
             public static final String ACTION_STOP_SERVICE = TERMUX_PACKAGE_NAME + ".service_stop"; // Default: "com.termux.service_stop"
 
+            /** Intent action to force stop TERMUX_SERVICE WITHOUT any further checks
+             *  (used after TermuxActivity has already confirmed data-loss warning with user) */
+            public static final String ACTION_STOP_SERVICE_FORCE = TERMUX_PACKAGE_NAME + ".service_stop_force"; // Default: "com.termux.service_stop_force"
+
+            /** Intent action to quit the entire app (stop service + kill process).
+             *  If QEMU VMs or proot containers are detected, a data-loss warning dialog is shown first. */
+            public static final String ACTION_QUIT_APP = TERMUX_PACKAGE_NAME + ".service_quit_app"; // Default: "com.termux.service_quit_app"
+
+            /** Intent action to force quit the entire app WITHOUT any further checks
+             *  (used after user has already confirmed data-loss warning) */
+            public static final String ACTION_QUIT_APP_FORCE = TERMUX_PACKAGE_NAME + ".service_quit_app_force"; // Default: "com.termux.service_quit_app_force"
 
             /** Intent action to make TERMUX_SERVICE acquire a wakelock */
             public static final String ACTION_WAKE_LOCK = TERMUX_PACKAGE_NAME + ".service_wake_lock"; // Default: "com.termux.service_wake_lock"

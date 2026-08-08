@@ -68,6 +68,12 @@
                     style="@style/ToolbarFlyoutToggle"
                     android:contentDescription="@string/desc_zoom_options_btn"
                     android:drawableStart="@drawable/ic_zoom_options" />
+
+                <ImageButton
+                    android:id="@+id/audio_btn"
+                    style="@style/ImageButton"
+                    android:contentDescription="@string/desc_audio_btn"
+                    android:src="@drawable/ic_volume_off" />
             </LinearLayout>
 
             <LinearLayout

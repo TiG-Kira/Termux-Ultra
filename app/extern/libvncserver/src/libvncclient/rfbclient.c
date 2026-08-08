@@ -1663,6 +1663,92 @@ rfbBool SendXvpMsg(rfbClient* client, uint8_t version, uint8_t code)
     return TRUE;
 }
 
+/*
+ * QEMU VNC Audio extension - SendQemuAudioSetFormat
+ *
+ * Wire format (client -> server, submsg=AUDIO, cmd=SET_FORMAT):
+ *   u8  type       = 255 (rfbQemuClientMsg)
+ *   u8  submessage = 1   (rfbQemuClientSubMsgAudio)
+ *   u16 cmd        = 2   (rfbQemuClientAudioSetFormat, network order)
+ *   u8  channels   (1 = mono, 2 = stereo)
+ *   u8  format     (rfbQemuAudioFmtS16=3 is the common default)
+ *   u32 frequency  (e.g. 44100 or 48000, network order)
+ */
+rfbBool SendQemuAudioSetFormat(rfbClient* client, uint8_t channels, uint8_t format, uint32_t freq)
+{
+    uint8_t buf[10];
+    uint16_t cmd16;
+    uint32_t freq32;
+
+    if (!SupportsClient2Server(client, rfbQemuClientMsg)) return TRUE;
+
+    buf[0] = rfbQemuClientMsg;
+    buf[1] = rfbQemuClientSubMsgAudio;
+    cmd16 = rfbClientSwap16IfLE(rfbQemuClientAudioSetFormat);
+    memcpy(&buf[2], &cmd16, 2);
+    buf[4] = channels;
+    buf[5] = format;
+    freq32 = rfbClientSwap32IfLE(freq);
+    memcpy(&buf[6], &freq32, 4);
+
+    if (!WriteToRFBServer(client, (char *)buf, sizeof(buf)))
+        return FALSE;
+
+    return TRUE;
+}
+
+/*
+ * QEMU VNC Audio extension - SendQemuAudioEnable
+ *
+ * Wire format (client -> server, submsg=AUDIO, cmd=ENABLE):
+ *   u8  type       = 255
+ *   u8  submessage = 1   (AUDIO)
+ *   u16 cmd        = 0   (ENABLE, network order)
+ */
+rfbBool SendQemuAudioEnable(rfbClient* client)
+{
+    uint8_t buf[4];
+    uint16_t cmd16;
+
+    if (!SupportsClient2Server(client, rfbQemuClientMsg)) return TRUE;
+
+    buf[0] = rfbQemuClientMsg;
+    buf[1] = rfbQemuClientSubMsgAudio;
+    cmd16 = rfbClientSwap16IfLE(rfbQemuClientAudioEnable);
+    memcpy(&buf[2], &cmd16, 2);
+
+    if (!WriteToRFBServer(client, (char *)buf, sizeof(buf)))
+        return FALSE;
+
+    return TRUE;
+}
+
+/*
+ * QEMU VNC Audio extension - SendQemuAudioDisable
+ *
+ * Wire format (client -> server, submsg=AUDIO, cmd=DISABLE):
+ *   u8  type       = 255
+ *   u8  submessage = 1   (AUDIO)
+ *   u16 cmd        = 1   (DISABLE, network order)
+ */
+rfbBool SendQemuAudioDisable(rfbClient* client)
+{
+    uint8_t buf[4];
+    uint16_t cmd16;
+
+    if (!SupportsClient2Server(client, rfbQemuClientMsg)) return TRUE;
+
+    buf[0] = rfbQemuClientMsg;
+    buf[1] = rfbQemuClientSubMsgAudio;
+    cmd16 = rfbClientSwap16IfLE(rfbQemuClientAudioDisable);
+    memcpy(&buf[2], &cmd16, 2);
+
+    if (!WriteToRFBServer(client, (char *)buf, sizeof(buf)))
+        return FALSE;
+
+    return TRUE;
+}
+
 
 /*
  * SendPointerEvent.
@@ -2739,6 +2825,92 @@ HandleRFBServerMessage(rfbClient* client)
       return FALSE;
     SendFramebufferUpdateRequest(client, 0, 0, client->width, client->height, FALSE);
     rfbClientLog("Got new framebuffer size: %dx%d\n", client->width, client->height);
+    break;
+  }
+
+  case rfbQemuServerMsg:
+  {
+    /* QEMU extension message (audio support) - type 255
+     * Wire format (server -> client):
+     *   u8  type        = 255
+     *   u8  submessage  = 1 (AUDIO)
+     *   u16 command     = 0(END), 1(BEGIN), 2(DATA)  [network order]
+     *   [For BEGIN/END]: u32 zero = 0  [network order]
+     *   [For DATA]:      u32 size       [network order]
+     *                    u8  data[size]
+     */
+    uint8_t submsg;
+    uint16_t command;
+    uint32_t payloadSize;
+    uint8_t *audioBuffer = NULL;
+
+    /* Read submessage (1 byte) */
+    if (!ReadFromRFBServer(client, (char *)&submsg, 1))
+      return FALSE;
+
+    if (submsg != rfbQemuServerSubMsgAudio) {
+      /* Unknown QEMU sub-message, skip remaining by reading protocol extensions, bail */
+      rfbClientErr("Unknown QEMU sub-message type %u from VNC server\n", (unsigned)submsg);
+      return FALSE;
+    }
+
+    /* Read audio command (U16, network byte order) */
+    if (!ReadFromRFBServer(client, (char *)&command, 2))
+      return FALSE;
+    command = rfbClientSwap16IfLE(command);
+
+    switch (command) {
+      case rfbQemuServerAudioBegin:
+        /* BEGIN has a fixed 4-byte zero trailer */
+        if (!ReadFromRFBServer(client, (char *)&payloadSize, 4))
+          return FALSE;
+        SetClient2Server(client, rfbQemuClientMsg);
+        SetServer2Client(client, rfbQemuServerMsg);
+        if (client->HandleQemuAudioBegin)
+          client->HandleQemuAudioBegin(client);
+        break;
+
+      case rfbQemuServerAudioEnd:
+        /* END has a fixed 4-byte zero trailer */
+        if (!ReadFromRFBServer(client, (char *)&payloadSize, 4))
+          return FALSE;
+        if (client->HandleQemuAudioEnd)
+          client->HandleQemuAudioEnd(client);
+        break;
+
+      case rfbQemuServerAudioData:
+        /* DATA is followed by 4-byte size and then the PCM audio bytes */
+        if (!ReadFromRFBServer(client, (char *)&payloadSize, 4))
+          return FALSE;
+        payloadSize = rfbClientSwap32IfLE(payloadSize);
+
+        if (payloadSize > 0) {
+          /* Safety: cap to a reasonable size to avoid massive allocations */
+          if (payloadSize > (16 << 20)) { /* 16 MB */
+            rfbClientErr("QEMU audio data size too large: %u B, ignoring\n", (unsigned)payloadSize);
+            return FALSE;
+          }
+
+          audioBuffer = (uint8_t *)malloc(payloadSize);
+          if (!audioBuffer) {
+            rfbClientErr("Could not allocate %u B for QEMU audio data\n", (unsigned)payloadSize);
+            return FALSE;
+          }
+          if (!ReadFromRFBServer(client, (char *)audioBuffer, payloadSize)) {
+            free(audioBuffer);
+            return FALSE;
+          }
+          if (client->HandleQemuAudioData)
+            client->HandleQemuAudioData(client, audioBuffer, payloadSize);
+          free(audioBuffer);
+        }
+        break;
+
+      default:
+        rfbClientErr("Unknown QEMU audio command %u from VNC server\n", (unsigned)command);
+        return FALSE;
+    }
+
     break;
   }
 

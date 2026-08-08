@@ -531,6 +531,37 @@ typedef struct {
 #define rfbEncodingQemuExtendedKeyEvent 0xFFFFFEFE /* -258 */
 #define rfbEncodingExtendedClipboard 0xC0A1E5CE
 
+/* QEMU VNC extension messages (Termux Ultra audio support) */
+/* Server -> Client message IDs */
+#define rfbQemuServerMsg                 255
+/* Client -> Server message IDs */
+#define rfbQemuClientMsg                 255
+
+/* QEMU client -> server sub-message types */
+#define rfbQemuClientSubMsgExtKeyEvent   0
+#define rfbQemuClientSubMsgAudio         1
+
+/* QEMU server -> client sub-message types */
+#define rfbQemuServerSubMsgAudio         1
+
+/* QEMU client -> server audio commands (U16, network byte order) */
+#define rfbQemuClientAudioEnable         0
+#define rfbQemuClientAudioDisable        1
+#define rfbQemuClientAudioSetFormat      2
+
+/* QEMU server -> client audio commands (U16, network byte order) */
+#define rfbQemuServerAudioEnd            0
+#define rfbQemuServerAudioBegin          1
+#define rfbQemuServerAudioData           2
+
+/* Audio format codes (QEMU AUDIO_FORMAT enum subset) */
+#define rfbQemuAudioFmtU8                0
+#define rfbQemuAudioFmtS8                1
+#define rfbQemuAudioFmtU16               2
+#define rfbQemuAudioFmtS16               3  /* Default: Signed 16-bit LE */
+#define rfbQemuAudioFmtU32               4
+#define rfbQemuAudioFmtS32               5
+
 /* LibVNCServer additions.   We claim 0xFFFE0000 - 0xFFFE00FF */
 #define rfbEncodingKeyboardLedState   0xFFFE0000
 #define rfbEncodingSupportedMessages  0xFFFE0001

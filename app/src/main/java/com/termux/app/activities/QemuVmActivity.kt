@@ -107,29 +107,14 @@ class QemuVmActivity : ComponentActivity() {
 
 /**
  * 检查当前运行中的 QEMU 虚拟机数量。
- * 通过 pgrep 查找 qemu-system-x86_64 进程。
+ * 同时覆盖 Termux 原生 / proot 容器两种环境。
+ *
+ * 实现：直接调用 [com.termux.app.compose.ProcessDetector.countRunningQemu]，
+ * 与 TermuxService LiveUpdate 通知中的检测逻辑完全一致，保证虚拟机页面卡片上的
+ * "运行中"数量与通知药丸文字同步。
  */
 private suspend fun countRunningQemuVms(context: Context): Int {
-    return withContext(Dispatchers.IO) {
-        try {
-            val shell = TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/sh"
-            val home = TermuxConstants.TERMUX_HOME_DIR_PATH
-            val envClient = TermuxShellEnvironmentClient()
-            val env = envClient.buildEnvironment(context, false, home)
-            val process = Runtime.getRuntime().exec(
-                arrayOf(shell, "-c", "pgrep -c -x qemu-system-x86_64 || echo 0"),
-                env,
-                java.io.File(home)
-            )
-            val reader = BufferedReader(InputStreamReader(process.inputStream))
-            val countStr = reader.readLine()?.trim() ?: "0"
-            reader.close()
-            process.waitFor()
-            countStr.toIntOrNull() ?: 0
-        } catch (_: Exception) {
-            0
-        }
-    }
+    return com.termux.app.compose.ProcessDetector.countRunningQemu(context)
 }
 
 @Composable
@@ -488,7 +473,7 @@ private fun VmCard(
                             color = MiuixTheme.colorScheme.onSurface
                         )
                         Text(
-                            text = "${vm.cpuCores}核 / ${vm.memoryMB}MB / VNC:${vm.vncPort}",
+                            text = "${vm.cpuCores}核 / ${vm.memoryMB}MB / ${(vm.machineType ?: "q35").uppercase()} / ${(vm.diskInterface ?: "ide").uppercase()} / VNC:${vm.vncPort}",
                             fontSize = 13.sp,
                             color = MiuixTheme.colorScheme.onSurfaceVariantSummary
                         )

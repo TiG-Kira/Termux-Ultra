@@ -130,6 +130,12 @@ public final class TermuxService extends Service implements TermuxTask.TermuxTas
     /** If the user has executed the {@link TERMUX_SERVICE#ACTION_STOP_SERVICE} intent. */
     boolean mWantsToStop = false;
 
+    /** If "end all sessions" has been clicked and all sessions/tasks were killed.
+     *  While true and no sessions are running, notification is downgraded to a normal
+     *  (non-LiveUpdate) format with text "终端会话已清理(已无会话运行)。".
+     *  Reset to false when a new session/task is created. */
+    boolean mAllSessionsCleared = false;
+
     public Integer mTerminalTranscriptRows;
 
     private static final String LOG_TAG = "TermuxService";
@@ -139,6 +145,31 @@ public final class TermuxService extends Service implements TermuxTask.TermuxTas
     private boolean mIsMemoryKillActive = false;
     private boolean mAreSessionsFrozen = false;
     private String mKilledSessionName = null;
+
+    /**
+     * 已结束（被杀死/自然退出）的会话信息队列。
+     *
+     * 当 [onTermuxSessionExited] 触发时，会话会立即从 [mTermuxSessions] 移除，
+     * UI 层来不及捕获退出代码。这里在移除前把会话名 + 退出代码 + 时间戳记录下来，
+     * 供 TerminalListScreen 拉取并以"死亡卡片"形式展示（红色标题 + 退出代码小字），
+     * 直到用户手动消除。
+     *
+     * 死亡会话不计入 [mTermuxSessions]，因此 LiveUpdate 通知中的会话数量自动排除。
+     */
+    private final List<DeadSessionInfo> mDeadSessionInfos = new ArrayList<>();
+
+    /** 已结束会话的信息载体（name + exitCode + exitedAt）。 */
+    public static class DeadSessionInfo {
+        public final String sessionName;
+        public final int exitCode;
+        public final long exitedAt;
+
+        public DeadSessionInfo(String sessionName, int exitCode, long exitedAt) {
+            this.sessionName = sessionName;
+            this.exitCode = exitCode;
+            this.exitedAt = exitedAt;
+        }
+    }
 
     private Handler mMemoryCheckHandler;
     private Runnable mMemoryCheckRunnable;
@@ -174,6 +205,18 @@ public final class TermuxService extends Service implements TermuxTask.TermuxTas
                 case TERMUX_SERVICE.ACTION_STOP_SERVICE:
                     Logger.logDebug(LOG_TAG, "ACTION_STOP_SERVICE intent received");
                     actionStopService();
+                    break;
+                case TERMUX_SERVICE.ACTION_STOP_SERVICE_FORCE:
+                    Logger.logDebug(LOG_TAG, "ACTION_STOP_SERVICE_FORCE intent received (skip data-loss checks, already confirmed by user)");
+                    actionStopServiceForce();
+                    break;
+                case TERMUX_SERVICE.ACTION_QUIT_APP:
+                    Logger.logDebug(LOG_TAG, "ACTION_QUIT_APP intent received");
+                    actionQuitApp();
+                    break;
+                case TERMUX_SERVICE.ACTION_QUIT_APP_FORCE:
+                    Logger.logDebug(LOG_TAG, "ACTION_QUIT_APP_FORCE intent received (skip data-loss checks, already confirmed by user)");
+                    actionQuitAppForce();
                     break;
                 case TERMUX_SERVICE.ACTION_WAKE_LOCK:
                     Logger.logDebug(LOG_TAG, "ACTION_WAKE_LOCK intent received");
@@ -285,21 +328,108 @@ public final class TermuxService extends Service implements TermuxTask.TermuxTas
         stopSelf();
     }
 
-    /** Process action to stop service. */
+    /** Process action to stop service.
+     *  If QEMU VMs or proot containers are detected running, this will NOT kill sessions directly;
+     *  instead it launches MainActivity with EXTRA_TRIGGER_STOP_SERVICE so that a data-loss
+     *  warning OverlayDialog can be shown and user must confirm. Once confirmed the activity
+     *  sends ACTION_STOP_SERVICE_FORCE, handled by {@link #actionStopServiceForce()}.
+     *  If no VMs/containers are running, sessions are killed immediately and MainActivity
+     *  is brought to the foreground so the user sees the refreshed terminal page. */
     private void actionStopService() {
+        // Detect running QEMU / proot containers
+        com.termux.app.compose.ProcessDetector.DetectionResult detection =
+                com.termux.app.compose.ProcessDetector.detectAllBlocking(this);
+        boolean hasDangerousProcesses = detection.getQemuCount() > 0 || detection.getContainerRunning();
+
+        if (hasDangerousProcesses) {
+            // 点击结束会话，先进入主页（MainActivity），然后在主页弹出OverlayDialog警告
+            Logger.logDebug(LOG_TAG, "QEMU or proot container running; delegating stop confirmation to MainActivity dialog (qemu=" + detection.getQemuCount() + ", container=" + detection.getContainerRunning() + ")");
+            Intent dialogIntent = new Intent(this, com.termux.app.MainActivity.class);
+            dialogIntent.putExtra(TermuxConstants.TERMUX_APP.TERMUX_ACTIVITY.EXTRA_TRIGGER_STOP_SERVICE, true);
+            dialogIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            // If app needs Display-over-other-apps to launch activity from service, respect that:
+            if (com.termux.shared.packages.PermissionUtils.validateDisplayOverOtherAppsPermissionForPostAndroid10(this, true)) {
+                startActivity(dialogIntent);
+            } else {
+                // If permission is missing, at least bring activity to front via existing task
+                dialogIntent.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);
+                try { startActivity(dialogIntent); } catch (Exception e) {
+                    Logger.logStackTraceWithMessage(LOG_TAG, "Failed to launch MainActivity for stop confirmation", e);
+                }
+            }
+            return;
+        }
+
+        // No dangerous processes: bring MainActivity to foreground, then kill sessions and refresh
+        Logger.logDebug(LOG_TAG, "No dangerous processes; launching MainActivity and killing sessions");
+        Intent mainIntent = new Intent(this, com.termux.app.MainActivity.class);
+        mainIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        try { startActivity(mainIntent); } catch (Exception e) {
+            Logger.logStackTraceWithMessage(LOG_TAG, "Failed to launch MainActivity", e);
+        }
+
+        actionStopServiceForce();
+    }
+
+    /** Process action to quit the entire app.
+     *  If QEMU VMs or proot containers are detected running, launches MainActivity with
+     *  EXTRA_TRIGGER_QUIT_APP so that a data-loss warning OverlayDialog can be shown.
+     *  Once confirmed, the activity sends ACTION_QUIT_APP_FORCE.
+     *  If no VMs/containers are running, the app exits immediately. */
+    private void actionQuitApp() {
+        // Detect running QEMU / proot containers
+        com.termux.app.compose.ProcessDetector.DetectionResult detection =
+                com.termux.app.compose.ProcessDetector.detectAllBlocking(this);
+        boolean hasDangerousProcesses = detection.getQemuCount() > 0 || detection.getContainerRunning();
+
+        if (hasDangerousProcesses) {
+            // 有容器/虚拟机运行：进入主页弹窗确认
+            Logger.logDebug(LOG_TAG, "QEMU or proot container running; delegating quit confirmation to MainActivity dialog (qemu=" + detection.getQemuCount() + ", container=" + detection.getContainerRunning() + ")");
+            Intent dialogIntent = new Intent(this, com.termux.app.MainActivity.class);
+            dialogIntent.putExtra(TermuxConstants.TERMUX_APP.TERMUX_ACTIVITY.EXTRA_TRIGGER_QUIT_APP, true);
+            dialogIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            if (com.termux.shared.packages.PermissionUtils.validateDisplayOverOtherAppsPermissionForPostAndroid10(this, true)) {
+                startActivity(dialogIntent);
+            } else {
+                dialogIntent.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);
+                try { startActivity(dialogIntent); } catch (Exception e) {
+                    Logger.logStackTraceWithMessage(LOG_TAG, "Failed to launch MainActivity for quit confirmation", e);
+                }
+            }
+            return;
+        }
+
+        // No dangerous processes: directly exit
+        actionQuitAppForce();
+    }
+
+    /** Force quit the entire app without any further data-loss checks.
+     *  Kills all sessions, stops foreground service, and terminates the process. */
+    private void actionQuitAppForce() {
+        mWantsToStop = true;
+        killAllTermuxExecutionCommands();
+        runStopForeground();
+        stopSelf();
+        android.os.Process.killProcess(android.os.Process.myPid());
+    }
+
+    /** Force stop service without any further data-loss checks. Called after TermuxActivity
+     *  has already warned the user (if QEMU/container running) and user confirmed "继续". */
+    private void actionStopServiceForce() {
         mWantsToStop = false;
         killAllTermuxExecutionCommands();
+
+        int remainingSessions = getTermuxSessionsSize();
+        int remainingTasks = mTermuxTasks.size();
+        if (remainingSessions == 0 && remainingTasks == 0) {
+            // Mark "sessions cleaned" state so notification downgrades (requirement 1)
+            mAllSessionsCleared = true;
+        }
+
         updateNotification();
 
         // 结束反馈：toast 通知用户已结束所有会话
-        int remainingSessions = getTermuxSessionsSize();
-        int remainingTasks = mTermuxTasks.size();
-        final String toastMsg;
-        if (remainingSessions == 0 && remainingTasks == 0) {
-            toastMsg = "已结束所有会话";
-        } else {
-            toastMsg = "已结束所有会话";
-        }
+        final String toastMsg = "已结束所有会话";
         new Handler(Looper.getMainLooper()).post(() ->
             android.widget.Toast.makeText(TermuxService.this, toastMsg, android.widget.Toast.LENGTH_SHORT).show()
         );
@@ -541,6 +671,10 @@ public final class TermuxService extends Service implements TermuxTask.TermuxTas
         if (executionCommand.isPluginExecutionCommand)
             mPendingPluginExecutionCommands.remove(executionCommand);
 
+        // A new background task was created => leave the "sessions cleaned" state so
+        // notification priority and format are restored to LiveUpdate style
+        mAllSessionsCleared = false;
+
         updateNotification();
 
         return newTermuxTask;
@@ -637,6 +771,9 @@ public final class TermuxService extends Service implements TermuxTask.TermuxTas
         if (executionCommand.isPluginExecutionCommand)
             mPendingPluginExecutionCommands.remove(executionCommand);
 
+        // A new foreground session was created => restore LiveUpdate notification format
+        mAllSessionsCleared = false;
+
         // Notify {@link TermuxSessionsListViewController} that sessions list has been updated if
         // activity in is foreground
         if (mTermuxTerminalSessionClient != null)
@@ -700,11 +837,16 @@ public final class TermuxService extends Service implements TermuxTask.TermuxTas
             Logger.logVerbose(LOG_TAG, "The onTermuxSessionExited() callback called for \"" + executionCommand.getCommandIdAndLabelLogString() + "\" TermuxSession command");
 
             int exitCode = termuxSession.getTerminalSession().getExitStatus();
+            String sessionName = termuxSession.getTerminalSession().mSessionName;
+            if (sessionName == null || sessionName.isEmpty()) {
+                sessionName = getString(R.string.terminal);
+            }
+
+            // 记录到死亡会话队列，供 TerminalListScreen 以"死亡卡片"形式展示
+            // （红色标题 + 退出代码小字 + 手动消除按钮）
+            mDeadSessionInfos.add(new DeadSessionInfo(sessionName, exitCode, System.currentTimeMillis()));
+
             if (exitCode == 137 && !mIsMemoryKillActive && !MemoryBroadcastReceiver.isMemoryKillReceived()) {
-                String sessionName = termuxSession.getTerminalSession().mSessionName;
-                if (sessionName == null || sessionName.isEmpty()) {
-                    sessionName = getString(R.string.terminal);
-                }
                 mKilledSessionName = sessionName;
                 Logger.logDebug(LOG_TAG, "Session killed by system: " + sessionName);
             }
@@ -722,6 +864,22 @@ public final class TermuxService extends Service implements TermuxTask.TermuxTas
         }
 
         updateNotification();
+    }
+
+    /** 获取已结束会话信息列表（供 TerminalListScreen 渲染死亡卡片）。 */
+    public synchronized List<DeadSessionInfo> getDeadSessionInfos() {
+        return new ArrayList<>(mDeadSessionInfos);
+    }
+
+    /** 用户手动消除某个死亡会话卡片时调用。 */
+    public synchronized void clearDeadSessionInfo(String sessionName, long exitedAt) {
+        mDeadSessionInfos.removeIf(info ->
+            info.sessionName.equals(sessionName) && info.exitedAt == exitedAt);
+    }
+
+    /** 清除所有死亡会话信息（例如用户点击"全部清除"）。 */
+    public synchronized void clearAllDeadSessionInfos() {
+        mDeadSessionInfos.clear();
     }
 
     /** Get the terminal transcript rows to be used for new {@link TermuxSession}. */
@@ -853,24 +1011,65 @@ public final class TermuxService extends Service implements TermuxTask.TermuxTas
         int sessionCount = getTermuxSessionsSize();
         int taskCount = mTermuxTasks.size();
         String notificationText;
-        
-        if (sessionCount == 0 && taskCount == 0) {
+
+        // Reset cleared state if a session/task came back (requirement 1)
+        if (mAllSessionsCleared && (sessionCount > 0 || taskCount > 0)) {
+            mAllSessionsCleared = false;
+        }
+
+        // --- Detect QEMU / proot container processes (requirement 2) ---
+        com.termux.app.compose.ProcessDetector.DetectionResult detection = null;
+        if (sessionCount > 0 || taskCount > 0) {
+            // Only run detection when something is running; keeps the no-session path fast
+            detection = com.termux.app.compose.ProcessDetector.detectAllBlocking(this);
+        }
+        final int qemuCount  = (detection == null) ? 0 : detection.getQemuCount();
+        final boolean containerRunning = (detection != null) && detection.getContainerRunning();
+
+        // --- Format notification text ---
+        // 三档优先级（与 LiveUpdate 药丸 shortCriticalText 保持一致）：
+        //   1) 有 QEMU 虚拟机运行        → 以虚拟机数量为主线
+        //   2) 否则有 proot 容器在运行    → 会话数 + (含容器) 标记
+        //   3) 都没有                     → 仅会话数
+        if (mAllSessionsCleared && sessionCount == 0 && taskCount == 0) {
+            // Requirement 1: downgrade text after end-sessions click until new sessions start
+            notificationText = "终端会话已清理(已无会话运行)。";
+        } else if (sessionCount == 0 && taskCount == 0) {
             notificationText = res.getString(R.string.notification_no_terminals_running);
-        } else {
-            notificationText = res.getString(R.string.notification_running_terminals, sessionCount);
+        } else if (qemuCount > 0) {
+            // 最优先：有虚拟机运行 —— 以虚拟机数量为主线
+            notificationText = "正运行 " + qemuCount + " 台虚拟机";
             if (taskCount > 0) {
-                notificationText += ", " + taskCount + " " + res.getString(taskCount == 1 ? R.string.notification_task : R.string.notification_tasks);
+                notificationText += "，" + taskCount + " 个任务";
+            }
+        } else if (containerRunning) {
+            // 次优先：有容器运行 —— 会话数 + 含容器标记
+            notificationText = "正运行 " + sessionCount + " 个会话(含容器)";
+            if (taskCount > 0) {
+                notificationText += "，" + taskCount + " 个任务";
+            }
+        } else {
+            // 默认：仅会话数
+            notificationText = "正运行 " + sessionCount + " 个会话";
+            if (taskCount > 0) {
+                notificationText += "，" + taskCount + " 个任务";
             }
         }
 
         final boolean wakeLockHeld = mWakeLock != null;
-        if (wakeLockHeld) notificationText += " (" + res.getString(R.string.notification_wake_lock_held) + ")";
+        if (wakeLockHeld && !(mAllSessionsCleared && sessionCount == 0 && taskCount == 0)) {
+            notificationText += " (" + res.getString(R.string.notification_wake_lock_held) + ")";
+        }
 
 
         // Set notification priority
-        // If holding a wake or wifi lock consider the notification of high priority since it's using power,
-        // otherwise use a low priority
-        int priority = (wakeLockHeld) ? Notification.PRIORITY_HIGH : Notification.PRIORITY_LOW;
+        // Requirement 1: if sessions have just been cleaned -> normal (low) priority, NOT high/LiveUpdate
+        int priority;
+        if (mAllSessionsCleared && sessionCount == 0 && taskCount == 0) {
+            priority = Notification.PRIORITY_LOW;
+        } else {
+            priority = (wakeLockHeld) ? Notification.PRIORITY_HIGH : Notification.PRIORITY_LOW;
+        }
 
 
         Notification.Builder builder;
@@ -888,8 +1087,20 @@ public final class TermuxService extends Service implements TermuxTask.TermuxTas
         builder.setSmallIcon(R.drawable.ic_service_notification);
         builder.setOngoing(true);
 
-        Intent exitIntent = new Intent(this, TermuxService.class).setAction(TERMUX_SERVICE.ACTION_STOP_SERVICE);
-        builder.addAction(android.R.drawable.ic_delete, res.getString(R.string.notification_action_exit), PendingIntent.getService(this, 0, exitIntent, pendingIntentFlags));
+        // "结束会话" action: send ACTION_STOP_SERVICE to service, which will launch MainActivity
+        // and show a data-loss warning dialog if VMs/containers are running.
+        Intent stopIntent = new Intent(this, TermuxService.class).setAction(TERMUX_SERVICE.ACTION_STOP_SERVICE);
+        // Use FLAG_UPDATE_CURRENT so the extra is delivered correctly even when the same PendingIntent already exists
+        int exitPiFlags = PendingIntent.FLAG_UPDATE_CURRENT;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) exitPiFlags |= PendingIntent.FLAG_IMMUTABLE;
+        builder.addAction(android.R.drawable.ic_delete, res.getString(R.string.notification_action_exit),
+                PendingIntent.getService(this, 1, stopIntent, exitPiFlags));
+
+        // "关闭程序" action: send ACTION_QUIT_APP to service, which will exit immediately
+        // or show a data-loss warning dialog if VMs/containers are running.
+        Intent quitIntent = new Intent(this, TermuxService.class).setAction(TERMUX_SERVICE.ACTION_QUIT_APP);
+        builder.addAction(android.R.drawable.ic_menu_close_clear_cancel, res.getString(R.string.notification_action_quit),
+                PendingIntent.getService(this, 2, quitIntent, exitPiFlags));
 
         String newWakeAction = wakeLockHeld ? TERMUX_SERVICE.ACTION_WAKE_UNLOCK : TERMUX_SERVICE.ACTION_WAKE_LOCK;
         Intent toggleWakeLockIntent = new Intent(this, TermuxService.class).setAction(newWakeAction);
@@ -899,19 +1110,35 @@ public final class TermuxService extends Service implements TermuxTask.TermuxTas
 
         if (Build.VERSION.SDK_INT >= 36) {
             try {
-                builder.setPriority(Notification.PRIORITY_HIGH);
-                
-                if (sessionCount > 0) {
-                    builder.setStyle(new Notification.BigTextStyle().bigText(notificationText));
-                }
-                
-                if (sessionCount > 0) {
-                    // Android 16+ Live Update (Promoted Ongoing): opt in via extras + short critical text.
-                    // Requires an ongoing notification with a Style (BigTextStyle set above).
-                    Bundle promotedExtras = new Bundle();
-                    promotedExtras.putBoolean(Notification.EXTRA_REQUEST_PROMOTED_ONGOING, true);
-                    builder.addExtras(promotedExtras);
-                    builder.setShortCriticalText(sessionCount + " 会话");
+                // Requirement 1: when sessions cleared, do NOT promote to LiveUpdate,
+                // do NOT set HIGH priority, and do NOT use shortCriticalText.
+                if (!(mAllSessionsCleared && sessionCount == 0 && taskCount == 0)) {
+                    builder.setPriority(Notification.PRIORITY_HIGH);
+
+                    if (sessionCount > 0 || qemuCount > 0 || containerRunning) {
+                        builder.setStyle(new Notification.BigTextStyle().bigText(notificationText));
+                    }
+
+                    if (sessionCount > 0) {
+                        // Android 16+ Live Update (Promoted Ongoing): opt in via extras + short critical text.
+                        // Requires an ongoing notification with a Style (BigTextStyle set above).
+                        Bundle promotedExtras = new Bundle();
+                        promotedExtras.putBoolean(Notification.EXTRA_REQUEST_PROMOTED_ONGOING, true);
+                        builder.addExtras(promotedExtras);
+                        // 药丸文字（shortCriticalText）三档优先级，与通知正文保持一致：
+                        //   1) 有 QEMU 虚拟机运行 → "<N> 台虚拟机"
+                        //   2) 否则有 proot 容器在运行 → "<M> 个会话(含容器)"
+                        //   3) 都没有 → "<M> 个会话"
+                        // 注：QEMU 检测已统一使用 ProcessDetector.countRunningQemuBlocking()，
+                        // 与 QemuVmActivity 虚拟机页面卡片上的"运行中"数量同步（包含容器内 QEMU 进程）。
+                        if (qemuCount > 0) {
+                            builder.setShortCriticalText(qemuCount + " 台虚拟机");
+                        } else if (containerRunning) {
+                            builder.setShortCriticalText(sessionCount + " 个会话(含容器)");
+                        } else {
+                            builder.setShortCriticalText(sessionCount + " 个会话");
+                        }
+                    }
                 }
             } catch (Exception e) {
                 Logger.logDebug(LOG_TAG, "Failed to set Live Update notification properties: " + e.getMessage());

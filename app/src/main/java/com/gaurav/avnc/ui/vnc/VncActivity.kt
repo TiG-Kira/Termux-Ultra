@@ -59,6 +59,7 @@ private const val PROFILE_KEY = "com.gaurav.avnc.server_profile"
 private const val PROFILE_ID_KEY = "com.gaurav.avnc.server_profile_id"
 private const val FRAME_STATE_KEY = "com.gaurav.avnc.frame_state"
 private const val AUTO_RECONNECT_DELAY_KEY = "com.gaurav.avnc.auto_reconnect_delay"
+private const val QEMU_AUDIO_MODE_KEY = "com.termux.app.vnc.QEMU_AUDIO_MODE"
 
 fun createVncIntent(context: Context, profile: ServerProfile): Intent {
     return Intent(context, VncActivity::class.java).apply {
@@ -80,10 +81,13 @@ fun startVncActivity(source: Activity, uri: VncUri) {
 @Parcelize
 private data class SavedFrameState(val frameX: Float, val frameY: Float, val zoom1: Float, val zoom2: Float) : Parcelable
 
-private fun startVncActivity(source: Activity, profile: ServerProfile, frameState: SavedFrameState, autoReconnectDelay: Int) {
+private fun startVncActivity(source: Activity, profile: ServerProfile, frameState: SavedFrameState, autoReconnectDelay: Int, qemuAudioMode: String? = null) {
     source.startActivity(createVncIntent(source, profile).also {
         it.putExtra(FRAME_STATE_KEY, frameState)
         it.putExtra(AUTO_RECONNECT_DELAY_KEY, autoReconnectDelay)
+        if (qemuAudioMode != null) {
+            it.putExtra(QEMU_AUDIO_MODE_KEY, qemuAudioMode)
+        }
     })
 }
 /**************************************************************************/
@@ -110,6 +114,7 @@ class VncActivity : AppCompatActivity() {
     private var wasConnectedWhenStopped = false
     private var onStartTime = 0L
     private var autoReconnectDelay = 5
+    private var qemuAudioMode: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         DeviceAuthPrompt.applyFingerprintDialogFix(supportFragmentManager)
@@ -137,8 +142,13 @@ class VncActivity : AppCompatActivity() {
         viewModel.state.observe(this) { onClientStateChanged(it) }
         viewModel.profileLive.observe(this) { onProfileUpdated() }
         viewModel.capturePointer.observe(this) { updatePointerCapture(it) }
+        viewModel.audioErrorMessage.observe(this) { msg ->
+            Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
+        }
 
         autoReconnectDelay = intent.getIntExtra(AUTO_RECONNECT_DELAY_KEY, 5)
+        qemuAudioMode = savedInstanceState?.getString(QEMU_AUDIO_MODE_KEY)
+            ?: intent.getStringExtra(QEMU_AUDIO_MODE_KEY)
         savedInstanceState?.let {
             restoredFromBundle = true
             wasConnectedWhenStopped = it.getBoolean("wasConnectedWhenStopped")
@@ -149,6 +159,11 @@ class VncActivity : AppCompatActivity() {
         super.onStart()
         binding.frameView.onResume()
         onStartTime = SystemClock.uptimeMillis()
+
+        // QEMU VM PA_FOLLOW_SCREEN 模式：跟随 VNC 页面启动 PulseAudio 播放
+        if (qemuAudioMode == com.termux.app.compose.AudioMode.PA_FOLLOW_SCREEN) {
+            com.termux.app.vnc.PulseAudioPlayer.start(viewModel.profile.host)
+        }
 
         // Refresh framebuffer on activity restart:
         // - It forces read/write on the socket. This allows us to verify the socket, which might have
@@ -165,6 +180,12 @@ class VncActivity : AppCompatActivity() {
         super.onStop()
         virtualKeys.releaseMetaKeys()
         binding.frameView.onPause()
+
+        // QEMU VM PA_FOLLOW_SCREEN 模式：离开 VNC 页面时停止 PulseAudio 播放
+        if (qemuAudioMode == com.termux.app.compose.AudioMode.PA_FOLLOW_SCREEN) {
+            com.termux.app.vnc.PulseAudioPlayer.stop()
+        }
+
         if (viewModel.pref.viewer.pauseUpdatesInBackground)
             viewModel.setFrameBufferUpdatesPaused(true)
         wasConnectedWhenStopped = viewModel.connected
@@ -174,6 +195,7 @@ class VncActivity : AppCompatActivity() {
         super.onSaveInstanceState(outState)
         outState.putParcelable(PROFILE_KEY, viewModel.profileLive.value)
         outState.putBoolean("wasConnectedWhenStopped", wasConnectedWhenStopped || viewModel.connected)
+        outState.putString(QEMU_AUDIO_MODE_KEY, qemuAudioMode)
     }
 
 
@@ -281,7 +303,7 @@ class VncActivity : AppCompatActivity() {
                 SavedFrameState(frameX = it.frameX, frameY = it.frameY, zoom1 = it.zoomScale1, zoom2 = it.zoomScale2)
             }
 
-            startVncActivity(this, viewModel.profile, savedFrameState, nextAutoReconnectDelay)
+            startVncActivity(this, viewModel.profile, savedFrameState, nextAutoReconnectDelay, qemuAudioMode)
 
             if (seamless) {
                 @Suppress("DEPRECATION")

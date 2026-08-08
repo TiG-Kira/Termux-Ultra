@@ -93,7 +93,19 @@ private fun VmWizardContent(
     var mountIso by remember { mutableStateOf(existingVm?.isoPath != null) }
     var cpuCores by remember { mutableStateOf(existingVm?.cpuCores ?: 2) }
     var memoryMB by remember { mutableStateOf(existingVm?.memoryMB ?: 1024) }
-    var hasSound by remember { mutableStateOf(existingVm?.hasSound ?: false) }
+    // 音频模式：关闭 / VNC RFB / PulseAudio跟随页面 / PulseAudio持续播放
+    var audioMode by remember {
+        mutableStateOf(
+            // 优先使用已保存的 audioMode；若为空则按旧的 hasSound 回填
+            when {
+                existingVm?.audioMode != null && existingVm.audioMode.isNotBlank() -> existingVm.audioMode
+                existingVm?.hasSound == true -> AudioMode.VNC_RFB
+                else -> AudioMode.DISABLED
+            }
+        )
+    }
+    // 向后兼容：用 audioMode 派生 hasSound
+    val hasSound = audioMode != AudioMode.DISABLED
     var shareDir by remember {
         mutableStateOf(existingVm?.shareDir ?: "\$HOME/storage/shared/qemu_share")
     }
@@ -104,6 +116,12 @@ private fun VmWizardContent(
         mutableStateOf(existingVm?.bootOrder?.getOrElse(1) { "" } ?: "")
     }
     var vncPort by remember { mutableStateOf((existingVm?.vncPort ?: 5900).toString()) }
+    var diskInterface by remember { mutableStateOf(existingVm?.diskInterface ?: "ide") }
+    var machineType by remember { mutableStateOf(existingVm?.machineType ?: "q35") }
+    // ISO 识别结果提示
+    var detectedSystem by remember { mutableStateOf<IsoSystemInfo?>(null) }
+    // 标记名称是否由 ISO 识别自动填充（用户手动修改后不再自动覆盖）
+    var nameAutoFilled by remember { mutableStateOf(false) }
 
     // 复制进度状态
     var showCopyProgress by remember { mutableStateOf(false) }
@@ -149,7 +167,26 @@ private fun VmWizardContent(
     val isoFileLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri ->
-        uri?.let { handleFileSelected(it, "image.iso") { isoPath = it } }
+        uri?.let {
+            handleFileSelected(it, "image.iso") { path ->
+                isoPath = path
+                // 智能识别 ISO 包含的操作系统
+                val detected = detectIsoSystem(path)
+                detectedSystem = detected
+                if (detected != null) {
+                    // 如果用户未填写名称或名称由上次识别自动填充，则使用系统名
+                    if (vmName.isBlank() || nameAutoFilled) {
+                        vmName = detected.systemName
+                        nameAutoFilled = true
+                    }
+                    // 应用推荐配置（用户仍可更改）
+                    machineType = detected.recommendedMachineType
+                    diskInterface = detected.recommendedDiskInterface
+                    cpuCores = detected.recommendedCpuCores
+                    memoryMB = detected.recommendedMemoryMB
+                }
+            }
+        }
     }
 
     // 新建磁盘路径（仅在新建模式且未指定路径时自动生成）
@@ -183,7 +220,10 @@ private fun VmWizardContent(
                 Spacer(Modifier.height(8.dp))
                 TextField(
                     value = vmName,
-                    onValueChange = { vmName = it },
+                    onValueChange = {
+                        vmName = it
+                        nameAutoFilled = false
+                    },
                     label = "请输入虚拟机名称"
                 )
             }
@@ -317,6 +357,15 @@ private fun VmWizardContent(
                         modifier = Modifier.fillMaxWidth(),
                         colors = ButtonDefaults.textButtonColorsPrimary()
                     )
+                    // 显示 ISO 识别结果
+                    if (detectedSystem != null) {
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            text = "识别到系统: ${detectedSystem!!.systemName}\n已自动应用推荐配置（可修改）",
+                            fontSize = 12.sp,
+                            color = MiuixTheme.colorScheme.primary
+                        )
+                    }
                 }
             }
         }
@@ -334,7 +383,10 @@ private fun VmWizardContent(
                     checked = mountIso,
                     onCheckedChange = {
                         mountIso = it
-                        if (!it) isoPath = ""
+                        if (!it) {
+                            isoPath = ""
+                            detectedSystem = null
+                        }
                     }
                 )
             }
@@ -370,7 +422,7 @@ private fun VmWizardContent(
             }
         }
 
-        // 设备选项
+        // 虚拟PC类型与硬盘接口
         Card(
             modifier = Modifier
                 .fillMaxWidth()
@@ -379,17 +431,73 @@ private fun VmWizardContent(
             Column {
                 Row(modifier = Modifier.padding(16.dp, 16.dp, 16.dp, 0.dp)) {
                     Text(
-                        text = "设备选项",
+                        text = "机型与硬盘接口",
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Bold,
                         color = MiuixTheme.colorScheme.primary
                     )
                 }
-                SwitchPreference(
-                    title = "配备声音",
-                    summary = "使用 HDA 音频设备",
-                    checked = hasSound,
-                    onCheckedChange = { hasSound = it }
+                WindowDropdownPreference(
+                    title = "虚拟PC类型",
+                    items = listOf("Q35 (现代PC)", "PC (i440fx 传统PC)", "ISA PC (老式PC)"),
+                    selectedIndex = listOf("q35", "pc", "isapc").indexOf(machineType).coerceAtLeast(0),
+                    onSelectedIndexChange = {
+                        machineType = listOf("q35", "pc", "isapc")[it]
+                    }
+                )
+                WindowDropdownPreference(
+                    title = "硬盘连接方式",
+                    items = listOf("IDE (兼容性最好)", "VirtIO (高性能)", "SATA (AHCI)", "SCSI (virtio-scsi)"),
+                    selectedIndex = listOf("ide", "virtio", "sata", "scsi").indexOf(diskInterface).coerceAtLeast(0),
+                    onSelectedIndexChange = {
+                        diskInterface = listOf("ide", "virtio", "sata", "scsi")[it]
+                    }
+                )
+            }
+        }
+
+        // 音频输出模式
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(16.dp))
+        ) {
+            Column {
+                Row(modifier = Modifier.padding(16.dp, 16.dp, 16.dp, 0.dp)) {
+                    Text(
+                        text = "音频输出模式",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MiuixTheme.colorScheme.primary
+                    )
+                }
+                RadioButtonPreference(
+                    title = "关闭",
+                    summary = "虚拟机无声音输出",
+                    selected = audioMode == AudioMode.DISABLED,
+                    onClick = { audioMode = AudioMode.DISABLED }
+                )
+                RadioButtonPreference(
+                    title = "VNC RFB 扩展（推荐）",
+                    summary = if (shouldUseQemuInContainer()) {
+                        "通过 VNC 连接直接传递音频；容器内 QEMU 不支持时自动回退到 PulseAudio"
+                    } else {
+                        "通过 VNC 连接直接传递虚拟机声音，客户端无需额外配置"
+                    },
+                    selected = audioMode == AudioMode.VNC_RFB,
+                    onClick = { audioMode = AudioMode.VNC_RFB }
+                )
+                RadioButtonPreference(
+                    title = "PulseAudio - 跟随 VNC 页面",
+                    summary = "进入 VNC 页面时开始播放声音，退出页面时停止播放；使用容器/原生 PulseAudio 服务",
+                    selected = audioMode == AudioMode.PA_FOLLOW_SCREEN,
+                    onClick = { audioMode = AudioMode.PA_FOLLOW_SCREEN }
+                )
+                RadioButtonPreference(
+                    title = "PulseAudio - 持续播放",
+                    summary = "虚拟机声音持续播放（即使关闭 VNC 页面），可用任意 PulseAudio 客户端收听",
+                    selected = audioMode == AudioMode.PA_PERSIST,
+                    onClick = { audioMode = AudioMode.PA_PERSIST }
                 )
             }
         }
@@ -548,10 +656,13 @@ private fun VmWizardContent(
                         isoPath = actualIsoPath,
                         cpuCores = cpuCores,
                         memoryMB = memoryMB,
-                        hasSound = hasSound,
+                        hasSound = hasSound,          // 旧字段（向后兼容）
+                        audioMode = audioMode,        // 新字段：用户选择的音频模式
                         shareDir = shareDir,
                         bootOrder = bootList,
-                        vncPort = port
+                        vncPort = port,
+                        diskInterface = diskInterface,
+                        machineType = machineType
                     )
                     onComplete(config)
                 },

@@ -52,6 +52,15 @@ class VncClient(private val observer: Observer) {
         fun onFramebufferSizeChanged(width: Int, height: Int)
         fun onPointerMoved(x: Int, y: Int)
         fun onBell()
+
+        /** QEMU VNC audio extension: audio stream has started. */
+        fun onQemuAudioBegin() = Unit
+
+        /** QEMU VNC audio extension: PCM audio data has been received. */
+        fun onQemuAudioData(data: ByteArray) = Unit
+
+        /** QEMU VNC audio extension: audio stream has ended. */
+        fun onQemuAudioEnd() = Unit
     }
 
     /**
@@ -277,6 +286,55 @@ class VncClient(private val observer: Observer) {
         }
     }
 
+    /**************************************************************************
+     * QEMU VNC Audio Extension (Termux Ultra)
+     **************************************************************************/
+
+    /**
+     * Configure QEMU VNC audio format. Must be called *before* [sendQemuAudioEnable].
+     *
+     * @param channels Number of audio channels (1 = mono, 2 = stereo).
+     * @param format   Audio sample format code (see rfbproto.h rfbQemuAudioFmt* constants).
+     *                 Default format is rfbQemuAudioFmtS16 = 3 (Signed 16-bit LE PCM).
+     * @param freq     Sample frequency in Hz (e.g. 44100 or 48000).
+     */
+    fun sendQemuAudioSetFormat(channels: Int, format: Int, freq: Int): Boolean {
+        var result = false
+        stateLock.tryRead {
+            if (connected && !destroyed) {
+                result = nativeSendQemuAudioSetFormat(nativePtr, channels, format, freq)
+            }
+        }
+        return result
+    }
+
+    /**
+     * Enable QEMU VNC audio streaming. Before enabling, you MUST call [sendQemuAudioSetFormat]
+     * to inform the server of the expected PCM format.
+     */
+    fun sendQemuAudioEnable(): Boolean {
+        var result = false
+        stateLock.tryRead {
+            if (connected && !destroyed) {
+                result = nativeSendQemuAudioEnable(nativePtr)
+            }
+        }
+        return result
+    }
+
+    /**
+     * Disable QEMU VNC audio streaming.
+     */
+    fun sendQemuAudioDisable(): Boolean {
+        var result = false
+        stateLock.tryRead {
+            if (connected && !destroyed) {
+                result = nativeSendQemuAudioDisable(nativePtr)
+            }
+        }
+        return result
+    }
+
 
     /**
      * Puts framebuffer contents in currently active OpenGL texture.
@@ -364,6 +422,9 @@ class VncClient(private val observer: Observer) {
     private external fun nativeUploadCursorTexture(clientPtr: Long)
     private external fun nativeGetLastErrorStr(): String
     private external fun nativeCleanup(clientPtr: Long)
+    private external fun nativeSendQemuAudioSetFormat(clientPtr: Long, channels: Int, format: Int, freq: Int): Boolean
+    private external fun nativeSendQemuAudioEnable(clientPtr: Long): Boolean
+    private external fun nativeSendQemuAudioDisable(clientPtr: Long): Boolean
 
     @Keep
     private fun cbGetPassword() = observer.getVncPassword()
@@ -411,6 +472,19 @@ class VncClient(private val observer: Observer) {
         cursorInfo = CursorInfo(width, height, xHot, yHot)
         cbFinishedFrameBufferUpdate() // Fake call to trigger rendering
     }
+
+    /**************************************************************************
+     * QEMU VNC Audio Extension (Termux Ultra) - JNI Callbacks
+     **************************************************************************/
+
+    @Keep
+    private fun cbQemuAudioBegin() = observer.onQemuAudioBegin()
+
+    @Keep
+    private fun cbQemuAudioData(data: ByteArray) = observer.onQemuAudioData(data)
+
+    @Keep
+    private fun cbQemuAudioEnd() = observer.onQemuAudioEnd()
 
 
     /**

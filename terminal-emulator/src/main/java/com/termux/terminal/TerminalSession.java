@@ -271,6 +271,19 @@ public final class TerminalSession extends TerminalOutput {
         return mShellExitStatus;
     }
 
+    /**
+     * Returns the shell process pid.
+     * <ul>
+     *   <li>{@code 0}  — 子进程尚未启动（终端会话未初始化）</li>
+     *   <li>{@code >0} — 子进程正在运行</li>
+     *   <li>{@code -1} — 子进程已结束</li>
+     * </ul>
+     * UI 层据此区分"未初始化"与"运行中"状态以展示不同的小字提示。
+     */
+    public synchronized int getShellPid() {
+        return mShellPid;
+    }
+
     @Override
     public void onCopyTextToClipboard(String text) {
         mClient.onCopyTextToClipboard(this, text);

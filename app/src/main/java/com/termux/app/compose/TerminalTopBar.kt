@@ -3,6 +3,10 @@ package com.termux.app.compose
 import androidx.compose.ui.graphics.Color
 import android.os.Handler
 import android.os.Looper
+import androidx.compose.foundation.LocalIndication
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -14,6 +18,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -41,7 +46,8 @@ fun TerminalTopBar(
     onBack: () -> Unit,
     onNewSession: () -> Unit,
     onCloseSession: () -> Unit,
-    onToggleKeyboard: () -> Unit
+    onToggleKeyboard: () -> Unit,
+    onLongPressNewSession: () -> Unit
 ) {
     Row(
         modifier = Modifier
@@ -80,7 +86,18 @@ fun TerminalTopBar(
                 )
             }
         }
-        IconButton(onClick = onNewSession) {
+        val interactionSource = remember { MutableInteractionSource() }
+        Box(
+            modifier = Modifier
+                .size(48.dp)
+                .combinedClickable(
+                    interactionSource = interactionSource,
+                    indication = LocalIndication.current,
+                    onClick = onNewSession,
+                    onLongClick = onLongPressNewSession
+                ),
+            contentAlignment = Alignment.Center
+        ) {
             Icon(
                 painter = painterResource(R.drawable.ic_add),
                 contentDescription = null,
@@ -144,14 +161,18 @@ fun setTerminalTopBarContent(
     onBack: () -> Unit,
     onNewSession: () -> Unit,
     onCloseSession: () -> Unit,
-    onToggleKeyboard: () -> Unit
+    onToggleKeyboard: () -> Unit,
+    onLongPressNewSession: () -> Unit
 ) {
+    // miuix UI 库不可用时跳过设置，避免 TermuxActivity 崩溃
+    if (!ApiCompat.canLoadMiuixUi()) return
     composeView.setContent {
         TerminalTopBar(
             onBack = onBack,
             onNewSession = onNewSession,
             onCloseSession = onCloseSession,
-            onToggleKeyboard = onToggleKeyboard
+            onToggleKeyboard = onToggleKeyboard,
+            onLongPressNewSession = onLongPressNewSession
         )
     }
 }

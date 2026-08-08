@@ -6,6 +6,7 @@ import android.content.Intent
 import android.content.ServiceConnection
 import android.os.Bundle
 import android.os.IBinder
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
@@ -68,7 +69,8 @@ class UtilityCenterActivity : ComponentActivity() {
                             url = "",
                             scriptUrl = "",
                             iconRes = R.drawable.ic_server,
-                            type = "qemu_on_vnc"
+                            type = "qemu_on_vnc",
+                            requiredFeature = ApiCompat.Feature.QEMU_VM_MANAGER
                         ),
                         ResourceItem(
                             title = "Debian QEMU",
@@ -77,7 +79,8 @@ class UtilityCenterActivity : ComponentActivity() {
                             scriptUrl = "debian_qemu",
                             iconRes = R.drawable.ic_server,
                             type = "qemu_termux",
-                            needsContainerCheck = true
+                            needsContainerCheck = true,
+                            requiredFeature = ApiCompat.Feature.DEBIAN_QEMU
                         ),
                         ResourceItem(
                             title = "Ubuntu 容器安装",
@@ -103,13 +106,15 @@ class UtilityCenterActivity : ComponentActivity() {
                             scriptUrl = "install_qemu",
                             iconRes = R.drawable.ic_server,
                             type = "install_qemu_in_container",
-                            needsContainerCheck = true
+                            needsContainerCheck = true,
+                            requiredFeature = ApiCompat.Feature.QEMU_VM_MANAGER
                         )
                     )
                 }
 
                 var expandedCard by remember { mutableStateOf<String?>(null) }
                 var showTmuxHelpDialog by remember { mutableStateOf(false) }
+                var showQemuSheet by remember { mutableStateOf(false) }
                 var sessions by remember { mutableStateOf<List<TerminalSession>>(emptyList()) }
                 var termuxService by remember { mutableStateOf<TermuxService?>(null) }
 
@@ -254,6 +259,7 @@ class UtilityCenterActivity : ComponentActivity() {
                                 sessions = sessions,
                                 onToggleExpand = {
                                     if (item.type == "qemu_on_vnc") {
+                                        // 跳转到虚拟机列表管理页面（QemuVmActivity）
                                         val intent = Intent(context, QemuVmActivity::class.java)
                                         context.startActivity(intent)
                                     } else {
@@ -316,6 +322,11 @@ class UtilityCenterActivity : ComponentActivity() {
                         }
                     }
 
+                    QemuOnVncSheet(
+                        show = showQemuSheet,
+                        onDismiss = { showQemuSheet = false },
+                        onExecuteScript = onExecuteScript
+                    )
                 }
             }
         }

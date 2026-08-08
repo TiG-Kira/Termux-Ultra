@@ -17,6 +17,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon as Material3Icon
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CheckCircleOutline
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Warning
@@ -38,7 +39,6 @@ import androidx.compose.ui.unit.sp
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.CardDefaults
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
@@ -81,6 +81,55 @@ fun TerminalListScreen(
     var searchExpanded by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
     var isRefreshing by remember { mutableStateOf(false) }
+    // 已结束（被杀死/自然退出）的会话信息列表，从 TermuxService 拉取。
+    // 这些会话已从 mTermuxSessions 移除，不计入会话数量，但以"死亡卡片"形式保留显示，
+    // 直到用户手动消除。红色标题 + "退出代码:N" 小字。
+    // 本地会话状态：从 TermuxService 实时拉取，避免依赖外部 2 秒轮询延迟
+    var localSessions by remember { mutableStateOf(termuxService?.termuxSessions?.toList() ?: sessions) }
+    var deadSessions by remember { mutableStateOf<List<TermuxService.DeadSessionInfo>>(termuxService?.deadSessionInfos ?: emptyList()) }
+
+    // 实时拉取会话列表和死亡会话列表 —— 400ms 轮询，确保状态一变化就能在 UI 上反映
+    LaunchedEffect(termuxService) {
+        while (true) {
+            termuxService?.let { svc ->
+                val fresh = svc.termuxSessions.toList()
+                if (fresh != localSessions) localSessions = fresh
+                val freshDead = svc.deadSessionInfos
+                if (freshDead != deadSessions) deadSessions = freshDead
+            }
+            delay(400)
+        }
+    }
+
+    /** 立即从 TermuxService 拉取最新状态并刷新 UI */
+    fun refreshNow() {
+        termuxService?.let { svc ->
+            localSessions = svc.termuxSessions.toList()
+            deadSessions = svc.deadSessionInfos
+        }
+    }
+
+    /** 停止会话后立即刷新（调用外部回调 + 立即拉取状态） */
+    fun handleStopSession(session: TermuxSession) {
+        onStopTerminal(session)
+        // 延迟 300ms 后刷新，给 TermuxService 时间处理会话移除
+        coroutineScope.launch {
+            delay(300)
+            refreshNow()
+        }
+    }
+
+    /** 消除死亡会话卡片 */
+    fun dismissDeadSession(sessionName: String, exitedAt: Long) {
+        termuxService?.clearDeadSessionInfo(sessionName, exitedAt)
+        deadSessions = termuxService?.deadSessionInfos ?: emptyList()
+    }
+
+    /** 强制移除会话（用于死亡卡片消除） */
+    fun forceRemoveAndRefresh(session: TermuxSession) {
+        termuxService?.forceRemoveTermuxSession(session)
+        refreshNow()
+    }
 
     LaunchedEffect(Unit) {
         val prefs = context.getSharedPreferences("termux_prefs", android.content.Context.MODE_PRIVATE)
@@ -88,7 +137,7 @@ fun TerminalListScreen(
             showWelcomeCard = true
         }
 
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+        if (ApiCompat.isAvailable(ApiCompat.Feature.KEEP_ALIVE_WARNING)) {
             if (!prefs.getBoolean("keep_alive_warning_dismissed", false)) {
                 showKeepAliveWarning = true
             }
@@ -250,7 +299,7 @@ fun TerminalListScreen(
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         Icon(
-                                            painter = painterResource(R.drawable.ic_terminal_session),
+                                            painter = painterResource(R.drawable.ic_terminal),
                                             contentDescription = null,
                                             tint = MiuixTheme.colorScheme.onSurface,
                                             modifier = Modifier.size(20.dp)
@@ -282,6 +331,8 @@ fun TerminalListScreen(
                     isRefreshing = isRefreshing,
                     onRefresh = {
                         isRefreshing = true
+                        // 立即刷新会话列表和死亡会话列表，而不是等待轮询
+                        refreshNow()
                         onRefresh()
                         coroutineScope.launch(kotlinx.coroutines.Dispatchers.Main) {
                             delay(600)
@@ -333,33 +384,79 @@ fun TerminalListScreen(
             }
 
             item(span = { GridItemSpan(2) }) {
-                val serviceStatus = remember(termuxService, isWakeLockEnabled, killedSessionName) {
-                    when {
-                        termuxService?.isMemoryKillActive() == true -> ServiceStatus.MEMORY_KILL
-                        termuxService?.isMemoryWarningActive() == true -> ServiceStatus.MEMORY_WARNING
-                        killedSessionName != null -> ServiceStatus.SESSION_KILLED
-                        termuxService == null -> ServiceStatus.SERVICE_STOPPED
-                        isWakeLockEnabled -> ServiceStatus.WAKE_LOCK_ACTIVE
-                        else -> ServiceStatus.NORMAL
+                val ctx = LocalContext.current
+                // 低版本卡片显示条件：
+                //  1) 运行时触发过功能屏蔽（hasAnyRuntimeDisabled），或
+                //  2) Android 本身就是低版本（8-11）：有用户强制启用 → 红色风险卡必须常驻，
+                //     无强制启用 → 正常也显示黄色提示
+                // 高版本 Android：保持原有行为，仅 runtime 触发时降级
+                val showLowCard = ApiCompat.hasAnyRuntimeDisabled() ||
+                    (ApiCompat.isLowAndroid && (ApiCompat.hasAnyForceEnabled(ctx) || true))
+
+                if (showLowCard) {
+                    LowAndroidWarningCard()
+                } else {
+                    val serviceStatus = remember(termuxService, isWakeLockEnabled, killedSessionName) {
+                        when {
+                            termuxService?.isMemoryKillActive() == true -> ServiceStatus.MEMORY_KILL
+                            termuxService?.isMemoryWarningActive() == true -> ServiceStatus.MEMORY_WARNING
+                            killedSessionName != null -> ServiceStatus.SESSION_KILLED
+                            termuxService == null -> ServiceStatus.SERVICE_STOPPED
+                            isWakeLockEnabled -> ServiceStatus.WAKE_LOCK_ACTIVE
+                            else -> ServiceStatus.NORMAL
+                        }
                     }
+                    ServiceStatusCard(status = serviceStatus, killedSessionName = killedSessionName)
                 }
-                ServiceStatusCard(status = serviceStatus, killedSessionName = killedSessionName)
             }
 
-            if (sessions.isEmpty()) {
+            // 搜索过滤：同时对活跃会话和死亡会话按名称匹配
+            val filteredDeadSessions = deadSessions.filter {
+                it.sessionName.contains(searchQuery, ignoreCase = true) || searchQuery.isEmpty()
+            }
+
+            if (localSessions.isEmpty() && filteredDeadSessions.isEmpty()) {
                 item(span = { GridItemSpan(2) }) {
-                    EmptyTerminalCard(onNewTerminal = onNewTerminal)
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 100.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Text(
+                            text = stringResource(R.string.no_terminal),
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                            lineHeight = 22.sp
+                        )
+                    }
                 }
             } else {
-                items(sessions) { session ->
+                items(localSessions) { session ->
                     TerminalCard(
                         session = session,
                         onClick = { onSessionClick(session) },
-                        onStop = { onStopTerminal(session) },
+                        onStop = { handleStopSession(session) },
                         onRename = {
                             renameSession = session
                             newName = session.getTerminalSession().mSessionName ?: ""
                             showRenameDialog = true
+                        },
+                        onDismissDead = {
+                            // 死亡卡片消除：强制从 TermuxService 移除并刷新
+                            forceRemoveAndRefresh(session)
+                        }
+                    )
+                }
+
+                // 已结束会话卡片（从 deadSessions 列表）：红色标题 + "退出代码:N" 小字 + 手动消除按钮
+                items(filteredDeadSessions) { info ->
+                    DeadSessionCard(
+                        info = info,
+                        onDismiss = {
+                            dismissDeadSession(info.sessionName, info.exitedAt)
                         }
                     )
                 }
@@ -418,13 +515,163 @@ private fun TerminalCard(
     session: TermuxSession,
     onClick: () -> Unit,
     onStop: () -> Unit,
-    onRename: () -> Unit
+    onRename: () -> Unit,
+    onDismissDead: () -> Unit = {}
 ) {
+    val terminalSession = session.terminalSession
+
+    // 实时订阅终端会话状态 —— 解决 Compose 无法自动检测普通 Java 对象字段变化的问题
+    // shellPid: 0=未初始化, >0=运行中, -1=已结束
+    var shellPid by remember { mutableStateOf(terminalSession.shellPid) }
+    var exitCode by remember { mutableStateOf(terminalSession.exitStatus) }
+    LaunchedEffect(terminalSession) {
+        while (true) {
+            // 始终更新状态（无条件检查），确保会话初始化/杀死后 UI 立即反映
+            shellPid = terminalSession.shellPid
+            exitCode = terminalSession.exitStatus
+            delay(400)
+        }
+    }
+
+    val isDead = shellPid == -1
+    val isUninitialized = shellPid == 0
+    val titleColor = if (isDead) Color(0xFFFF5252) else MiuixTheme.colorScheme.onSurface
+    val statusText: String? = when {
+        isDead -> "退出代码:$exitCode"
+        isUninitialized -> "未初始化"
+        else -> null
+    }
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(20.dp))
-            .clickable(onClick = onClick)
+            .clickable(enabled = !isDead, onClick = onClick)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                val iconBgColor = when {
+                    isDead -> Color(0xFFFFEBEE)
+                    else -> MiuixTheme.colorScheme.surfaceVariant
+                }
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(iconBgColor),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_terminal),
+                        contentDescription = null,
+                        modifier = Modifier.size(24.dp),
+                        tint = if (isDead) Color(0xFFFF5252) else MiuixTheme.colorScheme.primary
+                    )
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = terminalSession.mSessionName ?: stringResource(R.string.terminal),
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = titleColor,
+                        lineHeight = 22.sp
+                    )
+                    if (statusText != null) {
+                        Text(
+                            text = statusText,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Normal,
+                            color = if (isDead) Color(0xFFD32F2F) else MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                            lineHeight = 16.sp,
+                            modifier = Modifier.padding(top = 2.dp)
+                        )
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(14.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)
+            ) {
+                if (isDead) {
+                    // 已结束会话：显示"消除"按钮（红色），点击后强制从 TermuxService 移除
+                    IconButton(
+                        onClick = onDismissDead,
+                        modifier = Modifier
+                            .size(36.dp)
+                            .background(Color(0xFFFF5252), RoundedCornerShape(10.dp))
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_close),
+                            contentDescription = "消除",
+                            modifier = Modifier.size(20.dp),
+                            tint = Color.White
+                        )
+                    }
+                } else {
+                    // 活跃会话：原有的编辑 + 停止按钮
+                    IconButton(
+                        onClick = onRename,
+                        modifier = Modifier
+                            .size(36.dp)
+                            .background(MiuixTheme.colorScheme.primary, RoundedCornerShape(10.dp))
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_edit),
+                            contentDescription = stringResource(R.string.rename),
+                            modifier = Modifier.size(20.dp),
+                            tint = Color.White
+                        )
+                    }
+                    IconButton(
+                        onClick = onStop,
+                        modifier = Modifier
+                            .size(36.dp)
+                            .background(MiuixTheme.colorScheme.primary, RoundedCornerShape(10.dp))
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_delete),
+                            contentDescription = stringResource(R.string.stop),
+                            modifier = Modifier.size(20.dp),
+                            tint = Color.White
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * 已结束会话卡片。
+ *
+ * 与 [TerminalCard] 的区别：
+ *  - 标题文字为红色（提示会话已结束/被杀死）
+ *  - 标题下方显示"退出代码:N"小字
+ *  - 右下角是"消除"按钮（X 图标），点击后从 [TermuxService] 的死亡会话队列移除并刷新 UI
+ *  - 不计入会话数量（已从 mTermuxSessions 移除，LiveUpdate 通知数量自动排除）
+ */
+@Composable
+private fun DeadSessionCard(
+    info: TermuxService.DeadSessionInfo,
+    onDismiss: () -> Unit
+) {
+    val isDark = isSystemInDarkTheme()
+    val titleColor = Color(0xFFFF5252) // 红色标题，深浅色模式统一
+    val subColor = if (isDark) Color(0xFFEF9A9A) else Color(0xFFD32F2F)
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp))
     ) {
         Column(
             modifier = Modifier
@@ -439,25 +686,36 @@ private fun TerminalCard(
                     modifier = Modifier
                         .size(44.dp)
                         .clip(RoundedCornerShape(12.dp))
-                        .background(MiuixTheme.colorScheme.surfaceVariant),
+                        .background(
+                            if (isDark) Color(0xFF3B1414) else Color(0xFFFFEBEE)
+                        ),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        painter = painterResource(R.drawable.ic_terminal_session),
+                        painter = painterResource(R.drawable.ic_terminal),
                         contentDescription = null,
                         modifier = Modifier.size(24.dp),
-                        tint = MiuixTheme.colorScheme.primary
+                        tint = titleColor
                     )
                 }
                 Spacer(modifier = Modifier.width(12.dp))
-                Text(
-                    text = session.getTerminalSession().mSessionName ?: stringResource(R.string.terminal),
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MiuixTheme.colorScheme.onSurface,
-                    modifier = Modifier.weight(1f),
-                    lineHeight = 22.sp
-                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = info.sessionName,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = titleColor,
+                        lineHeight = 22.sp
+                    )
+                    Text(
+                        text = "退出代码:${info.exitCode}",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Normal,
+                        color = subColor,
+                        lineHeight = 16.sp,
+                        modifier = Modifier.padding(top = 2.dp)
+                    )
+                }
             }
             Spacer(modifier = Modifier.height(14.dp))
             Row(
@@ -465,82 +723,19 @@ private fun TerminalCard(
                 horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)
             ) {
                 IconButton(
-                    onClick = onRename,
+                    onClick = onDismiss,
                     modifier = Modifier
                         .size(36.dp)
-                        .background(MiuixTheme.colorScheme.primary, RoundedCornerShape(10.dp))
+                        .background(titleColor, RoundedCornerShape(10.dp))
                 ) {
                     Icon(
-                        painter = painterResource(R.drawable.ic_edit),
-                        contentDescription = stringResource(R.string.rename),
-                        modifier = Modifier.size(20.dp),
-                        tint = Color.White
-                    )
-                }
-                IconButton(
-                    onClick = onStop,
-                    modifier = Modifier
-                        .size(36.dp)
-                        .background(MiuixTheme.colorScheme.primary, RoundedCornerShape(10.dp))
-                ) {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_delete),
-                        contentDescription = stringResource(R.string.stop),
+                        painter = painterResource(R.drawable.ic_close),
+                        contentDescription = "消除",
                         modifier = Modifier.size(20.dp),
                         tint = Color.White
                     )
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun EmptyTerminalCard(onNewTerminal: () -> Unit) {
-    val isDark = isSystemInDarkTheme()
-    val cardColor = if (isDark) Color(0xFF2C2C2C) else Color.White
-    val textColor = if (isDark) Color.White else Color.Black
-    val iconColor = if (isDark) Color(0xFF888888) else Color(0xFFBBBBBB)
-
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 8.dp)
-            .clip(RoundedCornerShape(20.dp))
-            .clickable(onClick = onNewTerminal),
-        colors = CardDefaults.defaultColors(
-            color = cardColor,
-            contentColor = textColor
-        )
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 48.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
-        ) {
-            Icon(
-                painter = painterResource(R.drawable.ic_terminal_session),
-                contentDescription = null,
-                modifier = Modifier.size(48.dp),
-                tint = iconColor
-            )
-            Spacer(modifier = Modifier.height(16.dp))
-            Text(
-                text = stringResource(R.string.no_terminal),
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Medium,
-                color = textColor.copy(alpha = 0.7f),
-                lineHeight = 22.sp
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = stringResource(R.string.new_terminal),
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Medium,
-                color = MiuixTheme.colorScheme.primary
-            )
         }
     }
 }
@@ -765,4 +960,233 @@ fun ServiceStatusCard(
             }
         }
     }
+}
+
+/**
+ * 低版本 Android 警告卡片。
+ *
+ *  - 默认：黄底 + 警告图标，提示用户版本过低
+ *  - 用户已强制启用任意功能：红底 + 警告图标，提示用户自行承担闪退/卡顿风险
+ *  - 若用户没有强制启用功能：沿用原有「Android 版本过低」文案；有则升级为「已强制启用部分功能」+功能列表
+ */
+@Composable
+fun LowAndroidWarningCard() {
+    val context = LocalContext.current
+    val isDark = isSystemInDarkTheme()
+    var forceEnabled by remember { mutableStateOf(ApiCompat.forceEnabledFeatures(context)) }
+    val hasForce = forceEnabled.isNotEmpty()
+    var showDisableDialog by remember { mutableStateOf(false) }
+
+    // 底色/图标色：有强制启用 -> 红色；无强制启用 -> 黄色（原有）
+    val cardColor = if (hasForce) {
+        if (isDark) Color(0xFF3B1414) else Color(0xFFFFEBEE)
+    } else {
+        if (isDark) Color(0xFF3D3514) else Color(0xFFFFF9C4)
+    }
+    val iconColor = if (hasForce) Color(0xFFFF5252) else Color(0xFFFDD835)
+    val textColor = if (isDark) Color.White else Color.Black
+
+    val title = if (hasForce) {
+        stringResource(R.string.low_android_force_enabled_title)
+    } else {
+        stringResource(R.string.low_android_warning_title)
+    }
+    val versionInfo = stringResource(
+        R.string.low_android_version_info,
+        ApiCompat.androidReleaseName,
+        ApiCompat.sdkInt
+    )
+    val message = if (hasForce) {
+        val list = forceEnabled.joinToString("、") { it.label }
+        stringResource(R.string.low_android_force_enabled_desc,
+            ApiCompat.androidReleaseName, ApiCompat.sdkInt, list)
+    } else {
+        stringResource(R.string.low_android_warning_message)
+    }
+
+    androidx.compose.material3.Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = cardColor)
+    ) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .offset(35.dp, 35.dp),
+                contentAlignment = Alignment.BottomEnd
+            ) {
+                Material3Icon(
+                    modifier = Modifier.size(120.dp).alpha(0.8f),
+                    imageVector = Icons.Rounded.Warning,
+                    tint = iconColor,
+                    contentDescription = null
+                )
+            }
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(all = 18.dp)
+            ) {
+                Text(
+                    modifier = Modifier.fillMaxWidth(),
+                    text = title,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = textColor,
+                    lineHeight = 26.sp
+                )
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    modifier = Modifier.fillMaxWidth(),
+                    text = versionInfo,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = textColor,
+                    lineHeight = 21.sp
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    modifier = Modifier.fillMaxWidth(),
+                    text = message,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = textColor,
+                    lineHeight = 21.sp
+                )
+                if (hasForce) {
+                    Spacer(Modifier.height(12.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        androidx.compose.material3.Button(
+                            onClick = { showDisableDialog = true },
+                            modifier = Modifier.clip(RoundedCornerShape(10.dp)),
+                            colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                                containerColor = iconColor,
+                                contentColor = Color.White
+                            )
+                        ) {
+                            Material3Icon(
+                                imageVector = Icons.Rounded.Close,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                text = stringResource(R.string.low_android_force_disable_button),
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // 关闭强制启用确认弹窗
+    if (showDisableDialog) {
+        OverlayDialog(
+            show = true,
+            onDismissRequest = { showDisableDialog = false },
+            title = stringResource(R.string.low_android_force_disable_dialog_title),
+            content = {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        text = stringResource(R.string.low_android_force_disable_dialog_message),
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium,
+                        lineHeight = 21.sp,
+                        color = MiuixTheme.colorScheme.onSurface
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Row(
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        TextButton(
+                            text = stringResource(R.string.low_android_force_disable_cancel),
+                            onClick = { showDisableDialog = false },
+                            modifier = Modifier.weight(1f)
+                        )
+                        Spacer(Modifier.width(20.dp))
+                        TextButton(
+                            text = stringResource(R.string.low_android_force_disable_confirm),
+                            onClick = {
+                                ApiCompat.clearAllForceEnabled(context)
+                                forceEnabled = ApiCompat.forceEnabledFeatures(context)
+                                showDisableDialog = false
+                            },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.textButtonColorsPrimary()
+                        )
+                    }
+                }
+            }
+        )
+    }
+}
+
+/**
+ * 低版本 Android 强行启用确认弹窗。
+ *
+ * @param feature 被点击的功能（展示 label 与 minApi 要求版本）
+ * @param onConfirmed 用户点击「强行启用」：写入持久化并执行后续动作
+ * @param onDismiss 用户点击「取消启用」或外部 dismiss
+ */
+@Composable
+fun ForceEnableFeatureDialog(
+    feature: ApiCompat.Feature,
+    onConfirmed: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+    val message = stringResource(
+        R.string.force_enable_dialog_message,
+        ApiCompat.androidReleaseName,
+        ApiCompat.sdkInt,
+        feature.label,
+        feature.requiredVersionLabel
+    )
+    OverlayDialog(
+        show = true,
+        onDismissRequest = onDismiss,
+        title = stringResource(R.string.force_enable_dialog_title),
+        content = {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = message,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium,
+                    lineHeight = 21.sp,
+                    color = MiuixTheme.colorScheme.onSurface
+                )
+                Spacer(Modifier.height(12.dp))
+                Row(
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    TextButton(
+                        text = stringResource(R.string.force_enable_do_not),
+                        onClick = onDismiss,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Spacer(Modifier.width(20.dp))
+                    TextButton(
+                        text = stringResource(R.string.force_enable_anyway),
+                        onClick = {
+                            ApiCompat.setFeatureForceEnabled(context, feature, true)
+                            onConfirmed()
+                        },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.textButtonColorsPrimary()
+                    )
+                }
+            }
+        }
+    )
 }

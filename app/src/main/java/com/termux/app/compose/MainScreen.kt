@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -66,8 +67,32 @@ fun MainScreen(
     val isRemoteWithVnc = selectedTab == 2 && showVnc
     val dragOffset = if (isSwipingInProgress) rawDragOffset else dragOffsetAnimatable.value
 
+    // 页面可用性过滤：根据设备 API 支持程度隐藏无可用功能的页面入口。
+    // tab 索引 0-4 分别对应 终端/文件/远程/资源/设置 页面。
+    fun pageForTab(tab: Int): ApiCompat.Page = when (tab) {
+        0 -> ApiCompat.Page.TERMINAL
+        1 -> ApiCompat.Page.FILES
+        2 -> ApiCompat.Page.REMOTE
+        3 -> ApiCompat.Page.RESOURCES
+        else -> ApiCompat.Page.SETTINGS
+    }
+    val availableTabs = remember {
+        listOf(0, 1, 2, 3, 4).filter { ApiCompat.isPageAvailable(pageForTab(it)) }
+    }
+    // 若当前选中页被屏蔽，回退到第一个可用页
+    LaunchedEffect(availableTabs) {
+        if (selectedTab !in availableTabs) {
+            previousTab = selectedTab
+            onTabChange(availableTabs.firstOrNull() ?: 0)
+        }
+    }
+
     fun handleSwipe(dragAmount: Float) {
         if (kotlin.math.abs(dragAmount) < SWIPE_THRESHOLD) return
+
+        // 从 availableTabs 中查找下一个/上一个可用页（跳过被屏蔽的页面）
+        fun nextAvailable(from: Int): Int? = availableTabs.filter { it > from }.minOrNull()
+        fun prevAvailable(from: Int): Int? = availableTabs.filter { it < from }.maxOrNull()
 
         if (dragAmount < 0) {
             // Swipe left -> next
@@ -75,17 +100,13 @@ fun MainScreen(
                 if (remoteSubTab == 0) {
                     remoteSubTab = 1
                 } else {
-                    onTabChange(3)
+                    nextAvailable(2)?.let {
+                        previousTab = selectedTab
+                        onTabChange(it)
+                    }
                 }
             } else {
-                val next = when (selectedTab) {
-                    0 -> 1
-                    1 -> 2
-                    2 -> if (showVnc) 3 else 3
-                    3 -> 4
-                    else -> null
-                }
-                next?.let {
+                nextAvailable(selectedTab)?.let {
                     previousTab = selectedTab
                     onTabChange(it)
                 }
@@ -95,16 +116,9 @@ fun MainScreen(
             if (selectedTab == 2 && showVnc && remoteSubTab == 1) {
                 remoteSubTab = 0
             } else {
-                val prev = when (selectedTab) {
-                    1 -> 0
-                    2 -> 1
-                    3 -> 2
-                    4 -> 3
-                    else -> null
-                }
-                prev?.let {
+                prevAvailable(selectedTab)?.let {
                     previousTab = selectedTab
-                    if (selectedTab == 3 && showVnc) {
+                    if (selectedTab == 3 && showVnc && it == 2) {
                         remoteSubTab = 1
                     }
                     onTabChange(it)
@@ -117,36 +131,46 @@ fun MainScreen(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
             NavigationBar(modifier = Modifier.padding(horizontal = 12.dp)) {
-                NavigationBarItem(
-                    icon = ImageVector.vectorResource(R.drawable.ic_terminal),
-                    label = stringResource(R.string.terminal),
-                    selected = selectedTab == 0,
-                    onClick = { previousTab = selectedTab; onTabChange(0) }
-                )
-                NavigationBarItem(
-                    icon = ImageVector.vectorResource(R.drawable.ic_files),
-                    label = stringResource(R.string.files),
-                    selected = selectedTab == 1,
-                    onClick = { previousTab = selectedTab; onTabChange(1) }
-                )
-                NavigationBarItem(
-                    icon = ImageVector.vectorResource(R.drawable.ic_vnc),
-                    label = stringResource(R.string.remote),
-                    selected = selectedTab == 2,
-                    onClick = { previousTab = selectedTab; onTabChange(2) }
-                )
-                NavigationBarItem(
-                    icon = ImageVector.vectorResource(R.drawable.ic_resources),
-                    label = stringResource(R.string.resources),
-                    selected = selectedTab == 3,
-                    onClick = { previousTab = selectedTab; onTabChange(3) }
-                )
-                NavigationBarItem(
-                    icon = ImageVector.vectorResource(R.drawable.ic_settings),
-                    label = stringResource(R.string.settings),
-                    selected = selectedTab == 4,
-                    onClick = { previousTab = selectedTab; onTabChange(4) }
-                )
+                if (0 in availableTabs) {
+                    NavigationBarItem(
+                        icon = ImageVector.vectorResource(R.drawable.ic_terminal),
+                        label = stringResource(R.string.terminal),
+                        selected = selectedTab == 0,
+                        onClick = { previousTab = selectedTab; onTabChange(0) }
+                    )
+                }
+                if (1 in availableTabs) {
+                    NavigationBarItem(
+                        icon = ImageVector.vectorResource(R.drawable.ic_files),
+                        label = stringResource(R.string.files),
+                        selected = selectedTab == 1,
+                        onClick = { previousTab = selectedTab; onTabChange(1) }
+                    )
+                }
+                if (2 in availableTabs) {
+                    NavigationBarItem(
+                        icon = ImageVector.vectorResource(R.drawable.ic_vnc),
+                        label = stringResource(R.string.remote),
+                        selected = selectedTab == 2,
+                        onClick = { previousTab = selectedTab; onTabChange(2) }
+                    )
+                }
+                if (3 in availableTabs) {
+                    NavigationBarItem(
+                        icon = ImageVector.vectorResource(R.drawable.ic_resources),
+                        label = stringResource(R.string.resources),
+                        selected = selectedTab == 3,
+                        onClick = { previousTab = selectedTab; onTabChange(3) }
+                    )
+                }
+                if (4 in availableTabs) {
+                    NavigationBarItem(
+                        icon = ImageVector.vectorResource(R.drawable.ic_settings),
+                        label = stringResource(R.string.settings),
+                        selected = selectedTab == 4,
+                        onClick = { previousTab = selectedTab; onTabChange(4) }
+                    )
+                }
             }
         }
     ) { padding ->

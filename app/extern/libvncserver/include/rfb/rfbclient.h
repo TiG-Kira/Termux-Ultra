@@ -235,6 +235,11 @@ typedef rfbBool (*LockWriteToTLSProc)(struct _rfbClient* client);   /** @depreca
 typedef rfbBool (*UnlockWriteToTLSProc)(struct _rfbClient* client); /** @deprecated */
 typedef rfbBool (*VerifyServerCertificateProc)(struct _rfbClient *client, const unsigned char *der, int der_len);
 
+/* QEMU VNC Audio extension callbacks (Termux Ultra) */
+typedef void (*HandleQemuAudioBeginProc)(struct _rfbClient* client);
+typedef void (*HandleQemuAudioDataProc)(struct _rfbClient* client, const uint8_t* data, uint32_t size);
+typedef void (*HandleQemuAudioEndProc)(struct _rfbClient* client);
+
 #ifdef LIBVNCSERVER_HAVE_SASL
 typedef char* (*GetUserProc)(struct _rfbClient* client);
 typedef char* (*GetSASLMechanismProc)(struct _rfbClient* client, char* mechlist);
@@ -403,6 +408,11 @@ typedef struct _rfbClient {
 
         /** hook to handle xvp server messages */
 	HandleXvpMsgProc           HandleXvpMsg;
+
+	/* QEMU VNC Audio extension hooks (Termux Ultra) */
+	HandleQemuAudioBeginProc   HandleQemuAudioBegin;
+	HandleQemuAudioDataProc    HandleQemuAudioData;
+	HandleQemuAudioEndProc     HandleQemuAudioEnd;
 
 	/* listen.c */
         rfbSocket listenSock;
@@ -682,6 +692,11 @@ extern rfbBool TextChatClose(rfbClient* client);
 extern rfbBool TextChatFinish(rfbClient* client);
 extern rfbBool PermitServerInput(rfbClient* client, int enabled);
 extern rfbBool SendXvpMsg(rfbClient* client, uint8_t version, uint8_t code);
+
+/* QEMU VNC Audio extension messages (Termux Ultra) */
+extern rfbBool SendQemuAudioSetFormat(rfbClient* client, uint8_t channels, uint8_t format, uint32_t freq);
+extern rfbBool SendQemuAudioEnable(rfbClient* client);
+extern rfbBool SendQemuAudioDisable(rfbClient* client);
 
 extern void PrintPixelFormat(rfbPixelFormat *format);
 

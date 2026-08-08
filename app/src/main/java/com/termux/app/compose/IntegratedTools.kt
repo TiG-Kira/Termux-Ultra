@@ -103,11 +103,6 @@ object IntegratedTools {
                 )
             }
         }
-
-        if (tool == Tool.TERMUX_API) {
-            if (enabled) TermuxApiBroadcastFix.applyAmWrapper(context)
-            else TermuxApiBroadcastFix.removeAmWrapper()
-        }
     }
 
     /**

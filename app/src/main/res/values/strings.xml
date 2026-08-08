@@ -158,6 +158,7 @@
 
     <string name="error_display_over_other_apps_permission_not_granted">Display over other apps permission not granted</string>
     <string name="notification_action_exit">End Session</string>
+    <string name="notification_action_quit">Quit App</string>
     <string name="notification_action_wake_unlock">Wake unlock</string>
     <string name="notification_action_wake_lock">Wake lock</string>
     <string name="notification_running_terminals">Running %d sessions</string>
@@ -307,12 +308,17 @@
     <string name="edit_file">Edit (vi)</string>
     <string name="execute_bash">Execute (bash)</string>
     <string name="copy_path">Copy Path</string>
-    <string name="open_file">Open File</string>
-    <string name="open_with_other">Open With Other App</string>
-    <string name="file_path">Path</string>
-    <string name="file_permission">Permission</string>
-    <string name="file_modified_time">Modified</string>
-    <string name="create_new">New</string>
+    <string name="execute_script">Execute Script</string>
+    <string name="file_info_path">Path</string>
+    <string name="file_info_ext">Extension</string>
+    <string name="file_info_type">Type</string>
+    <string name="file_info_size">Size</string>
+    <string name="file_info_permissions">Permissions</string>
+    <string name="file_info_modified">Modified</string>
+    <string name="file_type_shell">Shell Script</string>
+    <string name="file_type_text">Text File</string>
+    <string name="file_type_binary">Binary File</string>
+    <string name="file_type_unknown">File</string>
 
     <string name="vnc_address_caption">Address</string>
     <string name="vnc_alt_check">Alt</string>
@@ -520,29 +526,38 @@
     <string name="termux_boot_help_content">Termux:Boot runs scripts automatically when the device starts.\n\nTo add a boot script:\n\n1. Create the directory:\n   mkdir -p ~/.termux/boot\n2. Place executable scripts in ~/.termux/boot/\n3. Scripts run in sorted order on boot.\n\nExample (~/.termux/boot/start-ssh):\n   #!/data/data/com.termux/files/usr/bin/sh\n   termux-wake-lock\n   sshd</string>
     <string name="feature_not_enabled_title">Feature not enabled</string>
     <string name="feature_not_enabled_message">\"%1$s\" is not enabled. Go to Settings to enable it?</string>
-    <string name="termux_api_setup_hint">First install the termux-api command package, then tap any command row below to copy it to the clipboard.</string>
-    <string name="termux_api_commands_title">Common Termux:API commands</string>
-    <string name="cmd_battery_status">Show battery health, temperature, level, etc.</string>
-    <string name="cmd_camera_photo">Take a JPEG photo with camera 0 (rear).</string>
-    <string name="cmd_clipboard_get">Print the current clipboard text to stdout.</string>
-    <string name="cmd_clipboard_set">Set clipboard to the given string.</string>
-    <string name="cmd_notification">Post a local notification with title and message.</string>
-    <string name="cmd_toast">Show a short Android toast message.</string>
-    <string name="cmd_vibrate">Vibrate the device for 500 ms.</string>
-    <string name="cmd_location">Return current GPS / network location.</string>
-    <string name="cmd_sms_list">List the 5 most recent SMS messages.</string>
-    <string name="cmd_sms_send">Send an SMS to the given number.</string>
-    <string name="cmd_tts_speak">Text-to-speech: speak the given text.</string>
-    <string name="cmd_wifi_info">Show current Wi-Fi connection info (SSID, IP, RSSI…).</string>
-    <string name="boot_clickable_examples_title">Clickable examples</string>
-    <string name="boot_cmd_mkdir_desc">Create the boot directory.</string>
-    <string name="boot_cmd_shebang_desc">Mandatory shebang line for the boot script.</string>
-    <string name="boot_cmd_wakelock_desc">Hold a wake-lock so the device does not immediately sleep.</string>
-    <string name="boot_cmd_sshd_desc">Start the SSH daemon on boot.</string>
     <string name="go_to_settings">Go to Settings</string>
 
     <!-- Official standalone APK conflict detection -->
     <string name="standalone_plugin_installed_title">Official plugin installed</string>
     <string name="standalone_plugin_installed_message">The official standalone \"%1$s\" plugin (package %2$s) is already installed on this device. It is not recommended to install the standalone plugin separately; please use the one built into this app instead.</string>
     <string name="standalone_plugin_installed_summary">Replaced by the official standalone plugin</string>
+
+    <!-- Low Android version optimization -->
+    <string name="low_android_warning_title">Android version too low</string>
+    <string name="low_android_warning_message">Some features have been disabled due to the low Android version.</string>
+    <string name="low_android_version_info">Current Android: %1$s (SDK %2$d)</string>
+    <string name="low_android_feature_disabled">Requires %1$s or above</string>
+    <string name="low_android_terminal_mode_title">Locked to terminal mode</string>
+    <string name="low_android_terminal_mode_message">An error occurred during startup, possibly due to your Android version. The app has been downgraded and locked to terminal mode.</string>
+    <string name="low_android_exit_message">Android version is too low. The app cannot run. Please update Android and try again.</string>
+    <string name="low_android_runtime_disabled_page">The \"%1$s\" page has been disabled due to compatibility issues. (Android %2$s, SDK %3$d)</string>
+    <string name="feature_disabled_by_android_version">This feature requires %1$s or above. Please update your Android system.</string>
+
+    <!-- Low Android force-enable warnings -->
+    <string name="force_enable_dialog_title">Android Version Too Low Warning</string>
+    <string name="force_enable_dialog_message">You are attempting to enable \"%3$s\" on Android %1$s (SDK %2$d), which requires %4$s or above.\n\nForce-enabling this on a low Android version may cause severe performance degradation, lag, crashes or even system instability.\n\nIf you choose to force-enable, all crashes, lags or data loss resulting therefrom shall be borne by you.</string>
+    <string name="force_enable_anyway">Enable Anyway</string>
+    <string name="force_enable_do_not">Cancel</string>
+
+    <!-- Terminal card: red warning after force-enabled -->
+    <string name="low_android_force_enabled_title">Some Features Force-Enabled</string>
+    <string name="low_android_force_enabled_desc">Android %1$s, SDK %2$d. You have force-enabled:\n%3$s\n\nThis may cause crashes, lags or instability. Risk borne by you.</string>
+
+    <!-- Terminal card: disable force-enabled features -->
+    <string name="low_android_force_disable_button">Disable Force-Enabled</string>
+    <string name="low_android_force_disable_dialog_title">Disable Force-Enabled Features</string>
+    <string name="low_android_force_disable_dialog_message">This will re-disable the features you force-enabled on this low Android version. Any of these features currently in use may stop working.\n\nAre you sure you want to disable them?</string>
+    <string name="low_android_force_disable_confirm">Disable</string>
+    <string name="low_android_force_disable_cancel">Cancel</string>
 </resources>

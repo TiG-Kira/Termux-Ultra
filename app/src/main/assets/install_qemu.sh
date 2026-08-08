@@ -15,6 +15,7 @@ apt install -y --no-install-recommends \
     qemu-system-x86 \
     qemu-utils \
     qemu-system-gui \
+    qemu-efi-aarch64 \
     genisoimage \
     curl \
     wget \

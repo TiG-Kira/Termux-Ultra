@@ -171,6 +171,11 @@ public final class TermuxActivity extends ComponentActivity implements ServiceCo
     private ComposeView mTerminalToolbar;
     private String mCurrentTitle = "";
 
+    /** True if activity was launched (or is being resumed) from the notification
+     *  "end sessions" action. When true, we show a data-loss warning dialog if VM/container
+     *  processes are running, and then instruct TermuxService to force-stop sessions. */
+    private boolean mPendingTriggerStopService = false;
+
 
     private static final int CONTEXT_MENU_SELECT_URL_ID = 0;
     private static final int CONTEXT_MENU_SHARE_TRANSCRIPT_ID = 1;
@@ -189,11 +194,33 @@ public final class TermuxActivity extends ComponentActivity implements ServiceCo
 
     private static final String LOG_TAG = "TermuxActivity";
 
+    /** Intent extra: when set to true, the activity was launched in fallback mode
+     *  (miuix UI library unavailable). This skips miuix-dependent UI and makes
+     *  the back button return to the launcher instead of finishing. */
+    public static final String EXTRA_FALLBACK_MODE = "extra_fallback_mode";
+
+    private boolean mIsFallbackMode = false;
+
     @Override
     public void onCreate(Bundle savedInstanceState) {
 
         Logger.logDebug(LOG_TAG, "onCreate");
         isOnResumeAfterOnCreate = true;
+
+        // Check for fallback mode flag (launched from FallbackHelper when miuix unavailable)
+        mIsFallbackMode = getIntent() != null && getIntent().getBooleanExtra(EXTRA_FALLBACK_MODE, false);
+
+        // Handle the EXTRA_TRIGGER_STOP_SERVICE sent from the notification "end sessions" action.
+        // We'll process this in onStart() once the activity is visible (so that OverlayDialog
+        // can attach to a valid window), but remember the intent here so it's not lost after
+        // rotation or process death.
+        Intent i = getIntent();
+        if (i != null && i.getBooleanExtra(TermuxConstants.TERMUX_APP.TERMUX_ACTIVITY.EXTRA_TRIGGER_STOP_SERVICE, false)) {
+            mPendingTriggerStopService = true;
+            // Clear the extra after reading so that we don't re-trigger on the next
+            // getIntent() call after e.g. screen rotation.
+            i.removeExtra(TermuxConstants.TERMUX_APP.TERMUX_ACTIVITY.EXTRA_TRIGGER_STOP_SERVICE);
+        }
 
         // Check if a crash happened on last run of the app and show a
         // notification with the crash details if it did
@@ -239,6 +266,9 @@ public final class TermuxActivity extends ComponentActivity implements ServiceCo
 
         setDrawerTheme();
 
+        // 锁定侧边栏，禁止滑动手势打开，只能通过长按加号按钮打开
+        getDrawer().setDrawerLockMode(DrawerLayout.LOCK_MODE_LOCKED_CLOSED, Gravity.LEFT);
+
         setTermuxTerminalViewAndClients();
 
         setTerminalToolbarView(savedInstanceState);
@@ -259,8 +289,11 @@ public final class TermuxActivity extends ComponentActivity implements ServiceCo
 
         // Attempt to bind to the service, this will call the {@link #onServiceConnected(ComponentName, IBinder)}
         // callback if it succeeds.
-        if (!bindService(serviceIntent, this, 0))
-            throw new RuntimeException("bindService() failed");
+        if (!bindService(serviceIntent, this, 0)) {
+            Logger.logError(LOG_TAG, "bindService() failed");
+            // In fallback mode or on low-end devices, the service may not be available immediately.
+            // Do not throw; the activity can still show the terminal view without the service.
+        }
 
         // Send the {@link TermuxConstants#BROADCAST_TERMUX_OPENED} broadcast to notify apps that Termux
         // app has been opened.
@@ -287,6 +320,31 @@ public final class TermuxActivity extends ComponentActivity implements ServiceCo
             addTermuxActivityRootViewGlobalLayoutListener();
 
         registerTermuxActivityBroadcastReceiver();
+
+        // Notification "end sessions" action routed us here; show warning dialog if needed.
+        if (mPendingTriggerStopService) {
+            mPendingTriggerStopService = false;
+            com.termux.app.compose.StopConfirmDialog.start(this);
+        }
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+
+        // Activity is already running (single-top / reorder-to-front), and the user
+        // tapped the notification "end sessions" action again.
+        if (intent != null && intent.getBooleanExtra(TermuxConstants.TERMUX_APP.TERMUX_ACTIVITY.EXTRA_TRIGGER_STOP_SERVICE, false)) {
+            // Clear extra right after reading
+            intent.removeExtra(TermuxConstants.TERMUX_APP.TERMUX_ACTIVITY.EXTRA_TRIGGER_STOP_SERVICE);
+            if (mIsVisible) {
+                com.termux.app.compose.StopConfirmDialog.start(this);
+            } else {
+                // Activity not yet visible; defer to onStart
+                mPendingTriggerStopService = true;
+            }
+        }
     }
 
     @Override
@@ -387,10 +445,13 @@ public final class TermuxActivity extends ComponentActivity implements ServiceCo
                         } catch (WindowManager.BadTokenException e) {
                         }
                     });
+                } else if (mIsFallbackMode) {
+                    // Fallback mode: auto-create a session so the terminal view isn't empty
+                    mTermuxTerminalSessionClient.addNewSession(false, null);
                 } else {
                     finishActivityIfNotFinishing();
                 }
-            } else {
+            } else if (!mIsFallbackMode) {
                 finishActivityIfNotFinishing();
             }
         } else {
@@ -576,6 +637,13 @@ public final class TermuxActivity extends ComponentActivity implements ServiceCo
 
     private void setTerminalToolbar() {
         mTerminalToolbar = findViewById(R.id.terminal_toolbar);
+
+        // In fallback mode (miuix unavailable), skip setting up the miuix-based toolbar
+        // to avoid crashes. The terminal view itself will still work.
+        if (mIsFallbackMode) {
+            return;
+        }
+
         mTerminalToolbar.setViewCompositionStrategy(
             androidx.compose.ui.platform.ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed.INSTANCE
         );
@@ -635,6 +703,14 @@ public final class TermuxActivity extends ComponentActivity implements ServiceCo
             },
             () -> {
                 mTermuxTerminalViewClient.onToggleSoftKeyboardRequest();
+                return kotlin.Unit.INSTANCE;
+            },
+            () -> {
+                if (getDrawer().isDrawerOpen(Gravity.LEFT)) {
+                    getDrawer().closeDrawer(Gravity.LEFT);
+                } else {
+                    getDrawer().openDrawer(Gravity.LEFT);
+                }
                 return kotlin.Unit.INSTANCE;
             }
         );
@@ -701,6 +777,13 @@ public final class TermuxActivity extends ComponentActivity implements ServiceCo
     public void onBackPressed() {
         if (getDrawer().isDrawerOpen(Gravity.LEFT)) {
             getDrawer().closeDrawers();
+        } else if (mIsFallbackMode) {
+            // In fallback mode, pressing back returns to the launcher/desktop
+            // instead of finishing the activity (which would exit the app).
+            Intent homeIntent = new Intent(Intent.ACTION_MAIN);
+            homeIntent.addCategory(Intent.CATEGORY_HOME);
+            homeIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(homeIntent);
         } else {
             finishActivityIfNotFinishing();
         }

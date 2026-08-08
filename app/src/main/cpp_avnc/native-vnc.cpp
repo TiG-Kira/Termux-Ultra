@@ -22,6 +22,9 @@ struct JniContext {
     JavaVM *vm;                     //JVM Instance
     jclass managedCls;              //Managed `VncClient` class
     jmethodID cbFramebufferUpdated; //Cached reference to managed callback
+    jmethodID cbQemuAudioBegin;     //QEMU audio stream start
+    jmethodID cbQemuAudioData;      //QEMU audio PCM data
+    jmethodID cbQemuAudioEnd;       //QEMU audio stream end
 
     [[nodiscard]]
     JNIEnv *getEnvUnchecked() const {
@@ -75,6 +78,9 @@ Java_com_gaurav_avnc_vnc_VncClient_initLibrary(JNIEnv *env, jclass clazz) {
 
     context.managedCls = (jclass) env->NewGlobalRef(clazz);
     context.cbFramebufferUpdated = env->GetMethodID(context.managedCls, "cbFinishedFrameBufferUpdate", "()V");
+    context.cbQemuAudioBegin     = env->GetMethodID(context.managedCls, "cbQemuAudioBegin", "()V");
+    context.cbQemuAudioData      = env->GetMethodID(context.managedCls, "cbQemuAudioData", "([B)V");
+    context.cbQemuAudioEnd       = env->GetMethodID(context.managedCls, "cbQemuAudioEnd", "()V");
     //TODO: Cache more method IDs so we don't have to repeatedly search them
 
     rfbClientLog = &log_info;
@@ -209,6 +215,43 @@ static void onFinishedFrameBufferUpdate(rfbClient *client) {
     env->CallVoidMethod(obj, context.cbFramebufferUpdated);
 }
 
+static void onQemuAudioBegin(rfbClient *client) {
+    auto obj = getManagedClient(client);
+    auto env = context.getEnv();
+    auto mid = context.cbQemuAudioBegin;
+
+    if (mid)
+        env->CallVoidMethod(obj, mid);
+}
+
+static void onQemuAudioData(rfbClient *client, const uint8_t *data, uint32_t size) {
+    if (!data || size <= 0) return;
+
+    auto obj = getManagedClient(client);
+    auto env = context.getEnv();
+    auto mid = context.cbQemuAudioData;
+
+    if (!mid) return;
+
+    jbyteArray bytes = env->NewByteArray((jsize) size);
+    if (!bytes) {
+        rfbClientErr("onQemuAudioData: Unable to allocate byte array of size %u\n", (unsigned) size);
+        return;
+    }
+    env->SetByteArrayRegion(bytes, 0, (jsize) size, reinterpret_cast<const jbyte *>(data));
+    env->CallVoidMethod(obj, mid, bytes);
+    env->DeleteLocalRef(bytes);
+}
+
+static void onQemuAudioEnd(rfbClient *client) {
+    auto obj = getManagedClient(client);
+    auto env = context.getEnv();
+    auto mid = context.cbQemuAudioEnd;
+
+    if (mid)
+        env->CallVoidMethod(obj, mid);
+}
+
 /**
  * We need to use our own allocator to know when frame size has changed.
  * and to acquire framebuffer lock during modification.
@@ -290,6 +333,9 @@ static void setCallbacks(rfbClient *client) {
     client->FinishedFrameBufferUpdate = onFinishedFrameBufferUpdate;
     client->MallocFrameBuffer = onMallocFrameBuffer;
     client->GotCursorShape = onGotCursorShape;
+    client->HandleQemuAudioBegin = onQemuAudioBegin;
+    client->HandleQemuAudioData = onQemuAudioData;
+    client->HandleQemuAudioEnd = onQemuAudioEnd;
 }
 
 
@@ -567,4 +613,37 @@ Java_com_gaurav_avnc_vnc_VncClient_nativeUploadCursorTexture(JNIEnv * /*env*/, j
                  cursor->buffer);
 
     UNLOCK(ex->mutex);
+}
+
+/******************************************************************************
+ * QEMU VNC Audio Extension (Termux Ultra)
+ * Native methods for enabling/disabling audio and setting audio format
+ *****************************************************************************/
+
+extern "C"
+JNIEXPORT jboolean JNICALL
+Java_com_gaurav_avnc_vnc_VncClient_nativeSendQemuAudioSetFormat(JNIEnv * /*env*/, jobject /*thiz*/,
+                                                                jlong client_ptr,
+                                                                jint channels, jint format, jint freq) {
+    auto client = (rfbClient *) client_ptr;
+    return (jboolean) SendQemuAudioSetFormat(client,
+                                             (uint8_t) channels,
+                                             (uint8_t) format,
+                                             (uint32_t) freq);
+}
+
+extern "C"
+JNIEXPORT jboolean JNICALL
+Java_com_gaurav_avnc_vnc_VncClient_nativeSendQemuAudioEnable(JNIEnv * /*env*/, jobject /*thiz*/,
+                                                             jlong client_ptr) {
+    auto client = (rfbClient *) client_ptr;
+    return (jboolean) SendQemuAudioEnable(client);
+}
+
+extern "C"
+JNIEXPORT jboolean JNICALL
+Java_com_gaurav_avnc_vnc_VncClient_nativeSendQemuAudioDisable(JNIEnv * /*env*/, jobject /*thiz*/,
+                                                              jlong client_ptr) {
+    auto client = (rfbClient *) client_ptr;
+    return (jboolean) SendQemuAudioDisable(client);
 }

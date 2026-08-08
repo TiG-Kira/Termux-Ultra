@@ -45,54 +45,67 @@ class OobeActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: android.os.Bundle?) {
         super.onCreate(savedInstanceState)
 
-        requestPermissionsLauncher = registerForActivityResult(
-            ActivityResultContracts.RequestMultiplePermissions()
-        ) { _ ->
-            Log.d("OobeActivity", "Normal permissions result received")
-            val allNormalGranted = normalPermissions.all {
-                ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED
+        try {
+            requestPermissionsLauncher = registerForActivityResult(
+                ActivityResultContracts.RequestMultiplePermissions()
+            ) { _ ->
+                Log.d("OobeActivity", "Normal permissions result received")
+                val allNormalGranted = normalPermissions.all {
+                    ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED
+                }
+                
+                if (allNormalGranted && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !Environment.isExternalStorageManager()) {
+                    Log.d("OobeActivity", "Normal permissions granted, requesting manage storage")
+                    requestManageStoragePermission()
+                } else {
+                    updatePermissionStatus()
+                }
             }
-            
-            if (allNormalGranted && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !Environment.isExternalStorageManager()) {
-                Log.d("OobeActivity", "Normal permissions granted, requesting manage storage")
-                requestManageStoragePermission()
-            } else {
+
+            manageStorageLauncher = registerForActivityResult(
+                ActivityResultContracts.StartActivityForResult()
+            ) { _ ->
+                Log.d("OobeActivity", "Manage storage result received")
                 updatePermissionStatus()
             }
-        }
 
-        manageStorageLauncher = registerForActivityResult(
-            ActivityResultContracts.StartActivityForResult()
-        ) { _ ->
-            Log.d("OobeActivity", "Manage storage result received")
             updatePermissionStatus()
-        }
 
-        updatePermissionStatus()
-
-        setContent {
-            KiTerminalTheme {
-                OobeScreen(
-                    permissionStatus = permissionStatus,
-                    isNextEnabled = isNextEnabled,
-                    isBootstrapping = isBootstrapping,
-                    onGrantAllPermissions = { grantAllPermissions() },
-                    onComplete = {
-                        if (isNextEnabled) {
-                            performBootstrap()
-                        } else {
-                            Toast.makeText(this, R.string.oobe_permission_required, Toast.LENGTH_SHORT).show()
+            setContent {
+                KiTerminalTheme {
+                    OobeScreen(
+                        permissionStatus = permissionStatus,
+                        isNextEnabled = isNextEnabled,
+                        isBootstrapping = isBootstrapping,
+                        onGrantAllPermissions = { grantAllPermissions() },
+                        onComplete = {
+                            if (isNextEnabled) {
+                                performBootstrap()
+                            } else {
+                                Toast.makeText(this, R.string.oobe_permission_required, Toast.LENGTH_SHORT).show()
+                            }
                         }
-                    }
-                )
+                    )
+                }
             }
+        } catch (t: Throwable) {
+            // OOBE 阶段异常 → 优先跳过 OOBE 直接进 MainActivity；
+            // MainActivity 再遇到崩溃时会按崩溃位置粒度屏蔽对应页面，
+            // 识别失败或仍崩溃才降级到终端锁定模式。
+            FallbackHelper.onOobeRenderFailure(this, t)
         }
     }
 
     override fun onResume() {
         super.onResume()
-        Log.d("OobeActivity", "onResume - refreshing permission status")
-        updatePermissionStatus()
+        try {
+            Log.d("OobeActivity", "onResume - refreshing permission status")
+            updatePermissionStatus()
+        } catch (t: Throwable) {
+            // onResume 期间也可能因低版本缺少 API（如 Environment.isExternalStorageManager）
+            // 而崩溃，统一走 OOBE 降级路径（跳过 OOBE → 主页 → 终端锁定）
+            FallbackHelper.onOobeRenderFailure(this, t)
+        }
     }
 
     private fun performBootstrap() {
@@ -175,8 +188,13 @@ class OobeActivity : ComponentActivity() {
                 grantedCount += 1
             }
         }
-        
-        Log.d("OobeActivity", "SDK_INT: ${Build.VERSION.SDK_INT}, isExternalStorageManager: ${Environment.isExternalStorageManager()}")
+
+        val storageManagerState = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            Environment.isExternalStorageManager()
+        } else {
+            false
+        }
+        Log.d("OobeActivity", "SDK_INT: ${Build.VERSION.SDK_INT}, isExternalStorageManager: $storageManagerState")
         Log.d("OobeActivity", "grantedCount: $grantedCount, total: $totalPermissions")
 
         permissionStatus = String.format("%s %d/%d",

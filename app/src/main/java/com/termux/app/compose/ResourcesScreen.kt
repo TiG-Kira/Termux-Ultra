@@ -52,7 +52,9 @@ data class ResourceItem(
     val needsLinuxContainer: Boolean = false,
     val needsContainerCheck: Boolean = false,
     val copyToClipboard: Boolean = false,
-    val fallbackScriptUrl: String = ""
+    val fallbackScriptUrl: String = "",
+    /** 该条目所需的最低 API 功能；为 null 表示无版本限制。不可用时按钮变灰+提示。 */
+    val requiredFeature: ApiCompat.Feature? = null
 )
 
 data class TerminalSession(val id: String, val name: String)
@@ -161,6 +163,28 @@ fun ResourceCard(
     val isDark = isSystemInDarkTheme()
     val cardBackgroundColor = if (isDark) Color(0xFF1A1A1A) else Color(0xFFFAFAFA)
 
+    // 检查该条目是否因 Android 版本过低而被屏蔽（综合静态判断与用户强制启用持久化）
+    var forceEnabled by remember {
+        mutableStateOf(
+            item.requiredFeature != null && ApiCompat.isFeatureForceEnabled(context, item.requiredFeature)
+        )
+    }
+    val isFeatureDisabled = item.requiredFeature != null &&
+        !ApiCompat.isAvailable(item.requiredFeature) && !forceEnabled
+    val disabledButtonColor = if (isDark) Color(0xFF424242) else Color(0xFFBDBDBD)
+    val disabledTextColor = if (isDark) Color(0xFF757575) else Color(0xFF9E9E9E)
+
+    // 强制启用确认弹窗状态
+    var showForceEnableDialog by remember { mutableStateOf(false) }
+    var pendingAction by remember { mutableStateOf<(() -> Unit)?>(null) }
+
+    fun showDisabledDialog(action: () -> Unit) {
+        if (item.requiredFeature != null) {
+            pendingAction = action
+            showForceEnableDialog = true
+        }
+    }
+
     androidx.compose.material3.Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -250,6 +274,7 @@ fun ResourceCard(
                     if (item.copyToClipboard) {
                         Button(
                             onClick = {
+                                if (isFeatureDisabled) { showDisabledDialog {}; return@Button }
                                 val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
                                 val clip = android.content.ClipData.newPlainText("执行指令", item.scriptUrl)
                                 clipboard.setPrimaryClip(clip)
@@ -257,34 +282,37 @@ fun ResourceCard(
                             },
                             modifier = Modifier.clip(RoundedCornerShape(8.dp)),
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = MiuixTheme.colorScheme.primary
+                                containerColor = if (isFeatureDisabled) disabledButtonColor else MiuixTheme.colorScheme.primary
                             )
                         ) {
                             Icon(
                                 painter = painterResource(R.drawable.ic_copy),
                                 contentDescription = "复制指令",
                                 modifier = Modifier.size(16.dp),
-                                tint = Color.White
+                                tint = if (isFeatureDisabled) disabledTextColor else Color.White
                             )
-                            Text(text = "复制指令", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                            Text(text = "复制指令", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = if (isFeatureDisabled) disabledTextColor else Color.White)
                         }
                     } else {
                         val isQemuOnVnc = item.type == "qemu_on_vnc"
                         val buttonText = if (isExpanded) "收起" else if (isQemuOnVnc) "配置" else context.getString(R.string.execute)
                         Button(
-                            onClick = onToggleExpand,
+                            onClick = {
+                                if (isFeatureDisabled) { showDisabledDialog { onToggleExpand() }; return@Button }
+                                onToggleExpand()
+                            },
                             modifier = Modifier.clip(RoundedCornerShape(8.dp)),
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = MiuixTheme.colorScheme.primary
+                                containerColor = if (isFeatureDisabled) disabledButtonColor else MiuixTheme.colorScheme.primary
                             )
                         ) {
                             Icon(
                                 painter = painterResource(if (isExpanded) R.drawable.ic_collapse else R.drawable.ic_play),
                                 contentDescription = buttonText,
                                 modifier = Modifier.size(16.dp),
-                                tint = Color.White
+                                tint = if (isFeatureDisabled) disabledTextColor else Color.White
                             )
-                            Text(text = buttonText, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                            Text(text = buttonText, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = if (isFeatureDisabled) disabledTextColor else Color.White)
                         }
                     }
                 }
@@ -405,6 +433,23 @@ fun ResourceCard(
                 }
             }
         }
+    }
+
+    // 低版本 Android 强制启用确认弹窗
+    if (showForceEnableDialog && item.requiredFeature != null) {
+        ForceEnableFeatureDialog(
+            feature = item.requiredFeature,
+            onConfirmed = {
+                forceEnabled = true
+                showForceEnableDialog = false
+                pendingAction?.invoke()
+                pendingAction = null
+            },
+            onDismiss = {
+                showForceEnableDialog = false
+                pendingAction = null
+            }
+        )
     }
 }
 

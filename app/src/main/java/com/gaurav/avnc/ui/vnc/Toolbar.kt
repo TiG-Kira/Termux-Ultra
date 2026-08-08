@@ -75,6 +75,15 @@ class Toolbar(private val activity: VncActivity) {
         binding.zoomLockBtn.setOnCheckedChangeListener { _, checked -> toggleZoomLock(checked); close() }
         binding.zoomSaveBtn.setOnClickListener { saveZoom(); close() }
         binding.virtualKeysBtn.setOnClickListener { activity.virtualKeys.show(true); close() }
+        binding.audioBtn.setOnClickListener { toggleAudio(); close() }
+
+        // Sync audio button state with view model
+        viewModel.audioStarted.observe(activity) { started ->
+            val icon = if (started) R.drawable.ic_volume_up else R.drawable.ic_volume_off
+            binding.audioBtn.setImageResource(icon)
+            val alpha = if (started) 1f else 0.6f
+            binding.audioBtn.alpha = alpha
+        }
 
         // Root view is transparent. Click on it should work just like a click in scrim area
         drawerView.setOnClickListener { close() }
@@ -147,6 +156,12 @@ class Toolbar(private val activity: VncActivity) {
     private fun saveZoom() {
         viewModel.saveZoom()
         toast(R.string.msg_zoom_saved)
+    }
+
+    private fun toggleAudio() {
+        viewModel.toggleAudio()
+        val enabled = viewModel.audioStarted.value == true
+        toast(if (enabled) R.string.msg_audio_enabled else R.string.msg_audio_disabled)
     }
 
     private fun setupViewModeSelection() {

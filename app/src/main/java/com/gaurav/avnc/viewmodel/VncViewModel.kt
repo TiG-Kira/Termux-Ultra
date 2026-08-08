@@ -11,7 +11,12 @@ package com.gaurav.avnc.viewmodel
 import android.app.Application
 import android.content.pm.ActivityInfo
 import android.graphics.RectF
+import android.media.AudioAttributes
+import android.media.AudioFormat
+import android.media.AudioManager
+import android.media.AudioTrack
 import android.media.ToneGenerator
+import android.os.Build
 import android.util.Log
 import android.widget.Toast
 import androidx.lifecycle.MutableLiveData
@@ -22,6 +27,7 @@ import com.gaurav.avnc.session.RemoteSession
 import com.gaurav.avnc.ui.vnc.FrameScroller
 import com.gaurav.avnc.ui.vnc.FrameState
 import com.gaurav.avnc.ui.vnc.FrameView
+import com.gaurav.avnc.util.LiveEvent
 import com.gaurav.avnc.util.LiveRequest
 import com.gaurav.avnc.util.Tones
 import com.gaurav.avnc.util.debugCheck
@@ -182,6 +188,195 @@ class VncViewModel(app: Application) : BaseViewModel(app) {
      */
     var messenger: Messenger? = null
 
+    /**************************************************************************
+     * QEMU VNC Audio Extension (Termux Ultra)
+     **************************************************************************/
+
+    /**
+     * Whether audio button should be ON (for UI data binding).
+     * Controlled by user action via toolbar audio button.
+     */
+    val audioStarted = MutableLiveData(false)
+
+    /** AudioTrack instance used for playback of PCM data received via VNC */
+    @Volatile
+    private var audioTrack: AudioTrack? = null
+
+    /** Audio sample format used for QEMU VNC extension (matches rfbproto.h rfbQemuAudioFmtS16) */
+    private val audioQemuFormatCode = 3  // rfbQemuAudioFmtS16
+
+    /** Preferred audio parameters for AudioTrack + QEMU VNC audio extension */
+    private val audioSampleRate = 44100   // Hz
+    private val audioChannelCount = 2     // Stereo
+    private val audioAndroidChannels = AudioFormat.CHANNEL_OUT_STEREO
+    private val audioAndroidEncoding = AudioFormat.ENCODING_PCM_16BIT
+
+    /** Audio connection error request: fires a message to UI layer showing a toast */
+    val audioErrorMessage = LiveEvent<String>()
+
+    /** Release audio resources (AudioTrack) */
+    private fun releaseAudio() {
+        try {
+            audioTrack?.apply {
+                try { stop() } catch (_: Throwable) {}
+                try { release() } catch (_: Throwable) {}
+            }
+        } finally {
+            audioTrack = null
+        }
+    }
+
+    /** Create and initialize AudioTrack with preferred parameters */
+    private fun initAudioTrack(): AudioTrack? {
+        return try {
+            val minBufferSize = AudioTrack.getMinBufferSize(
+                audioSampleRate,
+                audioAndroidChannels,
+                audioAndroidEncoding
+            )
+            if (minBufferSize <= 0) {
+                Log.e(javaClass.simpleName, "AudioTrack.getMinBufferSize returned $minBufferSize, audio disabled")
+                return null
+            }
+
+            // Use 4x min buffer to reduce glitches during playback
+            val bufferSize = minBufferSize * 4
+
+            val attributes = AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_MEDIA)
+                .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                .build()
+
+            val format = AudioFormat.Builder()
+                .setSampleRate(audioSampleRate)
+                .setChannelMask(audioAndroidChannels)
+                .setEncoding(audioAndroidEncoding)
+                .build()
+
+            val track = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                AudioTrack.Builder()
+                    .setAudioAttributes(attributes)
+                    .setAudioFormat(format)
+                    .setBufferSizeInBytes(bufferSize)
+                    .setTransferMode(AudioTrack.MODE_STREAM)
+                    .build()
+            } else {
+                @Suppress("DEPRECATION")
+                AudioTrack(
+                    AudioManager.STREAM_MUSIC,
+                    audioSampleRate,
+                    audioAndroidChannels,
+                    audioAndroidEncoding,
+                    bufferSize,
+                    AudioTrack.MODE_STREAM
+                )
+            }
+
+            if (track.state != AudioTrack.STATE_INITIALIZED) {
+                Log.e(javaClass.simpleName, "AudioTrack not initialized (state=${track.state})")
+                try { track.release() } catch (_: Throwable) {}
+                return null
+            }
+
+            track.play()
+            track
+        } catch (t: Throwable) {
+            Log.e(javaClass.simpleName, "Failed to initialize AudioTrack", t)
+            null
+        }
+    }
+
+    /**
+     * Start QEMU VNC audio streaming (SET_FORMAT + ENABLE) via messenger thread.
+     * Called when user manually taps the toolbar audio button.
+     * Returns true if command was successfully enqueued.
+     */
+    private fun startAudioStreaming(): Boolean {
+        val m = messenger ?: return false
+        if (!connected) return false
+        if (audioStarted.value == true) return true
+
+        launchIO {
+            try {
+                // First send SetFormat so server knows our PCM preferences
+                val formatResult = m.sendQemuAudioSetFormat(audioChannelCount, audioQemuFormatCode, audioSampleRate)
+                // Then enable streaming
+                val enableResult = m.sendQemuAudioEnable()
+
+                if (formatResult || enableResult) {
+                    Log.d(javaClass.simpleName, "QEMU audio streaming started (format=$formatResult, enable=$enableResult)")
+                    audioStarted.postValue(true)
+                } else {
+                    Log.w(javaClass.simpleName, "QEMU audio commands returned false - server may not support audio extension")
+                    audioStarted.postValue(false)
+                    audioErrorMessage.fireAsync(
+                        app.getString(R.string.msg_audio_connection_failed)
+                    )
+                }
+            } catch (t: Throwable) {
+                Log.e(javaClass.simpleName, "Failed to start QEMU VNC audio", t)
+                audioStarted.postValue(false)
+                // Any error from audio commands is swallowed - never disconnect VNC because of audio
+                audioErrorMessage.fireAsync(
+                    app.getString(R.string.msg_audio_connection_failed)
+                )
+            }
+        }
+        return true
+    }
+
+    /** Stop QEMU VNC audio streaming (DISABLE + release resources) */
+    private fun stopAudioStreaming() {
+        try {
+            messenger?.sendQemuAudioDisable()
+        } catch (_: Throwable) {}
+        audioStarted.postValue(false)
+        releaseAudio()
+    }
+
+    /** JNI callback: audio stream has begun */
+    private fun onQemuAudioBeginImpl() {
+        if (audioTrack == null) {
+            audioTrack = initAudioTrack()
+        }
+        // If already created, make sure it's playing
+        try {
+            audioTrack?.takeIf { it.playState != AudioTrack.PLAYSTATE_PLAYING }?.play()
+        } catch (_: Throwable) {}
+    }
+
+    /** JNI callback: PCM audio data received */
+    private fun onQemuAudioDataImpl(data: ByteArray) {
+        if (data.isEmpty()) return
+        val track = audioTrack ?: return
+        try {
+            track.write(data, 0, data.size)
+        } catch (t: Throwable) {
+            Log.e(javaClass.simpleName, "AudioTrack.write failed", t)
+            releaseAudio()
+        }
+    }
+
+    /** JNI callback: audio stream has ended */
+    private fun onQemuAudioEndImpl() {
+        releaseAudio()
+    }
+
+    /**
+     * Toggle QEMU VNC audio on/off.
+     * Exposed to UI layer (toolbar button).
+     * Audio errors never interrupt the VNC connection - only a toast is shown.
+     */
+    fun toggleAudio() {
+        if (!connected) return
+        val shouldEnable = audioStarted.value != true
+        if (shouldEnable) {
+            startAudioStreaming()
+        } else {
+            stopAudioStreaming()
+        }
+    }
+
     /**
      * Used to confirm something with user before continuing.
      * This is mostly used to warn about unknown SSH host, x509 certificates etc.
@@ -218,6 +413,7 @@ class VncViewModel(app: Application) : BaseViewModel(app) {
 
     override fun onCleared() {
         super.onCleared()
+        stopAudioStreaming()
         session.stop()
     }
 
@@ -457,6 +653,9 @@ class VncViewModel(app: Application) : BaseViewModel(app) {
 
                 rememberLoginInfo()
 
+                // Reset audio state on new connection - user must press the button
+                audioStarted.value = false
+
                 // Initial clipboard sync, slightly delayed to allow extended clipboard negotiations
                 delay(1000L)
                 sendClipboardText()
@@ -467,6 +666,7 @@ class VncViewModel(app: Application) : BaseViewModel(app) {
             // Block until main thread is synchronised with disconnected state
             runBlocking(Dispatchers.Main) {
                 state.value = State.Disconnected
+                stopAudioStreaming()
                 client = null
                 messenger = null
             }
@@ -510,6 +710,7 @@ class VncViewModel(app: Application) : BaseViewModel(app) {
 
         override fun onFramebufferUpdated() {
             refreshFrameView()
+            // Auto audio start removed - user must press toolbar audio button
         }
 
         override fun onCutTextReceived(text: String) {
@@ -531,6 +732,12 @@ class VncViewModel(app: Application) : BaseViewModel(app) {
                 Tones.notify(ToneGenerator.TONE_PROP_BEEP)
             }
         }
+
+        override fun onQemuAudioBegin() = onQemuAudioBeginImpl()
+
+        override fun onQemuAudioData(data: ByteArray) = onQemuAudioDataImpl(data)
+
+        override fun onQemuAudioEnd() = onQemuAudioEndImpl()
 
 
         /**************************** [SshClient.Observer] *******************/

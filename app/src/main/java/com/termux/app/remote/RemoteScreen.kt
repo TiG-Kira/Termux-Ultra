@@ -28,7 +28,6 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
@@ -46,7 +45,7 @@ import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
-import top.yukonga.miuix.kmp.basic.TabRow
+import top.yukonga.miuix.kmp.basic.TabRowWithContour
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
@@ -194,16 +193,12 @@ fun RemoteScreen(
         Box(modifier = Modifier.padding(padding)) {
             if (showVnc) {
                 Column(Modifier.fillMaxSize()) {
-                    val tabItems = listOf(
-                        stringResource(R.string.vnc),
-                        stringResource(R.string.ssh)
-                    )
-                    TabRow(
-                        tabs = tabItems,
+                    TabRowWithContour(
+                        tabs = listOf("VNC", "SSH"),
                         selectedTabIndex = selectedTabIndex,
-                        onTabSelected = { index ->
-                            selectedTabIndex = index
-                            onTabChange(index)
+                        onTabSelected = {
+                            selectedTabIndex = it
+                            onTabChange(it)
                         },
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
                     )

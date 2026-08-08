@@ -107,4 +107,26 @@ class Messenger(private val client: VncClient) {
     fun setFrameBufferUpdatesPaused(pause: Boolean) {
         execute { client.setFrameBufferUpdatesPaused(pause) }
     }
+
+    /**************************************************************************
+     * QEMU VNC Audio Extension (Termux Ultra)
+     **************************************************************************/
+
+    /**
+     * Configure audio format for QEMU VNC audio streaming.
+     * Enqueued on sender thread to serialize with other VNC messages.
+     */
+    fun sendQemuAudioSetFormat(channels: Int, format: Int, freq: Int): Boolean {
+        return execute { client.sendQemuAudioSetFormat(channels, format, freq) }
+    }
+
+    /** Enable QEMU VNC audio streaming (must send SetFormat first). */
+    fun sendQemuAudioEnable(): Boolean {
+        return execute { client.sendQemuAudioEnable() }
+    }
+
+    /** Disable QEMU VNC audio streaming. */
+    fun sendQemuAudioDisable(): Boolean {
+        return execute { client.sendQemuAudioDisable() }
+    }
 }

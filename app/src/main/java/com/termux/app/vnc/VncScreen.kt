@@ -423,6 +423,8 @@ private fun scanTermuxVnc(context: Context, connections: MutableList<VncConnecti
     }
 }
 
+internal const val EXTRA_QEMU_AUDIO_MODE = "com.termux.app.vnc.QEMU_AUDIO_MODE"
+
 internal fun connectToVnc(context: Context, connection: VncConnection) {
     val serviceIntent = Intent(context, com.termux.app.TermuxService::class.java)
     context.startService(serviceIntent)
@@ -435,5 +437,18 @@ internal fun connectToVnc(context: Context, connection: VncConnection) {
     )
     val vncIntent = Intent(context, com.gaurav.avnc.ui.vnc.VncActivity::class.java)
     vncIntent.putExtra("com.gaurav.avnc.server_profile", profile)
+
+    // 如果 VNC 端口正好匹配某个已保存 QEMU 虚拟机的 vncPort，则将该虚拟机的音频模式传入
+    // 用于 VncActivity 决定是否跟随页面生命周期启停 PulseAudio 播放
+    if (connection.host == "127.0.0.1" || connection.host.equals("localhost", ignoreCase = true)) {
+        runCatching {
+            val vms = com.termux.app.compose.QemuVmManager.loadVms(context)
+            val matched = vms.firstOrNull { it.vncPort == connection.port }
+            if (matched != null) {
+                vncIntent.putExtra(EXTRA_QEMU_AUDIO_MODE, matched.effectiveAudioMode)
+            }
+        }
+    }
+
     context.startActivity(vncIntent)
 }
