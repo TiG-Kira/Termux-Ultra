@@ -490,4 +490,5 @@
     <string name="low_android_force_disable_dialog_message">这将恢复屏蔽您在低版本 Android 上强制启用的功能，正在使用中的相关功能可能会停止工作。\n\n确定要关闭吗？</string>
     <string name="low_android_force_disable_confirm">关闭</string>
     <string name="low_android_force_disable_cancel">取消</string>
+
 </resources>

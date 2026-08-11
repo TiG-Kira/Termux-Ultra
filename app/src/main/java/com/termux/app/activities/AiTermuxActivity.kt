@@ -1,0 +1,1817 @@
+package com.termux.app.activities
+
+import android.content.ComponentName
+import android.content.Context
+import android.content.Intent
+import android.content.ServiceConnection
+import android.net.Uri
+import android.os.Bundle
+import android.os.IBinder
+import android.provider.OpenableColumns
+import com.google.gson.JsonObject
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.viewModels
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.Send
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Divider
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Slider
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.core.view.WindowCompat
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
+import com.termux.R
+import com.termux.app.TermuxService
+import com.termux.app.compose.*
+import kotlinx.coroutines.CoroutineExceptionHandler
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import top.yukonga.miuix.kmp.basic.*
+import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.Back
+import top.yukonga.miuix.kmp.theme.MiuixTheme
+
+class AiTermuxActivity : ComponentActivity() {
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        val vm: AiTermuxViewModel by viewModels()
+        setContent {
+            com.termux.app.compose.KiTerminalTheme {
+                AiTermuxRoot(vm) { finish() }
+            }
+        }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        val vm: AiTermuxViewModel by viewModels()
+        AiTermuxPrefs.saveChatHistory(this, vm.messages.toList())
+    }
+}
+
+class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
+
+    var config by mutableStateOf(AiTermuxPrefs.getConfig(app))
+        private set
+
+    var messages = mutableStateListOf<ChatMessage>()
+        private set
+
+    var isLoading by mutableStateOf(false)
+        private set
+
+    var termuxService by mutableStateOf<TermuxService?>(null)
+        private set
+
+    private var bound = false
+    private val serviceConn = object : ServiceConnection {
+        override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
+            val binder = service as TermuxService.LocalBinder
+            termuxService = binder.service
+            bound = true
+        }
+        override fun onServiceDisconnected(name: ComponentName?) {
+            termuxService = null
+            bound = false
+        }
+    }
+
+    private val exceptionHandler = CoroutineExceptionHandler { _, throwable ->
+        android.util.Log.e("AiTermux", "协程异常", throwable)
+        isLoading = false
+        val ctx = getApplication<android.app.Application>()
+        synchronized(messages) {
+            val lastMsg = messages.lastOrNull()
+            if (lastMsg?.role == "assistant") {
+                val idx = messages.indexOf(lastMsg)
+                if (idx >= 0) {
+                    messages[idx] = lastMsg.copy(
+                        content = lastMsg.content.ifBlank { "⚠️ 执行出错" },
+                        errorMessage = "内部错误: ${throwable.message ?: "未知"}"
+                    )
+                }
+            } else {
+                messages.add(ChatMessage(
+                    role = "assistant",
+                    content = "⚠️ 执行出错",
+                    errorMessage = "内部错误: ${throwable.message ?: "未知"}"
+                ))
+            }
+        }
+        AiTermuxPrefs.saveChatHistory(ctx, messages.toList())
+    }
+
+    init {
+        val history = AiTermuxPrefs.getChatHistory(app)
+        messages.addAll(history)
+        val ctx = getApplication<android.app.Application>()
+        val intent = Intent(ctx, TermuxService::class.java)
+        ctx.bindService(intent, serviceConn, Context.BIND_AUTO_CREATE)
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        if (bound) {
+            runCatching { getApplication<android.app.Application>().unbindService(serviceConn) }
+        }
+    }
+
+    fun updateConfig(newConfig: AiTermuxConfig) {
+        config = newConfig.copy(isConfigured = newConfig.providerConfig.apiKey.isNotBlank())
+        AiTermuxPrefs.saveConfig(getApplication(), config)
+    }
+
+    private fun runInScope(block: suspend () -> Unit) {
+        viewModelScope.launch(exceptionHandler) {
+            try {
+                block()
+            } catch (e: Exception) {
+                android.util.Log.e("AiTermux", "未捕获异常", e)
+                isLoading = false
+                val ctx = getApplication<android.app.Application>()
+                synchronized(messages) {
+                    messages.add(ChatMessage(
+                        role = "assistant",
+                        content = "⚠️ 执行出错",
+                        errorMessage = "操作失败: ${e.message ?: "未知错误"}"
+                    ))
+                }
+                AiTermuxPrefs.saveChatHistory(ctx, messages.toList())
+            }
+        }
+    }
+
+    fun sendUserMessage(text: String) {
+        val ctx = getApplication<android.app.Application>()
+        if (text.isBlank()) return
+        val userMsg = ChatMessage(role = "user", content = text)
+        synchronized(messages) { messages.add(userMsg) }
+        AiTermuxPrefs.saveChatHistory(ctx, messages.toList())
+
+        runInScope {
+            isLoading = true
+            try {
+                processUserMessage(ctx, text)
+            } finally {
+                isLoading = false
+                AiTermuxPrefs.saveChatHistory(ctx, messages.toList())
+            }
+        }
+    }
+
+    /** 提交对 ASK_USER 卡片的回答 */
+    fun submitAnswer(messageId: String, answer: String) {
+        val ctx = getApplication<android.app.Application>()
+        val idx = messages.indexOfFirst { it.id == messageId }
+        if (idx < 0) return
+        val old = messages[idx]
+        val card = old.skillCard ?: return
+        if (card.skillType != SkillType.ASK_USER) return
+        synchronized(messages) {
+            messages[idx] = old.copy(
+                skillCard = card.copy(status = SkillStatus.COMPLETED, askAnswer = answer)
+            )
+        }
+        val userMsg = ChatMessage(role = "user", content = "[用户回答] ${card.askQuestion}\n回答：$answer")
+        synchronized(messages) { messages.add(userMsg) }
+        AiTermuxPrefs.saveChatHistory(ctx, messages.toList())
+
+        runInScope {
+            isLoading = true
+            try {
+                processAiTurn(ctx, "[用户回答] ${card.askQuestion}\n回答：$answer")
+            } finally {
+                isLoading = false
+                AiTermuxPrefs.saveChatHistory(ctx, messages.toList())
+            }
+        }
+    }
+
+    /** 确认危险操作，继续执行 */
+    fun confirmDangerous(messageId: String) {
+        val ctx = getApplication<android.app.Application>()
+        val idx = messages.indexOfFirst { it.id == messageId }
+        if (idx < 0) return
+        val old = messages[idx]
+        val card = old.skillCard ?: return
+        if (card.skillType != SkillType.CONFIRM_DANGEROUS) return
+        val pending = pendingDanger[messageId] ?: return
+        pendingDanger.remove(messageId)
+        synchronized(messages) {
+            messages[idx] = old.copy(
+                skillCard = card.copy(status = SkillStatus.RUNNING, title = "正在执行…")
+            )
+        }
+        AiTermuxPrefs.saveChatHistory(ctx, messages.toList())
+
+        runInScope {
+            isLoading = true
+            try {
+                val svc = termuxService
+                val result = SkillExecutor.executeSkill(
+                    ctx, svc, pending.first, pending.second
+                )
+                val resultCard = result.skillCard ?: SkillCardData(
+                    skillType = try { SkillType.valueOf(pending.first) } catch (_: Exception) { SkillType.RUN_COMMAND },
+                    title = if (result.success) "执行成功" else "执行失败",
+                    description = result.message,
+                    status = if (result.success) SkillStatus.COMPLETED else SkillStatus.FAILED
+                )
+                synchronized(messages) {
+                    val idx2 = messages.indexOfFirst { it.id == messageId }
+                    if (idx2 >= 0) {
+                        messages[idx2] = messages[idx2].copy(
+                            skillCard = resultCard,
+                            content = if (result.success) "" else "⚠️ 执行出错"
+                        )
+                    }
+                }
+                AiTermuxPrefs.saveChatHistory(ctx, messages.toList())
+                continueAfterSkill(ctx, resultCard, result.message)
+            } finally {
+                isLoading = false
+                AiTermuxPrefs.saveChatHistory(ctx, messages.toList())
+            }
+        }
+    }
+
+    /** 取消危险操作 */
+    fun cancelDangerous(messageId: String) {
+        val ctx = getApplication<android.app.Application>()
+        val idx = messages.indexOfFirst { it.id == messageId }
+        if (idx < 0) return
+        val old = messages[idx]
+        val card = old.skillCard ?: return
+        if (card.skillType != SkillType.CONFIRM_DANGEROUS) return
+        pendingDanger.remove(messageId)
+        synchronized(messages) {
+            messages[idx] = old.copy(
+                skillCard = card.copy(
+                    status = SkillStatus.FAILED,
+                    title = "已取消",
+                    description = "用户取消了该危险操作"
+                )
+            )
+        }
+        AiTermuxPrefs.saveChatHistory(ctx, messages.toList())
+
+        runInScope {
+            isLoading = true
+            try {
+                processAiTurn(ctx, "[用户取消了危险操作] ${card.dangerousAction ?: card.title}，用户选择不执行。")
+            } finally {
+                isLoading = false
+                AiTermuxPrefs.saveChatHistory(ctx, messages.toList())
+            }
+        }
+    }
+
+    // 待执行的危险操作：messageId -> (skillType, params)
+    private val pendingDanger = mutableMapOf<String, Pair<String, JsonObject>>()
+
+    private suspend fun processUserMessage(ctx: Context, userText: String) {
+        processAiTurn(ctx, userText)
+    }
+
+    /**
+     * 一次 AI 回合：发消息给 AI → 收到回复 → 执行技能 → 结果回传 AI → 循环直到没有技能或需要交互
+     */
+    private suspend fun processAiTurn(ctx: Context, userText: String) {
+        var currentUserText = userText
+        // 最多 20 轮自动推进，防止死循环
+        for (round in 1..20) {
+            val systemPrompt = AiTermuxPrefs.buildFullSystemPrompt(ctx)
+            val apiMsgs = mutableListOf<OpenAiMessage>()
+            apiMsgs.add(OpenAiMessage("system", systemPrompt))
+            synchronized(messages) {
+                messages.dropLast(1).takeLast(20).forEach {
+                    if (it.role == "user" || it.role == "assistant") {
+                        apiMsgs.add(OpenAiMessage(it.role, it.content))
+                    }
+                }
+            }
+            apiMsgs.add(OpenAiMessage("user", currentUserText))
+
+            val resp = AiApiClient.chat(config.providerConfig, apiMsgs)
+            if (resp.error != null) {
+                synchronized(messages) {
+                    messages.add(
+                        ChatMessage(
+                            role = "assistant",
+                            content = "调用 AI 时出错了",
+                            errorMessage = "API 错误：${resp.error.message}"
+                        )
+                    )
+                }
+                return
+            }
+            val replyText = resp.choices.firstOrNull()?.message?.content ?: "(无响应内容)"
+
+            // === 假输出检测 ===
+            val fakeCheck = SkillExecutor.detectFakeOutput(replyText)
+            if (fakeCheck.isFake) {
+                android.util.Log.e("AiTermux", "检测到 AI 假输出: ${fakeCheck.violations}")
+                // 显示警告给用户
+                synchronized(messages) {
+                    messages.add(
+                        ChatMessage(
+                            role = "assistant",
+                            content = "⚠️ 检测到 AI 幻觉输出，正在要求 AI 重新生成...",
+                            isWarning = true
+                        )
+                    )
+                }
+                AiTermuxPrefs.saveChatHistory(ctx, messages.toList())
+
+                // 注入严格指令要求 AI 重新生成，替换当前的 currentUserText
+                val violationText = fakeCheck.violations.joinToString("；")
+                currentUserText = buildString {
+                    appendLine("[系统拦截] 你刚才的回复违反了以下禁令：")
+                    appendLine(violationText)
+                    appendLine()
+                    appendLine("请严格遵守系统指令，重新回复。")
+                    appendLine("- 如果需要执行操作，只输出一句意图说明 + skill 代码块，之后立即停止")
+                    appendLine("- 如果不需要执行操作，只输出自然语言文本")
+                    appendLine("- 绝对不要编造任何执行结果、文件列表、命令输出或系统信息")
+                    appendLine()
+                    appendLine("用户原始请求：$userText")
+                }
+                continue
+            }
+
+            val plainText = SkillExecutor.stripSkillBlocks(replyText)
+            synchronized(messages) {
+                messages.add(ChatMessage(role = "assistant", content = plainText.ifBlank { replyText }))
+            }
+            AiTermuxPrefs.saveChatHistory(ctx, messages.toList())
+
+            val skills = SkillExecutor.parseSkillBlocks(replyText)
+            if (skills.isEmpty()) {
+                return
+            }
+
+            var needsUserInput = false
+            var lastResultText: String? = null
+
+            for ((skillTypeStr, params) in skills) {
+                val st = runCatching { SkillType.valueOf(skillTypeStr) }.getOrNull()
+                val dangerReason = if (st != null) SkillExecutor.checkDangerous(st, params) else null
+                if (dangerReason != null && st != null) {
+                    val dangerCard = SkillCardData(
+                        skillType = SkillType.CONFIRM_DANGEROUS,
+                        title = "危险操作，需要确认",
+                        description = dangerReason,
+                        status = SkillStatus.RUNNING,
+                        dangerousReason = dangerReason,
+                        dangerousAction = buildDangerousActionDesc(st, params)
+                    )
+                    val tempId = "danger_${System.currentTimeMillis()}_${Math.random()}"
+                    pendingDanger[tempId] = skillTypeStr to params
+                    synchronized(messages) {
+                        messages.add(
+                            ChatMessage(
+                                id = tempId,
+                                role = "assistant",
+                                content = "",
+                                skillCard = dangerCard
+                            )
+                        )
+                    }
+                    AiTermuxPrefs.saveChatHistory(ctx, messages.toList())
+                    needsUserInput = true
+                    break
+                }
+
+                val runningCard = SkillCardData(
+                    skillType = st ?: SkillType.RUN_COMMAND,
+                    title = "执行技能中…",
+                    description = skillTypeStr,
+                    status = SkillStatus.RUNNING
+                )
+                val tempId = "skill_${System.currentTimeMillis()}_${Math.random()}"
+                synchronized(messages) {
+                    messages.add(
+                        ChatMessage(
+                            id = tempId,
+                            role = "assistant",
+                            content = "",
+                            skillCard = runningCard
+                        )
+                    )
+                }
+
+                val svc = termuxService
+                val result = runCatching {
+                    SkillExecutor.executeSkill(ctx, svc, skillTypeStr, params)
+                }.getOrElse { e ->
+                    SkillExecutionResult(false, "执行异常: ${e.message}")
+                }
+
+                synchronized(messages) {
+                    val idx = messages.indexOfLast { it.id == tempId }
+                    if (idx >= 0) {
+                        val resultCard = result.skillCard ?: SkillCardData(
+                            skillType = runningCard.skillType,
+                            title = if (result.success) "执行成功" else "执行失败",
+                            description = result.message,
+                            status = if (result.success) SkillStatus.COMPLETED else SkillStatus.FAILED
+                        )
+                        messages[idx] = messages[idx].copy(
+                            content = if (result.success) "" else "⚠️ 执行出错",
+                            skillCard = resultCard
+                        )
+
+                        if (resultCard.skillType == SkillType.ASK_USER) {
+                            needsUserInput = true
+                            AiTermuxPrefs.saveChatHistory(ctx, messages.toList())
+                            break
+                        }
+
+                        lastResultText = buildSkillResultText(resultCard, result.message)
+                    }
+                }
+                AiTermuxPrefs.saveChatHistory(ctx, messages.toList())
+                withContext(Dispatchers.IO) { kotlinx.coroutines.delay(150) }
+            }
+
+            if (needsUserInput) {
+                return
+            }
+
+            currentUserText = lastResultText ?: "(技能执行完成，无输出)"
+        }
+    }
+
+    private fun buildSkillResultText(card: SkillCardData, defaultMsg: String): String {
+        val status = if (card.status == SkillStatus.COMPLETED) "成功" else "失败"
+        val output = if (!card.output.isNullOrBlank()) "\n输出：\n${card.output}" else ""
+        val desc = card.description.ifBlank { defaultMsg }
+        return "[技能结果] ${card.skillType.name} - $status\n描述：$desc$output"
+    }
+
+    private fun buildDangerousActionDesc(type: SkillType, params: JsonObject): String {
+        return when (type) {
+            SkillType.RUN_COMMAND -> "执行命令：${if (params.has("command")) params.get("command").asString else ""}"
+            SkillType.FILE_DELETE -> "删除：${if (params.has("path")) params.get("path").asString else ""}"
+            SkillType.CLOSE_ALL_SESSIONS -> "关闭全部会话"
+            SkillType.EXIT_TERMUX -> "退出 Termux"
+            else -> type.name
+        }
+    }
+
+    private suspend fun continueAfterSkill(ctx: Context, card: SkillCardData, defaultMsg: String) {
+        val resultText = buildSkillResultText(card, defaultMsg)
+        processAiTurn(ctx, resultText)
+    }
+
+    fun clearHistory() {
+        val ctx = getApplication<android.app.Application>()
+        synchronized(messages) { messages.clear() }
+        AiTermuxPrefs.clearChatHistory(ctx)
+    }
+}
+
+/** ================================================================ */
+
+@Composable
+private fun AiTermuxRoot(vm: AiTermuxViewModel, onBack: () -> Unit) {
+    if (!vm.config.isConfigured) {
+        AiSetupScreen(vm = vm, onBack = onBack)
+    } else {
+        AiChatScreen(vm = vm, onBack = onBack)
+    }
+}
+
+/** -------------------- 配置引导页 -------------------- */
+
+@Composable
+private fun AiSetupScreen(vm: AiTermuxViewModel, onBack: () -> Unit) {
+    val ctx = LocalContext.current
+    val scrollBehavior = MiuixScrollBehavior()
+    val isDark = isSystemInDarkTheme()
+
+    var provider by remember { mutableStateOf(vm.config.providerConfig.provider) }
+    var apiKey by remember { mutableStateOf(vm.config.providerConfig.apiKey) }
+    var baseUrl by remember { mutableStateOf(vm.config.providerConfig.apiBaseUrl) }
+    var model by remember { mutableStateOf(vm.config.providerConfig.model) }
+    var temperature by remember { mutableStateOf(vm.config.providerConfig.temperature) }
+    var customPrompt by remember { mutableStateOf(vm.config.customSystemPrompt) }
+    var showKey by remember { mutableStateOf(false) }
+    var testing by remember { mutableStateOf(false) }
+    var testResult by remember { mutableStateOf<String?>(null) }
+
+    Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        topBar = {
+            TopAppBar(
+                title = "AI Termux 设置",
+                scrollBehavior = scrollBehavior,
+                navigationIcon = {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .clickable { onBack() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = MiuixIcons.Back,
+                            contentDescription = null,
+                            modifier = Modifier.size(24.dp),
+                            tint = MiuixTheme.colorScheme.onSurface
+                        )
+                    }
+                }
+            )
+        }
+    ) { padding ->
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .nestedScroll(scrollBehavior.nestedScrollConnection),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+
+            item {
+                // Hero 卡
+                val gradient = Brush.linearGradient(
+                    colors = listOf(Color(0xFF6366F1), Color(0xFF8B5CF6), Color(0xFFEC4899))
+                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(gradient)
+                        .padding(20.dp)
+                ) {
+                    Column {
+                        Text(
+                            text = "🤖 AI Termux",
+                            color = Color.White,
+                            style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = "你的专属 Termux 智能助手",
+                            color = Color.White,
+                            style = TextStyle(fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            text = "支持管理终端会话、运行虚拟机、VNC/SSH 连接、文件操作等。只需用自然语言描述你的需求。",
+                            color = Color.White.copy(alpha = 0.9f),
+                            style = TextStyle(fontSize = 13.sp, lineHeight = 19.sp)
+                        )
+                    }
+                }
+            }
+
+            item { SectionTitle("AI 能力说明") }
+            item {
+                InfoBullet("会话管理", "新建 / 关闭终端会话、退出 Termux")
+                InfoBullet("虚拟机", "运行 QEMU with VNC，支持新建配置")
+                InfoBullet("远程连接", "VNC 连接、SSH 连接远程机器")
+                InfoBullet("文件操作", "列出目录、读取 / 写入 / 删除文件（限 Termux 容器内）")
+                InfoBullet("命令执行", "在会话中执行任意命令、通过 pkg 安装软件包")
+            }
+
+            item { SectionTitle("1. 选择提供商") }
+            item {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ProviderChip("OpenAI 兼容", "custom", provider, isDark) { provider = it }
+                    ProviderChip("直接 OpenAI", "openai", provider, isDark) { provider = it }
+                }
+            }
+
+            item { SectionTitle("2. API Key（必填）") }
+            item {
+                OutlinedTextField(
+                    value = apiKey,
+                    onValueChange = { apiKey = it.trim() },
+                    label = { Text("API Key") },
+                    visualTransformation = if (showKey) VisualTransformation.None else PasswordVisualTransformation(),
+                    trailingIcon = {
+                        IconButton(onClick = { showKey = !showKey }) {
+                            Icon(
+                                painter = painterResource(if (showKey) R.drawable.ic_visibility else R.drawable.ic_key),
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp),
+                                tint = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                            )
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = outlinedTextFieldColors(isDark)
+                )
+            }
+
+            item { SectionTitle("3. API 地址") }
+            item {
+                OutlinedTextField(
+                    value = baseUrl,
+                    onValueChange = { baseUrl = it.trim() },
+                    label = { Text("Base URL（如 https://api.openai.com/v1）") },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = outlinedTextFieldColors(isDark)
+                )
+            }
+
+            item { SectionTitle("4. 模型名称") }
+            item {
+                OutlinedTextField(
+                    value = model,
+                    onValueChange = { model = it.trim() },
+                    label = { Text("Model（如 gpt-4o-mini / deepseek-chat 等）") },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = outlinedTextFieldColors(isDark)
+                )
+            }
+
+            item { SectionTitle("5. 温度 (%.1f)".format(temperature)) }
+            item {
+                Slider(
+                    value = temperature,
+                    onValueChange = { temperature = (it * 10).toInt() / 10f },
+                    valueRange = 0f..1.6f,
+                    steps = 15,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+
+            item { SectionTitle("6. 自定义 System Prompt（可选）") }
+            item {
+                OutlinedTextField(
+                    value = customPrompt,
+                    onValueChange = { customPrompt = it },
+                    label = { Text("你可以添加自己的要求，例如：'用繁体字回答'、'尽量用一行命令解决' 等") },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 100.dp),
+                    maxLines = 6,
+                    shape = RoundedCornerShape(12.dp),
+                    colors = outlinedTextFieldColors(isDark)
+                )
+            }
+
+            testResult?.let { msg ->
+                item {
+                    Text(
+                        text = msg,
+                        color = if (msg.startsWith("✅")) Color(0xFF16A34A) else Color(0xFFDC2626),
+                        style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Medium),
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
+            }
+
+            item { Spacer(Modifier.height(8.dp)) }
+
+            item {
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Button(
+                        onClick = {
+                            testing = true
+                            testResult = null
+                            val cfg = AiProviderConfig(provider, apiKey, baseUrl, model, temperature)
+                            vm.viewModelScope.launch {
+                                val resp = AiApiClient.chat(
+                                    cfg,
+                                    listOf(
+                                        OpenAiMessage("system", "你是测试机器人，只回复 'ok' 一个字，不要加其他任何文字。"),
+                                        OpenAiMessage("user", "ping")
+                                    )
+                                )
+                                testResult = if (resp.error != null) {
+                                    "❌ 连接失败：${resp.error.message}"
+                                } else {
+                                    val reply = resp.choices.firstOrNull()?.message?.content ?: ""
+                                    if (reply.isNotBlank()) "✅ 连接成功！模型回复：$reply"
+                                    else "❌ 返回为空，请检查配置"
+                                }
+                                testing = false
+                            }
+                        },
+                        enabled = apiKey.isNotBlank() && !testing,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(48.dp)
+                            .clip(RoundedCornerShape(12.dp)),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (isDark) Color(0xFF424242) else Color(0xFFE0E0E0)
+                        )
+                    ) {
+                        if (testing) CircularProgressIndicator(modifier = Modifier.size(18.dp), color = MiuixTheme.colorScheme.onSurface, strokeWidth = 2.dp)
+                        else Text("测试连接", color = MiuixTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
+                    }
+                    Button(
+                        onClick = {
+                            if (apiKey.isBlank()) {
+                                testResult = "❌ 请先填写 API Key"
+                                return@Button
+                            }
+                            val newCfg = AiTermuxConfig(
+                                providerConfig = AiProviderConfig(provider, apiKey, baseUrl, model, temperature),
+                                customSystemPrompt = customPrompt,
+                                isConfigured = true
+                            )
+                            vm.updateConfig(newCfg)
+                            android.widget.Toast.makeText(ctx, "配置已保存，进入对话界面", android.widget.Toast.LENGTH_SHORT).show()
+                        },
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(48.dp)
+                            .clip(RoundedCornerShape(12.dp)),
+                        colors = ButtonDefaults.buttonColors(containerColor = MiuixTheme.colorScheme.primary)
+                    ) {
+                        Text("保存并开始使用", color = Color.White, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+
+            item { Spacer(Modifier.height(32.dp)) }
+        }
+    }
+}
+
+@Composable
+private fun SectionTitle(text: String) {
+    Text(
+        text = text,
+        style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Bold, color = MiuixTheme.colorScheme.onSurface),
+        modifier = Modifier.padding(top = 6.dp, bottom = 2.dp)
+    )
+}
+
+@Composable
+private fun InfoBullet(title: String, desc: String) {
+    val isDark = isSystemInDarkTheme()
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(8.dp)
+                .clip(CircleShape)
+                .background(MiuixTheme.colorScheme.primary)
+        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(title, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, color = MiuixTheme.colorScheme.onSurface)
+            Text(desc, fontSize = 12.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+        }
+    }
+}
+
+@Composable
+private fun ProviderChip(label: String, value: String, selected: String, isDark: Boolean, onClick: (String) -> Unit) {
+    val sel = selected == value
+    androidx.compose.material3.Surface(
+        onClick = { onClick(value) },
+        shape = RoundedCornerShape(999.dp),
+        color = if (sel) MiuixTheme.colorScheme.primary else if (isDark) Color(0xFF2A2A2A) else Color(0xFFF0F0F0),
+        modifier = Modifier.height(36.dp)
+    ) {
+        Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(horizontal = 14.dp)) {
+            Text(label, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = if (sel) Color.White else MiuixTheme.colorScheme.onSurface)
+        }
+    }
+}
+
+@Composable
+private fun outlinedTextFieldColors(isDark: Boolean) = OutlinedTextFieldDefaults.colors(
+    focusedBorderColor = MiuixTheme.colorScheme.primary,
+    unfocusedBorderColor = if (isDark) Color(0xFF444) else Color(0xFFD0D0D0),
+    focusedLabelColor = MiuixTheme.colorScheme.primary,
+    unfocusedLabelColor = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+    cursorColor = MiuixTheme.colorScheme.primary,
+    focusedTextColor = MiuixTheme.colorScheme.onSurface,
+    unfocusedTextColor = MiuixTheme.colorScheme.onSurface,
+    focusedContainerColor = if (isDark) Color(0xFF1A1A1A) else Color.White,
+    unfocusedContainerColor = if (isDark) Color(0xFF1A1A1A) else Color.White
+)
+
+/** -------------------- 聊天界面 -------------------- */
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun AiChatScreen(vm: AiTermuxViewModel, onBack: () -> Unit) {
+    val ctx = LocalContext.current
+    val scrollBehavior = MiuixScrollBehavior()
+    val listState = rememberLazyListState()
+    val isDark = isSystemInDarkTheme()
+    val focusRequester = remember { FocusRequester() }
+    var inputText by remember { mutableStateOf("") }
+    var pendingAttachment by remember { mutableStateOf<Triple<String, String, Long>?>(null) }
+
+
+    // 文件/图片选择器
+    val filePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            pendingAttachment = resolveAttachment(ctx, uri)
+        }
+    }
+
+    LaunchedEffect(vm.messages.size, vm.isLoading) {
+        if (vm.messages.isNotEmpty()) listState.animateScrollToItem(vm.messages.size - 1)
+    }
+
+    Box {
+        Scaffold(
+            contentWindowInsets = WindowInsets(0, 0, 0, 0),
+            topBar = {
+                TopAppBar(
+                    title = "AI Termux",
+                    scrollBehavior = scrollBehavior,
+                    navigationIcon = {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .clickable { onBack() },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = MiuixIcons.Back,
+                                contentDescription = null,
+                                modifier = Modifier.size(24.dp),
+                                tint = MiuixTheme.colorScheme.onSurface
+                            )
+                        }
+                    },
+                    actions = {
+                    }
+                )
+            },
+            bottomBar = {
+                Column {
+                    Divider(color = if (isDark) Color(0xFF2A2A2A) else Color(0xFFE8E8E8), thickness = 0.5.dp)
+                    // 选中的附件标签
+                    pendingAttachment?.let { (fileName, filePath, sizeB) ->
+                        val sizeStr = when {
+                            sizeB >= 1024 * 1024 -> "%.1f MB".format(sizeB.toFloat() / (1024 * 1024))
+                            sizeB >= 1024 -> "%.1f KB".format(sizeB.toFloat() / 1024)
+                            else -> "$sizeB B"
+                        }
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp)
+                                .padding(top = 10.dp, bottom = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_upload),
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp),
+                                tint = MiuixTheme.colorScheme.primary
+                            )
+                            Text(
+                                text = fileName,
+                                style = TextStyle(fontSize = 12.sp, color = MiuixTheme.colorScheme.onSurface),
+                                modifier = Modifier.weight(1f),
+                                maxLines = 1,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                            )
+                            Text(
+                                text = sizeStr,
+                                style = TextStyle(fontSize = 11.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+                            )
+                            IconButton(onClick = { pendingAttachment = null }, modifier = Modifier.size(24.dp)) {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_close),
+                                    contentDescription = "移除附件",
+                                    modifier = Modifier.size(16.dp),
+                                    tint = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                                )
+                            }
+                        }
+                    }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .navigationBarsPadding()
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        // 上传按钮
+                        IconButton(
+                            onClick = { filePickerLauncher.launch(arrayOf("*/*")) },
+                            modifier = Modifier
+                                .size(44.dp)
+                                .clip(CircleShape)
+                                .background(if (isDark) Color(0xFF2A2A2A) else Color(0xFFF0F0F0))
+                        ) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_upload),
+                                contentDescription = "上传文件/图片",
+                                modifier = Modifier.size(22.dp),
+                                tint = MiuixTheme.colorScheme.onSurface
+                            )
+                        }
+                        OutlinedTextField(
+                            value = inputText,
+                            onValueChange = { inputText = it },
+                            placeholder = { Text("需要 AI Termux 做什么…", color = MiuixTheme.colorScheme.onSurfaceVariantSummary) },
+                            modifier = Modifier
+                                .weight(1f)
+                                .focusRequester(focusRequester),
+                            shape = RoundedCornerShape(999.dp),
+                            colors = outlinedTextFieldColors(isDark),
+                            maxLines = 4
+                        )
+                        IconButton(
+                            onClick = {
+                                val text = inputText.trim()
+                                if ((text.isNotBlank() || pendingAttachment != null) && !vm.isLoading) {
+                                    val finalMsg = buildString {
+                                        pendingAttachment?.let { (fname, fpath, sz) ->
+                                            val sizeStr = when {
+                                                sz >= 1024 * 1024 -> "%.1fMB".format(sz.toFloat() / (1024 * 1024))
+                                                sz >= 1024 -> "%.1fKB".format(sz.toFloat() / 1024)
+                                                else -> "${sz}B"
+                                            }
+                                            append("📎 附件：$fname（$sizeStr，路径：$fpath）\n")
+                                        }
+                                        if (text.isNotBlank()) append(text)
+                                    }
+                                    vm.sendUserMessage(finalMsg)
+                                    inputText = ""
+                                    pendingAttachment = null
+                                }
+                            },
+                            enabled = (inputText.isNotBlank() || pendingAttachment != null) && !vm.isLoading,
+                            modifier = Modifier
+                                .size(48.dp)
+                                .clip(CircleShape)
+                                .background(
+                                    if ((inputText.isNotBlank() || pendingAttachment != null) && !vm.isLoading) MiuixTheme.colorScheme.primary
+                                    else if (isDark) Color(0xFF333) else Color(0xFFE0E0E0)
+                                )
+                        ) {
+                            if (vm.isLoading) {
+                                CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White, strokeWidth = 2.dp)
+                            } else {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Rounded.Send,
+                                    contentDescription = "发送",
+                                    tint = if ((inputText.isNotBlank() || pendingAttachment != null)) Color.White else Color.Gray,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        ) { padding ->
+            LazyColumn(
+                state = listState,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .nestedScroll(scrollBehavior.nestedScrollConnection),
+                contentPadding = PaddingValues(14.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+
+                if (vm.messages.isEmpty()) {
+                    item { WelcomeChatCard(isDark) }
+                    item { QuickChips(vm, inputText = "") { inputText = it } }
+                }
+
+                items(vm.messages, key = { it.id }) { msg ->
+                    ChatBubble(msg = msg, vm = vm)
+                }
+
+                if (vm.isLoading && vm.messages.lastOrNull()?.role != "assistant") {
+                    item { TypingIndicator(isDark) }
+                }
+
+                item { Spacer(Modifier.height(10.dp)) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun WelcomeChatCard(isDark: Boolean) {
+    val gradient = Brush.linearGradient(
+        colors = listOf(Color(0xFF6366F1), Color(0xFF8B5CF6), Color(0xFFEC4899))
+    )
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(18.dp))
+            .background(gradient)
+            .padding(18.dp)
+    ) {
+        Column {
+            Text("👋 欢迎使用 AI Termux", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+            Spacer(Modifier.height(6.dp))
+            Text(
+                "我可以帮你管理 Termux。试试说：\n" +
+                        "• 新建一个终端会话\n" +
+                        "• 帮我安装 git 和 vim\n" +
+                        "• 列出家目录文件\n" +
+                        "• 运行我的 QEMU 虚拟机\n" +
+                        "• 用 VNC 连接 192.168.1.10:5901",
+                color = Color.White.copy(alpha = 0.92f),
+                fontSize = 13.sp,
+                lineHeight = 20.sp
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun QuickChips(vm: AiTermuxViewModel, inputText: String, setInput: (String) -> Unit) {
+    val suggestions = listOf(
+        "新建一个终端会话",
+        "帮我列出当前会话",
+        "安装 git 和 vim",
+        "列出家目录文件",
+        "读取 ~/.bashrc",
+        "用 VNC 连接 127.0.0.1:5900"
+    )
+    val isDark = isSystemInDarkTheme()
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        suggestions.forEach { s ->
+            androidx.compose.material3.Surface(
+                onClick = {
+                    if (!vm.isLoading) vm.sendUserMessage(s)
+                },
+                shape = RoundedCornerShape(999.dp),
+                color = if (isDark) Color(0xFF242424) else Color(0xFFF3F3F3),
+                modifier = Modifier.height(34.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(horizontal = 12.dp)) {
+                    Text(s, fontSize = 12.sp, color = MiuixTheme.colorScheme.onSurface)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TypingIndicator(isDark: Boolean) {
+    Row(
+        modifier = Modifier
+            .padding(end = 60.dp)
+            .clip(RoundedCornerShape(14.dp, 14.dp, 14.dp, 2.dp))
+            .background(if (isDark) Color(0xFF242424) else Color(0xFFF3F3F3))
+            .padding(horizontal = 14.dp, vertical = 12.dp)
+    ) {
+        val dotColor = if (isDark) Color(0xFFAAA) else Color(0xFF888)
+        repeat(3) { i ->
+            var alpha by remember { mutableStateOf(0.3f) }
+            LaunchedEffect(i) {
+                while (true) {
+                    kotlinx.coroutines.delay((i * 200).toLong())
+                    alpha = 1f
+                    kotlinx.coroutines.delay(400)
+                    alpha = 0.3f
+                }
+            }
+            Box(
+                Modifier
+                    .padding(horizontal = 3.dp)
+                    .size(8.dp)
+                    .clip(CircleShape)
+                    .background(dotColor.copy(alpha = alpha))
+            )
+        }
+    }
+}
+
+/** -------------------- 消息气泡 -------------------- */
+
+private fun parseMarkdown(text: String, isDark: Boolean = true): AnnotatedString = buildAnnotatedString {
+    val codeBg = if (isDark) Color(0xFF3A3A3A) else Color(0xFFE8E8E8)
+    val codeFg = if (isDark) Color(0xFFFFD54F) else Color(0xFFB71C1C)
+
+    val lines = text.split("\n")
+    var firstLine = true
+
+    for (line in lines) {
+        if (!firstLine) append("\n")
+        firstLine = false
+
+        when {
+            line.startsWith("### ") -> {
+                val content = line.removePrefix("### ").trim()
+                withStyle(SpanStyle(fontWeight = FontWeight.Bold, fontSize = 16.sp)) {
+                    append(content)
+                }
+            }
+            line.startsWith("## ") -> {
+                val content = line.removePrefix("## ").trim()
+                withStyle(SpanStyle(fontWeight = FontWeight.Bold, fontSize = 17.sp)) {
+                    append(content)
+                }
+            }
+            line.startsWith("# ") -> {
+                val content = line.removePrefix("# ").trim()
+                withStyle(SpanStyle(fontWeight = FontWeight.Bold, fontSize = 18.sp)) {
+                    append(content)
+                }
+            }
+            line.matches(Regex("\\d+\\.\\s.*")) -> {
+                val content = line.replaceFirst(Regex("^(\\d+\\.\\s)"), "")
+                val prefix = line.substringBefore(" ")
+                append("$prefix ")
+                appendInlineFormatted(content, codeBg, codeFg)
+            }
+            line.startsWith("- ") || line.startsWith("* ") -> {
+                val content = line.substring(2)
+                withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append("• ") }
+                appendInlineFormatted(content, codeBg, codeFg)
+            }
+            else -> appendInlineFormatted(line, codeBg, codeFg)
+        }
+    }
+}
+
+private fun AnnotatedString.Builder.appendInlineFormatted(
+    text: String, codeBg: Color, codeFg: Color
+) {
+    val segments = mutableListOf<Triple<String, Boolean, Boolean>>()
+    var current = ""
+    var inBold = false
+    var inCode = false
+    var i = 0
+    while (i < text.length) {
+        when {
+            i + 1 < text.length && text[i] == '*' && text[i + 1] == '*' && !inCode -> {
+                if (current.isNotBlank()) segments.add(Triple(current, inBold, inCode))
+                current = ""
+                inBold = !inBold
+                i += 2
+            }
+            text[i] == '`' && !inBold -> {
+                if (current.isNotBlank()) segments.add(Triple(current, inBold, inCode))
+                current = ""
+                inCode = !inCode
+                i++
+            }
+            else -> {
+                current += text[i]
+                i++
+            }
+        }
+    }
+    if (current.isNotBlank()) segments.add(Triple(current, inBold, inCode))
+
+    for ((seg, bold, code) in segments) {
+        when {
+            code -> {
+                withStyle(SpanStyle(background = codeBg, color = codeFg)) {
+                    append(seg)
+                }
+            }
+            bold -> {
+                withStyle(SpanStyle(fontWeight = FontWeight.Bold)) {
+                    append(seg)
+                }
+            }
+            else -> append(seg)
+        }
+    }
+}
+
+@Composable
+private fun ChatBubble(msg: ChatMessage, vm: AiTermuxViewModel) {
+    val isDark = isSystemInDarkTheme()
+    val isUser = msg.role == "user"
+    val isWarning = msg.isWarning
+
+    // 空内容且只有卡片，不画文本气泡
+    if (msg.content.isBlank() && msg.skillCard != null) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start
+        ) {
+            SkillCard(msgId = msg.id, card = msg.skillCard, errorMsg = msg.errorMessage, isDark = isDark, vm = vm)
+        }
+        return
+    }
+
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = if (isUser) Alignment.End else Alignment.Start
+    ) {
+        if (msg.content.isNotBlank()) {
+            val bg = when {
+                isWarning -> if (isDark) Color(0xFF4A2C00) else Color(0xFFFFF3CD)
+                isUser -> MiuixTheme.colorScheme.primary
+                isDark -> Color(0xFF242424)
+                else -> Color(0xFFF3F3F3)
+            }
+            val textColor = when {
+                isWarning -> if (isDark) Color(0xFFFFD666) else Color(0xFF856404)
+                isUser -> Color.White
+                else -> MiuixTheme.colorScheme.onSurface
+            }
+            val corners = if (isUser) {
+                RoundedCornerShape(14.dp, 14.dp, 2.dp, 14.dp)
+            } else {
+                RoundedCornerShape(14.dp, 14.dp, 14.dp, 2.dp)
+            }
+            Box(
+                modifier = Modifier
+                    .then(if (isUser) Modifier.padding(start = 40.dp) else Modifier.padding(end = 40.dp))
+                    .clip(corners)
+                    .background(bg)
+                    .padding(horizontal = 12.dp, vertical = 10.dp)
+            ) {
+                Text(
+                    text = parseMarkdown(msg.content, isDark),
+                    style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp, color = textColor)
+                )
+            }
+        }
+
+        msg.skillCard?.let { card ->
+            Spacer(Modifier.height(6.dp))
+            SkillCard(msgId = msg.id, card = card, errorMsg = msg.errorMessage, isDark = isDark, vm = vm)
+        }
+
+        msg.errorMessage?.takeIf { msg.skillCard == null }?.let { err ->
+            Spacer(Modifier.height(4.dp))
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Color(0xFFFEE2E2).copy(alpha = if (isDark) 0.15f else 1f))
+                    .padding(10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_error),
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                    tint = Color(0xFFDC2626)
+                )
+                Text(
+                    text = err,
+                    style = TextStyle(fontSize = 12.sp, color = Color(0xFFDC2626))
+                )
+            }
+        }
+    }
+}
+
+/** -------------------- 技能卡片 -------------------- */
+
+@Composable
+private fun SkillCard(msgId: String, card: SkillCardData, errorMsg: String?, isDark: Boolean, vm: AiTermuxViewModel) {
+    val ctx = LocalContext.current
+    // ASK_USER / CONFIRM_DANGEROUS 需要可交互，状态为 RUNNING 时显示交互组件
+    val isInteractive = (card.skillType == SkillType.ASK_USER || card.skillType == SkillType.CONFIRM_DANGEROUS)
+            && card.status == SkillStatus.RUNNING
+
+    val (statusColor, statusBg, statusText) = when {
+        card.skillType == SkillType.CONFIRM_DANGEROUS && card.status == SkillStatus.RUNNING ->
+            Triple(Color(0xFFDC2626), Color(0xFFDC2626).copy(alpha = 0.12f), "待确认")
+        card.skillType == SkillType.ASK_USER && card.status == SkillStatus.RUNNING ->
+            Triple(Color(0xFF6366F1), Color(0xFF6366F1).copy(alpha = 0.12f), "待回答")
+        card.status == SkillStatus.RUNNING -> Triple(Color(0xFF2563EB), Color(0xFF2563EB).copy(alpha = 0.12f), "执行中")
+        card.status == SkillStatus.COMPLETED -> Triple(Color(0xFF16A34A), Color(0xFF16A34A).copy(alpha = 0.12f), "已完成")
+        card.status == SkillStatus.FAILED -> Triple(Color(0xFFDC2626), Color(0xFFDC2626).copy(alpha = 0.12f), "失败")
+        else -> Triple(Color(0xFF64748B), Color(0xFF64748B).copy(alpha = 0.12f), "未知")
+    }
+    val iconRes = when (card.skillType) {
+        SkillType.NEW_SESSION, SkillType.CLOSE_SESSION,
+        SkillType.CLOSE_ALL_SESSIONS, SkillType.EXIT_TERMUX,
+        SkillType.GET_SESSION_INFO, SkillType.RUN_COMMAND,
+        SkillType.CAPTURE_OUTPUT, SkillType.CUSTOM_COMMAND -> R.drawable.ic_terminal
+        SkillType.RUN_VM_QEMU, SkillType.CREATE_VM_QEMU,
+        SkillType.VM_LIST -> R.drawable.ic_computer
+        SkillType.CONNECT_VNC -> R.drawable.ic_vnc
+        SkillType.CONNECT_SSH -> R.drawable.ic_ssh
+        SkillType.FILE_LIST, SkillType.FILE_READ,
+        SkillType.FILE_WRITE, SkillType.FILE_DELETE -> R.drawable.ic_files
+        SkillType.PACKAGE_INSTALL -> R.drawable.ic_download
+        SkillType.ASK_USER -> R.drawable.ic_help
+        SkillType.CONFIRM_DANGEROUS -> R.drawable.ic_warning
+    }
+
+    val cardBg = if (isDark) Color(0xFF1A1A1A) else Color(0xFFFAFAFA)
+    val borderColor = if (isDark) Color(0xFF2C2C2C) else Color(0xFFE8E8E8)
+
+    val clickable = card.skillType in setOf(
+        SkillType.NEW_SESSION, SkillType.CLOSE_SESSION, SkillType.RUN_COMMAND,
+        SkillType.CAPTURE_OUTPUT, SkillType.CONNECT_SSH, SkillType.CONNECT_VNC,
+        SkillType.RUN_VM_QEMU, SkillType.CREATE_VM_QEMU,
+        SkillType.VM_LIST, SkillType.CUSTOM_COMMAND, SkillType.EXIT_TERMUX
+    )
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth(0.92f)
+            .clip(RoundedCornerShape(14.dp))
+            .then(
+                if (clickable) Modifier.clickable { SkillExecutor.onSkillCardClick(ctx, card) }
+                else Modifier
+            )
+    ) {
+        androidx.compose.material3.Surface(
+            shape = RoundedCornerShape(14.dp),
+            color = cardBg,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier
+                        .padding(12.dp)
+                        .fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    // 左侧图标（右下半露）
+                    Box(
+                        modifier = Modifier
+                            .width(64.dp)
+                            .fillMaxHeight()
+                            .height(64.dp)
+                            .clip(RoundedCornerShape(32.dp))
+                            .background(statusBg),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            painter = painterResource(iconRes),
+                            contentDescription = null,
+                            modifier = Modifier.size(28.dp),
+                            tint = statusColor
+                        )
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                text = card.title,
+                                style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Bold, color = MiuixTheme.colorScheme.onSurface)
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(999.dp))
+                                    .background(statusBg)
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            ) {
+                                Text(statusText, fontSize = 10.sp, color = statusColor, fontWeight = FontWeight.SemiBold)
+                            }
+                        }
+                        Spacer(Modifier.height(2.dp))
+                        Text(
+                            text = card.description,
+                            style = TextStyle(fontSize = 12.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+                        )
+                    }
+                }
+
+                // 会话 / 连接信息行
+                val sessionText = if (!card.sessionName.isNullOrBlank()) {
+                    "会话：${card.sessionName}"
+                } else null
+                val connText = card.connectionAddress?.let { "地址：$it" }
+                val vmText = card.vmName?.let { "虚拟机：$it" }
+                val fileText = card.filePath?.let { "路径：$it" }
+                val cmdText = card.command?.let { "命令：$it" }
+                val meta = listOfNotNull(sessionText, connText, vmText, fileText, cmdText)
+                if (meta.isNotEmpty()) {
+                    Divider(color = borderColor, thickness = 0.5.dp)
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        meta.forEach { line ->
+                            Text(
+                                text = line,
+                                style = TextStyle(fontSize = 12.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary),
+                                modifier = Modifier.padding(vertical = 1.dp)
+                            )
+                        }
+                    }
+                }
+
+                // 输出（如文件内容、目录列表）
+                card.output?.let { output ->
+                    if (output.isNotBlank()) {
+                        Divider(color = borderColor, thickness = 0.5.dp)
+                        val isLong = output.length > 400
+                        val display = if (isLong) output.take(400) + "\n…… (输出过长，已截断，请在终端中查看完整结果)" else output
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(if (isDark) Color(0xFF111) else Color(0xFF1E1E1E))
+                                .padding(10.dp)
+                        ) {
+                            Text(
+                                text = display,
+                                style = TextStyle(
+                                    fontSize = 12.sp,
+                                    color = Color(0xFFD4D4D4),
+                                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                    lineHeight = 18.sp
+                                )
+                            )
+                        }
+                    }
+                }
+
+                // 错误信息
+                if (!errorMsg.isNullOrBlank() || card.status == SkillStatus.FAILED) {
+                    val errText = errorMsg ?: card.description
+                    if (errText.isNotBlank()) {
+                        Divider(color = borderColor, thickness = 0.5.dp)
+                        Row(
+                            modifier = Modifier
+                                .padding(12.dp)
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(Color(0xFFFEE2E2).copy(alpha = if (isDark) 0.15f else 1f))
+                                .padding(10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_error),
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp),
+                                tint = Color(0xFFDC2626)
+                            )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("执行出错", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFFDC2626))
+                                Spacer(Modifier.height(2.dp))
+                                Text(errText, fontSize = 12.sp, color = Color(0xFFB91C1C))
+                            }
+                        }
+                    }
+                }
+
+                // 点击提示
+                if (clickable) {
+                    Divider(color = borderColor, thickness = 0.5.dp)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            text = "点击卡片打开对应页面 / 会话",
+                            style = TextStyle(fontSize = 11.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+                        )
+                    }
+                }
+
+                // 交互组件（ASK_USER / CONFIRM_DANGEROUS）
+                if (isInteractive) {
+                    Divider(color = borderColor, thickness = 0.5.dp)
+                    when (card.skillType) {
+                        SkillType.ASK_USER -> {
+                            var textInput by remember { mutableStateOf("") }
+                            var singleSelection by remember { mutableStateOf<String?>(null) }
+                            val multiSelection = remember { mutableStateListOf<String>() }
+
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                card.askQuestion?.let { q ->
+                                    Text(
+                                        text = q,
+                                        style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Medium, color = MiuixTheme.colorScheme.onSurface),
+                                        modifier = Modifier.padding(bottom = 10.dp)
+                                    )
+                                }
+
+                                val type = card.askType ?: "text"
+                                when (type) {
+                                    "text" -> {
+                                        OutlinedTextField(
+                                            value = textInput,
+                                            onValueChange = { textInput = it },
+                                            placeholder = {
+                                                Text(
+                                                    text = card.askPlaceholder ?: "请输入...",
+                                                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                                                )
+                                            },
+                                            modifier = Modifier.fillMaxWidth(),
+                                            shape = RoundedCornerShape(10.dp),
+                                            colors = outlinedTextFieldColors(isDark)
+                                        )
+                                        Spacer(Modifier.height(10.dp))
+                                        Button(
+                                            onClick = { vm.submitAnswer(msgId, textInput) },
+                                            enabled = textInput.isNotBlank(),
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(44.dp)
+                                                .clip(RoundedCornerShape(10.dp)),
+                                            colors = ButtonDefaults.buttonColors(containerColor = MiuixTheme.colorScheme.primary)
+                                        ) {
+                                            Text("提交回答", color = Color.White, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+
+                                    "single" -> {
+                                        card.askOptions?.forEach { option ->
+                                            val selected = singleSelection == option
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .clip(RoundedCornerShape(10.dp))
+                                                    .background(if (selected) statusBg else Color.Transparent)
+                                                    .clickable { singleSelection = option }
+                                                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                            ) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .size(20.dp)
+                                                        .clip(CircleShape)
+                                                        .background(
+                                                            if (selected) MiuixTheme.colorScheme.primary
+                                                            else if (isDark) Color(0xFF333333) else Color(0xFFDDDDDD)
+                                                        ),
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    if (selected) {
+                                                        Box(
+                                                            modifier = Modifier
+                                                                .size(8.dp)
+                                                                .clip(CircleShape)
+                                                                .background(Color.White)
+                                                        )
+                                                    }
+                                                }
+                                                Text(
+                                                    text = option,
+                                                    style = TextStyle(fontSize = 14.sp, color = MiuixTheme.colorScheme.onSurface)
+                                                )
+                                            }
+                                        }
+                                        Spacer(Modifier.height(10.dp))
+                                        Button(
+                                            onClick = { singleSelection?.let { vm.submitAnswer(msgId, it) } },
+                                            enabled = singleSelection != null,
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(44.dp)
+                                                .clip(RoundedCornerShape(10.dp)),
+                                            colors = ButtonDefaults.buttonColors(containerColor = MiuixTheme.colorScheme.primary)
+                                        ) {
+                                            Text("提交回答", color = Color.White, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+
+                                    "multi" -> {
+                                        card.askOptions?.forEach { option ->
+                                            val checked = multiSelection.contains(option)
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .clip(RoundedCornerShape(10.dp))
+                                                    .background(if (checked) statusBg else Color.Transparent)
+                                                    .clickable {
+                                                        if (checked) multiSelection.remove(option)
+                                                        else multiSelection.add(option)
+                                                    }
+                                                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                            ) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .size(22.dp)
+                                                        .clip(RoundedCornerShape(6.dp))
+                                                        .background(
+                                                            if (checked) MiuixTheme.colorScheme.primary
+                                                            else if (isDark) Color(0xFF333333) else Color(0xFFDDDDDD)
+                                                        ),
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    if (checked) {
+                                                        Text(
+                                                            text = "✓",
+                                                            color = Color.White,
+                                                            fontSize = 14.sp,
+                                                            fontWeight = FontWeight.Bold
+                                                        )
+                                                    }
+                                                }
+                                                Text(
+                                                    text = option,
+                                                    style = TextStyle(fontSize = 14.sp, color = MiuixTheme.colorScheme.onSurface)
+                                                )
+                                            }
+                                        }
+                                        Spacer(Modifier.height(10.dp))
+                                        Button(
+                                            onClick = {
+                                                vm.submitAnswer(msgId, multiSelection.joinToString(", "))
+                                            },
+                                            enabled = multiSelection.isNotEmpty(),
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(44.dp)
+                                                .clip(RoundedCornerShape(10.dp)),
+                                            colors = ButtonDefaults.buttonColors(containerColor = MiuixTheme.colorScheme.primary)
+                                        ) {
+                                            Text("提交回答", color = Color.White, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        SkillType.CONFIRM_DANGEROUS -> {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                card.dangerousAction?.let { action ->
+                                    Text(
+                                        text = "即将执行：$action",
+                                        style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Medium, color = MiuixTheme.colorScheme.onSurface),
+                                        modifier = Modifier.padding(bottom = 10.dp)
+                                    )
+                                }
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    Button(
+                                        onClick = { vm.cancelDangerous(msgId) },
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .height(44.dp)
+                                            .clip(RoundedCornerShape(10.dp)),
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = if (isDark) Color(0xFF333333) else Color(0xFFEEEEEE)
+                                        )
+                                    ) {
+                                        Text("取消", color = MiuixTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
+                                    }
+                                    Button(
+                                        onClick = { vm.confirmDangerous(msgId) },
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .height(44.dp)
+                                            .clip(RoundedCornerShape(10.dp)),
+                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626))
+                                    ) {
+                                        Text("确认执行", color = Color.White, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
+                        }
+
+                        else -> {}
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * 将用户选择的 content Uri 解析成 <文件名, 绝对路径, 大小字节>。
+ * 如果是相册/外部文件且拿不到真实路径，就复制到 Termux filesDir 下。
+ */
+private fun resolveAttachment(ctx: Context, uri: Uri): Triple<String, String, Long> {
+    // 1. 查询显示名和大小
+    var fileName: String? = null
+    var sizeBytes: Long = 0
+    try {
+        ctx.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+            val nameIdx = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+            val sizeIdx = cursor.getColumnIndex(OpenableColumns.SIZE)
+            cursor.moveToFirst()
+            if (nameIdx >= 0) fileName = cursor.getString(nameIdx)
+            if (sizeIdx >= 0) sizeBytes = cursor.getLong(sizeIdx).coerceAtLeast(0L)
+        }
+    } catch (_: Throwable) {
+    }
+
+    // 兜底文件名
+    val finalName = fileName
+        ?: uri.lastPathSegment?.substringAfterLast('/')
+        ?: "attachment_${System.currentTimeMillis()}"
+
+    // 2. 尝试拿本地真实文件路径（file:// 或 MediaStore _data）
+    var realPath: String? = try {
+        if ("file".equals(uri.scheme, ignoreCase = true)) {
+            uri.path
+        } else {
+            null
+        }
+    } catch (_: Throwable) { null }
+
+    // 尝试从 MediaStore 查询 _data 列
+    if (realPath == null && "content".equals(uri.scheme, ignoreCase = true)) {
+        try {
+            ctx.contentResolver.query(
+                uri, arrayOf(android.provider.MediaStore.MediaColumns.DATA),
+                null, null, null
+            )?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val idx = cursor.getColumnIndex(android.provider.MediaStore.MediaColumns.DATA)
+                    if (idx >= 0) realPath = cursor.getString(idx)?.takeIf { it.isNotBlank() }
+                }
+            }
+        } catch (_: Throwable) {
+        }
+    }
+
+    if (realPath != null) {
+        val f = java.io.File(realPath!!)
+        if (f.exists() && f.canRead()) {
+            return Triple(finalName, f.absolutePath, if (sizeBytes > 0) sizeBytes else f.length())
+        }
+    }
+
+    // 3. 取不到真实路径（例如相册 content:// 或第三方应用）→ 复制到 Termux filesDir/ai_uploads/
+    val uploadDir = java.io.File(ctx.filesDir, "ai_uploads").apply { mkdirs() }
+    val outFile = java.io.File(uploadDir, finalName).let { base ->
+        var candidate = base
+        var i = 1
+        while (candidate.exists()) {
+            val ext = base.extension.let { if (it.isBlank()) "" else ".$it" }
+            candidate = java.io.File(uploadDir, "${base.nameWithoutExtension}_$i$ext")
+            i++
+        }
+        candidate
+    }
+    ctx.contentResolver.openInputStream(uri)?.use { input ->
+        java.io.FileOutputStream(outFile).use { output ->
+            input.copyTo(output)
+        }
+    }
+    return Triple(finalName, outFile.absolutePath, if (sizeBytes > 0) sizeBytes else outFile.length())
+}

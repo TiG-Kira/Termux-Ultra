@@ -36,6 +36,7 @@ import com.termux.shared.shell.TermuxShellEnvironmentClient
 import com.termux.shared.termux.TermuxConstants
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import top.yukonga.miuix.kmp.basic.*
 import top.yukonga.miuix.kmp.icon.MiuixIcons
@@ -123,12 +124,19 @@ private fun QemuVmScreen(
     onExecuteScript: (String, String) -> Unit
 ) {
     val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
     var vms by remember { mutableStateOf(QemuVmManager.loadVms(context)) }
     var showCreateSheet by remember { mutableStateOf(false) }
     var editingVm by remember { mutableStateOf<QemuVmConfig?>(null) }
     var showDeleteConfirm by remember { mutableStateOf<QemuVmConfig?>(null) }
     var runningVmCount by remember { mutableStateOf(0) }
     val scrollBehavior = MiuixScrollBehavior()
+
+    // 路径迁移状态
+    var showMigrationDialog by remember { mutableStateOf(false) }
+    var isMigrating by remember { mutableStateOf(false) }
+    var migrationResult by remember { mutableStateOf<QemuVmManager.MigrationResult?>(null) }
+    var migrationPromptShown by remember { mutableStateOf(false) }
 
     fun refreshVms() {
         vms = QemuVmManager.loadVms(context)
@@ -138,6 +146,14 @@ private fun QemuVmScreen(
         while (true) {
             runningVmCount = countRunningQemuVms(context)
             delay(3000)
+        }
+    }
+
+    // 页面加载时检测是否需要路径迁移（仅提示一次）
+    LaunchedEffect(vms) {
+        if (!migrationPromptShown && !QemuVmManager.isMigrationDone(context) && QemuVmManager.needsMigration(vms)) {
+            showMigrationDialog = true
+            migrationPromptShown = true
         }
     }
 
@@ -268,6 +284,90 @@ private fun QemuVmScreen(
                                 showDeleteConfirm = null
                             }
                         },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.textButtonColorsPrimary()
+                    )
+                }
+            }
+        }
+
+        // 路径迁移对话框
+        if (showMigrationDialog) {
+            OverlayDialog(
+                show = true,
+                title = "路径迁移",
+                summary = "检测到现有虚拟机使用旧版默认路径。\n\n" +
+                    "新版本已更新默认位置：\n" +
+                    "• 硬盘：\$HOME/virtual_disks/\n" +
+                    "• 共享目录：\$HOME/storage/shared/Termux/Sharing/\n\n" +
+                    "是否一键迁移硬盘文件和共享目录到新位置？",
+                onDismissRequest = {
+                    if (!isMigrating) showMigrationDialog = false
+                }
+            ) {
+                if (isMigrating) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Text(
+                            text = "正在迁移，请稍候...",
+                            fontSize = 14.sp,
+                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                        )
+                    }
+                } else {
+                    Row(horizontalArrangement = Arrangement.SpaceBetween) {
+                        TextButton(
+                            text = "稍后",
+                            onClick = { showMigrationDialog = false },
+                            modifier = Modifier.weight(1f)
+                        )
+                        Spacer(Modifier.width(16.dp))
+                        TextButton(
+                            text = "一键迁移",
+                            onClick = {
+                                isMigrating = true
+                                coroutineScope.launch {
+                                    val result = withContext(Dispatchers.IO) {
+                                        QemuVmManager.migratePaths(context)
+                                    }
+                                    isMigrating = false
+                                    migrationResult = result
+                                    showMigrationDialog = false
+                                    refreshVms()
+                                }
+                            },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.textButtonColorsPrimary()
+                        )
+                    }
+                }
+            }
+        }
+
+        // 迁移结果对话框
+        if (migrationResult != null) {
+            OverlayDialog(
+                show = true,
+                title = "迁移完成",
+                summary = migrationResult!!.let { result ->
+                    buildString {
+                        append("已迁移 ${result.migratedVmCount} 个虚拟机配置。\n")
+                        append("成功移动 ${result.movedDiskCount} 个硬盘文件。\n")
+                        append("共享目录${if (result.shareDirMoved) "已" else "未"}迁移。")
+                        if (result.errors.isNotEmpty()) {
+                            append("\n\n错误信息：\n")
+                            result.errors.forEach { append("• $it\n") }
+                        }
+                    }
+                },
+                onDismissRequest = { migrationResult = null }
+            ) {
+                Row(horizontalArrangement = Arrangement.Center) {
+                    TextButton(
+                        text = "确定",
+                        onClick = { migrationResult = null },
                         modifier = Modifier.weight(1f),
                         colors = ButtonDefaults.textButtonColorsPrimary()
                     )

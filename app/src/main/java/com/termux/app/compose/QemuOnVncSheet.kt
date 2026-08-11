@@ -107,7 +107,7 @@ private fun VmWizardContent(
     // 向后兼容：用 audioMode 派生 hasSound
     val hasSound = audioMode != AudioMode.DISABLED
     var shareDir by remember {
-        mutableStateOf(existingVm?.shareDir ?: "\$HOME/storage/shared/qemu_share")
+        mutableStateOf(existingVm?.shareDir ?: "\$HOME/storage/shared/Termux/Sharing")
     }
     var bootDevice1 by remember {
         mutableStateOf(existingVm?.bootOrder?.getOrElse(0) { "c" } ?: "c")
@@ -127,6 +127,12 @@ private fun VmWizardContent(
     var showCopyProgress by remember { mutableStateOf(false) }
     var copyProgress by remember { mutableFloatStateOf(0f) }
     var copyProgressText by remember { mutableStateOf("正在复制到虚拟机目录...") }
+
+    // 文件来源选择："disk"=选择磁盘文件；"iso"=选择ISO文件；null=不显示
+    var fileSourceTarget by remember { mutableStateOf<String?>(null) }
+    // Termux 内部文件选择器
+    var showInternalDiskPicker by remember { mutableStateOf(false) }
+    var showInternalIsoPicker by remember { mutableStateOf(false) }
 
     // install_iso 模式强制挂载 ISO
     if (mode == "install_iso") {
@@ -191,8 +197,8 @@ private fun VmWizardContent(
 
     // 新建磁盘路径（仅在新建模式且未指定路径时自动生成）
     fun ensureCreateDiskPath(): String {
-        return if (diskPath.isBlank() || !diskPath.contains("/qemu_disks/")) {
-            "\$HOME/storage/shared/qemu_disks/${existingVm?.id ?: java.util.UUID.randomUUID().toString()}.${newDiskFormat}"
+        return if (diskPath.isBlank() || (!diskPath.contains("/virtual_disks/") && !diskPath.contains("/qemu_disks/"))) {
+            "\$HOME/virtual_disks/${existingVm?.id ?: java.util.UUID.randomUUID().toString()}.${newDiskFormat}"
         } else {
             diskPath
         }
@@ -298,7 +304,7 @@ private fun VmWizardContent(
                     Spacer(Modifier.height(8.dp))
                     TextButton(
                         text = "选择磁盘文件",
-                        onClick = { diskFileLauncher.launch(arrayOf("*/*")) },
+                        onClick = { fileSourceTarget = "disk" },
                         modifier = Modifier.fillMaxWidth(),
                         colors = ButtonDefaults.textButtonColorsPrimary()
                     )
@@ -353,7 +359,7 @@ private fun VmWizardContent(
                     Spacer(Modifier.height(8.dp))
                     TextButton(
                         text = "选择 ISO 文件",
-                        onClick = { isoFileLauncher.launch(arrayOf("*/*")) },
+                        onClick = { fileSourceTarget = "iso" },
                         modifier = Modifier.fillMaxWidth(),
                         colors = ButtonDefaults.textButtonColorsPrimary()
                     )
@@ -701,6 +707,86 @@ private fun VmWizardContent(
             }
         )
     }
+
+    // 文件来源选择对话框：Termux 内部 vs 外部系统选择器
+    if (fileSourceTarget != null) {
+        OverlayDialog(
+            show = true,
+            title = if (fileSourceTarget == "disk") "选择磁盘文件方式" else "选择 ISO 文件方式",
+            summary = "请选择文件来源：\n\n" +
+                "• Termux 环境内：浏览 /data/data/com.termux 下的文件（如 \$HOME/virtual_disks/）\n" +
+                "• 外部存储：使用系统文件选择器选择 Termux 之外的文件（自动复制到内部）",
+            onDismissRequest = { fileSourceTarget = null }
+        ) {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                TextButton(
+                    text = "Termux 环境内",
+                    onClick = {
+                        val target = fileSourceTarget
+                        fileSourceTarget = null
+                        when (target) {
+                            "disk" -> showInternalDiskPicker = true
+                            "iso" -> showInternalIsoPicker = true
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.textButtonColorsPrimary()
+                )
+                TextButton(
+                    text = "外部存储（系统选择器）",
+                    onClick = {
+                        val target = fileSourceTarget
+                        fileSourceTarget = null
+                        when (target) {
+                            "disk" -> diskFileLauncher.launch(arrayOf("*/*"))
+                            "iso" -> isoFileLauncher.launch(arrayOf("*/*"))
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
+    }
+
+    // 磁盘文件：Termux 内部选择器
+    TermuxInternalFilePicker(
+        show = showInternalDiskPicker,
+        title = "选择磁盘文件",
+        fileExtensions = listOf("qcow2", "img", "raw", "vmdk", "vdi", "vpc", "qcow", "qed"),
+        onDismiss = { showInternalDiskPicker = false },
+        onFileSelected = { path ->
+            diskPath = path
+            showInternalDiskPicker = false
+        }
+    )
+
+    // ISO 文件：Termux 内部选择器
+    TermuxInternalFilePicker(
+        show = showInternalIsoPicker,
+        title = "选择 ISO 文件",
+        fileExtensions = listOf("iso"),
+        onDismiss = { showInternalIsoPicker = false },
+        onFileSelected = { path ->
+            isoPath = path
+            showInternalIsoPicker = false
+            // 智能识别 ISO
+            val detected = detectIsoSystem(path)
+            detectedSystem = detected
+            if (detected != null) {
+                if (vmName.isBlank() || nameAutoFilled) {
+                    vmName = detected.systemName
+                    nameAutoFilled = true
+                }
+                machineType = detected.recommendedMachineType
+                diskInterface = detected.recommendedDiskInterface
+                cpuCores = detected.recommendedCpuCores
+                memoryMB = detected.recommendedMemoryMB
+            }
+        }
+    )
 }
 
 /**

@@ -89,6 +89,11 @@
             android:exported="false" />
 
         <activity
+            android:name=".app.activities.AiTermuxActivity"
+            android:label="AI Termux"
+            android:exported="false" />
+
+        <activity
             android:name=".app.TerminalDetailActivity"
             android:label="@string/application_name" />
 

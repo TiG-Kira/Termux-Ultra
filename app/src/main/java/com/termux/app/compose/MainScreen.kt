@@ -277,5 +277,8 @@ fun MainScreen(
                 }
             }
         }
+
+        // 停止/退出确认弹窗（状态驱动，在主 Compose 树内渲染，避免 addView overlay 白屏）
+        StopConfirmDialogHost()
     }
 }

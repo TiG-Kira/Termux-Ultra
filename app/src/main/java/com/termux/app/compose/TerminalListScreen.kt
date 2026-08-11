@@ -19,6 +19,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CheckCircleOutline
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.ErrorOutline
+import androidx.compose.material.icons.rounded.ExpandLess
+import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.runtime.*
@@ -81,6 +83,8 @@ fun TerminalListScreen(
     var searchExpanded by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
     var isRefreshing by remember { mutableStateOf(false) }
+    val aiTermuxEnabled = context.getSharedPreferences("app_settings", android.content.Context.MODE_PRIVATE)
+        .getBoolean("ai_termux_enabled", true)
     // 已结束（被杀死/自然退出）的会话信息列表，从 TermuxService 拉取。
     // 这些会话已从 mTermuxSessions 移除，不计入会话数量，但以"死亡卡片"形式保留显示，
     // 直到用户手动消除。红色标题 + "退出代码:N" 小字。
@@ -358,6 +362,12 @@ fun TerminalListScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                     contentPadding = PaddingValues(vertical = 8.dp)
                 ) {
+            if (aiTermuxEnabled) {
+                item(span = { GridItemSpan(2) }) {
+                    AiTermuxEntryCard()
+                }
+            }
+
             if (showWelcomeCard) {
                 item(span = { GridItemSpan(2) }) {
                     WelcomeCard(
@@ -424,6 +434,13 @@ fun TerminalListScreen(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center
                     ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_terminal),
+                            contentDescription = null,
+                            modifier = Modifier.size(56.dp),
+                            tint = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
                         Text(
                             text = stringResource(R.string.no_terminal),
                             fontSize = 15.sp,
@@ -746,58 +763,110 @@ fun KeepAliveWarningCard(onClose: () -> Unit) {
     val cardColor = if (isDark) Color(0xFF3D3514) else Color(0xFFFFF9C4)
     val iconColor = Color(0xFFFDD835)
     val textColor = if (isDark) Color.White else Color.Black
+    var collapsed by remember { mutableStateOf(false) }
 
     androidx.compose.material3.Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 8.dp),
+            .padding(vertical = 8.dp)
+            .then(if (collapsed) Modifier.clickable { collapsed = false } else Modifier),
         colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = cardColor)
     ) {
-        Box(modifier = Modifier.fillMaxSize()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .offset(30.dp, 60.dp),
-                contentAlignment = Alignment.BottomEnd
-            ) {
-                Material3Icon(
-                    modifier = Modifier.size(120.dp).alpha(0.8f),
-                    imageVector = Icons.Rounded.Warning,
-                    tint = iconColor,
-                    contentDescription = null
-                )
-            }
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(all = 18.dp)
-            ) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_close),
-                    contentDescription = stringResource(R.string.ok),
+        Box(modifier = Modifier.fillMaxWidth()) {
+            if (!collapsed) {
+                Box(
                     modifier = Modifier
-                        .size(24.dp)
-                        .align(Alignment.End)
-                        .clickable(onClick = onClose),
-                    tint = textColor.copy(alpha = 0.6f)
-                )
-                Text(
-                    modifier = Modifier.fillMaxWidth(),
-                    text = stringResource(R.string.keep_alive_warning_title),
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = textColor,
-                    lineHeight = 26.sp
-                )
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    modifier = Modifier.fillMaxWidth(),
-                    text = stringResource(R.string.keep_alive_warning_message),
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = textColor,
-                    lineHeight = 21.sp
-                )
+                        .fillMaxSize()
+                        .offset(30.dp, 60.dp),
+                    contentAlignment = Alignment.BottomEnd
+                ) {
+                    Material3Icon(
+                        modifier = Modifier.size(120.dp).alpha(0.8f),
+                        imageVector = Icons.Rounded.Warning,
+                        tint = iconColor,
+                        contentDescription = null
+                    )
+                }
+            }
+            if (collapsed) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Material3Icon(
+                        imageVector = Icons.Rounded.Warning,
+                        tint = iconColor,
+                        contentDescription = null,
+                        modifier = Modifier.size(22.dp)
+                    )
+                    Text(
+                        text = stringResource(R.string.keep_alive_warning_title),
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = textColor,
+                        maxLines = 1
+                    )
+                    Text(
+                        text = stringResource(R.string.keep_alive_warning_message),
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Normal,
+                        color = textColor.copy(alpha = 0.8f),
+                        maxLines = 1,
+                        modifier = Modifier.weight(1f),
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                    )
+                }
+            } else {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(all = 18.dp)
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_close),
+                        contentDescription = stringResource(R.string.ok),
+                        modifier = Modifier
+                            .size(24.dp)
+                            .align(Alignment.End)
+                            .clickable(onClick = onClose),
+                        tint = textColor.copy(alpha = 0.6f)
+                    )
+                    Text(
+                        modifier = Modifier.fillMaxWidth(),
+                        text = stringResource(R.string.keep_alive_warning_title),
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = textColor,
+                        lineHeight = 26.sp
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        modifier = Modifier.fillMaxWidth(),
+                        text = stringResource(R.string.keep_alive_warning_message),
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = textColor,
+                        lineHeight = 21.sp
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .offset(x = 6.dp, y = 4.dp)
+                        .size(20.dp)
+                        .clickable { collapsed = true },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Material3Icon(
+                        imageVector = Icons.Rounded.ExpandLess,
+                        contentDescription = null,
+                        tint = textColor.copy(alpha = 0.45f),
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
             }
         }
     }
@@ -809,49 +878,101 @@ fun WelcomeCard(text: String, onClose: () -> Unit) {
     val cardColor = if (isDark) Color(0xFF1A1A1A) else Color.White
     val iconColor = if (isDark) Color(0xFF666666) else Color(0xFFCCCCCC)
     val textColor = if (isDark) Color.White else Color.Black
+    var collapsed by remember { mutableStateOf(false) }
 
     androidx.compose.material3.Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 8.dp),
+            .padding(vertical = 8.dp)
+            .then(if (collapsed) Modifier.clickable { collapsed = false } else Modifier),
         colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = cardColor)
     ) {
-        Box(modifier = Modifier.fillMaxSize()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .offset(30.dp, 30.dp),
-                contentAlignment = Alignment.BottomEnd
-            ) {
-                Material3Icon(
-                    modifier = Modifier.size(120.dp).alpha(0.8f),
-                    imageVector = Icons.Rounded.Info,
-                    tint = iconColor,
-                    contentDescription = null
-                )
-            }
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(all = 18.dp)
-            ) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_close),
-                    contentDescription = stringResource(R.string.ok),
+        Box(modifier = Modifier.fillMaxWidth()) {
+            if (!collapsed) {
+                Box(
                     modifier = Modifier
-                        .size(24.dp)
-                        .align(Alignment.End)
-                        .clickable(onClick = onClose),
-                    tint = textColor.copy(alpha = 0.6f)
-                )
-                Text(
-                    modifier = Modifier.fillMaxWidth(),
-                    text = text,
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = textColor,
-                    lineHeight = 22.sp
-                )
+                        .fillMaxSize()
+                        .offset(30.dp, 30.dp),
+                    contentAlignment = Alignment.BottomEnd
+                ) {
+                    Material3Icon(
+                        modifier = Modifier.size(120.dp).alpha(0.8f),
+                        imageVector = Icons.Rounded.Info,
+                        tint = iconColor,
+                        contentDescription = null
+                    )
+                }
+            }
+            if (collapsed) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Material3Icon(
+                        imageVector = Icons.Rounded.Info,
+                        tint = iconColor,
+                        contentDescription = null,
+                        modifier = Modifier.size(22.dp)
+                    )
+                    Text(
+                        text = stringResource(R.string.terminal_welcome_title),
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = textColor,
+                        maxLines = 1
+                    )
+                    Text(
+                        text = text,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Normal,
+                        color = textColor.copy(alpha = 0.7f),
+                        maxLines = 1,
+                        modifier = Modifier.weight(1f),
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                    )
+                }
+            } else {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(all = 18.dp)
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_close),
+                        contentDescription = stringResource(R.string.ok),
+                        modifier = Modifier
+                            .size(24.dp)
+                            .align(Alignment.End)
+                            .clickable(onClick = onClose),
+                        tint = textColor.copy(alpha = 0.6f)
+                    )
+                    Text(
+                        modifier = Modifier.fillMaxWidth(),
+                        text = text,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = textColor,
+                        lineHeight = 22.sp
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .offset(x = 6.dp, y = 4.dp)
+                        .size(20.dp)
+                        .clickable { collapsed = true },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Material3Icon(
+                        imageVector = Icons.Rounded.ExpandLess,
+                        contentDescription = null,
+                        tint = textColor.copy(alpha = 0.4f),
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
             }
         }
     }
@@ -893,6 +1014,7 @@ fun ServiceStatusCard(
         }
     }
     val textColor = if (isDark) Color.White else Color.Black
+    var collapsed by remember { mutableStateOf(false) }
 
     val title = when (status) {
         ServiceStatus.NORMAL -> stringResource(R.string.service_status_normal)
@@ -918,45 +1040,96 @@ fun ServiceStatusCard(
     androidx.compose.material3.Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 8.dp),
+            .padding(vertical = 8.dp)
+            .then(if (collapsed) Modifier.clickable { collapsed = false } else Modifier),
         colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = cardColor)
     ) {
-        Box(modifier = Modifier.fillMaxSize()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .offset(35.dp, 35.dp),
-                contentAlignment = Alignment.BottomEnd
-            ) {
-                Material3Icon(
-                    modifier = Modifier.size(120.dp).alpha(0.8f),
-                    imageVector = icon,
-                    tint = iconColor,
-                    contentDescription = null
-                )
+        Box(modifier = Modifier.fillMaxWidth()) {
+            if (!collapsed) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .offset(35.dp, 35.dp),
+                    contentAlignment = Alignment.BottomEnd
+                ) {
+                    Material3Icon(
+                        modifier = Modifier.size(120.dp).alpha(0.8f),
+                        imageVector = icon,
+                        tint = iconColor,
+                        contentDescription = null
+                    )
+                }
             }
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(all = 18.dp)
-            ) {
-                Text(
-                    modifier = Modifier.fillMaxWidth(),
-                    text = title,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = textColor,
-                    lineHeight = 26.sp
-                )
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    modifier = Modifier.fillMaxWidth(),
-                    text = description,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = textColor,
-                    lineHeight = 21.sp
-                )
+            if (collapsed) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Material3Icon(
+                        imageVector = icon,
+                        tint = iconColor,
+                        contentDescription = null,
+                        modifier = Modifier.size(22.dp)
+                    )
+                    Text(
+                        text = title,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = textColor,
+                        maxLines = 1
+                    )
+                    Text(
+                        text = description,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Normal,
+                        color = textColor.copy(alpha = 0.8f),
+                        maxLines = 1,
+                        modifier = Modifier.weight(1f),
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                    )
+                }
+            } else {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(all = 18.dp)
+                ) {
+                    Text(
+                        modifier = Modifier.fillMaxWidth(),
+                        text = title,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = textColor,
+                        lineHeight = 26.sp
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        modifier = Modifier.fillMaxWidth(),
+                        text = description,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = textColor,
+                        lineHeight = 21.sp
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .offset(x = 6.dp, y = 4.dp)
+                        .size(20.dp)
+                        .clickable { collapsed = true },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Material3Icon(
+                        imageVector = Icons.Rounded.ExpandLess,
+                        contentDescription = null,
+                        tint = textColor.copy(alpha = 0.45f),
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
             }
         }
     }
@@ -976,8 +1149,8 @@ fun LowAndroidWarningCard() {
     var forceEnabled by remember { mutableStateOf(ApiCompat.forceEnabledFeatures(context)) }
     val hasForce = forceEnabled.isNotEmpty()
     var showDisableDialog by remember { mutableStateOf(false) }
+    var collapsed by remember { mutableStateOf(false) }
 
-    // 底色/图标色：有强制启用 -> 红色；无强制启用 -> 黄色（原有）
     val cardColor = if (hasForce) {
         if (isDark) Color(0xFF3B1414) else Color(0xFFFFEBEE)
     } else {
@@ -1003,86 +1176,138 @@ fun LowAndroidWarningCard() {
     } else {
         stringResource(R.string.low_android_warning_message)
     }
+    val briefDescription = "$versionInfo · $message"
 
     androidx.compose.material3.Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 8.dp),
+            .padding(vertical = 8.dp)
+            .then(if (collapsed) Modifier.clickable { collapsed = false } else Modifier),
         colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = cardColor)
     ) {
-        Box(modifier = Modifier.fillMaxSize()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .offset(35.dp, 35.dp),
-                contentAlignment = Alignment.BottomEnd
-            ) {
-                Material3Icon(
-                    modifier = Modifier.size(120.dp).alpha(0.8f),
-                    imageVector = Icons.Rounded.Warning,
-                    tint = iconColor,
-                    contentDescription = null
-                )
+        Box(modifier = Modifier.fillMaxWidth()) {
+            if (!collapsed) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .offset(35.dp, 35.dp),
+                    contentAlignment = Alignment.BottomEnd
+                ) {
+                    Material3Icon(
+                        modifier = Modifier.size(120.dp).alpha(0.8f),
+                        imageVector = Icons.Rounded.Warning,
+                        tint = iconColor,
+                        contentDescription = null
+                    )
+                }
             }
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(all = 18.dp)
-            ) {
-                Text(
-                    modifier = Modifier.fillMaxWidth(),
-                    text = title,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = textColor,
-                    lineHeight = 26.sp
-                )
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    modifier = Modifier.fillMaxWidth(),
-                    text = versionInfo,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = textColor,
-                    lineHeight = 21.sp
-                )
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    modifier = Modifier.fillMaxWidth(),
-                    text = message,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = textColor,
-                    lineHeight = 21.sp
-                )
-                if (hasForce) {
-                    Spacer(Modifier.height(12.dp))
-                    Row(
+            if (collapsed) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Material3Icon(
+                        imageVector = Icons.Rounded.Warning,
+                        tint = iconColor,
+                        contentDescription = null,
+                        modifier = Modifier.size(22.dp)
+                    )
+                    Text(
+                        text = title,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = textColor,
+                        maxLines = 1
+                    )
+                    Text(
+                        text = briefDescription,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Normal,
+                        color = textColor.copy(alpha = 0.8f),
+                        maxLines = 1,
+                        modifier = Modifier.weight(1f),
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                    )
+                }
+            } else {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(all = 18.dp)
+                ) {
+                    Text(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.End
-                    ) {
-                        androidx.compose.material3.Button(
-                            onClick = { showDisableDialog = true },
-                            modifier = Modifier.clip(RoundedCornerShape(10.dp)),
-                            colors = androidx.compose.material3.ButtonDefaults.buttonColors(
-                                containerColor = iconColor,
-                                contentColor = Color.White
-                            )
+                        text = title,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = textColor,
+                        lineHeight = 26.sp
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        modifier = Modifier.fillMaxWidth(),
+                        text = versionInfo,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = textColor,
+                        lineHeight = 21.sp
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        modifier = Modifier.fillMaxWidth(),
+                        text = message,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = textColor,
+                        lineHeight = 21.sp
+                    )
+                    if (hasForce) {
+                        Spacer(Modifier.height(12.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End
                         ) {
-                            Material3Icon(
-                                imageVector = Icons.Rounded.Close,
-                                contentDescription = null,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(Modifier.width(6.dp))
-                            Text(
-                                text = stringResource(R.string.low_android_force_disable_button),
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White
-                            )
+                            androidx.compose.material3.Button(
+                                onClick = { showDisableDialog = true },
+                                modifier = Modifier.clip(RoundedCornerShape(10.dp)),
+                                colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                                    containerColor = iconColor,
+                                    contentColor = Color.White
+                                )
+                            ) {
+                                Material3Icon(
+                                    imageVector = Icons.Rounded.Close,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(Modifier.width(6.dp))
+                                Text(
+                                    text = stringResource(R.string.low_android_force_disable_button),
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White
+                                )
+                            }
                         }
                     }
+                }
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .offset(x = 6.dp, y = 4.dp)
+                        .size(20.dp)
+                        .clickable { collapsed = true },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Material3Icon(
+                        imageVector = Icons.Rounded.ExpandLess,
+                        contentDescription = null,
+                        tint = textColor.copy(alpha = 0.45f),
+                        modifier = Modifier.size(18.dp)
+                    )
                 }
             }
         }

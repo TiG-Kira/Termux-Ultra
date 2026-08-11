@@ -234,15 +234,19 @@ class MainActivity : ComponentActivity() {
         super.onStart()
         isVisible = true
 
-        // Notification "end sessions" action routed us here; show warning dialog if needed.
+        // 通知"结束会话/停止程序"按钮跳转到此。延迟触发弹窗，确保主页 Compose
+        // 内容先完成首帧渲染，避免白屏后弹窗。
         if (pendingTriggerStopService) {
             pendingTriggerStopService = false
-            com.termux.app.compose.StopConfirmDialog.start(this, isQuitApp = false)
+            handler.postDelayed({
+                com.termux.app.compose.StopConfirmDialog.start(this, isQuitApp = false)
+            }, 300)
         }
-        // Notification "quit app" action routed us here; show warning dialog if needed.
         if (pendingTriggerQuitApp) {
             pendingTriggerQuitApp = false
-            com.termux.app.compose.StopConfirmDialog.start(this, isQuitApp = true)
+            handler.postDelayed({
+                com.termux.app.compose.StopConfirmDialog.start(this, isQuitApp = true)
+            }, 300)
         }
     }
 

@@ -3,12 +3,14 @@ package com.termux.app.compose
 import android.content.Context
 import android.content.Intent
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowForward
+import androidx.compose.material.icons.rounded.ExpandLess
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -20,8 +22,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -294,8 +298,8 @@ fun ResourceCard(
                             Text(text = "复制指令", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = if (isFeatureDisabled) disabledTextColor else Color.White)
                         }
                     } else {
-                        val isQemuOnVnc = item.type == "qemu_on_vnc"
-                        val buttonText = if (isExpanded) "收起" else if (isQemuOnVnc) "配置" else context.getString(R.string.execute)
+                        val isConfigType = item.type == "qemu_on_vnc"
+                        val buttonText = if (isExpanded) "收起" else if (isConfigType) "配置" else context.getString(R.string.execute)
                         Button(
                             onClick = {
                                 if (isFeatureDisabled) { showDisabledDialog { onToggleExpand() }; return@Button }
@@ -786,6 +790,180 @@ fun WarningNoteCard(modifier: Modifier = Modifier) {
                 ),
                 modifier = Modifier.weight(1f)
             )
+        }
+    }
+}
+
+/** AI Termux 资源中心入口卡片 */
+@Composable
+fun AiTermuxEntryCard(modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    var collapsed by remember { mutableStateOf(false) }
+    val gradient = Brush.linearGradient(
+        colors = listOf(
+            Color(0xFF6366F1),
+            Color(0xFF8B5CF6),
+            Color(0xFFEC4899)
+        )
+    )
+    MiuixCard(
+        modifier = modifier,
+        onClick = {
+            if (collapsed) {
+                collapsed = false
+            } else {
+                val intent = Intent(context, com.termux.app.activities.AiTermuxActivity::class.java)
+                context.startActivity(intent)
+            }
+        },
+        showIndication = true
+    ) {
+        Box(modifier = Modifier.fillMaxWidth()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(gradient)
+                    .drawWithCache {
+                        onDrawWithContent {
+                            if (!collapsed) {
+                                drawCircle(
+                                    color = Color.White.copy(alpha = 0.12f),
+                                    radius = 55.dp.toPx(),
+                                    center = androidx.compose.ui.geometry.Offset(
+                                        x = size.width - 15.dp.toPx(),
+                                        y = 5.dp.toPx()
+                                    )
+                                )
+                                drawCircle(
+                                    color = Color.White.copy(alpha = 0.08f),
+                                    radius = 30.dp.toPx(),
+                                    center = androidx.compose.ui.geometry.Offset(
+                                        x = 10.dp.toPx(),
+                                        y = size.height + 10.dp.toPx()
+                                    )
+                                )
+                            }
+                            drawContent()
+                        }
+                    }
+                    .padding(
+                        horizontal = if (collapsed) 14.dp else 16.dp,
+                        vertical = if (collapsed) 10.dp else 14.dp
+                    )
+            ) {
+                if (collapsed) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_lightbulb),
+                            contentDescription = null,
+                            modifier = Modifier.size(22.dp),
+                            tint = Color.White
+                        )
+                        Text(
+                            text = "AI Termux",
+                            style = TextStyle(
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                        )
+                        Text(
+                            text = "用自然语言管理 Termux 会话·虚拟机·VNC·文件",
+                            style = TextStyle(
+                                fontSize = 14.sp,
+                                color = Color.White.copy(alpha = 0.85f),
+                            ),
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                } else {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(60.dp)
+                                .clip(RoundedCornerShape(18.dp))
+                                .background(Color.White.copy(alpha = 0.18f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_lightbulb),
+                                contentDescription = null,
+                                modifier = Modifier.size(32.dp),
+                                tint = Color.White
+                            )
+                        }
+
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "AI Termux",
+                                style = TextStyle(
+                                    fontSize = 19.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White
+                                )
+                            )
+                            Spacer(Modifier.height(3.dp))
+                            Text(
+                                text = "用自然语言管理 Termux\n会话·虚拟机·VNC·文件",
+                                style = TextStyle(
+                                    fontSize = 13.sp,
+                                    color = Color.White.copy(alpha = 0.9f),
+                                    lineHeight = 19.sp
+                                )
+                            )
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(999.dp))
+                                .background(Color.White.copy(alpha = 0.22f))
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                                Text(
+                                    text = "进入",
+                                    style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
+                                )
+                                Icon(
+                                    imageVector = androidx.compose.material.icons.Icons.AutoMirrored.Rounded.ArrowForward,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp),
+                                    tint = Color.White
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            if (!collapsed) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .offset(x = 6.dp, y = 4.dp)
+                        .size(20.dp)
+                        .clickable { collapsed = true },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.ExpandLess,
+                        contentDescription = null,
+                        tint = Color.White.copy(alpha = 0.7f),
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
         }
     }
 }

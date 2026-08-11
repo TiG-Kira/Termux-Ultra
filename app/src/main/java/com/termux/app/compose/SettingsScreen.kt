@@ -50,6 +50,8 @@ import androidx.compose.material3.LinearProgressIndicator
 import com.termux.R
 import com.termux.app.LocaleHelper
 import com.termux.app.activities.SettingsActivity
+import com.termux.app.compose.AiTermuxPrefs
+import com.termux.app.compose.AiTermuxConfig
 import java.io.File
 
 
@@ -78,9 +80,12 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
     var restoreTotal by remember { mutableStateOf(100) }
     var restoreMessage by remember { mutableStateOf("") }
     var launchRestore by remember { mutableStateOf(false) }
+    var showAiReconfigConfirm by remember { mutableStateOf(false) }
+    var showAiClearConfirm by remember { mutableStateOf(false) }
     var showRestartPrompt by remember { mutableStateOf(false) }
     val prefs = remember { context.getSharedPreferences("app_settings", Context.MODE_PRIVATE) }
     var vncEnabled by remember { mutableStateOf(prefs.getBoolean("vnc_enabled", false)) }
+    var aiTermuxEnabled by remember { mutableStateOf(prefs.getBoolean("ai_termux_enabled", true)) }
 
     // Integrated Termux tools (default off)
     var termuxApiEnabled by remember { mutableStateOf(IntegratedTools.isEnabled(context, IntegratedTools.Tool.TERMUX_API)) }
@@ -511,6 +516,58 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
                 }
             }
 
+            // ---------- AI Termux ----------
+            item { SmallTitle(text = "AI Termux") }
+            item {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                ) {
+                    Column {
+                        SwitchPreference(
+                            title = "AI Termux",
+                            summary = "开启后显示终端页 AI Termux 入口卡片及相关设置",
+                            checked = aiTermuxEnabled,
+                            onCheckedChange = {
+                                aiTermuxEnabled = it
+                                prefs.edit().putBoolean("ai_termux_enabled", it).apply()
+                            },
+                            startAction = {
+                                SettingIcon(R.drawable.ic_lightbulb, contentDescription = "AI Termux")
+                            }
+                        )
+                        if (aiTermuxEnabled) {
+                            Divider(
+                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f),
+                                modifier = Modifier.padding(start = 72.dp, end = 16.dp)
+                            )
+                            ArrowPreference(
+                                title = "重新配置 AI",
+                                summary = "返回配置页面修改 API Key、模型等参数",
+                                onClick = { showAiReconfigConfirm = true },
+                                startAction = {
+                                    SettingIcon(R.drawable.ic_refresh, contentDescription = "重新配置 AI")
+                                }
+                            )
+                            Divider(
+                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f),
+                                modifier = Modifier.padding(start = 72.dp, end = 16.dp)
+                            )
+                            ArrowPreference(
+                                title = "清空对话记录",
+                                summary = "清空当前 AI Termux 的全部聊天记录",
+                                onClick = { showAiClearConfirm = true },
+                                startAction = {
+                                    SettingIcon(R.drawable.ic_delete, contentDescription = "清空对话记录")
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+
             // ---------- Tool Configuration (conditional, only for enabled tools) ----------
             if (toolConfigItems.isNotEmpty()) {
                 item { SmallTitle(text = context.getString(R.string.tool_config_category)) }
@@ -547,11 +604,9 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
         onDismissRequest = { showApiHelpDialog = false }
     ) {
         Column(modifier = Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
-            Text(
-                text = context.getString(R.string.termux_api_help_content),
-                fontSize = 14.sp,
-                color = MiuixTheme.colorScheme.onSurface,
-                lineHeight = 22.sp
+            HelpContentWithCopyableCommands(
+                content = context.getString(R.string.termux_api_help_content),
+                context = context
             )
         }
         Spacer(Modifier.height(12.dp))
@@ -569,11 +624,9 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
         onDismissRequest = { showBootHelpDialog = false }
     ) {
         Column(modifier = Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
-            Text(
-                text = context.getString(R.string.termux_boot_help_content),
-                fontSize = 14.sp,
-                color = MiuixTheme.colorScheme.onSurface,
-                lineHeight = 22.sp
+            HelpContentWithCopyableCommands(
+                content = context.getString(R.string.termux_boot_help_content),
+                context = context
             )
         }
         Spacer(Modifier.height(12.dp))
@@ -741,6 +794,74 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
             modifier = Modifier.fillMaxWidth()
         )
     }
+
+    // ---------- AI Termux：重新配置确认 ----------
+    if (showAiReconfigConfirm) {
+        OverlayDialog(
+            show = true,
+            title = "重新配置 AI？",
+            summary = "返回配置页面可以修改 API Key、模型等参数，历史对话会被保留。",
+            onDismissRequest = { showAiReconfigConfirm = false }
+        ) {
+            Row(
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                TextButton(
+                    text = "取消",
+                    onClick = { showAiReconfigConfirm = false },
+                    modifier = Modifier.weight(1f)
+                )
+                Spacer(Modifier.width(20.dp))
+                TextButton(
+                    text = "重配置",
+                    onClick = {
+                        showAiReconfigConfirm = false
+                        val cfg = AiTermuxPrefs.getConfig(context)
+                        AiTermuxPrefs.saveConfig(
+                            context,
+                            AiTermuxConfig(
+                                providerConfig = cfg.providerConfig.copy(apiKey = cfg.providerConfig.apiKey),
+                                customSystemPrompt = cfg.customSystemPrompt,
+                                isConfigured = false
+                            )
+                        )
+                    },
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+    }
+
+    // ---------- AI Termux：清空对话确认 ----------
+    if (showAiClearConfirm) {
+        OverlayDialog(
+            show = true,
+            title = "清空对话记录？",
+            summary = "当前对话将被清空且不可恢复，是否继续？",
+            onDismissRequest = { showAiClearConfirm = false }
+        ) {
+            Row(
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                TextButton(
+                    text = "取消",
+                    onClick = { showAiClearConfirm = false },
+                    modifier = Modifier.weight(1f)
+                )
+                Spacer(Modifier.width(20.dp))
+                TextButton(
+                    text = "清空",
+                    onClick = {
+                        showAiClearConfirm = false
+                        AiTermuxPrefs.clearChatHistory(context)
+                    },
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+    }
 }
 
 @Composable
@@ -854,5 +975,106 @@ private fun IntegratedToolSwitch(
                 SettingIcon(iconRes, contentDescription = title)
             }
         )
+    }
+}
+
+/**
+ * 解析帮助文本，将命令行渲染为可一键复制的行，其余渲染为普通文本。
+ *
+ * 判定规则（行首去空格后）：
+ *  - 以 `•` 开头 → 命令描述行，其中 ` — ` 后为说明，前面是命令 → 提取命令部分可复制
+ *  - 以 `pkg ` / `mkdir ` / `termux-` / `#!/` / `#` / `sshd` / `termux-wake-lock` 开头 → 整行可复制
+ *  - 以数字+`.` 开头（如 `1. `）→ 步骤说明行，不可复制
+ *  - 其余 → 普通文本
+ */
+@Composable
+private fun HelpContentWithCopyableCommands(
+    content: String,
+    context: Context
+) {
+    val lines = content.split("\n")
+    val clipboard = remember {
+        context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+    }
+
+    lines.forEachIndexed { index, rawLine ->
+        val trimmed = rawLine.trim()
+        if (trimmed.isEmpty()) {
+            Spacer(Modifier.height(8.dp))
+            return@forEachIndexed
+        }
+
+        // 提取命令部分
+        val commandText: String? = when {
+            // "• termux-battery-status — 电池信息" → 命令是 "termux-battery-status"
+            trimmed.startsWith("• ") -> {
+                val afterBullet = trimmed.substring(2).trim()
+                val dashIdx = afterBullet.indexOf(" — ")
+                if (dashIdx > 0) afterBullet.substring(0, dashIdx).trim()
+                else if (afterBullet.startsWith("termux-") || afterBullet.startsWith("pkg ")) afterBullet
+                else null
+            }
+            // 独立命令行
+            trimmed.startsWith("pkg ") ||
+            trimmed.startsWith("mkdir ") ||
+            trimmed.startsWith("termux-") ||
+            trimmed.startsWith("#!/") ||
+            trimmed.startsWith("sshd") ||
+            trimmed.startsWith("termux-wake-lock") -> trimmed
+            // "   #!/data/..." 缩进的脚本行
+            rawLine.trimStart().startsWith("#!/") -> rawLine.trimStart()
+            rawLine.trimStart().startsWith("termux-wake-lock") -> rawLine.trimStart()
+            rawLine.trimStart().startsWith("sshd") -> rawLine.trimStart()
+            else -> null
+        }
+
+        if (commandText != null) {
+            // 可复制命令行：命令文本 + 复制图标
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = rawLine,
+                    fontSize = 13.sp,
+                    color = MiuixTheme.colorScheme.onSurface,
+                    lineHeight = 20.sp,
+                    modifier = Modifier.weight(1f)
+                )
+                Spacer(Modifier.width(4.dp))
+                Box(
+                    modifier = Modifier
+                        .size(28.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(MiuixTheme.colorScheme.primary.copy(alpha = 0.12f))
+                        .clickable {
+                            val clip = android.content.ClipData.newPlainText("命令", commandText)
+                            clipboard.setPrimaryClip(clip)
+                            android.widget.Toast.makeText(
+                                context, "已复制: $commandText",
+                                android.widget.Toast.LENGTH_SHORT
+                            ).show()
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_copy),
+                        contentDescription = "复制",
+                        modifier = Modifier.size(16.dp),
+                        tint = MiuixTheme.colorScheme.primary
+                    )
+                }
+            }
+        } else {
+            // 普通文本行
+            Text(
+                text = rawLine,
+                fontSize = 14.sp,
+                color = MiuixTheme.colorScheme.onSurface,
+                lineHeight = 22.sp
+            )
+        }
     }
 }

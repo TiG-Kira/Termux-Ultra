@@ -87,47 +87,39 @@ object ProcessDetector {
                 val pid = name.toIntOrNull() ?: continue
                 if (pid == myPid) continue
 
-                // 1) exe 指向 "proot" 或 "proot-distro" 等真实可执行文件？
+                val argv = readCmdline(pidDir) ?: continue
+                if (argv.isEmpty()) continue
+                val argv0 = argv[0]
+                val argvJoined = argv.joinToString(" ")
+
+                // 判断是否为 proot 进程：
+                //  - exe 名为 "proot"，或
+                //  - cmdline[0] 路径含 "bin/proot"（如 /data/.../usr/bin/proot）
                 val exeFile = File(pidDir, "exe")
                 val exeName = try {
                     exeFile.canonicalPath.substringAfterLast('/')
                 } catch (_: Exception) {
                     ""
                 }
-                val exeLooksLikeProot = exeName == "proot" || exeName.startsWith("proot-")
+                val isProotProcess = exeName == "proot" ||
+                    argv0.contains("bin/proot") ||
+                    argv0.endsWith("proot")
 
-                // 2) 如果 exe 匹配 proot，再检查 cmdline 是否有 "-r" 参数指向某个 rootfs
-                //    （排除非容器用途的 proot 调用，例如 proot --help）
-                if (exeLooksLikeProot) {
-                    val argv = readCmdline(pidDir) ?: continue
-                    // argv[0] 是可执行文件，argv[1..] 是参数
-                    var i = 1
-                    while (i < argv.size) {
-                        if (argv[i] == "-r" && i + 1 < argv.size) {
-                            val rootFsPath = argv[i + 1]
-                            // 只要 -r 指向的路径包含 "rootfs" 或 "debian-container" 等典型关键字，
-                            // 就认为是正在运行中的容器
-                            if (rootFsPath.contains("/rootfs") ||
-                                rootFsPath.contains("debian-container") ||
-                                rootFsPath.contains("container")) {
-                                return true
-                            }
-                        }
-                        i++
-                    }
-                }
+                if (!isProotProcess) continue
 
-                // 3) 兜底：exe 不直接叫 proot（例如 proot-distro 包装脚本里再 exec proot），
-                //    但 cmdline 里出现 "/.../usr/bin/proot" 和 "-r" 组合，也算
-                val argv = readCmdline(pidDir) ?: continue
-                val argv0 = argv.firstOrNull() ?: ""
-                val argvJoined = argv.joinToString(" ")
-                if ((argv0.contains("bin/proot") || argvJoined.contains(" /usr/bin/proot ")) &&
-                    (argvJoined.contains(" -r /") || argvJoined.contains(" -r$ ") || argvJoined.contains(" -r\""))) {
-                    if (argvJoined.contains("/rootfs") || argvJoined.contains("container")) {
-                        return true
-                    }
+                // proot 容器启动时必定带 rootfs 参数，支持以下所有变体：
+                //   -r <path>          （proot 原生短选项）
+                //   -R <path>          （proot 短选项，等价于 -r + 推荐 defaults）
+                //   --rootfs <path>    （proot 长选项）
+                //   --rootfs=<path>    （proot-distro 常用格式，单参数）
+                // 只要含任意一种 rootfs 参数，就判定为容器在运行
+                val hasRootfsArg = argv.any { arg ->
+                    arg == "-r" || arg == "-R" || arg == "--rootfs" || arg.startsWith("--rootfs=")
                 }
+                // 兜底：cmdline 中直接出现 " -r /" 或 " -R /"（proot 原生短选项 + 绝对路径）
+                val hasRootfsInline = argvJoined.contains(" -r /") || argvJoined.contains(" -R /")
+
+                if (hasRootfsArg || hasRootfsInline) return true
             }
         } catch (_: Exception) {
             return false

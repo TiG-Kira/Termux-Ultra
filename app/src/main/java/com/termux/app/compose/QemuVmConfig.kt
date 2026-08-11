@@ -42,11 +42,15 @@ data class QemuVmConfig(
     @Deprecated("Use audioMode instead; kept for backward compatibility with saved configs")
     val hasSound: Boolean = false,
     val audioMode: String = AudioMode.VNC_RFB, // 默认 VNC RFB 方案
-    val shareDir: String = "\$HOME/storage/shared/qemu_share",
+    val shareDir: String = "\$HOME/storage/shared/Termux/Sharing",
     val bootOrder: List<String> = listOf("c"),
     val vncPort: Int = 5900,
     val diskInterface: String = "ide",   // 硬盘连接方式: ide / virtio / scsi / sata
-    val machineType: String = "q35"      // 虚拟PC类型: pc / q35 / isapc
+    val machineType: String = "q35",     // 虚拟PC类型: pc / q35 / isapc
+    // ── 性能优化字段（可选，默认值保持旧有行为） ──
+    val cpuModelOverride: String? = null,      // 自定义 CPU 模型覆盖默认选择
+    val enableShareDir: Boolean = true,       // 是否启用 9p 共享目录（安装阶段可关闭以减少开销）
+    val ssdCacheMode: Boolean = false         // 磁盘是否启用 writeback 缓存模式（模拟 SSD）
 ) {
     /** 向后兼容：有效音频模式。audioMode=disabled 时若 hasSound=true 视为 vnc_rfb（旧数据迁移） */
     val effectiveAudioMode: String
@@ -55,6 +59,26 @@ data class QemuVmConfig(
             else -> audioMode
         }
     val effectiveHasSound: Boolean get() = effectiveAudioMode != AudioMode.DISABLED
+
+    /**
+     * 将 bootOrder 列表正确转换为 QEMU `-boot` 参数行。
+     * QEMU -boot 语法规则：
+     *   1. 设备顺序必须直接拼接字符：-boot order=dc (不是逗号分隔)
+     *   2. 选项（menu=on 等）必须使用独立的 -boot 参数
+     *   3. 不能写成 -boot order=d,c,menu=on (QEMU 会把逗号当参数分隔符解析)
+     */
+    internal fun buildBootArgs(): String {
+        val deviceChars = bootOrder.filter { it.length == 1 && it[0] in "cdnpr" }.joinToString("")
+        val options = bootOrder.filter { it.contains("=") }
+        val sb = StringBuilder()
+        if (deviceChars.isNotEmpty()) {
+            sb.append("    -boot order=$deviceChars\n")
+        }
+        for (opt in options) {
+            sb.append("    -boot $opt\n")
+        }
+        return sb.toString().trimEnd('\n')
+    }
 
     /**
      * 生成 QEMU 启动脚本。
@@ -111,6 +135,8 @@ data class QemuVmConfig(
         // 4. 如果是 install_iso / create_disk 模式，创建新硬盘
         if (mode == "install_iso" || mode == "create_disk") {
             sb.append("# 创建新硬盘\n")
+            sb.append("# 确保硬盘所在目录存在\n")
+            sb.append("mkdir -p \"\$(dirname \"$diskPath\")\"\n")
             sb.append("if [ ! -f \"$diskPath\" ]; then\n")
             sb.append("    echo \"正在创建新硬盘 (${newDiskSizeGB}GB, 格式 $newDiskFormat)...\"\n")
             sb.append("    qemu-img create -f $newDiskFormat \"$diskPath\" ${newDiskSizeGB}G\n")
@@ -228,7 +254,6 @@ data class QemuVmConfig(
         sb.append("sleep 1\n\n")
 
         val vncDisplay = vncPort - 5900
-        val bootOrderStr = bootOrder.joinToString("")
 
         // 将参数放入 bash 数组，避免 eval/引号嵌套造成的语法错误
         // 音频参数在 bash 脚本中动态生成，根据 PA 是否成功启动来决定
@@ -254,9 +279,10 @@ data class QemuVmConfig(
         sb.append("fi\n\n")
         sb.append("QEMU_ARGS=(\n")
         sb.append("    -M $machineType\n")
-        // 老系统使用兼容性更好的 CPU 模型
-        val cpuModel = if (machineType == "isapc" || machineType == "pc") "qemu64" else "core2duo"
-        sb.append("    -cpu $cpuModel\n")
+        // CPU 模型：优先用覆盖值，否则按机器类型选默认
+        val cpuModelFinal = cpuModelOverride
+            ?: if (machineType == "isapc" || machineType == "pc") "qemu64" else "core2duo"
+        sb.append("    -cpu $cpuModelFinal\n")
         sb.append("    -accel tcg,thread=multi\n")
         sb.append("    -smp $cpuCores,cores=$cpuCores,threads=1,sockets=1\n")
         sb.append("    -m $memoryMB\n")
@@ -266,35 +292,44 @@ data class QemuVmConfig(
         sb.append("    -vga virtio\n")
         sb.append("    -usb -device usb-tablet\n")
         sb.append("    -vnc localhost:$vncDisplay\${VNC_AUDIO_ARG}\n")
+        sb.append("    -no-reboot\n")
+        // SSD 级缓存选项（TCG 下模拟 SSD 行为，显著加速 I/O）
+        // aio=threads 比 aio=native 兼容性更好（Termux/容器环境可能没有 native AIO）
+        val driveCacheOption = if (ssdCacheMode) ",cache=writeback,aio=threads,discard=on,detect-zeroes=on" else ""
         // 根据硬盘连接方式生成参数
         when (diskInterface) {
             "virtio" -> {
-                sb.append("    -drive file=\"$diskPath\",if=none,id=hd0\n")
+                sb.append("    -drive file=\"$diskPath\",if=none,id=hd0$driveCacheOption\n")
                 sb.append("    -device virtio-blk-pci,drive=hd0\n")
             }
             "scsi" -> {
-                sb.append("    -drive file=\"$diskPath\",if=none,id=hd0\n")
+                sb.append("    -drive file=\"$diskPath\",if=none,id=hd0$driveCacheOption\n")
                 sb.append("    -device virtio-scsi-pci,id=scsi0\n")
                 sb.append("    -device scsi-hd,drive=hd0,bus=scsi0.0\n")
             }
             "sata" -> {
-                sb.append("    -drive file=\"$diskPath\",if=none,id=hd0\n")
+                sb.append("    -drive file=\"$diskPath\",if=none,id=hd0$driveCacheOption\n")
                 sb.append("    -device ich9-ahci,id=sata0\n")
                 sb.append("    -device ide-hd,drive=hd0,bus=sata0.0\n")
             }
             else -> {
-                // ide: 使用最简单的 -hda
+                // ide: 使用最简单的 -hda，通过全局参数指定缓存模式
                 sb.append("    -hda \"$diskPath\"\n")
+                if (ssdCacheMode) {
+                    sb.append("    -global ide-hd.drive-cache=writeback\n")
+                }
             }
         }
         if (isoPath != null) {
             sb.append("    -cdrom \"$isoPath\"\n")
         }
         sb.append("    -rtc base=localtime\n")
-        sb.append("    -boot order=$bootOrderStr\n")
-        // 9p virtio 文件夹共享：把 $shareDir 直接挂载到虚拟机
-        sb.append("    -fsdev local,security_model=mapped-file,id=fsdev_shared,path=\"$shareDir\"\n")
-        sb.append("    -device virtio-9p-pci,id=fs0,fsdev=fsdev_shared,mount_tag=hostshare\n")
+        sb.append(buildBootArgs()).append("\n")
+        // 9p virtio 文件夹共享（可选，安装阶段关闭以减少设备开销）
+        if (enableShareDir) {
+            sb.append("    -fsdev local,security_model=mapped-file,id=fsdev_shared,path=\"$shareDir\"\n")
+            sb.append("    -device virtio-9p-pci,id=fs0,fsdev=fsdev_shared,mount_tag=hostshare\n")
+        }
         sb.append(")\n\n")
 
         sb.append("echo \"正在启动 QEMU 虚拟机...\"\n")
@@ -474,9 +509,9 @@ data class QemuVmConfig(
         sb.append("# 4. 创建共享目录和新硬盘 (Termux 层)\n")
         sb.append("mkdir -p \"$shareDir\"\n")
         val vncDisplay = vncPort - 5900
-        val bootOrderStr = bootOrder.joinToString("")
 
         if (mode == "install_iso" || mode == "create_disk") {
+            sb.append("mkdir -p \"\$(dirname \"$diskPath\")\"\n")
             sb.append("if [ ! -f \"$diskPath\" ]; then\n")
             sb.append("    echo \"正在创建新硬盘 (${newDiskSizeGB}GB, 格式 $newDiskFormat)...\"\n")
             // 优先使用容器内的 qemu-img（容器版 / 原生版 qcow2 格式完全兼容）
@@ -578,7 +613,7 @@ data class QemuVmConfig(
             sb.append("        # ========== [PA修复2] 校验/补全配置文件（不再 rm -rf 清空预配置！） ==========\n")
             sb.append("        if [ ! -f /root/.config/pulse/client.conf ]; then\n")
             sb.append("            cat > /root/.config/pulse/client.conf <<PAEOF\n")
-            sb.append("allow-root-connection = 1\n")
+            sb.append("allow-root = yes\n")
             sb.append("disable-shm = true\n")
             sb.append("auto-connect-localhost = yes\n")
             sb.append("default-server = tcp:127.0.0.1:4713\n")
@@ -586,7 +621,7 @@ data class QemuVmConfig(
             sb.append("        fi\n")
             sb.append("        if [ ! -f /root/.config/pulse/daemon.conf ]; then\n")
             sb.append("            cat > /root/.config/pulse/daemon.conf <<PAEOF\n")
-            sb.append("allow-root-connection = 1\n")
+            sb.append("allow-root = yes\n")
             sb.append("exit-idle-time = -1\n")
             sb.append("flat-volumes = no\n")
             sb.append("shm-size-bytes = 0\n")
@@ -753,8 +788,9 @@ data class QemuVmConfig(
         // 生成 QEMU 参数数组（容器内路径使用 /root/shared 前缀）
         sb.append("QEMU_ARGS=(\n")
         sb.append("    -M $machineType\n")
-        val cpuModel = if (machineType == "isapc" || machineType == "pc") "qemu64" else "core2duo"
-        sb.append("    -cpu $cpuModel\n")
+        val cpuModelFinal = cpuModelOverride
+            ?: if (machineType == "isapc" || machineType == "pc") "qemu64" else "core2duo"
+        sb.append("    -cpu $cpuModelFinal\n")
         sb.append("    -accel tcg,thread=multi\n")
         sb.append("    -smp $cpuCores,cores=$cpuCores,threads=1,sockets=1\n")
         sb.append("    -m $memoryMB\n")
@@ -764,33 +800,40 @@ data class QemuVmConfig(
         }
         sb.append("    -vga virtio\n")
         sb.append("    -usb -device usb-tablet\n")
-        sb.append("    -vnc 0.0.0.0:$vncDisplay\${VNC_AUDIO_ARG}\n")  // 容器里用 0.0.0.0，localhost 也能连上
+        sb.append("    -vnc 0.0.0.0:$vncDisplay\${VNC_AUDIO_ARG}\n")
+        sb.append("    -no-reboot\n")
+        val driveCacheOption = if (ssdCacheMode) ",cache=writeback,aio=threads,discard=on,detect-zeroes=on" else ""
         when (diskInterface) {
             "virtio" -> {
-                sb.append("    -drive file=\"$containerDiskPath\",if=none,id=hd0\n")
+                sb.append("    -drive file=\"$containerDiskPath\",if=none,id=hd0$driveCacheOption\n")
                 sb.append("    -device virtio-blk-pci,drive=hd0\n")
             }
             "scsi" -> {
-                sb.append("    -drive file=\"$containerDiskPath\",if=none,id=hd0\n")
+                sb.append("    -drive file=\"$containerDiskPath\",if=none,id=hd0$driveCacheOption\n")
                 sb.append("    -device virtio-scsi-pci,id=scsi0\n")
                 sb.append("    -device scsi-hd,drive=hd0,bus=scsi0.0\n")
             }
             "sata" -> {
-                sb.append("    -drive file=\"$containerDiskPath\",if=none,id=hd0\n")
+                sb.append("    -drive file=\"$containerDiskPath\",if=none,id=hd0$driveCacheOption\n")
                 sb.append("    -device ich9-ahci,id=sata0\n")
                 sb.append("    -device ide-hd,drive=hd0,bus=sata0.0\n")
             }
             else -> {
                 sb.append("    -hda \"$containerDiskPath\"\n")
+                if (ssdCacheMode) {
+                    sb.append("    -global ide-hd.drive-cache=writeback\n")
+                }
             }
         }
         if (containerIsoPath != null) {
             sb.append("    -cdrom \"$containerIsoPath\"\n")
         }
         sb.append("    -rtc base=localtime\n")
-        sb.append("    -boot order=$bootOrderStr\n")
-        sb.append("    -fsdev local,security_model=mapped-file,id=fsdev_shared,path=\"$containerShareDir\"\n")
-        sb.append("    -device virtio-9p-pci,id=fs0,fsdev=fsdev_shared,mount_tag=hostshare\n")
+        sb.append(buildBootArgs()).append("\n")
+        if (enableShareDir) {
+            sb.append("    -fsdev local,security_model=mapped-file,id=fsdev_shared,path=\"$containerShareDir\"\n")
+            sb.append("    -device virtio-9p-pci,id=fs0,fsdev=fsdev_shared,mount_tag=hostshare\n")
+        }
         sb.append(")\n\n")
 
         sb.append("echo \"  [容器内] 正在启动 QEMU 虚拟机...\"\n")
@@ -880,7 +923,7 @@ data class QemuVmConfig(
         sb.append("chmod 1777 /run/pulse 2>/dev/null || true\n")
         sb.append("# 6.0.3 client.conf\n")
         sb.append("cat > /root/.config/pulse/client.conf <<PAEOF\n")
-        sb.append("allow-root-connection = 1\n")
+        sb.append("allow-root = yes\n")
         sb.append("disable-shm = true\n")
         sb.append("auto-connect-localhost = yes\n")
         sb.append("default-server = tcp:127.0.0.1:4713\n")
@@ -888,7 +931,7 @@ data class QemuVmConfig(
         sb.append("chmod 644 /root/.config/pulse/client.conf 2>/dev/null\n")
         sb.append("# 6.0.4 daemon.conf\n")
         sb.append("cat > /root/.config/pulse/daemon.conf <<PAEOF\n")
-        sb.append("allow-root-connection = 1\n")
+        sb.append("allow-root = yes\n")
         sb.append("exit-idle-time = -1\n")
         sb.append("flat-volumes = no\n")
         sb.append("shm-size-bytes = 0\n")
@@ -1024,7 +1067,14 @@ fun detectIsoSystem(isoPath: String): IsoSystemInfo? {
 object QemuVmManager {
     private const val PREFS_NAME = "qemu_vms_prefs"
     private const val KEY_VMS = "vms_list"
+    private const val KEY_MIGRATION_DONE = "paths_migration_v1_done"
     private val gson = Gson()
+
+    // 路径迁移相关常量
+    private const val OLD_DEFAULT_SHARE_DIR = "\$HOME/storage/shared/qemu_share"
+    private const val NEW_DEFAULT_SHARE_DIR = "\$HOME/storage/shared/Termux/Sharing"
+    private const val NEW_DEFAULT_DISK_DIR = "\$HOME/virtual_disks"
+    private const val TERMUX_HOME = "/data/data/com.termux/files/home"
 
     fun loadVms(context: Context): List<QemuVmConfig> {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -1054,7 +1104,7 @@ object QemuVmManager {
                     // 旧数据迁移：audioMode 为空时按 hasSound 回填
                     if (vm.hasSound) AudioMode.VNC_RFB else AudioMode.DISABLED
                 } else vm.audioMode,
-                shareDir = vm.shareDir.orEmpty().ifBlank { "\$HOME/storage/shared/qemu_share" },
+                shareDir = vm.shareDir.orEmpty().ifBlank { "\$HOME/storage/shared/Termux/Sharing" },
                 bootOrder = if (vm.bootOrder?.isNotEmpty() == true) vm.bootOrder else listOf("c"),
                 vncPort = if (vm.vncPort in 5900..5999) vm.vncPort else 5900,
                 diskInterface = vm.diskInterface.orEmpty().ifBlank { "ide" },
@@ -1083,5 +1133,128 @@ object QemuVmManager {
     private fun saveVms(context: Context, vms: List<QemuVmConfig>) {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         prefs.edit().putString(KEY_VMS, gson.toJson(vms)).apply()
+    }
+
+    /**
+     * 路径迁移结果
+     */
+    data class MigrationResult(
+        val migratedVmCount: Int,
+        val movedDiskCount: Int,
+        val shareDirMoved: Boolean,
+        val errors: List<String>
+    )
+
+    /**
+     * 检查虚拟机列表是否需要路径迁移。
+     * - 硬盘路径包含 /qemu_disks/ 的需要迁移到 $HOME/virtual_disks/
+     * - 共享目录为旧默认值的需要迁移到新默认值
+     */
+    fun needsMigration(vms: List<QemuVmConfig>): Boolean {
+        return vms.any { vm ->
+            vm.diskPath.contains("/qemu_disks/") ||
+            vm.shareDir == OLD_DEFAULT_SHARE_DIR
+        }
+    }
+
+    /**
+     * 检查是否已经完成过路径迁移。
+     */
+    fun isMigrationDone(context: Context): Boolean {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        return prefs.getBoolean(KEY_MIGRATION_DONE, false)
+    }
+
+    /**
+     * 执行路径迁移：
+     * 1. 将旧默认硬盘目录 ($HOME/storage/shared/qemu_disks/) 中的硬盘文件移动到新目录 ($HOME/virtual_disks/)
+     * 2. 将旧默认共享目录 ($HOME/storage/shared/qemu_share/) 的内容移动到新目录 ($HOME/storage/shared/Termux/Sharing/)
+     * 3. 更新所有虚拟机配置中的路径
+     *
+     * 此函数会执行 shell 命令（mv/cp），应在 IO 线程调用。
+     */
+    fun migratePaths(context: Context): MigrationResult {
+        val vms = loadVms(context)
+        if (vms.isEmpty()) {
+            markMigrationDone(context)
+            return MigrationResult(0, 0, false, emptyList())
+        }
+
+        val errors = mutableListOf<String>()
+        val newDiskDirAbs = "$TERMUX_HOME/virtual_disks"
+        val newShareDirAbs = "$TERMUX_HOME/storage/shared/Termux/Sharing"
+        val oldShareDirAbs = "$TERMUX_HOME/storage/shared/qemu_share"
+
+        // 构建迁移脚本（使用绝对路径，不依赖 $HOME 环境变量）
+        val script = StringBuilder()
+        script.append("set +e\n")
+        script.append("mkdir -p \"$newDiskDirAbs\"\n")
+        script.append("mkdir -p \"$newShareDirAbs\"\n")
+
+        // 为每个需要迁移硬盘的虚拟机生成 mv 命令
+        vms.forEach { vm ->
+            if (vm.diskPath.contains("/qemu_disks/")) {
+                val oldDiskAbs = vm.diskPath.replace("\$HOME", TERMUX_HOME)
+                val fileName = oldDiskAbs.substringAfterLast("/")
+                val newDiskAbs = "$newDiskDirAbs/$fileName"
+                script.append("if [ -f \"$oldDiskAbs\" ]; then\n")
+                script.append("    mv \"$oldDiskAbs\" \"$newDiskAbs\" 2>/dev/null && echo \"DISK_MOVED:$fileName\"\n")
+                script.append("fi\n")
+            }
+        }
+
+        // 迁移共享目录内容
+        script.append("if [ -d \"$oldShareDirAbs\" ]; then\n")
+        script.append("    cp -r \"$oldShareDirAbs\"/* \"$newShareDirAbs\"/ 2>/dev/null\n")
+        script.append("    rm -rf \"$oldShareDirAbs\" 2>/dev/null\n")
+        script.append("    echo \"SHARE_MOVED\"\n")
+        script.append("fi\n")
+
+        // 执行迁移脚本
+        val output = try {
+            val process = Runtime.getRuntime().exec(arrayOf("sh", "-c", script.toString()))
+            val stdout = process.inputStream.bufferedReader().readText()
+            process.waitFor()
+            stdout
+        } catch (e: Exception) {
+            errors.add("迁移脚本执行失败: ${e.message}")
+            ""
+        }
+
+        // 解析输出
+        val movedDisks = mutableSetOf<String>()
+        var shareMoved = false
+        output.lines().forEach { line ->
+            when {
+                line.startsWith("DISK_MOVED:") -> movedDisks.add(line.removePrefix("DISK_MOVED:"))
+                line == "SHARE_MOVED" -> shareMoved = true
+            }
+        }
+
+        // 更新所有虚拟机配置中的路径
+        val migratedVms = vms.map { vm ->
+            val newDiskPath = if (vm.diskPath.contains("/qemu_disks/")) {
+                val fileName = vm.diskPath.substringAfterLast("/")
+                "$NEW_DEFAULT_DISK_DIR/$fileName"
+            } else vm.diskPath
+            val newShare = if (vm.shareDir == OLD_DEFAULT_SHARE_DIR) NEW_DEFAULT_SHARE_DIR else vm.shareDir
+            vm.copy(diskPath = newDiskPath, shareDir = newShare)
+        }
+        saveVms(context, migratedVms)
+        markMigrationDone(context)
+
+        val migratedVmCount = vms.count { vm ->
+            vm.diskPath.contains("/qemu_disks/") || vm.shareDir == OLD_DEFAULT_SHARE_DIR
+        }
+
+        return MigrationResult(migratedVmCount, movedDisks.size, shareMoved, errors)
+    }
+
+    /**
+     * 标记路径迁移已完成。
+     */
+    fun markMigrationDone(context: Context) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit().putBoolean(KEY_MIGRATION_DONE, true).apply()
     }
 }

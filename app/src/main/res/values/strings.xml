@@ -277,6 +277,7 @@
     <string name="resource_python_env_desc">Setup Python with Poetry</string>
     <string name="info">Info</string>
     <string name="execute">Execute</string>
+    <string name="terminal_welcome_title">Welcome</string>
     <string name="terminal_welcome_message">This is your first time on the Terminal page. Please create a new session and open it to complete the Termux setup.</string>
     <string name="files_warning_message">Handle files with care. Improper operations may affect files outside the Termux container.</string>
     <string name="termux_report">Termux Report</string>
@@ -560,4 +561,5 @@
     <string name="low_android_force_disable_dialog_message">This will re-disable the features you force-enabled on this low Android version. Any of these features currently in use may stop working.\n\nAre you sure you want to disable them?</string>
     <string name="low_android_force_disable_confirm">Disable</string>
     <string name="low_android_force_disable_cancel">Cancel</string>
+
 </resources>

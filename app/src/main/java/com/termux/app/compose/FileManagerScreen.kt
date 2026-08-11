@@ -7,8 +7,10 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.asPaddingValues
@@ -633,7 +635,7 @@ fun FileManagerScreen(
             },
             title = "",
             content = {
-                Column {
+                Column(modifier = Modifier.heightIn(max = 600.dp)) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -680,6 +682,12 @@ fun FileManagerScreen(
                         }
                     }
 
+                    // ── 可滚动内容区域：文件详情 + 操作选项 ──
+                    Column(
+                        modifier = Modifier
+                            .weight(1f, fill = false)
+                            .verticalScroll(rememberScrollState())
+                    ) {
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -970,6 +978,7 @@ fun FileManagerScreen(
                             tint = dialogSubtextColor
                         )
                     }
+                    } // ── 可滚动内容区域结束 ──
 
                     Spacer(Modifier.height(16.dp))
 
