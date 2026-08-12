@@ -26,6 +26,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -83,9 +84,19 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
     var showAiReconfigConfirm by remember { mutableStateOf(false) }
     var showAiClearConfirm by remember { mutableStateOf(false) }
     var showRestartPrompt by remember { mutableStateOf(false) }
+    var showSystemPromptEditor by remember { mutableStateOf(false) }
+    var showCustomSkillManager by remember { mutableStateOf(false) }
+    var showFullHistoryViewer by remember { mutableStateOf(false) }
+    var showAddEditSkillDialog by remember { mutableStateOf(false) }
+    var editingSkill by remember { mutableStateOf<CustomSkill?>(null) }
+    var showSystemPromptFilePicker by remember { mutableStateOf(false) }
+    var showSystemPromptRestoreConfirm by remember { mutableStateOf(false) }
+    var systemPromptSource by remember { mutableStateOf("") }
     val prefs = remember { context.getSharedPreferences("app_settings", Context.MODE_PRIVATE) }
     var vncEnabled by remember { mutableStateOf(prefs.getBoolean("vnc_enabled", false)) }
     var aiTermuxEnabled by remember { mutableStateOf(prefs.getBoolean("ai_termux_enabled", true)) }
+    var aiDeveloperMode by remember { mutableStateOf(AiTermuxPrefs.isDeveloperMode(context)) }
+    var useCustomSystemPrompt by remember { mutableStateOf(AiTermuxPrefs.isUsingCustomSystemPrompt(context)) }
 
     // Integrated Termux tools (default off)
     var termuxApiEnabled by remember { mutableStateOf(IntegratedTools.isEnabled(context, IntegratedTools.Tool.TERMUX_API)) }
@@ -178,6 +189,27 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
         if (launchRestore) {
             restoreFileLauncher.launch(arrayOf("application/zip", "application/x-tar", "application/gzip", "application/x-gzip", "application/x-xz", "application/octet-stream", "*/*"))
             launchRestore = false
+        }
+    }
+
+    val systemPromptFileLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri?.let {
+            try {
+                val inputStream = context.contentResolver.openInputStream(uri)
+                val content = inputStream?.bufferedReader()?.use { it.readText() } ?: ""
+                if (content.isNotBlank()) {
+                    AiTermuxPrefs.setCustomSystemPrompt(context, content)
+                    AiTermuxPrefs.setUseCustomSystemPrompt(context, true)
+                    useCustomSystemPrompt = true
+                    val fileName = uri.lastPathSegment?.substringAfterLast("/") ?: "custom_prompt.md"
+                    systemPromptSource = fileName
+                    android.widget.Toast.makeText(context, "已加载自定义 System Prompt", android.widget.Toast.LENGTH_SHORT).show()
+                } else {
+                    android.widget.Toast.makeText(context, "文件内容为空", android.widget.Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                android.widget.Toast.makeText(context, "读取文件失败: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
+            }
         }
     }
 
@@ -563,6 +595,71 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
                                     SettingIcon(R.drawable.ic_delete, contentDescription = "清空对话记录")
                                 }
                             )
+                            Divider(
+                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f),
+                                modifier = Modifier.padding(start = 72.dp, end = 16.dp)
+                            )
+                            SwitchPreference(
+                                title = "开发者模式",
+                                summary = "允许编辑 System Prompt、管理自定义技能、查看完整对话记录",
+                                checked = aiDeveloperMode,
+                                onCheckedChange = {
+                                    aiDeveloperMode = it
+                                    AiTermuxPrefs.setDeveloperMode(context, it)
+                                },
+                                startAction = {
+                                    SettingIcon(R.drawable.ic_bug, contentDescription = "开发者模式")
+                                }
+                            )
+                            if (aiDeveloperMode) {
+                                Divider(
+                                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f),
+                                    modifier = Modifier.padding(start = 72.dp, end = 16.dp)
+                                )
+                                if (useCustomSystemPrompt) {
+                                    ArrowPreference(
+                                        title = "使用官方 System Prompt",
+                                        summary = "当前使用: ${systemPromptSource.ifBlank { "自定义文件" }}。点击切换回官方默认 System Prompt",
+                                        onClick = { showSystemPromptRestoreConfirm = true },
+                                        startAction = {
+                                            SettingIcon(R.drawable.ic_restore, contentDescription = "使用官方 System Prompt")
+                                        }
+                                    )
+                                } else {
+                                    ArrowPreference(
+                                        title = "使用自定义 System Prompt",
+                                        summary = "从文件加载 System Prompt（支持 .md 文件）",
+                                        onClick = { showSystemPromptFilePicker = true },
+                                        startAction = {
+                                            SettingIcon(R.drawable.ic_edit, contentDescription = "使用自定义 System Prompt")
+                                        }
+                                    )
+                                }
+                                Divider(
+                                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f),
+                                    modifier = Modifier.padding(start = 72.dp, end = 16.dp)
+                                )
+                                ArrowPreference(
+                                    title = "自定义技能",
+                                    summary = "创建和管理用户自定义技能卡（官方技能不可修改）",
+                                    onClick = { showCustomSkillManager = true },
+                                    startAction = {
+                                        SettingIcon(R.drawable.ic_code, contentDescription = "自定义技能")
+                                    }
+                                )
+                                Divider(
+                                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f),
+                                    modifier = Modifier.padding(start = 72.dp, end = 16.dp)
+                                )
+                                ArrowPreference(
+                                    title = "完整对话记录",
+                                    summary = "查看包含 System 提示在内的完整对话历史",
+                                    onClick = { showFullHistoryViewer = true },
+                                    startAction = {
+                                        SettingIcon(R.drawable.ic_files, contentDescription = "完整对话记录")
+                                    }
+                                )
+                            }
                         }
                     }
                 }
@@ -860,6 +957,534 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
                     modifier = Modifier.weight(1f)
                 )
             }
+        }
+    }
+
+    // ---------- AI Termux：编辑 System Prompt ----------
+    var systemPromptText by remember { mutableStateOf(AiTermuxPrefs.getConfig(context).customSystemPrompt) }
+    OverlayDialog(
+        title = "编辑 System Prompt",
+        summary = "自定义额外的系统指令，将附加在官方 System Prompt 之后。\n修改需谨慎，错误配置可能导致 AI 行为异常。",
+        show = showSystemPromptEditor,
+        onDismissRequest = { showSystemPromptEditor = false }
+    ) {
+        Column(
+            modifier = Modifier
+                .heightIn(max = 400.dp)
+                .verticalScroll(rememberScrollState())
+        ) {
+            TextField(
+                value = systemPromptText,
+                onValueChange = { systemPromptText = it },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 150.dp),
+                label = "在此输入自定义 System Prompt 内容...",
+                useLabelAsPlaceholder = true,
+                maxLines = Int.MAX_VALUE,
+                minLines = 5
+            )
+        }
+        Spacer(Modifier.height(12.dp))
+        Row(horizontalArrangement = Arrangement.SpaceBetween) {
+            TextButton(
+                text = "恢复默认",
+                onClick = {
+                    systemPromptText = ""
+                    val cfg = AiTermuxPrefs.getConfig(context)
+                    AiTermuxPrefs.saveConfig(context, cfg.copy(customSystemPrompt = ""))
+                },
+                modifier = Modifier.weight(1f)
+            )
+            Spacer(Modifier.width(16.dp))
+            TextButton(
+                text = "保存",
+                onClick = {
+                    val cfg = AiTermuxPrefs.getConfig(context)
+                    AiTermuxPrefs.saveConfig(context, cfg.copy(customSystemPrompt = systemPromptText))
+                    showSystemPromptEditor = false
+                },
+                modifier = Modifier.weight(1f),
+                colors = ButtonDefaults.textButtonColorsPrimary()
+            )
+        }
+    }
+
+    // ---------- AI Termux：选择 System Prompt 文件 ----------
+    OverlayDialog(
+        title = "选择 System Prompt 文件",
+        summary = "请选择一个 .md 文件作为自定义 System Prompt。\n此文件将完全替代官方默认 System Prompt。",
+        show = showSystemPromptFilePicker,
+        onDismissRequest = { showSystemPromptFilePicker = false }
+    ) {
+        Column {
+            Text(
+                text = "请选择使用哪种文件选择器：",
+                style = TextStyle(fontSize = 14.sp)
+            )
+            Spacer(Modifier.height(16.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                TextButton(
+                    text = "Termux 内部",
+                    onClick = {
+                        showSystemPromptFilePicker = false
+                        // 使用 Termux 内部文件选择器
+                        systemPromptFileLauncher.launch(arrayOf("text/markdown", "text/plain", "*/*"))
+                    },
+                    modifier = Modifier.weight(1f)
+                )
+                TextButton(
+                    text = "系统选择器",
+                    onClick = {
+                        showSystemPromptFilePicker = false
+                        // 使用系统文件选择器
+                        systemPromptFileLauncher.launch(arrayOf("text/markdown", "text/plain", "*/*"))
+                    },
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+    }
+
+    // ---------- AI Termux：确认还原官方 System Prompt ----------
+    OverlayDialog(
+        title = "还原官方 System Prompt",
+        summary = "确定要切换回官方默认 System Prompt 吗？\n您的自定义文件将不再被使用。",
+        show = showSystemPromptRestoreConfirm,
+        onDismissRequest = { showSystemPromptRestoreConfirm = false }
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.End
+        ) {
+            TextButton(
+                text = "取消",
+                onClick = { showSystemPromptRestoreConfirm = false }
+            )
+            Spacer(Modifier.width(12.dp))
+            TextButton(
+                text = "确定还原",
+                onClick = {
+                    AiTermuxPrefs.setUseCustomSystemPrompt(context, false)
+                    useCustomSystemPrompt = false
+                    systemPromptSource = ""
+                    showSystemPromptRestoreConfirm = false
+                    android.widget.Toast.makeText(context, "已切换回官方 System Prompt", android.widget.Toast.LENGTH_SHORT).show()
+                },
+                colors = ButtonDefaults.textButtonColorsPrimary()
+            )
+        }
+    }
+
+    // ---------- AI Termux：自定义技能管理 ----------
+    var skillsRefreshKey by remember { mutableStateOf(0) }
+    OverlayDialog(
+        title = "自定义技能",
+        summary = "管理用户自定义的技能卡。官方技能不可修改，仅支持添加、编辑和删除您自己创建的技能。",
+        show = showCustomSkillManager,
+        onDismissRequest = { showCustomSkillManager = false }
+    ) {
+        val customSkills = remember(skillsRefreshKey) { AiTermuxPrefs.getCustomSkills(context) }
+        if (customSkills.isEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(120.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "暂无自定义技能，点击下方按钮添加",
+                    fontSize = 14.sp,
+                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                )
+            }
+        } else {
+            Column(
+                modifier = Modifier
+                    .heightIn(max = 350.dp)
+                    .verticalScroll(rememberScrollState())
+            ) {
+                customSkills.forEach { skill ->
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(12.dp)
+                        ) {
+                            Text(
+                                text = skill.name,
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MiuixTheme.colorScheme.onSurface
+                            )
+                            if (skill.description.isNotBlank()) {
+                                Text(
+                                    text = skill.description,
+                                    fontSize = 13.sp,
+                                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                    modifier = Modifier.padding(top = 4.dp)
+                                )
+                            }
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 8.dp),
+                                horizontalArrangement = Arrangement.End
+                            ) {
+                                TextButton(
+                                    text = "编辑",
+                                    onClick = {
+                                        editingSkill = skill
+                                        showAddEditSkillDialog = true
+                                    }
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                TextButton(
+                                    text = "删除",
+                                    onClick = {
+                                        AiTermuxPrefs.deleteCustomSkill(context, skill.id)
+                                        skillsRefreshKey++
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+        Row(horizontalArrangement = Arrangement.SpaceBetween) {
+            TextButton(
+                text = "关闭",
+                onClick = { showCustomSkillManager = false },
+                modifier = Modifier.weight(1f)
+            )
+            Spacer(Modifier.width(16.dp))
+            TextButton(
+                text = "添加技能",
+                onClick = {
+                    editingSkill = null
+                    showAddEditSkillDialog = true
+                },
+                modifier = Modifier.weight(1f),
+                colors = ButtonDefaults.textButtonColorsPrimary()
+            )
+        }
+    }
+
+    // ---------- AI Termux：添加/编辑自定义技能 ----------
+    var skillName by remember { mutableStateOf("") }
+    var skillDescription by remember { mutableStateOf("") }
+    var skillSystemPrompt by remember { mutableStateOf("") }
+    var skillJson by remember { mutableStateOf("") }
+    var skillImplementationType by remember { mutableStateOf("shell_command") }
+
+    val implOptions = listOf(
+        "shell_command" to "Shell 命令",
+        "open_activity" to "打开页面",
+        "send_broadcast" to "发送广播",
+        "custom" to "自定义"
+    )
+
+    val implJsonTemplates = mapOf(
+        "shell_command" to """{"skillType":"CUSTOM_COMMAND","params":{"command":"ls -la ~"}}""",
+        "open_activity" to """{"skillType":"CUSTOM_COMMAND","params":{"activityClass":"com.example.MyActivity","extras":{"key":"value"}}}""",
+        "send_broadcast" to """{"skillType":"CUSTOM_COMMAND","params":{"action":"com.example.MY_ACTION","extras":{"key":"value"}}}""",
+        "custom" to """{"skillType":"CUSTOM_COMMAND","params":{"key":"value"}}"""
+    )
+
+    LaunchedEffect(editingSkill) {
+        editingSkill?.let { skill ->
+            skillName = skill.name
+            skillDescription = skill.description
+            skillSystemPrompt = skill.systemPrompt
+            skillJson = skill.skillJson
+            skillImplementationType = skill.implementationType
+        } ?: run {
+            skillName = ""
+            skillDescription = ""
+            skillSystemPrompt = ""
+            skillJson = ""
+            skillImplementationType = "shell_command"
+        }
+    }
+
+    OverlayDialog(
+        title = if (editingSkill != null) "编辑技能" else "添加自定义技能",
+        summary = "创建一个供 AI 调用的自定义技能。技能将作为系统指令的一部分注入。",
+        show = showAddEditSkillDialog,
+        onDismissRequest = { showAddEditSkillDialog = false }
+    ) {
+        Column(
+            modifier = Modifier
+                .heightIn(max = 520.dp)
+                .verticalScroll(rememberScrollState())
+        ) {
+            TextField(
+                value = skillName,
+                onValueChange = { skillName = it },
+                modifier = Modifier.fillMaxWidth(),
+                label = "技能名称（必填）",
+                useLabelAsPlaceholder = true,
+                singleLine = true
+            )
+            Spacer(Modifier.height(8.dp))
+            TextField(
+                value = skillDescription,
+                onValueChange = { skillDescription = it },
+                modifier = Modifier.fillMaxWidth(),
+                label = "技能描述",
+                useLabelAsPlaceholder = true,
+                singleLine = false,
+                maxLines = 2
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = "实现方式",
+                fontSize = 12.sp,
+                color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+            )
+            Spacer(Modifier.height(4.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                implOptions.forEach { (value, label) ->
+                    val selected = skillImplementationType == value
+                    TextButton(
+                        text = label,
+                        onClick = {
+                            skillImplementationType = value
+                            if (skillJson.isBlank() || skillJson == implJsonTemplates.values.first()) {
+                                skillJson = implJsonTemplates[value] ?: ""
+                            }
+                        },
+                        modifier = Modifier.weight(1f),
+                        colors = if (selected) ButtonDefaults.textButtonColorsPrimary() else ButtonDefaults.textButtonColors()
+                    )
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = "调用方式（AI 输出的 skillType 结构）",
+                fontSize = 12.sp,
+                color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+            )
+            TextField(
+                value = skillJson,
+                onValueChange = { skillJson = it },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 60.dp),
+                label = "示例：${implJsonTemplates[skillImplementationType]}",
+                useLabelAsPlaceholder = true,
+                maxLines = Int.MAX_VALUE,
+                minLines = 3
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = "实现方式说明（可选）",
+                fontSize = 12.sp,
+                color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+            )
+            TextField(
+                value = skillSystemPrompt,
+                onValueChange = { skillSystemPrompt = it },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 60.dp),
+                label = "详细说明该技能如何实现，会注入到 System Prompt 中指导 AI",
+                useLabelAsPlaceholder = true,
+                maxLines = Int.MAX_VALUE,
+                minLines = 3
+            )
+        }
+        Spacer(Modifier.height(12.dp))
+        Row(horizontalArrangement = Arrangement.SpaceBetween) {
+            TextButton(
+                text = "取消",
+                onClick = { showAddEditSkillDialog = false },
+                modifier = Modifier.weight(1f)
+            )
+            Spacer(Modifier.width(16.dp))
+            TextButton(
+                text = "保存",
+                onClick = {
+                    if (skillName.isBlank()) return@TextButton
+                    val existing = editingSkill
+                    if (existing != null) {
+                        AiTermuxPrefs.updateCustomSkill(context, existing.copy(
+                            name = skillName,
+                            description = skillDescription,
+                            systemPrompt = skillSystemPrompt,
+                            skillJson = skillJson,
+                            implementationType = skillImplementationType
+                        ))
+                    } else {
+                        AiTermuxPrefs.addCustomSkill(context, CustomSkill(
+                            name = skillName,
+                            description = skillDescription,
+                            systemPrompt = skillSystemPrompt,
+                            skillJson = skillJson,
+                            implementationType = skillImplementationType
+                        ))
+                    }
+                    skillsRefreshKey++
+                    showAddEditSkillDialog = false
+                },
+                modifier = Modifier.weight(1f),
+                colors = ButtonDefaults.textButtonColorsPrimary()
+            )
+        }
+    }
+
+    // ---------- AI Termux：完整对话记录 ----------
+    OverlayDialog(
+        title = "完整对话记录",
+        summary = "包含 System 系统提示在内的完整对话历史。仅显示 AI Termux 保存的最近 100 条消息。",
+        show = showFullHistoryViewer,
+        onDismissRequest = { showFullHistoryViewer = false }
+    ) {
+        val messages = remember { AiTermuxPrefs.getChatHistory(context) }
+        val clipboard = remember {
+            context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+        }
+        if (messages.isEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(120.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "暂无对话记录",
+                    fontSize = 14.sp,
+                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                )
+            }
+        } else {
+            Column(
+                modifier = Modifier
+                    .heightIn(max = 400.dp)
+                    .verticalScroll(rememberScrollState())
+            ) {
+                // System Prompt
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp)
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Text(
+                            text = "System Prompt",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MiuixTheme.colorScheme.primary
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = AiTermuxPrefs.buildFullSystemPrompt(context),
+                            fontSize = 11.sp,
+                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                            lineHeight = 16.sp,
+                            maxLines = 30
+                        )
+                    }
+                }
+                // Messages
+                messages.forEach { msg ->
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Text(
+                                text = when (msg.role) {
+                                    "user" -> "👤 用户"
+                                    "assistant" -> "🤖 AI"
+                                    "system" -> "⚙️ 系统"
+                                    else -> msg.role
+                                },
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = when (msg.role) {
+                                    "user" -> MiuixTheme.colorScheme.primary
+                                    "assistant" -> MiuixTheme.colorScheme.onSurface
+                                    else -> MiuixTheme.colorScheme.onSurfaceVariantSummary
+                                }
+                            )
+                            Spacer(Modifier.height(4.dp))
+                            if (msg.reasoningContent != null && msg.reasoningContent.isNotBlank()) {
+                                Text(
+                                    text = "💭 ${msg.reasoningContent.take(200)}${if (msg.reasoningContent.length > 200) "..." else ""}",
+                                    fontSize = 11.sp,
+                                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                    lineHeight = 16.sp,
+                                    modifier = Modifier.padding(bottom = 4.dp)
+                                )
+                            }
+                            Text(
+                                text = msg.content.ifBlank { "(空)" },
+                                fontSize = 13.sp,
+                                color = MiuixTheme.colorScheme.onSurface,
+                                lineHeight = 18.sp,
+                                maxLines = 50
+                            )
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 4.dp),
+                                horizontalArrangement = Arrangement.End
+                            ) {
+                                Text(
+                                    text = "复制",
+                                    fontSize = 11.sp,
+                                    color = MiuixTheme.colorScheme.primary,
+                                    modifier = Modifier
+                                        .clickable {
+                                            val clip = android.content.ClipData.newPlainText("消息", msg.content)
+                                            clipboard.setPrimaryClip(clip)
+                                        }
+                                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+        Row(horizontalArrangement = Arrangement.SpaceBetween) {
+            TextButton(
+                text = "复制全部",
+                onClick = {
+                    val allContent = buildString {
+                        appendLine("=== System Prompt ===")
+                        appendLine(AiTermuxPrefs.buildFullSystemPrompt(context))
+                        appendLine()
+                        appendLine("=== 对话记录 ===")
+                        messages.forEach { msg ->
+                            appendLine("[${msg.role}] ${msg.content}")
+                        }
+                    }
+                    val clip = android.content.ClipData.newPlainText("完整对话记录", allContent)
+                    clipboard.setPrimaryClip(clip)
+                },
+                modifier = Modifier.weight(1f)
+            )
+            Spacer(Modifier.width(16.dp))
+            TextButton(
+                text = "关闭",
+                onClick = { showFullHistoryViewer = false },
+                modifier = Modifier.weight(1f),
+                colors = ButtonDefaults.textButtonColorsPrimary()
+            )
         }
     }
 }

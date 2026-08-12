@@ -12,6 +12,27 @@
 
 ***
 
+## 最近更新
+
+### AI 助手（v118.3.63）
+- 内置 AI 助手，支持通过自然语言与终端交互
+- 支持 OpenAI 兼容 API 及自定义端点配置
+- 技能系统：新建/关闭会话、执行命令、文件操作、VNC/SSH 连接、QEMU 虚拟机管理
+- 危险操作检测与二次确认机制
+- 深度思考内容展示（模型支持时）
+
+### 文件管理增强
+- SFTP 服务器支持，局域网文件传输
+- 多文件选择与批量操作
+- 文件类型图标与详情面板优化
+
+### 终端会话管理
+- 会话状态实时刷新（400ms 轮询）
+- 已结束会话信息保留与查看
+- 搜索功能优化与欢迎卡片
+
+***
+
 ## 目录
 
 - [功能特性](#功能特性)
@@ -84,6 +105,13 @@
 - 多语言支持（中文 / 英文，100% 中文覆盖）
 - 深色 / 浅色模式自适应
 - Miuix 风格设置页（ArrowPreference 套件）
+
+### AI 助手
+- 自然语言交互：通过对话方式与终端、文件系统、远程连接等交互
+- 技能系统：支持新建/关闭会话、执行命令、文件读写、VNC/SSH 连接、QEMU 虚拟机管理等
+- 多模型支持：兼容 OpenAI API 及自定义端点，可配置 temperature 等参数
+- 安全机制：危险操作检测（rm -rf、dd、fork bomb 等）与二次确认
+- 上下文感知：可获取会话信息、文件列表、执行结果等实时数据
 
 ### 交互与动画
 - 首页横滑手势切换页面（终端 → 文件 → 远程 → 资源）
@@ -164,12 +192,15 @@ Termux-Ultra/
 │   │   ├── cpp_avnc/           # AVNC 原生 VNC 客户端
 │   │   ├── java/com/termux/    # 应用 Kotlin/Java 源码
 │   │   │   ├── app/            # 核心逻辑（TermuxActivity、TermuxService 等）
-│   │   │   ├── app/compose/    # Jetpack Compose UI（主页、文件、远程、资源、设置等）
+│   │   │   ├── app/compose/    # Jetpack Compose UI（主页、文件、远程、资源、设置、AI 助手等）
+│   │   │   │   ├── AiTermuxActivity.kt   # AI 助手界面
+│   │   │   │   ├── AiTermuxEngine.kt     # AI 引擎与技能执行器
+│   │   │   │   └── AiTermuxModels.kt     # AI 数据模型与配置
 │   │   │   ├── app/vnc/        # VNC 连接管理
 │   │   │   ├── app/ssh/        # SSH 连接管理
 │   │   │   ├── app/remote/     # 远程管理综合页
 │   │   │   ├── app/ftp/        # 内置 FTP 服务器
-│   │   │   └── app/activities/ # 第三方资源中心、实用工具中心等
+│   │   │   └── app/activities/ # 第三方资源中心、实用工具中心、AI 助手等
 │   │   ├── jniLibs/            # 预编译 .so 库
 │   │   └── res/                # 资源（布局、drawable、strings、xml 偏好）
 │   ├── extern/                 # 第三方原生库源码
@@ -238,6 +269,7 @@ Termux-Ultra/
 | 图片加载 | Coil Compose 2.7.0 |
 | 生物识别 | AndroidX Biometric 1.2.0-alpha05 |
 | 序列化 | Gson 2.10.1、kotlinx-serialization 1.9.0 |
+| AI 助手 | OpenAI 兼容 API、自定义端点、技能系统 |
 | 构建 | Gradle、CMake 3.22.1、NDK 22.1.7171670 |
 | 集成插件 | termux-api、termux-boot、termux-styling、termux-tasker、termux-widget |
 | 包名 | `com.termux`（sharedUserId） |

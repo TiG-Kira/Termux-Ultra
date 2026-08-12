@@ -2301,6 +2301,152 @@ private val EXTENSION_MAP: Map<String, String> by lazy {
         "hushlogin" to "无登录消息",
         "ssh_config" to "SSH 客户端配置",
         "sshd_config" to "SSH 守护配置",
+
+        // ========= 前端样式表 =========
+        "css" to "CSS 级联样式表",
+        "scss" to "Sass/SCSS 样式表",
+        "sass" to "Sass 样式表",
+        "less" to "Less 样式表",
+        "styl" to "Stylus 样式表",
+
+        // ========= WebAssembly =========
+        "wasm" to "WebAssembly 二进制",
+        "wast" to "WebAssembly 文本",
+        "wat" to "WebAssembly 文本格式",
+
+        // ========= 设计软件 =========
+        "sketch" to "Sketch 设计文件",
+        "xd" to "Adobe XD 设计",
+        "afdesign" to "Affinity Designer",
+        "afphoto" to "Affinity Photo",
+        "afpub" to "Affinity Publisher",
+        "affont" to "Affinity Font",
+
+        // ========= 游戏音乐 =========
+        "nsf" to "NES 音乐",
+        "spc" to "SNES SPC700 音乐",
+        "gbs" to "Game Boy 音乐",
+        "gym" to "Genesis/MD 音乐",
+        "sap" to "Atari 8-bit 音乐",
+        "ay" to "ZX Spectrum 音乐",
+        "sid" to "Commodore 64 SID 音乐",
+        "psf" to "PlayStation PSF 音乐",
+        "psf2" to "PlayStation PSF2 音乐",
+        "minipsf" to "MiniPSF 音乐",
+
+        // ========= 视频RAW/专业视频 =========
+        "braw" to "Blackmagic RAW 视频",
+        "ari" to "ARRI ARRIRAW 视频",
+        "r3d" to "RED REDCODE RAW 视频",
+
+        // ========= 电子书/文档补充 =========
+        "chm" to "Windows 压缩帮助",
+        "hlp" to "Windows 帮助",
+        "lit" to "Microsoft Reader 电子书",
+
+        // ========= P2P/下载 =========
+        "torrent" to "BitTorrent 种子",
+        "crdownload" to "Chrome 下载临时",
+        "part" to "下载临时文件",
+
+        // ========= 临时/系统补充 =========
+        "tmp" to "临时文件",
+        "temp" to "临时文件",
+        "bak" to "备份文件",
+        "old" to "旧文件",
+        "swp" to "Vim 交换文件",
+        "swo" to "Vim 交换文件",
+        "swx" to "Vim 交换文件",
+
+        // ========= 压缩补充 =========
+        "lrz" to "LRZIP 压缩",
+        "zoo" to "ZOO 压缩",
+        "zpaq" to "ZPAQ 压缩",
+
+        // ========= CD音频 =========
+        "cda" to "CD 音频轨道",
+
+        // ========= 网络/安全补充 =========
+        "cert" to "安全证书",
+        "cer" to "安全证书",
+        "crt" to "安全证书",
+        "p12" to "PKCS#12 证书",
+        "pfx" to "PFX 证书包",
+        "p7b" to "PKCS#7 证书",
+        "p7c" to "PKCS#7 加密",
+        "p7m" to "PKCS#7 MIME",
+        "p7s" to "PKCS#7 签名",
+        "der" to "DER 证书",
+        "key" to "私钥文件",
+        "pub" to "公钥文件",
+        "ppk" to "PuTTY 私钥",
+        "openssh" to "OpenSSH 密钥",
+        "ssh" to "SSH 配置",
+        "known_hosts" to "SSH 主机",
+        "authorized_keys" to "SSH 授权",
+        "pgp" to "PGP 密钥",
+        "gpg" to "GNU Privacy Guard",
+        "sig" to "签名文件",
+        "sign" to "签名",
+        "asc" to "ASCII 装甲",
+
+        // ========= 校验和补充 =========
+        "md5" to "MD5 校验",
+        "sha" to "SHA 校验",
+        "sha1" to "SHA-1 校验",
+        "sha256" to "SHA-256 校验",
+        "sha384" to "SHA-384 校验",
+        "sha512" to "SHA-512 校验",
+        "crc" to "CRC 校验",
+        "sfv" to "SFV 校验",
+        "par" to "PAR 恢复",
+        "par2" to "PAR2 恢复",
+
+        // ========= 数据库补充 =========
+        "db" to "数据库文件",
+        "db3" to "数据库 3",
+        "sdb" to "SDB 数据库",
+        "s3db" to "S3DB 数据库",
+        "sl3" to "SQLite 3",
+        "sql" to "SQL 脚本",
+        "mysql" to "MySQL 脚本",
+        "psql" to "PostgreSQL 脚本",
+        "pgsql" to "PostgreSQL 脚本",
+
+        // ========= 网络/配置补充 =========
+        "htaccess" to "Apache 访问",
+        "htpasswd" to "Apache 密码",
+        "htgroups" to "Apache 组",
+        "npmrc" to "npm 配置",
+        "yarnrc" to "Yarn 配置",
+        "gitignore" to "Git 忽略",
+        "gitattributes" to "Git 属性",
+        "gitmodules" to "Git 子模块",
+        "editorconfig" to "EditorConfig",
+        "dockerfile" to "Dockerfile",
+        "dockerignore" to "Docker 忽略",
+        "makefile" to "Makefile",
+        "mk" to "Makefile 包含",
+
+        // ========= WordPerfect/其他 =========
+        "wpd" to "WordPerfect",
+        "wps" to "WPS 文字",
+        "et" to "WPS 表格",
+        "dps" to "WPS 演示",
+        "wpt" to "WPS 模板",
+        "ett" to "WPS 表格模板",
+        "dpt" to "WPS 演示模板",
+
+        // ========= iWork =========
+        "pages" to "Pages 文档",
+        "numbers" to "Numbers 表格",
+        "key" to "Keynote 演示",
+
+        // ========= OneNote =========
+        "one" to "OneNote 分区",
+        "onepkg" to "OneNote 包",
+        "onezip" to "OneNote 压缩",
+
         null
     ).filterNotNull()
 

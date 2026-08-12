@@ -798,7 +798,14 @@ fun WarningNoteCard(modifier: Modifier = Modifier) {
 @Composable
 fun AiTermuxEntryCard(modifier: Modifier = Modifier) {
     val context = LocalContext.current
-    var collapsed by remember { mutableStateOf(false) }
+    val prefs = remember { context.getSharedPreferences("termux_prefs", android.content.Context.MODE_PRIVATE) }
+    var collapsed by remember { mutableStateOf(prefs.getBoolean("ai_termux_entry_collapsed", false)) }
+
+    fun setCollapsed(value: Boolean) {
+        collapsed = value
+        prefs.edit().putBoolean("ai_termux_entry_collapsed", value).apply()
+    }
+
     val gradient = Brush.linearGradient(
         colors = listOf(
             Color(0xFF6366F1),
@@ -810,7 +817,7 @@ fun AiTermuxEntryCard(modifier: Modifier = Modifier) {
         modifier = modifier,
         onClick = {
             if (collapsed) {
-                collapsed = false
+                setCollapsed(false)
             } else {
                 val intent = Intent(context, com.termux.app.activities.AiTermuxActivity::class.java)
                 context.startActivity(intent)
@@ -953,7 +960,7 @@ fun AiTermuxEntryCard(modifier: Modifier = Modifier) {
                         .align(Alignment.BottomStart)
                         .offset(x = 6.dp, y = 4.dp)
                         .size(20.dp)
-                        .clickable { collapsed = true },
+                        .clickable { setCollapsed(true) },
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(

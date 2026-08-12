@@ -92,7 +92,7 @@ public final class TermuxService extends Service implements TermuxTask.TermuxTas
 
     private final IBinder mBinder = new LocalBinder();
 
-    private final Handler mHandler = new Handler();
+    private final Handler mHandler = new Handler(Looper.getMainLooper());
 
     /**
      * The foreground TermuxSessions which this service manages.
@@ -278,7 +278,7 @@ public final class TermuxService extends Service implements TermuxTask.TermuxTas
             runStartForeground();
             
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                Handler handler = new Handler();
+                Handler handler = new Handler(Looper.getMainLooper());
                 handler.postDelayed(() -> {
                     Intent restartIntent = new Intent(this, TermuxService.class);
                     restartIntent.setAction(TERMUX_SERVICE.ACTION_SERVICE_EXECUTE);
@@ -607,6 +607,14 @@ public final class TermuxService extends Service implements TermuxTask.TermuxTas
             executionCommand.resultConfig.resultFileOutputFormat = IntentUtils.getStringExtraIfSet(intent, TERMUX_SERVICE.EXTRA_RESULT_FILE_OUTPUT_FORMAT, null);
             executionCommand.resultConfig.resultFileErrorFormat = IntentUtils.getStringExtraIfSet(intent, TERMUX_SERVICE.EXTRA_RESULT_FILE_ERROR_FORMAT, null);
             executionCommand.resultConfig.resultFilesSuffix = IntentUtils.getStringExtraIfSet(intent, TERMUX_SERVICE.EXTRA_RESULT_FILES_SUFFIX, null);
+        }
+
+        // Guard: ignore ACTION_SERVICE_EXECUTE intents with no executable data.
+        // These are sent by keep-alive mechanisms (AlarmManager, JobScheduler, onTaskRemoved)
+        // and should NOT create new Termux sessions.
+        if (executionCommand.executableUri == null && executionCommand.executable == null) {
+            Logger.logDebug(LOG_TAG, "Ignoring ACTION_SERVICE_EXECUTE intent with no executable data (likely keep-alive/restart)");
+            return;
         }
 
         // Add the execution command to pending plugin execution commands list

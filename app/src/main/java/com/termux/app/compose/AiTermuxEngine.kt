@@ -12,6 +12,9 @@ import com.termux.app.activities.QemuVmActivity
 import com.gaurav.avnc.ui.vnc.VncActivity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withContext
 import java.io.BufferedReader
 import java.io.DataOutputStream
@@ -85,8 +88,9 @@ object SkillExecutor {
         val seen = mutableSetOf<String>()
 
         // 策略 1: 匹配 ```skill / ```json / ```javascript 等代码块包裹的 JSON
+        // 宽容的正则：允许 closing ``` 前没有换行符
         val blockPattern = Regex(
-            """```[a-zA-Z]*\s*[\r\n]+(.*?)[\r\n]+```""",
+            """```[a-zA-Z]*\s*\r?\n([\s\S]*?)[\r\n]*```""",
             RegexOption.DOT_MATCHES_ALL
         )
         for (match in blockPattern.findAll(content)) {
@@ -105,7 +109,7 @@ object SkillExecutor {
             } catch (_: Exception) { }
         }
 
-        // 策略 2: 直接在文本中查找包含 skillType 的 JSON 对象（兜底）
+        // 策略 2: 直接在文本中查找包含 skillType 的 JSON 对象（兜底，与策略1互补）
         if (results.isEmpty()) {
             val jsonPattern = Regex("""\{[^{}]*"skillType"[^{}]*\}""", RegexOption.DOT_MATCHES_ALL)
             for (match in jsonPattern.findAll(content)) {
@@ -137,9 +141,9 @@ object SkillExecutor {
     fun stripSkillBlocks(content: String): String {
         var result = content
 
-        // 1. 移除所有包含 skillType 的代码块
+        // 1. 移除所有包含 skillType 的代码块（使用宽容的正则）
         val blockPattern = Regex(
-            """```[a-zA-Z]*\s*[\r\n]+(.*?)[\r\n]+```""",
+            """```[a-zA-Z]*\s*\r?\n([\s\S]*?)[\r\n]*```""",
             RegexOption.DOT_MATCHES_ALL
         )
         result = blockPattern.replace(result) { match ->
@@ -189,23 +193,66 @@ object SkillExecutor {
      * - AI 编造了执行结果/输出文本
      * - AI 假装看到了文件列表/进程信息等
      * - AI 在技能卡片后添加了伪造的结果段落
+     *
+     * @param content AI 回复的完整文本
+     * @param preParsedSkillCount 预先解析到的技能块数量（用于交叉验证，避免正则遗漏导致误判）
      */
-    fun detectFakeOutput(content: String): FakeOutputCheck {
+    fun detectFakeOutput(content: String, preParsedSkillCount: Int = -1): FakeOutputCheck {
         val violations = mutableListOf<String>()
         val lower = content.lowercase()
 
-        // 禁令 1：禁止在技能卡片后声称操作已执行/已完成
-        // 检测在 skill 代码块之后出现的伪造结果描述
-        val skillBlockEnd = Regex("""```[a-zA-Z]*\s*[\r\n]+(.*?)[\r\n]+```""", RegexOption.DOT_MATCHES_ALL)
-        val skillBlocks = skillBlockEnd.findAll(content).toList()
+        // ---------- 统一的技能块检测（与 parseSkillBlocks 保持一致）----------
 
-        if (skillBlocks.isNotEmpty()) {
-            // 获取最后一个 skill 代码块的结束位置
-            val lastBlockEnd = skillBlocks.last().range.last
+        // 策略 1: 匹配 ```skill / ```json 等代码块包裹的 JSON（更宽容的正则）
+        // 允许 AI 输出中 closing ``` 前没有换行符的情况
+        val blockRegex = Regex(
+            """```[a-zA-Z]*\s*\r?\n([\s\S]*?)[\r\n]*```""",
+            RegexOption.DOT_MATCHES_ALL
+        )
+        val blockMatches = blockRegex.findAll(content).toList()
+
+        // 策略 2: 直接在文本中查找包含 skillType 的 JSON 对象（兜底）
+        val inlineRegex = Regex("""\{[^{}]*"skillType"[^{}]*\}""", RegexOption.DOT_MATCHES_ALL)
+        val inlineMatches = inlineRegex.findAll(content).toList()
+
+        // 合并去重的技能块范围
+        data class BlockRange(val first: Int, val last: Int)
+        val allRanges = mutableListOf<BlockRange>()
+
+        for (m in blockMatches) {
+            val jsonStr = m.groupValues.getOrNull(1)?.trim() ?: continue
+            try {
+                val json = JsonParser.parseString(jsonStr).asJsonObject
+                val skillType = json.get("skillType")?.asString
+                if (skillType != null && skillType.isNotBlank()) {
+                    allRanges.add(BlockRange(m.range.first, m.range.last))
+                }
+            } catch (_: Exception) { }
+        }
+        for (m in inlineMatches) {
+            try {
+                val json = JsonParser.parseString(m.value).asJsonObject
+                val skillType = json.get("skillType")?.asString
+                if (skillType != null && skillType.isNotBlank()) {
+                    // 内联 JSON 的范围就是它自身
+                    allRanges.add(BlockRange(m.range.first, m.range.last))
+                }
+            } catch (_: Exception) { }
+        }
+
+        val hasSkillBlocks = allRanges.isNotEmpty() || preParsedSkillCount > 0
+
+        // 如果预先解析到技能块但本函数正则没匹配到，以预先解析为准
+        val effectiveHasSkills = if (preParsedSkillCount >= 0 && preParsedSkillCount > 0) true else hasSkillBlocks
+
+        // ---------- 禁令 1-3：检查技能卡片之后是否有伪造结果 ----------
+        if (hasSkillBlocks && allRanges.isNotEmpty()) {
+            // 获取最后一个技能块的结束位置
+            val lastBlockEnd = allRanges.maxOf { it.last }
             val afterBlock = content.substring(lastBlockEnd.coerceAtMost(content.length - 1)).trim()
 
-            // 如果代码块之后还有内容，检查是否为伪造结果
             if (afterBlock.isNotBlank()) {
+                // 禁令 1：伪造的执行结果描述
                 val fakeResultPatterns = listOf(
                     "执行结果", "已执行", "已完成", "执行成功", "执行完毕",
                     "技能结果", "skill result",
@@ -221,7 +268,7 @@ object SkillExecutor {
                     }
                 }
 
-                // 检测编造的文件路径/系统信息
+                // 禁令 2：伪造的系统/文件信息
                 val fakeInfoPatterns = listOf(
                     "/proc/", "/data/data/com.termux", "qemu-system",
                     "进程列表", "内存使用", "磁盘空间",
@@ -234,7 +281,7 @@ object SkillExecutor {
                     }
                 }
 
-                // 检测编造的 "---" 分隔线 + 结果段落
+                // 禁令 3：伪造的分隔线 + 结果段落
                 if (Regex("""-{3,}""").containsMatchIn(afterBlock) &&
                     (afterBlock.contains("技能") || afterBlock.contains("结果") || afterBlock.contains("输出"))) {
                     violations.add("【禁令3】技能卡片后存在伪造的分隔线和结果段落")
@@ -242,9 +289,12 @@ object SkillExecutor {
             }
         }
 
-        // 禁令 4：禁止在没有 skill 代码块时假装执行了操作
-        // 如果回复中声称"执行了"但没有任何技能卡片
-        if (skillBlocks.isEmpty()) {
+        // ---------- 禁令 4/6/7/8：仅在确认无技能块时才检查 ----------
+        // 使用 effectiveHasSkills 进行交叉验证：如果预解析有技能，即使正则没匹配到也跳过这些检查
+        if (!effectiveHasSkills) {
+            val noSkillViolations = mutableListOf<String>()
+
+            // 禁令 4：假装执行了操作但无技能卡片
             val fakeActionPatterns = listOf(
                 "已执行", "已完成", "已发送", "已创建", "已连接", "已安装",
                 "列出了", "读取了", "写入了", "删除了",
@@ -252,34 +302,78 @@ object SkillExecutor {
             )
             for (pattern in fakeActionPatterns) {
                 if (lower.contains(pattern)) {
-                    violations.add("【禁令4】回复声称操作「$pattern」但未输出任何技能卡片")
+                    noSkillViolations.add("【禁令4】回复声称操作「$pattern」但未输出任何技能卡片")
                     break
                 }
             }
+
+            // 禁令 6：自信式幻觉
+            val confidentHollowPatterns = listOf(
+                "不存在", "没有这个", "无法直接执行", "无法为你执行",
+                "不支持", "不允许", "权限不足", "无法访问",
+                "当前环境中没有", "该功能尚未", "暂时不支持",
+                "没有权限", "不在允许的路径", "禁用的文件系统",
+                "我目前没有", "我没有这个功能", "我无法执行",
+            )
+            for (pattern in confidentHollowPatterns) {
+                if (lower.contains(pattern)) {
+                    noSkillViolations.add("【禁令6】自信式幻觉：声称「$pattern」但未提供任何技能或真实依据")
+                    break
+                }
+            }
+
+            // 禁令 7：捏造技能
+            val fakeSkillPatterns = listOf(
+                "技能卡片", "智能日程", "天气查询", "外卖下单",
+                "快递查询", "语音助手", "翻译技能", "搜索技能",
+            )
+            for (pattern in fakeSkillPatterns) {
+                if (lower.contains(pattern) && lower.contains("已")) {
+                    noSkillViolations.add("【禁令7】捏造不存在的技能：「$pattern」")
+                    break
+                }
+            }
+
+            // 禁令 8：提供解决方案式幻觉
+            val solutionPattern = Regex("(解决方案|解决方法|解决办法)[\\s\\S]*?(请在|您可以|建议你|建议您)", RegexOption.IGNORE_CASE)
+            if (solutionPattern.containsMatchIn(content) && content.length > 200) {
+                noSkillViolations.add("【禁令8】逃避执行：不使用技能执行操作，反而提供用户自行操作的\"解决方案\"")
+            }
+
+            violations.addAll(noSkillViolations)
         }
 
-        // 禁令 5：检测虚构的命令输出（如假装看到了文件列表的详细输出）
+        // ---------- 禁令 5：虚构的命令/系统输出 ----------
+        // 即使有技能块，也要检查技能块之外是否有伪造输出
         val fakeOutputPatterns = listOf(
-            """\[D\]\s+\S+""",  // 模拟 FILE_LIST 输出
+            """\[D\]\s+\S+""",
             """\[F\]\s+\S+""",
-            """total\s+\d+""",  // 模拟 ls 输出
-            """^\s*\d+\s+\S+\s+\S+""",  // 模拟 ps 输出格式
+            """total\s+\d+""",
+            """^\s*\d+\s+\S+\s+\S+""",
             """PID\s+USER\s+COMMAND""",
             """/proc/\d+/status""",
             """MemTotal|MemFree|MemAvailable""",
-            """[<>]\s*[0-9a-fA-F]+\s*bytes""",  // 模拟网络输出
-            """\d+\s+imported""",  // 模拟包管理输出
+            """[<>]\s*[0-9a-fA-F]+\s*bytes""",
+            """\d+\s+imported""",
             """\d+\s+not upgraded""",
             """Setting up\s+""",
             """Processing triggers""",
         )
         for (pattern in fakeOutputPatterns) {
             if (Regex(pattern, RegexOption.MULTILINE).containsMatchIn(content)) {
-                // 只有在没有 skill 代码块的情况下才报告（有 skill 可能是用户输入的）
-                if (skillBlocks.isEmpty() || !content.substring(
-                    skillBlocks.first().range.first.coerceAtLeast(0),
-                    skillBlocks.last().range.last.coerceAtMost(content.length - 1)
-                ).contains(pattern)) {
+                // 如果有技能块，检查伪造输出是否在技能块范围内
+                if (hasSkillBlocks && allRanges.isNotEmpty()) {
+                    val firstBlockStart = allRanges.minOf { it.first }
+                    val lastBlockEnd = allRanges.maxOf { it.last }
+                    val insideBlocks = content.substring(
+                        firstBlockStart.coerceAtLeast(0),
+                        lastBlockEnd.coerceAtMost(content.length - 1)
+                    ).contains(pattern)
+                    if (!insideBlocks) {
+                        violations.add("【禁令5】回复包含虚构的命令/系统输出")
+                        break
+                    }
+                } else {
                     violations.add("【禁令5】回复包含虚构的命令/系统输出")
                     break
                 }
@@ -332,7 +426,14 @@ object SkillExecutor {
             SkillType.CAPTURE_OUTPUT -> execCaptureOutput(context, termuxService, params)
             SkillType.PACKAGE_INSTALL -> execPackageInstall(context, termuxService, params)
             SkillType.CONFIRM_DANGEROUS -> SkillExecutionResult(false, "危险操作需在 UI 中确认后执行")
-            SkillType.CUSTOM_COMMAND -> execRunCommand(context, termuxService, params)
+            SkillType.CUSTOM_COMMAND -> {
+                when {
+                    params.has("activityClass") -> execOpenActivity(context, params)
+                    params.has("action") -> execSendBroadcast(context, params)
+                    params.has("command") -> execRunCommand(context, termuxService, params)
+                    else -> execRunCommand(context, termuxService, params)
+                }
+            }
         }
     }
 
@@ -387,11 +488,11 @@ object SkillExecutor {
                 val handle = ts.mHandle.toString()
                 val displayName = ts.mSessionName ?: "Terminal"
                 SkillExecutionResult(
-                    true, "已创建新会话",
+                    true, "已生成终端会话卡片",
                     SkillCardData(
                         skillType = SkillType.NEW_SESSION,
                         title = "已新建终端会话",
-                        description = "会话名称: $displayName",
+                        description = "会话名称: $displayName（点击卡片以初始化终端）",
                         status = SkillStatus.COMPLETED,
                         sessionId = handle,
                         sessionName = displayName
@@ -475,18 +576,22 @@ object SkillExecutor {
             val activity = context as? Activity
             if (activity != null) {
                 activity.finishAffinity()
-                SkillExecutionResult(
-                    true, "已退出 Termux",
-                    SkillCardData(
-                        skillType = SkillType.EXIT_TERMUX,
-                        title = "已退出 Termux",
-                        description = "应用已退出",
-                        status = SkillStatus.COMPLETED
-                    )
-                )
             } else {
-                SkillExecutionResult(false, "无法获取 Activity 上下文，退出失败")
+                val homeIntent = Intent(Intent.ACTION_MAIN).apply {
+                    addCategory(Intent.CATEGORY_HOME)
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                }
+                context.startActivity(homeIntent)
             }
+            SkillExecutionResult(
+                true, "已退出 Termux",
+                SkillCardData(
+                    skillType = SkillType.EXIT_TERMUX,
+                    title = "已退出 Termux",
+                    description = "应用已退出",
+                    status = SkillStatus.COMPLETED
+                )
+            )
         } catch (e: Exception) {
             SkillExecutionResult(false, "退出 Termux 出错: ${e.message}")
         }
@@ -630,11 +735,13 @@ object SkillExecutor {
                 echo '__AI_COMMAND_DONE__' >> '$outputFile'
             """.trimIndent()
 
-            // 在新会话中执行
+            // 在新会话中执行（切到主线程，因为 createTermuxSession 内部 Handler 依赖主线程 Looper）
             val sessionName = "capture-${command.take(20).replace(Regex("[^a-zA-Z0-9]"), "_")}"
-            val session = termuxService.createTermuxSession(
-                null, arrayOf("-c", wrappedCmd), null, null, false, sessionName
-            )
+            val session = withContext(Dispatchers.Main.immediate) {
+                termuxService.createTermuxSession(
+                    null, arrayOf("-c", wrappedCmd), null, null, false, sessionName
+                )
+            }
 
             if (session == null) {
                 return@withContext SkillExecutionResult(false, "创建会话失败")
@@ -682,7 +789,7 @@ object SkillExecutor {
 
             SkillExecutionResult(
                 success = completed || output.isNotBlank(),
-                message = if (completed) "命令执行完成，已捕获输出" else "命令可能仍在运行，已捕获部分输出",
+                message = if (completed) "命令已完成，已捕获输出" else "命令可能仍在运行，已捕获部分输出",
                 skillCard = SkillCardData(
                     skillType = SkillType.CAPTURE_OUTPUT,
                     title = description,
@@ -716,11 +823,11 @@ object SkillExecutor {
             if (password.isNotBlank()) intent.putExtra("password", password)
             context.startActivity(intent)
             SkillExecutionResult(
-                true, "正在连接 VNC: $address",
+                true, "已生成 VNC 连接卡片",
                 SkillCardData(
                     skillType = SkillType.CONNECT_VNC,
                     title = "VNC 连接",
-                    description = "地址: $address",
+                    description = "地址: $address（点击卡片以连接）",
                     status = SkillStatus.COMPLETED,
                     connectionAddress = address
                 )
@@ -756,11 +863,11 @@ object SkillExecutor {
             if (session != null) {
                 val ts = session.getTerminalSession()
                 SkillExecutionResult(
-                    true, "已在新会话启动 SSH 连接到 $host",
+                    true, "已生成 SSH 连接卡片",
                     SkillCardData(
                         skillType = SkillType.CONNECT_SSH,
                         title = "SSH 连接",
-                        description = "$username@$host:$port",
+                        description = "$username@$host:$port（点击卡片以连接）",
                         status = SkillStatus.COMPLETED,
                         sessionId = ts.mHandle.toString(),
                         sessionName = ts.mSessionName ?: "SSH-$host",
@@ -944,7 +1051,7 @@ object SkillExecutor {
                     // 写入命令（追加换行）
                     ts.write(command + "\n")
                     SkillExecutionResult(
-                        true, "命令已发送到会话 \"${ts.mSessionName}\"",
+                        true, "已生成命令卡片",
                         SkillCardData(
                             skillType = SkillType.RUN_COMMAND,
                             title = "执行命令",
@@ -965,7 +1072,7 @@ object SkillExecutor {
                 if (newSession != null) {
                     val ts = newSession.getTerminalSession()
                     SkillExecutionResult(
-                        true, "已在新会话执行命令",
+                        true, "已生成命令卡片",
                         SkillCardData(
                             skillType = SkillType.RUN_COMMAND,
                             title = "新会话执行命令",
@@ -1061,11 +1168,97 @@ object SkillExecutor {
             }
             SkillType.EXIT_TERMUX -> {
                 val activity = context as? Activity
-                activity?.finishAffinity()
+                if (activity != null) {
+                    activity.finishAffinity()
+                } else {
+                    val homeIntent = Intent(Intent.ACTION_MAIN).apply {
+                        addCategory(Intent.CATEGORY_HOME)
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                    }
+                    context.startActivity(homeIntent)
+                }
             }
             else -> { }
         }
     }
+
+    // ---- 自定义技能实现 ----
+
+    private suspend fun execOpenActivity(context: Context, params: JsonObject): SkillExecutionResult =
+        withContext(Dispatchers.Main.immediate) {
+            return@withContext try {
+                val activityClass = if (params.has("activityClass")) params.get("activityClass").asString else ""
+                if (activityClass.isBlank()) {
+                    return@withContext SkillExecutionResult(false, "activityClass 参数为空")
+                }
+                val extras = if (params.has("extras")) {
+                    runCatching { params.getAsJsonObject("extras") }.getOrNull()
+                } else null
+
+                val intent = Intent()
+                intent.setClassName(context, activityClass)
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                extras?.entrySet()?.forEach { (key, value) ->
+                    when {
+                        value.isJsonPrimitive && value.asJsonPrimitive.isString ->
+                            intent.putExtra(key, value.asString)
+                        value.isJsonPrimitive && value.asJsonPrimitive.isNumber ->
+                            intent.putExtra(key, value.asLong)
+                        value.isJsonPrimitive && value.asJsonPrimitive.isBoolean ->
+                            intent.putExtra(key, value.asBoolean)
+                    }
+                }
+                context.startActivity(intent)
+                SkillExecutionResult(
+                    true, "已打开页面: $activityClass",
+                    SkillCardData(
+                        skillType = SkillType.CUSTOM_COMMAND,
+                        title = "打开页面",
+                        description = activityClass,
+                        status = SkillStatus.COMPLETED
+                    )
+                )
+            } catch (e: Exception) {
+                SkillExecutionResult(false, "打开页面出错: ${e.message}")
+            }
+        }
+
+    private suspend fun execSendBroadcast(context: Context, params: JsonObject): SkillExecutionResult =
+        withContext(Dispatchers.Main.immediate) {
+            return@withContext try {
+                val action = if (params.has("action")) params.get("action").asString else ""
+                if (action.isBlank()) {
+                    return@withContext SkillExecutionResult(false, "action 参数为空")
+                }
+                val extras = if (params.has("extras")) {
+                    runCatching { params.getAsJsonObject("extras") }.getOrNull()
+                } else null
+
+                val intent = Intent(action)
+                extras?.entrySet()?.forEach { (key, value) ->
+                    when {
+                        value.isJsonPrimitive && value.asJsonPrimitive.isString ->
+                            intent.putExtra(key, value.asString)
+                        value.isJsonPrimitive && value.asJsonPrimitive.isNumber ->
+                            intent.putExtra(key, value.asLong)
+                        value.isJsonPrimitive && value.asJsonPrimitive.isBoolean ->
+                            intent.putExtra(key, value.asBoolean)
+                    }
+                }
+                context.sendBroadcast(intent)
+                SkillExecutionResult(
+                    true, "已发送广播: $action",
+                    SkillCardData(
+                        skillType = SkillType.CUSTOM_COMMAND,
+                        title = "发送广播",
+                        description = action,
+                        status = SkillStatus.COMPLETED
+                    )
+                )
+            } catch (e: Exception) {
+                SkillExecutionResult(false, "发送广播出错: ${e.message}")
+            }
+        }
 }
 
 /** ---------- AI API 调用器 ---------- */
@@ -1119,4 +1312,275 @@ object AiApiClient {
             )
         }
     }
+
+    /**
+     * 流式调用 AI，通过 Flow 逐块返回内容。
+     * 支持 OpenAI 兼容的 SSE 格式（data: {...}）。
+     * 发送方在外部通过 isCancelled 检查是否停止。
+     */
+    fun chatStream(
+        config: AiProviderConfig,
+        messages: List<OpenAiMessage>,
+        isCancelled: () -> Boolean
+    ): Flow<StreamChunk> = flow {
+        try {
+            val baseUrl = config.apiBaseUrl.trimEnd('/')
+            val url = URL("$baseUrl/chat/completions")
+            val bodyObj = ChatCompletionRequest(
+                model = config.model,
+                messages = messages,
+                temperature = config.temperature,
+                stream = true
+            )
+            val body = Gson().toJson(bodyObj)
+
+            val conn = (url.openConnection() as HttpURLConnection).apply {
+                requestMethod = "POST"
+                connectTimeout = 60_000
+                readTimeout = 120_000
+                setRequestProperty("Content-Type", "application/json")
+                setRequestProperty("Accept", "text/event-stream")
+                if (config.apiKey.isNotBlank()) {
+                    setRequestProperty("Authorization", "Bearer ${config.apiKey}")
+                }
+                doOutput = true
+                doInput = true
+            }
+
+            DataOutputStream(conn.outputStream).use { it.write(body.toByteArray(Charsets.UTF_8)) }
+
+            val code = conn.responseCode
+            if (code !in 200..299) {
+                val errorText = conn.errorStream?.bufferedReader()?.use(BufferedReader::readText) ?: ""
+                emit(StreamChunk.Error("HTTP $code: ${errorText.take(200)}"))
+                return@flow
+            }
+
+            val reader = BufferedReader(InputStreamReader(conn.inputStream, Charsets.UTF_8))
+            var line: String?
+            var fullContent = StringBuilder()
+            var fullReasoning = StringBuilder()
+            val rawResponse = StringBuilder()  // 收集原始 SSE 数据
+            var hasContent = false
+            var doneReceived = false
+            var inThinkBlock = false
+            var thinkTagBuffer = StringBuilder()
+            var hasSentReasoningDone = false  // 是否已发送 ReasoningDone 事件
+
+            while (true) {
+                if (isCancelled()) {
+                    conn.disconnect()
+                    emit(StreamChunk.Cancelled)
+                    break
+                }
+                line = reader.readLine()
+                if (line == null) {
+                    // 连接关闭
+                    android.util.Log.d("AiTermux", "Connection closed: contentLen=${fullContent.length}, reasoningLen=${fullReasoning.length}")
+                    emit(StreamChunk.Done(
+                        fullContent.toString(),
+                        fullReasoning.toString(),
+                        rawResponse.toString()
+                    ))
+                    break
+                }
+                val trimmed = line.trim()
+                if (trimmed.isEmpty()) continue
+                if (!trimmed.startsWith("data:")) continue
+                val dataStr = trimmed.removePrefix("data:").trim()
+
+                // 收集原始 SSE 数据
+                rawResponse.append(line).append("\n")
+
+                if (dataStr == "[DONE]") {
+                    android.util.Log.d("AiTermux", "[DONE] -> Done (hasContent=$hasContent, reasoningLen=${fullReasoning.length})")
+                    // 如果有思考内容但未发送 ReasoningDone，先发送
+                    if (fullReasoning.isNotEmpty() && !hasSentReasoningDone) {
+                        emit(StreamChunk.ReasoningDone)
+                        hasSentReasoningDone = true
+                    }
+                    emit(StreamChunk.Done(
+                        fullContent.toString(),
+                        fullReasoning.toString(),
+                        rawResponse.toString()
+                    ))
+                    break
+                }
+
+                try {
+                    val json = JsonParser.parseString(dataStr).asJsonObject
+                    val choices = json.getAsJsonArray("choices")
+                    if (choices != null && choices.size() > 0) {
+                        val delta = choices.get(0).asJsonObject.getAsJsonObject("delta")
+
+                        // 优先处理 reasoning_content（如果 API 支持）
+                        // 注意：JSON null 需要特殊处理
+                        val reasoningElement = delta?.get("reasoning_content")
+                        val reasoningContent = if (reasoningElement != null && !reasoningElement.isJsonNull) {
+                            reasoningElement.asString?.takeIf { it.isNotBlank() }
+                        } else null
+
+                        if (reasoningContent != null) {
+                            fullReasoning.append(reasoningContent)
+                            emit(StreamChunk.Reasoning(reasoningContent))
+                        }
+
+                        // 处理 content 字段
+                        val content = delta?.get("content")?.asString
+                        if (content != null && content.isNotBlank()) {
+                            android.util.Log.d("AiTermux", "content delta (len=${content.length}): ${content.take(80)}${if (content.length > 80) "..." else ""}")
+
+                            if (reasoningContent != null) {
+                                // API 已提供 reasoning_content，直接使用 content
+                                // 当开始接收实际内容时，标记思考完成
+                                if (fullReasoning.isNotEmpty() && !hasSentReasoningDone) {
+                                    hasSentReasoningDone = true
+                                    emit(StreamChunk.ReasoningDone)
+                                }
+                                fullContent.append(content)
+                                hasContent = true
+                                emit(StreamChunk.Content(content))
+                            } else {
+                                // 从 content 中解析 <think> 标签（如果有的话）
+                                val processed = processContentDelta(content, inThinkBlock, thinkTagBuffer)
+                                inThinkBlock = processed.inThink
+                                if (processed.reasoning.isNotEmpty()) {
+                                    fullReasoning.append(processed.reasoning)
+                                    emit(StreamChunk.Reasoning(processed.reasoning))
+                                }
+                                if (processed.reasoningDone) {
+                                    hasSentReasoningDone = true
+                                    emit(StreamChunk.ReasoningDone)
+                                }
+                                if (processed.content.isNotEmpty()) {
+                                    fullContent.append(processed.content)
+                                    hasContent = true
+                                    emit(StreamChunk.Content(processed.content))
+                                }
+                            }
+                        }
+
+                        // 检查 finish_reason
+                        val finishReason = choices.get(0).asJsonObject.get("finish_reason")?.asString
+                        if (finishReason != null && finishReason != "null") {
+                            android.util.Log.d("AiTermux", "finish_reason=$finishReason, hasContent=$hasContent")
+                            // 如果有思考内容但未发送 ReasoningDone，先发送
+                            if (fullReasoning.isNotEmpty() && !hasSentReasoningDone) {
+                                emit(StreamChunk.ReasoningDone)
+                                hasSentReasoningDone = true
+                            }
+                            emit(StreamChunk.Done(
+                                fullContent.toString(),
+                                fullReasoning.toString(),
+                                rawResponse.toString()
+                            ))
+                            break
+                        }
+                    }
+                } catch (_: Exception) { }
+            }
+        } catch (e: Exception) {
+            emit(StreamChunk.Error("请求失败: ${e.message ?: "未知错误"}"))
+        }
+    }.flowOn(Dispatchers.IO)
+}
+
+/**
+ * 处理 content 字段中的 <think> 标签。
+ * 模型可能把思考内容放在 content 字段里，用 <think> 和 </think> 标签包装。
+ * 此函数将内容分离为思考部分和实际回复部分。
+ */
+private data class ProcessedContent(
+    val reasoning: String = "",
+    val content: String = "",
+    val reasoningDone: Boolean = false,
+    val inThink: Boolean = false
+)
+
+private fun processContentDelta(
+    delta: String,
+    inThink: Boolean,
+    tagBuffer: StringBuilder
+): ProcessedContent {
+    var reasoning = StringBuilder()
+    var content = StringBuilder()
+    var currentInThink = inThink
+    var reasoningDone = false
+    var remaining = delta
+
+    // 如果之前有未完成的标签（如 "<thi" 被截断），先拼接
+    if (tagBuffer.isNotEmpty()) {
+        remaining = tagBuffer.toString() + remaining
+        tagBuffer.clear()
+    }
+
+    while (remaining.isNotEmpty()) {
+        if (currentInThink) {
+            // 正在思考区域，查找 </think> 结束标签
+            val endIdx = remaining.indexOf("</think>")
+            if (endIdx >= 0) {
+                // 找到结束标签
+                val thinkPart = remaining.substring(0, endIdx)
+                if (thinkPart.isNotEmpty()) {
+                    reasoning.append(thinkPart)
+                }
+                currentInThink = false
+                reasoningDone = true
+                remaining = remaining.substring(endIdx + 7) // 跳过 </think>
+                // 跳过标签后的空白
+                remaining = remaining.trimStart()
+                if (remaining.isEmpty()) break
+            } else {
+                // 检查是否是被截断的 </think> 标签（以 "<" 开头且与 "</think" 前缀匹配）
+                if (remaining.startsWith("<") && "</think".startsWith(remaining)) {
+                    // 可能是被截断的 </think> 标签，保存到缓冲区
+                    tagBuffer.append(remaining)
+                    remaining = ""
+                } else {
+                    reasoning.append(remaining)
+                    remaining = ""
+                }
+            }
+        } else {
+            // 不在思考区域，查找 <think> 开始标签
+            val startIdx = remaining.indexOf("<think>")
+            if (startIdx >= 0) {
+                // 找到开始标签
+                if (startIdx > 0) {
+                    content.append(remaining.substring(0, startIdx))
+                }
+                currentInThink = true
+                remaining = remaining.substring(startIdx + 7) // 跳过 <think>
+                remaining = remaining.trimStart()
+                if (remaining.isEmpty()) break
+            } else {
+                // 检查是否是被截断的 <think> 标签（以 "<" 开头且与 "<think" 前缀匹配）
+                if (remaining.startsWith("<") && "<think".startsWith(remaining)) {
+                    // 可能是被截断的 <think> 标签，保存到缓冲区
+                    tagBuffer.append(remaining)
+                    remaining = ""
+                } else {
+                    content.append(remaining)
+                    remaining = ""
+                }
+            }
+        }
+    }
+
+    return ProcessedContent(
+        reasoning = reasoning.toString(),
+        content = content.toString(),
+        reasoningDone = reasoningDone,
+        inThink = currentInThink
+    )
+}
+
+/** 流式响应的分片类型 */
+sealed class StreamChunk {
+    data class Content(val delta: String) : StreamChunk()
+    data class Reasoning(val delta: String) : StreamChunk()
+    data object ReasoningDone : StreamChunk()
+    data class Done(val fullText: String, val fullReasoning: String = "", val rawResponse: String = "") : StreamChunk()
+    data class Error(val message: String) : StreamChunk()
+    object Cancelled : StreamChunk()
 }

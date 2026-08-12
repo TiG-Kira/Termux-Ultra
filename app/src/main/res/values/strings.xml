@@ -562,4 +562,24 @@
     <string name="low_android_force_disable_confirm">Disable</string>
     <string name="low_android_force_disable_cancel">Cancel</string>
 
+    <!-- AI Termux Developer Mode -->
+    <string name="ai_developer_mode">Developer Mode</string>
+    <string name="ai_developer_mode_desc">Edit System Prompt, manage custom skills, view full conversation history</string>
+    <string name="ai_edit_system_prompt">Edit System Prompt</string>
+    <string name="ai_edit_system_prompt_desc">Customize AI system instructions (advanced, use with caution)</string>
+    <string name="ai_custom_skills">Custom Skills</string>
+    <string name="ai_custom_skills_desc">Create and manage custom skill cards (official skills are read-only)</string>
+    <string name="ai_full_history">Full Conversation History</string>
+    <string name="ai_full_history_desc">View full conversation including System prompts</string>
+    <string name="ai_no_custom_skills">No custom skills yet</string>
+    <string name="ai_no_chat_history">No conversation history</string>
+    <string name="ai_add_skill">Add Skill</string>
+    <string name="ai_edit_skill">Edit Skill</string>
+    <string name="ai_skill_name">Skill Name</string>
+    <string name="ai_skill_description">Skill Description</string>
+    <string name="ai_skill_json">Skill JSON Definition</string>
+    <string name="ai_skill_prompt">Additional System Prompt</string>
+    <string name="ai_copy_all">Copy All</string>
+    <string name="ai_system_prompt_warning">Use with caution - incorrect configuration may cause abnormal AI behavior.</string>
+
 </resources>

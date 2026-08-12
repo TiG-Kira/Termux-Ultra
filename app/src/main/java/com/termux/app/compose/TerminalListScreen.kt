@@ -759,17 +759,24 @@ private fun DeadSessionCard(
 
 @Composable
 fun KeepAliveWarningCard(onClose: () -> Unit) {
+    val context = LocalContext.current
     val isDark = isSystemInDarkTheme()
     val cardColor = if (isDark) Color(0xFF3D3514) else Color(0xFFFFF9C4)
     val iconColor = Color(0xFFFDD835)
     val textColor = if (isDark) Color.White else Color.Black
-    var collapsed by remember { mutableStateOf(false) }
+    val prefs = remember { context.getSharedPreferences("termux_prefs", android.content.Context.MODE_PRIVATE) }
+    var collapsed by remember { mutableStateOf(prefs.getBoolean("keep_alive_warning_collapsed", false)) }
+
+    fun setCollapsed(value: Boolean) {
+        collapsed = value
+        prefs.edit().putBoolean("keep_alive_warning_collapsed", value).apply()
+    }
 
     androidx.compose.material3.Card(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 8.dp)
-            .then(if (collapsed) Modifier.clickable { collapsed = false } else Modifier),
+            .then(if (collapsed) Modifier.clickable { setCollapsed(false) } else Modifier),
         colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = cardColor)
     ) {
         Box(modifier = Modifier.fillMaxWidth()) {
@@ -857,7 +864,7 @@ fun KeepAliveWarningCard(onClose: () -> Unit) {
                         .align(Alignment.BottomStart)
                         .offset(x = 6.dp, y = 4.dp)
                         .size(20.dp)
-                        .clickable { collapsed = true },
+                        .clickable { setCollapsed(true) },
                     contentAlignment = Alignment.Center
                 ) {
                     Material3Icon(
@@ -874,17 +881,24 @@ fun KeepAliveWarningCard(onClose: () -> Unit) {
 
 @Composable
 fun WelcomeCard(text: String, onClose: () -> Unit) {
+    val context = LocalContext.current
     val isDark = isSystemInDarkTheme()
     val cardColor = if (isDark) Color(0xFF1A1A1A) else Color.White
     val iconColor = if (isDark) Color(0xFF666666) else Color(0xFFCCCCCC)
     val textColor = if (isDark) Color.White else Color.Black
-    var collapsed by remember { mutableStateOf(false) }
+    val prefs = remember { context.getSharedPreferences("termux_prefs", android.content.Context.MODE_PRIVATE) }
+    var collapsed by remember { mutableStateOf(prefs.getBoolean("welcome_card_collapsed", false)) }
+
+    fun setCollapsed(value: Boolean) {
+        collapsed = value
+        prefs.edit().putBoolean("welcome_card_collapsed", value).apply()
+    }
 
     androidx.compose.material3.Card(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 8.dp)
-            .then(if (collapsed) Modifier.clickable { collapsed = false } else Modifier),
+            .then(if (collapsed) Modifier.clickable { setCollapsed(false) } else Modifier),
         colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = cardColor)
     ) {
         Box(modifier = Modifier.fillMaxWidth()) {
@@ -963,7 +977,7 @@ fun WelcomeCard(text: String, onClose: () -> Unit) {
                         .align(Alignment.BottomStart)
                         .offset(x = 6.dp, y = 4.dp)
                         .size(20.dp)
-                        .clickable { collapsed = true },
+                        .clickable { setCollapsed(true) },
                     contentAlignment = Alignment.Center
                 ) {
                     Material3Icon(
@@ -992,6 +1006,7 @@ fun ServiceStatusCard(
     status: ServiceStatus,
     killedSessionName: String? = null
 ) {
+    val context = LocalContext.current
     val isDark = isSystemInDarkTheme()
     val (cardColor, iconColor, icon) = when (status) {
         ServiceStatus.NORMAL -> {
@@ -1014,7 +1029,13 @@ fun ServiceStatusCard(
         }
     }
     val textColor = if (isDark) Color.White else Color.Black
-    var collapsed by remember { mutableStateOf(false) }
+    val prefs = remember { context.getSharedPreferences("termux_prefs", android.content.Context.MODE_PRIVATE) }
+    var collapsed by remember { mutableStateOf(prefs.getBoolean("service_status_collapsed", false)) }
+
+    fun setCollapsed(value: Boolean) {
+        collapsed = value
+        prefs.edit().putBoolean("service_status_collapsed", value).apply()
+    }
 
     val title = when (status) {
         ServiceStatus.NORMAL -> stringResource(R.string.service_status_normal)
@@ -1041,7 +1062,7 @@ fun ServiceStatusCard(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 8.dp)
-            .then(if (collapsed) Modifier.clickable { collapsed = false } else Modifier),
+            .then(if (collapsed) Modifier.clickable { setCollapsed(false) } else Modifier),
         colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = cardColor)
     ) {
         Box(modifier = Modifier.fillMaxWidth()) {
@@ -1120,7 +1141,7 @@ fun ServiceStatusCard(
                         .align(Alignment.BottomStart)
                         .offset(x = 6.dp, y = 4.dp)
                         .size(20.dp)
-                        .clickable { collapsed = true },
+                        .clickable { setCollapsed(true) },
                     contentAlignment = Alignment.Center
                 ) {
                     Material3Icon(
@@ -1149,7 +1170,13 @@ fun LowAndroidWarningCard() {
     var forceEnabled by remember { mutableStateOf(ApiCompat.forceEnabledFeatures(context)) }
     val hasForce = forceEnabled.isNotEmpty()
     var showDisableDialog by remember { mutableStateOf(false) }
-    var collapsed by remember { mutableStateOf(false) }
+    val prefs = remember { context.getSharedPreferences("termux_prefs", android.content.Context.MODE_PRIVATE) }
+    var collapsed by remember { mutableStateOf(prefs.getBoolean("low_android_warning_collapsed", false)) }
+
+    fun setCollapsed(value: Boolean) {
+        collapsed = value
+        prefs.edit().putBoolean("low_android_warning_collapsed", value).apply()
+    }
 
     val cardColor = if (hasForce) {
         if (isDark) Color(0xFF3B1414) else Color(0xFFFFEBEE)
@@ -1182,7 +1209,7 @@ fun LowAndroidWarningCard() {
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 8.dp)
-            .then(if (collapsed) Modifier.clickable { collapsed = false } else Modifier),
+            .then(if (collapsed) Modifier.clickable { setCollapsed(false) } else Modifier),
         colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = cardColor)
     ) {
         Box(modifier = Modifier.fillMaxWidth()) {
@@ -1299,7 +1326,7 @@ fun LowAndroidWarningCard() {
                         .align(Alignment.BottomStart)
                         .offset(x = 6.dp, y = 4.dp)
                         .size(20.dp)
-                        .clickable { collapsed = true },
+                        .clickable { setCollapsed(true) },
                     contentAlignment = Alignment.Center
                 ) {
                     Material3Icon(

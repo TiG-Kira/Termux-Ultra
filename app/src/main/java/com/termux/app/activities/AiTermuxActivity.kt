@@ -17,6 +17,7 @@ import androidx.activity.viewModels
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -77,6 +78,7 @@ import kotlinx.coroutines.withContext
 import top.yukonga.miuix.kmp.basic.*
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
+import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 class AiTermuxActivity : ComponentActivity() {
@@ -109,6 +111,16 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
 
     var isLoading by mutableStateOf(false)
         private set
+
+    var isStreaming by mutableStateOf(false)
+        private set
+
+    private var cancelled = false
+
+    fun cancelGeneration() {
+        cancelled = true
+        isStreaming = false
+    }
 
     var termuxService by mutableStateOf<TermuxService?>(null)
         private set
@@ -324,13 +336,47 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
     }
 
     /**
-     * 一次 AI 回合：发消息给 AI → 收到回复 → 执行技能 → 结果回传 AI → 循环直到没有技能或需要交互
+     * 一次 AI 回合：发消息给 AI → 流式显示回复 → 执行技能 → 结果回传 AI → 循环
      */
     private suspend fun processAiTurn(ctx: Context, userText: String) {
         var currentUserText = userText
-        // 最多 20 轮自动推进，防止死循环
+        cancelled = false
+        // 被幻觉拦截的技能卡片（skillType -> params key），用于重输出时去重
+        var hallucinatedSkillKeys: Set<String> = emptySet()
+        var hallucinatedTotalCount = 0
+        var hallucinationRetryCount = 0
+        val maxHallucinationRetries = 1
+        // 技能执行历史：记录已执行的 skillType:params key，用于检测重复
+        val executedHistory = mutableListOf<String>()
+        val maxHistorySize = 10
+        // 连续相同技能计数，用于检测 AI 陷入技能循环
+        var lastSkillKey: String? = null
+        var consecutiveSameSkill = 0
+        val maxConsecutiveSameSkill = 3
+        // AI 文本回复历史：检测纯文本重复（AI 反复回答同样的问题）
+        val recentAiReplies = mutableListOf<String>()
+        val maxReplyHistory = 5
+        var consecutiveSimilarReplies = 0
+        val maxConsecutiveSimilarReplies = 3
+
+        // 构建一次 System Prompt，后续迭代复用
+        val baseSystemPrompt = AiTermuxPrefs.buildFullSystemPrompt(ctx)
+        // 重试时使用的精简 System Prompt
+        val retrySystemPrompt = """
+你刚才的回复违反了 AI Termux 的输出规范。请重新输出，并遵守以下核心规则：
+1. 仅输出技能卡片（```skill 代码块）+ 一句自然语言说明
+2. 不要编造执行结果、不要声称操作已完成
+3. 不要添加技能结果、执行结果等伪造段落
+4. 如果之前被拦截过相同的技能卡片，不要重复输出
+5. 类别A技能（NEW_SESSION/RUN_COMMAND/CAPTURE_OUTPUT等）仅生成卡片，告知用户点击即可
+6. 每轮回复结尾必须输出 [END_TURN] 表示完成
+""".trimIndent()
+
         for (round in 1..20) {
-            val systemPrompt = AiTermuxPrefs.buildFullSystemPrompt(ctx)
+            if (cancelled) break
+
+            // 决定使用的 System Prompt：重试时用精简版
+            val systemPrompt = if (hallucinationRetryCount > 0) retrySystemPrompt else baseSystemPrompt
             val apiMsgs = mutableListOf<OpenAiMessage>()
             apiMsgs.add(OpenAiMessage("system", systemPrompt))
             synchronized(messages) {
@@ -342,68 +388,400 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
             }
             apiMsgs.add(OpenAiMessage("user", currentUserText))
 
-            val resp = AiApiClient.chat(config.providerConfig, apiMsgs)
-            if (resp.error != null) {
-                synchronized(messages) {
-                    messages.add(
-                        ChatMessage(
-                            role = "assistant",
-                            content = "调用 AI 时出错了",
-                            errorMessage = "API 错误：${resp.error.message}"
-                        )
+            // 先放一个空的 assistant 消息用于流式填充
+            val streamMsgId = "stream_${System.currentTimeMillis()}_${Math.random()}"
+            synchronized(messages) {
+                messages.add(
+                    ChatMessage(
+                        id = streamMsgId,
+                        role = "assistant",
+                        content = ""
                     )
+                )
+            }
+
+            isStreaming = true
+            var replyText = ""
+            var reasoningText = ""
+            var rawResponseText = ""
+            var streamError: String? = null
+            var wasCancelled = false
+
+            AiApiClient.chatStream(config.providerConfig, apiMsgs, { cancelled }).collect { chunk ->
+                when (chunk) {
+                    is StreamChunk.Reasoning -> {
+                        reasoningText += chunk.delta
+                        synchronized(messages) {
+                            val idx = messages.indexOfFirst { it.id == streamMsgId }
+                            if (idx >= 0) {
+                                messages[idx] = messages[idx].copy(
+                                    reasoningContent = reasoningText,
+                                    reasoningDone = false
+                                )
+                            }
+                        }
+                    }
+                    StreamChunk.ReasoningDone -> {
+                        android.util.Log.d("AiTermux", "ReasoningDone received, reasoningLen=${reasoningText.length}")
+                        synchronized(messages) {
+                            val idx = messages.indexOfFirst { it.id == streamMsgId }
+                            if (idx >= 0) {
+                                messages[idx] = messages[idx].copy(
+                                    reasoningContent = reasoningText,
+                                    reasoningDone = true
+                                )
+                            }
+                        }
+                    }
+                    is StreamChunk.Content -> {
+                        replyText += chunk.delta
+                        synchronized(messages) {
+                            val idx = messages.indexOfFirst { it.id == streamMsgId }
+                            if (idx >= 0) {
+                                // 流式显示时隐藏 [END_TURN] 标记
+                                val displayText = replyText.replace("[END_TURN]", "").trimEnd()
+                                messages[idx] = messages[idx].copy(
+                                    content = SkillExecutor.stripSkillBlocks(displayText).ifBlank { displayText }
+                                )
+                            }
+                        }
+                    }
+                    is StreamChunk.Done -> {
+                        replyText = chunk.fullText
+                        rawResponseText = chunk.rawResponse
+                        android.util.Log.d("AiTermux", "Done received, contentLen=${chunk.fullText.length}, reasoningLen=${chunk.fullReasoning.length}, rawLen=${chunk.rawResponse.length}")
+                    }
+                    is StreamChunk.Error -> {
+                        streamError = chunk.message
+                    }
+                    is StreamChunk.Cancelled -> {
+                        wasCancelled = true
+                    }
                 }
+            }
+            isStreaming = false
+
+// 流结束后，处理消息
+            if (wasCancelled) {
+                AiTermuxPrefs.saveChatHistory(ctx, messages.toList())
                 return
             }
-            val replyText = resp.choices.firstOrNull()?.message?.content ?: "(无响应内容)"
 
-            // === 假输出检测 ===
-            val fakeCheck = SkillExecutor.detectFakeOutput(replyText)
-            if (fakeCheck.isFake) {
-                android.util.Log.e("AiTermux", "检测到 AI 假输出: ${fakeCheck.violations}")
-                // 显示警告给用户
+            if (streamError != null) {
                 synchronized(messages) {
-                    messages.add(
-                        ChatMessage(
-                            role = "assistant",
-                            content = "⚠️ 检测到 AI 幻觉输出，正在要求 AI 重新生成...",
-                            isWarning = true
+                    val idx = messages.indexOfFirst { it.id == streamMsgId }
+                    if (idx >= 0) {
+                        messages[idx] = messages[idx].copy(
+                            content = "调用 AI 时出错了",
+                            errorMessage = "API 错误：$streamError"
                         )
-                    )
+                    }
                 }
                 AiTermuxPrefs.saveChatHistory(ctx, messages.toList())
+                return
+            }
 
-                // 注入严格指令要求 AI 重新生成，替换当前的 currentUserText
-                val violationText = fakeCheck.violations.joinToString("；")
-                currentUserText = buildString {
-                    appendLine("[系统拦截] 你刚才的回复违反了以下禁令：")
-                    appendLine(violationText)
-                    appendLine()
-                    appendLine("请严格遵守系统指令，重新回复。")
-                    appendLine("- 如果需要执行操作，只输出一句意图说明 + skill 代码块，之后立即停止")
-                    appendLine("- 如果不需要执行操作，只输出自然语言文本")
-                    appendLine("- 绝对不要编造任何执行结果、文件列表、命令输出或系统信息")
-                    appendLine()
-                    appendLine("用户原始请求：$userText")
+            // 如果只有思考内容没有回复文本，中断并保存原始响应用于调试
+            if (replyText.isBlank() && reasoningText.isNotBlank()) {
+                android.util.Log.e("AiTermux", "AI 思考完成但未输出文本，保存原始响应用于调试")
+                synchronized(messages) {
+                    val idx = messages.indexOfFirst { it.id == streamMsgId }
+                    if (idx >= 0) {
+                        messages[idx] = messages[idx].copy(
+                            content = "⚠️ AI 只进行了深度思考，未输出实际回复。点击查看原始 API 响应以供排查。",
+                            reasoningContent = reasoningText,
+                            reasoningDone = true,
+                            rawResponse = rawResponseText
+                        )
+                    }
                 }
+                AiTermuxPrefs.saveChatHistory(ctx, messages.toList())
+                return
+            }
+
+            // 如果流式返回的是空内容（无思考也无回复），删掉占位消息
+            if (replyText.isBlank()) {
+                synchronized(messages) {
+                    val idx = messages.indexOfFirst { it.id == streamMsgId }
+                    if (idx >= 0) messages.removeAt(idx)
+                }
+                AiTermuxPrefs.saveChatHistory(ctx, messages.toList())
+                return
+            }
+
+            // === 预解析技能块（用于交叉验证，防止正则遗漏导致的误判）===
+            val preParsedSkills = SkillExecutor.parseSkillBlocks(replyText)
+            val preParsedCount = preParsedSkills.size
+
+            // === 假输出检测（传入预解析数量进行交叉验证）===
+            val fakeCheck = SkillExecutor.detectFakeOutput(replyText, preParsedCount)
+
+            // 二次校验：如果预解析找到了技能块，但检测报告"无技能块"类违规，
+            // 则剔除这些违规（说明是正则遗漏导致的误判）
+            val finalViolations = if (preParsedCount > 0 && fakeCheck.isFake) {
+                fakeCheck.violations.filter { v ->
+                    // 移除依赖"无技能块"判断的禁令（4、6、7、8）
+                    !v.contains("但未输出任何技能卡片") &&
+                    !v.contains("自信式幻觉") &&
+                    !v.contains("捏造不存在的技能") &&
+                    !v.contains("逃避执行")
+                }
+            } else {
+                fakeCheck.violations
+            }
+
+            if (finalViolations.isNotEmpty()) {
+                android.util.Log.e("AiTermux", "检测到 AI 假输出（第${hallucinationRetryCount + 1}次）: $finalViolations")
+
+                // 超过最大重试次数，接受输出
+                if (hallucinationRetryCount >= maxHallucinationRetries) {
+                    android.util.Log.w("AiTermux", "幻觉重试次数已达上限，接受当前输出")
+                    synchronized(messages) {
+                        val idx = messages.indexOfFirst { it.id == streamMsgId }
+                        if (idx >= 0) {
+                            messages[idx] = messages[idx].copy(
+                                content = "⚠️ 检测到 AI 输出不规范，但已达重试上限，已接受输出。",
+                                isWarning = true
+                            )
+                        }
+                    }
+                    AiTermuxPrefs.saveChatHistory(ctx, messages.toList())
+                    // 继续执行下面的技能解析和执行逻辑，跳过幻觉检测
+                    // 不设置 continue，让代码走到下面的正常流程
+                } else {
+                    // 保存被拦截的技能卡片 key，用于重输出时去重
+                    hallucinatedSkillKeys = preParsedSkills.map { (st, params) ->
+                        "$st:$params"
+                    }.toSet()
+                    hallucinatedTotalCount = preParsedSkills.size
+                    hallucinationRetryCount++
+
+                    // 替换流式消息为警告
+                    synchronized(messages) {
+                        val idx = messages.indexOfFirst { it.id == streamMsgId }
+                        if (idx >= 0) {
+                            messages[idx] = messages[idx].copy(
+                                content = "⚠️ 检测到 AI 幻觉输出（${finalViolations.firstOrNull() ?: "违反禁令"}），正在要求重新生成…",
+                                isWarning = true
+                            )
+                        }
+                    }
+                    AiTermuxPrefs.saveChatHistory(ctx, messages.toList())
+
+                    val shortReason = finalViolations.firstOrNull() ?: "违反输出规范"
+                    currentUserText = buildString {
+                        appendLine("[拦截] $shortReason")
+                        appendLine("重新输出：仅需输出 skill 代码块 + 简短说明，停止。")
+                        if (hallucinatedSkillKeys.isNotEmpty()) {
+                            appendLine("跳过之前已拦截的 ${hallucinatedTotalCount} 个相同卡片。")
+                        }
+                        appendLine("原请求：$userText")
+                    }
+                    continue
+                }
+            }
+
+            // 更新最终消息（可能包含技能卡片）
+            // 注意：以下所有处理仅基于 replyText（实际回复内容），
+            // reasoningContent（深度思考）不参与任何检测/解析/执行逻辑
+            // 检测并移除 [END_TURN] 结束标记
+            val hasEndTurn = replyText.contains("[END_TURN]")
+            val cleanedReply = replyText.replace("[END_TURN]", "").trimEnd()
+            val plainText = SkillExecutor.stripSkillBlocks(cleanedReply)
+            val skills = SkillExecutor.parseSkillBlocks(cleanedReply)
+
+            // === 去重检查 1：与之前被幻觉拦截的技能卡片比较 ===
+            val newSkills = mutableListOf<Pair<String, JsonObject>>()
+            val skippedSkills = mutableListOf<Pair<String, JsonObject>>()
+
+            for (skill in skills) {
+                val key = "${skill.first}:${skill.second}"
+                if (key in hallucinatedSkillKeys) {
+                    skippedSkills.add(skill)
+                } else {
+                    newSkills.add(skill)
+                }
+            }
+
+            // === 去重检查 2：与已执行的历史比较，检测 AI 重复执行同一操作 ===
+            val trulyNewSkills = mutableListOf<Pair<String, JsonObject>>()
+            for (skill in newSkills) {
+                val key = "${skill.first}:${skill.second}"
+                if (key in executedHistory) {
+                    // AI 试图重复执行已执行过的相同技能
+                    skippedSkills.add(skill)
+                    android.util.Log.w("AiTermux", "AI 试图重复执行已执行的技能: $key")
+                } else {
+                    trulyNewSkills.add(skill)
+                }
+            }
+
+            // 检查连续相同技能，检测 AI 陷入循环
+            if (trulyNewSkills.size == 1 && lastSkillKey != null) {
+                if (trulyNewSkills[0].first + ":" + trulyNewSkills[0].second == lastSkillKey) {
+                    consecutiveSameSkill++
+                } else {
+                    consecutiveSameSkill = 1
+                }
+            } else if (trulyNewSkills.isNotEmpty()) {
+                consecutiveSameSkill = 1
+            }
+
+            if (consecutiveSameSkill >= maxConsecutiveSameSkill) {
+                android.util.Log.e("AiTermux", "AI 陷入循环：连续 $consecutiveSameSkill 次输出相同技能 $lastSkillKey")
+                synchronized(messages) {
+                    val idx = messages.indexOfFirst { it.id == streamMsgId }
+                    if (idx >= 0) {
+                        messages[idx] = messages[idx].copy(
+                            content = "⚠️ 检测到 AI 陷入循环（连续 $consecutiveSameSkill 次执行相同操作），已自动停止。",
+                            isWarning = true
+                        )
+                    }
+                }
+                AiTermuxPrefs.saveChatHistory(ctx, messages.toList())
+                // 用简短消息告诉 AI 不要再重复
+                currentUserText = "[系统] 你连续多次输出了相同的技能，请直接回答用户的问题，不要重复执行已完成的操作。"
+                // 重置连续计数，防止立即再次触发
+                consecutiveSameSkill = 0
+                lastSkillKey = null
                 continue
             }
 
-            val plainText = SkillExecutor.stripSkillBlocks(replyText)
-            synchronized(messages) {
-                messages.add(ChatMessage(role = "assistant", content = plainText.ifBlank { replyText }))
+            // 用 trulyNewSkills 替换 newSkills 用于后续执行
+            val skillsToExecute = trulyNewSkills
+
+            // 如果有被跳过的卡片，显示提示
+            if (skippedSkills.isNotEmpty()) {
+                val skipMsg = buildString {
+                    append("⚠️ 以下 ${skippedSkills.size} 个操作已被跳过（重复执行）")
+                    if (skillsToExecute.isNotEmpty()) append("，将执行其余 ${skillsToExecute.size} 个操作")
+                    append("。")
+                }
+                synchronized(messages) {
+                    val idx = messages.indexOfFirst { it.id == streamMsgId }
+                    if (idx >= 0) {
+                        messages[idx] = messages[idx].copy(
+                            content = skipMsg
+                        )
+                    }
+                }
+                // 为每个被跳过的卡片显示"已跳过"卡片
+                for ((skStr, _) in skippedSkills) {
+                    val sk = runCatching { SkillType.valueOf(skStr) }.getOrNull()
+                    val skipCard = SkillCardData(
+                        skillType = sk ?: SkillType.RUN_COMMAND,
+                        title = "已跳过（重复执行）",
+                        description = "此操作已在之前的回复中生成，无需重复执行",
+                        status = SkillStatus.COMPLETED
+                    )
+                    val skipId = "skip_${System.currentTimeMillis()}_${Math.random()}"
+                    synchronized(messages) {
+                        messages.add(
+                            ChatMessage(
+                                id = skipId,
+                                role = "assistant",
+                                content = "",
+                                skillCard = skipCard
+                            )
+                        )
+                    }
+                }
+                AiTermuxPrefs.saveChatHistory(ctx, messages.toList())
+            }
+
+            // 更新消息文本
+            if (skippedSkills.isEmpty()) {
+                synchronized(messages) {
+                    val idx = messages.indexOfFirst { it.id == streamMsgId }
+                    if (idx >= 0) {
+                        messages[idx] = messages[idx].copy(
+                            content = plainText.ifBlank { replyText }
+                        )
+                    }
+                }
             }
             AiTermuxPrefs.saveChatHistory(ctx, messages.toList())
 
-            val skills = SkillExecutor.parseSkillBlocks(replyText)
-            if (skills.isEmpty()) {
+            // 清理被拦截的技能集合
+            hallucinatedSkillKeys = emptySet()
+            hallucinatedTotalCount = 0
+
+            // === 文本重复检测：检测 AI 是否在反复输出相同/相似的回答 ===
+            val normalizedReply = plainText.trim().lowercase().replace(Regex("\\s+"), " ")
+            if (normalizedReply.length > 20) {
+                // 与历史回复比较相似度
+                val isSimilarToRecent = recentAiReplies.any { prev ->
+                    calcTextSimilarity(normalizedReply, prev) > 0.85
+                }
+                if (isSimilarToRecent) {
+                    consecutiveSimilarReplies++
+                    android.util.Log.w("AiTermux", "AI 文本重复: 连续相似回复 $consecutiveSimilarReplies 次")
+                } else {
+                    consecutiveSimilarReplies = 1
+                }
+                recentAiReplies.add(normalizedReply)
+                if (recentAiReplies.size > maxReplyHistory) {
+                    recentAiReplies.removeAt(0)
+                }
+
+                if (consecutiveSimilarReplies >= maxConsecutiveSimilarReplies) {
+                    android.util.Log.e("AiTermux", "AI 陷入文本循环：连续 $consecutiveSimilarReplies 次相似回复")
+                    synchronized(messages) {
+                        val idx = messages.indexOfFirst { it.id == streamMsgId }
+                        if (idx >= 0) {
+                            messages[idx] = messages[idx].copy(
+                                content = plainText.ifBlank { "（AI 重复回答已停止）" } +
+                                    "\n\n⚠️ 检测到 AI 陷入重复回答循环（$consecutiveSimilarReplies 次相似回复），已自动停止。",
+                                isWarning = true
+                            )
+                        }
+                    }
+                    AiTermuxPrefs.saveChatHistory(ctx, messages.toList())
+                    return
+                }
+            }
+
+            // 检测是否有重复执行的技能（触犯禁令第四条）
+            val hasDuplicateViolation = skippedSkills.isNotEmpty() && hallucinatedSkillKeys.isEmpty()
+            // 构建警告消息，用于告知 AI 触犯了禁令
+            val duplicateWarning = if (hasDuplicateViolation) {
+                "[系统警告] 你违反了输出规范禁令第四条：禁止重复执行已执行过的技能。以下 ${skippedSkills.size} 个技能已跳过执行。请直接回答用户的问题，不要再重复执行已完成的操作。"
+            } else null
+
+            // === 终止逻辑：基于 [END_TURN] 标记 ===
+            if (skillsToExecute.isEmpty()) {
+                // 无新技能要执行
+                if (hasEndTurn) {
+                    // AI 标记了结束 → 终止（即使是违规警告后 AI 回复了文本）
+                    android.util.Log.d("AiTermux", "AI 输出 [END_TURN]（无技能），终止循环")
+                    return
+                }
+                if (hasDuplicateViolation) {
+                    // 违规且无 END_TURN → 发送警告让 AI 回复文本
+                    currentUserText = duplicateWarning!!
+                    continue
+                }
+                // 无 END_TURN 但也没有违规 → AI 忘记标记，安全终止并警告
+                android.util.Log.w("AiTermux", "AI 未输出 [END_TURN]，安全终止")
+                synchronized(messages) {
+                    val idx = messages.indexOfFirst { it.id == streamMsgId }
+                    if (idx >= 0) {
+                        messages[idx] = messages[idx].copy(
+                            content = plainText.ifBlank { replyText } +
+                                    "\n\n⚠️ AI 未输出结束标记，已自动停止（下次将提醒 AI 输出 [END_TURN]）",
+                            isWarning = true
+                        )
+                    }
+                }
+                AiTermuxPrefs.saveChatHistory(ctx, messages.toList())
                 return
             }
 
             var needsUserInput = false
             var lastResultText: String? = null
+            var executedSkillTypes = mutableListOf<SkillType>()
 
-            for ((skillTypeStr, params) in skills) {
+            for ((skillTypeStr, params) in skillsToExecute) {
                 val st = runCatching { SkillType.valueOf(skillTypeStr) }.getOrNull()
                 val dangerReason = if (st != null) SkillExecutor.checkDangerous(st, params) else null
                 if (dangerReason != null && st != null) {
@@ -457,11 +835,22 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
                     SkillExecutionResult(false, "执行异常: ${e.message}")
                 }
 
+                val actualSkillType = result.skillCard?.skillType ?: st ?: SkillType.RUN_COMMAND
+                executedSkillTypes.add(actualSkillType)
+
+                // 记录执行的技能 key 到历史，用于检测重复
+                val execKey = "$skillTypeStr:$params"
+                executedHistory.add(execKey)
+                if (executedHistory.size > maxHistorySize) {
+                    executedHistory.removeAt(0)
+                }
+                lastSkillKey = execKey
+
                 synchronized(messages) {
                     val idx = messages.indexOfLast { it.id == tempId }
                     if (idx >= 0) {
                         val resultCard = result.skillCard ?: SkillCardData(
-                            skillType = runningCard.skillType,
+                            skillType = actualSkillType,
                             title = if (result.success) "执行成功" else "执行失败",
                             description = result.message,
                             status = if (result.success) SkillStatus.COMPLETED else SkillStatus.FAILED
@@ -488,15 +877,58 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
                 return
             }
 
-            currentUserText = lastResultText ?: "(技能执行完成，无输出)"
+            // 如果所有执行的技能都是"需点击执行"类型，终止循环
+            // AI 已经生成了卡片并告知用户点击，不应再继续生成更多卡片
+            if (executedSkillTypes.isNotEmpty() &&
+                executedSkillTypes.all { it.requiresClick() }) {
+                return
+            }
+
+            // AI 输出了 [END_TURN] → 执行完技能后终止，不再回传结果给 AI
+            if (hasEndTurn) {
+                android.util.Log.d("AiTermux", "AI 输出 [END_TURN]（有技能已执行），终止循环")
+                return
+            }
+
+            // 构建回传给 AI 的结果消息（仅当 AI 未标记结束时才回传）
+            val baseResult = lastResultText ?: "(技能执行完成，无输出)"
+            val missingEndTurnWarning = if (!hasEndTurn) {
+                "\n\n[系统警告] 你上一轮回复遗漏了 [END_TURN] 结束标记，导致系统再次调用你。请在本轮回复结尾务必输出 [END_TURN]。"
+            } else ""
+            currentUserText = if (hasDuplicateViolation) {
+                "$baseResult\n\n$duplicateWarning$missingEndTurnWarning"
+            } else {
+                "$baseResult$missingEndTurnWarning"
+            }
         }
+    }
+
+    /**
+     * 计算两个字符串的相似度（基于最长公共子序列比率）
+     * 用于检测 AI 是否在反复输出相同/相似的回答
+     */
+    private fun calcTextSimilarity(a: String, b: String): Double {
+        if (a.isEmpty() || b.isEmpty()) return 0.0
+        if (a == b) return 1.0
+        // 使用简单的基于词的 Jaccard 相似度 + 子序列比率
+        val wordsA = a.split("\\s+".toRegex()).toSet()
+        val wordsB = b.split("\\s+".toRegex()).toSet()
+        if (wordsA.isEmpty() || wordsB.isEmpty()) return 0.0
+        val intersection = wordsA intersect wordsB
+        val union = wordsA union wordsB
+        val jaccard = intersection.size.toDouble() / union.size.toDouble()
+        // 额外检查：较短文本是否是较长文本的子串
+        val shorter = if (a.length < b.length) a else b
+        val longer = if (a.length < b.length) b else a
+        val substringBonus = if (longer.contains(shorter)) 0.3 else 0.0
+        return (jaccard + substringBonus).coerceAtMost(1.0)
     }
 
     private fun buildSkillResultText(card: SkillCardData, defaultMsg: String): String {
         val status = if (card.status == SkillStatus.COMPLETED) "成功" else "失败"
-        val output = if (!card.output.isNullOrBlank()) "\n输出：\n${card.output}" else ""
+        val output = if (!card.output.isNullOrBlank()) "\n${card.output}" else ""
         val desc = card.description.ifBlank { defaultMsg }
-        return "[技能结果] ${card.skillType.name} - $status\n描述：$desc$output"
+        return "[技能结果] ${card.skillType.name} $status：$desc$output"
     }
 
     private fun buildDangerousActionDesc(type: SkillType, params: JsonObject): String {
@@ -899,6 +1331,23 @@ private fun AiChatScreen(vm: AiTermuxViewModel, onBack: () -> Unit) {
                         }
                     },
                     actions = {
+                        if (vm.isStreaming) {
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(CircleShape)
+                                    .clickable { vm.cancelGeneration() }
+                                    .background(Color(0xFFDC2626)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_close),
+                                    contentDescription = "停止生成",
+                                    modifier = Modifier.size(18.dp),
+                                    tint = Color.White
+                                )
+                            }
+                        }
                     }
                 )
             },
@@ -1035,6 +1484,10 @@ private fun AiChatScreen(vm: AiTermuxViewModel, onBack: () -> Unit) {
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
 
+                item {
+                    AiDisclaimerCard(isDark)
+                }
+
                 if (vm.messages.isEmpty()) {
                     item { WelcomeChatCard(isDark) }
                     item { QuickChips(vm, inputText = "") { inputText = it } }
@@ -1051,6 +1504,30 @@ private fun AiChatScreen(vm: AiTermuxViewModel, onBack: () -> Unit) {
                 item { Spacer(Modifier.height(10.dp)) }
             }
         }
+    }
+}
+
+@Composable
+private fun AiDisclaimerCard(isDark: Boolean) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(if (isDark) Color(0xFF1E1E1E) else Color(0xFFF5F5F5))
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Icon(
+            painter = painterResource(R.drawable.ic_info),
+            contentDescription = null,
+            modifier = Modifier.size(16.dp),
+            tint = MiuixTheme.colorScheme.onSurfaceVariantSummary
+        )
+        Text(
+            text = "内容由 AI 生成",
+            style = TextStyle(fontSize = 12.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+        )
     }
 }
 
@@ -1244,11 +1721,13 @@ private fun AnnotatedString.Builder.appendInlineFormatted(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun ChatBubble(msg: ChatMessage, vm: AiTermuxViewModel) {
     val isDark = isSystemInDarkTheme()
     val isUser = msg.role == "user"
     val isWarning = msg.isWarning
+    var showRawResponse by remember { mutableStateOf(false) }
 
     // 空内容且只有卡片，不画文本气泡
     if (msg.content.isBlank() && msg.skillCard != null) {
@@ -1265,6 +1744,12 @@ private fun ChatBubble(msg: ChatMessage, vm: AiTermuxViewModel) {
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = if (isUser) Alignment.End else Alignment.Start
     ) {
+        // 深度思考内容（可折叠）
+        if (!isUser && !msg.reasoningContent.isNullOrBlank()) {
+            ReasoningBlock(reasoning = msg.reasoningContent, isDone = msg.reasoningDone, isDark = isDark)
+            Spacer(Modifier.height(6.dp))
+        }
+
         if (msg.content.isNotBlank()) {
             val bg = when {
                 isWarning -> if (isDark) Color(0xFF4A2C00) else Color(0xFFFFF3CD)
@@ -1282,11 +1767,25 @@ private fun ChatBubble(msg: ChatMessage, vm: AiTermuxViewModel) {
             } else {
                 RoundedCornerShape(14.dp, 14.dp, 14.dp, 2.dp)
             }
+            val ctx = LocalContext.current
             Box(
                 modifier = Modifier
                     .then(if (isUser) Modifier.padding(start = 40.dp) else Modifier.padding(end = 40.dp))
                     .clip(corners)
                     .background(bg)
+                    .then(
+                        if (!isUser && msg.content.isNotBlank()) {
+                            Modifier.combinedClickable(
+                                onLongClick = {
+                                    val clipboard = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                                    val clip = android.content.ClipData.newPlainText("AI 回复", msg.content)
+                                    clipboard.setPrimaryClip(clip)
+                                    android.widget.Toast.makeText(ctx, "已复制", android.widget.Toast.LENGTH_SHORT).show()
+                                },
+                                onClick = {}
+                            )
+                        } else Modifier
+                    )
                     .padding(horizontal = 12.dp, vertical = 10.dp)
             ) {
                 Text(
@@ -1322,6 +1821,144 @@ private fun ChatBubble(msg: ChatMessage, vm: AiTermuxViewModel) {
                     style = TextStyle(fontSize = 12.sp, color = Color(0xFFDC2626))
                 )
             }
+        }
+
+        // 原始 API 响应查看入口
+        msg.rawResponse?.takeIf { it.isNotBlank() }?.let { rawResp ->
+            Spacer(Modifier.height(4.dp))
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Color(0xFFDBEAFE).copy(alpha = if (isDark) 0.15f else 1f))
+                    .clickable { showRawResponse = true }
+                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Text(
+                    text = "🔍 点击查看原始 API 响应",
+                    style = TextStyle(fontSize = 12.sp, color = Color(0xFF2563EB))
+                )
+            }
+        }
+    }
+
+    // 原始 API 响应对话框
+    if (showRawResponse && msg.rawResponse?.isNotBlank() == true) {
+        val ctx = LocalContext.current
+        OverlayDialog(
+            show = showRawResponse,
+            onDismissRequest = { showRawResponse = false },
+            title = "原始 API 响应",
+            content = {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        text = "这是从 API 收到的原始 SSE 数据，用于排查问题。",
+                        style = TextStyle(fontSize = 12.sp, color = Color.Gray)
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Box(
+                        modifier = Modifier
+                            .height(300.dp)
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(if (isDark) Color(0xFF1A1A1A) else Color(0xFFF5F5F5))
+                            .padding(8.dp)
+                    ) {
+                        Text(
+                            text = msg.rawResponse!!,
+                            style = TextStyle(
+                                fontSize = 11.sp,
+                                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                color = if (isDark) Color(0xFFB0B0B0) else Color(0xFF333333)
+                            )
+                        )
+                    }
+                    Spacer(Modifier.height(12.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        TextButton(
+                            text = "关闭",
+                            onClick = { showRawResponse = false }
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        TextButton(
+                            text = "复制",
+                            onClick = {
+                                val clipboard = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                                val clip = android.content.ClipData.newPlainText("原始 API 响应", msg.rawResponse!!)
+                                clipboard.setPrimaryClip(clip)
+                                android.widget.Toast.makeText(ctx, "已复制到剪贴板", android.widget.Toast.LENGTH_SHORT).show()
+                            }
+                        )
+                    }
+                }
+            }
+        )
+    }
+}
+
+/** -------------------- 深度思考内容（可折叠）-------------------- */
+
+@Composable
+private fun ReasoningBlock(reasoning: String, isDone: Boolean, isDark: Boolean) {
+    var expanded by remember { mutableStateOf(false) }
+    val bg = if (isDark) Color(0xFF1A1A2E) else Color(0xFFF0F0F8)
+    val textColor = if (isDark) Color(0xFFB0B0C8) else Color(0xFF555570)
+    val headerColor = if (isDark) Color(0xFF8888AA) else Color(0xFF7777A0)
+    val statusColor = if (isDone) Color(0xFF16A34A) else Color(0xFF6366F1)
+
+    Column(
+        modifier = Modifier
+            .then(Modifier.padding(end = 40.dp))
+            .clip(RoundedCornerShape(10.dp))
+            .background(bg)
+            .clickable { expanded = !expanded }
+            .padding(horizontal = 12.dp, vertical = 8.dp)
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Text(
+                text = if (expanded) "▼" else "▶",
+                style = TextStyle(fontSize = 10.sp, color = headerColor)
+            )
+            Text(
+                text = "深度思考",
+                style = TextStyle(
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = headerColor
+                )
+            )
+            // 思考状态指示
+            Text(
+                text = if (isDone) "✓ 已完成" else "⋯ 进行中",
+                style = TextStyle(
+                    fontSize = 11.sp,
+                    color = statusColor
+                )
+            )
+            if (!expanded) {
+                Text(
+                    text = "（点击展开）",
+                    style = TextStyle(fontSize = 11.sp, color = headerColor.copy(alpha = 0.6f))
+                )
+            }
+        }
+        if (expanded) {
+            Spacer(Modifier.height(6.dp))
+            Text(
+                text = reasoning.trim(),
+                style = TextStyle(
+                    fontSize = 12.sp,
+                    lineHeight = 18.sp,
+                    color = textColor
+                )
+            )
         }
     }
 }

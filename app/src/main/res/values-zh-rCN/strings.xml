@@ -491,4 +491,24 @@
     <string name="low_android_force_disable_confirm">关闭</string>
     <string name="low_android_force_disable_cancel">取消</string>
 
+    <!-- AI Termux 开发者模式 -->
+    <string name="ai_developer_mode">开发者模式</string>
+    <string name="ai_developer_mode_desc">允许编辑 System Prompt、管理自定义技能、查看完整对话记录</string>
+    <string name="ai_edit_system_prompt">编辑 System Prompt</string>
+    <string name="ai_edit_system_prompt_desc">自定义 AI 的系统指令（高级功能，谨慎修改）</string>
+    <string name="ai_custom_skills">自定义技能</string>
+    <string name="ai_custom_skills_desc">创建和管理用户自定义技能卡（官方技能不可修改）</string>
+    <string name="ai_full_history">完整对话记录</string>
+    <string name="ai_full_history_desc">查看包含 System 提示在内的完整对话历史</string>
+    <string name="ai_no_custom_skills">暂无自定义技能</string>
+    <string name="ai_no_chat_history">暂无对话记录</string>
+    <string name="ai_add_skill">添加技能</string>
+    <string name="ai_edit_skill">编辑技能</string>
+    <string name="ai_skill_name">技能名称</string>
+    <string name="ai_skill_description">技能描述</string>
+    <string name="ai_skill_json">技能 JSON 定义</string>
+    <string name="ai_skill_prompt">附加 System Prompt</string>
+    <string name="ai_copy_all">复制全部</string>
+    <string name="ai_system_prompt_warning">修改需谨慎，错误配置可能导致 AI 行为异常。</string>
+
 </resources>

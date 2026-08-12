@@ -160,6 +160,13 @@ public final class TermuxActivity extends ComponentActivity implements ServiceCo
     private boolean isOnResumeAfterOnCreate = false;
 
     /**
+     * True if an ACTION_RUN intent has already been processed to create a session.
+     * Used to prevent duplicate session creation when Activity is recreated
+     * (e.g., configuration change) with the same ACTION_RUN intent.
+     */
+    private boolean mActionRunHandled = false;
+
+    /**
      * The {@link TermuxActivity} is in an invalid state and must not be run.
      */
     private boolean mIsInvalidState;
@@ -206,6 +213,10 @@ public final class TermuxActivity extends ComponentActivity implements ServiceCo
 
         Logger.logDebug(LOG_TAG, "onCreate");
         isOnResumeAfterOnCreate = true;
+
+        if (savedInstanceState != null) {
+            mActionRunHandled = savedInstanceState.getBoolean("mActionRunHandled", false);
+        }
 
         // Check for fallback mode flag (launched from FallbackHelper when miuix unavailable)
         mIsFallbackMode = getIntent() != null && getIntent().getBooleanExtra(EXTRA_FALLBACK_MODE, false);
@@ -412,6 +423,7 @@ public final class TermuxActivity extends ComponentActivity implements ServiceCo
     @Override
     public void onSaveInstanceState(@NonNull Bundle savedInstanceState) {
         super.onSaveInstanceState(savedInstanceState);
+        savedInstanceState.putBoolean("mActionRunHandled", mActionRunHandled);
         saveTerminalToolbarTextInput(savedInstanceState);
     }
 
@@ -436,7 +448,8 @@ public final class TermuxActivity extends ComponentActivity implements ServiceCo
         if (mTermuxService.getTermuxSessionsSize() == 0) {
             if (mIsVisible) {
                 Intent i = getIntent();
-                if (i != null && Intent.ACTION_RUN.equals(i.getAction())) {
+                if (i != null && Intent.ACTION_RUN.equals(i.getAction()) && !mActionRunHandled) {
+                    mActionRunHandled = true;
                     TermuxInstaller.setupBootstrapIfNeeded(TermuxActivity.this, () -> {
                         if (mTermuxService == null) return;
                         try {
@@ -456,7 +469,8 @@ public final class TermuxActivity extends ComponentActivity implements ServiceCo
             }
         } else {
             Intent i = getIntent();
-            if (i != null && Intent.ACTION_RUN.equals(i.getAction())) {
+            if (i != null && Intent.ACTION_RUN.equals(i.getAction()) && !mActionRunHandled) {
+                mActionRunHandled = true;
                 boolean isFailSafe = i.getBooleanExtra(TERMUX_ACTIVITY.EXTRA_FAILSAFE_SESSION, false);
                 mTermuxTerminalSessionClient.addNewSession(isFailSafe, null);
             } else if (i != null && i.hasExtra("sessionHandle")) {
