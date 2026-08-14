@@ -80,6 +80,7 @@ import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.theme.MiuixTheme
+import java.io.File
 
 class AiTermuxActivity : ComponentActivity() {
 
@@ -169,6 +170,21 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
         val ctx = getApplication<android.app.Application>()
         val intent = Intent(ctx, TermuxService::class.java)
         ctx.bindService(intent, serviceConn, Context.BIND_AUTO_CREATE)
+
+        viewModelScope.launch(Dispatchers.IO) {
+            loadMemoryMd(ctx)
+        }
+    }
+
+    private suspend fun loadMemoryMd(context: Context) {
+        try {
+            val memoryFile = File("/data/data/com.termux/files/home/.ai_memory/MEMORY.md")
+            if (memoryFile.exists()) {
+                val content = memoryFile.readText()
+                AiTermuxPrefs.setMemory(context, content)
+            }
+        } catch (_: Exception) {
+        }
     }
 
     override fun onCleared() {
@@ -363,7 +379,7 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
         val baseSystemPrompt = AiTermuxPrefs.buildFullSystemPrompt(ctx)
         // 重试时使用的精简 System Prompt
         val retrySystemPrompt = """
-你刚才的回复违反了 AI Termux 的输出规范。请重新输出，并遵守以下核心规则：
+你刚才的回复违反了 Termux Agent 的输出规范。请重新输出，并遵守以下核心规则：
 1. 仅输出技能卡片（```skill 代码块）+ 一句自然语言说明
 2. 不要编造执行结果、不要声称操作已完成
 3. 不要添加技能结果、执行结果等伪造段落
@@ -986,7 +1002,7 @@ private fun AiSetupScreen(vm: AiTermuxViewModel, onBack: () -> Unit) {
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
-                title = "AI Termux 设置",
+                title = "Termux Agent 设置",
                 scrollBehavior = scrollBehavior,
                 navigationIcon = {
                     Box(
@@ -1030,7 +1046,7 @@ private fun AiSetupScreen(vm: AiTermuxViewModel, onBack: () -> Unit) {
                 ) {
                     Column {
                         Text(
-                            text = "🤖 AI Termux",
+                            text = "🤖 Termux Agent",
                             color = Color.White,
                             style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Medium)
                         )
@@ -1312,7 +1328,7 @@ private fun AiChatScreen(vm: AiTermuxViewModel, onBack: () -> Unit) {
             contentWindowInsets = WindowInsets(0, 0, 0, 0),
             topBar = {
                 TopAppBar(
-                    title = "AI Termux",
+                    title = "Termux Agent",
                     scrollBehavior = scrollBehavior,
                     navigationIcon = {
                         Box(
@@ -1422,7 +1438,7 @@ private fun AiChatScreen(vm: AiTermuxViewModel, onBack: () -> Unit) {
                         OutlinedTextField(
                             value = inputText,
                             onValueChange = { inputText = it },
-                            placeholder = { Text("需要 AI Termux 做什么…", color = MiuixTheme.colorScheme.onSurfaceVariantSummary) },
+                            placeholder = { Text("需要 Termux Agent 做什么…", color = MiuixTheme.colorScheme.onSurfaceVariantSummary) },
                             modifier = Modifier
                                 .weight(1f)
                                 .focusRequester(focusRequester),
@@ -1544,7 +1560,7 @@ private fun WelcomeChatCard(isDark: Boolean) {
             .padding(18.dp)
     ) {
         Column {
-            Text("👋 欢迎使用 AI Termux", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+            Text("👋 欢迎使用 Termux Agent", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
             Spacer(Modifier.height(6.dp))
             Text(
                 "我可以帮你管理 Termux。试试说：\n" +
@@ -1668,6 +1684,21 @@ private fun parseMarkdown(text: String, isDark: Boolean = true): AnnotatedString
                 val content = line.substring(2)
                 withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append("• ") }
                 appendInlineFormatted(content, codeBg, codeFg)
+            }
+            line.trimStart().startsWith("|") -> {
+                val cells = line.trim().removeSurrounding("|").split("|").map { it.trim() }
+                val isSeparator = cells.all { it.matches(Regex("^:?-{3,}:?$")) }
+                if (isSeparator) {
+                    append("│ ")
+                    append(cells.joinToString(" │ ") { "─".repeat(it.length.coerceAtLeast(3)) })
+                    append(" │")
+                } else {
+                    withStyle(SpanStyle(fontWeight = FontWeight.Bold)) {
+                        append("│ ")
+                        append(cells.joinToString(" │ "))
+                        append(" │")
+                    }
+                }
             }
             else -> appendInlineFormatted(line, codeBg, codeFg)
         }
@@ -1996,6 +2027,8 @@ private fun SkillCard(msgId: String, card: SkillCardData, errorMsg: String?, isD
         SkillType.PACKAGE_INSTALL -> R.drawable.ic_download
         SkillType.ASK_USER -> R.drawable.ic_help
         SkillType.CONFIRM_DANGEROUS -> R.drawable.ic_warning
+        SkillType.SCHEDULE_TASK -> R.drawable.ic_service_notification
+        SkillType.GET_DEVICE_STATUS -> R.drawable.ic_info
     }
 
     val cardBg = if (isDark) Color(0xFF1A1A1A) else Color(0xFFFAFAFA)

@@ -3,6 +3,13 @@ package com.termux.app.compose
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
+import android.content.SharedPreferences
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
+import android.os.BatteryManager
+import android.os.Build
+import android.location.LocationManager
 import com.google.gson.Gson
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
@@ -28,7 +35,8 @@ import java.net.URL
 data class SkillExecutionResult(
     val success: Boolean,
     val message: String,
-    val skillCard: SkillCardData? = null
+    val skillCard: SkillCardData? = null,
+    val status: String = if (success) "success" else "failed"
 )
 
 /** AI 回复假输出检测结果 */
@@ -426,6 +434,8 @@ object SkillExecutor {
             SkillType.CAPTURE_OUTPUT -> execCaptureOutput(context, termuxService, params)
             SkillType.PACKAGE_INSTALL -> execPackageInstall(context, termuxService, params)
             SkillType.CONFIRM_DANGEROUS -> SkillExecutionResult(false, "危险操作需在 UI 中确认后执行")
+            SkillType.SCHEDULE_TASK -> execScheduleTask(context, params)
+            SkillType.GET_DEVICE_STATUS -> execGetDeviceStatus(context, termuxService, params)
             SkillType.CUSTOM_COMMAND -> {
                 when {
                     params.has("activityClass") -> execOpenActivity(context, params)
@@ -1259,6 +1269,216 @@ object SkillExecutor {
                 SkillExecutionResult(false, "发送广播出错: ${e.message}")
             }
         }
+
+    private suspend fun execScheduleTask(context: Context, params: JsonObject): SkillExecutionResult =
+        withContext(Dispatchers.IO) {
+            val task = if (params.has("task")) params.get("task").asString else ""
+            val delayMinutes = if (params.has("delayMinutes")) params.get("delayMinutes").asLong else 0
+            val repeat = if (params.has("repeat")) params.get("repeat").asString else "once"
+            val command = if (params.has("command")) params.get("command").asString else null
+
+            if (task.isBlank()) {
+                return@withContext SkillExecutionResult(false, "定时任务缺少 task 参数")
+            }
+
+            val prefs: SharedPreferences = context.getSharedPreferences("ai_scheduled_tasks", Context.MODE_PRIVATE)
+            val taskId = System.currentTimeMillis().toString()
+            val taskJson = """{"id":"$taskId","task":"$task","delayMinutes":$delayMinutes,"repeat":"$repeat","command":${if (command != null) "\"$command\"" else "null"},"createdAt":${System.currentTimeMillis()}}"""
+
+            prefs.edit().putString("task_$taskId", taskJson).apply()
+
+            val repeatLabel = when (repeat) {
+                "hourly" -> "每小时"
+                "daily" -> "每天"
+                else -> "单次"
+            }
+            val delayLabel = if (delayMinutes > 0) "${delayMinutes}分钟后" else "立即"
+
+            SkillExecutionResult(
+                true,
+                "定时任务已创建：$task（$delayLabel，$repeatLabel）",
+                SkillCardData(
+                    skillType = SkillType.SCHEDULE_TASK,
+                    title = "⏰ 定时任务",
+                    description = "$delayLabel · $repeatLabel · $task",
+                    status = SkillStatus.COMPLETED
+                )
+            )
+        }
+
+    private suspend fun execGetDeviceStatus(
+        context: Context,
+        termuxService: TermuxService?,
+        params: JsonObject
+    ): SkillExecutionResult = withContext(Dispatchers.IO) {
+        val infoType = if (params.has("infoType")) params.get("infoType").asString else "all"
+
+        val build = StringBuilder()
+        var hasAnyData = false
+
+        if (infoType == "battery" || infoType == "all") {
+            val batteryInfo = queryBatteryStatus(context)
+            if (batteryInfo.isNotBlank()) hasAnyData = true
+            build.appendLine("=== 电池状态 ===")
+            build.appendLine(batteryInfo.ifBlank { "不可用" })
+            build.appendLine()
+        }
+
+        if (infoType == "network" || infoType == "all") {
+            val networkInfo = queryNetworkStatus(context)
+            if (networkInfo.isNotBlank()) hasAnyData = true
+            build.appendLine("=== 网络状态 ===")
+            build.appendLine(networkInfo.ifBlank { "不可用" })
+            build.appendLine()
+        }
+
+        if (infoType == "location" || infoType == "all") {
+            val locationInfo = queryLocationStatus(context)
+            if (locationInfo.isNotBlank()) hasAnyData = true
+            build.appendLine("=== 位置信息 ===")
+            build.appendLine(locationInfo.ifBlank { "不可用（缺少位置权限）" })
+            build.appendLine()
+        }
+
+        if (infoType != "battery" && infoType != "network" && infoType != "location" && infoType != "all") {
+            return@withContext SkillExecutionResult(
+                false,
+                "未知的 infoType: $infoType（支持: battery, network, location, all）"
+            )
+        }
+
+        val result = build.toString().trimEnd()
+
+        SkillExecutionResult(
+            success = hasAnyData,
+            message = if (hasAnyData) "设备状态查询成功" else "设备状态查询无结果",
+            SkillCardData(
+                skillType = SkillType.GET_DEVICE_STATUS,
+                title = "📱 设备状态",
+                description = result.take(300),
+                output = result,
+                status = if (hasAnyData) SkillStatus.COMPLETED else SkillStatus.FAILED
+            )
+        )
+    }
+
+    private fun queryBatteryStatus(context: Context): String {
+        return try {
+            val intent = context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+            if (intent == null) return "无法获取电池信息"
+
+            val level = intent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
+            val scale = intent.getIntExtra(BatteryManager.EXTRA_SCALE, -1)
+            val plugged = intent.getIntExtra(BatteryManager.EXTRA_PLUGGED, -1)
+            val status = intent.getIntExtra(BatteryManager.EXTRA_STATUS, BatteryManager.BATTERY_STATUS_UNKNOWN)
+            val temperature = intent.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, -1)
+            val voltage = intent.getIntExtra(BatteryManager.EXTRA_VOLTAGE, -1)
+            val technology = intent.getStringExtra(BatteryManager.EXTRA_TECHNOLOGY)
+
+            val pct = if (level >= 0 && scale > 0) "%.1f%%".format(level * 100.0 / scale) else "未知"
+            val statusStr = when (status) {
+                BatteryManager.BATTERY_STATUS_CHARGING -> "充电中"
+                BatteryManager.BATTERY_STATUS_DISCHARGING -> "放电中"
+                BatteryManager.BATTERY_STATUS_NOT_CHARGING -> "未充电"
+                BatteryManager.BATTERY_STATUS_FULL -> "已满"
+                else -> "未知"
+            }
+            val pluggedStr = when (plugged) {
+                BatteryManager.BATTERY_PLUGGED_USB -> "USB"
+                BatteryManager.BATTERY_PLUGGED_AC -> "AC 交流电"
+                BatteryManager.BATTERY_PLUGGED_WIRELESS -> "无线"
+                else -> "未连接"
+            }
+
+            buildString {
+                appendLine("电量: $pct")
+                appendLine("状态: $statusStr")
+                appendLine("充电方式: $pluggedStr")
+                if (temperature >= 0) appendLine("温度: ${temperature / 10.0}°C")
+                if (voltage >= 0) appendLine("电压: ${voltage}mV")
+                if (!technology.isNullOrBlank()) appendLine("技术: $technology")
+            }
+        } catch (e: Exception) {
+            "查询电池状态失败: ${e.message}"
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun queryNetworkStatus(context: Context): String {
+        return try {
+            val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                val network = cm.activeNetwork
+                val caps = network?.let { cm.getNetworkCapabilities(it) }
+                if (caps == null) return "无网络连接"
+
+                val type = when {
+                    caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> "Wi-Fi"
+                    caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> "蜂窝移动数据"
+                    caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) -> "以太网"
+                    caps.hasTransport(NetworkCapabilities.TRANSPORT_BLUETOOTH) -> "蓝牙"
+                    caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN) -> "VPN"
+                    else -> "其他"
+                }
+                val connected = caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                val validated = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M)
+                    caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED) else connected
+
+                buildString {
+                    appendLine("类型: $type")
+                    appendLine("已连接: ${if (connected) "是" else "否"}")
+                    appendLine("网络可用: ${if (validated) "是" else "否"}")
+                    if (caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED))
+                        appendLine("非计费网络: 是")
+                }
+            } else {
+                val info = cm.activeNetworkInfo
+                if (info == null || !info.isConnected) return "无网络连接"
+
+                buildString {
+                    appendLine("类型: ${info.typeName}")
+                    appendLine("已连接: 是")
+                    appendLine("网络可用: ${if (info.isAvailable) "是" else "否"}")
+                    if (info.subtypeName.isNotBlank()) appendLine("子类型: ${info.subtypeName}")
+                }
+            }
+        } catch (e: Exception) {
+            "查询网络状态失败: ${e.message}"
+        }
+    }
+
+    private fun queryLocationStatus(context: Context): String {
+        return try {
+            val lm = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+            val gpsEnabled = lm.isProviderEnabled(LocationManager.GPS_PROVIDER)
+            val networkEnabled = lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
+
+            buildString {
+                appendLine("GPS 开关: ${if (gpsEnabled) "已开启" else "已关闭"}")
+                appendLine("网络定位开关: ${if (networkEnabled) "已开启" else "已关闭"}")
+
+                val lastKnown = try {
+                    lm.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
+                        ?: lm.getLastKnownLocation(LocationManager.GPS_PROVIDER)
+                } catch (_: SecurityException) { null }
+
+                if (lastKnown != null) {
+                    appendLine("最后位置: ${lastKnown.latitude}, ${lastKnown.longitude}")
+                    appendLine("精度: ${lastKnown.accuracy}m")
+                    val time = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault())
+                        .format(java.util.Date(lastKnown.time))
+                    appendLine("时间: $time")
+                } else {
+                    appendLine("无已知位置（可能缺少位置权限或从未请求过位置）")
+                }
+            }
+        } catch (e: SecurityException) {
+            "缺少位置访问权限（ACCESS_FINE_LOCATION / ACCESS_COARSE_LOCATION）"
+        } catch (e: Exception) {
+            "查询位置失败: ${e.message}"
+        }
+    }
 }
 
 /** ---------- AI API 调用器 ---------- */

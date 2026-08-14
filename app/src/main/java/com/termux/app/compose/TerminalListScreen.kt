@@ -360,7 +360,7 @@ fun TerminalListScreen(
                         .nestedScroll(scrollBehavior.nestedScrollConnection),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
-                    contentPadding = PaddingValues(vertical = 8.dp)
+                    contentPadding = PaddingValues(top = 8.dp, bottom = 92.dp)
                 ) {
             if (aiTermuxEnabled) {
                 item(span = { GridItemSpan(2) }) {

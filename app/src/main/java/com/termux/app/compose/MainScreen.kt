@@ -1,5 +1,6 @@
 package com.termux.app.compose
 
+import android.content.Context
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.EnterTransition
@@ -9,6 +10,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -26,14 +28,20 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import com.kyant.backdrop.backdrops.LayerBackdrop
+import com.kyant.backdrop.backdrops.layerBackdrop
+import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import kotlinx.coroutines.launch
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.NavigationBar
 import top.yukonga.miuix.kmp.basic.NavigationBarItem
+import top.yukonga.miuix.kmp.basic.FloatingNavigationBar
+import top.yukonga.miuix.kmp.basic.FloatingNavigationBarItem
 import com.termux.R
 import com.termux.shared.shell.TermuxSession
 
@@ -62,6 +70,21 @@ fun MainScreen(
     var rawDragOffset by remember { mutableFloatStateOf(0f) }
     val dragOffsetAnimatable = remember { Animatable(0f) }
     var isSwipingInProgress by remember { mutableStateOf(false) }
+
+    val context = LocalContext.current
+    val navBarStyle = remember {
+        context.getSharedPreferences("app_settings", Context.MODE_PRIVATE)
+            .getString("navigation_bar_style", "default") ?: "default"
+    }
+    val useFloatingNav = navBarStyle == "floating"
+    val useLiquidGlassNav = navBarStyle == "liquid_glass"
+    val navStyle = when {
+        useLiquidGlassNav -> 2
+        useFloatingNav -> 1
+        else -> 0
+    }
+
+    val liquidGlassBackdrop = rememberLayerBackdrop()
 
     val direction = if (selectedTab > previousTab) 1 else -1
     val isRemoteWithVnc = selectedTab == 2 && showVnc
@@ -130,54 +153,171 @@ fun MainScreen(
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
-            NavigationBar(modifier = Modifier.padding(horizontal = 12.dp)) {
-                if (0 in availableTabs) {
-                    NavigationBarItem(
-                        icon = ImageVector.vectorResource(R.drawable.ic_terminal),
-                        label = stringResource(R.string.terminal),
-                        selected = selectedTab == 0,
-                        onClick = { previousTab = selectedTab; onTabChange(0) }
-                    )
+            when (navStyle) {
+                2 -> {
+                    LiquidGlassNavigationBarWithIndicator(
+                        selectedIndex = selectedTab,
+                        itemCount = availableTabs.size,
+                        backdrop = liquidGlassBackdrop,
+                        onIndexChange = { index ->
+                            val actualTab = availableTabs.getOrElse(index) { selectedTab }
+                            if (actualTab != selectedTab) {
+                                previousTab = selectedTab
+                                onTabChange(actualTab)
+                            }
+                        },
+                        modifier = Modifier.padding(horizontal = 12.dp)
+                    ) {
+                        if (0 in availableTabs) {
+                            LiquidGlassNavigationBarItem(
+                                icon = ImageVector.vectorResource(R.drawable.ic_terminal),
+                                label = stringResource(R.string.terminal),
+                                selected = selectedTab == 0,
+                                onClick = { previousTab = selectedTab; onTabChange(0) }
+                            )
+                        }
+                        if (1 in availableTabs) {
+                            LiquidGlassNavigationBarItem(
+                                icon = ImageVector.vectorResource(R.drawable.ic_files),
+                                label = stringResource(R.string.files),
+                                selected = selectedTab == 1,
+                                onClick = { previousTab = selectedTab; onTabChange(1) }
+                            )
+                        }
+                        if (2 in availableTabs) {
+                            LiquidGlassNavigationBarItem(
+                                icon = ImageVector.vectorResource(R.drawable.ic_vnc),
+                                label = stringResource(R.string.remote),
+                                selected = selectedTab == 2,
+                                onClick = { previousTab = selectedTab; onTabChange(2) }
+                            )
+                        }
+                        if (3 in availableTabs) {
+                            LiquidGlassNavigationBarItem(
+                                icon = ImageVector.vectorResource(R.drawable.ic_resources),
+                                label = stringResource(R.string.resources),
+                                selected = selectedTab == 3,
+                                onClick = { previousTab = selectedTab; onTabChange(3) }
+                            )
+                        }
+                        if (4 in availableTabs) {
+                            LiquidGlassNavigationBarItem(
+                                icon = ImageVector.vectorResource(R.drawable.ic_settings),
+                                label = stringResource(R.string.settings),
+                                selected = selectedTab == 4,
+                                onClick = { previousTab = selectedTab; onTabChange(4) }
+                            )
+                        }
+                    }
                 }
-                if (1 in availableTabs) {
-                    NavigationBarItem(
-                        icon = ImageVector.vectorResource(R.drawable.ic_files),
-                        label = stringResource(R.string.files),
-                        selected = selectedTab == 1,
-                        onClick = { previousTab = selectedTab; onTabChange(1) }
-                    )
+                1 -> {
+                    FloatingNavigationBar(
+                        modifier = Modifier.padding(horizontal = 12.dp)
+                    ) {
+                        if (0 in availableTabs) {
+                            FloatingNavigationBarItem(
+                                icon = ImageVector.vectorResource(R.drawable.ic_terminal),
+                                label = stringResource(R.string.terminal),
+                                selected = selectedTab == 0,
+                                onClick = { previousTab = selectedTab; onTabChange(0) }
+                            )
+                        }
+                        if (1 in availableTabs) {
+                            FloatingNavigationBarItem(
+                                icon = ImageVector.vectorResource(R.drawable.ic_files),
+                                label = stringResource(R.string.files),
+                                selected = selectedTab == 1,
+                                onClick = { previousTab = selectedTab; onTabChange(1) }
+                            )
+                        }
+                        if (2 in availableTabs) {
+                            FloatingNavigationBarItem(
+                                icon = ImageVector.vectorResource(R.drawable.ic_vnc),
+                                label = stringResource(R.string.remote),
+                                selected = selectedTab == 2,
+                                onClick = { previousTab = selectedTab; onTabChange(2) }
+                            )
+                        }
+                        if (3 in availableTabs) {
+                            FloatingNavigationBarItem(
+                                icon = ImageVector.vectorResource(R.drawable.ic_resources),
+                                label = stringResource(R.string.resources),
+                                selected = selectedTab == 3,
+                                onClick = { previousTab = selectedTab; onTabChange(3) }
+                            )
+                        }
+                        if (4 in availableTabs) {
+                            FloatingNavigationBarItem(
+                                icon = ImageVector.vectorResource(R.drawable.ic_settings),
+                                label = stringResource(R.string.settings),
+                                selected = selectedTab == 4,
+                                onClick = { previousTab = selectedTab; onTabChange(4) }
+                            )
+                        }
+                    }
                 }
-                if (2 in availableTabs) {
-                    NavigationBarItem(
-                        icon = ImageVector.vectorResource(R.drawable.ic_vnc),
-                        label = stringResource(R.string.remote),
-                        selected = selectedTab == 2,
-                        onClick = { previousTab = selectedTab; onTabChange(2) }
-                    )
-                }
-                if (3 in availableTabs) {
-                    NavigationBarItem(
-                        icon = ImageVector.vectorResource(R.drawable.ic_resources),
-                        label = stringResource(R.string.resources),
-                        selected = selectedTab == 3,
-                        onClick = { previousTab = selectedTab; onTabChange(3) }
-                    )
-                }
-                if (4 in availableTabs) {
-                    NavigationBarItem(
-                        icon = ImageVector.vectorResource(R.drawable.ic_settings),
-                        label = stringResource(R.string.settings),
-                        selected = selectedTab == 4,
-                        onClick = { previousTab = selectedTab; onTabChange(4) }
-                    )
+                else -> {
+                    NavigationBar(modifier = Modifier.padding(horizontal = 12.dp)) {
+                        if (0 in availableTabs) {
+                            NavigationBarItem(
+                                icon = ImageVector.vectorResource(R.drawable.ic_terminal),
+                                label = stringResource(R.string.terminal),
+                                selected = selectedTab == 0,
+                                onClick = { previousTab = selectedTab; onTabChange(0) }
+                            )
+                        }
+                        if (1 in availableTabs) {
+                            NavigationBarItem(
+                                icon = ImageVector.vectorResource(R.drawable.ic_files),
+                                label = stringResource(R.string.files),
+                                selected = selectedTab == 1,
+                                onClick = { previousTab = selectedTab; onTabChange(1) }
+                            )
+                        }
+                        if (2 in availableTabs) {
+                            NavigationBarItem(
+                                icon = ImageVector.vectorResource(R.drawable.ic_vnc),
+                                label = stringResource(R.string.remote),
+                                selected = selectedTab == 2,
+                                onClick = { previousTab = selectedTab; onTabChange(2) }
+                            )
+                        }
+                        if (3 in availableTabs) {
+                            NavigationBarItem(
+                                icon = ImageVector.vectorResource(R.drawable.ic_resources),
+                                label = stringResource(R.string.resources),
+                                selected = selectedTab == 3,
+                                onClick = { previousTab = selectedTab; onTabChange(3) }
+                            )
+                        }
+                        if (4 in availableTabs) {
+                            NavigationBarItem(
+                                icon = ImageVector.vectorResource(R.drawable.ic_settings),
+                                label = stringResource(R.string.settings),
+                                selected = selectedTab == 4,
+                                onClick = { previousTab = selectedTab; onTabChange(4) }
+                            )
+                        }
+                    }
                 }
             }
         }
     ) { padding ->
+        val contentPadding = PaddingValues(
+            top = padding.calculateTopPadding(),
+            bottom = 0.dp
+        )
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
+                .then(
+                    if (useLiquidGlassNav) {
+                        Modifier.layerBackdrop(liquidGlassBackdrop)
+                    } else {
+                        Modifier
+                    }
+                )
+                .padding(contentPadding)
                 .pointerInput(selectedTab, showVnc) {
                     detectDragGestures(
                         onDragStart = {

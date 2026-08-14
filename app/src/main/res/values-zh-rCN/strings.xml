@@ -333,6 +333,14 @@
     <string name="system_category">系统</string>
     <string name="language_restart_message">语言变更将在重启应用后生效。</string>
 
+    <!-- Navigation Bar Style -->
+    <string name="navigation_bar_style">导航栏样式</string>
+    <string name="navigation_bar_style_description">选择导航栏样式</string>
+    <string name="navigation_bar_default">默认</string>
+    <string name="navigation_bar_floating">浮动</string>
+    <string name="navigation_bar_liquid_glass">玻璃</string>
+    <string name="navigation_bar_restart_message">导航栏样式变更将在重启应用后生效。</string>
+
     <!-- PullToRefresh -->
     <string name="pull_down_to_refresh">下拉刷新</string>
     <string name="release_to_refresh">松开刷新</string>

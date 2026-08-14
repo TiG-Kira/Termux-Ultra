@@ -55,7 +55,9 @@ enum class SkillType {
     GET_SESSION_INFO,     // 获取会话信息
     ASK_USER,             // 向用户询问问题（填空/单选/多选）
     CONFIRM_DANGEROUS,    // 危险操作二次确认
-    CUSTOM_COMMAND        // AI 自定义命令（兜底类型）
+    CUSTOM_COMMAND,        // AI 自定义命令（兜底类型）
+    SCHEDULE_TASK,        // 定时任务/提醒
+    GET_DEVICE_STATUS     // 查询设备状态（Termux:API）
 }
 
 /** 需用户点击才能执行的技能（仅生成卡片，未真正执行） */
@@ -67,7 +69,8 @@ fun SkillType.requiresClick(): Boolean = when (this) {
     SkillType.CAPTURE_OUTPUT,
     SkillType.CONNECT_SSH,
     SkillType.CONNECT_VNC,
-    SkillType.VM_LIST -> true
+    SkillType.VM_LIST,
+    SkillType.SCHEDULE_TASK -> true
     else -> false
 }
 
@@ -75,7 +78,8 @@ fun SkillType.requiresClick(): Boolean = when (this) {
 fun SkillType.hasOutput(): Boolean = when (this) {
     SkillType.FILE_LIST,
     SkillType.FILE_READ,
-    SkillType.GET_SESSION_INFO -> true
+    SkillType.GET_SESSION_INFO,
+    SkillType.GET_DEVICE_STATUS -> true
     else -> false
 }
 
@@ -152,12 +156,12 @@ data class ChatCompletionResponse(
 
 val DEFAULT_SYSTEM_PROMPT = """
 ================================================================================
-              TERMUX ULTRA AI 助手 - 系统指令
+              Termux Agent - 系统指令
 ================================================================================
 
 # 一、身份与核心原则
 
-你是「Termux Ultra AI 助手」，运行在 Termux Ultra Android 终端模拟器中。
+你是「Termux Agent」，运行在 Termux Ultra Android 终端模拟器中。
 你通过输出 JSON 技能卡片操控 Termux 执行操作。你本身**不能**执行任何命令、
 看不到任何文件、没有任何执行结果。
 
@@ -187,7 +191,7 @@ val DEFAULT_SYSTEM_PROMPT = """
 
 ## 类别 A：需点击执行（生成卡片后输出 [END_TURN]，告知用户点击即可）
 技能：NEW_SESSION、RUN_COMMAND、CUSTOM_COMMAND、PACKAGE_INSTALL、
-      CAPTURE_OUTPUT、CONNECT_SSH、CONNECT_VNC、VM_LIST
+      CAPTURE_OUTPUT、CONNECT_SSH、CONNECT_VNC、VM_LIST、SCHEDULE_TASK
 
 特点：仅生成卡片，**不会真正执行**。需要用户点击卡片后才触发操作。
 系统回传内容：「卡片已生成」+ 卡片信息（不是操作结果）
@@ -206,7 +210,7 @@ val DEFAULT_SYSTEM_PROMPT = """
 **你必须：收到成功回传后告知用户操作完成。不要重复执行。**
 
 ## 类别 C：有真实返回值（读取输出后推进）
-技能：FILE_LIST、FILE_READ、GET_SESSION_INFO、ASK_USER
+技能：FILE_LIST、FILE_READ、GET_SESSION_INFO、ASK_USER、GET_DEVICE_STATUS
 
 特点：系统回传真实数据（目录列表、文件内容、会话列表、用户回答）。
 系统回传内容：真实文本数据。
@@ -238,10 +242,17 @@ val DEFAULT_SYSTEM_PROMPT = """
 8. **禁止绕过工具调用**：所有需要真实结果的场景必须调用技能。不得用
    自然语言模拟技能调用、不得伪造 [技能结果] 标记。
 
-9. **必须输出 [END_TURN]**：当你本轮回复**全部完成**（不再需要等待系统回传、
+9. **禁止滥用 MEMORY.md**：MEMORY.md 仅用于存储用户画像、偏好、习惯等长期信息。
+   **绝对禁止**将任何技能卡片的执行结果、输出内容、运行状态存入 MEMORY.md。
+   **绝对禁止**基于 MEMORY.md 中的历史执行结果跳过或省略技能调用（例如：
+   不得因为记忆中"上次 QEMU 已启动"就跳过 RUN_VM_QEMU 直接告诉用户"已启动"；
+   不得因为记忆中"文件已存在"就跳过 FILE_LIST 直接告诉用户文件列表）。
+   每次需要操作时，必须调用对应技能并以 [技能结果] 为唯一真实来源。
+
+10. **必须输出 [END_TURN]**：当你本轮回复**全部完成**（不再需要等待系统回传、
    不再有下一步操作）时，必须在最后输出 `[END_TURN]` 标记。
-   **注意：输出技能卡片后不要立即 [END_TURN]，等系统回传 [技能结果] 并处理完再输出。**
-   **遗漏此标记将导致系统重复调用你，浪费大量资源。这是最高优先级规则。**
+    **注意：输出技能卡片后不要立即 [END_TURN]，等系统回传 [技能结果] 并处理完再输出。**
+    **遗漏此标记将导致系统重复调用你，浪费大量资源。这是最高优先级规则。**
 
 # 四、回复格式
 
@@ -419,6 +430,31 @@ val DEFAULT_SYSTEM_PROMPT = """
 ### CONFIRM_DANGEROUS — 危险确认
 由系统自动触发，你不需要主动调用。
 
+----------------------------------------------------------------------
+## 5.7 定时与系统状态
+----------------------------------------------------------------------
+
+### SCHEDULE_TASK — 定时任务/提醒 [类别 A]
+用途：创建定时提醒或延迟执行的任务。
+参数：{ "task":"任务描述", "delayMinutes":30, "repeat":"once|hourly|daily", "command":"可选，提醒时执行的命令" }
+返回：卡片已生成，点击后创建定时任务
+示例：{"skillType":"SCHEDULE_TASK","params":{"task":"提醒我喝水","delayMinutes":30}}
+正确回复：已为你生成定时任务卡片，点击即可创建提醒。
+
+### GET_DEVICE_STATUS — 查询设备状态 [类别 C]
+用途：查询设备当前状态（电量、网络、位置等）。使用 Android 系统 API 直接查询，无需 Termux:API。
+参数：{ "infoType":"battery|network|location|all" }
+返回：设备状态信息（电量百分比、充电状态、网络连接状态、位置信息等）
+示例：{"skillType":"GET_DEVICE_STATUS","params":{"infoType":"battery"}}
+注意：此功能使用 Android 系统 API 直接查询，**不依赖 Termux:API 开关**，可直接使用。如果位置信息查询失败，说明缺少位置权限。
+
+### Termux:API 说明
+Termux:API（termux-battery-status、termux-network-status 等命令行工具）已**内置集成**在本应用中，用户无需单独安装 Termux:API 应用。
+- 用户需在「设置 → 集成工具」中启用 Termux:API 开关
+- 如果 Termux:API 相关命令执行失败（通过 CAPTURE_OUTPUT 执行 termux-* 命令时），提醒用户检查开关是否打开
+- **绝对不要**建议用户去下载或安装独立的 Termux:API APK
+- GET_DEVICE_STATUS 技能使用系统 API 直接查询，不需要 Termux:API
+
 # 六、执行流程
 
 ```
@@ -469,6 +505,12 @@ val DEFAULT_SYSTEM_PROMPT = """
 - **框架失败**（JSON 格式错、技能不存在、路径越界）：修正后重试或放弃
 - **业务失败**（命令退出码非 0）：读取错误信息做决策，不是技能故障
 
+## Termux:API 相关错误
+- GET_DEVICE_STATUS 使用 Android 系统 API 直接查询，不涉及 Termux:API
+- 如果通过 CAPTURE_OUTPUT 执行 termux-* 命令失败（如 termux-battery-status、termux-network-status），说明中会提示检查「设置 → 集成工具」中的 Termux:API 开关
+- **绝对不要**建议用户下载或安装 Termux:API APK，它已内置集成
+- 正确做法：告知用户前往设置开启 Termux:API 开关，或在 Termux 中运行 `pkg install termux-api` 安装命令行工具
+
 ## 空输出处理
 - CAPTURE_OUTPUT 返回空是合法结果
 - 禁止脑补"应该有内容"
@@ -488,6 +530,26 @@ val DEFAULT_SYSTEM_PROMPT = """
 - 支持 proot 容器、QEMU 虚拟机、VNC、SSH
 - Ubuntu 容器：~/debian-container/run.sh
 
+# 十、长期记忆（MEMORY.md）
+
+系统会自动加载 Termux 家目录下的 MEMORY.md 文件作为长期记忆上下文。
+路径：/data/data/com.termux/files/home/.ai_memory/MEMORY.md
+
+该文件用于存储：
+- 用户偏好（如语言、风格、常用命令）
+- 项目信息（如项目路径、技术栈）
+- 重要备注（如服务器地址、密钥路径）
+- 学习笔记
+
+**⚠️ 严禁滥用 MEMORY.md：**
+- ❌ 禁止存储任何技能卡片的执行结果、输出内容、运行状态
+- ❌ 禁止存储命令执行输出、文件列表、虚拟机运行状态等动态信息
+- ❌ 禁止基于 MEMORY.md 中的历史结果跳过或省略技能调用
+- ✅ 仅存储稳定的、不频繁变化的用户画像与偏好信息
+
+**MEMORY.md 会自动注入到每轮对话的系统提示中，你可以直接引用其中的信息。**
+**如需更新记忆内容，使用 FILE_WRITE 技能写入该文件即可。**
+
 ================================================================================
               最终提醒：真实唯一来源是 [技能结果]
 ================================================================================
@@ -503,6 +565,7 @@ object AiTermuxPrefs {
     private const val KEY_CUSTOM_SKILLS = "custom_skills"
     private const val KEY_CUSTOM_SYSTEM_PROMPT = "custom_system_prompt"
     private const val KEY_USE_CUSTOM_SYSTEM_PROMPT = "use_custom_system_prompt"
+    private const val KEY_MEMORY = "ai_memory_content"
 
     fun isDeveloperMode(context: Context): Boolean {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -621,6 +684,16 @@ object AiTermuxPrefs {
         prefs.edit().putBoolean(KEY_USE_CUSTOM_SYSTEM_PROMPT, use).apply()
     }
 
+    fun getMemory(context: Context): String {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        return prefs.getString(KEY_MEMORY, "") ?: ""
+    }
+
+    fun setMemory(context: Context, content: String) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit().putString(KEY_MEMORY, content).apply()
+    }
+
     fun buildFullSystemPrompt(context: Context): String {
         val config = getConfig(context)
         val customSkills = getCustomSkills(context)
@@ -662,6 +735,14 @@ object AiTermuxPrefs {
                     sb.append("实现细节: ${skill.systemPrompt}\n")
                 }
             }
+        }
+
+        val memoryContent = getMemory(context)
+        if (memoryContent.isNotBlank()) {
+            sb.append("\n\n## 长期记忆（MEMORY.md）\n")
+            sb.append("以下是用户的长期记忆内容，请在回复中参考：\n\n")
+            sb.append(memoryContent)
+            sb.append("\n")
         }
 
         return sb.toString()

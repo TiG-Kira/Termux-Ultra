@@ -78,7 +78,8 @@ fun ResourcesScreen() {
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(padding)
-                    .nestedScroll(scrollBehavior.nestedScrollConnection)
+                    .nestedScroll(scrollBehavior.nestedScrollConnection),
+                contentPadding = PaddingValues(bottom = 92.dp)
             ) {
                 item {
                     HeroWelcomeCard(
@@ -872,7 +873,7 @@ fun AiTermuxEntryCard(modifier: Modifier = Modifier) {
                             tint = Color.White
                         )
                         Text(
-                            text = "AI Termux",
+                            text = "Termux Agent",
                             style = TextStyle(
                                 fontSize = 15.sp,
                                 fontWeight = FontWeight.Bold,
@@ -913,7 +914,7 @@ fun AiTermuxEntryCard(modifier: Modifier = Modifier) {
 
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "AI Termux",
+                                text = "Termux Agent",
                                 style = TextStyle(
                                     fontSize = 19.sp,
                                     fontWeight = FontWeight.Bold,

@@ -404,6 +404,14 @@
     <string name="system_category">System</string>
     <string name="language_restart_message">Language changes will take effect after the app is restarted.</string>
 
+    <!-- Navigation Bar Style -->
+    <string name="navigation_bar_style">Navigation Bar</string>
+    <string name="navigation_bar_style_description">Choose navigation bar style</string>
+    <string name="navigation_bar_default">Default</string>
+    <string name="navigation_bar_floating">Floating</string>
+    <string name="navigation_bar_liquid_glass">Glass</string>
+    <string name="navigation_bar_restart_message">Navigation bar style changes will take effect after the app is restarted.</string>
+
     <!-- PullToRefresh -->
     <string name="pull_down_to_refresh">Pull down to refresh</string>
     <string name="release_to_refresh">Release to refresh</string>

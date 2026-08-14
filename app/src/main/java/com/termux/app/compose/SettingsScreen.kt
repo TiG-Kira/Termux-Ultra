@@ -128,6 +128,22 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
         mutableStateOf(if (LocaleHelper.isChinese(context)) 0 else 1)
     }
 
+    val navBarStyleOptions = listOf(
+        context.getString(R.string.navigation_bar_default),
+        context.getString(R.string.navigation_bar_floating),
+        context.getString(R.string.navigation_bar_liquid_glass)
+    )
+    var navBarSelectedIndex by remember {
+        mutableStateOf(
+            when (prefs.getString("navigation_bar_style", "default")) {
+                "floating" -> 1
+                "liquid_glass" -> 2
+                else -> 0
+            }
+        )
+    }
+    var showNavRestartPrompt by remember { mutableStateOf(false) }
+
     val scrollBehavior = MiuixScrollBehavior()
 
     val restoreFileLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -376,7 +392,8 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .nestedScroll(scrollBehavior.nestedScrollConnection)
+                .nestedScroll(scrollBehavior.nestedScrollConnection),
+            contentPadding = PaddingValues(bottom = 92.dp)
         ) {
             // ---------- Appearance ----------
             item { SmallTitle(text = context.getString(R.string.appearance)) }
@@ -387,25 +404,49 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
                         .padding(horizontal = 16.dp, vertical = 8.dp)
                         .clip(RoundedCornerShape(16.dp))
                 ) {
-                    OverlayDropdownPreference(
-                        title = context.getString(R.string.language),
-                        summary = context.getString(R.string.language_description),
-                        items = languageOptions,
-                        selectedIndex = languageSelectedIndex,
-                        onSelectedIndexChange = { idx ->
-                            languageSelectedIndex = idx
-                            // Apply without restarting; show prompt so users restart.
-                            if (idx == 0) {
-                                LocaleHelper.setChinese(context)
-                            } else {
-                                LocaleHelper.setEnglish(context)
+                    Column {
+                        OverlayDropdownPreference(
+                            title = context.getString(R.string.language),
+                            summary = context.getString(R.string.language_description),
+                            items = languageOptions,
+                            selectedIndex = languageSelectedIndex,
+                            onSelectedIndexChange = { idx ->
+                                languageSelectedIndex = idx
+                                if (idx == 0) {
+                                    LocaleHelper.setChinese(context)
+                                } else {
+                                    LocaleHelper.setEnglish(context)
+                                }
+                                showRestartPrompt = true
+                            },
+                            startAction = {
+                                SettingIcon(R.drawable.ic_language, contentDescription = context.getString(R.string.language))
                             }
-                            showRestartPrompt = true
-                        },
-                        startAction = {
-                            SettingIcon(R.drawable.ic_language, contentDescription = context.getString(R.string.language))
-                        }
-                    )
+                        )
+                        Divider(
+                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f),
+                            modifier = Modifier.padding(start = 72.dp, end = 16.dp)
+                        )
+                        OverlayDropdownPreference(
+                            title = context.getString(R.string.navigation_bar_style),
+                            summary = context.getString(R.string.navigation_bar_style_description),
+                            items = navBarStyleOptions,
+                            selectedIndex = navBarSelectedIndex,
+                            onSelectedIndexChange = { idx ->
+                                navBarSelectedIndex = idx
+                                val style = when (idx) {
+                                    1 -> "floating"
+                                    2 -> "liquid_glass"
+                                    else -> "default"
+                                }
+                                prefs.edit().putString("navigation_bar_style", style).apply()
+                                showNavRestartPrompt = true
+                            },
+                            startAction = {
+                                SettingIcon(R.drawable.ic_navigation, contentDescription = context.getString(R.string.navigation_bar_style))
+                            }
+                        )
+                    }
                 }
             }
 
@@ -549,7 +590,7 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
             }
 
             // ---------- AI Termux ----------
-            item { SmallTitle(text = "AI Termux") }
+            item { SmallTitle(text = "Termux Agent") }
             item {
                 Card(
                     modifier = Modifier
@@ -559,15 +600,15 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
                 ) {
                     Column {
                         SwitchPreference(
-                            title = "AI Termux",
-                            summary = "开启后显示终端页 AI Termux 入口卡片及相关设置",
+                            title = "Termux Agent",
+                            summary = "开启后显示终端页 Termux Agent 入口卡片及相关设置",
                             checked = aiTermuxEnabled,
                             onCheckedChange = {
                                 aiTermuxEnabled = it
                                 prefs.edit().putBoolean("ai_termux_enabled", it).apply()
                             },
                             startAction = {
-                                SettingIcon(R.drawable.ic_lightbulb, contentDescription = "AI Termux")
+                                SettingIcon(R.drawable.ic_lightbulb, contentDescription = "Termux Agent")
                             }
                         )
                         if (aiTermuxEnabled) {
@@ -589,7 +630,7 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
                             )
                             ArrowPreference(
                                 title = "清空对话记录",
-                                summary = "清空当前 AI Termux 的全部聊天记录",
+                                summary = "清空当前 Termux Agent 的全部聊天记录",
                                 onClick = { showAiClearConfirm = true },
                                 startAction = {
                                     SettingIcon(R.drawable.ic_delete, contentDescription = "清空对话记录")
@@ -608,7 +649,7 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
                                     AiTermuxPrefs.setDeveloperMode(context, it)
                                 },
                                 startAction = {
-                                    SettingIcon(R.drawable.ic_bug, contentDescription = "开发者模式")
+                                    SettingIcon(R.drawable.ic_wrench, contentDescription = "开发者模式")
                                 }
                             )
                             if (aiDeveloperMode) {
@@ -690,6 +731,20 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
         TextButton(
             text = context.getString(R.string.ok),
             onClick = { showRestartPrompt = false },
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
+
+    // ---------- Navigation bar style restart prompt ----------
+    OverlayDialog(
+        title = context.getString(R.string.restart_required),
+        summary = context.getString(R.string.navigation_bar_restart_message),
+        show = showNavRestartPrompt,
+        onDismissRequest = { showNavRestartPrompt = false }
+    ) {
+        TextButton(
+            text = context.getString(R.string.ok),
+            onClick = { showNavRestartPrompt = false },
             modifier = Modifier.fillMaxWidth()
         )
     }
@@ -1011,6 +1066,7 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
     }
 
     // ---------- AI Termux：选择 System Prompt 文件 ----------
+    var showInternalPromptPicker by remember { mutableStateOf(false) }
     OverlayDialog(
         title = "选择 System Prompt 文件",
         summary = "请选择一个 .md 文件作为自定义 System Prompt。\n此文件将完全替代官方默认 System Prompt。",
@@ -1031,8 +1087,7 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
                     text = "Termux 内部",
                     onClick = {
                         showSystemPromptFilePicker = false
-                        // 使用 Termux 内部文件选择器
-                        systemPromptFileLauncher.launch(arrayOf("text/markdown", "text/plain", "*/*"))
+                        showInternalPromptPicker = true
                     },
                     modifier = Modifier.weight(1f)
                 )
@@ -1048,6 +1103,36 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
             }
         }
     }
+
+    // Termux 内部文件选择器
+    TermuxInternalFilePicker(
+        show = showInternalPromptPicker,
+        title = "选择 System Prompt 文件",
+        fileExtensions = listOf("md", "txt"),
+        onDismiss = { showInternalPromptPicker = false },
+        onFileSelected = { path ->
+            showInternalPromptPicker = false
+            try {
+                val file = java.io.File(path.replace("\$HOME", TERMUX_HOME_ABS))
+                if (file.exists() && file.isFile) {
+                    val content = file.readText()
+                    if (content.isNotBlank()) {
+                        AiTermuxPrefs.setCustomSystemPrompt(context, content)
+                        AiTermuxPrefs.setUseCustomSystemPrompt(context, true)
+                        useCustomSystemPrompt = true
+                        systemPromptSource = file.name
+                        android.widget.Toast.makeText(context, "已加载自定义 System Prompt", android.widget.Toast.LENGTH_SHORT).show()
+                    } else {
+                        android.widget.Toast.makeText(context, "文件内容为空", android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                } else {
+                    android.widget.Toast.makeText(context, "文件不存在", android.widget.Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                android.widget.Toast.makeText(context, "读取文件失败: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
+            }
+        }
+    )
 
     // ---------- AI Termux：确认还原官方 System Prompt ----------
     OverlayDialog(
@@ -1346,7 +1431,7 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
     // ---------- AI Termux：完整对话记录 ----------
     OverlayDialog(
         title = "完整对话记录",
-        summary = "包含 System 系统提示在内的完整对话历史。仅显示 AI Termux 保存的最近 100 条消息。",
+        summary = "包含 System 系统提示在内的完整对话历史。仅显示 Termux Agent 保存的最近 100 条消息。",
         show = showFullHistoryViewer,
         onDismissRequest = { showFullHistoryViewer = false }
     ) {

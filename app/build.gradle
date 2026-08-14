@@ -21,8 +21,8 @@ android {
         applicationId "com.termux"
         minSdkVersion project.properties.minSdkVersion.toInteger()
         targetSdkVersion project.properties.targetSdkVersion.toInteger()
-        versionCode 1053
-        versionName "118.3.63"
+        versionCode 1054
+        versionName "118.3.64"
 
         if (appVersionName) versionName = appVersionName
 
@@ -142,6 +142,20 @@ dependencies {
     implementation "androidx.preference:preference-ktx:1.2.1"
 
     implementation "io.coil-kt:coil-compose:2.7.0"
+
+    // Liquid Glass effects (Android-only artifacts)
+    // CM Compose artifacts are excluded to avoid duplication;
+    // the project's androidx.compose (already resolved to 1.11.2 via MIUIX strictly) is used instead
+    implementation("io.github.kyant0:backdrop-android:2.0.0") {
+        exclude group: 'org.jetbrains.compose'
+        exclude group: 'org.jetbrains.compose.ui'
+        exclude group: 'org.jetbrains.compose.foundation'
+    }
+    implementation("io.github.kyant0:shapes-android:1.2.0") {
+        exclude group: 'org.jetbrains.compose'
+        exclude group: 'org.jetbrains.compose.ui'
+        exclude group: 'org.jetbrains.compose.foundation'
+    }
 
     implementation project(':terminal-view')
     implementation project(':termux-shared')

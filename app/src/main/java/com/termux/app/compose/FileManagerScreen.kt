@@ -450,7 +450,7 @@ fun FileManagerScreen(
                 .padding(padding)
                 .padding(horizontal = 16.dp)
                 .nestedScroll(scrollBehavior.nestedScrollConnection),
-            contentPadding = PaddingValues(vertical = 8.dp),
+            contentPadding = PaddingValues(top = 8.dp, bottom = 92.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             if (showWarningCard) {
