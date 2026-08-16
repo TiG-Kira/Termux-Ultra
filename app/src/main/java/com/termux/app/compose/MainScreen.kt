@@ -1,6 +1,7 @@
 package com.termux.app.compose
 
 import android.content.Context
+import android.widget.Toast
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.EnterTransition
@@ -13,9 +14,12 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -76,12 +80,55 @@ fun MainScreen(
         context.getSharedPreferences("app_settings", Context.MODE_PRIVATE)
             .getString("navigation_bar_style", "default") ?: "default"
     }
+    val navPrefs = remember { context.getSharedPreferences("app_settings", Context.MODE_PRIVATE) }
     val useFloatingNav = navBarStyle == "floating"
     val useLiquidGlassNav = navBarStyle == "liquid_glass"
+    var glassNavFailed by remember { mutableStateOf(false) }
+
+    // Crash recovery: if the previous glass nav rendering attempt crashed (SIGSEGV etc.),
+    // the "crash pending" flag will still be set. Detect this and auto-fallback.
+    LaunchedEffect(useLiquidGlassNav) {
+        if (useLiquidGlassNav && navPrefs.getBoolean("glass_nav_crash_pending", false)) {
+            glassNavFailed = true
+            navPrefs.edit().remove("glass_nav_crash_pending").apply()
+        }
+    }
+
     val navStyle = when {
-        useLiquidGlassNav -> 2
+        useLiquidGlassNav && !glassNavFailed -> 2
         useFloatingNav -> 1
         else -> 0
+    }
+
+    LaunchedEffect(navStyle) {
+        if (navStyle == 2) {
+            // Mark that glass nav rendering is in progress
+            navPrefs.edit().putBoolean("glass_nav_crash_pending", true).apply()
+        } else {
+            navPrefs.edit().remove("glass_nav_crash_pending").apply()
+        }
+    }
+
+    // After first successful glass nav frame, clear the crash-pending flag.
+    // Delay 2s to ensure the first frame is fully rendered — if a native crash
+    // (SIGSEGV etc.) occurs during rendering, this block won't execute and the
+    // flag persists, enabling automatic crash recovery on next launch.
+    if (navStyle == 2) {
+        LaunchedEffect(Unit) {
+            kotlinx.coroutines.delay(2000)
+            navPrefs.edit().remove("glass_nav_crash_pending").apply()
+        }
+    }
+
+    LaunchedEffect(glassNavFailed) {
+        if (glassNavFailed) {
+            navPrefs.edit().remove("glass_nav_crash_pending").apply()
+            Toast.makeText(
+                context,
+                context.getString(R.string.glass_nav_bar_fallback_toast),
+                Toast.LENGTH_LONG
+            ).show()
+        }
     }
 
     val liquidGlassBackdrop = rememberLayerBackdrop()
@@ -211,49 +258,55 @@ fun MainScreen(
                     }
                 }
                 1 -> {
-                    FloatingNavigationBar(
-                        modifier = Modifier.padding(horizontal = 12.dp)
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .offset(y = 14.dp)
                     ) {
-                        if (0 in availableTabs) {
-                            FloatingNavigationBarItem(
-                                icon = ImageVector.vectorResource(R.drawable.ic_terminal),
-                                label = stringResource(R.string.terminal),
-                                selected = selectedTab == 0,
-                                onClick = { previousTab = selectedTab; onTabChange(0) }
-                            )
-                        }
-                        if (1 in availableTabs) {
-                            FloatingNavigationBarItem(
-                                icon = ImageVector.vectorResource(R.drawable.ic_files),
-                                label = stringResource(R.string.files),
-                                selected = selectedTab == 1,
-                                onClick = { previousTab = selectedTab; onTabChange(1) }
-                            )
-                        }
-                        if (2 in availableTabs) {
-                            FloatingNavigationBarItem(
-                                icon = ImageVector.vectorResource(R.drawable.ic_vnc),
-                                label = stringResource(R.string.remote),
-                                selected = selectedTab == 2,
-                                onClick = { previousTab = selectedTab; onTabChange(2) }
-                            )
-                        }
-                        if (3 in availableTabs) {
-                            FloatingNavigationBarItem(
-                                icon = ImageVector.vectorResource(R.drawable.ic_resources),
-                                label = stringResource(R.string.resources),
-                                selected = selectedTab == 3,
-                                onClick = { previousTab = selectedTab; onTabChange(3) }
-                            )
-                        }
-                        if (4 in availableTabs) {
-                            FloatingNavigationBarItem(
-                                icon = ImageVector.vectorResource(R.drawable.ic_settings),
-                                label = stringResource(R.string.settings),
-                                selected = selectedTab == 4,
-                                onClick = { previousTab = selectedTab; onTabChange(4) }
-                            )
-                        }
+                        FloatingNavigationBar(
+                            modifier = Modifier.padding(horizontal = 12.dp)
+                        ) {
+                            if (0 in availableTabs) {
+                                FloatingNavigationBarItem(
+                                    icon = ImageVector.vectorResource(R.drawable.ic_terminal),
+                                    label = stringResource(R.string.terminal),
+                                    selected = selectedTab == 0,
+                                    onClick = { previousTab = selectedTab; onTabChange(0) }
+                                )
+                            }
+                            if (1 in availableTabs) {
+                                FloatingNavigationBarItem(
+                                    icon = ImageVector.vectorResource(R.drawable.ic_files),
+                                    label = stringResource(R.string.files),
+                                    selected = selectedTab == 1,
+                                    onClick = { previousTab = selectedTab; onTabChange(1) }
+                                )
+                            }
+                            if (2 in availableTabs) {
+                                FloatingNavigationBarItem(
+                                    icon = ImageVector.vectorResource(R.drawable.ic_vnc),
+                                    label = stringResource(R.string.remote),
+                                    selected = selectedTab == 2,
+                                    onClick = { previousTab = selectedTab; onTabChange(2) }
+                                )
+                            }
+                            if (3 in availableTabs) {
+                                FloatingNavigationBarItem(
+                                    icon = ImageVector.vectorResource(R.drawable.ic_resources),
+                                    label = stringResource(R.string.resources),
+                                    selected = selectedTab == 3,
+                                    onClick = { previousTab = selectedTab; onTabChange(3) }
+                                )
+                            }
+                            if (4 in availableTabs) {
+                                FloatingNavigationBarItem(
+                                    icon = ImageVector.vectorResource(R.drawable.ic_settings),
+                                    label = stringResource(R.string.settings),
+                                    selected = selectedTab == 4,
+                                    onClick = { previousTab = selectedTab; onTabChange(4) }
+                                )
+                            }
+                            }
                     }
                 }
                 else -> {
@@ -418,7 +471,19 @@ fun MainScreen(
             }
         }
 
+        val stopDialogState by StopConfirmDialog.dialogState.collectAsState()
+        val riskDialogState by RiskConfirmManager.dialogState.collectAsState()
+        val disableWarningState by RiskConfirmManager.disableWarningState.collectAsState()
+        val showAuthorizationMask = stopDialogState != null || riskDialogState != null || disableWarningState.show
+
+        if (showAuthorizationMask) {
+            AuthorizationMask()
+        }
+
         // 停止/退出确认弹窗（状态驱动，在主 Compose 树内渲染，避免 addView overlay 白屏）
         StopConfirmDialogHost()
+
+        // 风险命令确认弹窗
+        RiskConfirmDialogHost()
     }
 }

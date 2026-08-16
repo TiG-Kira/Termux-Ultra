@@ -340,6 +340,7 @@
     <string name="navigation_bar_floating">浮动</string>
     <string name="navigation_bar_liquid_glass">玻璃</string>
     <string name="navigation_bar_restart_message">导航栏样式变更将在重启应用后生效。</string>
+    <string name="glass_nav_bar_fallback_toast">玻璃导航栏在当前设备渲染失败，已自动切换为默认导航栏。</string>
 
     <!-- PullToRefresh -->
     <string name="pull_down_to_refresh">下拉刷新</string>
@@ -472,8 +473,8 @@
     <string name="standalone_plugin_installed_summary">已由官方插件替代</string>
 
     <!-- 低版本 Android 优化 -->
-    <string name="low_android_warning_title">Android 版本过低</string>
-    <string name="low_android_warning_message">因 Android 版本过低，部分功能已屏蔽。</string>
+    <string name="low_android_warning_title">Termux 可能运行在老旧设备</string>
+    <string name="low_android_warning_message">您的 Android 版本已过时。部分功能已自动屏蔽——要么需要当前系统不具备的 API，要么会在老旧设备上造成较大性能负担。您可自行承担风险强制开启，相关问题不予技术支持。</string>
     <string name="low_android_version_info">当前 Android 版本：%1$s (SDK %2$d)</string>
     <string name="low_android_feature_disabled">需要 %1$s 及以上版本</string>
     <string name="low_android_terminal_mode_title">已锁定为终端模式</string>
@@ -483,10 +484,17 @@
     <string name="feature_disabled_by_android_version">此功能需要 %1$s 或更高版本，请更新 Android 系统。</string>
 
     <!-- 低版本强制启用警告 -->
-    <string name="force_enable_dialog_title">Android 版本过低警告</string>
-    <string name="force_enable_dialog_message">您正试图在 Android %1$s（SDK %2$d）上启用「%3$s」，该功能要求 %4$s 及以上。\n\n在低版本 Android 上强行启用可能造成严重的性能下降、卡顿、闪退甚至系统不稳定。\n\n若您选择强行启用，所有由此产生的闪退、卡顿或数据损失由您自行承担。</string>
+    <string name="force_enable_dialog_title">老旧设备性能警告</string>
+    <string name="force_enable_dialog_message">您正在 Android %1$s（SDK %2$d）上启用「%3$s」，建议在 %4$s 及以上系统使用。\n\n此功能为新一代设备设计。虽然当前系统 API 可用，但老旧设备的内存和处理能力有限，开启后将给设备带来较大负担。\n\n强制启用可能导致：\n\n• 界面明显卡顿、掉帧\n• CPU/内存占用过高、设备发热\n• 应用或系统进程因内存不足被终止\n• 后台应用更容易被系统回收\n\n请自行承担风险，在老旧设备上启用此功能引发的问题不予提供技术支持。</string>
     <string name="force_enable_anyway">强行启用</string>
-    <string name="force_enable_do_not">取消启用</string>
+    <string name="force_enable_do_not">取消</string>
+
+    <!-- 严重 API 不兼容警告 -->
+    <string name="critical_force_enable_dialog_title">兼容性警告</string>
+    <string name="critical_force_enable_dialog_message">您正试图在 Android %1$s（SDK %2$d）上使用「%3$s」，该功能要求 %4$s 及以上。\n\n这是纯粹的 API 级别不兼容——当前系统缺少必要的渲染 API。强行启用极有可能导致：\n\n• 立即闪退或黑屏\n• 严重的渲染异常\n• 系统 UI 不稳定\n• 内存或 GPU 资源泄漏导致设备卡顿或过热\n• 可能短暂正常工作后才出现故障\n• （极低概率）不兼容组件可能泄露 Surface / 图形句柄，导致其他 App 渲染异常\n\n请自行承担风险，技术不予支持。</string>
+    <string name="critical_force_enable_confirm_text">我已了解风险，强行启用</string>
+    <string name="critical_force_enable_action_continue">继续</string>
+    <string name="critical_force_enable_cancel">中止</string>
 
     <!-- 终端卡片：强制启用后红色警告 -->
     <string name="low_android_force_enabled_title">已强制启用部分功能</string>
@@ -518,5 +526,49 @@
     <string name="ai_skill_prompt">附加 System Prompt</string>
     <string name="ai_copy_all">复制全部</string>
     <string name="ai_system_prompt_warning">修改需谨慎，错误配置可能导致 AI 行为异常。</string>
+
+    <!-- Update checker & APK downloader -->
+    <string name="check_updates">检查更新</string>
+    <string name="new_version_available">有新版本</string>
+    <string name="enable_beta_update">获取 Beta 测试版</string>
+    <string name="enable_beta_update_desc">检查更新时包含 Pre-release 版本</string>
+    <string name="beta_version_available">有 Beta 版本可用</string>
+    <string name="beta_warning_title">开启 Beta 更新？</string>
+    <string name="beta_warning_message">Beta 版本包含未完成功能、实验性改动及不稳定特性，可能导致闪退、卡顿或数据丢失。请勿在生产环境中使用。遇到问题请在 GitHub 反馈。</string>
+    <string name="beta_warning_confirm">开启</string>
+    <string name="beta_warning_cancel">取消</string>
+    <string name="update_log">更新日志</string>
+    <string name="later">稍后</string>
+    <string name="manual">手动</string>
+    <string name="download">下载</string>
+    <string name="downloading">下载中...</string>
+    <string name="is_latest">当前已是最新版本。版本号:</string>
+    <string name="download_failed">下载失败</string>
+    <string name="install_failed">安装失败</string>
+    <string name="response_body_empty">响应体为空</string>
+    <string name="apk_download_failed">APK 文件下载失败</string>
+    <string name="request_install_permission_failed">请求安装权限失败</string>
+    <string name="download_failed_with_code">下载失败: %1$d</string>
+    <string name="beta_version">Beta 版本</string>
+    <string name="internal_version">内部版本</string>
+
+    <!-- 风险命令确认弹窗 -->
+    <string name="risk_command_dialog_title">即将执行风险命令</string>
+    <string name="risk_command_dialog_disclaimer">该命令可能造成不可恢复的数据丢失、系统损坏或安全问题。您执行高危命令所造成的任何后果，本应用不承担任何责任，且不受理因高危操作产生的 Issue。</string>
+    <string name="risk_command_label">命令</string>
+    <string name="risk_command_warning">警告：这是一项高危操作，可能导致不可逆的后果。</string>
+    <string name="risk_command_confirm_checkbox">我自愿承担执行此命令的全部风险，继续执行</string>
+    <string name="risk_command_continue">继续执行</string>
+    <string name="access_denied">Access Denied(权限拒绝)</string>
+    <string name="risk_command_disable_title">关闭高危命令二次确认？</string>
+    <string name="risk_command_disable_message">关闭后高危命令将不再经过二次确认直接执行，您将失去防止意外数据丢失或系统损坏的安全屏障。强烈建议保持开启。继续操作即表示您已知晓风险，并同意本应用不承担任何后果。</string>
+    <string name="risk_command_disable_checkbox">我清楚风险，确认关闭高危命令二次确认；可在设置中重新开启提醒</string>
+    <string name="risk_command_disable_confirm">确认关闭</string>
+    <string name="risk_command_biometric_prompt">请验证您的身份以继续</string>
+    <string name="risk_command_biometric_not_set">设备未设置生物验证或屏幕锁。已跳过验证。建议在系统设置中设置屏幕锁（PIN/图案）或生物验证以获得更好的安全性。</string>
+    <string name="risk_confirm_toggle_title">高危命令二次确认</string>
+    <string name="risk_confirm_toggle_summary">执行高危命令（dd、su/sudo、mkfs、rm -rf / 等）前弹出确认弹窗，防止意外数据丢失</string>
+    <string name="authorization_required_title">操作需要你的授权以继续</string>
+    <string name="accessibility_guard_blocked_toast">请手动点击按钮完成操作，第三方无障碍服务无法执行此操作</string>
 
 </resources>

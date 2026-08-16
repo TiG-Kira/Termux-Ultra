@@ -14,9 +14,12 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.ref.WeakReference;
 import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 /**
  * A terminal session, consisting of a process coupled to a terminal interface.
@@ -33,6 +36,36 @@ public final class TerminalSession extends TerminalOutput {
 
     private static final int MSG_NEW_INPUT = 1;
     private static final int MSG_PROCESS_EXITED = 4;
+
+    /**
+     * 终端输入拦截器接口，用于在用户输入命令时进行高危检测。
+     */
+    public interface InputInterceptor {
+        /**
+         * 检查命令是否应该被拦截。
+         * @param command 用户输入的完整命令
+         * @return true 表示命令已被处理（允许或拒绝），false 表示使用默认行为
+         */
+        boolean onCommandEntered(TerminalSession session, String command);
+
+        /**
+         * 命令被拒绝时调用。
+         */
+        void onCommandBlocked(TerminalSession session, String command);
+    }
+
+    private static InputInterceptor sInputInterceptor;
+
+    public static void setInputInterceptor(InputInterceptor interceptor) {
+        sInputInterceptor = interceptor;
+    }
+
+    /** 命令输入缓冲区，用于检测回车时的完整命令 */
+    private final StringBuilder mCommandBuffer = new StringBuilder();
+
+    /** 待确认的危险命令 */
+    private String mPendingDangerousCommand = null;
+    private byte[] mPendingEnterBytes = null;
 
     public final String mHandle = UUID.randomUUID().toString();
 
@@ -176,7 +209,108 @@ public final class TerminalSession extends TerminalOutput {
     /** Write data to the shell process. */
     @Override
     public void write(byte[] data, int offset, int count) {
-        if (mShellPid > 0) mTerminalToProcessIOQueue.write(data, offset, count);
+        if (mShellPid <= 0) return;
+
+        InputInterceptor interceptor = sInputInterceptor;
+        if (interceptor == null || count <= 0) {
+            if (count > 0) {
+                mTerminalToProcessIOQueue.write(data, offset, count);
+            }
+            return;
+        }
+
+        // Check if there's a pending dialog - don't allow new input until resolved
+        if (mPendingDangerousCommand != null) {
+            // Still buffer but don't forward to shell
+            bufferInput(data, offset, count);
+            return;
+        }
+
+        // Scan for Enter key in the data
+        int segmentStart = offset;
+        for (int i = offset; i < offset + count; i++) {
+            byte b = data[i];
+            if (b == '\r' || b == '\n') {
+                // Buffer everything up to Enter
+                for (int j = segmentStart; j < i; j++) {
+                    bufferChar(data[j]);
+                }
+                segmentStart = i + 1;
+
+                String command = mCommandBuffer.toString().trim();
+                mCommandBuffer.setLength(0);
+
+                if (command.length() > 0) {
+                    boolean handled = interceptor.onCommandEntered(this, command);
+                    if (handled) {
+                        // Command is being handled by interceptor (dangerous)
+                        // Store the Enter bytes to be sent if confirmed
+                        byte[] enterBytes = new byte[]{b};
+                        mPendingEnterBytes = enterBytes;
+                        mPendingDangerousCommand = command;
+                        // Forward the characters but NOT the Enter
+                        if (i - offset > 0) {
+                            mTerminalToProcessIOQueue.write(data, offset, i - offset);
+                        }
+                        return;
+                    }
+                }
+            }
+        }
+
+        // Buffer and forward the rest
+        for (int i = segmentStart; i < offset + count; i++) {
+            bufferChar(data[i]);
+        }
+        if (count > 0) {
+            mTerminalToProcessIOQueue.write(data, offset, count);
+        }
+    }
+
+    private void bufferInput(byte[] data, int offset, int count) {
+        for (int i = offset; i < offset + count; i++) {
+            bufferChar(data[i]);
+        }
+    }
+
+    private void bufferChar(byte b) {
+        if (b == 8 || b == 127) {
+            // Backspace
+            if (mCommandBuffer.length() > 0) {
+                mCommandBuffer.deleteCharAt(mCommandBuffer.length() - 1);
+            }
+        } else if (b == 3 || b == 4) {
+            // Ctrl+C / Ctrl+D
+            mCommandBuffer.setLength(0);
+        } else if (b >= 32) {
+            mCommandBuffer.append((char) (b & 0xFF));
+        }
+    }
+
+    /** 用户确认执行危险命令，放行 Enter 键 */
+    public void confirmPendingCommand() {
+        if (mPendingDangerousCommand != null && mPendingEnterBytes != null) {
+            mTerminalToProcessIOQueue.write(mPendingEnterBytes, 0, mPendingEnterBytes.length);
+            mPendingDangerousCommand = null;
+            mPendingEnterBytes = null;
+        }
+    }
+
+    /** 用户拒绝危险命令，清除行并显示错误 */
+    public void denyPendingCommand() {
+        if (mPendingDangerousCommand != null) {
+            // Send Ctrl+U to kill the current line
+            byte[] killLine = new byte[]{0x15};
+            mTerminalToProcessIOQueue.write(killLine, 0, 1);
+            mPendingDangerousCommand = null;
+            mPendingEnterBytes = null;
+            mCommandBuffer.setLength(0);
+        }
+    }
+
+    /** 是否有待处理的危险命令确认 */
+    public boolean hasPendingDangerousCommand() {
+        return mPendingDangerousCommand != null;
     }
 
     /** Write the Unicode code point to the terminal encoded in UTF-8. */

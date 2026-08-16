@@ -16,6 +16,11 @@ import com.google.gson.JsonParser
 import com.termux.app.TermuxService
 import com.termux.app.TermuxActivity
 import com.termux.app.activities.QemuVmActivity
+import com.termux.shared.models.ExecutionCommand
+import com.termux.shared.shell.TermuxShellEnvironmentClient
+import com.termux.shared.shell.TermuxShellUtils
+import com.termux.shared.shell.TermuxTask
+import com.termux.shared.termux.TermuxConstants
 import com.gaurav.avnc.ui.vnc.VncActivity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -67,22 +72,9 @@ object SkillExecutor {
             }
             SkillType.RUN_COMMAND -> {
                 val cmd = if (params.has("command")) params.get("command").asString else ""
-                val trimmed = cmd.trim()
-                when {
-                    trimmed.isBlank() -> null
-                    Regex("""\brm\s+(-[a-zA-Z]*r[a-zA-Z]*\s+|--recursive\s+).*(\.\s*$|/\s*$|\*|\\${'$'}HOME|\\${'$'}PREFIX)""")
-                        .containsMatchIn(trimmed) ->
-                        "递归删除命令可能导致大量数据丢失"
-                    trimmed.startsWith("rm -rf /") || trimmed.startsWith("rm -rf /*") ->
-                        "禁止执行 rm -rf / ，会破坏整个系统"
-                    trimmed.contains("dd if=") && trimmed.contains("of=") ->
-                        "dd 直接写入磁盘可能破坏数据"
-                    trimmed.contains(":(){ :|:& };:") || trimmed.contains("fork bomb") ->
-                        "fork bomb 会耗尽系统资源"
-                    trimmed.contains("mkfs") ->
-                        "格式化文件系统会导致数据丢失"
-                    else -> null
-                }
+                if (cmd.isBlank()) return null
+                val result = RiskCommandDetector.detect(cmd)
+                if (result.isDangerous) result.description else null
             }
             SkillType.CLOSE_ALL_SESSIONS -> "将关闭所有正在运行的终端会话，未保存的内容会丢失"
             SkillType.EXIT_TERMUX -> "将退出 Termux 应用，所有运行中的进程会终止"
@@ -261,18 +253,47 @@ object SkillExecutor {
 
             if (afterBlock.isNotBlank()) {
                 // 禁令 1：伪造的执行结果描述
-                val fakeResultPatterns = listOf(
-                    "执行结果", "已执行", "已完成", "执行成功", "执行完毕",
-                    "技能结果", "skill result",
-                    "输出", "output", "详细信息",
-                    "操作说明", "结果说明",
-                    "正在读取", "正在检查", "正在扫描",
-                    """共 \d+ 个""", "\\d+ 个会话", "\\d+ 个文件"
+                // 仅检查真正可疑的模式（捏造具体数据），排除 AI 对技能执行的合法描述
+                val fabricatedDataPatterns = listOf(
+                    """共\s+\d+\s+个""",
+                    """\d+\s+个会话""",
+                    """\d+\s+个文件""",
+                    """\d+\s+个进程""",
+                    "共找到",
+                    "运行中进程",
                 )
-                for (pattern in fakeResultPatterns) {
-                    if (afterBlock.contains(pattern, ignoreCase = true)) {
+                var foundFake = false
+                for (pattern in fabricatedDataPatterns) {
+                    if (Regex(pattern).containsMatchIn(afterBlock)) {
                         violations.add("【禁令1】技能卡片后存在伪造的执行结果描述（包含「$pattern」）")
+                        foundFake = true
                         break
+                    }
+                }
+                if (!foundFake) {
+                    val commonDescPatterns = listOf(
+                        "执行结果", "已执行", "已完成", "执行成功", "执行完毕",
+                        "技能结果", "skill result", "详细信息",
+                        "操作说明", "结果说明",
+                        "正在读取", "正在检查", "正在扫描",
+                        "输出", "output", "结果如下"
+                    )
+                    for (pattern in commonDescPatterns) {
+                        if (afterBlock.contains(pattern, ignoreCase = true)) {
+                            val skillTypesInBlock = mutableListOf<String>()
+                            for (r in allRanges) {
+                                try {
+                                    val json = JsonParser.parseString(
+                                        content.substring(r.first, r.last).trim()
+                                    ).asJsonObject
+                                    skillTypesInBlock.add(json.get("skillType")?.asString ?: "")
+                                } catch (_: Exception) { }
+                            }
+                            if (skillTypesInBlock.isEmpty()) {
+                                violations.add("【禁令1】技能卡片后存在可疑的执行结果描述（包含「$pattern」但未识别到技能类型）")
+                            }
+                            break
+                        }
                     }
                 }
 
@@ -303,13 +324,21 @@ object SkillExecutor {
             val noSkillViolations = mutableListOf<String>()
 
             // 禁令 4：假装执行了操作但无技能卡片
+            // 使用更具体的模式组合，避免误判 AI 对技能执行的合法描述
             val fakeActionPatterns = listOf(
-                "已执行", "已完成", "已发送", "已创建", "已连接", "已安装",
-                "列出了", "读取了", "写入了", "删除了",
-                "执行结果", "操作成功", "操作完成"
+                "已创建.*(文件|会话|进程|目录)",
+                "已连接.*(SSH|VNC|远程)",
+                "已安装.*(软件|包|package)",
+                "已发送.*(命令|请求)",
+                "读取了.*(文件|目录|内容)",
+                "写入了.*(文件|内容)",
+                "删除了.*(文件|目录)",
+                "执行结果.*(显示|为|是)",
+                "列出了.*(文件|目录|会话|进程)",
+                "操作成功.*(创建|连接|安装|写入|删除)",
             )
             for (pattern in fakeActionPatterns) {
-                if (lower.contains(pattern)) {
+                if (Regex(pattern, RegexOption.IGNORE_CASE).containsMatchIn(content)) {
                     noSkillViolations.add("【禁令4】回复声称操作「$pattern」但未输出任何技能卡片")
                     break
                 }
@@ -436,6 +465,9 @@ object SkillExecutor {
             SkillType.CONFIRM_DANGEROUS -> SkillExecutionResult(false, "危险操作需在 UI 中确认后执行")
             SkillType.SCHEDULE_TASK -> execScheduleTask(context, params)
             SkillType.GET_DEVICE_STATUS -> execGetDeviceStatus(context, termuxService, params)
+            SkillType.GET_CURRENT_SESSION -> execGetCurrentSession(context, termuxService)
+            SkillType.CLIPBOARD_READ -> execClipboardRead(context)
+            SkillType.CLIPBOARD_WRITE -> execClipboardWrite(context, params)
             SkillType.CUSTOM_COMMAND -> {
                 when {
                     params.has("activityClass") -> execOpenActivity(context, params)
@@ -720,6 +752,19 @@ object SkillExecutor {
 
     // ---- 命令执行（带输出捕获） ----
 
+    private fun resolveTermuxShell(): String? {
+        val binDir = TermuxShellUtils.getDefaultBinPath()
+        if (binDir.isNotEmpty()) {
+            for (shellBinary in arrayOf("bash", "login", "zsh", "sh")) {
+                val shellFile = java.io.File(binDir, shellBinary)
+                if (shellFile.canExecute()) return shellFile.absolutePath
+            }
+        }
+        val systemShell = java.io.File("/system/bin/sh")
+        if (systemShell.canExecute()) return systemShell.absolutePath
+        return null
+    }
+
     private suspend fun execCaptureOutput(
         context: Context,
         termuxService: TermuxService?,
@@ -728,91 +773,99 @@ object SkillExecutor {
         if (termuxService == null) return@withContext SkillExecutionResult(false, "Termux 服务未连接")
         val command = if (params.has("command")) params.get("command").asString else ""
         if (command.isBlank()) return@withContext SkillExecutionResult(false, "命令为空")
-        val timeoutSeconds = if (params.has("timeout")) params.get("timeout").asInt else 10
+        val timeoutSeconds = (if (params.has("timeout")) params.get("timeout").asInt else 30).coerceIn(5, 120)
         val description = if (params.has("description")) params.get("description").asString else command
 
-        // 安全检查
         val danger = Regex("""rm\s+-[a-zA-Z]*r[a-zA-Z]*\s+/\b|mkfs|dd\s+if=.*/dev/block|:\(\)\{ :\|:\& \};:""")
         if (danger.containsMatchIn(command)) {
             return@withContext SkillExecutionResult(false, "检测到危险命令，已拒绝执行")
         }
 
         return@withContext try {
-            val outputFile = "$TERMUX_ROOT/files/home/.ai_capture_${System.currentTimeMillis()}.txt"
-            // 包装命令：执行 + 写入输出文件 + 标记完成
-            val wrappedCmd = """
-                $command > '$outputFile' 2>&1
-                echo '__AI_COMMAND_DONE__' >> '$outputFile'
-            """.trimIndent()
+            val shellPath = resolveTermuxShell()
+                ?: return@withContext SkillExecutionResult(false, "找不到可用的 shell 环境")
 
-            // 在新会话中执行（切到主线程，因为 createTermuxSession 内部 Handler 依赖主线程 Looper）
-            val sessionName = "capture-${command.take(20).replace(Regex("[^a-zA-Z0-9]"), "_")}"
-            val session = withContext(Dispatchers.Main.immediate) {
-                termuxService.createTermuxSession(
-                    null, arrayOf("-c", wrappedCmd), null, null, false, sessionName
-                )
+            val executionCommand = ExecutionCommand(
+                System.currentTimeMillis().toInt(),
+                shellPath,
+                arrayOf("-c", command),
+                null,
+                null,
+                true,
+                false
+            )
+
+            val shellEnvClient = TermuxShellEnvironmentClient()
+            val termuxTask = TermuxTask.execute(
+                context,
+                executionCommand,
+                null,
+                shellEnvClient,
+                false
+            )
+
+            if (termuxTask == null) {
+                val errCode = executionCommand.resultData.getErrCode()
+                val errMsg = executionCommand.resultData.errorsList
+                    ?.joinToString("; ") { it.message ?: "" }
+                    ?.ifBlank { "创建执行任务失败 (code=$errCode)" }
+                    ?: "创建执行任务失败"
+                return@withContext SkillExecutionResult(false, errMsg)
             }
 
-            if (session == null) {
-                return@withContext SkillExecutionResult(false, "创建会话失败")
-            }
-
-            val ts = session.getTerminalSession()
-
-            // 等待命令完成（轮询检查标记文件 + 超时）
-            var output = ""
-            var completed = false
+            val resultData = executionCommand.resultData
             val startTime = System.currentTimeMillis()
             val timeoutMs = timeoutSeconds * 1000L
-            val pollInterval = 200L
+            var completed = false
 
             while (System.currentTimeMillis() - startTime < timeoutMs) {
-                delay(pollInterval)
-                try {
-                    val file = File(outputFile)
-                    if (file.exists()) {
-                        val content = file.readText()
-                        if (content.contains("__AI_COMMAND_DONE__")) {
-                            output = content.removeSuffix("__AI_COMMAND_DONE__").trim()
-                            completed = true
-                            break
-                        }
-                    }
-                } catch (_: Exception) { }
+                delay(200)
+                if (executionCommand.hasExecuted() || resultData.exitCode != null) {
+                    completed = true
+                    break
+                }
             }
 
-            // 超时后如果还没完成，尝试读取已有输出
             if (!completed) {
-                try {
-                    val file = File(outputFile)
-                    if (file.exists()) {
-                        output = file.readText().removeSuffix("__AI_COMMAND_DONE__").trim()
-                    }
-                } catch (_: Exception) { }
-                if (output.isBlank()) output = "(命令执行超时或无输出，命令可能仍在运行中)"
+                runCatching {
+                    termuxTask.killIfExecuting(context, false)
+                }
             }
 
-            // 清理：异步删除临时文件（不阻塞）
-            runCatching { File(outputFile).delete() }
+            val stdout = resultData.stdout.toString()
+            val stderr = resultData.stderr.toString()
+            val combined = buildString {
+                if (stdout.isNotBlank()) append(stdout.trim())
+                if (stderr.isNotBlank()) {
+                    if (isNotEmpty()) append("\n")
+                    append(stderr.trim())
+                }
+            }
+            val output = if (combined.isBlank()) {
+                if (completed) "(命令执行完成但无输出)" else "(命令执行超时或无输出，命令可能仍在运行中)"
+            } else {
+                combined
+            }
 
-            val truncatedOutput = if (output.length > 20000) output.take(20000) + "\n...(输出已截断，超过20000字符)" else output
+            val truncatedOutput = if (output.length > 30000) output.take(30000) + "\n...(输出已截断，超过30000字符)" else output
+            val exitCode = resultData.exitCode
 
             SkillExecutionResult(
                 success = completed || output.isNotBlank(),
-                message = if (completed) "命令已完成，已捕获输出" else "命令可能仍在运行，已捕获部分输出",
+                message = if (completed) "命令已完成${if (exitCode != null) " (exit=$exitCode)" else ""}" else "命令可能仍在运行，已捕获部分输出",
                 skillCard = SkillCardData(
                     skillType = SkillType.CAPTURE_OUTPUT,
                     title = description,
                     description = command,
-                    status = SkillStatus.COMPLETED,
-                    sessionId = ts.mHandle.toString(),
-                    sessionName = ts.mSessionName,
+                    status = if (completed) SkillStatus.COMPLETED else SkillStatus.RUNNING,
                     command = command,
-                    output = truncatedOutput
+                    output = truncatedOutput,
+                    partialOutput = !completed
                 )
             )
         } catch (e: Exception) {
-            SkillExecutionResult(false, "执行出错: ${e.message}")
+            val msg = e.message ?: e.javaClass.simpleName
+            SkillExecutionResult(false, "执行出错: $msg")
         }
     }
 
@@ -1036,9 +1089,13 @@ object SkillExecutor {
         val sessionId = if (params.has("sessionId")) params.get("sessionId").asString else ""
         val sessionName = if (params.has("sessionName")) params.get("sessionName").asString else null
 
-        val danger = Regex("""rm\s+-[a-zA-Z]*r[a-zA-Z]*\s+/\b|mkfs|dd\s+if=.*/dev/block|:\(\)\{ :\|:\& \};:""")
-        if (danger.containsMatchIn(command)) {
-            return@withContext SkillExecutionResult(false, "检测到危险命令，已拒绝执行。请手动在终端中确认后运行。")
+        // 高危命令二次确认
+        val confirmed = RiskConfirmManager.requestConfirmation(context, command)
+        if (!confirmed) {
+            return@withContext SkillExecutionResult(
+                false,
+                context.getString(com.termux.R.string.access_denied)
+            )
         }
 
         return@withContext try {
@@ -1305,6 +1362,105 @@ object SkillExecutor {
                 )
             )
         }
+
+    private suspend fun execGetCurrentSession(
+        context: Context,
+        termuxService: TermuxService?
+    ): SkillExecutionResult = withContext(Dispatchers.Main.immediate) {
+        if (termuxService == null) return@withContext SkillExecutionResult(false, "Termux 服务未连接")
+        return@withContext try {
+            val sessions = termuxService.getTermuxSessions()
+            val activity = context as? Activity
+            val currentHandle = activity?.intent?.getLongExtra("sessionHandle", -1L) ?: -1L
+            val currentSession = sessions.find {
+                it.getTerminalSession().mHandle.toString() == currentHandle.toString()
+            }
+            val currentInfo = if (currentSession != null) {
+                val ts = currentSession.getTerminalSession()
+                "- ${ts.mSessionName ?: "Terminal"} [handle=${ts.mHandle}] 运行中=${ts.isRunning} (当前活跃)"
+            } else {
+                "(未在任何特定会话中)"
+            }
+            val allInfo = sessions.joinToString("\n") {
+                val ts = it.getTerminalSession()
+                val marker = if (ts.mHandle.toString() == currentHandle.toString()) " ◀ 当前" else ""
+                "- ${ts.mSessionName ?: "Terminal"} [handle=${ts.mHandle}] 运行中=${ts.isRunning}$marker"
+            }
+            val output = if (sessions.isEmpty()) "当前无运行会话" else "当前活跃会话：\n$currentInfo\n\n全部会话：\n$allInfo"
+            SkillExecutionResult(
+                true, output,
+                SkillCardData(
+                    skillType = SkillType.GET_CURRENT_SESSION,
+                    title = "当前会话",
+                    description = if (currentSession != null) currentSession.getTerminalSession().mSessionName ?: "Terminal" else "无活跃会话",
+                    status = SkillStatus.COMPLETED,
+                    output = output,
+                    sessionId = currentHandle.toString().takeIf { it != "-1" }
+                )
+            )
+        } catch (e: Exception) {
+            SkillExecutionResult(false, "获取当前会话失败: ${e.message}")
+        }
+    }
+
+    private suspend fun execClipboardRead(context: Context): SkillExecutionResult = withContext(Dispatchers.IO) {
+        return@withContext try {
+            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+            val text = clipboard.primaryClip?.getItemAt(0)?.text?.toString() ?: ""
+            if (text.isBlank()) {
+                SkillExecutionResult(
+                    true, "剪贴板为空",
+                    SkillCardData(
+                        skillType = SkillType.CLIPBOARD_READ,
+                        title = "剪贴板",
+                        description = "剪贴板当前为空",
+                        status = SkillStatus.COMPLETED,
+                        output = "(剪贴板为空)",
+                        clipboardContent = ""
+                    )
+                )
+            } else {
+                val truncated = if (text.length > 5000) text.take(5000) + "...(已截断)" else text
+                SkillExecutionResult(
+                    true, "已读取剪贴板",
+                    SkillCardData(
+                        skillType = SkillType.CLIPBOARD_READ,
+                        title = "剪贴板内容",
+                        description = "长度: ${text.length} 字符",
+                        status = SkillStatus.COMPLETED,
+                        output = truncated,
+                        clipboardContent = text
+                    )
+                )
+            }
+        } catch (e: Exception) {
+            SkillExecutionResult(false, "读取剪贴板失败: ${e.message}")
+        }
+    }
+
+    private suspend fun execClipboardWrite(
+        context: Context,
+        params: JsonObject
+    ): SkillExecutionResult = withContext(Dispatchers.IO) {
+        val content = if (params.has("content")) params.get("content").asString else ""
+        if (content.isBlank()) return@withContext SkillExecutionResult(false, "写入内容为空")
+        return@withContext try {
+            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+            clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Termux Agent", content))
+            SkillExecutionResult(
+                true, "已写入剪贴板",
+                SkillCardData(
+                    skillType = SkillType.CLIPBOARD_WRITE,
+                    title = "已写入剪贴板",
+                    description = "长度: ${content.length} 字符",
+                    status = SkillStatus.COMPLETED,
+                    clipboardWriteContent = content.take(200)
+                )
+            )
+        } catch (e: Exception) {
+            SkillExecutionResult(false, "写入剪贴板失败: ${e.message}")
+        }
+    }
 
     private suspend fun execGetDeviceStatus(
         context: Context,

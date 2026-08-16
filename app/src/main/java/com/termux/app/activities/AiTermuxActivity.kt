@@ -118,6 +118,10 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
 
     private var cancelled = false
 
+    private val autoExecSkills: Set<SkillType> by lazy {
+        AiTermuxPrefs.getAutoExecSkills(getApplication())
+    }
+
     fun cancelGeneration() {
         cancelled = true
         isStreaming = false
@@ -532,15 +536,16 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
             // === 假输出检测（传入预解析数量进行交叉验证）===
             val fakeCheck = SkillExecutor.detectFakeOutput(replyText, preParsedCount)
 
-            // 二次校验：如果预解析找到了技能块，但检测报告"无技能块"类违规，
-            // 则剔除这些违规（说明是正则遗漏导致的误判）
+            // 二次校验：如果预解析找到了技能块，放宽检测标准
             val finalViolations = if (preParsedCount > 0 && fakeCheck.isFake) {
                 fakeCheck.violations.filter { v ->
-                    // 移除依赖"无技能块"判断的禁令（4、6、7、8）
-                    !v.contains("但未输出任何技能卡片") &&
-                    !v.contains("自信式幻觉") &&
-                    !v.contains("捏造不存在的技能") &&
-                    !v.contains("逃避执行")
+                    // 移除"无技能块"类禁令（4、6、7、8）
+                    v.contains("但未输出任何技能卡片").not() &&
+                    v.contains("自信式幻觉").not() &&
+                    v.contains("捏造不存在的技能").not() &&
+                    v.contains("逃避执行").not() &&
+                    // 移除"通用描述"类禁令1条目（当有技能卡时，"已执行"/"已完成"等是合法描述）
+                    v.contains("但未识别到技能类型").not()
                 }
             } else {
                 fakeCheck.violations
@@ -896,7 +901,7 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
             // 如果所有执行的技能都是"需点击执行"类型，终止循环
             // AI 已经生成了卡片并告知用户点击，不应再继续生成更多卡片
             if (executedSkillTypes.isNotEmpty() &&
-                executedSkillTypes.all { it.requiresClick() }) {
+                executedSkillTypes.all { it.requiresClick(autoExecSkills) }) {
                 return
             }
 
@@ -1521,6 +1526,9 @@ private fun AiChatScreen(vm: AiTermuxViewModel, onBack: () -> Unit) {
             }
         }
     }
+
+    // 风险命令确认弹窗
+    com.termux.app.compose.RiskConfirmDialogHost()
 }
 
 @Composable
@@ -2016,8 +2024,9 @@ private fun SkillCard(msgId: String, card: SkillCardData, errorMsg: String?, isD
     val iconRes = when (card.skillType) {
         SkillType.NEW_SESSION, SkillType.CLOSE_SESSION,
         SkillType.CLOSE_ALL_SESSIONS, SkillType.EXIT_TERMUX,
-        SkillType.GET_SESSION_INFO, SkillType.RUN_COMMAND,
-        SkillType.CAPTURE_OUTPUT, SkillType.CUSTOM_COMMAND -> R.drawable.ic_terminal
+        SkillType.GET_SESSION_INFO, SkillType.GET_CURRENT_SESSION,
+        SkillType.RUN_COMMAND, SkillType.CAPTURE_OUTPUT,
+        SkillType.CUSTOM_COMMAND -> R.drawable.ic_terminal
         SkillType.RUN_VM_QEMU, SkillType.CREATE_VM_QEMU,
         SkillType.VM_LIST -> R.drawable.ic_computer
         SkillType.CONNECT_VNC -> R.drawable.ic_vnc
@@ -2029,6 +2038,7 @@ private fun SkillCard(msgId: String, card: SkillCardData, errorMsg: String?, isD
         SkillType.CONFIRM_DANGEROUS -> R.drawable.ic_warning
         SkillType.SCHEDULE_TASK -> R.drawable.ic_service_notification
         SkillType.GET_DEVICE_STATUS -> R.drawable.ic_info
+        SkillType.CLIPBOARD_READ, SkillType.CLIPBOARD_WRITE -> R.drawable.ic_copy
     }
 
     val cardBg = if (isDark) Color(0xFF1A1A1A) else Color(0xFFFAFAFA)

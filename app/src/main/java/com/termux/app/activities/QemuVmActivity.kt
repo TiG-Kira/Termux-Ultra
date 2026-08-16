@@ -266,8 +266,8 @@ private fun QemuVmScreen(
                 summary = showDeleteConfirm?.let {
                     "确定删除 \"${it.name}\" 的配置吗？\n注意：磁盘和镜像文件不会被删除，如需彻底删除请手动清除。"
                 } ?: "",
-                onDismissRequest = { showDeleteConfirm = null }
-            ) {
+                onDismissRequest = { showDeleteConfirm = null },
+                content = {
                 Row(horizontalArrangement = Arrangement.SpaceBetween) {
                     TextButton(
                         text = "取消",
@@ -288,7 +288,8 @@ private fun QemuVmScreen(
                         colors = ButtonDefaults.textButtonColorsPrimary()
                     )
                 }
-            }
+                }
+            )
         }
 
         // 路径迁移对话框
@@ -303,8 +304,8 @@ private fun QemuVmScreen(
                     "是否一键迁移硬盘文件和共享目录到新位置？",
                 onDismissRequest = {
                     if (!isMigrating) showMigrationDialog = false
-                }
-            ) {
+                },
+                content = {
                 if (isMigrating) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -343,7 +344,8 @@ private fun QemuVmScreen(
                         )
                     }
                 }
-            }
+                }
+            )
         }
 
         // 迁移结果对话框
@@ -362,8 +364,8 @@ private fun QemuVmScreen(
                         }
                     }
                 },
-                onDismissRequest = { migrationResult = null }
-            ) {
+                onDismissRequest = { migrationResult = null },
+                content = {
                 Row(horizontalArrangement = Arrangement.Center) {
                     TextButton(
                         text = "确定",
@@ -372,7 +374,8 @@ private fun QemuVmScreen(
                         colors = ButtonDefaults.textButtonColorsPrimary()
                     )
                 }
-            }
+                }
+            )
         }
     }
 }

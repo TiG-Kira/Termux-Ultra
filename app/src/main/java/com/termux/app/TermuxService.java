@@ -183,6 +183,26 @@ public final class TermuxService extends Service implements TermuxTask.TermuxTas
         Process.setThreadPriority(Process.THREAD_PRIORITY_FOREGROUND);
         runStartForeground();
         registerMemoryBroadcastReceiver();
+
+        // 注册终端输入拦截器，用于检测高危命令
+        com.termux.terminal.TerminalSession.setInputInterceptor(new com.termux.terminal.TerminalSession.InputInterceptor() {
+            @Override
+            public boolean onCommandEntered(com.termux.terminal.TerminalSession session, String command) {
+                return com.termux.app.compose.RiskConfirmManager.INSTANCE
+                    .handleTerminalCommand(TermuxService.this, session, command);
+            }
+
+            @Override
+            public void onCommandBlocked(com.termux.terminal.TerminalSession session, String command) {
+                // 被拦截时显示 Toast
+                android.os.Handler handler = new android.os.Handler(android.os.Looper.getMainLooper());
+                handler.post(() -> {
+                    android.widget.Toast.makeText(TermuxService.this,
+                        getString(R.string.access_denied),
+                        android.widget.Toast.LENGTH_LONG).show();
+                });
+            }
+        });
     }
 
     @SuppressLint("Wakelock")
@@ -658,6 +678,21 @@ public final class TermuxService extends Service implements TermuxTask.TermuxTas
             return null;
         }
 
+        // 高危命令检测：显示弹窗二次确认
+        if (isRiskConfirmationEnabled()) {
+            String cmdStr = extractCommandString(executionCommand);
+            if (cmdStr != null && com.termux.app.compose.RiskCommandDetector.INSTANCE.isDangerous(cmdStr)) {
+                Logger.logWarn(LOG_TAG, "High-risk task command detected, requesting confirmation: " + cmdStr);
+                boolean confirmed = com.termux.app.compose.RiskConfirmManager.INSTANCE
+                    .requestConfirmationBlocking(this, cmdStr);
+                if (!confirmed) {
+                    Logger.logWarn(LOG_TAG, "Blocked high-risk task command: " + cmdStr);
+                    Toast.makeText(this, R.string.access_denied, Toast.LENGTH_LONG).show();
+                    return null;
+                }
+            }
+        }
+
         if (Logger.getLogLevel() >= Logger.LOG_LEVEL_VERBOSE)
             Logger.logVerboseExtended(LOG_TAG, executionCommand.toString());
 
@@ -752,6 +787,21 @@ public final class TermuxService extends Service implements TermuxTask.TermuxTas
         if (executionCommand.inBackground) {
             Logger.logDebug(LOG_TAG, "Ignoring a background execution command passed to createTermuxSession()");
             return null;
+        }
+
+        // 高危命令检测：显示弹窗二次确认
+        if (isRiskConfirmationEnabled()) {
+            String cmdStr = extractCommandString(executionCommand);
+            if (cmdStr != null && com.termux.app.compose.RiskCommandDetector.INSTANCE.isDangerous(cmdStr)) {
+                Logger.logWarn(LOG_TAG, "High-risk command detected, requesting confirmation: " + cmdStr);
+                boolean confirmed = com.termux.app.compose.RiskConfirmManager.INSTANCE
+                    .requestConfirmationBlocking(this, cmdStr);
+                if (!confirmed) {
+                    Logger.logWarn(LOG_TAG, "Blocked high-risk command: " + cmdStr);
+                    Toast.makeText(this, R.string.access_denied, Toast.LENGTH_LONG).show();
+                    return null;
+                }
+            }
         }
 
         if (Logger.getLogLevel() >= Logger.LOG_LEVEL_VERBOSE)
@@ -1605,6 +1655,37 @@ public final class TermuxService extends Service implements TermuxTask.TermuxTas
 
     public void clearKilledSessionName() {
         mKilledSessionName = null;
+    }
+
+    /** Check if high-risk command confirmation is enabled in preferences. */
+    private boolean isRiskConfirmationEnabled() {
+        try {
+            android.content.SharedPreferences prefs = getSharedPreferences(
+                com.termux.app.compose.RiskConfirmManager.PREFS_NAME,
+                Context.MODE_PRIVATE
+            );
+            return prefs.getBoolean(com.termux.app.compose.RiskConfirmManager.KEY_ENABLED, true);
+        } catch (Exception e) {
+            return true;
+        }
+    }
+
+    /** Extract the actual command string from an ExecutionCommand for risk detection. */
+    private String extractCommandString(ExecutionCommand executionCommand) {
+        if (executionCommand == null) return null;
+
+        String executable = executionCommand.executable;
+        String[] args = executionCommand.arguments;
+
+        if (executable == null) return null;
+
+        // If executable is a shell with "-c" argument, the actual command is in args[1]
+        if (args != null && args.length >= 2 && "-c".equals(args[0])) {
+            return args[1];
+        }
+
+        // Otherwise, return the executable path itself
+        return executable;
     }
 
 }

@@ -63,7 +63,7 @@ private val GlassIndicatorHeight = 52.dp
 private val GlassIndicatorExpandedWidth = 76.dp
 private val GlassIndicatorExpandedHeight = 56.dp
 private val GlassCornerRadius = 32.dp
-private val GlassBottomMargin = 16.dp
+private val GlassBottomMargin = 18.dp
 
 @Composable
 fun LiquidGlassNavigationBarItem(

@@ -292,8 +292,8 @@ class UtilityCenterActivity : ComponentActivity() {
                     OverlayDialog(
                         show = showTmuxHelpDialog,
                         onDismissRequest = { showTmuxHelpDialog = false },
-                        title = stringResource(R.string.tmux_help_title)
-                    ) {
+                        title = stringResource(R.string.tmux_help_title),
+                        content = {
                         Column(modifier = Modifier.padding(vertical = 8.dp)) {
                             Text(
                                 text = stringResource(R.string.tmux_help_new),
@@ -320,7 +320,8 @@ class UtilityCenterActivity : ComponentActivity() {
                                 )
                             }
                         }
-                    }
+                        }
+                    )
 
                     QemuOnVncSheet(
                         show = showQemuSheet,

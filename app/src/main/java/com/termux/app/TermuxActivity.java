@@ -356,6 +356,41 @@ public final class TermuxActivity extends ComponentActivity implements ServiceCo
                 mPendingTriggerStopService = true;
             }
         }
+
+        // 处理风险确认结果（从主页返回时携带）
+        handleRiskConfirmResult(intent);
+    }
+
+    /**
+     * 处理从主页返回的风险确认结果。
+     * 根据结果对终端会话执行确认或拒绝操作。
+     */
+    private void handleRiskConfirmResult(Intent intent) {
+        if (intent == null) return;
+
+        String result = intent.getStringExtra(com.termux.app.compose.RiskConfirmManager.EXTRA_RISK_RESULT);
+        String sessionHandle = intent.getStringExtra(com.termux.app.compose.RiskConfirmManager.EXTRA_SESSION_HANDLE);
+
+        if (result == null || sessionHandle == null) return;
+
+        TerminalSession session = findSessionByHandle(sessionHandle);
+        if (session == null) {
+            Logger.logWarn(LOG_TAG, "Risk confirm result: session not found for handle " + sessionHandle);
+            return;
+        }
+
+        if (com.termux.app.compose.RiskConfirmManager.RESULT_CONFIRMED.equals(result)) {
+            session.confirmPendingCommand();
+            Logger.logInfo(LOG_TAG, "Risk confirm: command confirmed, handle=" + sessionHandle);
+        } else if (com.termux.app.compose.RiskConfirmManager.RESULT_DENIED.equals(result)) {
+            session.denyPendingCommand();
+            Logger.logInfo(LOG_TAG, "Risk confirm: command denied, handle=" + sessionHandle);
+        }
+
+        // 成功处理后清除状态
+        intent.removeExtra(com.termux.app.compose.RiskConfirmManager.EXTRA_RISK_RESULT);
+        intent.removeExtra(com.termux.app.compose.RiskConfirmManager.EXTRA_SESSION_HANDLE);
+        com.termux.app.compose.RiskConfirmManager.INSTANCE.clearPendingState(this);
     }
 
     @Override
@@ -374,7 +409,50 @@ public final class TermuxActivity extends ComponentActivity implements ServiceCo
 
         updateTerminalToolbarTitle();
 
+        // 检查是否有待处理的风险确认结果
+        // 1. 先检查 Intent extras（onNewIntent 传递的）
+        handleRiskConfirmResult(getIntent());
+        // 2. 再检查 SharedPreferences 备份
+        handlePendingRiskConfirmFromPrefs();
+
         isOnResumeAfterOnCreate = false;
+    }
+
+    /**
+     * 从 SharedPreferences 检查并处理待确认的风险命令结果。
+     * 作为 Intent 传递的备用方案，防止 Activity 被系统回收后结果丢失。
+     */
+    private void handlePendingRiskConfirmFromPrefs() {
+        if (mTermuxService == null) {
+            Logger.logVerbose(LOG_TAG, "handlePendingRiskConfirmFromPrefs: mTermuxService is null, skip");
+            return;
+        }
+
+        android.util.Pair<String, String> pendingResult = com.termux.app.compose.RiskConfirmManager.INSTANCE
+            .consumePendingResult(this);
+
+        if (pendingResult == null) {
+            Logger.logVerbose(LOG_TAG, "handlePendingRiskConfirmFromPrefs: no pending result");
+            return;
+        }
+
+        String sessionHandle = pendingResult.first;
+        String result = pendingResult.second;
+        Logger.logInfo(LOG_TAG, "handlePendingRiskConfirmFromPrefs: handle=" + sessionHandle + ", result=" + result);
+
+        TerminalSession session = findSessionByHandle(sessionHandle);
+        if (session == null) {
+            Logger.logWarn(LOG_TAG, "handlePendingRiskConfirmFromPrefs: session not found for handle " + sessionHandle);
+            return;
+        }
+
+        if (com.termux.app.compose.RiskConfirmManager.RESULT_CONFIRMED.equals(result)) {
+            session.confirmPendingCommand();
+            Logger.logInfo(LOG_TAG, "Risk confirm (from prefs): command confirmed");
+        } else if (com.termux.app.compose.RiskConfirmManager.RESULT_DENIED.equals(result)) {
+            session.denyPendingCommand();
+            Logger.logInfo(LOG_TAG, "Risk confirm (from prefs): command denied");
+        }
     }
 
     @Override
@@ -488,6 +566,13 @@ public final class TermuxActivity extends ComponentActivity implements ServiceCo
 
         // Update the {@link TerminalSession} and {@link TerminalEmulator} clients.
         mTermuxService.setTermuxTerminalSessionClient(mTermuxTerminalSessionClient);
+
+        // 处理从主页返回的风险确认结果（Activity 重建场景下 onNewIntent 不会被调用，
+        // 但 onServiceConnected 一定会在服务绑定后触发，此时 mTermuxService 已就绪）
+        handlePendingRiskConfirmFromPrefs();
+
+        // 同时检查 Intent extras（如果是通过 Intent 跳转回来的）
+        handleRiskConfirmResult(getIntent());
     }
 
     @Override

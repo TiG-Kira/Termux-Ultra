@@ -23,6 +23,7 @@ import androidx.compose.material.icons.rounded.ExpandLess
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Warning
+import top.yukonga.miuix.kmp.preference.CheckboxPreference
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -1436,6 +1437,81 @@ fun ForceEnableFeatureDialog(
                         },
                         modifier = Modifier.weight(1f),
                         colors = ButtonDefaults.textButtonColorsPrimary()
+                    )
+                }
+            }
+        }
+    )
+}
+
+@Composable
+fun ForceEnableCriticalDialog(
+    feature: ApiCompat.Feature,
+    onConfirmed: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+    var understood by remember { mutableStateOf(false) }
+    OverlayDialog(
+        show = true,
+        onDismissRequest = onDismiss,
+        title = stringResource(R.string.critical_force_enable_dialog_title),
+        content = {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(bottom = 12.dp)
+                ) {
+                    androidx.compose.material3.Icon(
+                        imageVector = Icons.Rounded.Warning,
+                        contentDescription = null,
+                        tint = Color(0xFFFF3B30),
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = stringResource(
+                            R.string.critical_force_enable_dialog_message,
+                            ApiCompat.androidReleaseName,
+                            ApiCompat.sdkInt,
+                            feature.label,
+                            feature.requiredVersionLabel
+                        ),
+                        fontSize = 13.sp,
+                        lineHeight = 20.sp,
+                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                    )
+                }
+                Spacer(Modifier.height(16.dp))
+                CheckboxPreference(
+                    title = stringResource(R.string.critical_force_enable_confirm_text),
+                    checked = understood,
+                    onCheckedChange = { understood = it }
+                )
+                Spacer(Modifier.height(16.dp))
+                Row(
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    TextButton(
+                        text = stringResource(R.string.critical_force_enable_cancel),
+                        onClick = onDismiss,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Spacer(Modifier.width(20.dp))
+                    TextButton(
+                        text = stringResource(R.string.critical_force_enable_action_continue),
+                        onClick = {
+                            if (understood) {
+                                ApiCompat.setFeatureForceEnabled(context, feature, true)
+                                onConfirmed()
+                            }
+                        },
+                        enabled = understood,
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.textButtonColors(
+                            color = Color(0xFFFF3B30)
+                        )
                     )
                 }
             }

@@ -21,8 +21,8 @@ android {
         applicationId "com.termux"
         minSdkVersion project.properties.minSdkVersion.toInteger()
         targetSdkVersion project.properties.targetSdkVersion.toInteger()
-        versionCode 1054
-        versionName "118.3.64"
+        versionCode 1055
+        versionName "118.3.65"
 
         if (appVersionName) versionName = appVersionName
 
@@ -188,6 +188,8 @@ dependencies {
     implementation "com.google.android.material:material:1.7.0"
     implementation "org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0"
     implementation "org.connectbot:sshlib:2.2.36"
+
+    implementation "com.squareup.okhttp3:okhttp:4.12.0"
 }
 
 tasks.whenTaskAdded { task ->

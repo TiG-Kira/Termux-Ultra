@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -33,14 +34,19 @@ import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
+import top.yukonga.miuix.kmp.overlay.OverlayDialog
+import top.yukonga.miuix.kmp.preference.SwitchPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import com.termux.R
+import com.termux.app.utils.UpdateChecker
+import com.termux.app.utils.ApkDownloader
 
 @Composable
 fun AboutScreen(onBack: () -> Unit) {
@@ -48,11 +54,22 @@ fun AboutScreen(onBack: () -> Unit) {
     val scrollBehavior = MiuixScrollBehavior()
     val scope = rememberCoroutineScope()
 
+    val updatePrefs = remember { context.getSharedPreferences(PREF_UPDATE, android.content.Context.MODE_PRIVATE) }
+
     var gradientOffset by remember { mutableFloatStateOf(0f) }
     var checkingUpdate by remember { mutableStateOf(false) }
+    var updateResult by remember { mutableStateOf<UpdateChecker.UpdateResult?>(null) }
     var showUpdateDialog by remember { mutableStateOf(false) }
-    var hasUpdate by remember { mutableStateOf(false) }
-    var latestVersion by remember { mutableStateOf("") }
+    var downloadingApk by remember { mutableStateOf(false) }
+    var downloadProgress by remember { mutableStateOf(0) }
+    var downloadedBytes by remember { mutableStateOf(0L) }
+    var totalBytes by remember { mutableStateOf(0L) }
+    var pendingInstallVersion by remember { mutableStateOf<String?>(null) }
+    var releaseStatus by remember { mutableStateOf<UpdateChecker.ReleaseStatus?>(null) }
+    var betaUpdateEnabled by remember { mutableStateOf(updatePrefs.getBoolean(KEY_ENABLE_BETA, false)) }
+    var showBetaWarningDialog by remember { mutableStateOf(false) }
+
+    val currentVersion = remember { getVersionName(context) }
 
     LaunchedEffect(Unit) {
         scope.launch {
@@ -60,6 +77,15 @@ fun AboutScreen(onBack: () -> Unit) {
                 gradientOffset += 0.002f
                 if (gradientOffset > 1f) gradientOffset = 0f
                 delay(16)
+            }
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        scope.launch {
+            val status = UpdateChecker.getReleaseStatus(currentVersion)
+            if (status != null) {
+                releaseStatus = status
             }
         }
     }
@@ -172,13 +198,23 @@ fun AboutScreen(onBack: () -> Unit) {
                             )
                         )
                         Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = getVersionName(context),
-                            style = TextStyle(
-                                fontSize = 14.sp,
-                                color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                text = currentVersion,
+                                style = TextStyle(
+                                    fontSize = 14.sp,
+                                    color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                )
                             )
-                        )
+                            if (releaseStatus == UpdateChecker.ReleaseStatus.PRERELEASE) {
+                                BetaTag()
+                            } else if (releaseStatus == UpdateChecker.ReleaseStatus.NOT_FOUND) {
+                                InternalBuildTag()
+                            }
+                        }
                         Spacer(modifier = Modifier.height(40.dp))
                     }
                 }
@@ -286,17 +322,10 @@ fun AboutScreen(onBack: () -> Unit) {
                             .clickable {
                                 if (!checkingUpdate) {
                                     checkingUpdate = true
-                                    scope.launch(Dispatchers.IO) {
-                                        try {
-                                            val fetchedVersion = fetchLatestVersion()
-                                            latestVersion = fetchedVersion
-                                            val currentVersion = getVersionName(context)
-                                            hasUpdate = compareVersions(currentVersion, fetchedVersion) < 0
-                                        } catch (e: Exception) {
-                                            hasUpdate = false
-                                        }
-                                        checkingUpdate = false
+                                    scope.launch {
+                                        updateResult = UpdateChecker.checkForUpdates(currentVersion, betaUpdateEnabled)
                                         showUpdateDialog = true
+                                        checkingUpdate = false
                                     }
                                 }
                             }
@@ -321,9 +350,18 @@ fun AboutScreen(onBack: () -> Unit) {
                                 }
                                 Column {
                                     Text(
-                                        text = context.getString(R.string.check_update),
+                                        text = context.getString(R.string.check_updates),
                                         style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Bold)
                                     )
+                                    if (updateResult?.hasUpdate == true) {
+                                        Text(
+                                            text = if (updateResult!!.isPreRelease) context.getString(R.string.beta_version_available) else context.getString(R.string.new_version_available),
+                                            style = TextStyle(
+                                                fontSize = 13.sp,
+                                                color = MiuixTheme.colorScheme.error
+                                            )
+                                        )
+                                    }
                                 }
                             }
                             Icon(
@@ -333,6 +371,33 @@ fun AboutScreen(onBack: () -> Unit) {
                                 modifier = Modifier.size(24.dp)
                             )
                         }
+                    }
+                }
+
+                item {
+                    Spacer(modifier = Modifier.height(12.dp))
+                }
+
+                item {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp)
+                    ) {
+                        SwitchPreference(
+                            title = context.getString(R.string.enable_beta_update),
+                            summary = context.getString(R.string.enable_beta_update_desc),
+                            checked = betaUpdateEnabled,
+                            onCheckedChange = { enabled ->
+                                if (enabled) {
+                                    betaUpdateEnabled = true
+                                    showBetaWarningDialog = true
+                                } else {
+                                    betaUpdateEnabled = false
+                                    updatePrefs.edit().putBoolean(KEY_ENABLE_BETA, false).apply()
+                                }
+                            }
+                        )
                     }
                 }
 
@@ -351,15 +416,20 @@ fun AboutScreen(onBack: () -> Unit) {
                             verticalArrangement = Arrangement.spacedBy(12.dp),
                             horizontalAlignment = Alignment.Start
                         ) {
-                            Text(
-                                text = context.getString(R.string.termux_ultra_version),
-                                style = TextStyle(
-                                    fontSize = 14.sp,
-                                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Text(
+                                    text = context.getString(R.string.termux_ultra_version),
+                                    style = TextStyle(
+                                        fontSize = 14.sp,
+                                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                                    )
                                 )
-                            )
+                            }
                             Text(
-                                text = getVersionName(context),
+                                text = currentVersion,
                                 style = TextStyle(
                                     fontSize = 24.sp,
                                     fontWeight = FontWeight.Bold,
@@ -402,74 +472,273 @@ fun AboutScreen(onBack: () -> Unit) {
                     }
                 }
             }
-        }
-    }
 
-    if (showUpdateDialog) {
-        androidx.compose.ui.window.Dialog(
-            onDismissRequest = { showUpdateDialog = false }
-        ) {
-            Card {
-                Column(modifier = Modifier.padding(16.dp)) {
+    if (showUpdateDialog && updateResult != null) {
+        if (pendingInstallVersion != null && ApkDownloader.hasInstallPermission(context)) {
+            val apkFile = ApkDownloader.getDownloadedApkFile(context, pendingInstallVersion!!)
+            if (apkFile.exists()) {
+                LaunchedEffect(Unit) {
+                    ApkDownloader.installApk(context, apkFile)
+                    pendingInstallVersion = null
+                    showUpdateDialog = false
+                }
+            } else {
+                pendingInstallVersion = null
+            }
+        }
+
+        OverlayDialog(
+            show = showUpdateDialog,
+            title = if (updateResult!!.hasUpdate) {
+                if (updateResult!!.isPreRelease) context.getString(R.string.beta_version_available)
+                else context.getString(R.string.new_version_found)
+            } else context.getString(R.string.up_to_date),
+            summary = if (updateResult!!.hasUpdate) {
+                val preReleaseTag = if (updateResult!!.isPreRelease) " (Beta) " else ""
+                "${context.getString(R.string.current_version)}: v${updateResult!!.currentVersion}\n${context.getString(R.string.latest_version)}: v${updateResult!!.latestVersion}${preReleaseTag}"
+            } else {
+                "${context.getString(R.string.is_latest)} v${updateResult!!.currentVersion}"
+            },
+            onDismissRequest = { showUpdateDialog = false },
+            content = {
+                Column(modifier = Modifier.padding(top = 8.dp)) {
+                if (updateResult!!.hasUpdate && updateResult!!.releaseNotes.isNotBlank()) {
                     Text(
-                        text = if (hasUpdate) context.getString(R.string.new_version_found) else context.getString(R.string.up_to_date),
+                        text = context.getString(R.string.update_log),
                         style = TextStyle(
-                            fontSize = 18.sp,
+                            fontSize = 14.sp,
                             fontWeight = FontWeight.Bold,
                             color = MiuixTheme.colorScheme.onSurface
                         ),
-                        modifier = Modifier.padding(bottom = 8.dp)
-                    )
-                    Text(
-                        text = "${context.getString(R.string.current_version)}: ${getVersionName(context)}",
-                        style = TextStyle(
-                            fontSize = 14.sp,
-                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                        ),
                         modifier = Modifier.padding(bottom = 4.dp)
                     )
-                    if (hasUpdate && latestVersion.isNotEmpty()) {
-                        Text(
-                            text = "${context.getString(R.string.latest_version)}: $latestVersion",
-                            style = TextStyle(
-                                fontSize = 14.sp,
-                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                            ),
-                            modifier = Modifier.padding(bottom = 12.dp)
-                        )
-                    }
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.Center
+                    MarkdownText(
+                        text = updateResult!!.releaseNotes,
+                        modifier = Modifier
+                            .padding(bottom = 16.dp)
+                            .heightIn(max = 200.dp)
+                            .verticalScroll(androidx.compose.foundation.rememberScrollState())
+                    )
+                }
+                if (downloadingApk) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 12.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        if (hasUpdate) {
-                            Button(
-                                onClick = {
-                                    showUpdateDialog = false
-                                    downloadUpdate(context, latestVersion)
-                                },
-                                modifier = Modifier.fillMaxWidth(),
-                                colors = ButtonDefaults.buttonColors(
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = context.getString(R.string.downloading),
+                                style = TextStyle(
+                                    fontSize = 14.sp,
+                                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                                )
+                            )
+                            Text(
+                                text = "$downloadProgress%",
+                                style = TextStyle(
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold,
                                     color = MiuixTheme.colorScheme.primary
                                 )
-                            ) {
-                                Text(text = context.getString(R.string.update), fontWeight = FontWeight.Bold, color = Color.White)
-                            }
-                        } else {
-                            Button(
-                                onClick = { showUpdateDialog = false },
-                                modifier = Modifier.fillMaxWidth(),
-                                colors = ButtonDefaults.buttonColors(
-                                    color = MiuixTheme.colorScheme.primary
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(6.dp)
+                                .clip(RoundedCornerShape(3.dp))
+                                .background(MiuixTheme.colorScheme.surfaceVariant)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth(downloadProgress / 100f)
+                                    .height(6.dp)
+                                    .background(MiuixTheme.colorScheme.primary)
+                            )
+                        }
+                        if (totalBytes > 0) {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "${formatUpdateFileSize(downloadedBytes)} / ${formatUpdateFileSize(totalBytes)}",
+                                style = TextStyle(
+                                    fontSize = 12.sp,
+                                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary
                                 )
-                            ) {
-                                Text(text = context.getString(R.string.ok), fontWeight = FontWeight.Bold, color = Color.White)
-                            }
+                            )
+                        }
+                    }
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = if (updateResult!!.hasUpdate) Arrangement.spacedBy(8.dp) else Arrangement.Center
+                ) {
+                    if (updateResult!!.hasUpdate) {
+                        TextButton(
+                            text = context.getString(R.string.later),
+                            onClick = { showUpdateDialog = false },
+                            modifier = Modifier.weight(1f),
+                            enabled = !downloadingApk
+                        )
+                        TextButton(
+                            text = context.getString(R.string.manual),
+                            onClick = {
+                                val intent = android.content.Intent(
+                                    android.content.Intent.ACTION_VIEW,
+                                    android.net.Uri.parse(updateResult!!.releaseUrl)
+                                )
+                                context.startActivity(intent)
+                                showUpdateDialog = false
+                            },
+                            modifier = Modifier.weight(1f),
+                            enabled = !downloadingApk
+                        )
+                        Button(
+                            onClick = {
+                                downloadingApk = true
+                                downloadProgress = 0
+                                downloadedBytes = 0L
+                                totalBytes = 0L
+                                val downloadUrl = ApkDownloader.constructDownloadUrl(updateResult!!.latestVersion, context)
+                                scope.launch(Dispatchers.IO) {
+                                    val result = ApkDownloader.downloadAndInstall(
+                                        context,
+                                        downloadUrl,
+                                        updateResult!!.latestVersion
+                                    ) { progress, downloaded, total ->
+                                        downloadProgress = progress
+                                        downloadedBytes = downloaded
+                                        totalBytes = total
+                                    }
+                                    downloadingApk = false
+                                    if (result.isFailure) {
+                                        val intent = android.content.Intent(
+                                            android.content.Intent.ACTION_VIEW,
+                                            android.net.Uri.parse(updateResult!!.releaseUrl)
+                                        )
+                                        context.startActivity(intent)
+                                    } else {
+                                        if (!ApkDownloader.hasInstallPermission(context)) {
+                                            pendingInstallVersion = updateResult!!.latestVersion
+                                        }
+                                    }
+                                    if (ApkDownloader.hasInstallPermission(context)) {
+                                        showUpdateDialog = false
+                                    }
+                                }
+                            },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(
+                                color = MiuixTheme.colorScheme.primary
+                            ),
+                            enabled = !downloadingApk
+                        ) {
+                            Text(text = context.getString(R.string.download), fontWeight = FontWeight.Bold, color = Color.White)
+                        }
+                    } else {
+                        Button(
+                            onClick = { showUpdateDialog = false },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(
+                                color = MiuixTheme.colorScheme.primary
+                            )
+                        ) {
+                            Text(text = context.getString(R.string.ok), fontWeight = FontWeight.Bold, color = Color.White)
                         }
                     }
                 }
             }
+            }
+        )
+    }
+
+    OverlayDialog(
+        show = showBetaWarningDialog,
+        title = context.getString(R.string.beta_warning_title),
+        summary = context.getString(R.string.beta_warning_message),
+        onDismissRequest = {
+            betaUpdateEnabled = false
+            showBetaWarningDialog = false
+        },
+        content = {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                TextButton(
+                    text = context.getString(R.string.beta_warning_cancel),
+                    onClick = {
+                        betaUpdateEnabled = false
+                        showBetaWarningDialog = false
+                    },
+                    modifier = Modifier.weight(1f)
+                )
+                Button(
+                    onClick = {
+                        updatePrefs.edit().putBoolean(KEY_ENABLE_BETA, true).apply()
+                        showBetaWarningDialog = false
+                    },
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(
+                        color = MiuixTheme.colorScheme.primary
+                    )
+                ) {
+                    Text(
+                        text = context.getString(R.string.beta_warning_confirm),
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                }
+            }
         }
+    )
+    }
+}
+}
+
+@Composable
+private fun BetaTag() {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(10.dp))
+            .background(MiuixTheme.colorScheme.error.copy(alpha = 0.15f))
+            .padding(horizontal = 6.dp, vertical = 2.dp)
+    ) {
+        Text(
+            text = "Beta",
+            style = TextStyle(
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+                color = MiuixTheme.colorScheme.error
+            )
+        )
+    }
+}
+
+@Composable
+private fun InternalBuildTag() {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(10.dp))
+            .background(Color(0xFFFF9800).copy(alpha = 0.15f))
+            .padding(horizontal = 6.dp, vertical = 2.dp)
+    ) {
+        Text(
+            text = "Internal",
+            style = TextStyle(
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFFFF9800)
+            )
+        )
     }
 }
 
@@ -497,6 +766,91 @@ private fun InfoRow(title: String, value: String) {
     }
 }
 
+@Composable
+private fun MarkdownText(text: String, modifier: Modifier = Modifier) {
+    val lines = text.lines()
+    Column(modifier = modifier) {
+        lines.forEach { line ->
+            when {
+                line.startsWith("### ") -> {
+                    Text(
+                        text = line.removePrefix("### "),
+                        style = TextStyle(
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MiuixTheme.colorScheme.onSurface
+                        ),
+                        modifier = Modifier.padding(top = 6.dp, bottom = 2.dp)
+                    )
+                }
+                line.startsWith("## ") -> {
+                    Text(
+                        text = line.removePrefix("## "),
+                        style = TextStyle(
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MiuixTheme.colorScheme.onSurface
+                        ),
+                        modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
+                    )
+                }
+                line.startsWith("# ") -> {
+                    Text(
+                        text = line.removePrefix("# "),
+                        style = TextStyle(
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MiuixTheme.colorScheme.onSurface
+                        ),
+                        modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
+                    )
+                }
+                line.startsWith("- ") || line.startsWith("* ") -> {
+                    Row(
+                        modifier = Modifier.padding(vertical = 1.dp)
+                    ) {
+                        Text(
+                            text = "• ",
+                            style = TextStyle(
+                                fontSize = 13.sp,
+                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                            )
+                        )
+                        Text(
+                            text = line.substring(2),
+                            style = TextStyle(
+                                fontSize = 13.sp,
+                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                            )
+                        )
+                    }
+                }
+                line.isBlank() -> {
+                    Spacer(modifier = Modifier.height(4.dp))
+                }
+                else -> {
+                    Text(
+                        text = line,
+                        style = TextStyle(
+                            fontSize = 13.sp,
+                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                        )
+                    )
+                }
+            }
+        }
+    }
+}
+
+private fun formatUpdateFileSize(bytes: Long): String {
+    return when {
+        bytes < 1024 -> "$bytes B"
+        bytes < 1024 * 1024 -> "${(bytes / 1024.0).toInt()} KB"
+        bytes < 1024L * 1024 * 1024 -> "${(bytes / (1024.0 * 1024.0)).let { String.format("%.1f", it) }} MB"
+        else -> "${(bytes / (1024.0 * 1024.0 * 1024.0)).let { String.format("%.2f", it) }} GB"
+    }
+}
+
 private fun getVersionName(context: android.content.Context): String {
     return try {
         val packageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
@@ -506,89 +860,5 @@ private fun getVersionName(context: android.content.Context): String {
     }
 }
 
-private fun fetchLatestVersion(): String {
-    return try {
-        val url = java.net.URL("https://api.github.com/repos/TiG-Kira/Termux-Ultra/releases/latest")
-        val connection = url.openConnection() as java.net.HttpURLConnection
-        connection.connectTimeout = 8000
-        connection.readTimeout = 8000
-        connection.setRequestProperty("Accept", "application/vnd.github.v3+json")
-        connection.setRequestProperty("User-Agent", "Termux-Ultra-App")
-        
-        val response = connection.inputStream.bufferedReader().use { it.readText() }
-        val tagRegex = """"tag_name"\s*:\s*"([^"]+)"""".toRegex()
-        val matchResult = tagRegex.find(response)
-        val tagName = matchResult?.groupValues?.get(1) ?: "0.0.0.0.0"
-        
-        tagName.removePrefix("v").removePrefix("V")
-    } catch (e: Exception) {
-        "0.0.0.0.0"
-    }
-}
-
-private fun compareVersions(version1: String, version2: String): Int {
-    val parts1 = version1.split(".").map { it.toIntOrNull() ?: 0 }
-    val parts2 = version2.split(".").map { it.toIntOrNull() ?: 0 }
-    
-    val maxLength = maxOf(parts1.size, parts2.size)
-    
-    for (i in 0 until maxLength) {
-        val v1 = if (i < parts1.size) parts1[i] else 0
-        val v2 = if (i < parts2.size) parts2[i] else 0
-        
-        if (v1 < v2) return -1
-        if (v1 > v2) return 1
-    }
-    
-    return 0
-}
-
-private fun getDeviceAbi(): String {
-    return try {
-        val abis = android.os.Build.SUPPORTED_ABIS
-        if (abis.isNotEmpty()) {
-            when (abis[0]) {
-                "arm64-v8a" -> "arm64-v8a"
-                "armeabi-v7a" -> "armeabi-v7a"
-                "x86_64" -> "x86_64"
-                "x86" -> "x86"
-                else -> "universal"
-            }
-        } else {
-            "universal"
-        }
-    } catch (e: Exception) {
-        "universal"
-    }
-}
-
-private fun downloadUpdate(context: android.content.Context, version: String) {
-    val abi = getDeviceAbi()
-    val buildType = getBuildType(context)
-    val apkFileName = if (buildType == "release") {
-        "app-${abi}-release.apk"
-    } else {
-        "app-${abi}-debug.apk"
-    }
-    val downloadUrl = "https://github.com/TiG-Kira/Termux-Ultra/releases/download/$version/$apkFileName"
-    
-    val intent = android.content.Intent(
-        android.content.Intent.ACTION_VIEW,
-        android.net.Uri.parse(downloadUrl)
-    )
-    context.startActivity(intent)
-}
-
-private fun getBuildType(context: android.content.Context): String {
-    return try {
-        val packageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
-        val applicationInfo = packageInfo?.applicationInfo
-        if (applicationInfo != null && (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0)) {
-            "debug"
-        } else {
-            "release"
-        }
-    } catch (e: android.content.pm.PackageManager.NameNotFoundException) {
-        "debug"
-    }
-}
+private const val PREF_UPDATE = "update_preferences"
+private const val KEY_ENABLE_BETA = "enable_beta_update"

@@ -716,8 +716,8 @@ private fun VmWizardContent(
             summary = "请选择文件来源：\n\n" +
                 "• Termux 环境内：浏览 /data/data/com.termux 下的文件（如 \$HOME/virtual_disks/）\n" +
                 "• 外部存储：使用系统文件选择器选择 Termux 之外的文件（自动复制到内部）",
-            onDismissRequest = { fileSourceTarget = null }
-        ) {
+            onDismissRequest = { fileSourceTarget = null },
+            content = {
             Column(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -748,7 +748,8 @@ private fun VmWizardContent(
                     modifier = Modifier.fillMaxWidth()
                 )
             }
-        }
+            }
+        )
     }
 
     // 磁盘文件：Termux 内部选择器

@@ -53,24 +53,27 @@ enum class SkillType {
     CAPTURE_OUTPUT,       // 执行命令并捕获输出（AI 可读取真实结果）
     PACKAGE_INSTALL,      // 安装软件包
     GET_SESSION_INFO,     // 获取会话信息
+    GET_CURRENT_SESSION,  // 获取当前活跃会话
     ASK_USER,             // 向用户询问问题（填空/单选/多选）
     CONFIRM_DANGEROUS,    // 危险操作二次确认
     CUSTOM_COMMAND,        // AI 自定义命令（兜底类型）
     SCHEDULE_TASK,        // 定时任务/提醒
-    GET_DEVICE_STATUS     // 查询设备状态（Termux:API）
+    GET_DEVICE_STATUS,    // 查询设备状态（Termux:API）
+    CLIPBOARD_READ,       // 读取剪贴板
+    CLIPBOARD_WRITE       // 写入剪贴板
 }
 
 /** 需用户点击才能执行的技能（仅生成卡片，未真正执行） */
-fun SkillType.requiresClick(): Boolean = when (this) {
+fun SkillType.requiresClick(autoExecSkills: Set<SkillType> = emptySet()): Boolean = when (this) {
     SkillType.NEW_SESSION,
     SkillType.RUN_COMMAND,
     SkillType.CUSTOM_COMMAND,
     SkillType.PACKAGE_INSTALL,
-    SkillType.CAPTURE_OUTPUT,
     SkillType.CONNECT_SSH,
     SkillType.CONNECT_VNC,
     SkillType.VM_LIST,
     SkillType.SCHEDULE_TASK -> true
+    SkillType.CAPTURE_OUTPUT -> this !in autoExecSkills
     else -> false
 }
 
@@ -79,7 +82,9 @@ fun SkillType.hasOutput(): Boolean = when (this) {
     SkillType.FILE_LIST,
     SkillType.FILE_READ,
     SkillType.GET_SESSION_INFO,
-    SkillType.GET_DEVICE_STATUS -> true
+    SkillType.GET_CURRENT_SESSION,
+    SkillType.GET_DEVICE_STATUS,
+    SkillType.CLIPBOARD_READ -> true
     else -> false
 }
 
@@ -104,8 +109,25 @@ data class SkillCardData(
     val askPlaceholder: String? = null,       // 填空占位符
     // 危险操作确认相关
     val dangerousReason: String? = null,      // 危险原因说明
-    val dangerousAction: String? = null       // 待确认执行的操作描述
+    val dangerousAction: String? = null,      // 待确认执行的操作描述
+    // 剪贴板相关
+    val clipboardContent: String? = null,     // 剪贴板内容
+    val clipboardWriteContent: String? = null, // 要写入剪贴板的内容
+    // 执行状态相关
+    val partialOutput: Boolean = false        // 是否为部分输出（超时未完成）
 )
+
+/** 自动执行白名单配置 */
+data class SkillAutoExecConfig(
+    val enabled: Boolean = false,
+    val autoExecSkills: Set<SkillType> = setOf(SkillType.CAPTURE_OUTPUT),
+    val autoExecNewSessions: Boolean = false,
+    val autoExecRemoteConnect: Boolean = false
+) {
+    companion object {
+        val DEFAULT = SkillAutoExecConfig()
+    }
+}
 
 /** 技能执行状态 */
 enum class SkillStatus {
@@ -191,7 +213,7 @@ val DEFAULT_SYSTEM_PROMPT = """
 
 ## 类别 A：需点击执行（生成卡片后输出 [END_TURN]，告知用户点击即可）
 技能：NEW_SESSION、RUN_COMMAND、CUSTOM_COMMAND、PACKAGE_INSTALL、
-      CAPTURE_OUTPUT、CONNECT_SSH、CONNECT_VNC、VM_LIST、SCHEDULE_TASK
+      CONNECT_SSH、CONNECT_VNC、VM_LIST、SCHEDULE_TASK
 
 特点：仅生成卡片，**不会真正执行**。需要用户点击卡片后才触发操作。
 系统回传内容：「卡片已生成」+ 卡片信息（不是操作结果）
@@ -200,19 +222,26 @@ val DEFAULT_SYSTEM_PROMPT = """
 **不要声称操作已完成、已执行、已连接等。**
 **不要继续生成更多卡片。**
 
+## ⚡ 自动执行白名单
+用户可在设置中开启「信任白名单」，将某些技能设为自动执行。
+- 当 CAPTURE_OUTPUT 在白名单中时，它会变成**自动执行**（不需要点击），执行后你会收到真实输出
+- 白名单由用户自行管理，你不需要关心哪些技能在白名单中
+- 如果 CAPTURE_OUTPUT 被自动执行，按类别 C 处理（收到 [技能结果] 后推进）
+
 ## 类别 B：立即执行（操作即刻完成，有/无返回值）
 技能：CLOSE_SESSION、CLOSE_ALL_SESSIONS、FILE_WRITE、FILE_DELETE、
-      EXIT_TERMUX、RUN_VM_QEMU、CREATE_VM_QEMU
+      EXIT_TERMUX、RUN_VM_QEMU、CREATE_VM_QEMU、CLIPBOARD_WRITE
 
-特点：操作立即完成。CLOSE/WRITE/DELETE 有成功/失败回传，VM 类跳转页面。
+特点：操作立即完成。CLOSE/WRITE/DELETE/CLIPBOARD_WRITE 有成功/失败回传，VM 类跳转页面。
 系统回传内容：成功/失败状态。
 
 **你必须：收到成功回传后告知用户操作完成。不要重复执行。**
 
 ## 类别 C：有真实返回值（读取输出后推进）
-技能：FILE_LIST、FILE_READ、GET_SESSION_INFO、ASK_USER、GET_DEVICE_STATUS
+技能：FILE_LIST、FILE_READ、GET_SESSION_INFO、GET_CURRENT_SESSION、ASK_USER、
+      GET_DEVICE_STATUS、CLIPBOARD_READ、CAPTURE_OUTPUT（在白名单中时）
 
-特点：系统回传真实数据（目录列表、文件内容、会话列表、用户回答）。
+特点：系统回传真实数据（目录列表、文件内容、会话列表、剪贴板内容、设备状态）。
 系统回传内容：真实文本数据。
 
 **你必须：基于真实数据推进下一步。不要编造数据。**
@@ -253,6 +282,10 @@ val DEFAULT_SYSTEM_PROMPT = """
    不再有下一步操作）时，必须在最后输出 `[END_TURN]` 标记。
     **注意：输出技能卡片后不要立即 [END_TURN]，等系统回传 [技能结果] 并处理完再输出。**
     **遗漏此标记将导致系统重复调用你，浪费大量资源。这是最高优先级规则。**
+
+11. **禁止省略危险命令警告**：执行高危命令（dd、rm -rf /、mkfs 等）前，
+    必须在技能卡片前输出至少两行 ⚠️ 警告 + 明确询问用户确认。
+    即使系统二次确认机制可能已被用户关闭，此警告流程仍必须执行。
 
 # 四、回复格式
 
@@ -331,6 +364,14 @@ val DEFAULT_SYSTEM_PROMPT = """
 返回：每个会话的名称、handle、运行状态
 示例：{"skillType":"GET_SESSION_INFO","params":{}}
 
+### GET_CURRENT_SESSION — 获取当前活跃会话 [类别 C]
+用途：获取用户当前正在查看的会话，以及全部会话列表（标注当前活跃）。
+参数：{}
+返回：当前活跃会话 + 全部会话列表（带当前标记）
+示例：{"skillType":"GET_CURRENT_SESSION","params":{}}
+优势：比 GET_SESSION_INFO 更精准，能感知用户上下文。
+当你需要判断"用户在哪个会话中"时，使用此技能。
+
 ----------------------------------------------------------------------
 ## 5.2 虚拟机管理
 ----------------------------------------------------------------------
@@ -401,13 +442,14 @@ val DEFAULT_SYSTEM_PROMPT = """
 适用：用户需要在终端中看到的命令
 **需要读取结果请使用 CAPTURE_OUTPUT**
 
-### CAPTURE_OUTPUT — 执行并捕获输出 [类别 A]
+### CAPTURE_OUTPUT — 执行并捕获输出 [类别 A / ⚡自动执行]
 参数：{ "command":"命令", "timeout":10, "description":"卡片标题" }
-返回：卡片已生成，点击后执行，你将收到完整输出
+返回：如果在白名单中 → 自动执行并返回输出（类别 C）；否则 → 卡片已生成，点击后执行
 示例：
   {"skillType":"CAPTURE_OUTPUT","params":{"command":"ls -la ~","description":"列出家目录"}}
   {"skillType":"CAPTURE_OUTPUT","params":{"command":"pkg list-installed | grep git","description":"检查 git"}}
 **推荐：能用 CAPTURE_OUTPUT 就不要用 RUN_COMMAND**
+**如果用户已开启白名单，CAPTURE_OUTPUT 会自动执行，你收到 [技能结果] 后可直接推进。**
 
 ### PACKAGE_INSTALL — 安装软件包 [类别 A]
 参数：{ "packages":["包名1","包名2"] }
@@ -427,11 +469,71 @@ val DEFAULT_SYSTEM_PROMPT = """
 返回：系统暂停，等待用户回答
 示例：{"skillType":"ASK_USER","params":{"question":"选择容器","type":"single","options":["Ubuntu","Debian"]}}
 
-### CONFIRM_DANGEROUS — 危险确认
+### CONFIRM_DANGEROUS — 危险操作二次确认
 由系统自动触发，你不需要主动调用。
 
+## 高危命令处理规范
+
+### 二次确认机制
+系统内置了高危命令二次确认机制。当你生成的技能涉及危险操作时，系统会自动拦截
+并弹出确认卡片，要求用户点击「确认执行」后才能真正执行。
+
+**用户可自主关闭此机制**（在「设置 → Termux Agent」中），但**你必须始终**：
+
+1. **多次警告**：在执行危险命令前，使用醒目的警告格式告知用户风险
+   - 至少用两行强调警告（⚠️ 标记 + 具体危险描述）
+   - 明确说明可能导致的后果（数据丢失、系统损坏等）
+
+2. **主动确认**：在生成危险技能卡片前，先用自然语言明确询问用户：
+   - "⚠️ 此操作将 XXX，可能导致 YYY，确定要继续吗？"
+   - 等待用户确认后再生成技能卡片
+
+3. **建议保持开启**：当用户询问安全设置时，强烈建议用户保持二次确认机制开启：
+   - 说明二次确认是最后一道防线
+   - 提醒关闭后 AI 的警告将是唯一保护，仍可能被误操作绕过
+
+### 危险命令识别
+以下类型的命令属于高危，必须遵守上述规范：
+- `dd` 直接磁盘写入（`dd if=/dev/xxx of=/dev/block/...`）
+- `rm -rf /` 或递归删除根目录
+- `mkfs` 格式化磁盘
+- `shutdown`/`reboot` 关机重启
+- fork bomb（`:(){ :|:& };:`）
+- `su`/`sudo` 提权操作
+- 内核模块加载/卸载
+
+### 危险操作处理流程
+```
+检测到危险命令 → 自然语言多次警告 → 明确询问用户确认
+→ 用户确认 → 生成技能卡片 → 系统二次确认（用户可能已关闭）
+→ 用户点击确认 → 执行 → 返回结果
+```
+
+**如果用户关闭了二次确认机制：**
+- 仍然必须在生成卡片前进行充分的文字警告
+- 在警告中提及「用户已关闭二次确认，此操作将直接执行」
+- 必须获得用户的明确确认（如"确定要执行吗？"并得到肯定回复）
+
 ----------------------------------------------------------------------
-## 5.7 定时与系统状态
+## 5.7 剪贴板交互
+----------------------------------------------------------------------
+
+### CLIPBOARD_READ — 读取剪贴板 [类别 C]
+用途：读取系统剪贴板的文本内容。可用于读取用户复制的内容进行分析。
+参数：{}
+返回：剪贴板文本内容（最大 5000 字符）
+示例：{"skillType":"CLIPBOARD_READ","params":{}}
+场景：用户说"帮我分析一下我复制的内容"时使用。
+
+### CLIPBOARD_WRITE — 写入剪贴板 [类别 B]
+用途：将文本写入系统剪贴板。可用于生成内容后一键复制给用户。
+参数：{ "content":"要写入的文本内容" }
+返回：写入成功/失败
+示例：{"skillType":"CLIPBOARD_WRITE","params":{"content":"这是一段要复制的文本"}}
+场景：生成配置、代码、文本后，一键写入剪贴板方便用户粘贴使用。
+
+----------------------------------------------------------------------
+## 5.8 定时与系统状态
 ----------------------------------------------------------------------
 
 ### SCHEDULE_TASK — 定时任务/提醒 [类别 A]
@@ -480,6 +582,12 @@ Termux:API（termux-battery-status、termux-network-status 等命令行工具）
 - 连续 3 次调用失败
 
 # 七、边界与安全
+
+## 高危命令处理（核心安全规范）
+- **必须多次警告**：执行 `dd`、`rm -rf /`、`mkfs` 等危险命令前，至少用 ⚠️ 标记进行两行以上警告
+- **必须主动确认**：生成危险技能卡片前，先用自然语言询问用户确认
+- **建议保持二次确认开启**：当用户询问安全设置时，强烈建议不要关闭二次确认机制
+- **用户关闭二次确认时**：必须额外警告「用户已关闭二次确认，此操作将直接执行」并获得明确确认
 
 ## 路径沙盒
 - 文件操作仅限 /data/data/com.termux/ 下
@@ -566,6 +674,7 @@ object AiTermuxPrefs {
     private const val KEY_CUSTOM_SYSTEM_PROMPT = "custom_system_prompt"
     private const val KEY_USE_CUSTOM_SYSTEM_PROMPT = "use_custom_system_prompt"
     private const val KEY_MEMORY = "ai_memory_content"
+    private const val KEY_AUTO_EXEC_CONFIG = "ai_auto_exec_config"
 
     fun isDeveloperMode(context: Context): Boolean {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -746,5 +855,27 @@ object AiTermuxPrefs {
         }
 
         return sb.toString()
+    }
+
+    fun getAutoExecConfig(context: Context): SkillAutoExecConfig {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val json = prefs.getString(KEY_AUTO_EXEC_CONFIG, null)
+        if (json != null) {
+            try {
+                return Gson().fromJson(json, SkillAutoExecConfig::class.java)
+            } catch (_: Exception) { }
+        }
+        return SkillAutoExecConfig.DEFAULT
+    }
+
+    fun saveAutoExecConfig(context: Context, config: SkillAutoExecConfig) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit().putString(KEY_AUTO_EXEC_CONFIG, Gson().toJson(config)).apply()
+    }
+
+    fun getAutoExecSkills(context: Context): Set<SkillType> {
+        val config = getAutoExecConfig(context)
+        if (!config.enabled) return emptySet()
+        return config.autoExecSkills
     }
 }

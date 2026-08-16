@@ -2,6 +2,8 @@ package com.termux.app.compose
 
 import android.content.Context
 import android.content.Intent
+import android.view.WindowManager
+import androidx.activity.ComponentActivity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.*
@@ -9,6 +11,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.lifecycleScope
@@ -156,6 +159,22 @@ fun StopConfirmDialogHost() {
     val context = LocalContext.current
     val dialogState by StopConfirmDialog.dialogState.collectAsState()
 
+    val thirdPartyBlocked = rememberThirdPartyBlocked(context)
+
+    val activity = context as? ComponentActivity
+    val window = activity?.window
+
+    LaunchedEffect(dialogState != null) {
+        if (dialogState != null) {
+            window?.setFlags(
+                WindowManager.LayoutParams.FLAG_SECURE,
+                WindowManager.LayoutParams.FLAG_SECURE
+            )
+        } else {
+            window?.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        }
+    }
+
     dialogState?.let { state ->
         OverlayDialog(
             show = true,
@@ -164,17 +183,24 @@ fun StopConfirmDialogHost() {
             summary = StopConfirmDialog.buildDialogSummary(state.qemuCount, state.containerRunning),
             content = {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .physicalTouchDetector()
+                        .accessibilityGuard(thirdPartyBlocked),
                     horizontalArrangement = Arrangement.spacedBy(20.dp)
                 ) {
                     TextButton(
                         text = "否",
-                        onClick = { StopConfirmDialog.dismiss() },
+                        onClick = guardedOnClick(context, thirdPartyBlocked) {
+                            StopConfirmDialog.dismiss()
+                        },
                         modifier = Modifier.weight(1f)
                     )
                     TextButton(
                         text = "是",
-                        onClick = { StopConfirmDialog.confirm(context, state) },
+                        onClick = guardedOnClick(context, thirdPartyBlocked) {
+                            StopConfirmDialog.confirm(context, state)
+                        },
                         modifier = Modifier.weight(1f),
                         colors = ButtonDefaults.textButtonColorsPrimary()
                     )

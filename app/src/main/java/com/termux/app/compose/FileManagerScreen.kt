@@ -27,7 +27,7 @@ import com.termux.shared.shell.TermuxShellUtils
 import com.termux.app.ftp.FtpServer
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Checkbox
+import top.yukonga.miuix.kmp.preference.CheckboxPreference
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.ui.graphics.Color
 import androidx.compose.runtime.*
@@ -1363,77 +1363,86 @@ private fun FileItem(
     onClick: () -> Unit,
     onLongClick: () -> Unit
 ) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick),
-        colors = CardDefaults.cardColors(
-            containerColor = if (isSelected) MiuixTheme.colorScheme.surfaceVariant else MiuixTheme.colorScheme.surface
+    if (isInSelectionMode) {
+        CheckboxPreference(
+            title = file.name,
+            summary = if (file.isDirectory) {
+                val count = file.listFiles()?.size ?: 0
+                "$count ${stringResource(R.string.items)}"
+            } else {
+                "${formatFileSize(file.length())} · ${Date(file.lastModified()).toString()}"
+            },
+            checked = isSelected,
+            onCheckedChange = { onClick() },
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(16.dp))
         )
-    ) {
-        Row(
-            modifier = Modifier.padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically
+    } else {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(16.dp))
+                .combinedClickable(onClick = onClick, onLongClick = onLongClick),
+            colors = CardDefaults.cardColors(
+                containerColor = if (isSelected) MiuixTheme.colorScheme.surfaceVariant else MiuixTheme.colorScheme.surface
+            )
         ) {
-            if (isInSelectionMode) {
-                Checkbox(
-                    checked = isSelected,
-                    onCheckedChange = { onClick() },
-                    modifier = Modifier.padding(end = 10.dp)
-                )
-            }
-
-            Box(
-                modifier = Modifier
-                    .size(42.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(
-                        if (file.isDirectory) MiuixTheme.colorScheme.primary.copy(alpha = 0.12f)
-                        else MiuixTheme.colorScheme.surfaceVariant
-                    ),
-                contentAlignment = Alignment.Center
+            Row(
+                modifier = Modifier.padding(14.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    painter = painterResource(if (file.isDirectory) R.drawable.ic_folder else R.drawable.ic_file),
-                    contentDescription = null,
-                    modifier = Modifier.size(22.dp),
-                    tint = if (file.isDirectory) MiuixTheme.colorScheme.primary else MiuixTheme.colorScheme.onSurface
-                )
-            }
-
-            Spacer(Modifier.width(14.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = file.name,
-                    fontSize = 15.sp,
-                    modifier = Modifier.padding(bottom = 3.dp),
-                    fontWeight = FontWeight.Bold,
-                    color = MiuixTheme.colorScheme.onSurface,
-                    lineHeight = 20.sp
-                )
-                Text(
-                    text = if (file.isDirectory) {
-                        val count = file.listFiles()?.size ?: 0
-                        "$count ${stringResource(R.string.items)}"
-                    } else {
-                        "${formatFileSize(file.length())} · ${Date(file.lastModified()).toString()}"
-                    },
-                    fontSize = 12.sp,
-                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                    lineHeight = 16.sp
-                )
-            }
-
-            if (file.isDirectory && !isInSelectionMode) {
-                IconButton(onClick = { onClick() }) {
+                Box(
+                    modifier = Modifier
+                        .size(42.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(
+                            if (file.isDirectory) MiuixTheme.colorScheme.primary.copy(alpha = 0.12f)
+                            else MiuixTheme.colorScheme.surfaceVariant
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
                     Icon(
-                        painter = painterResource(R.drawable.ic_arrow_right),
+                        painter = painterResource(if (file.isDirectory) R.drawable.ic_folder else R.drawable.ic_file),
                         contentDescription = null,
-                        modifier = Modifier.size(20.dp),
-                        tint = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                        modifier = Modifier.size(22.dp),
+                        tint = if (file.isDirectory) MiuixTheme.colorScheme.primary else MiuixTheme.colorScheme.onSurface
                     )
+                }
+
+                Spacer(Modifier.width(14.dp))
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = file.name,
+                        fontSize = 15.sp,
+                        modifier = Modifier.padding(bottom = 3.dp),
+                        fontWeight = FontWeight.Bold,
+                        color = MiuixTheme.colorScheme.onSurface,
+                        lineHeight = 20.sp
+                    )
+                    Text(
+                        text = if (file.isDirectory) {
+                            val count = file.listFiles()?.size ?: 0
+                            "$count ${stringResource(R.string.items)}"
+                        } else {
+                            "${formatFileSize(file.length())} · ${Date(file.lastModified()).toString()}"
+                        },
+                        fontSize = 12.sp,
+                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                        lineHeight = 16.sp
+                    )
+                }
+
+                if (file.isDirectory) {
+                    IconButton(onClick = { onClick() }) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_arrow_right),
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp),
+                            tint = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                        )
+                    }
                 }
             }
         }

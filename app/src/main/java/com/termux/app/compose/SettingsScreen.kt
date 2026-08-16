@@ -22,6 +22,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
@@ -44,6 +45,7 @@ import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.preference.SwitchPreference
+import top.yukonga.miuix.kmp.preference.CheckboxPreference
 import top.yukonga.miuix.kmp.preference.OverlayDropdownPreference
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
@@ -53,6 +55,7 @@ import com.termux.app.LocaleHelper
 import com.termux.app.activities.SettingsActivity
 import com.termux.app.compose.AiTermuxPrefs
 import com.termux.app.compose.AiTermuxConfig
+import com.termux.app.compose.SkillType
 import java.io.File
 
 
@@ -96,7 +99,19 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
     var vncEnabled by remember { mutableStateOf(prefs.getBoolean("vnc_enabled", false)) }
     var aiTermuxEnabled by remember { mutableStateOf(prefs.getBoolean("ai_termux_enabled", true)) }
     var aiDeveloperMode by remember { mutableStateOf(AiTermuxPrefs.isDeveloperMode(context)) }
+    var autoExecConfig by remember { mutableStateOf(AiTermuxPrefs.getAutoExecConfig(context)) }
     var useCustomSystemPrompt by remember { mutableStateOf(AiTermuxPrefs.isUsingCustomSystemPrompt(context)) }
+
+    // 高风险命令二次确认
+    var riskConfirmEnabled by remember { mutableStateOf(RiskConfirmManager.isEnabled(context)) }
+
+    // 监听关闭警告弹窗的结果，同步开关状态
+    val disableWarningState by RiskConfirmManager.disableWarningState.collectAsState()
+    LaunchedEffect(disableWarningState.show) {
+        if (!disableWarningState.show) {
+            riskConfirmEnabled = RiskConfirmManager.isEnabled(context)
+        }
+    }
 
     // Integrated Termux tools (default off)
     var termuxApiEnabled by remember { mutableStateOf(IntegratedTools.isEnabled(context, IntegratedTools.Tool.TERMUX_API)) }
@@ -143,6 +158,8 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
         )
     }
     var showNavRestartPrompt by remember { mutableStateOf(false) }
+    var showCriticalNavDialog by remember { mutableStateOf(false) }
+    var pendingNavStyleIndex by remember { mutableStateOf(-1) }
 
     val scrollBehavior = MiuixScrollBehavior()
 
@@ -299,7 +316,7 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
         )
     )
 
-    val systemSettings = listOf(
+    val systemSettings = remember(riskConfirmEnabled) { listOf(
         SettingItem(
             title = context.getString(R.string.termux_settings),
             description = context.getString(R.string.termux_settings_description),
@@ -314,8 +331,25 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
             description = context.getString(R.string.about_description),
             iconRes = R.drawable.ic_info,
             action = { onAboutClick() }
+        ),
+        SettingItem(
+            title = context.getString(R.string.risk_confirm_toggle_title),
+            description = context.getString(R.string.risk_confirm_toggle_summary),
+            iconRes = R.drawable.ic_shield,
+            action = {},
+            hasSwitch = true,
+            switchValue = riskConfirmEnabled,
+            onSwitchChange = { newVal ->
+                if (newVal) {
+                    riskConfirmEnabled = true
+                    RiskConfirmManager.setEnabled(context, true)
+                } else {
+                    RiskConfirmManager.showDisableWarning()
+                }
+            }
         )
     )
+}
 
     // Tool configuration entries — only shown for tools that are enabled. Tools with a dedicated
     // settings UI open their Activity; tools without one (API/Boot) show a usage guide dialog.
@@ -433,6 +467,13 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
                             items = navBarStyleOptions,
                             selectedIndex = navBarSelectedIndex,
                             onSelectedIndexChange = { idx ->
+                                if (idx == 2) {
+                                    if (!ApiCompat.isFeatureUsable(context, ApiCompat.Feature.GLASS_NAVIGATION_BAR)) {
+                                        pendingNavStyleIndex = idx
+                                        showCriticalNavDialog = true
+                                        return@OverlayDropdownPreference
+                                    }
+                                }
                                 navBarSelectedIndex = idx
                                 val style = when (idx) {
                                     1 -> "floating"
@@ -616,6 +657,77 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
                                 color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f),
                                 modifier = Modifier.padding(start = 72.dp, end = 16.dp)
                             )
+                            SwitchPreference(
+                                title = "信任白名单",
+                                summary = "允许将某些技能（如 CAPTURE_OUTPUT）设为自动执行，无需点击确认。安全由你掌控。",
+                                checked = autoExecConfig.enabled,
+                                onCheckedChange = { enabled ->
+                                    autoExecConfig = autoExecConfig.copy(enabled = enabled)
+                                    AiTermuxPrefs.saveAutoExecConfig(context, autoExecConfig)
+                                },
+                                startAction = {
+                                    SettingIcon(R.drawable.ic_shield, contentDescription = "信任白名单")
+                                }
+                            )
+                            if (autoExecConfig.enabled) {
+                                Divider(
+                                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f),
+                                    modifier = Modifier.padding(start = 72.dp, end = 16.dp)
+                                )
+                                Column(modifier = Modifier.padding(start = 72.dp)) {
+                                    Text(
+                                        text = "信任白名单中的技能将自动执行，无需点击确认。",
+                                        style = MiuixTheme.textStyles.body2,
+                                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                        modifier = Modifier.padding(vertical = 4.dp)
+                                    )
+                                    Text(
+                                        text = "⚠️ 仅勾选你完全信任的技能。自动执行意味着 AI 可以直接触发操作，跳过人工确认。",
+                                        style = MiuixTheme.textStyles.body2,
+                                        color = Color(0xFFDC2626),
+                                        modifier = Modifier.padding(vertical = 4.dp)
+                                    )
+
+                                    val whitelistSkills = listOf(
+                                        SkillType.CAPTURE_OUTPUT to "CAPTURE_OUTPUT — 执行命令并捕获输出",
+                                    )
+
+                                    whitelistSkills.forEach { (skill, label) ->
+                                        val checked = autoExecConfig.autoExecSkills.contains(skill)
+                                        CheckboxPreference(
+                                            title = label,
+                                            checked = checked,
+                                            onCheckedChange = { isChecked ->
+                                                val newSet = if (isChecked) {
+                                                    autoExecConfig.autoExecSkills + skill
+                                                } else {
+                                                    autoExecConfig.autoExecSkills - skill
+                                                }
+                                                autoExecConfig = autoExecConfig.copy(autoExecSkills = newSet)
+                                                AiTermuxPrefs.saveAutoExecConfig(context, autoExecConfig)
+                                            },
+                                            modifier = Modifier.padding(vertical = 4.dp)
+                                        )
+                                    }
+
+                                    Spacer(Modifier.height(8.dp))
+                                    Text(
+                                        text = "以下技能无需加入白名单，默认自动执行：",
+                                        style = MiuixTheme.textStyles.body2,
+                                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                    )
+                                    Text(
+                                        text = "GET_CURRENT_SESSION、CLIPBOARD_READ、CLIPBOARD_WRITE、FILE_READ、FILE_WRITE、FILE_DELETE 等",
+                                        style = MiuixTheme.textStyles.body2,
+                                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.7f),
+                                        modifier = Modifier.padding(top = 2.dp)
+                                    )
+                                }
+                            }
+                            Divider(
+                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f),
+                                modifier = Modifier.padding(start = 72.dp, end = 16.dp)
+                            )
                             ArrowPreference(
                                 title = "重新配置 AI",
                                 summary = "返回配置页面修改 API Key、模型等参数",
@@ -726,26 +838,52 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
         title = context.getString(R.string.restart_required),
         summary = context.getString(R.string.language_restart_message),
         show = showRestartPrompt,
-        onDismissRequest = { showRestartPrompt = false }
-    ) {
+        onDismissRequest = { showRestartPrompt = false },
+        content = {
         TextButton(
             text = context.getString(R.string.ok),
             onClick = { showRestartPrompt = false },
             modifier = Modifier.fillMaxWidth()
         )
-    }
+        }
+    )
 
     // ---------- Navigation bar style restart prompt ----------
     OverlayDialog(
         title = context.getString(R.string.restart_required),
         summary = context.getString(R.string.navigation_bar_restart_message),
         show = showNavRestartPrompt,
-        onDismissRequest = { showNavRestartPrompt = false }
-    ) {
+        onDismissRequest = { showNavRestartPrompt = false },
+        content = {
         TextButton(
             text = context.getString(R.string.ok),
             onClick = { showNavRestartPrompt = false },
             modifier = Modifier.fillMaxWidth()
+        )
+        }
+    )
+
+    // ---------- Critical glass nav bar incompatibility dialog ----------
+    if (showCriticalNavDialog) {
+        ForceEnableCriticalDialog(
+            feature = ApiCompat.Feature.GLASS_NAVIGATION_BAR,
+            onConfirmed = {
+                showCriticalNavDialog = false
+                val idx = pendingNavStyleIndex
+                navBarSelectedIndex = idx
+                val style = when (idx) {
+                    1 -> "floating"
+                    2 -> "liquid_glass"
+                    else -> "default"
+                }
+                prefs.edit().putString("navigation_bar_style", style).apply()
+                pendingNavStyleIndex = -1
+                showNavRestartPrompt = true
+            },
+            onDismiss = {
+                showCriticalNavDialog = false
+                pendingNavStyleIndex = -1
+            }
         )
     }
 
@@ -753,8 +891,8 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
     OverlayDialog(
         title = context.getString(R.string.termux_api_help),
         show = showApiHelpDialog,
-        onDismissRequest = { showApiHelpDialog = false }
-    ) {
+        onDismissRequest = { showApiHelpDialog = false },
+        content = {
         Column(modifier = Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
             HelpContentWithCopyableCommands(
                 content = context.getString(R.string.termux_api_help_content),
@@ -767,14 +905,15 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
             onClick = { showApiHelpDialog = false },
             modifier = Modifier.fillMaxWidth()
         )
-    }
+        }
+    )
 
     // ---------- Termux:Boot startup guide ----------
     OverlayDialog(
         title = context.getString(R.string.termux_boot_help),
         show = showBootHelpDialog,
-        onDismissRequest = { showBootHelpDialog = false }
-    ) {
+        onDismissRequest = { showBootHelpDialog = false },
+        content = {
         Column(modifier = Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
             HelpContentWithCopyableCommands(
                 content = context.getString(R.string.termux_boot_help_content),
@@ -787,14 +926,15 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
             onClick = { showBootHelpDialog = false },
             modifier = Modifier.fillMaxWidth()
         )
-    }
+        }
+    )
 
     // ---------- Restore: choose backup file ----------
     OverlayDialog(
         title = context.getString(R.string.restore),
         show = showRestoreDialog,
-        onDismissRequest = { showRestoreDialog = false }
-    ) {
+        onDismissRequest = { showRestoreDialog = false },
+        content = {
         Column(modifier = Modifier.heightIn(max = 300.dp)) {
             if (backupFiles.isEmpty()) {
                 Text(
@@ -828,15 +968,16 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
                 modifier = Modifier.weight(1f)
             )
         }
-    }
+        }
+    )
 
     // ---------- Restore: confirm ----------
     OverlayDialog(
         title = context.getString(R.string.restore),
         summary = context.getString(R.string.restore_confirm_message),
         show = showRestoreConfirmDialog,
-        onDismissRequest = { showRestoreConfirmDialog = false }
-    ) {
+        onDismissRequest = { showRestoreConfirmDialog = false },
+        content = {
         Row(horizontalArrangement = Arrangement.SpaceBetween) {
             TextButton(
                 text = context.getString(R.string.cancel),
@@ -886,15 +1027,16 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
                 colors = ButtonDefaults.textButtonColorsPrimary()
             )
         }
-    }
+        }
+    )
 
     // ---------- Restore: progress ----------
     OverlayDialog(
         title = context.getString(R.string.restore),
         summary = restoreMessage,
         show = showRestoreProgressDialog,
-        onDismissRequest = { BackupManager.cancelRestore() }
-    ) {
+        onDismissRequest = { BackupManager.cancelRestore() },
+        content = {
         Column(modifier = Modifier.padding(vertical = 8.dp)) {
             if (restoreTotal > 0) {
                 LinearProgressIndicator(
@@ -931,21 +1073,23 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
             onClick = { BackupManager.cancelRestore() },
             modifier = Modifier.fillMaxWidth()
         )
-    }
+        }
+    )
 
     // ---------- Result ----------
     OverlayDialog(
         title = context.getString(R.string.result),
         summary = resultMessage,
         show = showResultDialog,
-        onDismissRequest = { showResultDialog = false }
-    ) {
+        onDismissRequest = { showResultDialog = false },
+        content = {
         TextButton(
             text = context.getString(R.string.ok),
             onClick = { showResultDialog = false },
             modifier = Modifier.fillMaxWidth()
         )
-    }
+        }
+    )
 
     // ---------- AI Termux：重新配置确认 ----------
     if (showAiReconfigConfirm) {
@@ -953,8 +1097,8 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
             show = true,
             title = "重新配置 AI？",
             summary = "返回配置页面可以修改 API Key、模型等参数，历史对话会被保留。",
-            onDismissRequest = { showAiReconfigConfirm = false }
-        ) {
+            onDismissRequest = { showAiReconfigConfirm = false },
+            content = {
             Row(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 modifier = Modifier.fillMaxWidth()
@@ -983,6 +1127,7 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
                 )
             }
         }
+        )
     }
 
     // ---------- AI Termux：清空对话确认 ----------
@@ -991,8 +1136,8 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
             show = true,
             title = "清空对话记录？",
             summary = "当前对话将被清空且不可恢复，是否继续？",
-            onDismissRequest = { showAiClearConfirm = false }
-        ) {
+            onDismissRequest = { showAiClearConfirm = false },
+            content = {
             Row(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 modifier = Modifier.fillMaxWidth()
@@ -1013,7 +1158,10 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
                 )
             }
         }
+        )
     }
+
+    // ---------- 关闭高危命令二次确认：风险警告弹窗（由 RiskConfirmManager 统一处理） ----------
 
     // ---------- AI Termux：编辑 System Prompt ----------
     var systemPromptText by remember { mutableStateOf(AiTermuxPrefs.getConfig(context).customSystemPrompt) }
@@ -1021,8 +1169,8 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
         title = "编辑 System Prompt",
         summary = "自定义额外的系统指令，将附加在官方 System Prompt 之后。\n修改需谨慎，错误配置可能导致 AI 行为异常。",
         show = showSystemPromptEditor,
-        onDismissRequest = { showSystemPromptEditor = false }
-    ) {
+        onDismissRequest = { showSystemPromptEditor = false },
+        content = {
         Column(
             modifier = Modifier
                 .heightIn(max = 400.dp)
@@ -1063,7 +1211,8 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
                 colors = ButtonDefaults.textButtonColorsPrimary()
             )
         }
-    }
+        }
+    )
 
     // ---------- AI Termux：选择 System Prompt 文件 ----------
     var showInternalPromptPicker by remember { mutableStateOf(false) }
@@ -1071,8 +1220,8 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
         title = "选择 System Prompt 文件",
         summary = "请选择一个 .md 文件作为自定义 System Prompt。\n此文件将完全替代官方默认 System Prompt。",
         show = showSystemPromptFilePicker,
-        onDismissRequest = { showSystemPromptFilePicker = false }
-    ) {
+        onDismissRequest = { showSystemPromptFilePicker = false },
+        content = {
         Column {
             Text(
                 text = "请选择使用哪种文件选择器：",
@@ -1102,7 +1251,8 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
                 )
             }
         }
-    }
+        }
+    )
 
     // Termux 内部文件选择器
     TermuxInternalFilePicker(
@@ -1139,8 +1289,8 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
         title = "还原官方 System Prompt",
         summary = "确定要切换回官方默认 System Prompt 吗？\n您的自定义文件将不再被使用。",
         show = showSystemPromptRestoreConfirm,
-        onDismissRequest = { showSystemPromptRestoreConfirm = false }
-    ) {
+        onDismissRequest = { showSystemPromptRestoreConfirm = false },
+        content = {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.End
@@ -1162,7 +1312,8 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
                 colors = ButtonDefaults.textButtonColorsPrimary()
             )
         }
-    }
+        }
+    )
 
     // ---------- AI Termux：自定义技能管理 ----------
     var skillsRefreshKey by remember { mutableStateOf(0) }
@@ -1170,8 +1321,8 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
         title = "自定义技能",
         summary = "管理用户自定义的技能卡。官方技能不可修改，仅支持添加、编辑和删除您自己创建的技能。",
         show = showCustomSkillManager,
-        onDismissRequest = { showCustomSkillManager = false }
-    ) {
+        onDismissRequest = { showCustomSkillManager = false },
+        content = {
         val customSkills = remember(skillsRefreshKey) { AiTermuxPrefs.getCustomSkills(context) }
         if (customSkills.isEmpty()) {
             Box(
@@ -1260,7 +1411,8 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
                 colors = ButtonDefaults.textButtonColorsPrimary()
             )
         }
-    }
+        }
+    )
 
     // ---------- AI Termux：添加/编辑自定义技能 ----------
     var skillName by remember { mutableStateOf("") }
@@ -1303,8 +1455,8 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
         title = if (editingSkill != null) "编辑技能" else "添加自定义技能",
         summary = "创建一个供 AI 调用的自定义技能。技能将作为系统指令的一部分注入。",
         show = showAddEditSkillDialog,
-        onDismissRequest = { showAddEditSkillDialog = false }
-    ) {
+        onDismissRequest = { showAddEditSkillDialog = false },
+        content = {
         Column(
             modifier = Modifier
                 .heightIn(max = 520.dp)
@@ -1426,15 +1578,16 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
                 colors = ButtonDefaults.textButtonColorsPrimary()
             )
         }
-    }
+        }
+    )
 
     // ---------- AI Termux：完整对话记录 ----------
     OverlayDialog(
         title = "完整对话记录",
         summary = "包含 System 系统提示在内的完整对话历史。仅显示 Termux Agent 保存的最近 100 条消息。",
         show = showFullHistoryViewer,
-        onDismissRequest = { showFullHistoryViewer = false }
-    ) {
+        onDismissRequest = { showFullHistoryViewer = false },
+        content = {
         val messages = remember { AiTermuxPrefs.getChatHistory(context) }
         val clipboard = remember {
             context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
@@ -1571,7 +1724,8 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
                 colors = ButtonDefaults.textButtonColorsPrimary()
             )
         }
-    }
+        }
+    )
 }
 
 @Composable
@@ -1603,37 +1757,15 @@ private fun SettingsGroupCard(items: List<SettingItem>) {
         Column {
             items.forEachIndexed { index, item ->
                 if (item.hasSwitch) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp)
-                            .clickable(onClick = item.action),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        SettingIcon(item.iconRes, contentDescription = item.title)
-                        Column(
-                            modifier = Modifier
-                                .weight(1f)
-                                .padding(start = 16.dp)
-                        ) {
-                            Text(
-                                text = item.title,
-                                fontSize = 16.sp,
-                                modifier = Modifier.padding(bottom = 4.dp),
-                                fontWeight = FontWeight.Bold,
-                                color = MiuixTheme.colorScheme.onSurface
-                            )
-                            Text(
-                                text = item.description,
-                                fontSize = 14.sp,
-                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                            )
+                    SwitchPreference(
+                        title = item.title,
+                        summary = item.description,
+                        checked = item.switchValue,
+                        onCheckedChange = item.onSwitchChange,
+                        startAction = {
+                            SettingIcon(item.iconRes, contentDescription = item.title)
                         }
-                        Switch(
-                            checked = item.switchValue,
-                            onCheckedChange = item.onSwitchChange
-                        )
-                    }
+                    )
                 } else {
                     ArrowPreference(
                         title = item.title,

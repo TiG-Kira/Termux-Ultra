@@ -411,6 +411,7 @@
     <string name="navigation_bar_floating">Floating</string>
     <string name="navigation_bar_liquid_glass">Glass</string>
     <string name="navigation_bar_restart_message">Navigation bar style changes will take effect after the app is restarted.</string>
+    <string name="glass_nav_bar_fallback_toast">Glass navigation bar failed to render on this device. Automatically switched to the default navigation bar style.</string>
 
     <!-- PullToRefresh -->
     <string name="pull_down_to_refresh">Pull down to refresh</string>
@@ -543,8 +544,8 @@
     <string name="standalone_plugin_installed_summary">Replaced by the official standalone plugin</string>
 
     <!-- Low Android version optimization -->
-    <string name="low_android_warning_title">Android version too low</string>
-    <string name="low_android_warning_message">Some features have been disabled due to the low Android version.</string>
+    <string name="low_android_warning_title">Termux May Be Running on an Older Device</string>
+    <string name="low_android_warning_message">Your Android version is outdated. Some features are disabled automatically — they either require unavailable APIs or may cause heavy performance overhead on older devices. You may force‑enable at your own risk; no support will be provided.</string>
     <string name="low_android_version_info">Current Android: %1$s (SDK %2$d)</string>
     <string name="low_android_feature_disabled">Requires %1$s or above</string>
     <string name="low_android_terminal_mode_title">Locked to terminal mode</string>
@@ -554,10 +555,17 @@
     <string name="feature_disabled_by_android_version">This feature requires %1$s or above. Please update your Android system.</string>
 
     <!-- Low Android force-enable warnings -->
-    <string name="force_enable_dialog_title">Android Version Too Low Warning</string>
-    <string name="force_enable_dialog_message">You are attempting to enable \"%3$s\" on Android %1$s (SDK %2$d), which requires %4$s or above.\n\nForce-enabling this on a low Android version may cause severe performance degradation, lag, crashes or even system instability.\n\nIf you choose to force-enable, all crashes, lags or data loss resulting therefrom shall be borne by you.</string>
+    <string name="force_enable_dialog_title">Performance Warning for Older Devices</string>
+    <string name="force_enable_dialog_message">You are enabling \"%3$s\" on Android %1$s (SDK %2$d). It is recommended to use this feature on %4$s or above.\n\nThis feature is designed for newer-generation devices. Although the system APIs are available, older hardware has limited memory and processing capacity. Enabling it may impose a significant burden on your device.\n\nForce-enabling may result in:\n\n• Noticeable UI stuttering and frame drops\n• High CPU/RAM usage and device overheating\n• App or system process termination due to insufficient memory\n• Background apps being more readily reclaimed by the system\n\nProceed at your own risk. Issues arising from enabling this feature on older devices are not eligible for technical support.</string>
     <string name="force_enable_anyway">Enable Anyway</string>
     <string name="force_enable_do_not">Cancel</string>
+
+    <!-- Critical API-incompatibility warning (pure API not supported) -->
+    <string name="critical_force_enable_dialog_title">⚠️ Incompatible with Current System</string>
+    <string name="critical_force_enable_dialog_message">You are attempting to use \"%3$s\" on Android %1$s (SDK %2$d). This feature requires %4$s or above.\n\nThis is a pure API-level incompatibility — the required rendering APIs do not exist on your current system. Force-enabling is very likely to cause:\n\n• Immediate crash or black screen\n• Severe rendering distortion\n• System UI instability\n• Memory or GPU resource leaks causing device lag or overheating\n• It may appear to work briefly before failures occur\n• (Rare) Incompatible components may leak Surface / graphics handles, causing rendering failures across other apps\n\nContinue at your own risk. No support will be provided.</string>
+    <string name="critical_force_enable_confirm_text">I understand the risks, force-enable</string>
+    <string name="critical_force_enable_action_continue">Continue</string>
+    <string name="critical_force_enable_cancel">Abort</string>
 
     <!-- Terminal card: red warning after force-enabled -->
     <string name="low_android_force_enabled_title">Some Features Force-Enabled</string>
@@ -589,5 +597,49 @@
     <string name="ai_skill_prompt">Additional System Prompt</string>
     <string name="ai_copy_all">Copy All</string>
     <string name="ai_system_prompt_warning">Use with caution - incorrect configuration may cause abnormal AI behavior.</string>
+
+    <!-- Update checker & APK downloader -->
+    <string name="check_updates">Check for Updates</string>
+    <string name="new_version_available">New version available</string>
+    <string name="enable_beta_update">Get Beta Versions</string>
+    <string name="enable_beta_update_desc">Include pre-release versions when checking for updates</string>
+    <string name="beta_version_available">Beta version available</string>
+    <string name="beta_warning_title">Enable Beta Updates?</string>
+    <string name="beta_warning_message">Beta releases feature work-in-progress, experimental changes, and unfinished features. You may encounter crashes, instability, and data loss. Please do not use Beta versions in production environments. Report any issues on GitHub.</string>
+    <string name="beta_warning_confirm">Enable</string>
+    <string name="beta_warning_cancel">Cancel</string>
+    <string name="update_log">Update Log</string>
+    <string name="later">Later</string>
+    <string name="manual">Manual</string>
+    <string name="download">Download</string>
+    <string name="downloading">Downloading...</string>
+    <string name="is_latest">Already the latest version. Version:</string>
+    <string name="download_failed">Download failed</string>
+    <string name="install_failed">Install failed</string>
+    <string name="response_body_empty">Response body is empty</string>
+    <string name="apk_download_failed">APK file download failed</string>
+    <string name="request_install_permission_failed">Failed to request install permission</string>
+    <string name="download_failed_with_code">Download failed: %1$d</string>
+    <string name="beta_version">Beta</string>
+    <string name="internal_version">Internal Build</string>
+
+    <!-- Risk command confirmation dialog -->
+    <string name="risk_command_dialog_title">High Risk Command About To Be Executed</string>
+    <string name="risk_command_dialog_disclaimer">This command may cause irreversible data loss, system damage, or security issues. We are not responsible for any consequences caused by your execution of high-risk commands, and we do not accept issues arising from high-risk operations.</string>
+    <string name="risk_command_label">Command</string>
+    <string name="risk_command_warning">Warning: This is a high-risk operation that may cause irreversible consequences.</string>
+    <string name="risk_command_confirm_checkbox">I voluntarily bear all risks of executing this command and confirm to proceed.</string>
+    <string name="risk_command_continue">Continue Execution</string>
+    <string name="access_denied">Access Denied</string>
+    <string name="risk_command_disable_title">Disable High-Risk Command Confirmation?</string>
+    <string name="risk_command_disable_message">Disabling this means high-risk commands will be executed without secondary confirmation. You will lose the safety net that prevents accidental data loss or system damage. We strongly recommend keeping this enabled. By continuing, you acknowledge that you understand the risks and agree that we are not responsible for any consequences.</string>
+    <string name="risk_command_disable_checkbox">I understand the risks and confirm to disable high-risk command confirmation; warnings can be re-enabled in Settings.</string>
+    <string name="risk_command_disable_confirm">Confirm Disable</string>
+    <string name="risk_command_biometric_prompt">Please verify your identity to continue</string>
+    <string name="risk_confirm_toggle_title">High-Risk Command Secondary Confirmation</string>
+    <string name="risk_confirm_toggle_summary">Displays a confirmation dialog before executing high-risk commands (dd, su/sudo, mkfs, rm -rf /, etc.) to prevent accidental data loss</string>
+    <string name="risk_command_biometric_not_set">Biometric verification not set up on this device. Skipped verification. It is recommended to set up screen lock (PIN/pattern) or biometric authentication in system settings for better security.</string>
+    <string name="authorization_required_title">Your authorization is required to continue</string>
+    <string name="accessibility_guard_blocked_toast">Please tap the button manually to complete this operation. Third-party accessibility services are not allowed to handle this action.</string>
 
 </resources>

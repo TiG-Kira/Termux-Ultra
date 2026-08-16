@@ -72,7 +72,8 @@ object ApiCompat {
         POST_NOTIFICATIONS_RUNTIME(33, Page.SETTINGS, "Android 13", "通知权限"),
         MANAGE_ALL_FILES(30, Page.SETTINGS, "Android 11", "所有文件访问"),
         INTEGRATED_TOOLS(31, Page.SETTINGS, "Android 12", "集成工具（API/Boot/Styling/Tasker/Widget）"),
-        MIUIX_DYNAMIC_COLOR(31, Page.SETTINGS, "Android 12", "动态取色主题")
+        MIUIX_DYNAMIC_COLOR(31, Page.SETTINGS, "Android 12", "动态取色主题"),
+        GLASS_NAVIGATION_BAR(30, Page.SETTINGS, "Android 11", "玻璃导航栏")
     }
 
     /** 功能在当前设备是否可用（静态：基于 minApi） */

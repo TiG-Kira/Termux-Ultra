@@ -10,7 +10,6 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.BackHandler
 import androidx.core.view.WindowCompat
 import androidx.activity.compose.setContent
 import android.content.SharedPreferences
@@ -30,9 +29,10 @@ import kotlinx.coroutines.android.awaitFrame
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import com.termux.app.compose.AboutScreen
+import com.termux.app.activities.AboutActivity
 import com.termux.app.compose.KiTerminalTheme
 import com.termux.app.compose.MainScreen
+import com.termux.app.compose.RiskConfirmDialogHost
 import com.termux.shared.termux.TermuxConstants
 import com.termux.shared.shell.TermuxSession as SharedTermuxSession
 import com.termux.app.TermuxService
@@ -52,7 +52,6 @@ class MainActivity : ComponentActivity() {
     private var termuxService: TermuxService? = null
     private var sessions by mutableStateOf<List<SharedTermuxSession>>(emptyList())
     private var selectedTab by mutableStateOf(0)
-    private var showAbout by mutableStateOf(false)
     private var isWakeLockEnabled by mutableStateOf(false)
     private lateinit var appViewModel: AppViewModel
     private val handler = Handler(Looper.getMainLooper())
@@ -162,11 +161,7 @@ class MainActivity : ComponentActivity() {
                 KiTerminalTheme {
                     val showVnc by appViewModel.showVnc.collectAsState()
 
-                    if (showAbout) {
-                        BackHandler { showAbout = false }
-                        AboutScreen(onBack = { showAbout = false })
-                    } else {
-                        MainScreen(
+                    MainScreen(
                             selectedTab = selectedTab,
                             onTabChange = { index -> selectedTab = index },
                             sessions = sessions,
@@ -213,13 +208,13 @@ class MainActivity : ComponentActivity() {
                                     startActivity(intent)
                                 }
                             },
-                            onAboutClick = { showAbout = true },
+                            onAboutClick = { startActivity(Intent(this, AboutActivity::class.java)) },
                             showVnc = showVnc,
                             isWakeLockEnabled = isWakeLockEnabled,
                             onToggleWakeLock = { toggleWakeLock() },
                             onRefreshSessions = { updateSessions() }
                         )
-                    }
+                    RiskConfirmDialogHost()
                 }
             }
         } catch (t: Throwable) {

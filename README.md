@@ -1,7 +1,7 @@
 # Termux Ultra
 
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](./LICENSE)
-[![Platform: Android](https://img.shields.io/badge/Platform-Android%207.0%2B-green.svg)]()
+[![Platform: Android](https://img.shields.io/badge/Platform-Android%208.0%2B-green.svg)]()
 [![Based on Termux](https://img.shields.io/badge/Based%20on-Termux%20v0.118.x-orange.svg)](https://github.com/termux/termux-app)
 
 [![Build status](https://github.com/TiG-Kira/Termux-Ultra/workflows/Build/badge.svg)](https://github.com/TiG-Kira/Termux-Ultra/actions)
@@ -137,7 +137,7 @@ Termux Ultra 将以下 5 款 Termux 插件的源码集成到主应用中（位�
 
 ## 系统要求
 
-- Android `>= 7.0`（API 24）
+- Android `>= 8.0`（API 26）
 - targetSdk `28`，compileSdk `37`
 - 支持架构：`arm64-v8a`、`armeabi-v7a`、`x86`、`x86_64`
 
