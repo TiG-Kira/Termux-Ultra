@@ -31,7 +31,9 @@ object RiskCommandDetector {
         val isDangerous: Boolean,
         val riskType: RiskType?,
         val matchedCommand: String,
-        val description: String
+        val description: String,
+        /** 是否为 Windows 磁盘级命令（format, diskpart, bcdedit 等） */
+        val isWindowsDiskCommand: Boolean = false
     )
 
     /** 危险命令模式列表，按优先级排序。 */
@@ -118,6 +120,42 @@ object RiskCommandDetector {
             RiskType.SHUTDOWN_REBOOT,
             "检测到关机/重启命令，将强制终止所有进程",
             requireNative = false
+        ),
+        // Windows 磁盘/分区毁灭性操作（format, diskpart, bcdedit, PowerShell cmdlets）
+        RiskPattern(
+            Pattern.compile("""^\s*format\s+[a-zA-Z]:""", Pattern.CASE_INSENSITIVE),
+            RiskType.FORMAT,
+            "检测到 Windows format 命令，将格式化指定分区，数据不可恢复",
+            requireNative = false,
+            isWindowsDiskCommand = true
+        ),
+        RiskPattern(
+            Pattern.compile("""^\s*diskpart\b""", Pattern.CASE_INSENSITIVE),
+            RiskType.FORMAT,
+            "检测到 diskpart 命令，可清除磁盘分区表或擦除全部扇区",
+            requireNative = false,
+            isWindowsDiskCommand = true
+        ),
+        RiskPattern(
+            Pattern.compile("""^\s*bcdedit\b""", Pattern.CASE_INSENSITIVE),
+            RiskType.FORMAT,
+            "检测到 bcdedit 命令，可修改或删除系统启动配置，导致系统无法引导",
+            requireNative = false,
+            isWindowsDiskCommand = true
+        ),
+        RiskPattern(
+            Pattern.compile("""^\s*Format-Volume\b""", Pattern.CASE_INSENSITIVE),
+            RiskType.FORMAT,
+            "检测到 PowerShell Format-Volume 命令，将格式化指定卷",
+            requireNative = false,
+            isWindowsDiskCommand = true
+        ),
+        RiskPattern(
+            Pattern.compile("""^\s*Clear-Disk\b""", Pattern.CASE_INSENSITIVE),
+            RiskType.FORMAT,
+            "检测到 PowerShell Clear-Disk 命令，将清空磁盘全部数据",
+            requireNative = false,
+            isWindowsDiskCommand = true
         )
     )
 
@@ -126,7 +164,9 @@ object RiskCommandDetector {
         val type: RiskType,
         val description: String,
         /** 如果为 true，则仅在原生 Termux 环境下生效（容器/虚拟机内跳过） */
-        val requireNative: Boolean
+        val requireNative: Boolean,
+        /** 是否为 Windows 磁盘级命令 */
+        val isWindowsDiskCommand: Boolean = false
     )
 
     /**
@@ -151,7 +191,8 @@ object RiskCommandDetector {
                     isDangerous = true,
                     riskType = rp.type,
                     matchedCommand = trimmed,
-                    description = rp.description
+                    description = rp.description,
+                    isWindowsDiskCommand = rp.isWindowsDiskCommand
                 )
             }
         }

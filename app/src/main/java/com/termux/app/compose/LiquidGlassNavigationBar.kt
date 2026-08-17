@@ -5,6 +5,7 @@ import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -23,8 +24,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Icon
-import androidx.compose.material3.Text
+import top.yukonga.miuix.kmp.basic.Icon
+import top.yukonga.miuix.kmp.basic.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -34,6 +35,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -467,5 +473,266 @@ fun LiquidGlassNavigationBarWithIndicator(
                 }
             }
         }
+    }
+}
+
+// ============================================================
+// Soft Light Navigation Bar - HyperOS style (flat gray indicator)
+// ============================================================
+private val SoftLightContainerHeight = 62.dp
+private val SoftLightItemWidth = 56.dp
+private val SoftLightIndicatorWidth = 56.dp
+private val SoftLightIndicatorHeight = 48.dp
+private val SoftLightCornerRadius = 34.dp
+private val SoftLightBarHorizontalPadding = 12.dp
+private val SoftLightBarVerticalPadding = 4.dp
+private val SoftLightBottomMargin = 14.dp
+private val SoftLightFadeHeight = 16.dp
+
+@Composable
+fun SoftLightNavigationBarItem(
+    icon: ImageVector,
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val labelAlpha by animateFloatAsState(
+        targetValue = if (selected) 1f else 0.45f,
+        animationSpec = tween(durationMillis = 100),
+        label = "softLightLabelAlpha"
+    )
+
+    Column(
+        modifier = modifier
+            .width(SoftLightItemWidth)
+            .fillMaxHeight()
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick
+            ),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = label,
+            modifier = Modifier.size(22.dp),
+            tint = if (selected) {
+                MiuixTheme.colorScheme.onSurface
+            } else {
+                MiuixTheme.colorScheme.onSurface.copy(alpha = 0.50f)
+            }
+        )
+
+        Text(
+            text = label,
+            fontSize = 9.sp,
+            color = MiuixTheme.colorScheme.onSurface,
+            modifier = Modifier
+                .padding(top = 2.dp)
+                .graphicsLayer {
+                    alpha = labelAlpha
+                }
+        )
+    }
+}
+
+@Composable
+private fun SoftLightIndicator(
+    offsetX: Float,
+    modifier: Modifier = Modifier
+) {
+    val isDark = isSystemInDarkTheme()
+    val indicatorColor = if (isDark) {
+        Color.White.copy(alpha = 0.08f)
+    } else {
+        Color.Black.copy(alpha = 0.06f)
+    }
+
+    Box(
+        modifier = modifier
+            .offset { IntOffset(x = offsetX.roundToInt(), y = 0) }
+            .width(SoftLightIndicatorWidth)
+            .height(SoftLightIndicatorHeight)
+            .background(
+                color = indicatorColor,
+                shape = RoundedCornerShape(24.dp)
+            )
+    )
+}
+
+@Composable
+fun SoftLightNavigationBarWithIndicator(
+    selectedIndex: Int,
+    itemCount: Int,
+    backdrop: Backdrop,
+    onIndexChange: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit
+) {
+    var contentWidthPx by remember { mutableStateOf(0) }
+    val density = LocalDensity.current
+    val itemWidthPx = with(density) { SoftLightItemWidth.toPx() }
+    val indicatorWidthPx = with(density) { SoftLightIndicatorWidth.toPx() }
+    val isDark = isSystemInDarkTheme()
+
+    val baseTargetOffset = run {
+        if (contentWidthPx > 0 && itemCount > 0) {
+            val totalItemWidth = itemWidthPx * itemCount
+            val remainingSpace = contentWidthPx - totalItemWidth
+            val gap = remainingSpace / (itemCount + 1)
+            val itemLeft = gap * (selectedIndex + 1) + itemWidthPx * selectedIndex
+            val itemCenter = itemLeft + itemWidthPx / 2
+            itemCenter - indicatorWidthPx / 2
+        } else {
+            0f
+        }
+    }
+
+    val indicatorOffsetPx by animateFloatAsState(
+        targetValue = baseTargetOffset,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioLowBouncy,
+            stiffness = Spring.StiffnessHigh
+        ),
+        label = "softLightIndicatorOffset"
+    )
+
+    val barSurfaceColor = if (isDark) {
+        Color.White.copy(alpha = 0.10f)
+    } else {
+        Color.White.copy(alpha = 0.65f)
+    }
+
+    Box(
+        modifier = modifier.padding(bottom = SoftLightBottomMargin)
+    ) {
+        // Main bar
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(SoftLightContainerHeight)
+                .drawBackdrop(
+                    backdrop = backdrop,
+                    shape = { RoundedCornerShape(SoftLightCornerRadius) },
+                    effects = {
+                        blur(radius = 18f)
+                    },
+                    highlight = {
+                        Highlight(
+                            width = 0.5.dp,
+                            blurRadius = 0.5.dp,
+                            alpha = 0.6f,
+                            style = com.kyant.backdrop.highlight.HighlightStyle.Default
+                        )
+                    },
+                    shadow = {
+                        Shadow(
+                            radius = 16.dp,
+                            color = if (isDark) {
+                                Color.Black.copy(alpha = 0.12f)
+                            } else {
+                                Color.Black.copy(alpha = 0.05f)
+                            }
+                        )
+                    },
+                    onDrawSurface = {
+                        drawRect(color = barSurfaceColor)
+                    }
+                )
+        ) {
+            // Items layer
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .fillMaxHeight()
+                    .padding(
+                        horizontal = SoftLightBarHorizontalPadding,
+                        vertical = SoftLightBarVerticalPadding
+                    )
+                    .onSizeChanged { size ->
+                        contentWidthPx = size.width
+                    },
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                content()
+            }
+
+            // Indicator + tap layer
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(SoftLightContainerHeight)
+                    .padding(
+                        horizontal = SoftLightBarHorizontalPadding,
+                        vertical = SoftLightBarVerticalPadding
+                    )
+                    .pointerInput(selectedIndex, itemCount) {
+                        detectTapGestures(
+                            onTap = { offset ->
+                                var minDist = Float.MAX_VALUE
+                                var tappedIndex = selectedIndex
+                                for (i in 0 until itemCount) {
+                                    val totalItemWidth = itemWidthPx * itemCount
+                                    val remainingSpace = contentWidthPx - totalItemWidth
+                                    val gap = remainingSpace / (itemCount + 1)
+                                    val centerX = gap * (i + 1) + itemWidthPx * i + itemWidthPx / 2
+                                    val dist = abs(offset.x - centerX)
+                                    if (dist < minDist) {
+                                        minDist = dist
+                                        tappedIndex = i
+                                    }
+                                }
+                                if (tappedIndex != selectedIndex) {
+                                    onIndexChange(tappedIndex)
+                                }
+                            }
+                        )
+                    },
+                contentAlignment = Alignment.CenterStart
+            ) {
+                SoftLightIndicator(
+                    offsetX = indicatorOffsetPx,
+                    modifier = Modifier
+                )
+            }
+        }
+
+        // Bottom gradient fade
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .height(SoftLightFadeHeight)
+                .graphicsLayer {
+                    shape = RoundedCornerShape(
+                        bottomStart = SoftLightCornerRadius,
+                        bottomEnd = SoftLightCornerRadius
+                    )
+                    clip = true
+                }
+                .background(
+                    brush = Brush.verticalGradient(
+                        colors = if (isDark) {
+                            listOf(
+                                Color.Transparent,
+                                Color.Black.copy(alpha = 0.06f),
+                                Color.Black.copy(alpha = 0.14f)
+                            )
+                        } else {
+                            listOf(
+                                Color.Transparent,
+                                Color.White.copy(alpha = 0.08f),
+                                Color.White.copy(alpha = 0.18f)
+                            )
+                        },
+                        startY = 0f,
+                        endY = Float.POSITIVE_INFINITY
+                    )
+                )
+        )
     }
 }

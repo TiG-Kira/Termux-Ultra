@@ -30,6 +30,7 @@ import coil.compose.AsyncImage
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.CircularProgressIndicator
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.Scaffold
@@ -342,10 +343,9 @@ fun AboutScreen(onBack: () -> Unit) {
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 if (checkingUpdate) {
-                                    androidx.compose.material3.CircularProgressIndicator(
+                                    top.yukonga.miuix.kmp.basic.CircularProgressIndicator(
                                         modifier = Modifier.size(16.dp),
-                                        strokeWidth = 2.dp,
-                                        color = MiuixTheme.colorScheme.primary
+                                        strokeWidth = 2.dp
                                     )
                                 }
                                 Column {

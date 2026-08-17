@@ -148,6 +148,11 @@ public final class TerminalSession extends TerminalOutput {
         return (mEmulator == null) ? null : mEmulator.getTitle();
     }
 
+    /** Get the shell path for this session. */
+    public String getShellPath() {
+        return mShellPath;
+    }
+
     /**
      * Set the terminal emulator's window size and start terminal emulation.
      *

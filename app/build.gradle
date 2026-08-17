@@ -1,12 +1,10 @@
 plugins {
     id "com.android.application"
-    id "org.jetbrains.kotlin.android"
     id "org.jetbrains.kotlin.plugin.compose" version "2.3.10"
     id "org.jetbrains.kotlin.plugin.serialization" version "2.3.10"
     id "com.google.devtools.ksp" version "2.3.10"
+    id "kotlin-parcelize"
 }
-
-apply plugin: 'kotlin-parcelize'
 
 android {
     namespace "com.termux"
@@ -22,7 +20,7 @@ android {
         minSdkVersion project.properties.minSdkVersion.toInteger()
         targetSdkVersion project.properties.targetSdkVersion.toInteger()
         versionCode 1055
-        versionName "118.3.65"
+        versionName "118.3.66"
 
         if (appVersionName) versionName = appVersionName
 
@@ -82,12 +80,8 @@ android {
 
     compileOptions {
         coreLibraryDesugaringEnabled true
-        sourceCompatibility JavaVersion.VERSION_1_8
-        targetCompatibility JavaVersion.VERSION_1_8
-    }
-
-    kotlinOptions {
-        jvmTarget = "1.8"
+        sourceCompatibility JavaVersion.VERSION_21
+        targetCompatibility JavaVersion.VERSION_21
     }
 
     buildFeatures {
@@ -121,12 +115,16 @@ android {
     }
 }
 
+kotlin {
+    jvmToolchain(21)
+}
+
 dependencies {
     implementation fileTree(dir: 'libs', include: ['*.jar'])
     coreLibraryDesugaring "com.android.tools:desugar_jdk_libs:1.1.5"
-    implementation "top.yukonga.miuix.kmp:miuix-ui-android:0.9.3"
-    implementation "top.yukonga.miuix.kmp:miuix-icons-android:0.9.3"
-    implementation "top.yukonga.miuix.kmp:miuix-preference-android:0.9.3"
+    implementation "top.yukonga.miuix.kmp:miuix-ui-android:0.9.4-rc01"
+    implementation "top.yukonga.miuix.kmp:miuix-icons-android:0.9.4-rc01"
+    implementation "top.yukonga.miuix.kmp:miuix-preference-android:0.9.4-rc01"
 
     implementation "androidx.navigationevent:navigationevent-compose-android:1.0.0-alpha05"
 

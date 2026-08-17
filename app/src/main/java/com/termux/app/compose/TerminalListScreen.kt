@@ -14,7 +14,6 @@ import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Icon as Material3Icon
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CheckCircleOutline
 import androidx.compose.material.icons.rounded.Close
@@ -48,6 +47,7 @@ import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.Switch
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
+import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.basic.SearchBar
@@ -773,14 +773,13 @@ fun KeepAliveWarningCard(onClose: () -> Unit) {
         prefs.edit().putBoolean("keep_alive_warning_collapsed", value).apply()
     }
 
-    androidx.compose.material3.Card(
+    Card(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 8.dp)
             .then(if (collapsed) Modifier.clickable { setCollapsed(false) } else Modifier),
-        colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = cardColor)
     ) {
-        Box(modifier = Modifier.fillMaxWidth()) {
+        Box(modifier = Modifier.fillMaxWidth().background(cardColor)) {
             if (!collapsed) {
                 Box(
                     modifier = Modifier
@@ -788,7 +787,7 @@ fun KeepAliveWarningCard(onClose: () -> Unit) {
                         .offset(30.dp, 60.dp),
                     contentAlignment = Alignment.BottomEnd
                 ) {
-                    Material3Icon(
+                    Icon(
                         modifier = Modifier.size(120.dp).alpha(0.8f),
                         imageVector = Icons.Rounded.Warning,
                         tint = iconColor,
@@ -804,7 +803,7 @@ fun KeepAliveWarningCard(onClose: () -> Unit) {
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Material3Icon(
+                    Icon(
                         imageVector = Icons.Rounded.Warning,
                         tint = iconColor,
                         contentDescription = null,
@@ -868,7 +867,7 @@ fun KeepAliveWarningCard(onClose: () -> Unit) {
                         .clickable { setCollapsed(true) },
                     contentAlignment = Alignment.Center
                 ) {
-                    Material3Icon(
+                    Icon(
                         imageVector = Icons.Rounded.ExpandLess,
                         contentDescription = null,
                         tint = textColor.copy(alpha = 0.45f),
@@ -895,14 +894,13 @@ fun WelcomeCard(text: String, onClose: () -> Unit) {
         prefs.edit().putBoolean("welcome_card_collapsed", value).apply()
     }
 
-    androidx.compose.material3.Card(
+    Card(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 8.dp)
             .then(if (collapsed) Modifier.clickable { setCollapsed(false) } else Modifier),
-        colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = cardColor)
     ) {
-        Box(modifier = Modifier.fillMaxWidth()) {
+        Box(modifier = Modifier.fillMaxWidth().background(cardColor)) {
             if (!collapsed) {
                 Box(
                     modifier = Modifier
@@ -910,7 +908,7 @@ fun WelcomeCard(text: String, onClose: () -> Unit) {
                         .offset(30.dp, 30.dp),
                     contentAlignment = Alignment.BottomEnd
                 ) {
-                    Material3Icon(
+                    Icon(
                         modifier = Modifier.size(120.dp).alpha(0.8f),
                         imageVector = Icons.Rounded.Info,
                         tint = iconColor,
@@ -926,7 +924,7 @@ fun WelcomeCard(text: String, onClose: () -> Unit) {
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Material3Icon(
+                    Icon(
                         imageVector = Icons.Rounded.Info,
                         tint = iconColor,
                         contentDescription = null,
@@ -981,7 +979,7 @@ fun WelcomeCard(text: String, onClose: () -> Unit) {
                         .clickable { setCollapsed(true) },
                     contentAlignment = Alignment.Center
                 ) {
-                    Material3Icon(
+                    Icon(
                         imageVector = Icons.Rounded.ExpandLess,
                         contentDescription = null,
                         tint = textColor.copy(alpha = 0.4f),
@@ -1059,14 +1057,13 @@ fun ServiceStatusCard(
         }
     }
     
-    androidx.compose.material3.Card(
+    Card(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 8.dp)
             .then(if (collapsed) Modifier.clickable { setCollapsed(false) } else Modifier),
-        colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = cardColor)
     ) {
-        Box(modifier = Modifier.fillMaxWidth()) {
+        Box(modifier = Modifier.fillMaxWidth().background(cardColor)) {
             if (!collapsed) {
                 Box(
                     modifier = Modifier
@@ -1074,7 +1071,7 @@ fun ServiceStatusCard(
                         .offset(35.dp, 35.dp),
                     contentAlignment = Alignment.BottomEnd
                 ) {
-                    Material3Icon(
+                    Icon(
                         modifier = Modifier.size(120.dp).alpha(0.8f),
                         imageVector = icon,
                         tint = iconColor,
@@ -1090,7 +1087,7 @@ fun ServiceStatusCard(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Material3Icon(
+                    Icon(
                         imageVector = icon,
                         tint = iconColor,
                         contentDescription = null,
@@ -1145,7 +1142,7 @@ fun ServiceStatusCard(
                         .clickable { setCollapsed(true) },
                     contentAlignment = Alignment.Center
                 ) {
-                    Material3Icon(
+                    Icon(
                         imageVector = Icons.Rounded.ExpandLess,
                         contentDescription = null,
                         tint = textColor.copy(alpha = 0.45f),
@@ -1206,14 +1203,13 @@ fun LowAndroidWarningCard() {
     }
     val briefDescription = "$versionInfo · $message"
 
-    androidx.compose.material3.Card(
+    Card(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 8.dp)
             .then(if (collapsed) Modifier.clickable { setCollapsed(false) } else Modifier),
-        colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = cardColor)
     ) {
-        Box(modifier = Modifier.fillMaxWidth()) {
+        Box(modifier = Modifier.fillMaxWidth().background(cardColor)) {
             if (!collapsed) {
                 Box(
                     modifier = Modifier
@@ -1221,7 +1217,7 @@ fun LowAndroidWarningCard() {
                         .offset(35.dp, 35.dp),
                     contentAlignment = Alignment.BottomEnd
                 ) {
-                    Material3Icon(
+                    Icon(
                         modifier = Modifier.size(120.dp).alpha(0.8f),
                         imageVector = Icons.Rounded.Warning,
                         tint = iconColor,
@@ -1237,7 +1233,7 @@ fun LowAndroidWarningCard() {
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Material3Icon(
+                    Icon(
                         imageVector = Icons.Rounded.Warning,
                         tint = iconColor,
                         contentDescription = null,
@@ -1298,15 +1294,14 @@ fun LowAndroidWarningCard() {
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.End
                         ) {
-                            androidx.compose.material3.Button(
+                            Button(
                                 onClick = { showDisableDialog = true },
                                 modifier = Modifier.clip(RoundedCornerShape(10.dp)),
-                                colors = androidx.compose.material3.ButtonDefaults.buttonColors(
-                                    containerColor = iconColor,
-                                    contentColor = Color.White
+                                colors = ButtonDefaults.buttonColors(
+                                    color = iconColor
                                 )
                             ) {
-                                Material3Icon(
+                                Icon(
                                     imageVector = Icons.Rounded.Close,
                                     contentDescription = null,
                                     modifier = Modifier.size(16.dp)
@@ -1330,7 +1325,7 @@ fun LowAndroidWarningCard() {
                         .clickable { setCollapsed(true) },
                     contentAlignment = Alignment.Center
                 ) {
-                    Material3Icon(
+                    Icon(
                         imageVector = Icons.Rounded.ExpandLess,
                         contentDescription = null,
                         tint = textColor.copy(alpha = 0.45f),
@@ -1462,7 +1457,7 @@ fun ForceEnableCriticalDialog(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.padding(bottom = 12.dp)
                 ) {
-                    androidx.compose.material3.Icon(
+                    Icon(
                         imageVector = Icons.Rounded.Warning,
                         contentDescription = null,
                         tint = Color(0xFFFF3B30),

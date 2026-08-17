@@ -10,8 +10,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.TextField
-import androidx.compose.material3.TextFieldDefaults
+
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -31,6 +30,7 @@ import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
@@ -117,7 +117,7 @@ fun FtpInfoScreen() {
                     
                     if (isEditing) {
                         TextField(
-                            label = { Text("端口", color = MiuixTheme.colorScheme.onSurface) },
+                            label = "端口",
                             value = port.toString(),
                             onValueChange = {
                                 it.toIntOrNull()?.let { p ->
@@ -129,23 +129,11 @@ fun FtpInfoScreen() {
                                 fontSize = 14.sp,
                                 color = MiuixTheme.colorScheme.onSurface
                             ),
-                            colors = TextFieldDefaults.colors(
-                                focusedContainerColor = MiuixTheme.colorScheme.surface,
-                                unfocusedContainerColor = MiuixTheme.colorScheme.surface,
-                                disabledContainerColor = MiuixTheme.colorScheme.surface,
-                                focusedIndicatorColor = MiuixTheme.colorScheme.primary,
-                                unfocusedIndicatorColor = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.3f),
-                                disabledIndicatorColor = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.12f),
-                                cursorColor = MiuixTheme.colorScheme.primary,
-                                focusedLabelColor = MiuixTheme.colorScheme.primary,
-                                unfocusedLabelColor = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                                disabledLabelColor = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-                            ),
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             keyboardActions = KeyboardActions()
                         )
                         TextField(
-                            label = { Text("用户名", color = MiuixTheme.colorScheme.onSurface) },
+                            label = "用户名",
                             value = username,
                             onValueChange = { username = it },
                             modifier = Modifier.fillMaxWidth(),
@@ -153,41 +141,17 @@ fun FtpInfoScreen() {
                                 fontSize = 14.sp,
                                 color = MiuixTheme.colorScheme.onSurface
                             ),
-                            colors = TextFieldDefaults.colors(
-                                focusedContainerColor = MiuixTheme.colorScheme.surface,
-                                unfocusedContainerColor = MiuixTheme.colorScheme.surface,
-                                disabledContainerColor = MiuixTheme.colorScheme.surface,
-                                focusedIndicatorColor = MiuixTheme.colorScheme.primary,
-                                unfocusedIndicatorColor = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.3f),
-                                disabledIndicatorColor = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.12f),
-                                cursorColor = MiuixTheme.colorScheme.primary,
-                                focusedLabelColor = MiuixTheme.colorScheme.primary,
-                                unfocusedLabelColor = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                                disabledLabelColor = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-                            ),
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
                             keyboardActions = KeyboardActions()
                         )
                         TextField(
-                            label = { Text("密码", color = MiuixTheme.colorScheme.onSurface) },
+                            label = "密码",
                             value = password,
                             onValueChange = { password = it },
                             modifier = Modifier.fillMaxWidth(),
                             textStyle = TextStyle(
                                 fontSize = 14.sp,
                                 color = MiuixTheme.colorScheme.onSurface
-                            ),
-                            colors = TextFieldDefaults.colors(
-                                focusedContainerColor = MiuixTheme.colorScheme.surface,
-                                unfocusedContainerColor = MiuixTheme.colorScheme.surface,
-                                disabledContainerColor = MiuixTheme.colorScheme.surface,
-                                focusedIndicatorColor = MiuixTheme.colorScheme.primary,
-                                unfocusedIndicatorColor = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.3f),
-                                disabledIndicatorColor = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.12f),
-                                cursorColor = MiuixTheme.colorScheme.primary,
-                                focusedLabelColor = MiuixTheme.colorScheme.primary,
-                                unfocusedLabelColor = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                                disabledLabelColor = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.38f)
                             ),
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                             keyboardActions = KeyboardActions()

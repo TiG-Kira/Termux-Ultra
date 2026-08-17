@@ -12,12 +12,16 @@ import android.os.Looper
 import androidx.activity.ComponentActivity
 import androidx.core.view.WindowCompat
 import androidx.activity.compose.setContent
+import androidx.fragment.app.FragmentActivity
+import androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner
+import com.termux.app.compose.NavigationHelper
 import android.content.SharedPreferences
 import android.widget.Toast
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshotFlow
@@ -47,7 +51,7 @@ class AppViewModel : ViewModel() {
     }
 }
 
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
 
     private var termuxService: TermuxService? = null
     private var sessions by mutableStateOf<List<SharedTermuxSession>>(emptyList())
@@ -158,6 +162,11 @@ class MainActivity : ComponentActivity() {
             bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE)
 
             setContent {
+                val navDispatcher = remember { NavigationHelper.createDispatcher() }
+                val navDispatcherOwner = remember { NavigationHelper.createOwner(navDispatcher) }
+                CompositionLocalProvider(
+                    LocalNavigationEventDispatcherOwner provides navDispatcherOwner
+                ) {
                 KiTerminalTheme {
                     val showVnc by appViewModel.showVnc.collectAsState()
 
@@ -215,6 +224,7 @@ class MainActivity : ComponentActivity() {
                             onRefreshSessions = { updateSessions() }
                         )
                     RiskConfirmDialogHost()
+                }
                 }
             }
         } catch (t: Throwable) {

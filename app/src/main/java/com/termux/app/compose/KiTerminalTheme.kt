@@ -1,7 +1,6 @@
 package com.termux.app.compose
 
 import android.app.Activity
-import android.view.View
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.fillMaxSize
@@ -13,8 +12,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
-import androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner
-import androidx.navigationevent.compose.rememberNavigationEventDispatcherOwner
 import top.yukonga.miuix.kmp.theme.ColorSchemeMode
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.theme.ThemeController
@@ -33,23 +30,16 @@ fun KiTerminalTheme(
             WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !darkTheme
         }
     }
-    val navigationEventDispatcherOwner = rememberNavigationEventDispatcherOwner(
-        parent = null
-    )
-    CompositionLocalProvider(
-        LocalNavigationEventDispatcherOwner provides navigationEventDispatcherOwner
-    ) {
-        MiuixTheme(
-            controller = ThemeController(colorSchemeMode = ColorSchemeMode.System),
-            content = {
-                androidx.compose.foundation.layout.Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(MiuixTheme.colorScheme.background)
-                ) {
-                    content()
-                }
+    MiuixTheme(
+        controller = ThemeController(colorSchemeMode = ColorSchemeMode.System),
+        content = {
+            androidx.compose.foundation.layout.Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(MiuixTheme.colorScheme.background)
+            ) {
+                content()
             }
-        )
-    }
+        }
+    )
 }

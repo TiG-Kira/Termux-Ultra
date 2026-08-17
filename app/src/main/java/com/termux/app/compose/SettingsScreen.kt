@@ -31,7 +31,8 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.material3.Divider
+import top.yukonga.miuix.kmp.basic.HorizontalDivider
+import top.yukonga.miuix.kmp.basic.LinearProgressIndicator
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.basic.Card
@@ -49,7 +50,6 @@ import top.yukonga.miuix.kmp.preference.CheckboxPreference
 import top.yukonga.miuix.kmp.preference.OverlayDropdownPreference
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
-import androidx.compose.material3.LinearProgressIndicator
 import com.termux.R
 import com.termux.app.LocaleHelper
 import com.termux.app.activities.SettingsActivity
@@ -146,13 +146,15 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
     val navBarStyleOptions = listOf(
         context.getString(R.string.navigation_bar_default),
         context.getString(R.string.navigation_bar_floating),
-        context.getString(R.string.navigation_bar_liquid_glass)
+        context.getString(R.string.navigation_bar_liquid_glass),
+        context.getString(R.string.navigation_bar_os4)
     )
     var navBarSelectedIndex by remember {
         mutableStateOf(
             when (prefs.getString("navigation_bar_style", "default")) {
                 "floating" -> 1
                 "liquid_glass" -> 2
+                "soft_light" -> 3
                 else -> 0
             }
         )
@@ -457,7 +459,7 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
                                 SettingIcon(R.drawable.ic_language, contentDescription = context.getString(R.string.language))
                             }
                         )
-                        Divider(
+                        HorizontalDivider(
                             color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f),
                             modifier = Modifier.padding(start = 72.dp, end = 16.dp)
                         )
@@ -467,7 +469,7 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
                             items = navBarStyleOptions,
                             selectedIndex = navBarSelectedIndex,
                             onSelectedIndexChange = { idx ->
-                                if (idx == 2) {
+                                if (idx == 2 || idx == 3) {
                                     if (!ApiCompat.isFeatureUsable(context, ApiCompat.Feature.GLASS_NAVIGATION_BAR)) {
                                         pendingNavStyleIndex = idx
                                         showCriticalNavDialog = true
@@ -478,6 +480,7 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
                                 val style = when (idx) {
                                     1 -> "floating"
                                     2 -> "liquid_glass"
+                                    3 -> "soft_light"
                                     else -> "default"
                                 }
                                 prefs.edit().putString("navigation_bar_style", style).apply()
@@ -517,7 +520,7 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
                             }
                         )
                         remoteSettings.firstOrNull()?.let { item ->
-                            Divider(color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f))
+                            HorizontalDivider(color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f))
                             ArrowPreference(
                                 title = item.title,
                                 summary = item.description,
@@ -653,7 +656,7 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
                             }
                         )
                         if (aiTermuxEnabled) {
-                            Divider(
+                            HorizontalDivider(
                                 color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f),
                                 modifier = Modifier.padding(start = 72.dp, end = 16.dp)
                             )
@@ -670,7 +673,7 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
                                 }
                             )
                             if (autoExecConfig.enabled) {
-                                Divider(
+                                HorizontalDivider(
                                     color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f),
                                     modifier = Modifier.padding(start = 72.dp, end = 16.dp)
                                 )
@@ -724,7 +727,7 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
                                     )
                                 }
                             }
-                            Divider(
+                            HorizontalDivider(
                                 color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f),
                                 modifier = Modifier.padding(start = 72.dp, end = 16.dp)
                             )
@@ -736,7 +739,7 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
                                     SettingIcon(R.drawable.ic_refresh, contentDescription = "重新配置 AI")
                                 }
                             )
-                            Divider(
+                            HorizontalDivider(
                                 color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f),
                                 modifier = Modifier.padding(start = 72.dp, end = 16.dp)
                             )
@@ -748,7 +751,7 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
                                     SettingIcon(R.drawable.ic_delete, contentDescription = "清空对话记录")
                                 }
                             )
-                            Divider(
+                            HorizontalDivider(
                                 color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f),
                                 modifier = Modifier.padding(start = 72.dp, end = 16.dp)
                             )
@@ -765,7 +768,7 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
                                 }
                             )
                             if (aiDeveloperMode) {
-                                Divider(
+                                HorizontalDivider(
                                     color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f),
                                     modifier = Modifier.padding(start = 72.dp, end = 16.dp)
                                 )
@@ -788,7 +791,7 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
                                         }
                                     )
                                 }
-                                Divider(
+                                HorizontalDivider(
                                     color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f),
                                     modifier = Modifier.padding(start = 72.dp, end = 16.dp)
                                 )
@@ -800,7 +803,7 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
                                         SettingIcon(R.drawable.ic_code, contentDescription = "自定义技能")
                                     }
                                 )
-                                Divider(
+                                HorizontalDivider(
                                     color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f),
                                     modifier = Modifier.padding(start = 72.dp, end = 16.dp)
                                 )
@@ -874,6 +877,7 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
                 val style = when (idx) {
                     1 -> "floating"
                     2 -> "liquid_glass"
+                    3 -> "soft_light"
                     else -> "default"
                 }
                 prefs.edit().putString("navigation_bar_style", style).apply()
@@ -1040,7 +1044,7 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
         Column(modifier = Modifier.padding(vertical = 8.dp)) {
             if (restoreTotal > 0) {
                 LinearProgressIndicator(
-                    progress = { restoreProgress.toFloat() / 100f },
+                    progress = restoreProgress.toFloat() / 100f,
                     modifier = Modifier.fillMaxWidth()
                 )
                 Text(
@@ -1777,7 +1781,7 @@ private fun SettingsGroupCard(items: List<SettingItem>) {
                     )
                 }
                 if (index < items.lastIndex) {
-                    Divider(
+                    HorizontalDivider(
                         color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f),
                         modifier = Modifier.padding(start = 72.dp, end = 16.dp)
                     )

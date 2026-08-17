@@ -83,6 +83,7 @@ fun MainScreen(
     val navPrefs = remember { context.getSharedPreferences("app_settings", Context.MODE_PRIVATE) }
     val useFloatingNav = navBarStyle == "floating"
     val useLiquidGlassNav = navBarStyle == "liquid_glass"
+    val useSoftLightNav = navBarStyle == "soft_light"
     var glassNavFailed by remember { mutableStateOf(false) }
 
     // Crash recovery: if the previous glass nav rendering attempt crashed (SIGSEGV etc.),
@@ -97,6 +98,7 @@ fun MainScreen(
     val navStyle = when {
         useLiquidGlassNav && !glassNavFailed -> 2
         useFloatingNav -> 1
+        useSoftLightNav -> 3
         else -> 0
     }
 
@@ -257,6 +259,62 @@ fun MainScreen(
                         }
                     }
                 }
+                3 -> {
+                    SoftLightNavigationBarWithIndicator(
+                        selectedIndex = selectedTab,
+                        itemCount = availableTabs.size,
+                        backdrop = liquidGlassBackdrop,
+                        onIndexChange = { index ->
+                            val actualTab = availableTabs.getOrElse(index) { selectedTab }
+                            if (actualTab != selectedTab) {
+                                previousTab = selectedTab
+                                onTabChange(actualTab)
+                            }
+                        },
+                        modifier = Modifier.padding(horizontal = 12.dp)
+                    ) {
+                        if (0 in availableTabs) {
+                            SoftLightNavigationBarItem(
+                                icon = ImageVector.vectorResource(R.drawable.ic_terminal),
+                                label = stringResource(R.string.terminal),
+                                selected = selectedTab == 0,
+                                onClick = { previousTab = selectedTab; onTabChange(0) }
+                            )
+                        }
+                        if (1 in availableTabs) {
+                            SoftLightNavigationBarItem(
+                                icon = ImageVector.vectorResource(R.drawable.ic_files),
+                                label = stringResource(R.string.files),
+                                selected = selectedTab == 1,
+                                onClick = { previousTab = selectedTab; onTabChange(1) }
+                            )
+                        }
+                        if (2 in availableTabs) {
+                            SoftLightNavigationBarItem(
+                                icon = ImageVector.vectorResource(R.drawable.ic_vnc),
+                                label = stringResource(R.string.remote),
+                                selected = selectedTab == 2,
+                                onClick = { previousTab = selectedTab; onTabChange(2) }
+                            )
+                        }
+                        if (3 in availableTabs) {
+                            SoftLightNavigationBarItem(
+                                icon = ImageVector.vectorResource(R.drawable.ic_resources),
+                                label = stringResource(R.string.resources),
+                                selected = selectedTab == 3,
+                                onClick = { previousTab = selectedTab; onTabChange(3) }
+                            )
+                        }
+                        if (4 in availableTabs) {
+                            SoftLightNavigationBarItem(
+                                icon = ImageVector.vectorResource(R.drawable.ic_settings),
+                                label = stringResource(R.string.settings),
+                                selected = selectedTab == 4,
+                                onClick = { previousTab = selectedTab; onTabChange(4) }
+                            )
+                        }
+                    }
+                }
                 1 -> {
                     Box(
                         modifier = Modifier
@@ -364,7 +422,7 @@ fun MainScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .then(
-                    if (useLiquidGlassNav) {
+                    if (useLiquidGlassNav || useSoftLightNav) {
                         Modifier.layerBackdrop(liquidGlassBackdrop)
                     } else {
                         Modifier

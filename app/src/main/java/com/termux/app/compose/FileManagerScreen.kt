@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.border
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.verticalScroll
@@ -25,10 +27,14 @@ import android.os.Build
 import androidx.core.app.NotificationCompat
 import com.termux.shared.shell.TermuxShellUtils
 import com.termux.app.ftp.FtpServer
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.BreadcrumbBar
+import top.yukonga.miuix.kmp.basic.BreadcrumbItem
+import top.yukonga.miuix.kmp.basic.joinToPath
 import top.yukonga.miuix.kmp.preference.CheckboxPreference
-import androidx.compose.material3.HorizontalDivider
+import top.yukonga.miuix.kmp.basic.Checkbox
+import androidx.compose.ui.state.ToggleableState
+import top.yukonga.miuix.kmp.basic.HorizontalDivider
 import androidx.compose.ui.graphics.Color
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -458,10 +464,8 @@ fun FileManagerScreen(
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(16.dp)),
-                        colors = CardDefaults.cardColors(
-                            containerColor = if (isSystemInDarkTheme()) Color(0xFF3D3514) else Color(0xFFFFF9C4)
-                        )
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(if (isSystemInDarkTheme()) Color(0xFF3D3514) else Color(0xFFFFF9C4))
                     ) {
                         Row(
                             modifier = Modifier
@@ -509,36 +513,22 @@ fun FileManagerScreen(
             }
 
             item {
-                Card(
+                val breadcrumbItems = remember(currentPath) { pathToBreadcrumbItems(currentPath) }
+                BreadcrumbBar(
+                    items = breadcrumbItems,
+                    onItemClick = { index ->
+                        val targetPath = breadcrumbItems[index].path
+                        val targetFile = File(targetPath)
+                        if (targetFile.isDirectory && targetFile != currentPath) {
+                            forwardHistory = emptyList()
+                            currentPath = targetFile
+                        }
+                    },
+                    highlightIndex = breadcrumbItems.lastIndex,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp)),
-                    colors = CardDefaults.cardColors(
-                        containerColor = if (isSystemInDarkTheme()) Color(0xFF2C2C2C) else Color.White
-                    )
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 14.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_folder),
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp),
-                            tint = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            text = currentPath.absolutePath,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                            lineHeight = 18.sp
-                        )
-                    }
-                }
+                        .padding(horizontal = 4.dp)
+                )
             }
 
             if (files.isEmpty()) {
@@ -594,7 +584,13 @@ fun FileManagerScreen(
                                 selectedFiles = setOf(fileItem.absolutePath)
                                 isInSelectionMode = true
                             }
-                        }
+                        },
+                        onDetailClick = if (fileItem.isDirectory) {
+                            {
+                                fileToOpen = fileItem
+                                showOpenWithDialog = true
+                            }
+                        } else null
                     )
                 }
             }
@@ -647,7 +643,9 @@ fun FileManagerScreen(
                                 .size(48.dp)
                                 .clip(RoundedCornerShape(12.dp))
                                 .background(
-                                    if (isShFile) {
+                                    if (file.isDirectory) {
+                                        MiuixTheme.colorScheme.primary.copy(alpha = 0.15f)
+                                    } else if (isShFile) {
                                         if (isDark) Color(0xFF1A5A96) else Color(0xFF3F8DD6)
                                     } else {
                                         if (isDark) Color(0xFF3A3A3A) else Color(0xFFEEEEEE)
@@ -659,7 +657,7 @@ fun FileManagerScreen(
                                 painter = painterResource(if (file.isDirectory) R.drawable.ic_folder else R.drawable.ic_file),
                                 contentDescription = null,
                                 modifier = Modifier.size(24.dp),
-                                tint = Color.White
+                                tint = if (file.isDirectory) MiuixTheme.colorScheme.primary else Color.White
                             )
                         }
 
@@ -674,7 +672,12 @@ fun FileManagerScreen(
                                 lineHeight = 22.sp
                             )
                             Text(
-                                text = "${getFileTypeDescription(file)} · ${android.text.format.Formatter.formatFileSize(context, file.length())}",
+                                text = if (file.isDirectory) {
+                                    val count = file.listFiles()?.size ?: 0
+                                    "${stringResource(R.string.folder)} · $count ${stringResource(R.string.items)}"
+                                } else {
+                                    "${getFileTypeDescription(file)} · ${android.text.format.Formatter.formatFileSize(context, file.length())}"
+                                },
                                 fontSize = 13.sp,
                                 color = dialogSubtextColor,
                                 lineHeight = 18.sp
@@ -691,10 +694,8 @@ fun FileManagerScreen(
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp),
-                        colors = CardDefaults.cardColors(
-                            containerColor = if (isDark) Color(0xFF252525) else Color(0xFFF5F5F5)
-                        )
+                            .padding(horizontal = 16.dp)
+                            .background(if (isDark) Color(0xFF252525) else Color(0xFFF5F5F5))
                     ) {
                         Column(
                             modifier = Modifier.padding(vertical = 4.dp)
@@ -721,6 +722,7 @@ fun FileManagerScreen(
                                     modifier = Modifier.weight(1f)
                                 )
                             }
+                            if (!file.isDirectory) {
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -740,6 +742,7 @@ fun FileManagerScreen(
                                     lineHeight = 18.sp
                                 )
                             }
+                            }
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -753,7 +756,7 @@ fun FileManagerScreen(
                                     modifier = Modifier.width(70.dp)
                                 )
                                 Text(
-                                    text = getFileTypeDescription(file),
+                                    text = if (file.isDirectory) stringResource(R.string.folder) else getFileTypeDescription(file),
                                     fontSize = 13.sp,
                                     color = dialogTextColor,
                                     lineHeight = 18.sp
@@ -766,13 +769,18 @@ fun FileManagerScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = stringResource(R.string.file_info_size),
+                                    text = if (file.isDirectory) stringResource(R.string.items) else stringResource(R.string.file_info_size),
                                     fontSize = 13.sp,
                                     color = dialogSubtextColor,
                                     modifier = Modifier.width(70.dp)
                                 )
                                 Text(
-                                    text = android.text.format.Formatter.formatFileSize(context, file.length()),
+                                    text = if (file.isDirectory) {
+                                        val count = file.listFiles()?.size ?: 0
+                                        "$count ${stringResource(R.string.items)}"
+                                    } else {
+                                        android.text.format.Formatter.formatFileSize(context, file.length())
+                                    },
                                     fontSize = 13.sp,
                                     color = dialogTextColor,
                                     lineHeight = 18.sp
@@ -824,10 +832,8 @@ fun FileManagerScreen(
                         Card(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 16.dp),
-                            colors = CardDefaults.cardColors(
-                                containerColor = if (isDark) Color(0xFF3D3514) else Color(0xFFFFF9C4)
-                            )
+                                .padding(horizontal = 16.dp)
+                                .background(if (isDark) Color(0xFF3D3514) else Color(0xFFFFF9C4))
                         ) {
                             Row(
                                 modifier = Modifier
@@ -870,6 +876,41 @@ fun FileManagerScreen(
 
                     Spacer(Modifier.height(4.dp))
 
+                    if (file.isDirectory) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable {
+                                    forwardHistory = emptyList()
+                                    currentPath = file
+                                    showOpenWithDialog = false
+                                    fileToOpen = null
+                                }
+                                .padding(vertical = 12.dp, horizontal = 16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_folder),
+                                contentDescription = null,
+                                modifier = Modifier.size(22.dp),
+                                tint = MiuixTheme.colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.width(16.dp))
+                            Text(
+                                text = stringResource(R.string.action_file_received_open_directory),
+                                color = dialogTextColor,
+                                fontSize = 14.sp
+                            )
+                            Spacer(modifier = Modifier.weight(1f))
+                            Icon(
+                                painter = painterResource(R.drawable.ic_arrow_right),
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp),
+                                tint = dialogSubtextColor
+                            )
+                        }
+                    } else {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -978,6 +1019,7 @@ fun FileManagerScreen(
                             tint = dialogSubtextColor
                         )
                     }
+                    } // ── 文件操作 else 结束 ──
                     } // ── 可滚动内容区域结束 ──
 
                     Spacer(Modifier.height(16.dp))
@@ -1361,88 +1403,92 @@ private fun FileItem(
     isSelected: Boolean,
     isInSelectionMode: Boolean,
     onClick: () -> Unit,
-    onLongClick: () -> Unit
+    onLongClick: () -> Unit,
+    onDetailClick: (() -> Unit)? = null
 ) {
-    if (isInSelectionMode) {
-        CheckboxPreference(
-            title = file.name,
-            summary = if (file.isDirectory) {
-                val count = file.listFiles()?.size ?: 0
-                "$count ${stringResource(R.string.items)}"
-            } else {
-                "${formatFileSize(file.length())} · ${Date(file.lastModified()).toString()}"
-            },
-            checked = isSelected,
-            onCheckedChange = { onClick() },
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(16.dp))
-        )
-    } else {
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(16.dp))
-                .combinedClickable(onClick = onClick, onLongClick = onLongClick),
-            colors = CardDefaults.cardColors(
-                containerColor = if (isSelected) MiuixTheme.colorScheme.surfaceVariant else MiuixTheme.colorScheme.surface
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .then(
+                if (isInSelectionMode) Modifier.clickable { onClick() }
+                else Modifier.combinedClickable(onClick = onClick, onLongClick = onLongClick)
             )
+            .background(if (isSelected && isInSelectionMode) MiuixTheme.colorScheme.primary.copy(alpha = 0.08f) else MiuixTheme.colorScheme.surface)
+    ) {
+        Row(
+            modifier = Modifier.padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(
-                modifier = Modifier.padding(14.dp),
-                verticalAlignment = Alignment.CenterVertically
+            if (isInSelectionMode) {
+                Checkbox(
+                    state = if (isSelected) ToggleableState.On else ToggleableState.Off,
+                    onClick = { onClick() },
+                    modifier = Modifier.size(22.dp)
+                )
+                Spacer(Modifier.width(12.dp))
+            }
+
+            Box(
+                modifier = Modifier
+                    .size(42.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(
+                        if (file.isDirectory) MiuixTheme.colorScheme.primary.copy(alpha = 0.12f)
+                        else MiuixTheme.colorScheme.surfaceVariant
+                    ),
+                contentAlignment = Alignment.Center
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(42.dp)
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(
-                            if (file.isDirectory) MiuixTheme.colorScheme.primary.copy(alpha = 0.12f)
-                            else MiuixTheme.colorScheme.surfaceVariant
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        painter = painterResource(if (file.isDirectory) R.drawable.ic_folder else R.drawable.ic_file),
-                        contentDescription = null,
-                        modifier = Modifier.size(22.dp),
-                        tint = if (file.isDirectory) MiuixTheme.colorScheme.primary else MiuixTheme.colorScheme.onSurface
-                    )
-                }
+                Icon(
+                    painter = painterResource(if (file.isDirectory) R.drawable.ic_folder else R.drawable.ic_file),
+                    contentDescription = null,
+                    modifier = Modifier.size(22.dp),
+                    tint = if (file.isDirectory) MiuixTheme.colorScheme.primary else MiuixTheme.colorScheme.onSurface
+                )
+            }
 
-                Spacer(Modifier.width(14.dp))
+            Spacer(Modifier.width(14.dp))
 
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = file.name,
-                        fontSize = 15.sp,
-                        modifier = Modifier.padding(bottom = 3.dp),
-                        fontWeight = FontWeight.Bold,
-                        color = MiuixTheme.colorScheme.onSurface,
-                        lineHeight = 20.sp
-                    )
-                    Text(
-                        text = if (file.isDirectory) {
-                            val count = file.listFiles()?.size ?: 0
-                            "$count ${stringResource(R.string.items)}"
-                        } else {
-                            "${formatFileSize(file.length())} · ${Date(file.lastModified()).toString()}"
-                        },
-                        fontSize = 12.sp,
-                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                        lineHeight = 16.sp
-                    )
-                }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = file.name,
+                    fontSize = 15.sp,
+                    modifier = Modifier.padding(bottom = 3.dp),
+                    fontWeight = FontWeight.Bold,
+                    color = MiuixTheme.colorScheme.onSurface,
+                    lineHeight = 20.sp
+                )
+                Text(
+                    text = if (file.isDirectory) {
+                        val count = file.listFiles()?.size ?: 0
+                        "$count ${stringResource(R.string.items)}"
+                    } else {
+                        "${formatFileSize(file.length())} · ${Date(file.lastModified()).toString()}"
+                    },
+                    fontSize = 12.sp,
+                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                    lineHeight = 16.sp
+                )
+            }
 
-                if (file.isDirectory) {
-                    IconButton(onClick = { onClick() }) {
+            if (file.isDirectory && !isInSelectionMode) {
+                if (onDetailClick != null) {
+                    IconButton(onClick = { onDetailClick() }) {
                         Icon(
-                            painter = painterResource(R.drawable.ic_arrow_right),
+                            painter = painterResource(R.drawable.ic_info),
                             contentDescription = null,
                             modifier = Modifier.size(20.dp),
                             tint = MiuixTheme.colorScheme.onSurfaceVariantSummary
                         )
                     }
+                }
+                IconButton(onClick = { onClick() }) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_arrow_right),
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
+                        tint = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                    )
                 }
             }
         }
@@ -1456,6 +1502,27 @@ private fun formatFileSize(bytes: Long): String {
         bytes < 1024 * 1024 * 1024 -> "${String.format("%.2f", bytes / (1024.0 * 1024))} MB"
         else -> "${String.format("%.2f", bytes / (1024.0 * 1024 * 1024))} GB"
     }
+}
+
+private fun pathToBreadcrumbItems(currentPath: File): List<BreadcrumbItem> {
+    val rootPath = ROOT_PATH
+    val rootName = "Termux"
+    val currentAbsolutePath = currentPath.absolutePath
+
+    if (currentAbsolutePath == rootPath) {
+        return listOf(BreadcrumbItem(path = rootPath, text = rootName))
+    }
+
+    val relativePath = currentAbsolutePath.removePrefix(rootPath).trimStart('/')
+    val segments = relativePath.split('/').filter { it.isNotEmpty() }
+
+    val items = mutableListOf(BreadcrumbItem(path = rootPath, text = rootName))
+    var builtPath = rootPath
+    for (segment in segments) {
+        builtPath = "$builtPath/$segment"
+        items.add(BreadcrumbItem(path = builtPath, text = segment))
+    }
+    return items
 }
 
 private fun copyFile(src: File, dest: File) {

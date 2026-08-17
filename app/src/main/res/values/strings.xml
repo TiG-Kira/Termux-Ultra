@@ -410,6 +410,7 @@
     <string name="navigation_bar_default">Default</string>
     <string name="navigation_bar_floating">Floating</string>
     <string name="navigation_bar_liquid_glass">Glass</string>
+    <string name="navigation_bar_os4">Soft Light</string>
     <string name="navigation_bar_restart_message">Navigation bar style changes will take effect after the app is restarted.</string>
     <string name="glass_nav_bar_fallback_toast">Glass navigation bar failed to render on this device. Automatically switched to the default navigation bar style.</string>
 
@@ -631,6 +632,21 @@
     <string name="risk_command_confirm_checkbox">I voluntarily bear all risks of executing this command and confirm to proceed.</string>
     <string name="risk_command_continue">Continue Execution</string>
     <string name="access_denied">Access Denied</string>
+    <string name="risk_command_container_sudo_warning">Su/sudo detected in container/SSH/VM environment. Please use with caution.</string>
+    <!-- Environment-specific risk warnings -->
+    <string name="risk_command_env_container_title">High Risk Command - Container Environment</string>
+    <string name="risk_command_env_container_warning">This command is being executed inside a container environment and may cause irreversible damage to the container system, including but not limited to: container data loss, container system corruption, inability to restart the container, etc. Please carefully evaluate the necessity and safety of this command before execution.</string>
+    <string name="risk_command_env_vm_title">High Risk Command - Virtual Machine Environment</string>
+    <string name="risk_command_env_vm_warning">This command is being executed inside a virtual machine environment and may cause irreversible damage to the virtual machine system, including but not limited to: virtual machine data loss, virtual machine system corruption, inability to start the virtual machine, etc. Please carefully evaluate the necessity and safety of this command before execution.</string>
+    <string name="risk_command_env_ssh_title">High Risk Command - Remote System (SSH)</string>
+    <string name="risk_command_env_ssh_warning">This command is being executed on a remote system connected via SSH, which may cause irreversible damage to the remote system, including but not limited to: remote data loss, remote system corruption, service interruption, etc. If the remote system is a production environment, executing this command may result in service interruption, data loss, or even legal liability. Please carefully evaluate the necessity and safety of this command before execution.</string>
+    <string name="risk_command_env_ssh_disk_warning">This disk-level command will run on a remote system connected via SSH. Operations such as dd, mkfs, fdisk and parted may overwrite raw disks, destroy partition tables and erase all data permanently. Mis-specifying a device path can brick the whole remote host, and damaged data is almost unrecoverable. If the remote system is a production environment, executing this command may result in service interruption, massive data loss, or even legal liability. Please double-check target device path and evaluate necessity before execution.</string>
+    <string name="risk_command_env_ssh_disk_windows_warning">This disk-level command will run on a remote Windows system connected via SSH. Operations such as format, diskpart, and bcdedit can format partitions, wipe disk partition tables, modify or delete system boot configurations. diskpart\'s clean / clean all commands will erase all partition information on the disk, and clean-all will overwrite all sectors on the disk, making data almost unrecoverable. Specifying a wrong disk number or drive letter can cause data loss on the entire disk; even while the system is running, administrator privileges can destroy data on non-system volumes. If the remote system is a production environment, executing this command will cause massive data loss, business interruption, and even prevent the system from booting, with potential legal consequences. Please carefully verify disk numbers and drive letters before execution.</string>
+    <!-- SSH power operation dialog -->
+    <string name="risk_command_ssh_power_title">Remote Power Operation Confirmation</string>
+    <string name="risk_command_ssh_power_warning">You are about to shut down or restart a remote system connected via SSH.\n\nAfter you confirm, the remote host will terminate all running programs and services and the SSH session will be disconnected. If you choose to shut down, and there is no one physically present at the remote device or the device does not have Wake-on-LAN capability, the system will remain offline and you will not be able to restore it remotely.\n\nIf this is a production environment, this operation will cause service interruption and potential business losses.\n\nPlease confirm that you really need to perform a power operation before proceeding!</string>
+    <string name="risk_command_ssh_power_confirm_yes">Yes, shut down / restart</string>
+    <string name="risk_command_ssh_power_confirm_no">No</string>
     <string name="risk_command_disable_title">Disable High-Risk Command Confirmation?</string>
     <string name="risk_command_disable_message">Disabling this means high-risk commands will be executed without secondary confirmation. You will lose the safety net that prevents accidental data loss or system damage. We strongly recommend keeping this enabled. By continuing, you acknowledge that you understand the risks and agree that we are not responsible for any consequences.</string>
     <string name="risk_command_disable_checkbox">I understand the risks and confirm to disable high-risk command confirmation; warnings can be re-enabled in Settings.</string>

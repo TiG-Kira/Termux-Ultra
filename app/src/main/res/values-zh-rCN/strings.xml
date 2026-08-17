@@ -339,6 +339,7 @@
     <string name="navigation_bar_default">默认</string>
     <string name="navigation_bar_floating">浮动</string>
     <string name="navigation_bar_liquid_glass">玻璃</string>
+    <string name="navigation_bar_os4">柔光</string>
     <string name="navigation_bar_restart_message">导航栏样式变更将在重启应用后生效。</string>
     <string name="glass_nav_bar_fallback_toast">玻璃导航栏在当前设备渲染失败，已自动切换为默认导航栏。</string>
 
@@ -560,6 +561,21 @@
     <string name="risk_command_confirm_checkbox">我自愿承担执行此命令的全部风险，继续执行</string>
     <string name="risk_command_continue">继续执行</string>
     <string name="access_denied">Access Denied(权限拒绝)</string>
+    <string name="risk_command_container_sudo_warning">检测到容器/SSH/虚拟机环境内提权，请注意使用安全</string>
+    <!-- 环境特定的风险警告 -->
+    <string name="risk_command_env_container_title">高危命令 - 容器环境</string>
+    <string name="risk_command_env_container_warning">此命令正在容器环境中执行，可能会对容器系统造成不可逆的损害，包括但不限于：容器数据丢失、容器系统损坏、容器无法重新启动等。请在执行前仔细评估此命令的必要性和安全性。</string>
+    <string name="risk_command_env_vm_title">高危命令 - 虚拟机环境</string>
+    <string name="risk_command_env_vm_warning">此命令正在虚拟机环境中执行，可能会对虚拟机系统造成不可逆的损害，包括但不限于：虚拟机数据丢失、虚拟机系统损坏、虚拟机无法启动等。请在执行前仔细评估此命令的必要性和安全性。</string>
+    <string name="risk_command_env_ssh_title">高危命令 - 远程系统 (SSH)</string>
+    <string name="risk_command_env_ssh_warning">此命令正在通过 SSH 连接的远程系统上执行，可能会对远程系统造成不可逆的损害，包括但不限于：远程数据丢失、远程系统损坏、服务中断等。如果远程系统为生产环境，执行此命令可能导致服务中断、数据丢失，甚至带来法律风险。请在执行前仔细评估此命令的必要性和安全性。</string>
+    <string name="risk_command_env_ssh_disk_warning">此磁盘级命令将在通过 SSH 连接的远程系统上执行。dd、mkfs、fdisk 和 parted 等操作可能会覆盖原始磁盘、破坏分区表并永久擦除所有数据。错误指定设备路径可能导致远程主机完全无法启动，且损坏的数据几乎无法恢复。如果远程系统为生产环境，执行此命令可能导致服务中断、大规模数据丢失，甚至带来法律风险。请在执行前仔细检查目标设备路径并评估执行的必要性。</string>
+    <string name="risk_command_env_ssh_disk_windows_warning">此磁盘级命令将在通过 SSH 连接的远程 Windows 系统上执行。format、diskpart、bcdedit 等操作可格式化分区、擦除磁盘分区表、修改或删除系统启动配置。diskpart 的 clean / clean all 指令会清除磁盘全部分区信息，clean-all 将覆写磁盘全部扇区，数据几乎无法恢复。错误指定磁盘号、盘符会造成整块磁盘数据丢失；即使系统正在运行，管理员权限仍可摧毁非系统卷数据。如果远程系统为生产环境，执行此命令将造成大规模数据丢失、业务中断甚至系统无法启动，并可能带来法律风险。请在执行前仔细核对磁盘编号、盘符，评估执行必要性。</string>
+    <!-- SSH 电源操作弹窗 -->
+    <string name="risk_command_ssh_power_title">远程电源操作确认</string>
+    <string name="risk_command_ssh_power_warning">您即将对通过 SSH 连接的远程系统执行关机或重新启动。\n\n您确认后，远程主机将终止全部正在运行的程序与服务并断开 SSH 会话。如您选择关机，如果没有相关人员物理接触此远程设备或此设备不具备网络开机能力，系统将要持续离线，您无法通过远程方式恢复运行。\n\n若此环境为生产环境，此操作会造成服务中断与可能的业务损失。\n\n请确认您确实需要执行电源操作再继续！</string>
+    <string name="risk_command_ssh_power_confirm_yes">是，关机/重启</string>
+    <string name="risk_command_ssh_power_confirm_no">否</string>
     <string name="risk_command_disable_title">关闭高危命令二次确认？</string>
     <string name="risk_command_disable_message">关闭后高危命令将不再经过二次确认直接执行，您将失去防止意外数据丢失或系统损坏的安全屏障。强烈建议保持开启。继续操作即表示您已知晓风险，并同意本应用不承担任何后果。</string>
     <string name="risk_command_disable_checkbox">我清楚风险，确认关闭高危命令二次确认；可在设置中重新开启提醒</string>

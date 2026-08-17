@@ -11,12 +11,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowForward
 import androidx.compose.material.icons.rounded.ExpandLess
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Divider
-import androidx.compose.material3.Text
+import top.yukonga.miuix.kmp.basic.Button
+import top.yukonga.miuix.kmp.basic.ButtonDefaults
+import top.yukonga.miuix.kmp.basic.HorizontalDivider
+import top.yukonga.miuix.kmp.basic.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -190,11 +188,10 @@ fun ResourceCard(
         }
     }
 
-    androidx.compose.material3.Card(
+    MiuixCard(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp)),
-        colors = CardDefaults.cardColors(containerColor = cardBackgroundColor)
+            .clip(RoundedCornerShape(16.dp))
     ) {
         Column {
             Row(
@@ -243,7 +240,7 @@ fun ResourceCard(
             }
 
             if (item.url.isNotEmpty() || item.scriptUrl.isNotEmpty() || item.type == "qemu_on_vnc" || item.hasHelp) {
-                Divider(color = dividerColor)
+                HorizontalDivider(color = dividerColor)
                 
                 Row(
                     modifier = Modifier
@@ -269,7 +266,7 @@ fun ResourceCard(
                                 .padding(end = 8.dp)
                                 .clip(RoundedCornerShape(8.dp)),
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = if (isDark) Color(0xFF424242) else Color(0xFFE0E0E0)
+                                color = if (isDark) Color(0xFF424242) else Color(0xFFE0E0E0)
                             )
                         ) {
                             Text(text = "说明", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = onSurfaceColor)
@@ -287,7 +284,7 @@ fun ResourceCard(
                             },
                             modifier = Modifier.clip(RoundedCornerShape(8.dp)),
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = if (isFeatureDisabled) disabledButtonColor else MiuixTheme.colorScheme.primary
+                                color = if (isFeatureDisabled) disabledButtonColor else MiuixTheme.colorScheme.primary
                             )
                         ) {
                             Icon(
@@ -308,7 +305,7 @@ fun ResourceCard(
                             },
                             modifier = Modifier.clip(RoundedCornerShape(8.dp)),
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = if (isFeatureDisabled) disabledButtonColor else MiuixTheme.colorScheme.primary
+                                color = if (isFeatureDisabled) disabledButtonColor else MiuixTheme.colorScheme.primary
                             )
                         ) {
                             Icon(
@@ -367,7 +364,7 @@ fun ResourceCard(
                             .padding(bottom = 8.dp)
                             .clip(RoundedCornerShape(12.dp)),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = MiuixTheme.colorScheme.primary
+                            color = MiuixTheme.colorScheme.primary
                         )
                     ) {
                         Icon(
@@ -387,7 +384,7 @@ fun ResourceCard(
                                 .padding(bottom = 8.dp)
                                 .clip(RoundedCornerShape(12.dp)),
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = surfaceVariantColor
+                                color = surfaceVariantColor
                             )
                         ) {
                             Icon(
@@ -421,7 +418,7 @@ fun ResourceCard(
                                         .fillMaxWidth()
                                         .clip(RoundedCornerShape(12.dp)),
                                     colors = ButtonDefaults.buttonColors(
-                                        containerColor = surfaceVariantColor
+                                        color = surfaceVariantColor
                                     )
                                 ) {
                                     Icon(
