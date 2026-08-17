@@ -55,7 +55,12 @@ class ThirdPartyCenterActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
         setContent {
-            com.termux.app.compose.KiTerminalTheme {
+            val navDispatcher = com.termux.app.compose.NavigationHelper.createDispatcher()
+            val navDispatcherOwner = com.termux.app.compose.NavigationHelper.createOwner(navDispatcher)
+            androidx.compose.runtime.CompositionLocalProvider(
+                androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner provides navDispatcherOwner
+            ) {
+                com.termux.app.compose.KiTerminalTheme {
                 val context = this@ThirdPartyCenterActivity
                 val scrollBehavior = MiuixScrollBehavior()
 
@@ -485,6 +490,7 @@ class ThirdPartyCenterActivity : ComponentActivity() {
                         }
                     }
                 }
+            }
             }
         }
     }

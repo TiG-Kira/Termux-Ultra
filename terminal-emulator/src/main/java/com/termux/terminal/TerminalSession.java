@@ -153,6 +153,11 @@ public final class TerminalSession extends TerminalOutput {
         return mShellPath;
     }
 
+    /** Get the command arguments for this session. */
+    public String[] getArgs() {
+        return mArgs;
+    }
+
     /**
      * Set the terminal emulator's window size and start terminal emulation.
      *
@@ -301,10 +306,13 @@ public final class TerminalSession extends TerminalOutput {
         }
     }
 
-    /** 用户拒绝危险命令，清除行并显示错误 */
+    /** 用户拒绝危险命令，返回 Permission Denied 错误并清除行 */
     public void denyPendingCommand() {
         if (mPendingDangerousCommand != null) {
-            // Send Ctrl+U to kill the current line
+            // 向终端输出 "Permission Denied" 错误信息
+            byte[] errorMsg = "\r\nTermux-Confirm: Permission Denied\r\n".getBytes();
+            mProcessToTerminalIOQueue.write(errorMsg, 0, errorMsg.length);
+            // 发送 Ctrl+U 清除当前输入行
             byte[] killLine = new byte[]{0x15};
             mTerminalToProcessIOQueue.write(killLine, 0, 1);
             mPendingDangerousCommand = null;

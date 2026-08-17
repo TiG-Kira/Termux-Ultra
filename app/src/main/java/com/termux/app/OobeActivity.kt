@@ -72,20 +72,26 @@ class OobeActivity : ComponentActivity() {
             updatePermissionStatus()
 
             setContent {
-                KiTerminalTheme {
-                    OobeScreen(
-                        permissionStatus = permissionStatus,
-                        isNextEnabled = isNextEnabled,
-                        isBootstrapping = isBootstrapping,
-                        onGrantAllPermissions = { grantAllPermissions() },
-                        onComplete = {
-                            if (isNextEnabled) {
-                                performBootstrap()
-                            } else {
-                                Toast.makeText(this, R.string.oobe_permission_required, Toast.LENGTH_SHORT).show()
+                val navDispatcher = com.termux.app.compose.NavigationHelper.createDispatcher()
+                val navDispatcherOwner = com.termux.app.compose.NavigationHelper.createOwner(navDispatcher)
+                androidx.compose.runtime.CompositionLocalProvider(
+                    androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner provides navDispatcherOwner
+                ) {
+                    KiTerminalTheme {
+                        OobeScreen(
+                            permissionStatus = permissionStatus,
+                            isNextEnabled = isNextEnabled,
+                            isBootstrapping = isBootstrapping,
+                            onGrantAllPermissions = { grantAllPermissions() },
+                            onComplete = {
+                                if (isNextEnabled) {
+                                    performBootstrap()
+                                } else {
+                                    Toast.makeText(this, R.string.oobe_permission_required, Toast.LENGTH_SHORT).show()
+                                }
                             }
-                        }
-                    )
+                        )
+                    }
                 }
             }
         } catch (t: Throwable) {

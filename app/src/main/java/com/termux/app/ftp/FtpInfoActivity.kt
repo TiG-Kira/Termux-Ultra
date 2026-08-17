@@ -40,8 +40,14 @@ class FtpInfoActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            KiTerminalTheme {
-                FtpInfoScreen()
+            val navDispatcher = com.termux.app.compose.NavigationHelper.createDispatcher()
+            val navDispatcherOwner = com.termux.app.compose.NavigationHelper.createOwner(navDispatcher)
+            androidx.compose.runtime.CompositionLocalProvider(
+                androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner provides navDispatcherOwner
+            ) {
+                KiTerminalTheme {
+                    FtpInfoScreen()
+                }
             }
         }
     }

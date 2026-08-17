@@ -305,6 +305,46 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
         // 保存 Agent 待确认状态到 SharedPreferences
         RiskConfirmManager.saveAgentPendingState(ctx, pending.first, pending.second.toString(), messageId)
 
+        // 解析命令并设置弹窗状态，确保在主页能显示二次确认对话框
+        val params = runCatching {
+            com.google.gson.JsonParser.parseString(pending.second.toString()).asJsonObject
+        }.getOrNull()
+        val command = params?.let {
+            when (pending.first) {
+                SkillType.RUN_COMMAND.name -> if (it.has("command")) it.get("command").asString else ""
+                else -> card.dangerousAction ?: ""
+            }
+        } ?: (card.dangerousAction ?: "")
+
+        val detection = RiskCommandDetector.detect(command)
+        if (detection.isDangerous) {
+            RiskConfirmManager._dialogState.value = RiskConfirmManager.DialogState(
+                command = command,
+                riskDescription = detection.description,
+                riskType = detection.riskType?.displayName ?: "高危操作",
+                environmentType = RiskConfirmManager.EnvironmentType.NATIVE,
+                isWindowsDiskCommand = detection.isWindowsDiskCommand
+            )
+            RiskConfirmManager.startCountdown()
+        }
+
+        // 60 秒超时自动拒绝（走取消逻辑，恢复 Agent 会话）
+        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+            val prefs = ctx.getSharedPreferences(RiskConfirmManager.PREFS_NAME, Context.MODE_PRIVATE)
+            val action = prefs.getString(RiskConfirmManager.KEY_AGENT_PENDING_ACTION, null)
+            val result = prefs.getString(RiskConfirmManager.KEY_AGENT_PENDING_RESULT, null)
+            if (action != null && result == null) {
+                // 超时未处理，自动拒绝
+                prefs.edit().putString(RiskConfirmManager.KEY_AGENT_PENDING_RESULT, RiskConfirmManager.RESULT_DENIED).apply()
+                RiskConfirmManager._dialogState.value = null
+                RiskConfirmManager.stopCountdown()
+                // 导航回 AiTermuxActivity 处理拒绝结果
+                val intent = Intent(ctx, AiTermuxActivity::class.java)
+                intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
+                ctx.startActivity(intent)
+            }
+        }, 60000L)
+
         synchronized(messages) {
             messages[idx] = old.copy(
                 skillCard = card.copy(status = SkillStatus.RUNNING, title = "等待二次确认…")
@@ -342,6 +382,8 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
         runInScope {
             isLoading = true
             try {
+                // 跳过风险确认：用户已在对话框中确认过
+                RiskConfirmManager.setSkipRiskCheck(true)
                 val svc = termuxService
                 val result = SkillExecutor.executeSkill(
                     ctx, svc, skillType, params
@@ -364,6 +406,8 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
                 AiTermuxPrefs.saveChatHistory(ctx, messages.toList())
                 continueAfterSkill(ctx, resultCard, result.message)
             } finally {
+                // 恢复风险确认标志
+                RiskConfirmManager.setSkipRiskCheck(false)
                 isLoading = false
                 AiTermuxPrefs.saveChatHistory(ctx, messages.toList())
             }
@@ -1284,7 +1328,7 @@ private fun AiSetupScreen(vm: AiTermuxViewModel, onBack: () -> Unit) {
                             color = if (isDark) Color(0xFF424242) else Color(0xFFE0E0E0)
                         )
                     ) {
-                        if (testing) CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                        if (testing) androidx.compose.material3.CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
                         else Text("测试连接", color = MiuixTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
                     }
                     Button(
@@ -1507,7 +1551,7 @@ private fun AiChatScreen(vm: AiTermuxViewModel, onBack: () -> Unit) {
                         TextField(
                             value = inputText,
                             onValueChange = { inputText = it },
-                            label = "需要 Termux Agent 做什么…",
+                            label = "需要 Agent 做什么…",
                             modifier = Modifier
                                 .weight(1f)
                                 .focusRequester(focusRequester),
@@ -1545,7 +1589,7 @@ private fun AiChatScreen(vm: AiTermuxViewModel, onBack: () -> Unit) {
                                 )
                         ) {
                             if (vm.isLoading) {
-                                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                                androidx.compose.material3.CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                             } else {
                                 Icon(
                                     imageVector = Icons.AutoMirrored.Rounded.Send,

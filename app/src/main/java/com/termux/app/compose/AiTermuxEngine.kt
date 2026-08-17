@@ -74,12 +74,40 @@ object SkillExecutor {
                 val cmd = if (params.has("command")) params.get("command").asString else ""
                 if (cmd.isBlank()) return null
                 val result = RiskCommandDetector.detect(cmd)
-                if (result.isDangerous) result.description else null
+                if (result.isDangerous) {
+                    // 如果是 su/sudo，检查是否包装了其他危险命令
+                    if (result.riskType == RiskCommandDetector.RiskType.SU_SUDO) {
+                        val wrapped = extractWrappedCommandForCheck(cmd)
+                        if (wrapped != null) {
+                            val wrappedResult = RiskCommandDetector.detect(wrapped)
+                            if (wrappedResult.isDangerous && wrappedResult.riskType != RiskCommandDetector.RiskType.SU_SUDO) {
+                                return wrappedResult.description
+                            }
+                        }
+                    }
+                    result.description
+                } else null
             }
             SkillType.CLOSE_ALL_SESSIONS -> "将关闭所有正在运行的终端会话，未保存的内容会丢失"
             SkillType.EXIT_TERMUX -> "将退出 Termux 应用，所有运行中的进程会终止"
             else -> null
         }
+    }
+
+    /** 从 su/sudo 命令中提取被包装的子命令（用于 Agent 危险检测） */
+    private fun extractWrappedCommandForCheck(command: String): String? {
+        val trimmed = command.trim()
+        val sudoPattern = Regex("""^\s*sudo\s+(.*)""", RegexOption.DOT_MATCHES_ALL)
+        val sudoMatch = sudoPattern.find(trimmed)
+        if (sudoMatch != null) {
+            return sudoMatch.groupValues[1].trim()
+        }
+        val suPattern = Regex("""^\s*su\s+-c\s+['"]?(.+?)['"]?\s*$""", RegexOption.DOT_MATCHES_ALL)
+        val suMatch = suPattern.find(trimmed)
+        if (suMatch != null) {
+            return suMatch.groupValues[1].trim()
+        }
+        return null
     }
 
     /** 从 AI 回复内容中解析技能块（支持多种代码块标记或直接 JSON） */
@@ -1089,13 +1117,15 @@ object SkillExecutor {
         val sessionId = if (params.has("sessionId")) params.get("sessionId").asString else ""
         val sessionName = if (params.has("sessionName")) params.get("sessionName").asString else null
 
-        // 高危命令二次确认
-        val confirmed = RiskConfirmManager.requestConfirmation(context, command)
-        if (!confirmed) {
-            return@withContext SkillExecutionResult(
-                false,
-                context.getString(com.termux.R.string.access_denied)
-            )
+        // 高危命令二次确认（如果已经由 Agent 流程确认过则跳过）
+        if (!RiskConfirmManager.shouldSkipRiskCheck()) {
+            val confirmed = RiskConfirmManager.requestConfirmation(context, command)
+            if (!confirmed) {
+                return@withContext SkillExecutionResult(
+                    false,
+                    context.getString(com.termux.R.string.access_denied)
+                )
+            }
         }
 
         return@withContext try {

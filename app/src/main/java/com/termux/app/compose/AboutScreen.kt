@@ -343,7 +343,7 @@ fun AboutScreen(onBack: () -> Unit) {
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 if (checkingUpdate) {
-                                    top.yukonga.miuix.kmp.basic.CircularProgressIndicator(
+                                    androidx.compose.material3.CircularProgressIndicator(
                                         modifier = Modifier.size(16.dp),
                                         strokeWidth = 2.dp
                                     )
