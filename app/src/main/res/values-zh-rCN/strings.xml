@@ -190,6 +190,10 @@
     <string name="rename">重命名</string>
     <string name="rename_terminal">重命名终端</string>
     <string name="terminal_name">终端名称</string>
+    <string name="terminal_sessions">终端会话</string>
+    <string name="terminal_new_session">新会话</string>
+    <string name="terminal_new_safe_session">新安全模式会话</string>
+    <string name="current_session">当前会话</string>
     <string name="terminal_default_name">终端</string>
     <string name="files_title">文件</string>
     <string name="terminal_title">终端</string>

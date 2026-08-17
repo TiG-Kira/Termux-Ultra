@@ -217,13 +217,13 @@ private fun MainTermuxSettingsPage(
     ) {
         item { SmallTitle(text = stringResource(R.string.terminal)) }
         item {
-            SettingsCard {
+            SettingCard {
                 ArrowPreference(
                     title = stringResource(R.string.termux_preferences_title),
                     summary = stringResource(R.string.termux_preferences_summary),
                     onClick = { onNavigate(TermuxSettingsPage.TERMINAL) },
                     startAction = {
-                        SettingsIconBox(R.drawable.ic_terminal)
+                        SettingIcon(R.drawable.ic_terminal)
                     }
                 )
             }
@@ -232,7 +232,7 @@ private fun MainTermuxSettingsPage(
         if (visiblePluginItems.isNotEmpty()) {
             item { SmallTitle(text = stringResource(R.string.integrated_tools_category)) }
             item {
-                SettingsCard {
+                SettingCard {
                     PluginItemsList(
                         items = pluginItems,
                         onNavigate = onNavigate
@@ -243,7 +243,7 @@ private fun MainTermuxSettingsPage(
 
         item { SmallTitle(text = stringResource(R.string.termux_native_about_title)) }
         item {
-            SettingsCard {
+            SettingCard {
                 ArrowPreference(
                     title = stringResource(R.string.termux_native_about_title),
                     summary = stringResource(R.string.termux_native_about_summary),
@@ -251,7 +251,7 @@ private fun MainTermuxSettingsPage(
                         launchAboutReport(context)
                     },
                     startAction = {
-                        SettingsIconBox(R.drawable.ic_info)
+                        SettingIcon(R.drawable.ic_info)
                     }
                 )
             }
@@ -336,7 +336,7 @@ private fun PluginItemsList(
             summary = item.summary,
             onClick = { onNavigate(item.page) },
             startAction = {
-                SettingsIconBox(item.iconRes)
+                SettingIcon(item.iconRes)
             }
         )
         if (index < visibleItems.size - 1) {
@@ -359,13 +359,13 @@ private fun TerminalSettingsPage(
     ) {
         item { SmallTitle(text = stringResource(R.string.terminal)) }
         item {
-            SettingsCard {
+            SettingCard {
                 ArrowPreference(
                     title = stringResource(R.string.termux_terminal_io_preferences_title),
                     summary = stringResource(R.string.termux_terminal_io_preferences_summary),
                     onClick = { onNavigate(TermuxSettingsPage.TERMINAL_IO) },
                     startAction = {
-                        SettingsIconBox(R.drawable.ic_keyboard)
+                        SettingIcon(R.drawable.ic_keyboard)
                     }
                 )
                 HorizontalDivider(
@@ -377,7 +377,7 @@ private fun TerminalSettingsPage(
                     summary = stringResource(R.string.termux_terminal_view_preferences_summary),
                     onClick = { onNavigate(TermuxSettingsPage.TERMINAL_VIEW) },
                     startAction = {
-                        SettingsIconBox(R.drawable.ic_screen_rotation)
+                        SettingIcon(R.drawable.ic_screen_rotation)
                     }
                 )
                 HorizontalDivider(
@@ -389,7 +389,7 @@ private fun TerminalSettingsPage(
                     summary = stringResource(R.string.termux_debugging_preferences_summary),
                     onClick = { onNavigate(TermuxSettingsPage.DEBUGGING) },
                     startAction = {
-                        SettingsIconBox(R.drawable.ic_bug)
+                        SettingIcon(R.drawable.ic_bug)
                     }
                 )
             }
@@ -413,7 +413,7 @@ private fun TerminalViewSettingsPage(
     ) {
         item { SmallTitle(text = stringResource(R.string.termux_terminal_view_view_header)) }
         item {
-            SettingsCard {
+            SettingCard {
                 SwitchPreference(
                     title = stringResource(R.string.termux_terminal_view_terminal_margin_adjustment_title),
                     summary = stringResource(
@@ -426,7 +426,7 @@ private fun TerminalViewSettingsPage(
                         prefs?.setTerminalMarginAdjustment(it)
                     },
                     startAction = {
-                        SettingsIconBox(R.drawable.ic_screen_rotation)
+                        SettingIcon(R.drawable.ic_screen_rotation)
                     }
                 )
             }
@@ -451,7 +451,7 @@ private fun TerminalIoSettingsPage(
     ) {
         item { SmallTitle(text = stringResource(R.string.termux_keyboard_header)) }
         item {
-            SettingsCard {
+            SettingCard {
                 SwitchPreference(
                     title = stringResource(R.string.termux_soft_keyboard_enabled_title),
                     summary = stringResource(
@@ -464,7 +464,7 @@ private fun TerminalIoSettingsPage(
                         prefs?.setSoftKeyboardEnabled(it)
                     },
                     startAction = {
-                        SettingsIconBox(R.drawable.ic_keyboard)
+                        SettingIcon(R.drawable.ic_keyboard)
                     }
                 )
                 HorizontalDivider(
@@ -483,7 +483,7 @@ private fun TerminalIoSettingsPage(
                         prefs?.setSoftKeyboardEnabledOnlyIfNoHardware(it)
                     },
                     startAction = {
-                        SettingsIconBox(R.drawable.ic_keyboard)
+                        SettingIcon(R.drawable.ic_keyboard)
                     }
                 )
             }
@@ -519,7 +519,7 @@ private fun DebuggingSettingsPage(
     ) {
         item { SmallTitle(text = stringResource(R.string.termux_logging_header)) }
         item {
-            SettingsCard {
+            SettingCard {
                 OverlayDropdownPreference(
                     title = stringResource(R.string.termux_log_level_title),
                     summary = logLevelItems[logLevel],
@@ -530,7 +530,7 @@ private fun DebuggingSettingsPage(
                         prefs?.setLogLevel(context, idx)
                     },
                     startAction = {
-                        SettingsIconBox(R.drawable.ic_bug)
+                        SettingIcon(R.drawable.ic_bug)
                     }
                 )
                 HorizontalDivider(
@@ -549,7 +549,7 @@ private fun DebuggingSettingsPage(
                         prefs?.setTerminalViewKeyLoggingEnabled(it)
                     },
                     startAction = {
-                        SettingsIconBox(R.drawable.ic_bug)
+                        SettingIcon(R.drawable.ic_bug)
                     }
                 )
                 HorizontalDivider(
@@ -568,7 +568,7 @@ private fun DebuggingSettingsPage(
                         prefs?.setPluginErrorNotificationsEnabled(it)
                     },
                     startAction = {
-                        SettingsIconBox(R.drawable.ic_error)
+                        SettingIcon(R.drawable.ic_error)
                     }
                 )
                 HorizontalDivider(
@@ -587,7 +587,7 @@ private fun DebuggingSettingsPage(
                         prefs?.setCrashReportNotificationsEnabled(it)
                     },
                     startAction = {
-                        SettingsIconBox(R.drawable.ic_error)
+                        SettingIcon(R.drawable.ic_error)
                     }
                 )
             }
@@ -617,13 +617,13 @@ private fun PluginSettingsPage(
     ) {
         item { SmallTitle(text = title) }
         item {
-            SettingsCard {
+            SettingCard {
                 ArrowPreference(
                     title = stringResource(R.string.termux_debugging_preferences_title),
                     summary = stringResource(R.string.termux_debugging_preferences_summary),
                     onClick = { },
                     startAction = {
-                        SettingsIconBox(R.drawable.ic_bug)
+                        SettingIcon(R.drawable.ic_bug)
                     }
                 )
             }
@@ -634,7 +634,7 @@ private fun PluginSettingsPage(
 }
 
 @Composable
-private fun SettingsCard(
+internal fun SettingCard(
     content: @Composable () -> Unit
 ) {
     Card(
@@ -649,7 +649,7 @@ private fun SettingsCard(
 }
 
 @Composable
-private fun SettingsIconBox(iconRes: Int) {
+internal fun SettingIcon(iconRes: Int) {
     Box(
         modifier = Modifier
             .size(40.dp),

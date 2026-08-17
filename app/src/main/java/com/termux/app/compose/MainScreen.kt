@@ -202,6 +202,7 @@ fun MainScreen(
     }
 
     Scaffold(
+        modifier = Modifier.fillMaxSize(),
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         snackbarHost = { SnackbarHost(state = snackbarHostState) },
         bottomBar = {
@@ -497,7 +498,7 @@ fun MainScreen(
                         }
                     }
                 },
-                modifier = Modifier.graphicsLayer {
+                modifier = Modifier.fillMaxSize().graphicsLayer {
                     translationX = dragOffset
                 }
             ) { tab ->

@@ -1,6 +1,5 @@
-package com.gaurav.avnc.ui.prefs
+package com.termux.app.activities
 
-import android.content.Context
 import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
@@ -8,16 +7,11 @@ import androidx.activity.compose.setContent
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.core.view.WindowCompat
 import androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner
-import com.termux.app.LocaleHelper
 import com.termux.app.compose.KiTerminalTheme
 import com.termux.app.compose.NavigationHelper
-import com.termux.app.compose.VncSettingsScreen
+import com.termux.app.compose.TermuxStylingScreen
 
-class PrefsActivity : ComponentActivity() {
-
-    override fun attachBaseContext(newBase: Context) {
-        super.attachBaseContext(LocaleHelper.attachBaseContext(newBase))
-    }
+class TermuxStylingActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -31,7 +25,7 @@ class PrefsActivity : ComponentActivity() {
                 LocalNavigationEventDispatcherOwner provides navDispatcherOwner
             ) {
                 KiTerminalTheme {
-                    VncSettingsScreen(
+                    TermuxStylingScreen(
                         onBack = { finish() }
                     )
                 }

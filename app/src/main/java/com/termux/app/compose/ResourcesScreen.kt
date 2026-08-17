@@ -67,6 +67,7 @@ fun ResourcesScreen() {
     val scrollBehavior = MiuixScrollBehavior()
 
     Scaffold(
+        modifier = Modifier.fillMaxSize(),
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(title = stringResource(R.string.resources_center), scrollBehavior = scrollBehavior)

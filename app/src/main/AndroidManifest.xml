@@ -181,6 +181,30 @@
             android:label="@string/application_name" />
 
         <activity
+            android:name=".app.activities.TermuxCrashReportActivity"
+            android:exported="false"
+            android:label="@string/title_crash_report"
+            android:theme="@style/Theme.AppCompat.DayNight.NoActionBar" />
+
+        <activity
+            android:name=".app.activities.TermuxStylingActivity"
+            android:exported="false"
+            android:label="@string/title_styling"
+            android:theme="@style/Theme.AppCompat.DayNight.NoActionBar" />
+
+        <activity
+            android:name=".app.activities.TermuxTaskerActivity"
+            android:exported="false"
+            android:label="@string/title_tasker_settings"
+            android:theme="@style/Theme.AppCompat.DayNight.NoActionBar" />
+
+        <activity
+            android:name=".app.activities.TermuxWidgetActivity"
+            android:exported="false"
+            android:label="@string/title_widget_settings"
+            android:theme="@style/Theme.AppCompat.DayNight.NoActionBar" />
+
+        <activity
             android:name=".shared.activities.ReportActivity"
             android:theme="@style/Theme.AppCompat.TermuxReportActivity"
             android:documentLaunchMode="intoExisting"

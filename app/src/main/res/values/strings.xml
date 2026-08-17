@@ -202,6 +202,10 @@
     <string name="rename">Rename</string>
     <string name="rename_terminal">Rename Terminal</string>
     <string name="terminal_name">Terminal Name</string>
+    <string name="terminal_sessions">Terminal Sessions</string>
+    <string name="terminal_new_session">New Session</string>
+    <string name="terminal_new_safe_session">New Safe Mode Session</string>
+    <string name="current_session">Current Session</string>
     <string name="terminal_default_name">Terminal</string>
     <string name="files_title">Files</string>
     <string name="terminal_title">Terminal</string>
@@ -660,5 +664,46 @@
     <string name="risk_command_biometric_not_set">Biometric verification not set up on this device. Skipped verification. It is recommended to set up screen lock (PIN/pattern) or biometric authentication in system settings for better security.</string>
     <string name="authorization_required_title">Your authorization is required to continue</string>
     <string name="accessibility_guard_blocked_toast">Please tap the button manually to complete this operation. Third-party accessibility services are not allowed to handle this action.</string>
+
+    <!-- Crash Report -->
+    <string name="title_crash_report">Crash Report</string>
+    <string name="crash_report_warning">This report contains information about your device and the Termux Ultra app that can help diagnose issues. Share it only with trusted parties.</string>
+    <string name="copy_report">Copy Report</string>
+    <string name="copy_report_summary">Copy the full report to clipboard</string>
+    <string name="report_copied">Report copied to clipboard</string>
+    <string name="share">Share</string>
+    <string name="share_report">Share Report</string>
+    <string name="share_report_summary">Share the crash report via email or messaging apps</string>
+
+    <!-- Styling -->
+    <string name="title_styling">Styling</string>
+    <string name="styling_header">Appearance</string>
+    <string name="choose_color">Choose Color</string>
+    <string name="choose_font">Choose Font</string>
+    <string name="no_license_available">No license information available for this style.</string>
+    <string name="writing_failed">Failed to install file:\n\n</string>
+
+    <!-- Tasker -->
+    <string name="title_tasker_settings">Tasker Settings</string>
+    <string name="tasker_executable_header">Executable</string>
+    <string name="tasker_arguments_header">Arguments</string>
+    <string name="tasker_working_directory_header">Working Directory</string>
+    <string name="tasker_options_header">Options</string>
+    <string name="executable_path_hint">Executable (file in ~/.termux/tasker/ or absolute path to executable)</string>
+    <string name="arguments_hint">Arguments</string>
+    <string name="working_directory_path_hint">Working directory path</string>
+    <string name="execute_in_terminal">Execute in a terminal session</string>
+    <string name="executable_required">Executable required.</string>
+    <string name="termux_app_not_installed_or_disabled_warning">The Termux app is not installed or is disabled. It is required by the Termux:Tasker plugin app to run plugin commands.</string>
+
+    <!-- Widget -->
+    <string name="title_widget_settings">Shortcuts &amp; Widgets Settings</string>
+    <string name="plugin_info">Termux:Widget is a plugin app for the Termux app. Check Termux app github %1$s and Termux:Widget app github %2$s for more info.</string>
+    <string name="msg_disable_launcher_icon_details">The Termux:Widget app does not require a launcher icon/activity to function. You can optionally disable it if you want and can enable it again by reinstalling the app or from the Termux app settings.</string>
+    <string name="action_disable_launcher_icon">Disable Launcher Icon</string>
+    <string name="msg_disabling_launcher_icon">Disabling launcher icon for %1$s</string>
+    <string name="launcher_icon_disabled">Launcher icon has been disabled</string>
+    <string name="disable_launcher_icon_title">Disable Launcher Icon?</string>
+    <string name="disable_launcher_icon_message">The Termux:Widget app does not require a launcher icon to function. Are you sure you want to disable it? You can re-enable it later from the app settings.</string>
 
 </resources>

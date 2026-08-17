@@ -136,13 +136,13 @@ private fun MainVncSettingsPage(
     ) {
         item { SmallTitle(text = stringResource(R.string.vnc_settings_title)) }
         item {
-            SettingsCard {
+            VncSettingCard {
                 ArrowPreference(
                     title = stringResource(R.string.pref_viewer),
                     summary = stringResource(R.string.pref_viewer_summary),
                     onClick = { onNavigate(VncSettingsPage.VIEWER) },
                     startAction = {
-                        SettingsIconBox(R.drawable.ic_video)
+                        VncSettingIcon(R.drawable.ic_video)
                     }
                 )
                 HorizontalDivider(
@@ -154,7 +154,7 @@ private fun MainVncSettingsPage(
                     summary = stringResource(R.string.pref_input_summary),
                     onClick = { onNavigate(VncSettingsPage.INPUT) },
                     startAction = {
-                        SettingsIconBox(R.drawable.ic_keyboard_vnc)
+                        VncSettingIcon(R.drawable.ic_keyboard_vnc)
                     }
                 )
                 HorizontalDivider(
@@ -166,7 +166,7 @@ private fun MainVncSettingsPage(
                     summary = stringResource(R.string.pref_server_summary),
                     onClick = { onNavigate(VncSettingsPage.SERVER) },
                     startAction = {
-                        SettingsIconBox(R.drawable.ic_server)
+                        VncSettingIcon(R.drawable.ic_server)
                     }
                 )
             }
@@ -225,7 +225,7 @@ private fun ViewerSettingsPage(
     ) {
         item { SmallTitle(text = stringResource(R.string.pref_viewer)) }
         item {
-            SettingsCard {
+            VncSettingCard {
                 OverlayDropdownPreference(
                     title = stringResource(R.string.pref_orientation),
                     summary = "选择屏幕显示方向",
@@ -236,7 +236,7 @@ private fun ViewerSettingsPage(
                         prefs.edit().putString("viewer_orientation", orientationValues[idx]).apply()
                     },
                     startAction = {
-                        SettingsIconBox(R.drawable.ic_screen_rotation)
+                        VncSettingIcon(R.drawable.ic_screen_rotation)
                     }
                 )
                 HorizontalDivider(
@@ -252,7 +252,7 @@ private fun ViewerSettingsPage(
                         prefs.edit().putBoolean("keep_screen_on", it).apply()
                     },
                     startAction = {
-                        SettingsIconBox(R.drawable.ic_wake_on_lan)
+                        VncSettingIcon(R.drawable.ic_wake_on_lan)
                     }
                 )
                 HorizontalDivider(
@@ -268,7 +268,7 @@ private fun ViewerSettingsPage(
                         prefs.edit().putBoolean("fullscreen_display", it).apply()
                     },
                     startAction = {
-                        SettingsIconBox(R.drawable.ic_fullscreen)
+                        VncSettingIcon(R.drawable.ic_fullscreen)
                     }
                 )
                 if (fullscreenDisplay) {
@@ -285,7 +285,7 @@ private fun ViewerSettingsPage(
                             prefs.edit().putBoolean("viewer_draw_behind_cutout", it).apply()
                         },
                         startAction = {
-                            SettingsIconBox(R.drawable.ic_cut)
+                            VncSettingIcon(R.drawable.ic_cut)
                         }
                     )
                 }
@@ -303,7 +303,7 @@ private fun ViewerSettingsPage(
                         prefs.edit().putBoolean("pip_enabled", it).apply()
                     },
                     startAction = {
-                        SettingsIconBox(R.drawable.ic_video)
+                        VncSettingIcon(R.drawable.ic_video)
                     }
                 )
                 HorizontalDivider(
@@ -319,7 +319,7 @@ private fun ViewerSettingsPage(
                         prefs.edit().putBoolean("pause_fb_updates_in_background", it).apply()
                     },
                     startAction = {
-                        SettingsIconBox(R.drawable.ic_video_off)
+                        VncSettingIcon(R.drawable.ic_video_off)
                     }
                 )
             }
@@ -327,7 +327,7 @@ private fun ViewerSettingsPage(
 
         item { SmallTitle(text = stringResource(R.string.pref_zoom)) }
         item {
-            SettingsCard {
+            VncSettingCard {
                 OverlayDropdownPreference(
                     title = stringResource(R.string.pref_zoom_min),
                     summary = "调整最小缩放比例",
@@ -339,7 +339,7 @@ private fun ViewerSettingsPage(
                         prefs.edit().putInt("zoom_min", value).apply()
                     },
                     startAction = {
-                        SettingsIconBox(R.drawable.ic_zoom_in)
+                        VncSettingIcon(R.drawable.ic_zoom_in)
                     }
                 )
                 HorizontalDivider(
@@ -357,7 +357,7 @@ private fun ViewerSettingsPage(
                         prefs.edit().putInt("zoom_max", value).apply()
                     },
                     startAction = {
-                        SettingsIconBox(R.drawable.ic_zoom_options)
+                        VncSettingIcon(R.drawable.ic_zoom_options)
                     }
                 )
                 HorizontalDivider(
@@ -373,7 +373,7 @@ private fun ViewerSettingsPage(
                         prefs.edit().putBoolean("per_orientation_zoom", it).apply()
                     },
                     startAction = {
-                        SettingsIconBox(R.drawable.ic_screen_rotation)
+                        VncSettingIcon(R.drawable.ic_screen_rotation)
                     }
                 )
             }
@@ -381,7 +381,7 @@ private fun ViewerSettingsPage(
 
         item { SmallTitle(text = stringResource(R.string.pref_toolbar)) }
         item {
-            SettingsCard {
+            VncSettingCard {
                 OverlayDropdownPreference(
                     title = stringResource(R.string.pref_toolbar_alignment),
                     summary = "设置工具栏位置",
@@ -392,7 +392,7 @@ private fun ViewerSettingsPage(
                         prefs.edit().putString("toolbar_alignment", toolbarAlignmentValues[idx]).apply()
                     },
                     startAction = {
-                        SettingsIconBox(R.drawable.ic_toolbar)
+                        VncSettingIcon(R.drawable.ic_toolbar)
                     }
                 )
                 HorizontalDivider(
@@ -408,7 +408,7 @@ private fun ViewerSettingsPage(
                         prefs.edit().putBoolean("toolbar_open_with_swipe", it).apply()
                     },
                     startAction = {
-                        SettingsIconBox(R.drawable.ic_gesture)
+                        VncSettingIcon(R.drawable.ic_gesture)
                     }
                 )
                 HorizontalDivider(
@@ -424,7 +424,7 @@ private fun ViewerSettingsPage(
                         prefs.edit().putBoolean("toolbar_open_with_button", it).apply()
                     },
                     startAction = {
-                        SettingsIconBox(R.drawable.ic_tap)
+                        VncSettingIcon(R.drawable.ic_tap)
                     }
                 )
                 HorizontalDivider(
@@ -440,7 +440,7 @@ private fun ViewerSettingsPage(
                         prefs.edit().putBoolean("toolbar_show_gesture_style_toggle", it).apply()
                     },
                     startAction = {
-                        SettingsIconBox(R.drawable.ic_gesture)
+                        VncSettingIcon(R.drawable.ic_gesture)
                     }
                 )
             }
@@ -603,7 +603,7 @@ private fun InputSettingsPage(
     ) {
         item { SmallTitle(text = stringResource(R.string.pref_gesture)) }
         item {
-            SettingsCard {
+            VncSettingCard {
                 OverlayDropdownPreference(
                     title = stringResource(R.string.pref_gesture_style),
                     summary = "选择触控交互模式",
@@ -614,7 +614,7 @@ private fun InputSettingsPage(
                         prefs.edit().putString("gesture_style", gestureStyleValues[idx]).apply()
                     },
                     startAction = {
-                        SettingsIconBox(R.drawable.ic_gesture)
+                        VncSettingIcon(R.drawable.ic_gesture)
                     }
                 )
                 HorizontalDivider(
@@ -631,7 +631,7 @@ private fun InputSettingsPage(
                         prefs.edit().putString("gesture_double_tap", doubleTapValues[idx]).apply()
                     },
                     startAction = {
-                        SettingsIconBox(R.drawable.ic_tap)
+                        VncSettingIcon(R.drawable.ic_tap)
                     }
                 )
                 HorizontalDivider(
@@ -648,7 +648,7 @@ private fun InputSettingsPage(
                         prefs.edit().putString("gesture_long_press", longPressValues[idx]).apply()
                     },
                     startAction = {
-                        SettingsIconBox(R.drawable.ic_gesture)
+                        VncSettingIcon(R.drawable.ic_gesture)
                     }
                 )
                 HorizontalDivider(
@@ -665,7 +665,7 @@ private fun InputSettingsPage(
                         prefs.edit().putString("gesture_tap2", tap2Values[idx]).apply()
                     },
                     startAction = {
-                        SettingsIconBox(R.drawable.ic_tap)
+                        VncSettingIcon(R.drawable.ic_tap)
                     }
                 )
                 HorizontalDivider(
@@ -682,7 +682,7 @@ private fun InputSettingsPage(
                         prefs.edit().putString("gesture_tap3", tap3Values[idx]).apply()
                     },
                     startAction = {
-                        SettingsIconBox(R.drawable.ic_tap)
+                        VncSettingIcon(R.drawable.ic_tap)
                     }
                 )
                 HorizontalDivider(
@@ -700,7 +700,7 @@ private fun InputSettingsPage(
                         prefs.edit().putString("gesture_swipe1", swipeValues[idx]).apply()
                     },
                     startAction = {
-                        SettingsIconBox(R.drawable.ic_gesture)
+                        VncSettingIcon(R.drawable.ic_gesture)
                     }
                 )
                 HorizontalDivider(
@@ -717,7 +717,7 @@ private fun InputSettingsPage(
                         prefs.edit().putString("gesture_swipe2", swipe2Values[idx]).apply()
                     },
                     startAction = {
-                        SettingsIconBox(R.drawable.ic_gesture)
+                        VncSettingIcon(R.drawable.ic_gesture)
                     }
                 )
                 HorizontalDivider(
@@ -734,7 +734,7 @@ private fun InputSettingsPage(
                         prefs.edit().putString("gesture_swipe3", swipeValues[idx]).apply()
                     },
                     startAction = {
-                        SettingsIconBox(R.drawable.ic_gesture)
+                        VncSettingIcon(R.drawable.ic_gesture)
                     }
                 )
                 HorizontalDivider(
@@ -751,7 +751,7 @@ private fun InputSettingsPage(
                         prefs.edit().putString("gesture_double_tap_swipe", doubleTapSwipeValues[idx]).apply()
                     },
                     startAction = {
-                        SettingsIconBox(R.drawable.ic_gesture)
+                        VncSettingIcon(R.drawable.ic_gesture)
                     }
                 )
                 HorizontalDivider(
@@ -769,7 +769,7 @@ private fun InputSettingsPage(
                         prefs.edit().putString("gesture_long_press_swipe", longPressSwipeValues[idx]).apply()
                     },
                     startAction = {
-                        SettingsIconBox(R.drawable.ic_gesture)
+                        VncSettingIcon(R.drawable.ic_gesture)
                     }
                 )
                 HorizontalDivider(
@@ -787,7 +787,7 @@ private fun InputSettingsPage(
                         prefs.edit().putInt("gesture_swipe_sensitivity", value).apply()
                     },
                     startAction = {
-                        SettingsIconBox(R.drawable.ic_gesture)
+                        VncSettingIcon(R.drawable.ic_gesture)
                     }
                 )
                 if (invertScrollVisible) {
@@ -804,7 +804,7 @@ private fun InputSettingsPage(
                             prefs.edit().putBoolean("invert_vertical_scrolling", it).apply()
                         },
                         startAction = {
-                            SettingsIconBox(R.drawable.ic_swap)
+                            VncSettingIcon(R.drawable.ic_swap)
                         }
                     )
                 }
@@ -813,7 +813,7 @@ private fun InputSettingsPage(
 
         item { SmallTitle(text = stringResource(R.string.pref_mouse)) }
         item {
-            SettingsCard {
+            VncSettingCard {
                 SwitchPreference(
                     title = stringResource(R.string.pref_mouse_passthrough),
                     summary = if (mousePassthrough) stringResource(R.string.pref_mouse_passthrough_summary_on) else stringResource(R.string.pref_mouse_passthrough_summary_off),
@@ -823,7 +823,7 @@ private fun InputSettingsPage(
                         prefs.edit().putBoolean("mouse_passthrough", it).apply()
                     },
                     startAction = {
-                        SettingsIconBox(R.drawable.ic_mouse)
+                        VncSettingIcon(R.drawable.ic_mouse)
                     }
                 )
                 if (mousePassthrough) {
@@ -841,7 +841,7 @@ private fun InputSettingsPage(
                             prefs.edit().putBoolean("capture_pointer", it).apply()
                         },
                         startAction = {
-                            SettingsIconBox(R.drawable.ic_mouse)
+                            VncSettingIcon(R.drawable.ic_mouse)
                         }
                     )
                 }
@@ -859,7 +859,7 @@ private fun InputSettingsPage(
                         prefs.edit().putBoolean("hide_local_cursor", it).apply()
                     },
                     startAction = {
-                        SettingsIconBox(R.drawable.ic_visibility)
+                        VncSettingIcon(R.drawable.ic_visibility)
                     }
                 )
                 HorizontalDivider(
@@ -875,7 +875,7 @@ private fun InputSettingsPage(
                         prefs.edit().putBoolean("hide_remote_cursor", it).apply()
                     },
                     startAction = {
-                        SettingsIconBox(R.drawable.ic_visibility)
+                        VncSettingIcon(R.drawable.ic_visibility)
                     }
                 )
                 HorizontalDivider(
@@ -892,7 +892,7 @@ private fun InputSettingsPage(
                         prefs.edit().putString("mouse_back", mouseBackValues[idx]).apply()
                     },
                     startAction = {
-                        SettingsIconBox(R.drawable.ic_arrow_back)
+                        VncSettingIcon(R.drawable.ic_arrow_back)
                     }
                 )
             }
@@ -900,7 +900,7 @@ private fun InputSettingsPage(
 
         item { SmallTitle(text = stringResource(R.string.pref_vk)) }
         item {
-            SettingsCard {
+            VncSettingCard {
                 SwitchPreference(
                     title = stringResource(R.string.pref_vk_open_with_keyboard),
                     summary = null,
@@ -910,7 +910,7 @@ private fun InputSettingsPage(
                         prefs.edit().putBoolean("vk_open_with_keyboard", it).apply()
                     },
                     startAction = {
-                        SettingsIconBox(R.drawable.ic_keyboard_mini)
+                        VncSettingIcon(R.drawable.ic_keyboard_mini)
                     }
                 )
                 HorizontalDivider(
@@ -926,7 +926,7 @@ private fun InputSettingsPage(
                         prefs.edit().putBoolean("vk_use_super_with_single_tap", it).apply()
                     },
                     startAction = {
-                        SettingsIconBox(R.drawable.ic_super_key)
+                        VncSettingIcon(R.drawable.ic_super_key)
                     }
                 )
                 HorizontalDivider(
@@ -943,7 +943,7 @@ private fun InputSettingsPage(
                         prefs.edit().putString("vk_row_count", vkRowCountEntries[idx]).apply()
                     },
                     startAction = {
-                        SettingsIconBox(R.drawable.ic_keyboard_mini)
+                        VncSettingIcon(R.drawable.ic_keyboard_mini)
                     }
                 )
                 HorizontalDivider(
@@ -955,7 +955,7 @@ private fun InputSettingsPage(
                     summary = null,
                     onClick = { },
                     startAction = {
-                        SettingsIconBox(R.drawable.ic_edit)
+                        VncSettingIcon(R.drawable.ic_edit)
                     }
                 )
             }
@@ -963,7 +963,7 @@ private fun InputSettingsPage(
 
         item { SmallTitle(text = stringResource(R.string.pref_km)) }
         item {
-            SettingsCard {
+            VncSettingCard {
                 SwitchPreference(
                     title = stringResource(R.string.pref_km_right_alt_to_super),
                     summary = null,
@@ -973,7 +973,7 @@ private fun InputSettingsPage(
                         prefs.edit().putBoolean("km_right_alt_to_super", it).apply()
                     },
                     startAction = {
-                        SettingsIconBox(R.drawable.ic_super_key)
+                        VncSettingIcon(R.drawable.ic_super_key)
                     }
                 )
                 HorizontalDivider(
@@ -989,7 +989,7 @@ private fun InputSettingsPage(
                         prefs.edit().putBoolean("km_language_switch_to_super", it).apply()
                     },
                     startAction = {
-                        SettingsIconBox(R.drawable.ic_super_key)
+                        VncSettingIcon(R.drawable.ic_super_key)
                     }
                 )
                 HorizontalDivider(
@@ -1005,7 +1005,7 @@ private fun InputSettingsPage(
                         prefs.edit().putBoolean("km_back_to_escape", it).apply()
                     },
                     startAction = {
-                        SettingsIconBox(R.drawable.ic_arrow_back)
+                        VncSettingIcon(R.drawable.ic_arrow_back)
                     }
                 )
             }
@@ -1028,106 +1028,108 @@ private fun ServerSettingsPage(
     var showForgetConfirmDialog by remember { mutableStateOf(false) }
     val vncConnectionManager = remember { VncConnectionManager(context) }
 
-    LazyColumn(
-        modifier = modifier,
-        contentPadding = PaddingValues(bottom = 92.dp)
-    ) {
-        item { SmallTitle(text = stringResource(R.string.pref_servers)) }
-        item {
-            SettingsCard {
-                SwitchPreference(
-                    title = stringResource(R.string.pref_clipboard_sync),
-                    summary = null,
-                    checked = clipboardSync,
-                    onCheckedChange = {
-                        clipboardSync = it
-                        prefs.edit().putBoolean("clipboard_sync", it).apply()
-                    },
-                    startAction = {
-                        SettingsIconBox(R.drawable.ic_paste)
-                    }
-                )
-                HorizontalDivider(
-                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f),
-                    modifier = Modifier.padding(start = 72.dp, end = 16.dp)
-                )
-                SwitchPreference(
-                    title = stringResource(R.string.pref_auto_reconnect),
-                    summary = null,
-                    checked = autoReconnect,
-                    onCheckedChange = {
-                        autoReconnect = it
-                        prefs.edit().putBoolean("auto_reconnect", it).apply()
-                    },
-                    startAction = {
-                        SettingsIconBox(R.drawable.ic_refresh)
-                    }
-                )
-                HorizontalDivider(
-                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f),
-                    modifier = Modifier.padding(start = 72.dp, end = 16.dp)
-                )
-                ArrowPreference(
-                    title = stringResource(R.string.pref_forget_known_hosts),
-                    summary = null,
-                    onClick = { showForgetDialog = true },
-                    startAction = {
-                        SettingsIconBox(R.drawable.ic_delete)
-                    }
-                )
+    Box(modifier = modifier) {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(bottom = 92.dp)
+        ) {
+            item { SmallTitle(text = stringResource(R.string.pref_servers)) }
+            item {
+                VncSettingCard {
+                    SwitchPreference(
+                        title = stringResource(R.string.pref_clipboard_sync),
+                        summary = null,
+                        checked = clipboardSync,
+                        onCheckedChange = {
+                            clipboardSync = it
+                            prefs.edit().putBoolean("clipboard_sync", it).apply()
+                        },
+                        startAction = {
+                            VncSettingIcon(R.drawable.ic_paste)
+                        }
+                    )
+                    HorizontalDivider(
+                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f),
+                        modifier = Modifier.padding(start = 72.dp, end = 16.dp)
+                    )
+                    SwitchPreference(
+                        title = stringResource(R.string.pref_auto_reconnect),
+                        summary = null,
+                        checked = autoReconnect,
+                        onCheckedChange = {
+                            autoReconnect = it
+                            prefs.edit().putBoolean("auto_reconnect", it).apply()
+                        },
+                        startAction = {
+                            VncSettingIcon(R.drawable.ic_refresh)
+                        }
+                    )
+                    HorizontalDivider(
+                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f),
+                        modifier = Modifier.padding(start = 72.dp, end = 16.dp)
+                    )
+                    ArrowPreference(
+                        title = stringResource(R.string.pref_forget_known_hosts),
+                        summary = null,
+                        onClick = { showForgetDialog = true },
+                        startAction = {
+                            VncSettingIcon(R.drawable.ic_delete)
+                        }
+                    )
+                }
             }
+
+            item { Spacer(Modifier.height(16.dp)) }
         }
 
-        item { Spacer(Modifier.height(16.dp)) }
-    }
+        OverlayDialog(
+            title = stringResource(R.string.pref_forget_known_hosts),
+            summary = stringResource(R.string.pref_forget_known_hosts_question),
+            show = showForgetDialog,
+            onDismissRequest = { showForgetDialog = false },
+            content = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    TextButton(
+                        text = stringResource(R.string.title_forget),
+                        onClick = {
+                            val success = forgetKnownHosts(context) && deleteTrustedCertificates(context)
+                            if (success) {
+                                vncConnectionManager.clearAllConnections()
+                            }
+                            showForgetDialog = false
+                            if (success) {
+                                showForgetConfirmDialog = true
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.textButtonColorsPrimary()
+                    )
+                    TextButton(
+                        text = stringResource(R.string.title_cancel),
+                        onClick = { showForgetDialog = false },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+        )
 
-    OverlayDialog(
-        title = stringResource(R.string.pref_forget_known_hosts),
-        summary = stringResource(R.string.pref_forget_known_hosts_question),
-        show = showForgetDialog,
-        onDismissRequest = { showForgetDialog = false },
-        content = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        OverlayDialog(
+            title = stringResource(R.string.msg_done),
+            show = showForgetConfirmDialog,
+            onDismissRequest = { showForgetConfirmDialog = false },
+            content = {
                 TextButton(
-                    text = stringResource(R.string.title_forget),
-                    onClick = {
-                        val success = forgetKnownHosts(context) && deleteTrustedCertificates(context)
-                        if (success) {
-                            vncConnectionManager.clearAllConnections()
-                        }
-                        showForgetDialog = false
-                        if (success) {
-                            showForgetConfirmDialog = true
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.textButtonColorsPrimary()
-                )
-                TextButton(
-                    text = stringResource(R.string.title_cancel),
-                    onClick = { showForgetDialog = false },
+                    text = stringResource(R.string.ok),
+                    onClick = { showForgetConfirmDialog = false },
                     modifier = Modifier.fillMaxWidth()
                 )
             }
-        }
-    )
-
-    OverlayDialog(
-        title = stringResource(R.string.msg_done),
-        show = showForgetConfirmDialog,
-        onDismissRequest = { showForgetConfirmDialog = false },
-        content = {
-            TextButton(
-                text = stringResource(R.string.ok),
-                onClick = { showForgetConfirmDialog = false },
-                modifier = Modifier.fillMaxWidth()
-            )
-        }
-    )
+        )
+    }
 }
 
 @Composable
-private fun SettingsCard(
+private fun VncSettingCard(
     content: @Composable () -> Unit
 ) {
     Card(
@@ -1142,7 +1144,7 @@ private fun SettingsCard(
 }
 
 @Composable
-private fun SettingsIconBox(iconRes: Int) {
+private fun VncSettingIcon(iconRes: Int) {
     Box(
         modifier = Modifier
             .size(40.dp),

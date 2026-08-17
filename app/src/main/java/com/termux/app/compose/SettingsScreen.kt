@@ -397,7 +397,7 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
                     iconRes = R.drawable.ic_palette,
                     action = {
                         val intent = Intent().apply {
-                            component = ComponentName(context.packageName, "com.termux.styling.TermuxStyleActivity")
+                            component = ComponentName(context.packageName, "com.termux.app.activities.TermuxStylingActivity")
                         }
                         runCatching { context.startActivity(intent) }
                     }
@@ -410,7 +410,7 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
                     iconRes = R.drawable.ic_tools,
                     action = {
                         val intent = Intent().apply {
-                            component = ComponentName(context.packageName, "com.termux.tasker.EditConfigurationActivity")
+                            component = ComponentName(context.packageName, "com.termux.app.activities.TermuxTaskerActivity")
                         }
                         runCatching { context.startActivity(intent) }
                     }
@@ -423,7 +423,7 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
                     iconRes = R.drawable.ic_star,
                     action = {
                         val intent = Intent().apply {
-                            component = ComponentName(context.packageName, "com.termux.widget.activities.TermuxWidgetActivity")
+                            component = ComponentName(context.packageName, "com.termux.app.activities.TermuxWidgetActivity")
                         }
                         runCatching { context.startActivity(intent) }
                     }
@@ -433,6 +433,7 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
     }
 
     Scaffold(
+        modifier = Modifier.fillMaxSize(),
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         snackbarHost = { SnackbarHost(state = snackbarHostState) },
         topBar = {
@@ -912,18 +913,19 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
         show = showApiHelpDialog,
         onDismissRequest = { showApiHelpDialog = false },
         content = {
-        Column(modifier = Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
-            HelpContentWithCopyableCommands(
-                content = context.getString(R.string.termux_api_help_content),
-                context = context
+            Box(modifier = Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
+                HelpContentWithCopyableCommands(
+                    content = context.getString(R.string.termux_api_help_content),
+                    context = context,
+                    snackbarHostState = snackbarHostState
+                )
+            }
+            Spacer(Modifier.height(12.dp))
+            TextButton(
+                text = context.getString(R.string.ok),
+                onClick = { showApiHelpDialog = false },
+                modifier = Modifier.fillMaxWidth()
             )
-        }
-        Spacer(Modifier.height(12.dp))
-        TextButton(
-            text = context.getString(R.string.ok),
-            onClick = { showApiHelpDialog = false },
-            modifier = Modifier.fillMaxWidth()
-        )
         }
     )
 
@@ -933,18 +935,19 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
         show = showBootHelpDialog,
         onDismissRequest = { showBootHelpDialog = false },
         content = {
-        Column(modifier = Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
-            HelpContentWithCopyableCommands(
-                content = context.getString(R.string.termux_boot_help_content),
-                context = context
+            Box(modifier = Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
+                HelpContentWithCopyableCommands(
+                    content = context.getString(R.string.termux_boot_help_content),
+                    context = context,
+                    snackbarHostState = snackbarHostState
+                )
+            }
+            Spacer(Modifier.height(12.dp))
+            TextButton(
+                text = context.getString(R.string.ok),
+                onClick = { showBootHelpDialog = false },
+                modifier = Modifier.fillMaxWidth()
             )
-        }
-        Spacer(Modifier.height(12.dp))
-        TextButton(
-            text = context.getString(R.string.ok),
-            onClick = { showBootHelpDialog = false },
-            modifier = Modifier.fillMaxWidth()
-        )
         }
     )
 
@@ -1190,7 +1193,7 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
         show = showSystemPromptEditor,
         onDismissRequest = { showSystemPromptEditor = false },
         content = {
-        Column(
+        Box(
             modifier = Modifier
                 .heightIn(max = 400.dp)
                 .verticalScroll(rememberScrollState())
@@ -1355,12 +1358,13 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
                 )
             }
         } else {
-            Column(
+            Box(
                 modifier = Modifier
                     .heightIn(max = 350.dp)
                     .verticalScroll(rememberScrollState())
             ) {
-                customSkills.forEach { skill ->
+                Column {
+                    customSkills.forEach { skill ->
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -1407,6 +1411,7 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
                             }
                         }
                     }
+                }
                 }
             }
         }
@@ -1474,11 +1479,12 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
         show = showAddEditSkillDialog,
         onDismissRequest = { showAddEditSkillDialog = false },
         content = {
-        Column(
+        Box(
             modifier = Modifier
                 .heightIn(max = 520.dp)
                 .verticalScroll(rememberScrollState())
         ) {
+            Column {
             TextField(
                 value = skillName,
                 onValueChange = { skillName = it },
@@ -1557,6 +1563,7 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
                 maxLines = Int.MAX_VALUE,
                 minLines = 3
             )
+            }
         }
         Spacer(Modifier.height(12.dp))
         Row(horizontalArrangement = Arrangement.SpaceBetween) {
@@ -1623,11 +1630,12 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
                 )
             }
         } else {
-            Column(
+            Box(
                 modifier = Modifier
                     .heightIn(max = 400.dp)
                     .verticalScroll(rememberScrollState())
             ) {
+                Column {
                 // System Prompt
                 Card(
                     modifier = Modifier
@@ -1711,6 +1719,7 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
                             }
                         }
                     }
+                }
                 }
             }
         }
@@ -1849,9 +1858,9 @@ private fun IntegratedToolSwitch(
 @Composable
 private fun HelpContentWithCopyableCommands(
     content: String,
-    context: Context
+    context: Context,
+    snackbarHostState: SnackbarHostState
 ) {
-    val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     fun showSnackbar(message: String) {
         scope.launch {
@@ -1863,7 +1872,7 @@ private fun HelpContentWithCopyableCommands(
         context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
     }
 
-    Box {
+    Column(modifier = Modifier.fillMaxWidth()) {
         lines.forEachIndexed { index, rawLine ->
             val trimmed = rawLine.trim()
             if (trimmed.isEmpty()) {
@@ -1935,6 +1944,5 @@ private fun HelpContentWithCopyableCommands(
                 )
             }
         }
-        SnackbarHost(state = snackbarHostState)
     }
 }

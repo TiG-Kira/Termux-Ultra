@@ -173,6 +173,7 @@ fun TerminalListScreen(
     val scrollBehavior = MiuixScrollBehavior()
 
     Scaffold(
+        modifier = Modifier.fillMaxSize(),
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
