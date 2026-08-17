@@ -95,15 +95,18 @@ fun Modifier.physicalTouchDetector(): Modifier = this.pointerInput(Unit) {
 fun guardedOnClick(
     context: Context,
     thirdPartyBlocked: Boolean,
+    onBlocked: () -> Unit = {
+        Toast.makeText(
+            context,
+            context.getString(R.string.accessibility_guard_blocked_toast),
+            Toast.LENGTH_LONG
+        ).show()
+    },
     onClick: () -> Unit
 ): () -> Unit {
     return {
         if (thirdPartyBlocked && !AccessibilityGuard.wasPhysicalTouchRecent()) {
-            Toast.makeText(
-                context,
-                context.getString(R.string.accessibility_guard_blocked_toast),
-                Toast.LENGTH_LONG
-            ).show()
+            onBlocked()
         } else {
             onClick()
         }

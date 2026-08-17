@@ -44,6 +44,9 @@ import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.TextField
+import top.yukonga.miuix.kmp.basic.SnackbarHost
+import top.yukonga.miuix.kmp.basic.SnackbarHostState
+import top.yukonga.miuix.kmp.basic.SnackbarDuration
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.preference.SwitchPreference
 import top.yukonga.miuix.kmp.preference.CheckboxPreference
@@ -72,6 +75,16 @@ data class SettingItem(
 @Composable
 fun SettingsScreen(onAboutClick: () -> Unit) {
     val context = LocalContext.current
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+    fun showSnackbar(message: String, isLong: Boolean = false) {
+        scope.launch {
+            snackbarHostState.showSnackbar(
+                message = message,
+                duration = if (isLong) SnackbarDuration.Long else SnackbarDuration.Short
+            )
+        }
+    }
     var showRestoreDialog by remember { mutableStateOf(false) }
     var showRestoreConfirmDialog by remember { mutableStateOf(false) }
     var showRestoreProgressDialog by remember { mutableStateOf(false) }
@@ -169,7 +182,7 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
         uri?.let {
             if (!isProcessing) {
                 isProcessing = true
-                android.widget.Toast.makeText(context, context.getString(R.string.restore_view_progress_toast), android.widget.Toast.LENGTH_SHORT).show()
+                showSnackbar(context.getString(R.string.restore_view_progress_toast))
                 NotificationHelper.createNotificationChannel(context)
 
                 val cancelIntent = Intent("com.termux.RESTORE_CANCEL")
@@ -238,12 +251,12 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
                     useCustomSystemPrompt = true
                     val fileName = uri.lastPathSegment?.substringAfterLast("/") ?: "custom_prompt.md"
                     systemPromptSource = fileName
-                    android.widget.Toast.makeText(context, "已加载自定义 System Prompt", android.widget.Toast.LENGTH_SHORT).show()
+                    showSnackbar("已加载自定义 System Prompt")
                 } else {
-                    android.widget.Toast.makeText(context, "文件内容为空", android.widget.Toast.LENGTH_SHORT).show()
+                    showSnackbar("文件内容为空")
                 }
             } catch (e: Exception) {
-                android.widget.Toast.makeText(context, "读取文件失败: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
+                showSnackbar("读取文件失败: ${e.message}")
             }
         }
     }
@@ -268,7 +281,7 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
             action = {
                 if (!isProcessing) {
                     isProcessing = true
-                    android.widget.Toast.makeText(context, context.getString(R.string.backup_view_progress_toast), android.widget.Toast.LENGTH_SHORT).show()
+                    showSnackbar(context.getString(R.string.backup_view_progress_toast))
                     NotificationHelper.createNotificationChannel(context)
 
                     val cancelIntent = Intent("com.termux.BACKUP_CANCEL")
@@ -420,6 +433,7 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
 
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        snackbarHost = { SnackbarHost(state = snackbarHostState) },
         topBar = {
             TopAppBar(title = context.getString(R.string.settings_title), scrollBehavior = scrollBehavior)
         }
@@ -1018,9 +1032,9 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
                                     isProcessing = false
                                     showRestoreProgressDialog = false
                                     if (success) {
-                                        android.widget.Toast.makeText(context, context.getString(R.string.restore_complete), android.widget.Toast.LENGTH_SHORT).show()
+                                        showSnackbar(context.getString(R.string.restore_complete))
                                     } else {
-                                        android.widget.Toast.makeText(context, context.getString(R.string.restore_failed), android.widget.Toast.LENGTH_SHORT).show()
+                                        showSnackbar(context.getString(R.string.restore_failed))
                                     }
                                 }
                             }.start()
@@ -1275,15 +1289,15 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
                         AiTermuxPrefs.setUseCustomSystemPrompt(context, true)
                         useCustomSystemPrompt = true
                         systemPromptSource = file.name
-                        android.widget.Toast.makeText(context, "已加载自定义 System Prompt", android.widget.Toast.LENGTH_SHORT).show()
-                    } else {
-                        android.widget.Toast.makeText(context, "文件内容为空", android.widget.Toast.LENGTH_SHORT).show()
+                        showSnackbar("已加载自定义 System Prompt")
+                        } else {
+                            showSnackbar("文件内容为空")
+                        }
+                    } catch (e: Exception) {
+                        showSnackbar("文件不存在")
                     }
-                } else {
-                    android.widget.Toast.makeText(context, "文件不存在", android.widget.Toast.LENGTH_SHORT).show()
-                }
-            } catch (e: Exception) {
-                android.widget.Toast.makeText(context, "读取文件失败: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
+                } catch (e: Exception) {
+                    showSnackbar("读取文件失败: ${e.message}")
             }
         }
     )
@@ -1311,7 +1325,7 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
                     useCustomSystemPrompt = false
                     systemPromptSource = ""
                     showSystemPromptRestoreConfirm = false
-                    android.widget.Toast.makeText(context, "已切换回官方 System Prompt", android.widget.Toast.LENGTH_SHORT).show()
+                    showSnackbar("已切换回官方 System Prompt")
                 },
                 colors = ButtonDefaults.textButtonColorsPrimary()
             )
@@ -1898,10 +1912,7 @@ private fun HelpContentWithCopyableCommands(
                         .clickable {
                             val clip = android.content.ClipData.newPlainText("命令", commandText)
                             clipboard.setPrimaryClip(clip)
-                            android.widget.Toast.makeText(
-                                context, "已复制: $commandText",
-                                android.widget.Toast.LENGTH_SHORT
-                            ).show()
+                            showSnackbar("已复制: $commandText")
                         },
                     contentAlignment = Alignment.Center
                 ) {

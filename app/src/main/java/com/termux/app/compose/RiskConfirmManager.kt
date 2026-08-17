@@ -776,7 +776,7 @@ object RiskConfirmManager {
  * 来渲染弹窗。必须保持 Activity 存活。
  */
 @Composable
-fun RiskConfirmDialogHost() {
+fun RiskConfirmDialogHost(snackbarHostState: top.yukonga.miuix.kmp.basic.SnackbarHostState? = null) {
     val dialogState by RiskConfirmManager.dialogState.collectAsState()
     val countdown by RiskConfirmManager.countdown.collectAsState()
     var checkboxChecked by remember { mutableStateOf(false) }
@@ -790,6 +790,20 @@ fun RiskConfirmDialogHost() {
     val context = LocalContext.current
     val disableState by RiskConfirmManager.disableWarningState.collectAsState()
     var disableCheckboxChecked by remember { mutableStateOf(false) }
+    val snackbarScope = rememberCoroutineScope()
+    val showBlockedMessage: () -> Unit = {
+        val msg = context.getString(R.string.accessibility_guard_blocked_toast)
+        if (snackbarHostState != null) {
+            snackbarScope.launch {
+                snackbarHostState.showSnackbar(
+                    message = msg,
+                    duration = top.yukonga.miuix.kmp.basic.SnackbarDuration.Long
+                )
+            }
+        } else {
+            Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+        }
+    }
     var isAuthenticating by remember { mutableStateOf(false) }
 
     LaunchedEffect(disableState.show) {
@@ -870,13 +884,13 @@ fun RiskConfirmDialogHost() {
                         ) {
                             TextButton(
                                 text = "${stringResource(R.string.risk_command_ssh_power_confirm_no)}(${countdown}s)",
-                                onClick = guardedOnClick(context, thirdPartyBlocked) {
+                                onClick = guardedOnClick(context, thirdPartyBlocked, showBlockedMessage) {
                                     RiskConfirmManager.cancel(context)
                                 },
                                 modifier = Modifier.weight(1f)
                             )
                             Button(
-                                onClick = guardedOnClick(context, thirdPartyBlocked) {
+                                onClick = guardedOnClick(context, thirdPartyBlocked, showBlockedMessage) {
                                     RiskConfirmManager.confirm(context)
                                 },
                                 modifier = Modifier.weight(1f),
@@ -997,13 +1011,13 @@ fun RiskConfirmDialogHost() {
                         ) {
                             TextButton(
                                 text = "${stringResource(R.string.cancel)}(${countdown}s)",
-                                onClick = guardedOnClick(context, thirdPartyBlocked) {
+                                onClick = guardedOnClick(context, thirdPartyBlocked, showBlockedMessage) {
                                     RiskConfirmManager.cancel(context)
                                 },
                                 modifier = Modifier.weight(1f)
                             )
                             Button(
-                                onClick = guardedOnClick(context, thirdPartyBlocked) {
+                                onClick = guardedOnClick(context, thirdPartyBlocked, showBlockedMessage) {
                                     RiskConfirmManager.confirm(context)
                                 },
                                 enabled = checkboxChecked,
@@ -1058,13 +1072,13 @@ fun RiskConfirmDialogHost() {
                     ) {
                         TextButton(
                             text = stringResource(R.string.cancel),
-                            onClick = guardedOnClick(context, thirdPartyBlocked) {
+                            onClick = guardedOnClick(context, thirdPartyBlocked, showBlockedMessage) {
                                 RiskConfirmManager.hideDisableWarning()
                             },
                             modifier = Modifier.weight(1f)
                         )
                         Button(
-                            onClick = guardedOnClick(context, thirdPartyBlocked) {
+                            onClick = guardedOnClick(context, thirdPartyBlocked, showBlockedMessage) {
                                 isAuthenticating = true
                                 val activity = context as? FragmentActivity
                                 if (activity != null) {
@@ -1073,11 +1087,17 @@ fun RiskConfirmDialogHost() {
                                         if (success) {
                                             RiskConfirmManager.confirmDisable(context)
                                         } else {
-                                            Toast.makeText(
-                                                context,
-                                                context.getString(R.string.risk_command_biometric_prompt),
-                                                Toast.LENGTH_SHORT
-                                            ).show()
+                                            val msg = context.getString(R.string.risk_command_biometric_prompt)
+                                            if (snackbarHostState != null) {
+                                                snackbarScope.launch {
+                                                    snackbarHostState.showSnackbar(
+                                                        message = msg,
+                                                        duration = top.yukonga.miuix.kmp.basic.SnackbarDuration.Short
+                                                    )
+                                                }
+                                            } else {
+                                                Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                                            }
                                         }
                                     }
                                 } else {

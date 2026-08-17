@@ -171,6 +171,12 @@
             android:theme="@style/Theme.AppCompat.DayNight.NoActionBar" />
 
         <activity
+            android:name=".app.activities.TermuxSettingsActivity"
+            android:exported="false"
+            android:label="@string/title_activity_termux_settings"
+            android:theme="@style/Theme.AppCompat.DayNight.NoActionBar" />
+
+        <activity
             android:name=".app.activities.AboutActivity"
             android:label="@string/application_name" />
 
