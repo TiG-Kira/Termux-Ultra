@@ -56,13 +56,19 @@ class QemuVmActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
         setContent {
-            KiTerminalTheme {
-                QemuVmScreen(
-                    onBack = { finish() },
-                    onExecuteScript = { name, command ->
-                        startTermuxSession(name, command)
-                    }
-                )
+            val navDispatcher = com.termux.app.compose.NavigationHelper.createDispatcher()
+            val navDispatcherOwner = com.termux.app.compose.NavigationHelper.createOwner(navDispatcher)
+            androidx.compose.runtime.CompositionLocalProvider(
+                androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner provides navDispatcherOwner
+            ) {
+                KiTerminalTheme {
+                    QemuVmScreen(
+                        onBack = { finish() },
+                        onExecuteScript = { name, command ->
+                            startTermuxSession(name, command)
+                        }
+                    )
+                }
             }
         }
     }

@@ -2,8 +2,11 @@ package com.termux.app.activities
 
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner
 import com.termux.app.compose.AboutScreen
 import com.termux.app.compose.KiTerminalTheme
+import com.termux.app.compose.NavigationHelper
 
 class AboutActivity : ComponentActivity() {
 
@@ -11,8 +14,14 @@ class AboutActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         setContent {
-            KiTerminalTheme {
-                AboutScreen(onBack = { finish() })
+            val navDispatcher = NavigationHelper.createDispatcher()
+            val navDispatcherOwner = NavigationHelper.createOwner(navDispatcher)
+            CompositionLocalProvider(
+                LocalNavigationEventDispatcherOwner provides navDispatcherOwner
+            ) {
+                KiTerminalTheme {
+                    AboutScreen(onBack = { finish() })
+                }
             }
         }
     }

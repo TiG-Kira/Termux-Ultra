@@ -1284,7 +1284,7 @@ private fun AiSetupScreen(vm: AiTermuxViewModel, onBack: () -> Unit) {
                             color = if (isDark) Color(0xFF424242) else Color(0xFFE0E0E0)
                         )
                     ) {
-                        if (testing) CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                        if (testing) androidx.compose.material3.CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
                         else Text("测试连接", color = MiuixTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
                     }
                     Button(
@@ -1545,7 +1545,7 @@ private fun AiChatScreen(vm: AiTermuxViewModel, onBack: () -> Unit) {
                                 )
                         ) {
                             if (vm.isLoading) {
-                                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                                androidx.compose.material3.CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                             } else {
                                 Icon(
                                     imageVector = Icons.AutoMirrored.Rounded.Send,

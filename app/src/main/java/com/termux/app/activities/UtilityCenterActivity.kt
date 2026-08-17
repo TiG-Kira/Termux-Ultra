@@ -53,7 +53,12 @@ class UtilityCenterActivity : ComponentActivity() {
         WindowCompat.setDecorFitsSystemWindows(window, false)
         val appVM: com.termux.app.AppViewModel by viewModels()
         setContent {
-            com.termux.app.compose.KiTerminalTheme {
+            val navDispatcher = com.termux.app.compose.NavigationHelper.createDispatcher()
+            val navDispatcherOwner = com.termux.app.compose.NavigationHelper.createOwner(navDispatcher)
+            androidx.compose.runtime.CompositionLocalProvider(
+                androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner provides navDispatcherOwner
+            ) {
+                com.termux.app.compose.KiTerminalTheme {
                 val context = this@UtilityCenterActivity
                 val scrollBehavior = MiuixScrollBehavior()
 
@@ -324,6 +329,7 @@ class UtilityCenterActivity : ComponentActivity() {
                         onExecuteScript = onExecuteScript
                     )
                 }
+            }
             }
         }
     }
