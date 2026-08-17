@@ -75,6 +75,18 @@ object RiskConfirmManager {
     const val KEY_AGENT_PENDING_MESSAGE_ID = "agent_pending_message_id"
     const val KEY_AGENT_PENDING_RESULT = "agent_pending_result"
 
+    /** 跳过风险确认的标志：Agent 流程已确认的命令不需要二次确认 */
+    @Volatile
+    private var skipRiskCheck = false
+
+    /** 设置跳过风险确认标志（Agent 流程已确认后调用） */
+    fun setSkipRiskCheck(skip: Boolean) {
+        skipRiskCheck = skip
+    }
+
+    /** 检查是否应跳过风险确认 */
+    fun shouldSkipRiskCheck(): Boolean = skipRiskCheck
+
     const val ACTION_RISK_RESULT = "com.termux.app.RISK_RESULT"
     const val EXTRA_RISK_RESULT = "extra_risk_result"
     const val EXTRA_SESSION_HANDLE = "extra_session_handle"
@@ -98,7 +110,7 @@ object RiskConfirmManager {
         val isWindowsDiskCommand: Boolean = false
     )
 
-    private val _dialogState = MutableStateFlow<DialogState?>(null)
+    internal val _dialogState = MutableStateFlow<DialogState?>(null)
     val dialogState: StateFlow<DialogState?> = _dialogState.asStateFlow()
 
     /** 倒计时（秒），60秒自动拒绝 */
@@ -110,7 +122,7 @@ object RiskConfirmManager {
     internal val countdownScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
     /** 开始倒计时 */
-    private fun startCountdown() {
+    internal fun startCountdown() {
         stopCountdown()
         _countdown.value = 60
         countdownJob = countdownScope.launch {
@@ -122,7 +134,7 @@ object RiskConfirmManager {
     }
 
     /** 停止倒计时 */
-    private fun stopCountdown() {
+    internal fun stopCountdown() {
         countdownJob?.cancel()
         countdownJob = null
     }
@@ -528,6 +540,8 @@ object RiskConfirmManager {
     fun handleTerminalCommand(context: Context, session: com.termux.terminal.TerminalSession, command: String): Boolean {
         if (!isEnabled(context)) return false
 
+        val trimmed = command.trim()
+
         // 先用原生环境模式检测（su/sudo 会被标记为危险）
         val nativeDetection = RiskCommandDetector.detect(command, inNativeTermux = true)
         if (!nativeDetection.isDangerous) return false
@@ -537,6 +551,16 @@ object RiskConfirmManager {
 
         // 如果是 su/sudo，检查是否在原生 Termux 环境
         if (nativeDetection.riskType == RiskCommandDetector.RiskType.SU_SUDO) {
+            // 检查是否包装了其他危险命令（如 sudo shutdown、sudo poweroff 等）
+            val wrappedCommand = extractWrappedCommand(trimmed)
+            if (wrappedCommand != null) {
+                val wrappedDetection = RiskCommandDetector.detect(wrappedCommand)
+                if (wrappedDetection.isDangerous && wrappedDetection.riskType != RiskCommandDetector.RiskType.SU_SUDO) {
+                    // 包装的命令更危险，按包装命令的类型处理
+                    return handleDangerousCommand(context, session, command, wrappedDetection, envType)
+                }
+            }
+
             if (envType != EnvironmentType.NATIVE) {
                 // 非原生环境：Toast 提醒后放行
                 Handler(Looper.getMainLooper()).post {
@@ -550,18 +574,55 @@ object RiskConfirmManager {
             }
         }
 
-        // SHUTDOWN_REBOOT 类型：仅 SSH 环境拦截，且只拦截 init 0 和 init 6
-        if (nativeDetection.riskType == RiskCommandDetector.RiskType.SHUTDOWN_REBOOT) {
-            if (envType != EnvironmentType.SSH) {
-                // 非 SSH 环境：不拦截，直接放行
-                return false
-            }
+        // 其他高危命令或原生环境下的 su/sudo：正常拦截流程
+        return handleDangerousCommand(context, session, command, nativeDetection, envType)
+    }
+
+    /**
+     * 从 su/sudo 命令中提取被包装的子命令。
+     * 例如："sudo shutdown -h now" → "shutdown -h now"
+     *       "su -c 'poweroff'" → "poweroff"
+     *       "su -c reboot" → "reboot"
+     */
+    private fun extractWrappedCommand(command: String): String? {
+        val trimmed = command.trim()
+
+        // 匹配 sudo <command> 或 su -c <command> 或 su -c '<command>'
+        val sudoPattern = Regex("""^\s*sudo\s+(.*)""", RegexOption.DOT_MATCHES_ALL)
+        val sudoMatch = sudoPattern.find(trimmed)
+        if (sudoMatch != null) {
+            return sudoMatch.groupValues[1].trim()
+        }
+
+        val suPattern = Regex("""^\s*su\s+-c\s+['"]?(.+?)['"]?\s*$""", RegexOption.DOT_MATCHES_ALL)
+        val suMatch = suPattern.find(trimmed)
+        if (suMatch != null) {
+            return suMatch.groupValues[1].trim()
+        }
+
+        return null
+    }
+
+    /**
+     * 处理高危命令拦截的通用流程。
+     */
+    private fun handleDangerousCommand(
+        context: Context,
+        session: com.termux.terminal.TerminalSession,
+        command: String,
+        detection: RiskCommandDetector.DetectionResult,
+        envType: EnvironmentType
+    ): Boolean {
+        // SHUTDOWN_REBOOT 类型：原生环境和 SSH 环境都拦截
+        if (detection.riskType == RiskCommandDetector.RiskType.SHUTDOWN_REBOOT) {
             // SSH 环境下，对 init 命令额外检查只拦截 init 0 和 init 6
-            val trimmed = command.trim()
-            if (trimmed.matches(Regex("""\s*init\s+.*""", RegexOption.IGNORE_CASE))) {
-                if (!trimmed.matches(Regex("""\s*init\s+[06]\s*""", RegexOption.IGNORE_CASE))) {
-                    // 不是 init 0 或 init 6，放行
-                    return false
+            if (envType == EnvironmentType.SSH) {
+                val trimmed = command.trim()
+                if (trimmed.matches(Regex("""\s*init\s+.*""", RegexOption.IGNORE_CASE))) {
+                    if (!trimmed.matches(Regex("""\s*init\s+[06]\s*""", RegexOption.IGNORE_CASE))) {
+                        // 不是 init 0 或 init 6，放行
+                        return false
+                    }
                 }
             }
             // SSH 电源操作，设置特殊弹窗状态
@@ -569,22 +630,22 @@ object RiskConfirmManager {
             startCountdown()
             _dialogState.value = DialogState(
                 command = command,
-                riskDescription = nativeDetection.description,
-                riskType = nativeDetection.riskType?.displayName ?: "高危操作",
+                riskDescription = detection.description,
+                riskType = detection.riskType?.displayName ?: "高危操作",
                 environmentType = envType,
                 isSshPowerOperation = true
             )
-            // 60 秒超时自动拒绝
+            // 60 秒超时自动拒绝并恢复会话
             Handler(Looper.getMainLooper()).postDelayed({
                 val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
                 val handle = prefs.getString(KEY_PENDING_SESSION_HANDLE, null)
                 val result = prefs.getString(KEY_PENDING_RESULT, null)
                 if (handle != null && result == null) {
                     prefs.edit().putString(KEY_PENDING_RESULT, RESULT_DENIED).apply()
-                    clearPendingState(context)
-                    Toast.makeText(context, context.getString(R.string.access_denied), Toast.LENGTH_LONG).show()
                     _dialogState.value = null
                     stopCountdown()
+                    // 超时走取消逻辑，恢复会话
+                    navigateBackToTermux(context, handle, RESULT_DENIED)
                 }
             }, 60000L)
             // 跳转到主页 Activity
@@ -594,9 +655,7 @@ object RiskConfirmManager {
             return true
         }
 
-        // 其他高危命令或原生环境下的 su/sudo：正常拦截流程
-        val detection = nativeDetection
-
+        // 其他高危命令：拦截流程
         // 保存待处理状态到 SharedPreferences
         savePendingState(context, session.mHandle, command)
 
@@ -612,7 +671,7 @@ object RiskConfirmManager {
             isWindowsDiskCommand = detection.isWindowsDiskCommand
         )
 
-        // 60 秒超时自动拒绝
+        // 60 秒超时自动拒绝并恢复会话
         Handler(Looper.getMainLooper()).postDelayed({
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             val handle = prefs.getString(KEY_PENDING_SESSION_HANDLE, null)
@@ -620,10 +679,10 @@ object RiskConfirmManager {
             if (handle != null && result == null) {
                 // 超时未处理，自动拒绝
                 prefs.edit().putString(KEY_PENDING_RESULT, RESULT_DENIED).apply()
-                clearPendingState(context)
-                Toast.makeText(context, context.getString(R.string.access_denied), Toast.LENGTH_LONG).show()
                 _dialogState.value = null
                 stopCountdown()
+                // 超时走取消逻辑，恢复会话
+                navigateBackToTermux(context, handle, RESULT_DENIED)
             }
         }, 60000L)
 
@@ -666,10 +725,20 @@ object RiskConfirmManager {
         }
 
         // 检查会话名称是否包含 SSH 标识
-        val sshIndicators = listOf("ssh", "scp", "sftp", "remote")
+        val sshIndicators = listOf("ssh", "scp", "sftp", "remote", "SSH-")
         for (indicator in sshIndicators) {
             if (sessionName.contains(indicator, ignoreCase = true)) {
                 return EnvironmentType.SSH
+            }
+        }
+
+        // 检查会话参数是否包含 SSH 命令（通过远程页面创建的 SSH 会话）
+        val args = session.args
+        if (args != null) {
+            for (arg in args) {
+                if (arg != null && arg.contains("ssh", ignoreCase = true)) {
+                    return EnvironmentType.SSH
+                }
             }
         }
 
