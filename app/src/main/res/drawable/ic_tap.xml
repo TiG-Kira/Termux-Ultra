@@ -1,19 +1,9 @@
-<?xml version="1.0" encoding="utf-8"?><!--
-  ~ Copyright (c) 2025  Gaurav Ujjwal.
-  ~
-  ~ SPDX-License-Identifier:  GPL-3.0-or-later
-  ~
-  ~ See COPYING.txt for more details.
-  -->
-
-<shape xmlns:android="http://schemas.android.com/apk/res/android"
-    android:shape="oval">
-    <!--This is used on top of a black surface, so the color is fixed-->
-    <solid android:color="#bfff" />
-    <size
-        android:width="24dp"
-        android:height="24dp" />
-    <stroke
-        android:width="3dp"
-        android:color="#7aaa" />
-</shape>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="?colorOnSurface"
+        android:pathData="M13.64,21.97C13.14,22.21 12.54,22 12.31,21.5L10.13,16.76L7.62,18.78C7.45,18.92 7.24,19 7.02,19L6.77,19C6.36,19 6,18.64 6,18.23L6,6.77C6,6.36 6.36,6 6.77,6L7.02,6C7.24,6 7.45,6.08 7.62,6.22L16.09,13.09L19.05,11.86C19.55,11.64 20.15,11.85 20.38,12.34L21.95,15.67C22.21,16.22 22.14,16.89 21.77,17.39L13.64,21.97Z" />
+</vector>

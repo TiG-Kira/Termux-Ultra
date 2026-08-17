@@ -1851,86 +1851,90 @@ private fun HelpContentWithCopyableCommands(
     content: String,
     context: Context
 ) {
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+    fun showSnackbar(message: String) {
+        scope.launch {
+            snackbarHostState.showSnackbar(message = message, duration = SnackbarDuration.Short)
+        }
+    }
     val lines = content.split("\n")
     val clipboard = remember {
         context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
     }
 
-    lines.forEachIndexed { index, rawLine ->
-        val trimmed = rawLine.trim()
-        if (trimmed.isEmpty()) {
-            Spacer(Modifier.height(8.dp))
-            return@forEachIndexed
-        }
-
-        // 提取命令部分
-        val commandText: String? = when {
-            // "• termux-battery-status — 电池信息" → 命令是 "termux-battery-status"
-            trimmed.startsWith("• ") -> {
-                val afterBullet = trimmed.substring(2).trim()
-                val dashIdx = afterBullet.indexOf(" — ")
-                if (dashIdx > 0) afterBullet.substring(0, dashIdx).trim()
-                else if (afterBullet.startsWith("termux-") || afterBullet.startsWith("pkg ")) afterBullet
-                else null
+    Box {
+        lines.forEachIndexed { index, rawLine ->
+            val trimmed = rawLine.trim()
+            if (trimmed.isEmpty()) {
+                Spacer(Modifier.height(8.dp))
+                return@forEachIndexed
             }
-            // 独立命令行
-            trimmed.startsWith("pkg ") ||
-            trimmed.startsWith("mkdir ") ||
-            trimmed.startsWith("termux-") ||
-            trimmed.startsWith("#!/") ||
-            trimmed.startsWith("sshd") ||
-            trimmed.startsWith("termux-wake-lock") -> trimmed
-            // "   #!/data/..." 缩进的脚本行
-            rawLine.trimStart().startsWith("#!/") -> rawLine.trimStart()
-            rawLine.trimStart().startsWith("termux-wake-lock") -> rawLine.trimStart()
-            rawLine.trimStart().startsWith("sshd") -> rawLine.trimStart()
-            else -> null
-        }
 
-        if (commandText != null) {
-            // 可复制命令行：命令文本 + 复制图标
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 2.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+            val commandText: String? = when {
+                trimmed.startsWith("• ") -> {
+                    val afterBullet = trimmed.substring(2).trim()
+                    val dashIdx = afterBullet.indexOf(" — ")
+                    if (dashIdx > 0) afterBullet.substring(0, dashIdx).trim()
+                    else if (afterBullet.startsWith("termux-") || afterBullet.startsWith("pkg ")) afterBullet
+                    else null
+                }
+                trimmed.startsWith("pkg ") ||
+                trimmed.startsWith("mkdir ") ||
+                trimmed.startsWith("termux-") ||
+                trimmed.startsWith("#!/") ||
+                trimmed.startsWith("sshd") ||
+                trimmed.startsWith("termux-wake-lock") -> trimmed
+                rawLine.trimStart().startsWith("#!/") -> rawLine.trimStart()
+                rawLine.trimStart().startsWith("termux-wake-lock") -> rawLine.trimStart()
+                rawLine.trimStart().startsWith("sshd") -> rawLine.trimStart()
+                else -> null
+            }
+
+            if (commandText != null) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = rawLine,
+                        fontSize = 13.sp,
+                        color = MiuixTheme.colorScheme.onSurface,
+                        lineHeight = 20.sp,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Box(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(MiuixTheme.colorScheme.primary.copy(alpha = 0.12f))
+                            .clickable {
+                                val clip = android.content.ClipData.newPlainText("命令", commandText)
+                                clipboard.setPrimaryClip(clip)
+                                showSnackbar("已复制: $commandText")
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_copy),
+                            contentDescription = "复制",
+                            modifier = Modifier.size(16.dp),
+                            tint = MiuixTheme.colorScheme.primary
+                        )
+                    }
+                }
+            } else {
                 Text(
                     text = rawLine,
-                    fontSize = 13.sp,
+                    fontSize = 14.sp,
                     color = MiuixTheme.colorScheme.onSurface,
-                    lineHeight = 20.sp,
-                    modifier = Modifier.weight(1f)
+                    lineHeight = 22.sp
                 )
-                Spacer(Modifier.width(4.dp))
-                Box(
-                    modifier = Modifier
-                        .size(28.dp)
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(MiuixTheme.colorScheme.primary.copy(alpha = 0.12f))
-                        .clickable {
-                            val clip = android.content.ClipData.newPlainText("命令", commandText)
-                            clipboard.setPrimaryClip(clip)
-                            showSnackbar("已复制: $commandText")
-                        },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_copy),
-                        contentDescription = "复制",
-                        modifier = Modifier.size(16.dp),
-                        tint = MiuixTheme.colorScheme.primary
-                    )
-                }
             }
-        } else {
-            // 普通文本行
-            Text(
-                text = rawLine,
-                fontSize = 14.sp,
-                color = MiuixTheme.colorScheme.onSurface,
-                lineHeight = 22.sp
-            )
         }
+        SnackbarHost(state = snackbarHostState)
     }
 }

@@ -54,6 +54,10 @@ public class VncConnectionManager {
         saveAll(connections);
     }
 
+    public void clearAllConnections() {
+        saveAll(new ArrayList<>());
+    }
+
     private void saveAll(List<VncConnection> connections) {
         String json = gson.toJson(connections);
         prefs.edit().putString(KEY_CONNECTIONS, json).apply();

@@ -241,12 +241,12 @@ private fun MainTermuxSettingsPage(
             }
         }
 
-        item { SmallTitle(text = stringResource(R.string.about_preference_title)) }
+        item { SmallTitle(text = stringResource(R.string.termux_native_about_title)) }
         item {
             SettingsCard {
                 ArrowPreference(
-                    title = stringResource(R.string.about_preference_title),
-                    summary = stringResource(R.string.about_description),
+                    title = stringResource(R.string.termux_native_about_title),
+                    summary = stringResource(R.string.termux_native_about_summary),
                     onClick = {
                         launchAboutReport(context)
                     },

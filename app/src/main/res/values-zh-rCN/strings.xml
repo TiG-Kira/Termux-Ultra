@@ -102,6 +102,9 @@
     <string name="termux_widget_preferences_title">Termux:Widget</string>
     <string name="termux_widget_preferences_summary">Termux:Widget 设置</string>
 
+    <string name="termux_native_about_title">Termux 报告</string>
+    <string name="termux_native_about_summary">查看Termux 生成的完整关于本机和软件的报告</string>
+
     <string name="about_preference_title">关于</string>
     <string name="donate_preference_title">捐赠</string>
 
