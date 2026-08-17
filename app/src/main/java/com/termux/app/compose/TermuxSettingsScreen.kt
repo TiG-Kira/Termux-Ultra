@@ -19,6 +19,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.termux.R
 import com.termux.app.models.UserAction
+import com.termux.shared.R as SharedR
 import com.termux.shared.activities.ReportActivity
 import com.termux.shared.file.FileUtils
 import com.termux.shared.models.ReportInfo
@@ -505,10 +506,10 @@ private fun DebuggingSettingsPage(
 
     val logLevelItems = remember {
         listOf(
-            context.getString(R.string.log_level_off),
-            context.getString(R.string.log_level_normal),
-            context.getString(R.string.log_level_debug),
-            context.getString(R.string.log_level_verbose)
+            context.getString(SharedR.string.log_level_off),
+            context.getString(SharedR.string.log_level_normal),
+            context.getString(SharedR.string.log_level_debug),
+            context.getString(SharedR.string.log_level_verbose)
         )
     }
 

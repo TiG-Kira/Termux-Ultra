@@ -15,6 +15,7 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.lifecycleScope
+import com.termux.R
 import com.termux.app.TermuxService
 import com.termux.shared.termux.TermuxConstants
 import kotlinx.coroutines.Dispatchers

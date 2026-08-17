@@ -31,6 +31,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.launch
 import top.yukonga.miuix.kmp.basic.HorizontalDivider
 import top.yukonga.miuix.kmp.basic.LinearProgressIndicator
 import top.yukonga.miuix.kmp.basic.Scaffold
@@ -1290,14 +1291,12 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
                         useCustomSystemPrompt = true
                         systemPromptSource = file.name
                         showSnackbar("已加载自定义 System Prompt")
-                        } else {
-                            showSnackbar("文件内容为空")
-                        }
-                    } catch (e: Exception) {
-                        showSnackbar("文件不存在")
+                    } else {
+                        showSnackbar("文件内容为空")
                     }
-                } catch (e: Exception) {
-                    showSnackbar("读取文件失败: ${e.message}")
+                }
+            } catch (e: Exception) {
+                showSnackbar("读取文件失败: ${e.message}")
             }
         }
     )
