@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Termux Ultra — 终端</title>
+  <link rel="stylesheet" href="../colors_and_type.css">
+  <script>
+    tailwind.config = { darkMode: 'class' };
+  </script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    (function () {
+      const saved = localStorage.getItem('theme');
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      if (saved === 'dark' || (!saved && prefersDark)) {
+        document.documentElement.classList.add('dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+      }
+    })();
+  </script>
+  <style>
+    :root { color-scheme: light dark; }
+    body { font-family: var(--tu-font-family); -webkit-tap-highlight-color: transparent; }
+
+    /* ── Carousel ── */
+    .status-carousel {
+      display: flex;
+      overflow-x: auto;
+      scroll-snap-type: x mandatory;
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+      -webkit-overflow-scrolling: touch;
+      scroll-behavior: smooth;
+    }
+    .status-carousel::-webkit-scrollbar { display: none; }
+    .status-slide {
+      flex: 0 0 100%;
+      scroll-snap-align: center;
+      scroll-snap-stop: always;
+      box-sizing: border-box;
+      padding: 0 var(--tu-page-horizontal);
+    }
+
+    /* ── Page dots ── */
+    .page-dots {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 0 2px;
+    }
+    .page-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background-color: var(--tu-border);
+      border: none; padding: 0; cursor: pointer;
+      transition: width 0.3s cubic-bezier(0.4,0,0.2,1), background-color 0.3s ease;
+    }
+    .dark .page-dot { background-color: var(--tu-border-dark); }
+    .page-dot.active {
+      width: 20px;
+      border-radius: 3px;
+      background-color: var(--tu-primary);
+    }
+
+    /* ── Shared card base ── */
+    .hero-card {
+      position: relative;
+      overflow: hidden;
+      border-radius: var(--tu-radius-2xl);
+      padding: 22px 18px;
+      min-height: 120px;
+    }
+    .hero-card .deco {
+      position: absolute;
+      border-radius: 50%;
+      pointer-events: none;
+    }
+    .hero-card .close-btn {
+      position: absolute;
+      top: 10px; right: 10px;
+      width: 28px; height: 28px;
+      border-radius: 50%;
+      border: none;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer;
+      z-index: 2;
+      transition: opacity 0.15s ease;
+    }
+    .hero-card .close-btn:active { opacity: 0.6; }
+    .hero-card .card-row {
+      display: flex; align-items: center; gap: 14px;
+      position: relative; z-index: 1;
+    }
+    .hero-card .card-body { flex: 1; min-width: 0; }
+    .hero-card .icon-box {
+      flex-shrink: 0;
+      width: 48px; height: 48px;
+      border-radius: var(--tu-radius-lg);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .hero-card .status-badge {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 4px 10px; border-radius: 9999px;
+      font-size: 12px; font-weight: 500;
+    }
+
+    /* ── 1. Welcome card (blue-purple gradient) ── */
+    .card-welcome {
+      background: linear-gradient(135deg, #2563EB 0%, #7C3AED 100%);
+      box-shadow: 0 4px 16px rgba(37, 99, 235, 0.18);
+    }
+    .dark .card-welcome {
+      background: linear-gradient(135deg, #1E40AF 0%, #5B21B6 100%);
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+    }
+    .card-welcome .deco-1 { top: -32px; right: -20px; width: 104px; height: 104px; background: rgba(255,255,255,0.08); }
+    .card-welcome .deco-2 { bottom: -38px; right: 50px; width: 72px; height: 72px; background: rgba(255,255,255,0.05); }
+    .card-welcome .deco-3 { top: 14px; right: 64px; width: 36px; height: 36px; background: rgba(255,255,255,0.06); }
+    .card-welcome .icon-box {
+      background: rgba(255, 255, 255, 0.2);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.18);
+    }
+    .card-welcome .close-btn {
+      background: rgba(255, 255, 255, 0.15);
+      color: rgba(255, 255, 255, 0.85);
+    }
+
+    /* ── 2. Service status card (green container) ── */
+    .card-service {
+      background-color: var(--tu-success-container);
+      box-shadow: 0 2px 10px rgba(54, 209, 103, 0.1);
+    }
+    .dark .card-service {
+      background-color: var(--tu-success-container-dark);
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+    }
+    .card-service .deco-1 { top: -28px; right: -18px; width: 96px; height: 96px; background: rgba(54, 209, 103, 0.14); }
+    .card-service .deco-2 { bottom: -32px; right: 56px; width: 64px; height: 64px; background: rgba(54, 209, 103, 0.07); }
+    .card-service .icon-box {
+      background: linear-gradient(135deg, #36D167, #22C55E);
+      box-shadow: 0 2px 8px rgba(54, 209, 103, 0.3);
+    }
+    .card-service .status-badge {
+      background-color: rgba(54, 209, 103, 0.14);
+      color: var(--tu-success);
+    }
+
+    /* ── 3. Wake lock warning card (amber container) ── */
+    .card-wakelock {
+      background-color: var(--tu-warning-container);
+      box-shadow: 0 2px 10px rgba(253, 216, 53, 0.1);
+    }
+    .dark .card-wakelock {
+      background-color: var(--tu-warning-container-dark);
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+    }
+    .card-wakelock .deco-1 { top: -28px; right: -18px; width: 96px; height: 96px; background: rgba(253, 216, 53, 0.14); }
+    .card-wakelock .deco-2 { bottom: -32px; right: 56px; width: 64px; height: 64px; background: rgba(253, 216, 53, 0.07); }
+    .card-wakelock .icon-box {
+      background: linear-gradient(135deg, #F59E0B, #FDD835);
+      box-shadow: 0 2px 8px rgba(245, 158, 11, 0.3);
+    }
+    .card-wakelock .close-btn {
+      background: rgba(245, 158, 11, 0.15);
+      color: #B45309;
+    }
+    .dark .card-wakelock .close-btn {
+      background: rgba(253, 216, 53, 0.15);
+      color: #FCD34D;
+    }
+    .card-wakelock .status-badge {
+      background-color: rgba(245, 158, 11, 0.14);
+      color: #B45309;
+    }
+    .dark .card-wakelock .status-badge {
+      color: #FCD34D;
+    }
+
+    /* ── 4. Android low version card (orange gradient) ── */
+    .card-android {
+      background: linear-gradient(135deg, #EA580C 0%, #F59E0B 100%);
+      box-shadow: 0 4px 16px rgba(234, 88, 12, 0.18);
+    }
+    .dark .card-android {
+      background: linear-gradient(135deg, #9A3412 0%, #B45309 100%);
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+    }
+    .card-android .deco-1 { top: -30px; right: -18px; width: 100px; height: 100px; background: rgba(255,255,255,0.08); }
+    .card-android .deco-2 { bottom: -36px; right: 48px; width: 68px; height: 68px; background: rgba(255,255,255,0.05); }
+    .card-android .icon-box {
+      background: rgba(255, 255, 255, 0.2);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.18);
+    }
+    .card-android .close-btn {
+      background: rgba(255, 255, 255, 0.15);
+      color: rgba(255, 255, 255, 0.85);
+    }
+
+    /* ── 5. ROOT status card (purple-indigo gradient) ── */
+    .card-root {
+      background: linear-gradient(135deg, #6366F1 0%, #8B5CF6 100%);
+      box-shadow: 0 4px 16px rgba(99, 102, 241, 0.18);
+    }
+    .dark .card-root {
+      background: linear-gradient(135deg, #4338CA 0%, #6D28D9 100%);
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+    }
+    .card-root .deco-1 { top: -32px; right: -20px; width: 104px; height: 104px; background: rgba(255,255,255,0.08); }
+    .card-root .deco-2 { bottom: -38px; right: 50px; width: 72px; height: 72px; background: rgba(255,255,255,0.05); }
+    .card-root .deco-3 { top: 16px; right: 60px; width: 32px; height: 32px; background: rgba(255,255,255,0.06); }
+    .card-root .icon-box {
+      background: rgba(255, 255, 255, 0.2);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.18);
+    }
+    .card-root .status-badge {
+      background: rgba(255, 255, 255, 0.2);
+      color: white;
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+    }
+
+    /* ── 6. Init failure card (red container) ── */
+    .card-init-error {
+      background-color: var(--tu-error-container);
+      box-shadow: 0 2px 10px rgba(255, 82, 82, 0.1);
+    }
+    .dark .card-init-error {
+      background-color: var(--tu-error-container-dark);
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+    }
+    .card-init-error .deco-1 { top: -28px; right: -18px; width: 96px; height: 96px; background: rgba(255, 82, 82, 0.14); }
+    .card-init-error .deco-2 { bottom: -32px; right: 56px; width: 64px; height: 64px; background: rgba(255, 82, 82, 0.07); }
+    .card-init-error .icon-box {
+      background: linear-gradient(135deg, #EF4444, #FF5252);
+      box-shadow: 0 2px 8px rgba(255, 82, 82, 0.3);
+    }
+    .card-init-error .status-badge {
+      background-color: rgba(255, 82, 82, 0.14);
+      color: var(--tu-error);
+    }
+    .card-init-error .retry-btn {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 6px 14px; border-radius: 9999px;
+      background-color: var(--tu-error);
+      color: white;
+      font-size: 13px; font-weight: 500;
+      border: none; cursor: pointer;
+      transition: opacity 0.15s ease;
+    }
+    .card-init-error .retry-btn:active { opacity: 0.75; }
+
+    /* ── Session card ── */
+    .session-card {
+      border-radius: var(--tu-radius-xl);
+      background-color: var(--tu-surface);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+      transition: transform 0.15s ease;
+      cursor: pointer;
+    }
+    .session-card:active { transform: scale(0.99); }
+    .dark .session-card { background-color: var(--tu-surface-dark); }
+    .session-action-btn {
+      width: 36px; height: 36px;
+      border-radius: var(--tu-radius-md);
+      display: flex; align-items: center; justify-content: center;
+      border: none; cursor: pointer;
+      background-color: var(--tu-primary);
+      color: var(--tu-primary-foreground);
+      transition: opacity 0.15s ease;
+    }
+    .session-action-btn:active { opacity: 0.75; }
+    .session-action-btn.danger { background-color: var(--tu-error); }
+  </style>
+</head>
+<body class="tu-bg tu-text antialiased">
+  <main class="min-h-screen" style="padding-bottom: var(--tu-page-bottom);">
+    <!-- TopAppBar -->
+    <header class="tu-top-appbar">
+      <div class="w-10"></div>
+      <h1 class="tu-top-appbar-title">终端</h1>
+      <div class="flex items-center gap-1">
+        <!-- 唤醒锁开关 -->
+        <div class="flex items-center gap-1 px-1">
+          <svg class="shrink-0 tu-text-variant" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+          </svg>
+          <label class="relative inline-flex cursor-pointer items-center">
+            <input type="checkbox" class="peer sr-only">
+            <span class="h-6 w-10 rounded-full bg-[var(--tu-secondary)] transition-colors peer-checked:bg-[var(--tu-primary)] dark:bg-[var(--tu-secondary-dark)]"></span>
+            <span class="absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform peer-checked:translate-x-4"></span>
+          </label>
+        </div>
+        <!-- 新建终端 -->
+        <button data-dom-id="new-terminal" class="tu-top-appbar-btn" aria-label="新建终端">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- 搜索框 -->
+    <div class="px-4 pb-1 pt-2">
+      <div class="miuix-search">
+        <svg class="shrink-0 tu-text-variant" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="8"></circle>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+        </svg>
+        <input type="text" placeholder="输入相关标题来搜索" aria-label="搜索终端会话">
+      </div>
+    </div>
+
+    <!-- 页面指示器 -->
+    <div class="page-dots" id="page-dots">
+      <button class="page-dot active" data-index="0" aria-label="欢迎卡片"></button>
+      <button class="page-dot" data-index="1" aria-label="服务状态"></button>
+      <button class="page-dot" data-index="2" aria-label="唤醒锁警告"></button>
+      <button class="page-dot" data-index="3" aria-label="Android低版本"></button>
+      <button class="page-dot" data-index="4" aria-label="ROOT状态"></button>
+      <button class="page-dot" data-index="5" aria-label="初始化失败"></button>
+    </div>
+
+    <!-- 状态卡片横向轮播 -->
+    <div class="status-carousel" id="status-carousel">
+
+      <!-- Slide 1: 欢迎卡片 -->
+      <div class="status-slide">
+        <article class="hero-card card-welcome" data-dom-id="welcome-card">
+          <div class="deco deco-1"></div>
+          <div class="deco deco-2"></div>
+          <div class="deco deco-3"></div>
+          <button class="close-btn" data-dom-id="welcome-close" aria-label="关闭">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+          <div class="card-row">
+            <div class="icon-box">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M9 18h6"></path><path d="M10 22h4"></path>
+                <path d="M12 2a7 7 0 0 0-4 12.7c.4.3.7.7.9 1.1l.6 1.2h5l.6-1.2c.2-.4.5-.8.9-1.1A7 7 0 0 0 12 2z"></path>
+              </svg>
+            </div>
+            <div class="card-body">
+              <p class="text-[17px] font-bold leading-snug text-white">欢迎来到 Termux Ultra</p>
+              <p class="mt-1 text-[13px] leading-relaxed" style="color: rgba(255,255,255,0.72);">点击右上角"+"新建终端会话，开始命令行之旅。</p>
+            </div>
+          </div>
+        </article>
+      </div>
+
+      <!-- Slide 2: 服务状态卡 -->
+      <div class="status-slide">
+        <article class="hero-card card-service" data-dom-id="service-status-card">
+          <div class="deco deco-1"></div>
+          <div class="deco deco-2"></div>
+          <div class="card-row">
+            <div class="icon-box">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="20 6 9 17 4 12"></polyline>
+              </svg>
+            </div>
+            <div class="card-body">
+              <h2 class="text-[17px] font-bold leading-snug tu-text">服务运行正常</h2>
+              <p class="mt-1 text-[13px] leading-relaxed tu-text-variant">Termux 后台服务正在运行，所有会话均可正常交互。</p>
+            </div>
+            <span class="status-badge">
+              <span class="h-1.5 w-1.5 rounded-full" style="background-color: var(--tu-success);"></span>
+              运行中
+            </span>
+          </div>
+        </article>
+      </div>
+
+      <!-- Slide 3: 唤醒锁警告卡 -->
+      <div class="status-slide">
+        <article class="hero-card card-wakelock" data-dom-id="wakelock-warning-card">
+          <div class="deco deco-1"></div>
+          <div class="deco deco-2"></div>
+          <button class="close-btn" data-dom-id="wakelock-close" aria-label="关闭">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+          <div class="card-row">
+            <div class="icon-box">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                <line x1="12" y1="9" x2="12" y2="13"></line>
+                <line x1="12" y1="17" x2="12.01" y2="17"></line>
+              </svg>
+            </div>
+            <div class="card-body">
+              <h2 class="text-[17px] font-bold leading-snug tu-text">唤醒锁未开启</h2>
+              <p class="mt-1 text-[13px] leading-relaxed tu-text-variant">设备休眠后终端可能被系统杀死，建议开启唤醒锁保持运行。</p>
+            </div>
+            <span class="status-badge">
+              <span class="h-1.5 w-1.5 rounded-full" style="background-color: var(--tu-warning);"></span>
+              需注意
+            </span>
+          </div>
+        </article>
+      </div>
+
+      <!-- Slide 4: Android 低版本卡 -->
+      <div class="status-slide">
+        <article class="hero-card card-android" data-dom-id="android-version-card">
+          <div class="deco deco-1"></div>
+          <div class="deco deco-2"></div>
+          <button class="close-btn" data-dom-id="android-close" aria-label="关闭">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+          <div class="card-row">
+            <div class="icon-box">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M6 9a6 6 0 0 1 12 0v3"></path>
+                <path d="M17 15a2 2 0 0 0 2-2v-1"></path>
+                <path d="M7 15a2 2 0 0 1-2-2v-1"></path>
+                <line x1="7" y1="22" x2="7" y2="20"></line>
+                <line x1="17" y1="22" x2="17" y2="20"></line>
+                <rect x="5" y="12" width="14" height="9" rx="2"></rect>
+                <line x1="9" y1="5" x2="7.5" y2="3"></line>
+                <line x1="15" y1="5" x2="16.5" y2="3"></line>
+              </svg>
+            </div>
+            <div class="card-body">
+              <p class="text-[17px] font-bold leading-snug text-white">Android 版本较低</p>
+              <p class="mt-1 text-[13px] leading-relaxed" style="color: rgba(255,255,255,0.72);">当前系统版本可能存在兼容性问题，部分功能可能受限。</p>
+            </div>
+          </div>
+        </article>
+      </div>
+
+      <!-- Slide 5: ROOT 状态卡 -->
+      <div class="status-slide">
+        <article class="hero-card card-root" data-dom-id="root-status-card">
+          <div class="deco deco-1"></div>
+          <div class="deco deco-2"></div>
+          <div class="deco deco-3"></div>
+          <div class="card-row">
+            <div class="icon-box">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                <polyline points="9 12 11 14 15 10"></polyline>
+              </svg>
+            </div>
+            <div class="card-body">
+              <p class="text-[17px] font-bold leading-snug text-white">ROOT 权限可用</p>
+              <p class="mt-1 text-[13px] leading-relaxed" style="color: rgba(255,255,255,0.72);">已检测到 ROOT 权限，可使用高级系统管理功能。</p>
+            </div>
+            <span class="status-badge">
+              <span class="h-1.5 w-1.5 rounded-full bg-white"></span>
+              已授权
+            </span>
+          </div>
+        </article>
+      </div>
+
+      <!-- Slide 6: 初始化失败卡 -->
+      <div class="status-slide">
+        <article class="hero-card card-init-error" data-dom-id="init-error-card">
+          <div class="deco deco-1"></div>
+          <div class="deco deco-2"></div>
+          <div class="card-row" style="align-items: flex-start;">
+            <div class="icon-box" style="width: 48px; height: 48px;">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="15" y1="9" x2="9" y2="15"></line>
+                <line x1="9" y1="9" x2="15" y2="15"></line>
+              </svg>
+            </div>
+            <div class="card-body">
+              <h2 class="text-[17px] font-bold leading-snug tu-text">初始化失败</h2>
+              <p class="mt-1 text-[13px] leading-relaxed tu-text-variant">Termux 运行环境初始化失败，请重试或检查存储权限。</p>
+              <button class="retry-btn mt-3" data-dom-id="init-retry" aria-label="重试">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="23 4 23 10 17 10"></polyline>
+                  <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+                </svg>
+                重试
+              </button>
+            </div>
+          </div>
+        </article>
+      </div>
+
+    </div>
+
+    <!-- 终端会话列表 -->
+    <section class="space-y-3 px-4 pb-6 pt-5">
+      <!-- 会话卡片 1 -->
+      <article class="session-card p-4" data-dom-id="session-card-1">
+        <div class="flex items-center gap-3">
+          <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl tu-surface-variant">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--tu-primary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="4 17 10 11 4 5"></polyline>
+              <line x1="12" y1="19" x2="20" y2="19"></line>
+            </svg>
+          </div>
+          <div class="flex-1 min-w-0">
+            <h3 class="truncate text-[15px] font-bold tu-text">终端 1</h3>
+            <p class="mt-0.5 truncate text-xs tu-text-summary" style="font-family: var(--tu-font-mono);">~ $ pkg update</p>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <button data-dom-id="rename-session-1" class="session-action-btn" aria-label="重命名">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+              </svg>
+            </button>
+            <button data-dom-id="stop-session-1" class="session-action-btn danger" aria-label="关闭会话">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="3 6 5 6 21 6"></polyline>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+              </svg>
+            </button>
+          </div>
+        </div>
+      </article>
+
+      <!-- 会话卡片 2 -->
+      <article class="session-card p-4" data-dom-id="session-card-2">
+        <div class="flex items-center gap-3">
+          <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl tu-surface-variant">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--tu-primary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="4 17 10 11 4 5"></polyline>
+              <line x1="12" y1="19" x2="20" y2="19"></line>
+            </svg>
+          </div>
+          <div class="flex-1 min-w-0">
+            <h3 class="truncate text-[15px] font-bold tu-text">bash</h3>
+            <p class="mt-0.5 truncate text-xs tu-text-summary" style="font-family: var(--tu-font-mono);">~ $ ls -la</p>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <button data-dom-id="rename-session-2" class="session-action-btn" aria-label="重命名">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+              </svg>
+            </button>
+            <button data-dom-id="stop-session-2" class="session-action-btn danger" aria-label="关闭会话">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="3 6 5 6 21 6"></polyline>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+              </svg>
+            </button>
+          </div>
+        </div>
+      </article>
+    </section>
+
+    <!-- 空状态提示 -->
+    <div class="flex flex-col items-center justify-center py-20">
+      <div class="flex h-16 w-16 items-center justify-center rounded-full tu-surface-variant">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--tu-on-surface-variant)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="4 17 10 11 4 5"></polyline>
+          <line x1="12" y1="19" x2="20" y2="19"></line>
+        </svg>
+      </div>
+      <p class="mt-4 text-[15px] font-medium tu-text-summary">暂无终端会话</p>
+      <p class="mt-1 text-sm tu-text-variant">点击右上角"+"创建新终端</p>
+    </div>
+  </main>
+
+  <!-- 底部导航 -->
+  <nav class="fixed bottom-0 left-0 right-0 z-50 flex h-16 items-center justify-around border-t border-[var(--tu-border)] bg-[var(--tu-surface)] dark:border-[var(--tu-border-dark)] dark:bg-[var(--tu-surface-dark)]" style="padding-bottom: env(safe-area-inset-bottom);">
+    <button data-dom-id="nav-terminal" class="flex flex-1 flex-col items-center justify-center gap-1 text-[var(--tu-primary)]" aria-label="终端">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="4 17 10 11 4 5"></polyline>
+        <line x1="12" y1="19" x2="20" y2="19"></line>
+      </svg>
+      <span class="text-[11px] font-medium">终端</span>
+    </button>
+    <button data-dom-id="nav-files" class="flex flex-1 flex-col items-center justify-center gap-1 tu-text-variant" aria-label="文件">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+      </svg>
+      <span class="text-[11px] font-medium">文件</span>
+    </button>
+    <button data-dom-id="nav-remote" class="flex flex-1 flex-col items-center justify-center gap-1 tu-text-variant" aria-label="远程">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+        <line x1="8" y1="21" x2="16" y2="21"></line>
+        <line x1="12" y1="17" x2="12" y2="21"></line>
+      </svg>
+      <span class="text-[11px] font-medium">远程</span>
+    </button>
+    <button data-dom-id="nav-resources" class="flex flex-1 flex-col items-center justify-center gap-1 tu-text-variant" aria-label="资源">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+        <polyline points="14 2 14 8 20 8"></polyline>
+        <line x1="16" y1="13" x2="8" y2="13"></line>
+        <line x1="16" y1="17" x2="8" y2="17"></line>
+        <polyline points="10 9 9 9 8 9"></polyline>
+      </svg>
+      <span class="text-[11px] font-medium">资源</span>
+    </button>
+    <button data-dom-id="nav-settings" class="flex flex-1 flex-col items-center justify-center gap-1 tu-text-variant" aria-label="设置">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="3"></circle>
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+      </svg>
+      <span class="text-[11px] font-medium">设置</span>
+    </button>
+  </nav>
+
+  <script>
+    (function() {
+      var carousel = document.getElementById('status-carousel');
+      var dots = document.querySelectorAll('.page-dot');
+      if (!carousel || !dots.length) return;
+
+      carousel.addEventListener('scroll', function() {
+        var idx = Math.round(carousel.scrollLeft / carousel.offsetWidth);
+        dots.forEach(function(dot, i) {
+          dot.classList.toggle('active', i === idx);
+        });
+      }, { passive: true });
+
+      dots.forEach(function(dot) {
+        dot.addEventListener('click', function() {
+          var idx = parseInt(this.dataset.index, 10);
+          carousel.scrollTo({ left: idx * carousel.offsetWidth, behavior: 'smooth' });
+        });
+      });
+    })();
+  </script>
+</body>
+</html>

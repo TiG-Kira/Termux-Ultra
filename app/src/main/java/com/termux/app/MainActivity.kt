@@ -224,7 +224,7 @@ class MainActivity : FragmentActivity() {
                             onToggleWakeLock = { toggleWakeLock() },
                             onRefreshSessions = { updateSessions() }
                         )
-                    RiskConfirmDialogHost()
+                    RiskConfirmDialogHost(collectSnackbarEvents = false)
                 }
                 }
             }

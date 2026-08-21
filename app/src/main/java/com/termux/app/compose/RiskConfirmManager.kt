@@ -1059,11 +1059,15 @@ object RiskConfirmManager {
  * @param snackbarHostState Snackbar 宿主状态，用于显示 Snackbar
  * @param collectSnackbar 是否收集并显示 RiskConfirmManager 的 Snackbar 事件。
  *        主页设为 false（由终端页独占显示），终端页设为 true。
+ * @param collectSnackbarEvents 主开关：是否收集 Snackbar 事件（详情/汇总）。
+ *        设为 false 时完全跳过 Snackbar 事件收集，仅处理弹窗状态。
+ *        用于 MainActivity 级别宿主（避免在主页重复显示终端页的 Snackbar）。
  */
 @Composable
 fun RiskConfirmDialogHost(
     snackbarHostState: top.yukonga.miuix.kmp.basic.SnackbarHostState? = null,
-    collectSnackbar: Boolean = true
+    collectSnackbar: Boolean = true,
+    collectSnackbarEvents: Boolean = true
 ) {
     val dialogState by RiskConfirmManager.dialogState.collectAsState()
     val countdown by RiskConfirmManager.countdown.collectAsState()
@@ -1101,45 +1105,49 @@ fun RiskConfirmDialogHost(
         }
     }
 
-    // 仅在 collectSnackbar=true 时收集详细 Snackbar 事件（终端页）
-    if (collectSnackbar) {
-        LaunchedEffect(Unit) {
-            RiskConfirmManager.snackbarEvents.collect { event ->
-                val duration = if (event.duration >= Snackbar.LENGTH_LONG) {
-                    top.yukonga.miuix.kmp.basic.SnackbarDuration.Long
-                } else {
-                    top.yukonga.miuix.kmp.basic.SnackbarDuration.Short
-                }
-                if (snackbarHostState != null) {
-                    snackbarScope.launch {
-                        snackbarHostState.showSnackbar(
-                            message = event.message,
-                            duration = duration
-                        )
+    // 仅在 collectSnackbarEvents=true 时收集 Snackbar 事件
+    // collectSnackbar=true → 收集详情 Snackbar（终端页）
+    // collectSnackbar=false → 收集汇总 Snackbar（主页）
+    if (collectSnackbarEvents) {
+        if (collectSnackbar) {
+            LaunchedEffect(Unit) {
+                RiskConfirmManager.snackbarEvents.collect { event ->
+                    val duration = if (event.duration >= Snackbar.LENGTH_LONG) {
+                        top.yukonga.miuix.kmp.basic.SnackbarDuration.Long
+                    } else {
+                        top.yukonga.miuix.kmp.basic.SnackbarDuration.Short
                     }
-                } else {
-                    SnackbarHelper.show(context, event.message, event.duration)
+                    if (snackbarHostState != null) {
+                        snackbarScope.launch {
+                            snackbarHostState.showSnackbar(
+                                message = event.message,
+                                duration = duration
+                            )
+                        }
+                    } else {
+                        SnackbarHelper.show(context, event.message, event.duration)
+                    }
                 }
             }
-        }
-    } else {
-        // 主页：收集汇总 Snackbar（退出终端页时显示统计信息）
-        LaunchedEffect(Unit) {
-            RiskConfirmManager.summarySnackbarEvents.collect { event ->
-                val duration = if (event.duration >= Snackbar.LENGTH_LONG) {
-                    top.yukonga.miuix.kmp.basic.SnackbarDuration.Long
-                } else {
-                    top.yukonga.miuix.kmp.basic.SnackbarDuration.Short
-                }
-                if (snackbarHostState != null) {
-                    snackbarScope.launch {
-                        snackbarHostState.showSnackbar(
-                            message = event.message,
-                            duration = duration
-                        )
+        } else {
+            // 主页：收集汇总 Snackbar（退出终端页时显示统计信息）
+            LaunchedEffect(Unit) {
+                RiskConfirmManager.summarySnackbarEvents.collect { event ->
+                    val duration = if (event.duration >= Snackbar.LENGTH_LONG) {
+                        top.yukonga.miuix.kmp.basic.SnackbarDuration.Long
+                    } else {
+                        top.yukonga.miuix.kmp.basic.SnackbarDuration.Short
                     }
-                } else {
-                    SnackbarHelper.show(context, event.message, event.duration)
+                    if (snackbarHostState != null) {
+                        snackbarScope.launch {
+                            snackbarHostState.showSnackbar(
+                                message = event.message,
+                                duration = duration
+                            )
+                        }
+                    } else {
+                        SnackbarHelper.show(context, event.message, event.duration)
+                    }
                 }
             }
         }

@@ -1,0 +1,124 @@
+{
+  "schemaVersion": "2026.07.11.0",
+  "skillProvenance": {
+    "name": "solo-design",
+    "version": "2026.07.11.0",
+    "version_source": "skill-release-manifest.json",
+    "read_status": "ok"
+  },
+  "project": {
+    "projectName": "Termux Ultra UI 重设计",
+    "designProjectPath": "d:/KiTerminal-UX/termux-ultra-ui-redesign.design",
+    "resolvedLane": "existing_edit_add_comparison",
+    "intentProfile": {
+      "caseFamily": "project_mutation",
+      "requestType": "comparison-page-ui-redesign",
+      "sourceType": "existing-project"
+    },
+    "selectedIntentWorkflowRead": true,
+    "contextRequirementsLoaded": [
+      { "path": "intent-workflows/intent-project-mutation/INTENT_WORKFLOW.md", "readStatus": "loaded", "bodyRead": true },
+      { "path": "shared-runtime/runtime-boundaries/lane-runtime-contracts.md", "readStatus": "loaded", "bodyRead": true },
+      { "path": "shared-runtime/agent-dispatch-runtime/lane-dispatch-index.md", "readStatus": "loaded", "bodyRead": true },
+      { "path": "intent-workflows/intent-project-mutation/existing-edit-dispatch-contract.md", "readStatus": "loaded", "bodyRead": true },
+      { "path": "intent-workflows/intent-project-mutation/existing-edit-page-runtime.md", "readStatus": "loaded", "bodyRead": true },
+      { "path": "shared-runtime/agent-dispatch-runtime/shared-page-rendering-kernel.md", "readStatus": "loaded", "bodyRead": true },
+      { "path": "delivery-quality/page-rendering-quality-gate.md", "readStatus": "loaded", "bodyRead": true },
+      { "path": "delivery-quality/design-artifact-validation.md", "readStatus": "loaded", "bodyRead": true },
+      { "path": "delivery-quality/delivery-evidence-contract.md", "readStatus": "loaded", "bodyRead": true },
+      { "path": "visual-experience/visual-experience-guidelines.md", "readStatus": "loaded", "bodyRead": true },
+      { "path": "intent-workflows/intent-project-mutation/comparison-page-contract.md", "readStatus": "loaded", "bodyRead": true },
+      { "path": "intent-workflows/intent-project-mutation/orchestration-summary-fields.md", "readStatus": "loaded", "bodyRead": true },
+      { "path": "shared-runtime/agent-dispatch-runtime/sub-agent-runtime-boundaries.md", "readStatus": "loaded", "bodyRead": true },
+      { "path": "intent-workflows/intent-project-mutation/edit-existing-project.md", "readStatus": "loaded", "bodyRead": true }
+    ],
+    "contextReadScope": "existing-project-mutation-comparison-page",
+    "readScopeLedger": [],
+    "sourceProjectLaneHeritage": null,
+    "derivationType": "comparison-page",
+    "inPlaceEditAllowed": false,
+    "styleContinuityAnchors": {
+      "colorSystem": "Single primary blue (#2563EB) on neutral surfaces; light bg #F5F5F5 / dark bg #121212; semantic surface, on-surface, variant, summary, success/info/warning/error containers.",
+      "shapeSystem": "Radius scale sm 8 / md 12 / lg 16 / xl 20 / 2xl 24; cards use lg; buttons md; icons in rounded squares.",
+      "typographySystem": "System sans + Noto Sans SC / PingFang SC / Microsoft YaHei; base 15-16px; medium headings; mono for terminal content.",
+      "spacingSystem": "16px page horizontal inset; 12-16px card padding; 8-12px gaps; 96px bottom safe padding.",
+      "componentLanguage": "miuix-style cards, list items, switches, search box; TopAppBar with centered title; sticky header.",
+      "surfaceAndDepth": "Subtle shadow (0 1px 3px rgba(0,0,0,0.06)) on elevated cards; surface layering for light/dark.",
+      "imageryAndIconography": "Inline SVG icons (miuix-style, 1.5-2px stroke), no emoji; status icons in soft circular backgrounds.",
+      "interactionTone": "Active scale/opacity feedback; switch toggles; icon-only action buttons; clickable cards."
+    },
+    "dispatchPreflightManifest": [
+      {
+        "nodeId": "page-terminal-horizontal",
+        "htmlSrc": "pages/terminal-horizontal.html",
+        "title": "终端 - 横向卡片",
+        "sourcePageId": "page-terminal",
+        "sourceHtmlSrc": "pages/terminal.html",
+        "laneContract": {
+          "resolvedLane": "existing_edit_add_comparison",
+          "packetType": "ExistingEditPagePacket",
+          "pageRuntimeGuide": "intent-workflows/intent-project-mutation/existing-edit-page-runtime.md",
+          "dispatchContract": "intent-workflows/intent-project-mutation/existing-edit-dispatch-contract.md"
+        },
+        "sharedTemplate": "shared-runtime/agent-dispatch-runtime/shared-page-rendering-kernel.md",
+        "supplementaryReads": [],
+        "allowedWritePaths": ["pages/terminal-horizontal.html"],
+        "forbiddenWriteRoots": [
+          "termux-ultra-ui-redesign.design",
+          "runtime-orchestration-summary.json",
+          "validation-report.json",
+          "finish-readiness-report.json"
+        ],
+        "toolPolicy": {
+          "todoWriteAllowed": false,
+          "validationScriptsAllowed": false,
+          "previewAllowed": false,
+          "helperScriptsAllowed": false,
+          "designFileWriteAllowed": false,
+          "imageGenerationAllowed": false,
+          "allowedWritePaths": ["pages/terminal-horizontal.html"]
+        }
+      }
+    ],
+    "expectedDispatches": [],
+    "validationRunDiscipline": {
+      "maxFullValidationRuns": 2,
+      "softWarningsTriggerRepair": false,
+      "blockingRepairMode": "targeted-once",
+      "forbiddenRepairTriggers": ["soft-warning-only", "provenance-warning-only", "style-warning-only"]
+    },
+    "validationHistory": [],
+    "validationRepairLedger": [],
+    "validationSnapshot": {},
+    "artifactReadinessEvidence": {},
+    "lowValueCallWatchdog": {
+      "noProgressNextAction": "proceed-to-dispatch"
+    }
+  },
+  "designSource": {
+    "libraryIdentity": null,
+    "cssPath": "colors_and_type.css",
+    "brandPrefix": "tu",
+    "iconAssets": {
+      "availableNames": [],
+      "totalCount": 0
+    },
+    "reusableAssets": []
+  },
+  "pages": {
+    "page-terminal-horizontal": {
+      "nodeId": "page-terminal-horizontal",
+      "slug": "terminal-horizontal",
+      "title": "终端 - 横向卡片",
+      "htmlSrc": "pages/terminal-horizontal.html",
+      "sourcePageId": "page-terminal",
+      "sourceHtmlSrc": "pages/terminal.html",
+      "derivationType": "comparison-from-source",
+      "pageType": "task-driven",
+      "businessScenario": "Termux Ultra terminal session management with horizontally laid-out hint/status/session cards",
+      "qualityRisks": ["mobile-horizontal-card-text-compression", "action-button-touch-targets"],
+      "componentPlan": [],
+      "imagePlan": []
+    }
+  }
+}

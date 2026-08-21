@@ -1,39 +1,41 @@
 package com.termux.app.compose
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import top.yukonga.miuix.kmp.basic.Text
+import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.termux.R
+import top.yukonga.miuix.kmp.basic.TopAppBar
+import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 @Composable
 fun AuthorizationMask() {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MiuixTheme.colorScheme.background)
-    ) {
+    Scaffold(
+        modifier = Modifier.fillMaxSize(),
+        containerColor = MiuixTheme.colorScheme.surface,
+        topBar = {
+            TopAppBar(title = stringResource(R.string.authorization_title))
+        }
+    ) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(top = 120.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+                .padding(padding)
         ) {
             Text(
-                text = stringResource(R.string.authorization_required_title),
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Medium,
-                color = MiuixTheme.colorScheme.onBackground
+                text = stringResource(R.string.authorization_subtitle),
+                fontSize = 14.sp,
+                color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp, vertical = 12.dp)
             )
         }
     }

@@ -595,6 +595,8 @@
     <string name="risk_confirm_toggle_summary">执行高危命令（dd、su/sudo、mkfs、rm -rf / 等）前弹出确认弹窗，防止意外数据丢失</string>
 
     <string name="authorization_required_title">操作需要你的授权以继续</string>
+    <string name="authorization_title">授权</string>
+    <string name="authorization_subtitle">敏感操作需要得到你的授权来继续</string>
     <string name="accessibility_guard_blocked_toast">请手动点击按钮完成操作，第三方无障碍服务无法执行此操作</string>
 
     <!-- 增强防护模式 -->

@@ -69,6 +69,40 @@
       }
     },
     {
+      "id": "page-terminal-horizontal",
+      "title": "终端 - 横向卡片",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1754121600001,
+      "canvasData": {
+        "x": 0,
+        "y": 376,
+        "group": 0,
+        "layoutSnapshot": {
+          "version": 1,
+          "contentHeight": 900,
+          "viewportWidth": 375,
+          "sourceHash": "fnv1a-1f857c3d",
+          "measuredAt": 1787344055058
+        }
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/terminal-horizontal.html",
+        "interactions": [
+          {
+            "domId": "session-card-1",
+            "targetPageId": "page-terminal-detail",
+            "transitionLabel": "打开终端会话"
+          },
+          {
+            "domId": "session-card-2",
+            "targetPageId": "page-terminal-detail",
+            "transitionLabel": "打开终端会话"
+          }
+        ]
+      }
+    },
+    {
       "id": "page-files",
       "title": "文件",
       "type": "page",
@@ -80,10 +114,10 @@
         "group": 0,
         "layoutSnapshot": {
           "version": 1,
-          "contentHeight": 1021,
+          "contentHeight": 900,
           "viewportWidth": 375,
           "sourceHash": "fnv1a-fe1b111e",
-          "measuredAt": 1785613333483
+          "measuredAt": 1787344055058
         }
       },
       "devMetadata": {
@@ -128,10 +162,10 @@
         "group": 0,
         "layoutSnapshot": {
           "version": 1,
-          "contentHeight": 956,
+          "contentHeight": 900,
           "viewportWidth": 375,
           "sourceHash": "fnv1a-944663b3",
-          "measuredAt": 1785613333483
+          "measuredAt": 1787344055058
         }
       },
       "devMetadata": {
@@ -176,10 +210,10 @@
         "group": 0,
         "layoutSnapshot": {
           "version": 1,
-          "contentHeight": 1034,
+          "contentHeight": 900,
           "viewportWidth": 375,
           "sourceHash": "fnv1a-b063f262",
-          "measuredAt": 1785613333483
+          "measuredAt": 1787344055058
         }
       },
       "devMetadata": {
@@ -224,10 +258,10 @@
         "group": 0,
         "layoutSnapshot": {
           "version": 1,
-          "contentHeight": 1866,
+          "contentHeight": 900,
           "viewportWidth": 375,
           "sourceHash": "fnv1a-ec92d4b3",
-          "measuredAt": 1786184870018
+          "measuredAt": 1787344055058
         }
       },
       "devMetadata": {

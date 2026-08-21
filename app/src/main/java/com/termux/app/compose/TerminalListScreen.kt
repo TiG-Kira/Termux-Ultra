@@ -973,12 +973,20 @@ fun KeepAliveWarningCard(onClose: () -> Unit, horizontalMode: Boolean = false) {
         HorizontalTipCard(
             cardColor = if (isDark) Color(0xFF3D3514) else Color(0xFFFFF9C4),
             icon = Icons.Rounded.Warning,
-            iconTint = Color(0xFFFDD835),
-            iconBackgroundColor = if (isDark) Color(0xFF4A4020) else Color(0xFFF5E680),
+            iconTint = Color.White,
+            iconBackgroundColor = Color.Transparent,
+            iconStyle = HeroIconStyle.GRADIENT,
+            iconGradientColors = listOf(Color(0xFFF59E0B), Color(0xFFFDD835)),
             title = stringResource(R.string.keep_alive_warning_title),
             description = stringResource(R.string.keep_alive_warning_message),
             titleColor = if (isDark) Color.White else Color.Black,
-            descriptionColor = if (isDark) Color.White.copy(alpha = 0.8f) else Color.Black.copy(alpha = 0.8f)
+            descriptionColor = if (isDark) Color.White.copy(alpha = 0.8f) else Color.Black.copy(alpha = 0.8f),
+            statusBadgeText = "需注意",
+            statusBadgeColor = if (isDark) Color(0xFFFCD34D) else Color(0xFFB45309),
+            statusBadgeBackgroundColor = if (isDark) Color(0xFFFCD34D).copy(alpha = 0.14f) else Color(0xFFF59E0B).copy(alpha = 0.14f),
+            onClose = onClose,
+            closeButtonColor = if (isDark) Color(0xFFFCD34D).copy(alpha = 0.15f) else Color(0xFFB45309).copy(alpha = 0.15f),
+            closeButtonIconColor = if (isDark) Color(0xFFFCD34D) else Color(0xFFB45309)
         )
         return
     }
@@ -1112,17 +1120,23 @@ fun WelcomeCard(text: String, onClose: () -> Unit, horizontalMode: Boolean = fal
 
     // 横向模式使用统一的 HorizontalTipCard 组件
     if (horizontalMode) {
-        val titleColor = if (isDark) Color.White else Color.Black
-        val descriptionColor = if (isDark) Color.White.copy(alpha = 0.7f) else Color.Black.copy(alpha = 0.7f)
+        val welcomeGradient = if (isDark)
+            Brush.linearGradient(listOf(Color(0xFF1E40AF), Color(0xFF5B21B6)))
+        else
+            Brush.linearGradient(listOf(Color(0xFF2563EB), Color(0xFF7C3AED)))
         HorizontalTipCard(
-            cardColor = if (isDark) Color(0xFF1A1A1A) else Color.White,
+            cardColor = Color.Transparent,
+            gradient = welcomeGradient,
             icon = Icons.Rounded.Info,
-            iconTint = if (isDark) Color(0xFF666666) else Color(0xFF666666),
-            iconBackgroundColor = if (isDark) Color(0xFF333333) else Color(0xFFF0F0F0),
+            iconTint = Color.White,
+            iconBackgroundColor = Color.Transparent,
+            iconStyle = HeroIconStyle.FROSTED_GLASS,
+            showDecorationCircles = true,
             title = stringResource(R.string.terminal_welcome_title),
             description = text,
-            titleColor = titleColor,
-            descriptionColor = descriptionColor
+            titleColor = Color.White,
+            descriptionColor = Color.White.copy(alpha = 0.72f),
+            onClose = onClose
         )
         return
     }
@@ -1289,20 +1303,32 @@ fun ServiceStatusCard(
             ServiceStatus.MEMORY_KILL -> Triple(if (isDark) Color(0xFF3B1414) else Color(0xFFFFEBEE), Color(0xFFFF5252), Icons.Rounded.Warning)
             ServiceStatus.SESSION_KILLED -> Triple(if (isDark) Color(0xFF3B1414) else Color(0xFFFFEBEE), Color(0xFFFF5252), Icons.Rounded.Warning)
         }
-        val iconBackgroundColor = when (status) {
-            ServiceStatus.NORMAL, ServiceStatus.WAKE_LOCK_ACTIVE -> if (isDark) Color(0xFF2A5038) else Color(0xFFB8EDC9)
-            ServiceStatus.SERVICE_STOPPED, ServiceStatus.MEMORY_KILL, ServiceStatus.SESSION_KILLED -> if (isDark) Color(0xFF5A2020) else Color(0xFFFFCDD2)
-            ServiceStatus.MEMORY_WARNING -> if (isDark) Color(0xFF4A4020) else Color(0xFFF5E680)
+        val iconGradColors = when (status) {
+            ServiceStatus.NORMAL, ServiceStatus.WAKE_LOCK_ACTIVE -> listOf(Color(0xFF36D167), Color(0xFF22C55E))
+            ServiceStatus.SERVICE_STOPPED, ServiceStatus.MEMORY_KILL, ServiceStatus.SESSION_KILLED -> listOf(Color(0xFFEF4444), Color(0xFFFF5252))
+            ServiceStatus.MEMORY_WARNING -> listOf(Color(0xFFF59E0B), Color(0xFFFDD835))
+        }
+        val (badgeText, badgeColor) = when (status) {
+            ServiceStatus.NORMAL, ServiceStatus.WAKE_LOCK_ACTIVE -> "运行中" to Color(0xFF36D167)
+            ServiceStatus.SERVICE_STOPPED -> "已停止" to Color(0xFFFF5252)
+            ServiceStatus.MEMORY_WARNING -> "需注意" to Color(0xFFF59E0B)
+            ServiceStatus.MEMORY_KILL -> "内存不足" to Color(0xFFFF5252)
+            ServiceStatus.SESSION_KILLED -> "已终止" to Color(0xFFFF5252)
         }
         HorizontalTipCard(
             cardColor = cardColor,
             icon = icon,
-            iconTint = iconColor,
-            iconBackgroundColor = iconBackgroundColor,
+            iconTint = Color.White,
+            iconBackgroundColor = Color.Transparent,
+            iconStyle = HeroIconStyle.GRADIENT,
+            iconGradientColors = iconGradColors,
             title = title,
             description = description,
             titleColor = if (isDark) Color.White else Color.Black,
-            descriptionColor = if (isDark) Color.White.copy(alpha = 0.8f) else Color.Black.copy(alpha = 0.8f)
+            descriptionColor = if (isDark) Color.White.copy(alpha = 0.8f) else Color.Black.copy(alpha = 0.8f),
+            statusBadgeText = badgeText,
+            statusBadgeColor = badgeColor,
+            statusBadgeBackgroundColor = badgeColor.copy(alpha = 0.14f)
         )
         return
     }
@@ -1473,28 +1499,68 @@ fun LowAndroidWarningCard(horizontalMode: Boolean = false) {
 
     // 横向模式使用统一的 HorizontalTipCard 组件
     if (horizontalMode) {
-        val cardColor = if (hasForce) {
-            if (isDark) Color(0xFF3B1414) else Color(0xFFFFEBEE)
-        } else {
-            if (isDark) Color(0xFF3D3514) else Color(0xFFFFF9C4)
-        }
-        val iconColor = if (hasForce) Color(0xFFFF5252) else Color(0xFFFDD835)
-        val iconBackgroundColor = if (hasForce) {
-            if (isDark) Color(0xFF5A2020) else Color(0xFFFFCDD2)
-        } else {
-            if (isDark) Color(0xFF4A4020) else Color(0xFFF5E680)
-        }
         val briefDescription = "$versionInfo · $message"
-        HorizontalTipCard(
-            cardColor = cardColor,
-            icon = Icons.Rounded.Warning,
-            iconTint = iconColor,
-            iconBackgroundColor = iconBackgroundColor,
-            title = title,
-            description = briefDescription,
-            titleColor = if (isDark) Color.White else Color.Black,
-            descriptionColor = if (isDark) Color.White.copy(alpha = 0.8f) else Color.Black.copy(alpha = 0.8f)
-        )
+        if (hasForce) {
+            // 强制启用模式：红色容器 + 渐变图标 + 状态徽章 + 禁用按钮
+            HorizontalTipCard(
+                cardColor = if (isDark) Color(0xFF3B1414) else Color(0xFFFFEBEE),
+                icon = Icons.Rounded.Warning,
+                iconTint = Color.White,
+                iconBackgroundColor = Color.Transparent,
+                iconStyle = HeroIconStyle.GRADIENT,
+                iconGradientColors = listOf(Color(0xFFEF4444), Color(0xFFFF5252)),
+                title = title,
+                description = briefDescription,
+                titleColor = if (isDark) Color.White else Color.Black,
+                descriptionColor = if (isDark) Color.White.copy(alpha = 0.8f) else Color.Black.copy(alpha = 0.8f),
+                statusBadgeText = "强制启用",
+                statusBadgeColor = Color(0xFFFF5252),
+                statusBadgeBackgroundColor = Color(0xFFFF5252).copy(alpha = 0.14f),
+                actionButton = {
+                    Button(
+                        onClick = { showDisableDialog = true },
+                        modifier = Modifier
+                            .padding(top = 6.dp)
+                            .clip(RoundedCornerShape(50)),
+                        colors = ButtonDefaults.buttonColors(
+                            color = Color(0xFFFF5252)
+                        )
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Close,
+                            contentDescription = null,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text(
+                            text = stringResource(R.string.low_android_force_disable_button),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                    }
+                }
+            )
+        } else {
+            // 普通警告模式：橙色渐变 + 毛玻璃图标 + 装饰圆圈
+            val androidGradient = if (isDark)
+                Brush.linearGradient(listOf(Color(0xFF9A3412), Color(0xFFB45309)))
+            else
+                Brush.linearGradient(listOf(Color(0xFFEA580C), Color(0xFFF59E0B)))
+            HorizontalTipCard(
+                cardColor = Color.Transparent,
+                gradient = androidGradient,
+                icon = Icons.Rounded.Warning,
+                iconTint = Color.White,
+                iconBackgroundColor = Color.Transparent,
+                iconStyle = HeroIconStyle.FROSTED_GLASS,
+                showDecorationCircles = true,
+                title = title,
+                description = briefDescription,
+                titleColor = Color.White,
+                descriptionColor = Color.White.copy(alpha = 0.72f)
+            )
+        }
         return
     }
 
@@ -1754,6 +1820,12 @@ fun ForceEnableFeatureDialog(
  * - 结构：左侧图标背景 + 右侧标题和描述
  * - 间距：12dp（由外部 LazyRow 控制）
  */
+enum class HeroIconStyle {
+    SOLID,
+    FROSTED_GLASS,
+    GRADIENT
+}
+
 @Composable
 fun HorizontalTipCard(
     cardColor: Color,
@@ -1766,7 +1838,17 @@ fun HorizontalTipCard(
     titleColor: Color = Color.White,
     descriptionColor: Color = Color.White.copy(alpha = 0.85f),
     gradient: Brush? = null,
-    onClick: (() -> Unit)? = null
+    onClick: (() -> Unit)? = null,
+    iconStyle: HeroIconStyle = HeroIconStyle.SOLID,
+    iconGradientColors: List<Color>? = null,
+    showDecorationCircles: Boolean = false,
+    statusBadgeText: String? = null,
+    statusBadgeColor: Color = Color.White,
+    statusBadgeBackgroundColor: Color = Color.White.copy(alpha = 0.2f),
+    onClose: (() -> Unit)? = null,
+    closeButtonColor: Color = Color.White.copy(alpha = 0.15f),
+    closeButtonIconColor: Color = Color.White.copy(alpha = 0.85f),
+    actionButton: (@Composable () -> Unit)? = null
 ) {
     val cardModifier = if (onClick != null) {
         Modifier.clickable { onClick() }
@@ -1783,22 +1865,82 @@ fun HorizontalTipCard(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(
-                    brush = gradient ?: Brush.verticalGradient(listOf(cardColor, cardColor))
-                )
-                .padding(16.dp)
+                .clip(RoundedCornerShape(16.dp))
+                .background(brush = gradient ?: Brush.verticalGradient(listOf(cardColor, cardColor)))
         ) {
+            // 装饰圆圈
+            if (showDecorationCircles) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .offset(x = 20.dp, y = (-32).dp)
+                        .size(104.dp)
+                        .clip(RoundedCornerShape(50))
+                        .background(Color.White.copy(alpha = 0.08f))
+                )
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .offset(x = (-50).dp, y = 38.dp)
+                        .size(72.dp)
+                        .clip(RoundedCornerShape(50))
+                        .background(Color.White.copy(alpha = 0.05f))
+                )
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .offset(x = (-64).dp, y = 14.dp)
+                        .size(36.dp)
+                        .clip(RoundedCornerShape(50))
+                        .background(Color.White.copy(alpha = 0.06f))
+                )
+            }
+
+            // 关闭按钮
+            if (onClose != null) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(10.dp)
+                        .size(28.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(closeButtonColor)
+                        .clickable(onClick = onClose),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Close,
+                        contentDescription = null,
+                        modifier = Modifier.size(15.dp),
+                        tint = closeButtonIconColor
+                    )
+                }
+            }
+
+            // 主内容
             Row(
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(18.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(14.dp)
             ) {
                 // 左侧图标区域
                 Box(
                     modifier = Modifier
-                        .size(56.dp)
+                        .size(48.dp)
                         .clip(RoundedCornerShape(16.dp))
-                        .background(iconBackgroundColor),
+                        .then(
+                            when (iconStyle) {
+                                HeroIconStyle.SOLID -> Modifier.background(iconBackgroundColor)
+                                HeroIconStyle.FROSTED_GLASS -> Modifier.background(Color.White.copy(alpha = 0.2f))
+                                HeroIconStyle.GRADIENT -> Modifier.background(
+                                    Brush.linearGradient(
+                                        iconGradientColors ?: listOf(iconBackgroundColor, iconBackgroundColor)
+                                    )
+                                )
+                            }
+                        ),
                     contentAlignment = Alignment.Center
                 ) {
                     when {
@@ -1806,30 +1948,58 @@ fun HorizontalTipCard(
                             imageVector = icon,
                             contentDescription = null,
                             tint = iconTint,
-                            modifier = Modifier.size(32.dp)
+                            modifier = Modifier.size(24.dp)
                         )
                         iconPainter != null -> Icon(
                             painter = iconPainter,
                             contentDescription = null,
                             tint = iconTint,
-                            modifier = Modifier.size(32.dp)
+                            modifier = Modifier.size(24.dp)
                         )
                     }
                 }
 
-                // 右侧文本区域
+                // 右侧文本区域 + 状态徽章
                 Column(
                     modifier = Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    Text(
-                        text = title,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = titleColor,
-                        maxLines = 1,
-                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = title,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = titleColor,
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                        )
+                        if (statusBadgeText != null) {
+                            Row(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(50))
+                                    .background(statusBadgeBackgroundColor)
+                                    .padding(horizontal = 8.dp, vertical = 3.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(3.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(6.dp)
+                                        .clip(RoundedCornerShape(50))
+                                        .background(statusBadgeColor)
+                                )
+                                Text(
+                                    text = statusBadgeText,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = statusBadgeColor
+                                )
+                            }
+                        }
+                    }
                     Text(
                         text = description,
                         fontSize = 13.sp,
@@ -1837,6 +2007,9 @@ fun HorizontalTipCard(
                         color = descriptionColor,
                         lineHeight = 19.sp
                     )
+                    if (actionButton != null) {
+                        actionButton()
+                    }
                 }
             }
         }

@@ -665,6 +665,8 @@
     <string name="risk_confirm_toggle_summary">Displays a confirmation dialog before executing high-risk commands (dd, su/sudo, mkfs, rm -rf /, etc.) to prevent accidental data loss</string>
     <string name="risk_command_biometric_not_set">Biometric verification not set up on this device. Skipped verification. It is recommended to set up screen lock (PIN/pattern) or biometric authentication in system settings for better security.</string>
     <string name="authorization_required_title">Your authorization is required to continue</string>
+    <string name="authorization_title">Authorization</string>
+    <string name="authorization_subtitle">Sensitive operation requires your authorization to continue</string>
     <string name="accessibility_guard_blocked_toast">Please tap the button manually to complete this operation. Third-party accessibility services are not allowed to handle this action.</string>
 
     <!-- Crash Report -->

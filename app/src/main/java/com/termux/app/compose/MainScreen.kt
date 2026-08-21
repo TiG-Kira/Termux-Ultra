@@ -227,8 +227,7 @@ fun MainScreen(
                                 previousTab = selectedTab
                                 onTabChange(actualTab)
                             }
-                        },
-                        modifier = Modifier.padding(horizontal = 12.dp)
+                        }
                     ) {
                         if (0 in availableTabs) {
                             LiquidGlassNavigationBarItem(
@@ -283,8 +282,7 @@ fun MainScreen(
                                 previousTab = selectedTab
                                 onTabChange(actualTab)
                             }
-                        },
-                        modifier = Modifier.padding(horizontal = 12.dp)
+                        }
                     ) {
                         if (0 in availableTabs) {
                             SoftLightNavigationBarItem(
@@ -334,9 +332,7 @@ fun MainScreen(
                             .fillMaxWidth()
                             .offset(y = 14.dp)
                     ) {
-                        FloatingNavigationBar(
-                            modifier = Modifier.padding(horizontal = 12.dp)
-                        ) {
+                        FloatingNavigationBar() {
                             if (0 in availableTabs) {
                                 FloatingNavigationBarItem(
                                     icon = ImageVector.vectorResource(R.drawable.ic_terminal),
@@ -381,7 +377,7 @@ fun MainScreen(
                     }
                 }
                 else -> {
-                    NavigationBar(modifier = Modifier.padding(horizontal = 12.dp)) {
+                    NavigationBar() {
                         if (0 in availableTabs) {
                             NavigationBarItem(
                                 icon = ImageVector.vectorResource(R.drawable.ic_terminal),
