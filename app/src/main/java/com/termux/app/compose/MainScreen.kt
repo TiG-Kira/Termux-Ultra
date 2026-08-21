@@ -12,7 +12,9 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.offset
@@ -204,7 +206,14 @@ fun MainScreen(
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        snackbarHost = { SnackbarHost(state = snackbarHostState) },
+        snackbarHost = { 
+            SnackbarHost(
+                state = snackbarHostState,
+                modifier = Modifier
+                    .padding(WindowInsets.navigationBars.asPaddingValues())
+                    .padding(bottom = 97.dp)
+            ) 
+        },
         bottomBar = {
             when (navStyle) {
                 2 -> {
@@ -545,7 +554,7 @@ fun MainScreen(
         // 停止/退出确认弹窗（状态驱动，在主 Compose 树内渲染，避免 addView overlay 白屏）
         StopConfirmDialogHost(snackbarHostState)
 
-        // 风险命令确认弹窗
-        RiskConfirmDialogHost(snackbarHostState)
+        // 风险命令确认弹窗（主页不显示风险 Snackbar，由终端页独占）
+        RiskConfirmDialogHost(snackbarHostState, collectSnackbar = false)
     }
 }

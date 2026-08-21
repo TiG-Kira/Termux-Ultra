@@ -20,11 +20,12 @@ fun KiTerminalTheme(
     statusBarColor: Color = Color.Transparent,
     navigationBarColor: Color = Color.Transparent,
     isTerminalDark: Boolean = false,
+    manageSystemBars: Boolean = true,
     content: @Composable () -> Unit
 ) {
     val darkTheme = isSystemInDarkTheme()
     val view = LocalView.current
-    if (!view.isInEditMode) {
+    if (!view.isInEditMode && manageSystemBars) {
         SideEffect {
             val window = (view.context as Activity).window
             window.statusBarColor = statusBarColor.toArgb()

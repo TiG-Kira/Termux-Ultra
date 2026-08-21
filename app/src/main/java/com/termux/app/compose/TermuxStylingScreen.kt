@@ -4,7 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.util.AtomicFile
 import android.util.Log
-import android.widget.Toast
+import com.google.android.material.snackbar.Snackbar
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -21,6 +21,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.termux.R
+import com.termux.app.utils.SnackbarHelper
 import com.termux.shared.termux.TermuxConstants
 import top.yukonga.miuix.kmp.basic.*
 import top.yukonga.miuix.kmp.icon.MiuixIcons
@@ -270,7 +271,7 @@ private fun copyStyleFile(context: Context, item: StyleItem, isColors: Boolean) 
     } catch (e: Exception) {
         Log.w("TermuxStyling", "Failed to write style file", e)
         val message = context.getString(R.string.writing_failed) + e.message
-        Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+        SnackbarHelper.show(context, message, Snackbar.LENGTH_LONG)
     }
 }
 

@@ -120,13 +120,16 @@ data class SkillCardData(
 /** 自动执行白名单配置 */
 data class SkillAutoExecConfig(
     val enabled: Boolean = false,
-    val autoExecSkills: Set<SkillType> = setOf(SkillType.CAPTURE_OUTPUT),
+    val autoExecSkills: Set<SkillType> = emptySet(),
     val autoExecNewSessions: Boolean = false,
     val autoExecRemoteConnect: Boolean = false
 ) {
     companion object {
         val DEFAULT = SkillAutoExecConfig()
     }
+
+    /** Returns true if auto-execution is enabled (has skills selected) */
+    fun isAutoExecEnabled(): Boolean = enabled && autoExecSkills.isNotEmpty()
 }
 
 /** 技能执行状态 */
@@ -875,7 +878,7 @@ object AiTermuxPrefs {
 
     fun getAutoExecSkills(context: Context): Set<SkillType> {
         val config = getAutoExecConfig(context)
-        if (!config.enabled) return emptySet()
+        if (!config.isAutoExecEnabled()) return emptySet()
         return config.autoExecSkills
     }
 }

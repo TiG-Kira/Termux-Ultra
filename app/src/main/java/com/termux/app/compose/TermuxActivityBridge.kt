@@ -31,14 +31,17 @@ object TermuxActivityBridge {
             CompositionLocalProvider(
                 LocalNavigationEventDispatcherOwner provides navDispatcherOwner
             ) {
-                KiTerminalTheme(content = {
-                    TerminalDetailScreen(
-                        activity = activity,
-                        terminalView = terminalView,
-                        onBack = { onBack.run() },
-                        overlayMode = false,
-                    )
-                })
+                KiTerminalTheme(
+                    manageSystemBars = false,
+                    content = {
+                        TerminalDetailScreen(
+                            activity = activity,
+                            terminalView = terminalView,
+                            onBack = { onBack.run() },
+                            overlayMode = false,
+                        )
+                    }
+                )
             }
         }
     }

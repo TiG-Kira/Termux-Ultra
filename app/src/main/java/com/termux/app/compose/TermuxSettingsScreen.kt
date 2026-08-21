@@ -3,6 +3,7 @@ package com.termux.app.compose
 import android.content.Context
 import android.content.Intent
 import android.os.Environment
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -74,6 +75,26 @@ fun TermuxSettingsScreen(
     var currentPage by remember { mutableStateOf(TermuxSettingsPage.MAIN) }
     val scrollBehavior = MiuixScrollBehavior()
 
+    // 返回逻辑：从子页面返回上一级，主页面退出
+    fun handleBack() {
+        when (currentPage) {
+            TermuxSettingsPage.MAIN -> onBack()
+            TermuxSettingsPage.TERMINAL -> { currentPage = TermuxSettingsPage.MAIN }
+            TermuxSettingsPage.TERMINAL_VIEW -> { currentPage = TermuxSettingsPage.TERMINAL }
+            TermuxSettingsPage.TERMINAL_IO -> { currentPage = TermuxSettingsPage.TERMINAL }
+            TermuxSettingsPage.DEBUGGING -> { currentPage = TermuxSettingsPage.TERMINAL }
+            TermuxSettingsPage.PLUGIN_API -> { currentPage = TermuxSettingsPage.MAIN }
+            TermuxSettingsPage.PLUGIN_FLOAT -> { currentPage = TermuxSettingsPage.MAIN }
+            TermuxSettingsPage.PLUGIN_TASKER -> { currentPage = TermuxSettingsPage.MAIN }
+            TermuxSettingsPage.PLUGIN_WIDGET -> { currentPage = TermuxSettingsPage.MAIN }
+        }
+    }
+    
+    // 处理系统返回键
+    BackHandler(enabled = true) {
+        handleBack()
+    }
+
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
@@ -85,19 +106,7 @@ fun TermuxSettingsScreen(
                         modifier = Modifier
                             .size(40.dp)
                             .clip(CircleShape)
-                            .clickable {
-                                when (currentPage) {
-                                    TermuxSettingsPage.MAIN -> onBack()
-                                    TermuxSettingsPage.TERMINAL -> { currentPage = TermuxSettingsPage.MAIN }
-                                    TermuxSettingsPage.TERMINAL_VIEW -> { currentPage = TermuxSettingsPage.TERMINAL }
-                                    TermuxSettingsPage.TERMINAL_IO -> { currentPage = TermuxSettingsPage.TERMINAL }
-                                    TermuxSettingsPage.DEBUGGING -> { currentPage = TermuxSettingsPage.TERMINAL }
-                                    TermuxSettingsPage.PLUGIN_API -> { currentPage = TermuxSettingsPage.MAIN }
-                                    TermuxSettingsPage.PLUGIN_FLOAT -> { currentPage = TermuxSettingsPage.MAIN }
-                                    TermuxSettingsPage.PLUGIN_TASKER -> { currentPage = TermuxSettingsPage.MAIN }
-                                    TermuxSettingsPage.PLUGIN_WIDGET -> { currentPage = TermuxSettingsPage.MAIN }
-                                }
-                            },
+                            .clickable { handleBack() },
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(

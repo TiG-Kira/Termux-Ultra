@@ -583,15 +583,95 @@
     <string name="risk_command_ssh_power_warning">您即将对通过 SSH 连接的远程系统执行关机或重新启动。\n\n您确认后，远程主机将终止全部正在运行的程序与服务并断开 SSH 会话。如您选择关机，如果没有相关人员物理接触此远程设备或此设备不具备网络开机能力，系统将要持续离线，您无法通过远程方式恢复运行。\n\n若此环境为生产环境，此操作会造成服务中断与可能的业务损失。\n\n请确认您确实需要执行电源操作再继续！</string>
     <string name="risk_command_ssh_power_confirm_yes">是，关机/重启</string>
     <string name="risk_command_ssh_power_confirm_no">否</string>
-    <string name="risk_command_disable_title">关闭高危命令二次确认？</string>
-    <string name="risk_command_disable_message">关闭后高危命令将不再经过二次确认直接执行，您将失去防止意外数据丢失或系统损坏的安全屏障。强烈建议保持开启。继续操作即表示您已知晓风险，并同意本应用不承担任何后果。</string>
-    <string name="risk_command_disable_checkbox">我清楚风险，确认关闭高危命令二次确认；可在设置中重新开启提醒</string>
-    <string name="risk_command_disable_confirm">确认关闭</string>
+    <string name="risk_command_disable_title">调整增强防护模式？</string>
+    <string name="risk_command_disable_off_message">关闭后高危命令将不再经过二次确认直接执行，您将失去防止意外数据丢失或系统损坏的安全屏障。强烈建议保持开启。继续操作即表示您已知晓风险，并同意本应用不承担任何后果。</string>
+    <string name="risk_command_disable_warn_message">降级到仅提示模式后，高危命令只会显示 Snackbar 提示但不会被拦截。您仍可能在不小心时执行危险操作。继续操作即表示您已知晓风险。</string>
+    <string name="risk_command_disable_off_checkbox">我清楚风险，确认关闭增强防护模式；可在设置中重新开启</string>
+    <string name="risk_command_disable_warn_checkbox">我清楚风险，确认降级到仅提示模式；可在设置中调整</string>
+    <string name="risk_command_disable_confirm">确认调整</string>
     <string name="risk_command_biometric_prompt">请验证您的身份以继续</string>
     <string name="risk_command_biometric_not_set">设备未设置生物验证或屏幕锁。已跳过验证。建议在系统设置中设置屏幕锁（PIN/图案）或生物验证以获得更好的安全性。</string>
     <string name="risk_confirm_toggle_title">高危命令二次确认</string>
     <string name="risk_confirm_toggle_summary">执行高危命令（dd、su/sudo、mkfs、rm -rf / 等）前弹出确认弹窗，防止意外数据丢失</string>
+
     <string name="authorization_required_title">操作需要你的授权以继续</string>
     <string name="accessibility_guard_blocked_toast">请手动点击按钮完成操作，第三方无障碍服务无法执行此操作</string>
+
+    <!-- 增强防护模式 -->
+    <string name="protection_level_title">增强防护模式</string>
+    <string name="protection_level_summary">当前：%1$s — %2$s</string>
+    <string name="protection_level_dialog_summary">选择危险命令的处理力度。等级越高防护越强，但可能更频繁地中断操作。</string>
+    <string name="protection_level_off">关闭</string>
+    <string name="protection_level_off_desc">不检测，所有命令直接通过</string>
+    <string name="protection_level_warn_only">仅提示</string>
+    <string name="protection_level_warn_only_desc">仅 Snackbar 提示，不拦截命令</string>
+    <string name="protection_level_warn_verify">警告并验证</string>
+    <string name="protection_level_warn_verify_desc">完整弹窗 + 倒计时 + 生物识别验证</string>
+    <string name="protection_level_auto_block">自动拦截</string>
+    <string name="protection_level_auto_block_desc">直接拦截危险命令执行</string>
+
+    <!-- 防护检测手段 -->
+    <string name="detection_mode_title">防护检测手段</string>
+    <string name="detection_mode_summary">当前：%1$s</string>
+    <string name="detection_mode_dialog_summary">选择危险命令的检测方式。静态扫描在执行前检查命令模式；运行时解析在命令运行时拦截。</string>
+    <string name="detection_mode_none">无</string>
+    <string name="detection_mode_none_desc">不自动检测 — 仅依赖手动或可信输入</string>
+    <string name="detection_mode_static">静态侦测</string>
+    <string name="detection_mode_static_desc">基于正则的命令模式预匹配 — 快速轻量</string>
+    <string name="detection_mode_runtime">运行时解析</string>
+    <string name="detection_mode_runtime_desc">运行时命令解析与拦截 — 捕获动态构造的危险命令</string>
+
+    <!-- 脚本检测 -->
+    <string name="script_detection_title">脚本安全检查</string>
+    <string name="script_detection_message">脚本中包含 %1$d 条危险命令，请审查后再执行。</string>
+    <string name="script_detection_view">查看脚本</string>
+    <string name="script_detection_edit">编辑脚本</string>
+    <string name="script_detection_continue">仍然执行</string>
+    <string name="script_detection_cancel">取消</string>
+    <string name="script_detection_line_prefix">第 %1$d 行</string>
+
+    <!-- ROOT 防护 -->
+    <string name="root_protection_title">ROOT 防护</string>
+    <string name="root_protection_summary">为 ROOT 用户提供增强防护</string>
+    <string name="root_status_detected">检测到 ROOT - 已启用增强防护</string>
+    <string name="root_status_not_detected">未检测到 ROOT</string>
+    <string name="root_warning_title">检测到 ROOT 环境</string>
+    <string name="root_warning_message">本设备检测到 ROOT 权限。为确保您的安全，Termux Ultra 在 ROOT 环境下自动启用最高防护等级（Level 3 - 自动拦截），防止意外系统损坏。您可以在设置中调整。</string>
+    <string name="root_manage_title">ROOT 管理</string>
+    <string name="root_manage_grant_root">授予 ROOT 权限</string>
+    <string name="root_manage_loose_mode">宽松模式（取消自动拦截）</string>
+
+    <!-- 卡片布局 -->
+    <string name="card_layout_title">卡片布局</string>
+    <string name="card_layout_summary">选择主页功能卡片的排列方式</string>
+    <string name="card_layout_vertical">竖向（列表）</string>
+    <string name="card_layout_horizontal">横向（滑动）</string>
+
+    <!-- 终端 -->
+    <string name="termux_core_version">0.118.3</string>
+    <string name="terminal_new_session_with_handle">新会话 [%1$s]</string>
+    <string name="terminal_session_ended">会话已结束</string>
+    <string name="terminal_session_ended_with_code">会话已结束 (退出代码: %1$d)</string>
+
+    <!-- Termux Styling -->
+    <string name="title_styling">外观样式</string>
+    <string name="styling_header">外观</string>
+    <string name="choose_color">选择配色</string>
+    <string name="choose_font">选择字体</string>
+    <string name="no_license_available">此样式没有可用的许可证信息</string>
+    <string name="writing_failed">安装文件失败：\n\n</string>
+
+    <!-- Tasker Settings -->
+    <string name="title_tasker_settings">Tasker 设置</string>
+    <string name="tasker_executable_header">可执行文件</string>
+    <string name="tasker_arguments_header">参数</string>
+    <string name="tasker_working_directory_header">工作目录</string>
+    <string name="tasker_options_header">选项</string>
+    <string name="executable_path_hint">可执行文件（位于 ~/.termux/tasker/ 中的文件或可执行文件的绝对路径）</string>
+    <string name="arguments_hint">参数</string>
+    <string name="working_directory_path_hint">工作目录路径</string>
+    <string name="execute_in_terminal">在终端会话中执行</string>
+    <string name="executable_required">需要指定可执行文件。</string>
+    <string name="termux_app_not_installed_or_disabled_warning">Termux 应用未安装或已禁用。Termux:Tasker 插件应用运行插件命令需要 Termux 应用。</string>
 
 </resources>

@@ -3,20 +3,25 @@ package com.termux.app.compose
 import android.content.Intent
 import android.view.View
 import android.widget.FrameLayout
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -26,16 +31,22 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.ExpandLess
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.material.icons.rounded.KeyboardArrowLeft
+import androidx.compose.material.icons.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
+import androidx.compose.material.icons.rounded.Link
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.TextFields
 import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -48,10 +59,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -74,11 +87,11 @@ import top.yukonga.miuix.kmp.basic.DropdownItem
 import top.yukonga.miuix.kmp.basic.HorizontalDivider
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
-import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.Scaffold
+import top.yukonga.miuix.kmp.basic.SnackbarHost
+import top.yukonga.miuix.kmp.basic.SnackbarHostState
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
-import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.menu.OverlayIconDropdownMenu
@@ -120,6 +133,7 @@ fun TerminalDetailScreen(
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
 
     var localSessions by remember { mutableStateOf<List<TermuxSession>>(emptyList()) }
     var currentSessionName by remember { mutableStateOf("") }
@@ -134,23 +148,86 @@ fun TerminalDetailScreen(
     var sessionPid by remember { mutableIntStateOf(0) }
     var terminalBgColor by remember { mutableStateOf(Color(0xFF000000)) }
     var isTerminalDark by remember { mutableStateOf(true) }
+    var isCompact by remember { mutableStateOf(false) }
+    var showNewSessionLabel by remember { mutableStateOf(false) }
+    var sessionKey by remember { mutableIntStateOf(0) }
+    var lastInteractionTime by remember { mutableStateOf(0L) }
+    var lastInteractionFromTopBar by remember { mutableStateOf(false) }
+    var isTopBarCollapsed by remember { mutableStateOf(false) }
+    var currentSessionHandle by remember { mutableStateOf("") }
+    var currentSessionIsDead by remember { mutableStateOf(false) }
+    var currentSessionExitCode by remember { mutableIntStateOf(-1) }
+    
+    // 软键盘设置
+    var softKeyboardEnabled by remember { mutableStateOf(activity.preferences.isSoftKeyboardEnabled()) }
 
-    val scrollBehavior = MiuixScrollBehavior()
+    // ROOT 状态
+    var hasRootAccess by remember { mutableStateOf(false) }
+    var showRootStatusDialog by remember { mutableStateOf(false) }
+    
+    // 监听软键盘设置变化
+    LaunchedEffect(Unit) {
+        while (true) {
+            softKeyboardEnabled = activity.preferences.isSoftKeyboardEnabled()
+            delay(1000)
+        }
+    }
+
+    // 异步检测 ROOT 权限
+    LaunchedEffect(Unit) {
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            val root = RiskConfirmManager.hasRootAccess(context)
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                hasRootAccess = root
+            }
+        }
+    }
+
+    // 监听来自 Activity 的上下文菜单请求（文本选择"更多"按钮触发）
+    DisposableEffect(activity) {
+        val listener = TermuxActivity.OnContextMenuRequestedListener {
+            showContextMenu = true
+        }
+        activity.setOnContextMenuRequestedListener(listener)
+        onDispose {
+            activity.setOnContextMenuRequestedListener(null)
+        }
+    }
 
     val topBarContentColor = if (isTerminalDark) Color.White else Color.Black
     val topBarContentColorSecondary = if (isTerminalDark) Color.White.copy(alpha = 0.7f) else Color.Black.copy(alpha = 0.7f)
+
+    // TopBar background color - use hardcoded opaque colors
+    val isSystemDarkTheme = isSystemInDarkTheme()
+    val topBarBgColor = if (isSystemDarkTheme) Color(0xFF1C1B1F) else Color(0xFFFFFFFF)
+
+    // TopBar content color - derived from background luminance, always opaque
+    val topBarOpaqueContentColor = if (topBarBgColor.luminance() > 0.5f) Color(0xFF000000) else Color(0xFFFFFFFF)
+    val topBarOpaqueContentColorSecondary = topBarOpaqueContentColor.copy(alpha = 0.7f)
+
+    val effectiveTopBarContentColor = if (!isCompact) topBarOpaqueContentColor else topBarContentColor
+    val effectiveTopBarContentColorSecondary = if (!isCompact) topBarOpaqueContentColorSecondary else topBarContentColorSecondary
 
     val termuxService = activity.termuxService
 
     fun updateCurrentSessionName(act: TermuxActivity, svc: com.termux.app.TermuxService?) {
         val session = act.currentSession
-        currentSessionName = if (session != null) {
-            session.mSessionName?.ifEmpty {
+        if (session != null) {
+            currentSessionName = session.mSessionName?.ifEmpty {
                 val index = svc?.getIndexOfSession(session) ?: -1
                 if (index >= 0) context.getString(R.string.terminal) + " ${index + 1}" else context.getString(R.string.terminal)
             } ?: context.getString(R.string.terminal)
+            // Update handle and death status
+            val index = svc?.getIndexOfSession(session) ?: -1
+            currentSessionHandle = if (index >= 0) (index + 1).toString() else "" // 原生编号: 会话序号 (从1开始)
+            val shellPid = session.shellPid
+            currentSessionIsDead = shellPid == -1 || !session.isRunning
+            currentSessionExitCode = if (currentSessionIsDead) session.exitStatus else -1
         } else {
-            context.getString(R.string.terminal)
+            currentSessionName = context.getString(R.string.terminal)
+            currentSessionHandle = ""
+            currentSessionIsDead = false
+            currentSessionExitCode = -1
         }
     }
 
@@ -162,16 +239,33 @@ fun TerminalDetailScreen(
         }
     }
 
-    LaunchedEffect(termuxService) {
+    LaunchedEffect(isCompact, topBarBgColor) {
+        val act = activity as? android.app.Activity
+        if (act != null) {
+            val window = act.window
+            val controller = androidx.core.view.WindowCompat.getInsetsController(window, window.decorView)
+            if (!isCompact) {
+                // TopAppBar visible: status bar matches TopAppBar background, fully opaque
+                window.statusBarColor = topBarBgColor.toArgb()
+                controller.isAppearanceLightStatusBars = topBarBgColor.luminance() > 0.5f
+            } else {
+                // SmallTopAppBar mode: status bar transparent
+                window.statusBarColor = android.graphics.Color.TRANSPARENT
+                controller.isAppearanceLightStatusBars = !isTerminalDark
+            }
+        }
+    }
+
+    LaunchedEffect(Unit) {
         while (true) {
-            val svc = termuxService
+            val svc = activity.termuxService
             if (svc != null) {
                 val fresh = svc.termuxSessions.toList()
                 if (fresh != localSessions) {
                     localSessions = fresh
                     sessionCount = fresh.size
                 }
-                updateCurrentSessionName(activity, termuxService)
+                updateCurrentSessionName(activity, svc)
             }
             delay(100)
         }
@@ -197,19 +291,42 @@ fun TerminalDetailScreen(
                     isTerminalDark = terminalBgColor.luminance() < 0.5f
                 }
             }
-            val activity = terminalView.context as? android.app.Activity
-            if (activity != null) {
+            val act = terminalView.context as? android.app.Activity
+            if (act != null) {
                 val controller = androidx.core.view.WindowCompat.getInsetsController(
-                    activity.window, terminalView
+                    act.window, terminalView
                 )
-                controller.isAppearanceLightStatusBars = !isTerminalDark
+                // Only update status bar when SmallTopAppBar is visible (isCompact)
+                // TopAppBar mode (!isCompact) handles status bar in its own LaunchedEffect
+                if (isCompact) {
+                    controller.isAppearanceLightStatusBars = !isTerminalDark
+                }
                 controller.isAppearanceLightNavigationBars = !isTerminalDark
             }
             delay(500)
         }
     }
 
+    fun updateInteractionTime(fromTopBar: Boolean = true) {
+        lastInteractionTime = System.currentTimeMillis()
+        lastInteractionFromTopBar = fromTopBar
+    }
+
+    fun markOutsideInteraction() {
+        lastInteractionTime = System.currentTimeMillis()
+        lastInteractionFromTopBar = false
+    }
+
+    fun showTopAppBarTemporarily() {
+        isCompact = false
+        showNewSessionLabel = false
+        sessionKey++
+        lastInteractionTime = System.currentTimeMillis()
+        lastInteractionFromTopBar = true
+    }
+
     fun switchToSession(session: TermuxSession) {
+        updateInteractionTime(fromTopBar = true)
         val termSession = session.getTerminalSession()
         activity.termuxTerminalSessionClient.setCurrentSession(termSession)
         showSessionList = false
@@ -253,6 +370,10 @@ fun TerminalDetailScreen(
 
     fun addNewSession(isFailSafe: Boolean, sessionName: String?) {
         activity.termuxTerminalSessionClient.addNewSession(isFailSafe, sessionName)
+        isCompact = false
+        showNewSessionLabel = true
+        sessionKey++
+        lastInteractionTime = System.currentTimeMillis()
         coroutineScope.launch {
             delay(200)
             localSessions = termuxService?.termuxSessions ?: emptyList()
@@ -272,12 +393,8 @@ fun TerminalDetailScreen(
     }
 
     fun toggleKeyboard() {
-        if (terminalView.hasFocus()) {
-            KeyboardUtils.hideSoftKeyboard(context, terminalView)
-        } else {
-            terminalView.requestFocus()
-            KeyboardUtils.showSoftKeyboard(context, terminalView)
-        }
+        // Use toggleSoftKeyboard to properly toggle the input method visibility
+        KeyboardUtils.toggleSoftKeyboard(context)
     }
 
     fun toggleToolbar() {
@@ -353,129 +470,408 @@ fun TerminalDetailScreen(
 
     val scrollState = rememberScrollState()
 
-    // 监听 TerminalView 的滚动状态，更新 scrollBehavior 实现吸顶效果
-    LaunchedEffect(terminalView) {
+    // After 3 seconds of no interaction from TopAppBar, transition to SmallTopAppBar
+    // sessionKey changes when a new session is created, restarting the timer
+    // If last interaction was from TopAppBar (or its dialogs), timer pauses
+    // If session is dead, keep TopBar visible permanently (don't auto-hide)
+    LaunchedEffect(sessionKey, currentSessionIsDead) {
+        lastInteractionTime = System.currentTimeMillis()
         while (true) {
-            val topRow = try {
-                terminalView.getTopRow()
-            } catch (_: Exception) {
-                0
+            // 如果会话已结束，保持 TopBar 常驻
+            if (currentSessionIsDead) {
+                isCompact = false
+                delay(500)
+                continue
             }
-            // terminalView.getTopRow() 返回负数表示向上滚动（查看历史），0 表示在底部
-            scrollBehavior.state.contentOffset = (-topRow).toFloat()
-            delay(50)
+            
+            val now = System.currentTimeMillis()
+            val elapsed = now - lastInteractionTime
+            
+            // If last interaction was from TopAppBar or its dialogs are open, keep waiting
+            if (lastInteractionFromTopBar || showSessionList || showContextMenu || showRenameDialog || showKillConfirm) {
+                delay(100)
+                continue
+            }
+            
+            // If 3 seconds have passed since last non-TopAppBar interaction, switch to SmallTopAppBar
+            if (elapsed >= 3000) {
+                isCompact = true
+                delay(500)
+                showNewSessionLabel = false
+                break
+            }
+            
+            delay(100)
         }
     }
 
-    Scaffold(
-        containerColor = Color.Transparent,
-        contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        topBar = {
-                val newSessionEntry = DropdownEntry(
-                    items = listOf(
-                        DropdownItem(
-                            text = stringResource(R.string.terminal_new_session),
-                            onClick = { addNewSession(false, null) }
-                        ),
-                        DropdownItem(
-                            text = stringResource(R.string.terminal_new_safe_session),
-                            onClick = { addNewSession(true, null) }
-                        )
+    val newSessionEntry = DropdownEntry(
+        items = listOf(
+            DropdownItem(
+                text = stringResource(R.string.terminal_new_session),
+                onClick = { addNewSession(false, null) }
+            ),
+            DropdownItem(
+                text = stringResource(R.string.terminal_new_safe_session),
+                onClick = { addNewSession(true, null) }
+            )
+        )
+    )
+
+    // Shared button row composable used by both TopAppBar modes
+    @Composable
+    fun TopBarButtonRow() {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .statusBarsPadding()
+                .height(56.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(modifier = Modifier.padding(start = 16.dp)) {
+                IconButton(onClick = { updateInteractionTime(); onBack() }) {
+                    Icon(
+                        imageVector = MiuixIcons.Back,
+                        contentDescription = null,
+                        modifier = Modifier.size(24.dp),
+                        tint = effectiveTopBarContentColor
                     )
-                )
-                TopAppBar(
-                    title = currentSessionName.ifEmpty { stringResource(R.string.terminal) },
-                    scrollBehavior = scrollBehavior,
-                    color = Color.Transparent,
-                    titleColor = topBarContentColor,
-                    largeTitleColor = topBarContentColor,
-                navigationIcon = {
-                    Row(modifier = Modifier.padding(start = 4.dp)) {
-                        IconButton(onClick = onBack) {
-                            Icon(
-                                imageVector = MiuixIcons.Back,
-                                contentDescription = null,
-                                modifier = Modifier.size(24.dp),
-                                tint = topBarContentColor
-                            )
-                        }
-                    }
-                },
-                actions = {
-                    Row(
-                        modifier = Modifier.padding(end = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                }
+            }
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(end = 16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.End
+            ) {
+                if (!isTopBarCollapsed) {
+                    val terminalInteractionSource = remember { MutableInteractionSource() }
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .combinedClickable(
+                                interactionSource = terminalInteractionSource,
+                                indication = androidx.compose.foundation.LocalIndication.current,
+                                onClick = { updateInteractionTime(); showSessionList = true },
+                                onLongClick = {
+                                    updateInteractionTime()
+                                    renameValue = currentSessionName
+                                    showRenameDialog = true
+                                }
+                            ),
+                        contentAlignment = Alignment.Center
                     ) {
-                        val terminalInteractionSource = remember { MutableInteractionSource() }
-                        Box(
-                            modifier = Modifier
-                                .size(40.dp)
-                                .combinedClickable(
-                                    interactionSource = terminalInteractionSource,
-                                    indication = androidx.compose.foundation.LocalIndication.current,
-                                    onClick = { showSessionList = true },
-                                    onLongClick = {
-                                        renameValue = currentSessionName
-                                        showRenameDialog = true
-                                    }
-                                ),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                painter = painterResource(R.drawable.ic_terminal),
-                                contentDescription = null,
-                                modifier = Modifier.size(22.dp),
-                                tint = topBarContentColor
-                            )
-                        }
-                        IconButton(onClick = { toggleKeyboard() }) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_terminal),
+                            contentDescription = null,
+                            modifier = Modifier.size(22.dp),
+                            tint = effectiveTopBarContentColor
+                        )
+                    }
+                    if (softKeyboardEnabled) {
+                        IconButton(onClick = { updateInteractionTime(); toggleKeyboard() }) {
                             Icon(
                                 painter = painterResource(R.drawable.ic_keyboard),
                                 contentDescription = null,
                                 modifier = Modifier.size(22.dp),
-                                tint = topBarContentColor
-                            )
-                        }
-                        OverlayIconDropdownMenu(
-                            entry = newSessionEntry,
-                            backgroundColor = Color.Transparent,
-                            minWidth = 40.dp,
-                            minHeight = 40.dp
-                        ) {
-                            Icon(
-                                painter = painterResource(R.drawable.ic_add),
-                                contentDescription = null,
-                                modifier = Modifier.size(22.dp),
-                                tint = topBarContentColor
-                            )
-                        }
-                        IconButton(onClick = {
-                            val currentSession = activity.currentSession
-                            if (currentSession != null) {
-                                closeCurrentSession()
-                            } else {
-                                onBack()
-                            }
-                        }) {
-                            Icon(
-                                painter = painterResource(R.drawable.ic_close),
-                                contentDescription = null,
-                                modifier = Modifier.size(22.dp),
-                                tint = topBarContentColor
-                            )
-                        }
-                        IconButton(onClick = { showContextMenu = true }) {
-                            Icon(
-                                imageVector = Icons.Rounded.MoreVert,
-                                contentDescription = null,
-                                modifier = Modifier.size(22.dp),
-                                tint = topBarContentColor
+                                tint = effectiveTopBarContentColor
                             )
                         }
                     }
+                    OverlayIconDropdownMenu(
+                        entry = newSessionEntry,
+                        backgroundColor = Color.Transparent,
+                        minWidth = 40.dp,
+                        minHeight = 40.dp
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_add),
+                            contentDescription = null,
+                            modifier = Modifier.size(22.dp),
+                            tint = effectiveTopBarContentColor
+                        )
+                    }
+                    IconButton(onClick = {
+                        updateInteractionTime()
+                        val currentSession = activity.currentSession
+                        if (currentSession != null) {
+                            closeCurrentSession()
+                        } else {
+                            onBack()
+                        }
+                    }, enabled = !currentSessionIsDead) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_close),
+                            contentDescription = null,
+                            modifier = Modifier.size(22.dp),
+                            tint = if (currentSessionIsDead)
+                                effectiveTopBarContentColor.copy(alpha = 0.3f)
+                            else effectiveTopBarContentColor
+                        )
+                    }
+                    IconButton(onClick = { updateInteractionTime(); showContextMenu = true }) {
+                        Icon(
+                            imageVector = Icons.Rounded.MoreVert,
+                            contentDescription = null,
+                            modifier = Modifier.size(22.dp),
+                            tint = effectiveTopBarContentColor
+                        )
+                    }
                 }
-            )
-        },
+                // ROOT 状态指示器
+                if (hasRootAccess) {
+                    IconButton(onClick = {
+                        updateInteractionTime()
+                        showRootStatusDialog = true
+                    }) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_shield),
+                            contentDescription = "ROOT 已获取",
+                            modifier = Modifier.size(22.dp),
+                            tint = Color(0xFFFF9800)
+                        )
+                    }
+                }
+
+                // Collapse/Expand toggle button
+                IconButton(onClick = {
+                    updateInteractionTime()
+                    isTopBarCollapsed = !isTopBarCollapsed
+                }) {
+                    Icon(
+                        imageVector = if (isTopBarCollapsed) Icons.Rounded.KeyboardArrowLeft else Icons.Rounded.KeyboardArrowRight,
+                        contentDescription = null,
+                        modifier = Modifier.size(22.dp),
+                        tint = effectiveTopBarContentColor
+                    )
+                }
+            }
+        }
+    }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        Scaffold(
+            containerColor = Color.Transparent,
+            contentWindowInsets = WindowInsets(0, 0, 0, 0),
+            snackbarHost = {
+                SnackbarHost(
+                    state = snackbarHostState,
+                    modifier = Modifier
+                        .padding(WindowInsets.navigationBars.asPaddingValues())
+                        .padding(bottom = 5.dp)
+                )
+            },
+            topBar = {
+                AnimatedContent(
+                    targetState = !isCompact,
+                    label = "TopAppBarTransition"
+                ) { showLargeBar ->
+                    if (showLargeBar) {
+                        // Large TopAppBar: opaque background + button row + large title
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(topBarBgColor)
+                        ) {
+                            TopBarButtonRow()
+                            // Large title area
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 4.dp)
+                            ) {
+                                Column {
+                                    when {
+                                        currentSessionIsDead -> {
+                                            Text(
+                                                text = if (currentSessionExitCode >= 0)
+                                                    "会话已结束 (退出代码: $currentSessionExitCode)"
+                                                else "会话已结束",
+                                                fontSize = 13.sp,
+                                                color = Color(0xFFFF5252),
+                                                modifier = Modifier.padding(bottom = 1.dp)
+                                            )
+                                        }
+                                        showNewSessionLabel -> {
+                                            val handleText = currentSessionHandle
+                                            Text(
+                                                text = if (handleText.isNotEmpty())
+                                                    stringResource(R.string.terminal_new_session_with_handle, handleText)
+                                                else stringResource(R.string.action_new_session),
+                                                fontSize = 13.sp,
+                                                color = effectiveTopBarContentColorSecondary,
+                                                modifier = Modifier.padding(bottom = 1.dp)
+                                            )
+                                        }
+                                    }
+                                    Text(
+                                        text = currentSessionName.ifEmpty { stringResource(R.string.terminal) },
+                                        fontSize = 28.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = effectiveTopBarContentColor,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
+                        }
+                    } else {
+                        // Small TopAppBar: transparent background + button row + centered title
+                        // 点击区域展开 TopAppBar，但无点击视觉效果 (indication = null)
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(Color.Transparent)
+                                .statusBarsPadding()
+                                .height(56.dp)
+                                .clickable(
+                                    indication = null,
+                                    interactionSource = remember { MutableInteractionSource() }
+                                ) {
+                                    showTopAppBarTemporarily()
+                                },
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // 返回按钮
+                            Row(modifier = Modifier.padding(start = 16.dp)) {
+                                IconButton(onClick = { updateInteractionTime(); onBack() }) {
+                                    Icon(
+                                        imageVector = MiuixIcons.Back,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(24.dp),
+                                        tint = effectiveTopBarContentColor
+                                    )
+                                }
+                            }
+                            // 标题文字：仅在按钮全部隐藏时显示，且居中
+                            if (isTopBarCollapsed) {
+                                Text(
+                                    text = currentSessionName.ifEmpty { stringResource(R.string.terminal) },
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = effectiveTopBarContentColor,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .padding(horizontal = 8.dp),
+                                    textAlign = TextAlign.Center
+                                )
+                            } else {
+                                Spacer(modifier = Modifier.weight(1f))
+                            }
+                            // 右侧按钮区
+                            Row(
+                                modifier = Modifier.padding(end = 16.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.End
+                            ) {
+                                if (!isTopBarCollapsed) {
+                                    val terminalInteractionSource = remember { MutableInteractionSource() }
+                                    Box(
+                                        modifier = Modifier
+                                            .size(40.dp)
+                                            .combinedClickable(
+                                                interactionSource = terminalInteractionSource,
+                                                indication = androidx.compose.foundation.LocalIndication.current,
+                                                onClick = { updateInteractionTime(); showSessionList = true },
+                                                onLongClick = {
+                                                    updateInteractionTime()
+                                                    renameValue = currentSessionName
+                                                    showRenameDialog = true
+                                                }
+                                            ),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            painter = painterResource(R.drawable.ic_terminal),
+                                            contentDescription = null,
+                                            modifier = Modifier.size(22.dp),
+                                            tint = effectiveTopBarContentColor
+                                        )
+                                    }
+                                    if (softKeyboardEnabled) {
+                                        IconButton(onClick = { updateInteractionTime(); toggleKeyboard() }) {
+                                            Icon(
+                                                painter = painterResource(R.drawable.ic_keyboard),
+                                                contentDescription = null,
+                                                modifier = Modifier.size(22.dp),
+                                                tint = effectiveTopBarContentColor
+                                            )
+                                        }
+                                    }
+                                    OverlayIconDropdownMenu(
+                                        entry = newSessionEntry,
+                                        backgroundColor = Color.Transparent,
+                                        minWidth = 40.dp,
+                                        minHeight = 40.dp
+                                    ) {
+                                        Icon(
+                                            painter = painterResource(R.drawable.ic_add),
+                                            contentDescription = null,
+                                            modifier = Modifier.size(22.dp),
+                                            tint = effectiveTopBarContentColor
+                                        )
+                                    }
+                                    IconButton(onClick = {
+                                        updateInteractionTime()
+                                        val currentSession = activity.currentSession
+                                        if (currentSession != null) {
+                                            closeCurrentSession()
+                                        } else {
+                                            onBack()
+                                        }
+                                    }, enabled = !currentSessionIsDead) {
+                                        Icon(
+                                            painter = painterResource(R.drawable.ic_close),
+                                            contentDescription = null,
+                                            modifier = Modifier.size(22.dp),
+                                            tint = if (currentSessionIsDead)
+                                                effectiveTopBarContentColor.copy(alpha = 0.3f)
+                                            else effectiveTopBarContentColor
+                                        )
+                                    }
+                                    IconButton(onClick = { updateInteractionTime(); showContextMenu = true }) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.MoreVert,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(22.dp),
+                                            tint = effectiveTopBarContentColor
+                                        )
+                                    }
+                                }
+                                // ROOT 状态指示器
+                                if (hasRootAccess) {
+                                    IconButton(onClick = {
+                                        updateInteractionTime()
+                                        showRootStatusDialog = true
+                                    }) {
+                                        Icon(
+                                            painter = painterResource(R.drawable.ic_shield),
+                                            contentDescription = "ROOT 已获取",
+                                            modifier = Modifier.size(22.dp),
+                                            tint = Color(0xFFFF9800)
+                                        )
+                                    }
+                                }
+                                // Collapse/Expand toggle button
+                                IconButton(onClick = {
+                                    updateInteractionTime()
+                                    isTopBarCollapsed = !isTopBarCollapsed
+                                }) {
+                                    Icon(
+                                        imageVector = if (isTopBarCollapsed) Icons.Rounded.KeyboardArrowLeft else Icons.Rounded.KeyboardArrowRight,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(22.dp),
+                                        tint = effectiveTopBarContentColor
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            },
         bottomBar = {
             if (!overlayMode && showToolbar) {
                 Box(
@@ -519,6 +915,11 @@ fun TerminalDetailScreen(
                             (terminalView.parent as? android.view.ViewGroup)?.removeView(terminalView)
                             frameLayout.removeAllViews()
                             frameLayout.addView(terminalView)
+                        }
+                        // Set touch listener to detect interactions outside TopAppBar
+                        terminalView.setOnTouchListener { _, _ ->
+                            markOutsideInteraction()
+                            false
                         }
                     },
                     modifier = Modifier.fillMaxSize()
@@ -646,10 +1047,14 @@ fun TerminalDetailScreen(
                 val isRunning = currentSession?.isRunning ?: false
                 sessionPid = currentSession?.pid ?: 0
                 val keepScreenOn = terminalView.keepScreenOn
+                val hasSelectedText = !terminalView.storedSelectedText.isNullOrEmpty()
 
                 OverlayDialog(
                     show = showContextMenu,
-                    onDismissRequest = { showContextMenu = false },
+                    onDismissRequest = {
+                        showContextMenu = false
+                        terminalView.unsetStoredSelectedText()
+                    },
                     title = currentSessionName,
                     content = {
                         Column(
@@ -657,6 +1062,59 @@ fun TerminalDetailScreen(
                                 .fillMaxWidth()
                                 .padding(vertical = 4.dp)
                         ) {
+                            // Select URL
+                            ContextMenuItem(
+                                icon = {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Link,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(20.dp),
+                                        tint = MiuixTheme.colorScheme.onSurface
+                                    )
+                                },
+                                text = stringResource(R.string.action_select_url),
+                                onClick = {
+                                    activity.termuxTerminalViewClient.showUrlSelection()
+                                    showContextMenu = false
+                                }
+                            )
+                            // Share transcript
+                            ContextMenuItem(
+                                icon = {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Share,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(20.dp),
+                                        tint = MiuixTheme.colorScheme.onSurface
+                                    )
+                                },
+                                text = stringResource(R.string.action_share_transcript),
+                                onClick = {
+                                    activity.termuxTerminalViewClient.shareSessionTranscript()
+                                    showContextMenu = false
+                                }
+                            )
+                            // Share selected text (only when text is selected)
+                            if (hasSelectedText) {
+                                ContextMenuItem(
+                                    icon = {
+                                        Icon(
+                                            imageVector = Icons.Rounded.ContentCopy,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(20.dp),
+                                            tint = MiuixTheme.colorScheme.onSurface
+                                        )
+                                    },
+                                    text = stringResource(R.string.action_share_selected_text),
+                                    onClick = {
+                                        activity.termuxTerminalViewClient.shareSelectedText()
+                                        showContextMenu = false
+                                    }
+                                )
+                            }
+
+                            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
                             ContextMenuItem(
                                 icon = {
                                     Icon(
@@ -838,8 +1296,99 @@ fun TerminalDetailScreen(
                     }
                 )
             }
+
+            // ROOT 状态详情对话框
+            if (showRootStatusDialog) {
+                OverlayDialog(
+                    show = showRootStatusDialog,
+                    onDismissRequest = { showRootStatusDialog = false },
+                    title = "ROOT 权限状态",
+                    summary = if (hasRootAccess) {
+                        "设备已获取 ROOT 权限，可以执行特权命令"
+                    } else {
+                        "设备未获取 ROOT 权限，部分功能受限"
+                    },
+                    content = {
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(
+                                        if (hasRootAccess) Color(0xFF1A3825) else Color(0xFF3B1414)
+                                    )
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(14.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    Icon(
+                                        painter = painterResource(R.drawable.ic_shield),
+                                        contentDescription = null,
+                                        modifier = Modifier.size(32.dp),
+                                        tint = if (hasRootAccess) Color(0xFF36D167) else Color(0xFFFF5252)
+                                    )
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = if (hasRootAccess) "ROOT 已就绪" else "ROOT 不可用",
+                                            fontSize = 15.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MiuixTheme.colorScheme.onSurface
+                                        )
+                                        Text(
+                                            text = if (hasRootAccess) {
+                                                "su 命令可正常使用，建议注意命令安全性"
+                                            } else {
+                                                "无法使用 su 命令，ROOT 相关功能不可用"
+                                            },
+                                            fontSize = 13.sp,
+                                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                            lineHeight = 18.sp
+                                        )
+                                    }
+                                }
+                            }
+
+                            Spacer(Modifier.height(12.dp))
+
+                            Text(
+                                text = "ROOT 环境下的安全提示：",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = MiuixTheme.colorScheme.onSurface
+                            )
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                text = "• su/sudo 命令将被标记为高危\n• setprop 等系统属性修改命令会被检测\n• chmod 777 等权限修改操作会被提示\n• 建议在安全场景下谨慎使用 ROOT 权限",
+                                fontSize = 12.sp,
+                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                lineHeight = 18.sp
+                            )
+
+                            Spacer(Modifier.height(16.dp))
+
+                            Row(
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                top.yukonga.miuix.kmp.basic.TextButton(
+                                    text = "关闭",
+                                    onClick = { showRootStatusDialog = false },
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                        }
+                    }
+                )
+            }
+            
+            // 添加 RiskConfirmDialogHost 以收集 Snackbar 事件和显示风险确认弹窗
+            RiskConfirmDialogHost(snackbarHostState)
         }
     }
+}
 }
 
 @Composable

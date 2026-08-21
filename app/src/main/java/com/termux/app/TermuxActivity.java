@@ -207,7 +207,15 @@ public final class TermuxActivity extends ComponentActivity implements ServiceCo
      *  the back button return to the launcher instead of finishing. */
     public static final String EXTRA_FALLBACK_MODE = "extra_fallback_mode";
 
+    /**
+     * Callback interface for requesting a context menu (used by Compose mode to show miuix-styled menu).
+     */
+    public interface OnContextMenuRequestedListener {
+        void onContextMenuRequested();
+    }
+
     private boolean mIsFallbackMode = false;
+    private OnContextMenuRequestedListener mContextMenuListener;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -1010,19 +1018,37 @@ public final class TermuxActivity extends ComponentActivity implements ServiceCo
         }
     }
 
-    /** Show a toast and dismiss the last one if still visible. */
+    /** Show a snackbar and dismiss the last one if still visible. */
     public void showToast(String text, boolean longDuration) {
         if (text == null || text.isEmpty()) return;
-        if (mLastToast != null) mLastToast.cancel();
-        mLastToast = Toast.makeText(TermuxActivity.this, text, longDuration ? Toast.LENGTH_LONG : Toast.LENGTH_SHORT);
-        mLastToast.setGravity(Gravity.TOP, 0, 0);
-        mLastToast.show();
+        com.termux.app.utils.SnackbarHelper.INSTANCE.show(
+            this,
+            text,
+            com.termux.app.utils.SnackbarHelper.INSTANCE.getDuration(longDuration),
+            findViewById(android.R.id.content)
+        );
     }
 
 
 
+    /**
+     * Set listener to receive context menu requests (for Compose mode to show miuix-styled menu).
+     */
+    public void setOnContextMenuRequestedListener(OnContextMenuRequestedListener listener) {
+        mContextMenuListener = listener;
+    }
+
     @Override
     public void onCreateContextMenu(ContextMenu menu, View v, ContextMenuInfo menuInfo) {
+        // In Compose mode (non-fallback), delegate to Compose for miuix-styled context menu
+        if (!mIsFallbackMode && mContextMenuListener != null) {
+            TerminalSession currentSession = getCurrentSession();
+            if (currentSession == null) return;
+            mContextMenuListener.onContextMenuRequested();
+            return; // Don't create system Material menu
+        }
+
+        // Fallback mode: use standard Material context menu
         TerminalSession currentSession = getCurrentSession();
         if (currentSession == null) return;
 

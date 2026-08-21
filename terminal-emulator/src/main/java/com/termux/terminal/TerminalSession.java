@@ -44,7 +44,7 @@ public final class TerminalSession extends TerminalOutput {
         /**
          * 检查命令是否应该被拦截。
          * @param command 用户输入的完整命令
-         * @return true 表示命令已被处理（允许或拒绝），false 表示使用默认行为
+         * @return true 表示命令已被处理（拦截或拒绝），false 表示使用默认行为
          */
         boolean onCommandEntered(TerminalSession session, String command);
 
@@ -52,6 +52,14 @@ public final class TerminalSession extends TerminalOutput {
          * 命令被拒绝时调用。
          */
         void onCommandBlocked(TerminalSession session, String command);
+        
+        /**
+         * 命令被自动拦截时调用（不需要用户确认）。
+         * 返回 true 表示命令已被自动拦截处理。
+         */
+        default boolean onCommandAutoBlocked(TerminalSession session, String command) {
+            return false;
+        }
     }
 
     private static InputInterceptor sInputInterceptor;
@@ -62,6 +70,9 @@ public final class TerminalSession extends TerminalOutput {
 
     /** 命令输入缓冲区，用于检测回车时的完整命令 */
     private final StringBuilder mCommandBuffer = new StringBuilder();
+
+    /** 用户最后执行的命令（用于区分手动 exit 和其他退出原因） */
+    private String mLastCommand = "";
 
     /** 待确认的危险命令 */
     private String mPendingDangerousCommand = null;
@@ -253,6 +264,12 @@ public final class TerminalSession extends TerminalOutput {
                 if (command.length() > 0) {
                     boolean handled = interceptor.onCommandEntered(this, command);
                     if (handled) {
+                        // 检查是否需要自动拦截（不需要用户确认）
+                        if (interceptor.onCommandAutoBlocked(this, command)) {
+                            // 自动拦截：直接拒绝命令并清除输入行
+                            denyPendingCommand();
+                            return;
+                        }
                         // Command is being handled by interceptor (dangerous)
                         // Store the Enter bytes to be sent if confirmed
                         byte[] enterBytes = new byte[]{b};
@@ -263,6 +280,9 @@ public final class TerminalSession extends TerminalOutput {
                             mTerminalToProcessIOQueue.write(data, offset, i - offset);
                         }
                         return;
+                    } else {
+                        // 命令被接受（非危险命令），记录为最后执行的命令
+                        mLastCommand = command;
                     }
                 }
             }
@@ -308,17 +328,15 @@ public final class TerminalSession extends TerminalOutput {
 
     /** 用户拒绝危险命令，返回 Permission Denied 错误并清除行 */
     public void denyPendingCommand() {
-        if (mPendingDangerousCommand != null) {
-            // 向终端输出 "Permission Denied" 错误信息
-            byte[] errorMsg = "\r\nTermux-Confirm: Permission Denied\r\n".getBytes();
-            mProcessToTerminalIOQueue.write(errorMsg, 0, errorMsg.length);
-            // 发送 Ctrl+U 清除当前输入行
-            byte[] killLine = new byte[]{0x15};
-            mTerminalToProcessIOQueue.write(killLine, 0, 1);
-            mPendingDangerousCommand = null;
-            mPendingEnterBytes = null;
-            mCommandBuffer.setLength(0);
-        }
+        // 向终端输出 "Permission Denied" 错误信息
+        byte[] errorMsg = "\r\nTermux-Confirm: Permission Denied\r\n".getBytes();
+        mProcessToTerminalIOQueue.write(errorMsg, 0, errorMsg.length);
+        // 发送 Ctrl+U 清除当前输入行
+        byte[] killLine = new byte[]{0x15};
+        mTerminalToProcessIOQueue.write(killLine, 0, 1);
+        mPendingDangerousCommand = null;
+        mPendingEnterBytes = null;
+        mCommandBuffer.setLength(0);
     }
 
     /** 是否有待处理的危险命令确认 */
@@ -417,6 +435,21 @@ public final class TerminalSession extends TerminalOutput {
     /** Only valid if not {@link #isRunning()}. */
     public synchronized int getExitStatus() {
         return mShellExitStatus;
+    }
+
+    /**
+     * 获取用户最后执行的命令。
+     * 用于区分用户手动输入 `exit` 直接退出和其他退出原因。
+     */
+    public synchronized String getLastCommand() {
+        return mLastCommand;
+    }
+
+    /**
+     * 检查最后执行的命令是否为 exit（用户手动退出 shell）。
+     */
+    public synchronized boolean isLastCommandExit() {
+        return "exit".equals(mLastCommand.trim());
     }
 
     /**

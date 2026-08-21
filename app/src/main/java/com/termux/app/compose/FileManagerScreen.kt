@@ -109,6 +109,11 @@ fun FileManagerScreen(
     var showOperationProgress by remember { mutableStateOf(false) }
     var operationProgressText by remember { mutableStateOf("") }
     var operationProgress by remember { mutableFloatStateOf(0f) }
+    // 脚本安全检测对话框状态
+    var showScriptDetectionDialog by remember { mutableStateOf(false) }
+    var scriptDetectionResults by remember { mutableStateOf<List<RiskCommandDetector.ScriptDetectionResult>>(emptyList()) }
+    var scriptDetectionFilePath by remember { mutableStateOf("") }
+    var scriptDetectionCommand by remember { mutableStateOf("") }
 
     LaunchedEffect(currentPath) {
         files = currentPath.listFiles()?.sortedWith(compareBy({ !it.isDirectory }, { it.name })) ?: emptyList()
@@ -1069,9 +1074,26 @@ fun FileManagerScreen(
                                     .clip(RoundedCornerShape(12.dp))
                                     .background(MiuixTheme.colorScheme.primary)
                                     .clickable {
-                                        onOpenFile(file.absolutePath, "bash \"${file.absolutePath}\"")
-                                        showOpenWithDialog = false
-                                        fileToOpen = null
+                                        // 先检测脚本内容中是否包含危险命令
+                                        val scriptFile = java.io.File(file.absolutePath)
+                                        val content = try {
+                                            scriptFile.readText()
+                                        } catch (_: Exception) {
+                                            ""
+                                        }
+                                        val detections = RiskCommandDetector.detectScript(content)
+                                        if (detections.isNotEmpty()) {
+                                            // 有危险命令，显示检测对话框
+                                            scriptDetectionResults = detections
+                                            scriptDetectionFilePath = file.absolutePath
+                                            scriptDetectionCommand = "bash \"${file.absolutePath}\""
+                                            showScriptDetectionDialog = true
+                                        } else {
+                                            // 安全，直接执行
+                                            onOpenFile(file.absolutePath, "bash \"${file.absolutePath}\"")
+                                            showOpenWithDialog = false
+                                            fileToOpen = null
+                                        }
                                     }
                                     .padding(vertical = 14.dp),
                                 verticalAlignment = Alignment.CenterVertically,
@@ -1392,6 +1414,40 @@ fun FileManagerScreen(
                         color = MiuixTheme.colorScheme.onSurface
                     )
                 }
+            }
+        )
+    }
+
+    // 脚本安全检测对话框
+    if (showScriptDetectionDialog && scriptDetectionResults.isNotEmpty()) {
+        ScriptDetectionDialog(
+            results = scriptDetectionResults,
+            scriptFilePath = scriptDetectionFilePath,
+            onViewScript = {
+                // 查看脚本内容 - 用 cat 打开
+                onOpenFile(scriptDetectionFilePath, "cat \"${scriptDetectionFilePath}\"")
+                showScriptDetectionDialog = false
+            },
+            onEditScript = {
+                // 编辑脚本 - 用 vim 打开
+                val vimPath = "/data/data/com.termux/files/usr/bin/vim"
+                if (java.io.File(vimPath).exists()) {
+                    onOpenFile(scriptDetectionFilePath, "vi \"${scriptDetectionFilePath}\"")
+                } else {
+                    onOpenFile(scriptDetectionFilePath, "pkg install vim -y && vi \"${scriptDetectionFilePath}\"")
+                }
+                showScriptDetectionDialog = false
+            },
+            onContinue = {
+                // 用户确认继续执行
+                onOpenFile(scriptDetectionFilePath, scriptDetectionCommand)
+                showScriptDetectionDialog = false
+                showOpenWithDialog = false
+                fileToOpen = null
+            },
+            onCancel = {
+                // 用户取消执行
+                showScriptDetectionDialog = false
             }
         )
     }

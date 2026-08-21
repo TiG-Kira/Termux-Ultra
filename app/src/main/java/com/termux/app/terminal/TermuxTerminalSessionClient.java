@@ -152,25 +152,24 @@ public class TermuxTerminalSessionClient extends TermuxTerminalSessionClientBase
                 Logger.logVerbose(LOG_TAG, "The \"" + finishedSession.mSessionName + "\" session will be force finished automatically since result in pending.");
         }
 
-        String sessionName = finishedSession.mSessionName;
-        if (sessionName == null || sessionName.isEmpty()) {
-            sessionName = mActivity.getString(R.string.terminal);
-        }
-        String message = sessionName + " 已停止，返回代码: " + finishedSession.getExitStatus();
-        mActivity.showToast(message, true);
+        // 移除 Toast - 会话结束状态已由 TopBar 提示
 
-        if (mActivity.getPackageManager().hasSystemFeature(PackageManager.FEATURE_LEANBACK)) {
-            // On Android TV devices we need to use older behaviour because we may
-            // not be able to have multiple launcher icons.
-            if (service.getTermuxSessionsSize() > 1 || isPluginExecutionCommandWithPendingResult) {
-                removeFinishedSession(finishedSession);
-            }
+        int exitCode = finishedSession.getExitStatus();
+        boolean isUserManualExit = finishedSession.isLastCommandExit();
+
+        if (isPluginExecutionCommandWithPendingResult) {
+            // 插件命令：立即销毁会话
+            removeFinishedSession(finishedSession);
+        } else if (exitCode == 130) {
+            // Ctrl+C 导致的退出：立即销毁会话
+            removeFinishedSession(finishedSession);
+        } else if (exitCode == 0 && isUserManualExit) {
+            // 用户手动输入 exit：立即销毁会话
+            removeFinishedSession(finishedSession);
         } else {
-            // Once we have a separate launcher icon for the failsafe session, it
-            // should be safe to auto-close session on exit code '0' or '130'.
-            if (finishedSession.getExitStatus() == 0 || finishedSession.getExitStatus() == 130 || isPluginExecutionCommandWithPendingResult) {
-                removeFinishedSession(finishedSession);
-            }
+            // 其他情况：保持 dead 状态，等待用户按 Enter 后销毁
+            // TopBar 会显示"会话已结束"提示
+            Logger.logDebug(LOG_TAG, "Session \"" + finishedSession.mSessionName + "\" kept as dead state (exitCode=" + exitCode + ", lastCommand=\"" + finishedSession.getLastCommand() + "\")");
         }
     }
 
@@ -284,12 +283,8 @@ public class TermuxTerminalSessionClient extends TermuxTerminalSessionClientBase
     }
 
     void notifyOfSessionChange() {
-        if (!mActivity.isVisible()) return;
-
-        if (!mActivity.getProperties().areTerminalSessionChangeToastsDisabled()) {
-            TerminalSession session = mActivity.getCurrentSession();
-            mActivity.showToast(toToastTitle(session), false);
-        }
+        // Toast disabled - TopAppBar animation provides visual feedback
+        // for new sessions, and the session list dialog handles switching.
     }
 
     public void switchToSession(boolean forward) {

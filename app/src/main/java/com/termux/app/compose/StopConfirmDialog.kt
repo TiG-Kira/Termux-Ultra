@@ -17,7 +17,9 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.lifecycleScope
 import com.termux.R
 import com.termux.app.TermuxService
+import com.termux.app.utils.SnackbarHelper
 import com.termux.shared.termux.TermuxConstants
+import com.google.android.material.snackbar.Snackbar
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -172,7 +174,7 @@ fun StopConfirmDialogHost(snackbarHostState: top.yukonga.miuix.kmp.basic.Snackba
                 )
             }
         } else {
-            android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_LONG).show()
+            SnackbarHelper.show(context, msg, Snackbar.LENGTH_LONG)
         }
     }
 

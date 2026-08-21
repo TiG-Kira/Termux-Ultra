@@ -2,6 +2,7 @@ package com.termux.app.compose
 
 import android.content.Context
 import android.os.Build
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -53,6 +54,21 @@ fun VncSettingsScreen(
     var currentPage by remember { mutableStateOf(VncSettingsPage.MAIN) }
     val scrollBehavior = MiuixScrollBehavior()
 
+    // 返回逻辑：从子页面返回上一级，主页面退出
+    fun handleBack() {
+        when (currentPage) {
+            VncSettingsPage.MAIN -> onBack()
+            VncSettingsPage.VIEWER -> { currentPage = VncSettingsPage.MAIN }
+            VncSettingsPage.INPUT -> { currentPage = VncSettingsPage.MAIN }
+            VncSettingsPage.SERVER -> { currentPage = VncSettingsPage.MAIN }
+        }
+    }
+    
+    // 处理系统返回键
+    BackHandler(enabled = true) {
+        handleBack()
+    }
+
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
@@ -64,14 +80,7 @@ fun VncSettingsScreen(
                         modifier = Modifier
                             .size(40.dp)
                             .clip(CircleShape)
-                            .clickable {
-                                when (currentPage) {
-                                    VncSettingsPage.MAIN -> onBack()
-                                    VncSettingsPage.VIEWER -> { currentPage = VncSettingsPage.MAIN }
-                                    VncSettingsPage.INPUT -> { currentPage = VncSettingsPage.MAIN }
-                                    VncSettingsPage.SERVER -> { currentPage = VncSettingsPage.MAIN }
-                                }
-                            },
+                            .clickable { handleBack() },
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(

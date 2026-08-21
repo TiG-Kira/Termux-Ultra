@@ -6,10 +6,11 @@ import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
 import android.os.Build
-import android.widget.Toast
 import androidx.core.app.NotificationCompat
+import com.google.android.material.snackbar.Snackbar
 import com.termux.R
 import com.termux.app.compose.ApiCompat
+import com.termux.app.utils.SnackbarHelper
 
 /**
  * 分级降级助手。
@@ -165,7 +166,7 @@ object FallbackHelper {
         } catch (ignored: Throwable) {
         }
         try {
-            Toast.makeText(activity, R.string.low_android_exit_message, Toast.LENGTH_LONG).show()
+            SnackbarHelper.show(activity, activity.getString(R.string.low_android_exit_message), Snackbar.LENGTH_LONG)
         } catch (ignored: Throwable) {
         }
         try {
@@ -258,7 +259,7 @@ object FallbackHelper {
                 ApiCompat.androidReleaseName,
                 ApiCompat.sdkInt
             )
-            Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+            SnackbarHelper.show(context, msg, Snackbar.LENGTH_LONG)
         } catch (ignored: Throwable) {
         }
     }

@@ -202,6 +202,17 @@ public final class TermuxService extends Service implements TermuxTask.TermuxTas
                         android.widget.Toast.LENGTH_LONG).show();
                 });
             }
+
+            @Override
+            public boolean onCommandAutoBlocked(com.termux.terminal.TerminalSession session, String command) {
+                // 检查是否为自动拦截模式（AUTO_BLOCK）
+                boolean autoBlocked = com.termux.app.compose.RiskConfirmManager.INSTANCE.isLastCommandAutoBlocked();
+                if (autoBlocked) {
+                    // 重置标志
+                    com.termux.app.compose.RiskConfirmManager.INSTANCE.resetAutoBlockedFlag();
+                }
+                return autoBlocked;
+            }
         });
     }
 

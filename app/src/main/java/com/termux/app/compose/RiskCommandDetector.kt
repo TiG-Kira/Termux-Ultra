@@ -24,7 +24,9 @@ object RiskCommandDetector {
         FORK_BOMB("fork bomb 资源耗尽"),
         KERNEL_MODULE("内核模块操作"),
         RAW_DISK_WRITE("原始磁盘写入"),
-        SHUTDOWN_REBOOT("关机/重启")
+        SHUTDOWN_REBOOT("关机/重启"),
+        SETPROP("系统属性修改"),
+        ROOT_CMD("ROOT 特权命令")
     }
 
     data class DetectionResult(
@@ -156,6 +158,41 @@ object RiskCommandDetector {
             "检测到 PowerShell Clear-Disk 命令，将清空磁盘全部数据",
             requireNative = false,
             isWindowsDiskCommand = true
+        ),
+        // setprop 系统属性修改（ROOT 环境下可修改系统关键属性）
+        RiskPattern(
+            Pattern.compile("""\bsetprop\s+(?:persist\.|ro\.|sys\.)""", Pattern.CASE_INSENSITIVE),
+            RiskType.SETPROP,
+            "检测到 setprop 系统属性修改命令，可能影响系统稳定性",
+            requireNative = true
+        ),
+        // setprop 通用检测
+        RiskPattern(
+            Pattern.compile("""^\s*setprop\b""", Pattern.CASE_INSENSITIVE),
+            RiskType.SETPROP,
+            "检测到 setprop 命令，修改系统属性需谨慎",
+            requireNative = true
+        ),
+        // ROOT 环境下的高危特权命令
+        RiskPattern(
+            Pattern.compile("""\bchmod\s+(-[a-zA-Z]*\s+)?777\b""", Pattern.CASE_INSENSITIVE),
+            RiskType.ROOT_CMD,
+            "检测到 chmod 777，将文件设为全局可读写执行，存在安全风险",
+            requireNative = true
+        ),
+        // ROOT 环境下直接操作 /system /vendor 等系统分区
+        RiskPattern(
+            Pattern.compile("""\b(?:mount|remount)\s+(?:-o\s+)?(?:rw|ro|noatime)\s+/(?:system|vendor|product|odm)""", Pattern.CASE_INSENSITIVE),
+            RiskType.ROOT_CMD,
+            "检测到系统分区挂载操作，可能导致系统无法启动",
+            requireNative = true
+        ),
+        // ROOT 下的 SELinux 操作
+        RiskPattern(
+            Pattern.compile("""\b(?:setenforce|selinuxenabled|getenforce)\b""", Pattern.CASE_INSENSITIVE),
+            RiskType.ROOT_CMD,
+            "检测到 SELinux 操作，修改 SELinux 策略可能降低系统安全性",
+            requireNative = true
         )
     )
 
@@ -213,4 +250,49 @@ object RiskCommandDetector {
     /** Java 友好的检测接口 */
     @JvmStatic
     fun isDangerous(command: String?): Boolean = detect(command).isDangerous
+
+    /**
+     * 脚本检测结果。
+     * @param lineNumber 行号（从 1 开始）
+     * @param lineContent 该行内容
+     * @param detection 检测到的危险信息
+     */
+    data class ScriptDetectionResult(
+        val lineNumber: Int,
+        val lineContent: String,
+        val detection: DetectionResult
+    )
+
+    /**
+     * 检测脚本文件中的危险命令。
+     * @param scriptContent 脚本文件内容
+     * @param inNativeTermux 是否运行在原生 Termux 环境
+     * @return 检测到的危险命令列表（空列表表示安全）
+     */
+    fun detectScript(scriptContent: String, inNativeTermux: Boolean = true): List<ScriptDetectionResult> {
+        if (scriptContent.isBlank()) return emptyList()
+
+        val lines = scriptContent.lines()
+        val results = mutableListOf<ScriptDetectionResult>()
+
+        for ((index, line) in lines.withIndex()) {
+            val trimmedLine = line.trim()
+            // 跳过空行和注释
+            if (trimmedLine.isBlank() || trimmedLine.startsWith("#")) continue
+
+            // 移除常见的 shell 前缀（变量赋值前的命令等）
+            val detection = detect(trimmedLine, inNativeTermux)
+            if (detection.isDangerous) {
+                results.add(
+                    ScriptDetectionResult(
+                        lineNumber = index + 1,
+                        lineContent = trimmedLine,
+                        detection = detection
+                    )
+                )
+            }
+        }
+
+        return results
+    }
 }

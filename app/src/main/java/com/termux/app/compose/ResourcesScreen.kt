@@ -41,6 +41,8 @@ import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import com.termux.R
 import com.termux.app.TermuxService
+import com.termux.app.utils.SnackbarHelper
+import com.google.android.material.snackbar.Snackbar
 
 data class ResourceItem(
     val title: String,
@@ -281,7 +283,7 @@ fun ResourceCard(
                                 val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
                                 val clip = android.content.ClipData.newPlainText("执行指令", item.scriptUrl)
                                 clipboard.setPrimaryClip(clip)
-                                android.widget.Toast.makeText(context, "指令已复制到剪贴板", android.widget.Toast.LENGTH_SHORT).show()
+                                SnackbarHelper.show(context, "指令已复制到剪贴板", Snackbar.LENGTH_SHORT)
                             },
                             modifier = Modifier.clip(RoundedCornerShape(8.dp)),
                             colors = ButtonDefaults.buttonColors(
@@ -347,11 +349,11 @@ fun ResourceCard(
                             val runScript = java.io.File("$containerDir/run.sh")
                             val rootfsBash = java.io.File("$containerDir/rootfs/bin/bash")
                             if (!runScript.exists() || !rootfsBash.exists()) {
-                                android.widget.Toast.makeText(
+                                SnackbarHelper.show(
                                     context,
                                     "请先安装 Ubuntu 容器！请到资源页点击\"Ubuntu 容器安装\"",
-                                    android.widget.Toast.LENGTH_LONG
-                                ).show()
+                                    Snackbar.LENGTH_LONG
+                                )
                                 return
                             }
                         }
@@ -795,14 +797,18 @@ fun WarningNoteCard(modifier: Modifier = Modifier) {
 
 /** AI Termux 资源中心入口卡片 */
 @Composable
-fun AiTermuxEntryCard(modifier: Modifier = Modifier) {
+fun AiTermuxEntryCard(modifier: Modifier = Modifier, horizontalMode: Boolean = false) {
     val context = LocalContext.current
     val prefs = remember { context.getSharedPreferences("termux_prefs", android.content.Context.MODE_PRIVATE) }
-    var collapsed by remember { mutableStateOf(prefs.getBoolean("ai_termux_entry_collapsed", false)) }
+    var collapsed by remember { mutableStateOf(
+        if (horizontalMode) false else prefs.getBoolean("ai_termux_entry_collapsed", false)
+    ) }
 
     fun setCollapsed(value: Boolean) {
-        collapsed = value
-        prefs.edit().putBoolean("ai_termux_entry_collapsed", value).apply()
+        if (!horizontalMode) {
+            collapsed = value
+            prefs.edit().putBoolean("ai_termux_entry_collapsed", value).apply()
+        }
     }
 
     val gradient = Brush.linearGradient(

@@ -58,6 +58,8 @@ import androidx.lifecycle.viewModelScope
 import com.termux.R
 import com.termux.app.TermuxService
 import com.termux.app.compose.*
+import com.termux.app.utils.SnackbarHelper
+import com.google.android.material.snackbar.Snackbar
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -1343,7 +1345,7 @@ private fun AiSetupScreen(vm: AiTermuxViewModel, onBack: () -> Unit) {
                                 isConfigured = true
                             )
                             vm.updateConfig(newCfg)
-                            android.widget.Toast.makeText(ctx, "配置已保存，进入对话界面", android.widget.Toast.LENGTH_SHORT).show()
+                            SnackbarHelper.show(ctx, "配置已保存，进入对话界面", Snackbar.LENGTH_SHORT, null)
                         },
                         modifier = Modifier
                             .weight(1f)
@@ -1928,7 +1930,7 @@ private fun ChatBubble(msg: ChatMessage, vm: AiTermuxViewModel) {
                                     val clipboard = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
                                     val clip = android.content.ClipData.newPlainText("AI 回复", msg.content)
                                     clipboard.setPrimaryClip(clip)
-                                    android.widget.Toast.makeText(ctx, "已复制", android.widget.Toast.LENGTH_SHORT).show()
+                                    SnackbarHelper.show(ctx, "已复制", Snackbar.LENGTH_SHORT, null)
                                 },
                                 onClick = {}
                             )
@@ -2038,7 +2040,7 @@ private fun ChatBubble(msg: ChatMessage, vm: AiTermuxViewModel) {
                                 val clipboard = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
                                 val clip = android.content.ClipData.newPlainText("原始 API 响应", msg.rawResponse!!)
                                 clipboard.setPrimaryClip(clip)
-                                android.widget.Toast.makeText(ctx, "已复制到剪贴板", android.widget.Toast.LENGTH_SHORT).show()
+                                SnackbarHelper.show(ctx, "已复制到剪贴板", Snackbar.LENGTH_SHORT, null)
                             }
                         )
                     }

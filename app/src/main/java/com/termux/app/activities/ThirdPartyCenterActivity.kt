@@ -10,7 +10,7 @@ import android.content.SharedPreferences
 import android.os.Bundle
 import android.os.IBinder
 import android.util.Log
-import android.widget.Toast
+import com.google.android.material.snackbar.Snackbar
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
@@ -40,6 +40,7 @@ import com.termux.R
 import com.termux.app.compose.*
 import com.termux.app.compose.TerminalSession
 import com.termux.app.compose.getRunningSessions
+import com.termux.app.utils.SnackbarHelper
 import top.yukonga.miuix.kmp.basic.*
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
@@ -174,7 +175,7 @@ class ThirdPartyCenterActivity : ComponentActivity() {
                         val runScript = java.io.File("$containerDir/run.sh")
                         val rootfsBash = java.io.File("$containerDir/rootfs/bin/bash")
                         if (!runScript.exists() || !rootfsBash.exists()) {
-                            Toast.makeText(context, context.getString(R.string.need_container_first), Toast.LENGTH_LONG).show()
+                            SnackbarHelper.show(context, context.getString(R.string.need_container_first), Snackbar.LENGTH_LONG)
                             return
                         }
                     }
@@ -187,7 +188,7 @@ class ThirdPartyCenterActivity : ComponentActivity() {
                             val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                             val clip = ClipData.newPlainText(r.name, r.script)
                             clipboard.setPrimaryClip(clip)
-                            Toast.makeText(context, context.getString(R.string.copy_to_clipboard_toast), Toast.LENGTH_SHORT).show()
+                            SnackbarHelper.show(context, context.getString(R.string.copy_to_clipboard_toast), Snackbar.LENGTH_SHORT)
                         }
                         return
                     }
