@@ -854,9 +854,8 @@ object RiskConfirmManager {
                     )
                 }
                 // 发送汇总 Snackbar 到主页
-                val countForSudo = incrementDangerCount()
                 emitSummarySnackbar(
-                    message = "已检测 $countForSudo 次危险命令，请注意会话使用安全。",
+                    message = "已检测 ${getDangerCount()} 次危险命令，请注意会话使用安全。",
                     duration = Snackbar.LENGTH_LONG
                 )
                 return false
@@ -938,9 +937,8 @@ object RiskConfirmManager {
                 }
             }, 60000L)
             // 发送汇总 Snackbar 到主页
-            val countForShutdown = incrementDangerCount()
             emitSummarySnackbar(
-                message = "已拦截 $countForShutdown 次危险命令，请注意会话使用安全。",
+                message = "已拦截 ${getDangerCount()} 次危险命令，请注意会话使用安全。",
                 duration = Snackbar.LENGTH_LONG
             )
             // 跳转到主页 Activity
@@ -972,9 +970,8 @@ object RiskConfirmManager {
         android.util.Log.i("RiskConfirmManager", "Starting MainActivity to show dialog...")
 
         // 发送汇总 Snackbar 到主页（WARN_VERIFY 模式）
-        val countForVerify = incrementDangerCount()
         emitSummarySnackbar(
-            message = "已拦截 $countForVerify 次危险命令，请注意会话使用安全。",
+            message = "已拦截 ${getDangerCount()} 次危险命令，请注意会话使用安全。",
             duration = Snackbar.LENGTH_LONG
         )
 
