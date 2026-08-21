@@ -461,95 +461,6 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
                 .nestedScroll(scrollBehavior.nestedScrollConnection),
             contentPadding = PaddingValues(bottom = 92.dp)
         ) {
-            // ---------- Security Settings ----------
-            item { SmallTitle(text = "安全设置") }
-            item {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
-                        .clip(RoundedCornerShape(16.dp))
-                ) {
-                    Column {
-                        val protectionItems = RiskConfirmManager.ProtectionLevel.entries.map { level ->
-                            DropdownItem(
-                                text = level.displayName,
-                                summary = level.description
-                            )
-                        }
-                        WindowSpinnerPreference(
-                            title = context.getString(R.string.protection_level_title),
-                            summary = protectionLevel.description,
-                            items = protectionItems,
-                            selectedIndex = protectionLevelIndex,
-                            onSelectedIndexChange = { idx ->
-                                val newLevel = RiskConfirmManager.ProtectionLevel.entries[idx]
-                                // 如果选择 OFF 或 WARN_ONLY，触发关闭弹窗确认
-                                if (newLevel == RiskConfirmManager.ProtectionLevel.OFF ||
-                                    newLevel == RiskConfirmManager.ProtectionLevel.WARN_ONLY) {
-                                    RiskConfirmManager.showDisableWarning(newLevel)
-                                } else {
-                                    protectionLevelIndex = idx
-                                    protectionLevel = newLevel
-                                    RiskConfirmManager.setProtectionLevel(context, newLevel)
-                                    riskConfirmEnabled = true
-                                }
-                            },
-                            startAction = {
-                                SettingIcon(R.drawable.ic_shield, contentDescription = context.getString(R.string.protection_level_title))
-                            }
-                        )
-                        HorizontalDivider(
-                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f),
-                            modifier = Modifier.padding(start = 72.dp, end = 16.dp)
-                        )
-                        val detectionEnabled = protectionLevel != RiskConfirmManager.ProtectionLevel.OFF
-                        val detectionItems = listOf(
-                            RiskConfirmManager.DetectionMode.STATIC to R.string.detection_mode_static_desc,
-                            RiskConfirmManager.DetectionMode.RUNTIME to R.string.detection_mode_runtime_desc
-                        ).map { (mode, descRes) ->
-                            DropdownItem(
-                                text = mode.displayName,
-                                summary = context.getString(descRes)
-                            )
-                        }
-                        // 计算在过滤后的列表中的索引
-                        val filteredDetectionIndex = when (detectionMode) {
-                            RiskConfirmManager.DetectionMode.RUNTIME -> 1
-                            else -> 0
-                        }
-                        WindowSpinnerPreference(
-                            title = context.getString(R.string.detection_mode_title),
-                            summary = if (detectionEnabled) {
-                                when (detectionMode) {
-                                    RiskConfirmManager.DetectionMode.RUNTIME -> context.getString(R.string.detection_mode_runtime_desc)
-                                    else -> context.getString(R.string.detection_mode_static_desc)
-                                }
-                            } else {
-                                context.getString(R.string.detection_mode_none_desc)
-                            },
-                            items = detectionItems,
-                            selectedIndex = filteredDetectionIndex,
-                            onSelectedIndexChange = { idx ->
-                                if (!detectionEnabled) return@WindowSpinnerPreference
-                                val mode = if (idx == 1) {
-                                    RiskConfirmManager.DetectionMode.RUNTIME
-                                } else {
-                                    RiskConfirmManager.DetectionMode.STATIC
-                                }
-                                detectionModeIndex = idx
-                                detectionMode = mode
-                                RiskConfirmManager.setDetectionMode(context, mode)
-                            },
-                            enabled = detectionEnabled,
-                            startAction = {
-                                SettingIcon(R.drawable.ic_shield, contentDescription = context.getString(R.string.detection_mode_title))
-                            }
-                        )
-                    }
-                }
-            }
-
             // ---------- Appearance ----------
             item { SmallTitle(text = context.getString(R.string.appearance)) }
             item {
@@ -907,6 +818,95 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
             if (toolConfigItems.isNotEmpty()) {
                 item { SmallTitle(text = context.getString(R.string.tool_config_category)) }
                 item { SettingsGroupCard(items = toolConfigItems) }
+            }
+
+            // ---------- Security Settings ----------
+            item { SmallTitle(text = "安全设置") }
+            item {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                ) {
+                    Column {
+                        val protectionItems = RiskConfirmManager.ProtectionLevel.entries.map { level ->
+                            DropdownItem(
+                                text = level.displayName,
+                                summary = level.description
+                            )
+                        }
+                        WindowSpinnerPreference(
+                            title = context.getString(R.string.protection_level_title),
+                            summary = protectionLevel.description,
+                            items = protectionItems,
+                            selectedIndex = protectionLevelIndex,
+                            onSelectedIndexChange = { idx ->
+                                val newLevel = RiskConfirmManager.ProtectionLevel.entries[idx]
+                                // 如果选择 OFF 或 WARN_ONLY，触发关闭弹窗确认
+                                if (newLevel == RiskConfirmManager.ProtectionLevel.OFF ||
+                                    newLevel == RiskConfirmManager.ProtectionLevel.WARN_ONLY) {
+                                    RiskConfirmManager.showDisableWarning(newLevel)
+                                } else {
+                                    protectionLevelIndex = idx
+                                    protectionLevel = newLevel
+                                    RiskConfirmManager.setProtectionLevel(context, newLevel)
+                                    riskConfirmEnabled = true
+                                }
+                            },
+                            startAction = {
+                                SettingIcon(R.drawable.ic_shield, contentDescription = context.getString(R.string.protection_level_title))
+                            }
+                        )
+                        HorizontalDivider(
+                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f),
+                            modifier = Modifier.padding(start = 72.dp, end = 16.dp)
+                        )
+                        val detectionEnabled = protectionLevel != RiskConfirmManager.ProtectionLevel.OFF
+                        val detectionItems = listOf(
+                            RiskConfirmManager.DetectionMode.STATIC to R.string.detection_mode_static_desc,
+                            RiskConfirmManager.DetectionMode.RUNTIME to R.string.detection_mode_runtime_desc
+                        ).map { (mode, descRes) ->
+                            DropdownItem(
+                                text = mode.displayName,
+                                summary = context.getString(descRes)
+                            )
+                        }
+                        // 计算在过滤后的列表中的索引
+                        val filteredDetectionIndex = when (detectionMode) {
+                            RiskConfirmManager.DetectionMode.RUNTIME -> 1
+                            else -> 0
+                        }
+                        WindowSpinnerPreference(
+                            title = context.getString(R.string.detection_mode_title),
+                            summary = if (detectionEnabled) {
+                                when (detectionMode) {
+                                    RiskConfirmManager.DetectionMode.RUNTIME -> context.getString(R.string.detection_mode_runtime_desc)
+                                    else -> context.getString(R.string.detection_mode_static_desc)
+                                }
+                            } else {
+                                context.getString(R.string.detection_mode_none_desc)
+                            },
+                            items = detectionItems,
+                            selectedIndex = filteredDetectionIndex,
+                            onSelectedIndexChange = { idx ->
+                                if (!detectionEnabled) return@WindowSpinnerPreference
+                                val mode = if (idx == 1) {
+                                    RiskConfirmManager.DetectionMode.RUNTIME
+                                } else {
+                                    RiskConfirmManager.DetectionMode.STATIC
+                                }
+                                detectionModeIndex = idx
+                                detectionMode = mode
+                                RiskConfirmManager.setDetectionMode(context, mode)
+                            },
+                            enabled = detectionEnabled,
+                            startAction = {
+                                SettingIcon(R.drawable.ic_detection, contentDescription = context.getString(R.string.detection_mode_title))
+                            }
+                        )
+                    }
+                }
             }
 
             // ---------- System ----------

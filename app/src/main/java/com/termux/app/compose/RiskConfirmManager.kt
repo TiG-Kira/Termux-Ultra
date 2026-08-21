@@ -122,12 +122,13 @@ object RiskConfirmManager {
     }
 
     // ---- 主页汇总 Snackbar（退出终端页时发送，显示统计信息） ----
+    // 使用 replay=1 确保新订阅者（主页）激活后能收到最后一个事件
     data class SummarySnackbarEvent(
         val message: String,
         val duration: Int = Snackbar.LENGTH_LONG
     )
     private val _summarySnackbarEvents = MutableSharedFlow<SummarySnackbarEvent>(
-        replay = 0,
+        replay = 1,
         extraBufferCapacity = 8
     )
     val summarySnackbarEvents: SharedFlow<SummarySnackbarEvent> = _summarySnackbarEvents

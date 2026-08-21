@@ -19,6 +19,8 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CheckCircleOutline
 import androidx.compose.material.icons.rounded.Close
@@ -464,14 +466,14 @@ fun TerminalListScreen(
                         modifier = Modifier.fillMaxWidth(),
                         contentPadding = PaddingValues(horizontal = 0.dp),
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalAlignment = Alignment.Top
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
                         items(tipPageCount) { index ->
-                            // 每张卡片严格占满父容器宽度，固定高度，间距 12dp
+                            // 每张卡片严格占满父容器宽度，统一高度 140dp，间距 12dp
                             Box(
                                 modifier = Modifier
                                     .width(itemWidth)
-                                    .height(160.dp)
+                                    .height(140.dp)
                             ) {
                                 tipPages[index]()
                             }
@@ -954,9 +956,6 @@ private fun DeadSessionCard(
 fun KeepAliveWarningCard(onClose: () -> Unit, horizontalMode: Boolean = false) {
     val context = LocalContext.current
     val isDark = isSystemInDarkTheme()
-    val cardColor = if (isDark) Color(0xFF3D3514) else Color(0xFFFFF9C4)
-    val iconColor = Color(0xFFFDD835)
-    val textColor = if (isDark) Color.White else Color.Black
     val prefs = remember { context.getSharedPreferences("termux_prefs", android.content.Context.MODE_PRIVATE) }
     var collapsed by remember { mutableStateOf(
         if (horizontalMode) false else prefs.getBoolean("keep_alive_warning_collapsed", false)
@@ -968,6 +967,26 @@ fun KeepAliveWarningCard(onClose: () -> Unit, horizontalMode: Boolean = false) {
             prefs.edit().putBoolean("keep_alive_warning_collapsed", value).apply()
         }
     }
+
+    // 横向模式使用统一的 HorizontalTipCard 组件
+    if (horizontalMode) {
+        HorizontalTipCard(
+            cardColor = if (isDark) Color(0xFF3D3514) else Color(0xFFFFF9C4),
+            icon = Icons.Rounded.Warning,
+            iconTint = Color(0xFFFDD835),
+            iconBackgroundColor = if (isDark) Color(0xFF4A4020) else Color(0xFFF5E680),
+            title = stringResource(R.string.keep_alive_warning_title),
+            description = stringResource(R.string.keep_alive_warning_message),
+            titleColor = if (isDark) Color.White else Color.Black,
+            descriptionColor = if (isDark) Color.White.copy(alpha = 0.8f) else Color.Black.copy(alpha = 0.8f)
+        )
+        return
+    }
+
+    // 竖向模式保持原有设计
+    val cardColor = if (isDark) Color(0xFF3D3514) else Color(0xFFFFF9C4)
+    val iconColor = Color(0xFFFDD835)
+    val textColor = if (isDark) Color.White else Color.Black
 
     Card(
         modifier = Modifier
@@ -1026,55 +1045,49 @@ fun KeepAliveWarningCard(onClose: () -> Unit, horizontalMode: Boolean = false) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(all = if (horizontalMode) 16.dp else 18.dp)
+                        .padding(all = 18.dp)
                 ) {
-                    // 横向模式隐藏关闭按钮
-                    if (!horizontalMode) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_close),
-                            contentDescription = stringResource(R.string.ok),
-                            modifier = Modifier
-                                .size(24.dp)
-                                .align(Alignment.End)
-                                .clickable(onClick = onClose),
-                            tint = textColor.copy(alpha = 0.6f)
-                        )
-                    }
+                    Icon(
+                        painter = painterResource(R.drawable.ic_close),
+                        contentDescription = stringResource(R.string.ok),
+                        modifier = Modifier
+                            .size(24.dp)
+                            .align(Alignment.End)
+                            .clickable(onClick = onClose),
+                        tint = textColor.copy(alpha = 0.6f)
+                    )
                     Text(
                         modifier = Modifier.fillMaxWidth(),
                         text = stringResource(R.string.keep_alive_warning_title),
-                        fontSize = if (horizontalMode) 17.sp else 18.sp,
+                        fontSize = 18.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = textColor,
                         lineHeight = 26.sp
                     )
-                    Spacer(Modifier.height(if (horizontalMode) 4.dp else 6.dp))
+                    Spacer(Modifier.height(6.dp))
                     Text(
                         modifier = Modifier.fillMaxWidth(),
                         text = stringResource(R.string.keep_alive_warning_message),
-                        fontSize = if (horizontalMode) 13.sp else 14.sp,
+                        fontSize = 14.sp,
                         fontWeight = FontWeight.Medium,
                         color = textColor,
                         lineHeight = 21.sp
                     )
                 }
-                // 横向模式隐藏折叠按钮
-                if (!horizontalMode) {
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.BottomStart)
-                            .offset(x = 6.dp, y = 4.dp)
-                            .size(20.dp)
-                            .clickable { setCollapsed(true) },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.ExpandLess,
-                            contentDescription = null,
-                            tint = textColor.copy(alpha = 0.45f),
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .offset(x = 6.dp, y = 4.dp)
+                        .size(20.dp)
+                        .clickable { setCollapsed(true) },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.ExpandLess,
+                        contentDescription = null,
+                        tint = textColor.copy(alpha = 0.45f),
+                        modifier = Modifier.size(18.dp)
+                    )
                 }
             }
         }
@@ -1085,9 +1098,6 @@ fun KeepAliveWarningCard(onClose: () -> Unit, horizontalMode: Boolean = false) {
 fun WelcomeCard(text: String, onClose: () -> Unit, horizontalMode: Boolean = false) {
     val context = LocalContext.current
     val isDark = isSystemInDarkTheme()
-    val cardColor = if (isDark) Color(0xFF1A1A1A) else Color.White
-    val iconColor = if (isDark) Color(0xFF666666) else Color(0xFFCCCCCC)
-    val textColor = if (isDark) Color.White else Color.Black
     val prefs = remember { context.getSharedPreferences("termux_prefs", android.content.Context.MODE_PRIVATE) }
     var collapsed by remember { mutableStateOf(
         if (horizontalMode) false else prefs.getBoolean("welcome_card_collapsed", false)
@@ -1099,6 +1109,28 @@ fun WelcomeCard(text: String, onClose: () -> Unit, horizontalMode: Boolean = fal
             prefs.edit().putBoolean("welcome_card_collapsed", value).apply()
         }
     }
+
+    // 横向模式使用统一的 HorizontalTipCard 组件
+    if (horizontalMode) {
+        val titleColor = if (isDark) Color.White else Color.Black
+        val descriptionColor = if (isDark) Color.White.copy(alpha = 0.7f) else Color.Black.copy(alpha = 0.7f)
+        HorizontalTipCard(
+            cardColor = if (isDark) Color(0xFF1A1A1A) else Color.White,
+            icon = Icons.Rounded.Info,
+            iconTint = if (isDark) Color(0xFF666666) else Color(0xFF666666),
+            iconBackgroundColor = if (isDark) Color(0xFF333333) else Color(0xFFF0F0F0),
+            title = stringResource(R.string.terminal_welcome_title),
+            description = text,
+            titleColor = titleColor,
+            descriptionColor = descriptionColor
+        )
+        return
+    }
+
+    // 竖向模式保持原有设计
+    val cardColor = if (isDark) Color(0xFF1A1A1A) else Color.White
+    val iconColor = if (isDark) Color(0xFF666666) else Color(0xFFCCCCCC)
+    val textColor = if (isDark) Color.White else Color.Black
 
     Card(
         modifier = Modifier
@@ -1157,46 +1189,40 @@ fun WelcomeCard(text: String, onClose: () -> Unit, horizontalMode: Boolean = fal
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(all = if (horizontalMode) 16.dp else 18.dp)
+                        .padding(all = 18.dp)
                 ) {
-                    // 横向模式隐藏关闭按钮
-                    if (!horizontalMode) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_close),
-                            contentDescription = stringResource(R.string.ok),
-                            modifier = Modifier
-                                .size(24.dp)
-                                .align(Alignment.End)
-                                .clickable(onClick = onClose),
-                            tint = textColor.copy(alpha = 0.6f)
-                        )
-                    }
+                    Icon(
+                        painter = painterResource(R.drawable.ic_close),
+                        contentDescription = stringResource(R.string.ok),
+                        modifier = Modifier
+                            .size(24.dp)
+                            .align(Alignment.End)
+                            .clickable(onClick = onClose),
+                        tint = textColor.copy(alpha = 0.6f)
+                    )
                     Text(
                         modifier = Modifier.fillMaxWidth(),
                         text = text,
-                        fontSize = if (horizontalMode) 14.sp else 15.sp,
+                        fontSize = 15.sp,
                         fontWeight = FontWeight.Medium,
                         color = textColor,
                         lineHeight = 22.sp
                     )
                 }
-                // 横向模式隐藏折叠按钮
-                if (!horizontalMode) {
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.BottomStart)
-                            .offset(x = 6.dp, y = 4.dp)
-                            .size(20.dp)
-                            .clickable { setCollapsed(true) },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.ExpandLess,
-                            contentDescription = null,
-                            tint = textColor.copy(alpha = 0.4f),
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .offset(x = 6.dp, y = 4.dp)
+                        .size(20.dp)
+                        .clickable { setCollapsed(true) },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.ExpandLess,
+                        contentDescription = null,
+                        tint = textColor.copy(alpha = 0.4f),
+                        modifier = Modifier.size(18.dp)
+                    )
                 }
             }
         }
@@ -1220,27 +1246,6 @@ fun ServiceStatusCard(
 ) {
     val context = LocalContext.current
     val isDark = isSystemInDarkTheme()
-    val (cardColor, iconColor, icon) = when (status) {
-        ServiceStatus.NORMAL -> {
-            Triple(if (isDark) Color(0xFF1A3825) else Color(0xFFDFFAE4), Color(0xFF36D167), Icons.Rounded.CheckCircleOutline)
-        }
-        ServiceStatus.WAKE_LOCK_ACTIVE -> {
-            Triple(if (isDark) Color(0xFF1A3825) else Color(0xFFDFFAE4), Color(0xFF36D167), Icons.Rounded.CheckCircleOutline)
-        }
-        ServiceStatus.SERVICE_STOPPED -> {
-            Triple(if (isDark) Color(0xFF3B1414) else Color(0xFFFFEBEE), Color(0xFFFF5252), Icons.Rounded.ErrorOutline)
-        }
-        ServiceStatus.MEMORY_WARNING -> {
-            Triple(if (isDark) Color(0xFF3D3514) else Color(0xFFFFF9C4), Color(0xFFFDD835), Icons.Rounded.Warning)
-        }
-        ServiceStatus.MEMORY_KILL -> {
-            Triple(if (isDark) Color(0xFF3B1414) else Color(0xFFFFEBEE), Color(0xFFFF5252), Icons.Rounded.Warning)
-        }
-        ServiceStatus.SESSION_KILLED -> {
-            Triple(if (isDark) Color(0xFF3B1414) else Color(0xFFFFEBEE), Color(0xFFFF5252), Icons.Rounded.Warning)
-        }
-    }
-    val textColor = if (isDark) Color.White else Color.Black
     val prefs = remember { context.getSharedPreferences("termux_prefs", android.content.Context.MODE_PRIVATE) }
     var collapsed by remember { mutableStateOf(
         if (horizontalMode) false else prefs.getBoolean("service_status_collapsed", false)
@@ -1273,7 +1278,58 @@ fun ServiceStatusCard(
             stringResource(R.string.service_status_killed_desc, name)
         }
     }
-    
+
+    // 横向模式使用统一的 HorizontalTipCard 组件
+    if (horizontalMode) {
+        val (cardColor, iconColor, icon) = when (status) {
+            ServiceStatus.NORMAL -> Triple(if (isDark) Color(0xFF1A3825) else Color(0xFFDFFAE4), Color(0xFF36D167), Icons.Rounded.CheckCircleOutline)
+            ServiceStatus.WAKE_LOCK_ACTIVE -> Triple(if (isDark) Color(0xFF1A3825) else Color(0xFFDFFAE4), Color(0xFF36D167), Icons.Rounded.CheckCircleOutline)
+            ServiceStatus.SERVICE_STOPPED -> Triple(if (isDark) Color(0xFF3B1414) else Color(0xFFFFEBEE), Color(0xFFFF5252), Icons.Rounded.ErrorOutline)
+            ServiceStatus.MEMORY_WARNING -> Triple(if (isDark) Color(0xFF3D3514) else Color(0xFFFFF9C4), Color(0xFFFDD835), Icons.Rounded.Warning)
+            ServiceStatus.MEMORY_KILL -> Triple(if (isDark) Color(0xFF3B1414) else Color(0xFFFFEBEE), Color(0xFFFF5252), Icons.Rounded.Warning)
+            ServiceStatus.SESSION_KILLED -> Triple(if (isDark) Color(0xFF3B1414) else Color(0xFFFFEBEE), Color(0xFFFF5252), Icons.Rounded.Warning)
+        }
+        val iconBackgroundColor = when (status) {
+            ServiceStatus.NORMAL, ServiceStatus.WAKE_LOCK_ACTIVE -> if (isDark) Color(0xFF2A5038) else Color(0xFFB8EDC9)
+            ServiceStatus.SERVICE_STOPPED, ServiceStatus.MEMORY_KILL, ServiceStatus.SESSION_KILLED -> if (isDark) Color(0xFF5A2020) else Color(0xFFFFCDD2)
+            ServiceStatus.MEMORY_WARNING -> if (isDark) Color(0xFF4A4020) else Color(0xFFF5E680)
+        }
+        HorizontalTipCard(
+            cardColor = cardColor,
+            icon = icon,
+            iconTint = iconColor,
+            iconBackgroundColor = iconBackgroundColor,
+            title = title,
+            description = description,
+            titleColor = if (isDark) Color.White else Color.Black,
+            descriptionColor = if (isDark) Color.White.copy(alpha = 0.8f) else Color.Black.copy(alpha = 0.8f)
+        )
+        return
+    }
+
+    // 竖向模式保持原有设计
+    val (cardColor, iconColor, icon) = when (status) {
+        ServiceStatus.NORMAL -> {
+            Triple(if (isDark) Color(0xFF1A3825) else Color(0xFFDFFAE4), Color(0xFF36D167), Icons.Rounded.CheckCircleOutline)
+        }
+        ServiceStatus.WAKE_LOCK_ACTIVE -> {
+            Triple(if (isDark) Color(0xFF1A3825) else Color(0xFFDFFAE4), Color(0xFF36D167), Icons.Rounded.CheckCircleOutline)
+        }
+        ServiceStatus.SERVICE_STOPPED -> {
+            Triple(if (isDark) Color(0xFF3B1414) else Color(0xFFFFEBEE), Color(0xFFFF5252), Icons.Rounded.ErrorOutline)
+        }
+        ServiceStatus.MEMORY_WARNING -> {
+            Triple(if (isDark) Color(0xFF3D3514) else Color(0xFFFFF9C4), Color(0xFFFDD835), Icons.Rounded.Warning)
+        }
+        ServiceStatus.MEMORY_KILL -> {
+            Triple(if (isDark) Color(0xFF3B1414) else Color(0xFFFFEBEE), Color(0xFFFF5252), Icons.Rounded.Warning)
+        }
+        ServiceStatus.SESSION_KILLED -> {
+            Triple(if (isDark) Color(0xFF3B1414) else Color(0xFFFFEBEE), Color(0xFFFF5252), Icons.Rounded.Warning)
+        }
+    }
+    val textColor = if (isDark) Color.White else Color.Black
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -1331,43 +1387,40 @@ fun ServiceStatusCard(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(all = if (horizontalMode) 16.dp else 18.dp)
+                        .padding(all = 18.dp)
                 ) {
                     Text(
                         modifier = Modifier.fillMaxWidth(),
                         text = title,
-                        fontSize = if (horizontalMode) 17.sp else 18.sp,
+                        fontSize = 18.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = textColor,
                         lineHeight = 26.sp
                     )
-                    Spacer(Modifier.height(if (horizontalMode) 4.dp else 6.dp))
+                    Spacer(Modifier.height(6.dp))
                     Text(
                         modifier = Modifier.fillMaxWidth(),
                         text = description,
-                        fontSize = if (horizontalMode) 13.sp else 14.sp,
+                        fontSize = 14.sp,
                         fontWeight = FontWeight.Medium,
                         color = textColor,
                         lineHeight = 21.sp
                     )
                 }
-                // 横向模式隐藏折叠按钮
-                if (!horizontalMode) {
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.BottomStart)
-                            .offset(x = 6.dp, y = 4.dp)
-                            .size(20.dp)
-                            .clickable { setCollapsed(true) },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.ExpandLess,
-                            contentDescription = null,
-                            tint = textColor.copy(alpha = 0.45f),
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .offset(x = 6.dp, y = 4.dp)
+                        .size(20.dp)
+                        .clickable { setCollapsed(true) },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.ExpandLess,
+                        contentDescription = null,
+                        tint = textColor.copy(alpha = 0.45f),
+                        modifier = Modifier.size(18.dp)
+                    )
                 }
             }
         }
@@ -1400,14 +1453,6 @@ fun LowAndroidWarningCard(horizontalMode: Boolean = false) {
         }
     }
 
-    val cardColor = if (hasForce) {
-        if (isDark) Color(0xFF3B1414) else Color(0xFFFFEBEE)
-    } else {
-        if (isDark) Color(0xFF3D3514) else Color(0xFFFFF9C4)
-    }
-    val iconColor = if (hasForce) Color(0xFFFF5252) else Color(0xFFFDD835)
-    val textColor = if (isDark) Color.White else Color.Black
-
     val title = if (hasForce) {
         stringResource(R.string.low_android_force_enabled_title)
     } else {
@@ -1425,6 +1470,42 @@ fun LowAndroidWarningCard(horizontalMode: Boolean = false) {
     } else {
         stringResource(R.string.low_android_warning_message)
     }
+
+    // 横向模式使用统一的 HorizontalTipCard 组件
+    if (horizontalMode) {
+        val cardColor = if (hasForce) {
+            if (isDark) Color(0xFF3B1414) else Color(0xFFFFEBEE)
+        } else {
+            if (isDark) Color(0xFF3D3514) else Color(0xFFFFF9C4)
+        }
+        val iconColor = if (hasForce) Color(0xFFFF5252) else Color(0xFFFDD835)
+        val iconBackgroundColor = if (hasForce) {
+            if (isDark) Color(0xFF5A2020) else Color(0xFFFFCDD2)
+        } else {
+            if (isDark) Color(0xFF4A4020) else Color(0xFFF5E680)
+        }
+        val briefDescription = "$versionInfo · $message"
+        HorizontalTipCard(
+            cardColor = cardColor,
+            icon = Icons.Rounded.Warning,
+            iconTint = iconColor,
+            iconBackgroundColor = iconBackgroundColor,
+            title = title,
+            description = briefDescription,
+            titleColor = if (isDark) Color.White else Color.Black,
+            descriptionColor = if (isDark) Color.White.copy(alpha = 0.8f) else Color.Black.copy(alpha = 0.8f)
+        )
+        return
+    }
+
+    // 竖向模式保持原有设计
+    val cardColor = if (hasForce) {
+        if (isDark) Color(0xFF3B1414) else Color(0xFFFFEBEE)
+    } else {
+        if (isDark) Color(0xFF3D3514) else Color(0xFFFFF9C4)
+    }
+    val iconColor = if (hasForce) Color(0xFFFF5252) else Color(0xFFFDD835)
+    val textColor = if (isDark) Color.White else Color.Black
     val briefDescription = "$versionInfo · $message"
 
     Card(
@@ -1484,21 +1565,21 @@ fun LowAndroidWarningCard(horizontalMode: Boolean = false) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(all = if (horizontalMode) 16.dp else 18.dp)
+                        .padding(all = 18.dp)
                 ) {
                     Text(
                         modifier = Modifier.fillMaxWidth(),
                         text = title,
-                        fontSize = if (horizontalMode) 17.sp else 18.sp,
+                        fontSize = 18.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = textColor,
                         lineHeight = 26.sp
                     )
-                    Spacer(Modifier.height(if (horizontalMode) 4.dp else 6.dp))
+                    Spacer(Modifier.height(6.dp))
                     Text(
                         modifier = Modifier.fillMaxWidth(),
                         text = versionInfo,
-                        fontSize = if (horizontalMode) 13.sp else 14.sp,
+                        fontSize = 14.sp,
                         fontWeight = FontWeight.Medium,
                         color = textColor,
                         lineHeight = 21.sp
@@ -1507,13 +1588,13 @@ fun LowAndroidWarningCard(horizontalMode: Boolean = false) {
                     Text(
                         modifier = Modifier.fillMaxWidth(),
                         text = message,
-                        fontSize = if (horizontalMode) 13.sp else 14.sp,
+                        fontSize = 14.sp,
                         fontWeight = FontWeight.Medium,
                         color = textColor,
                         lineHeight = 21.sp
                     )
                     if (hasForce) {
-                        Spacer(Modifier.height(if (horizontalMode) 6.dp else 12.dp))
+                        Spacer(Modifier.height(12.dp))
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.End
@@ -1661,6 +1742,105 @@ fun ForceEnableFeatureDialog(
             }
         }
     )
+}
+
+/**
+ * 统一横向提示卡片布局组件。
+ * 所有提示卡片在横向模式下使用此组件，确保统一的设计规范。
+ *
+ * 设计规范：
+ * - 高度：140dp
+ * - 内部 padding：16dp
+ * - 结构：左侧图标背景 + 右侧标题和描述
+ * - 间距：12dp（由外部 LazyRow 控制）
+ */
+@Composable
+fun HorizontalTipCard(
+    cardColor: Color,
+    icon: ImageVector? = null,
+    iconPainter: androidx.compose.ui.graphics.painter.Painter? = null,
+    iconTint: Color = Color.White,
+    iconBackgroundColor: Color,
+    title: String,
+    description: String,
+    titleColor: Color = Color.White,
+    descriptionColor: Color = Color.White.copy(alpha = 0.85f),
+    gradient: Brush? = null,
+    onClick: (() -> Unit)? = null
+) {
+    val cardModifier = if (onClick != null) {
+        Modifier.clickable { onClick() }
+    } else {
+        Modifier
+    }
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(140.dp)
+            .then(cardModifier)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    brush = gradient ?: Brush.verticalGradient(listOf(cardColor, cardColor))
+                )
+                .padding(16.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxSize(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                // 左侧图标区域
+                Box(
+                    modifier = Modifier
+                        .size(56.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(iconBackgroundColor),
+                    contentAlignment = Alignment.Center
+                ) {
+                    when {
+                        icon != null -> Icon(
+                            imageVector = icon,
+                            contentDescription = null,
+                            tint = iconTint,
+                            modifier = Modifier.size(32.dp)
+                        )
+                        iconPainter != null -> Icon(
+                            painter = iconPainter,
+                            contentDescription = null,
+                            tint = iconTint,
+                            modifier = Modifier.size(32.dp)
+                        )
+                    }
+                }
+
+                // 右侧文本区域
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = title,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = titleColor,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = description,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = descriptionColor,
+                        lineHeight = 19.sp
+                    )
+                }
+            }
+        }
+    }
 }
 
 @Composable

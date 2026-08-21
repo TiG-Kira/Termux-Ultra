@@ -818,6 +818,97 @@ fun AiTermuxEntryCard(modifier: Modifier = Modifier, horizontalMode: Boolean = f
             Color(0xFFEC4899)
         )
     )
+
+    // 横向模式：保持渐变设计但统一尺寸
+    if (horizontalMode) {
+        MiuixCard(
+            modifier = modifier
+                .fillMaxWidth()
+                .height(140.dp),
+            onClick = {
+                val intent = Intent(context, com.termux.app.activities.AiTermuxActivity::class.java)
+                context.startActivity(intent)
+            },
+            showIndication = true
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(gradient)
+                    .drawWithCache {
+                        onDrawWithContent {
+                            drawCircle(
+                                color = Color.White.copy(alpha = 0.12f),
+                                radius = 55.dp.toPx(),
+                                center = androidx.compose.ui.geometry.Offset(
+                                    x = size.width - 15.dp.toPx(),
+                                    y = 5.dp.toPx()
+                                )
+                            )
+                            drawCircle(
+                                color = Color.White.copy(alpha = 0.08f),
+                                radius = 30.dp.toPx(),
+                                center = androidx.compose.ui.geometry.Offset(
+                                    x = 10.dp.toPx(),
+                                    y = size.height + 10.dp.toPx()
+                                )
+                            )
+                            drawContent()
+                        }
+                    }
+                    .padding(16.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxSize(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    // 左侧图标
+                    Box(
+                        modifier = Modifier
+                            .size(56.dp)
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(Color.White.copy(alpha = 0.2f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_lightbulb),
+                            contentDescription = null,
+                            modifier = Modifier.size(32.dp),
+                            tint = Color.White
+                        )
+                    }
+
+                    // 右侧文本
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Termux Agent",
+                            style = TextStyle(
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = "用自然语言管理 Termux 会话·虚拟机·VNC·文件",
+                            style = TextStyle(
+                                fontSize = 13.sp,
+                                color = Color.White.copy(alpha = 0.9f),
+                                lineHeight = 19.sp
+                            ),
+                            maxLines = 2,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            }
+        }
+        return
+    }
+
+    // 竖向模式保持原有设计
     MiuixCard(
         modifier = modifier,
         onClick = {

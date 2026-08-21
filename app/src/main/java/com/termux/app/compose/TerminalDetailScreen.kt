@@ -136,17 +136,21 @@ fun TerminalDetailScreen(
     val snackbarHostState = remember { SnackbarHostState() }
 
     // 包装 onBack：退出时发送汇总 Snackbar 到主页
+    // 使用 replay=1 的 SharedFlow，事件会被保留，主页激活后能收到
     val handleExit = {
         val count = RiskConfirmManager.getDangerCount()
         if (count > 0) {
             val level = RiskConfirmManager.getLastProtectionLevel()
             val prefix = if (level == RiskConfirmManager.ProtectionLevel.WARN_ONLY) "已检测" else "已拦截"
+            // 先发送事件（replay=1 会保留，主页激活后会收到）
             RiskConfirmManager.emitSummarySnackbar(
                 message = "$prefix $count 次危险命令，请注意会话使用安全。",
                 duration = android.widget.Toast.LENGTH_LONG
             )
+            // 重置计数
             RiskConfirmManager.resetDangerCount()
         }
+        // 切换页面（主页的 RiskConfirmDialogHost 激活后会收到之前保留的事件）
         onBack()
     }
 
