@@ -331,7 +331,7 @@ private fun deleteConnection(context: Context, connection: SshConnection, connec
     connections.remove(connection)
 }
 
-internal fun connectToSsh(context: Context, connection: SshConnection) {
+fun connectToSsh(context: Context, connection: SshConnection) {
     val sshCommand = buildSshCommand(connection)
 
     val executableUri = android.net.Uri.Builder()

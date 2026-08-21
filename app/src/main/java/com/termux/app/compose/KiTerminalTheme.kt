@@ -1,7 +1,6 @@
 package com.termux.app.compose
 
 import android.app.Activity
-import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
@@ -19,24 +18,28 @@ import top.yukonga.miuix.kmp.theme.ThemeController
 @Composable
 fun KiTerminalTheme(
     statusBarColor: Color = Color.Transparent,
+    navigationBarColor: Color = Color.Transparent,
+    isTerminalDark: Boolean = false,
+    manageSystemBars: Boolean = true,
     content: @Composable () -> Unit
 ) {
     val darkTheme = isSystemInDarkTheme()
     val view = LocalView.current
-    if (!view.isInEditMode) {
+    if (!view.isInEditMode && manageSystemBars) {
         SideEffect {
             val window = (view.context as Activity).window
             window.statusBarColor = statusBarColor.toArgb()
-            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !darkTheme
+            window.navigationBarColor = navigationBarColor.toArgb()
+            val controller = WindowCompat.getInsetsController(window, view)
+            controller.isAppearanceLightStatusBars = if (isTerminalDark) false else !darkTheme
+            controller.isAppearanceLightNavigationBars = if (isTerminalDark) false else !darkTheme
         }
     }
     MiuixTheme(
         controller = ThemeController(colorSchemeMode = ColorSchemeMode.System),
         content = {
             androidx.compose.foundation.layout.Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(MiuixTheme.colorScheme.background)
+                modifier = Modifier.fillMaxSize()
             ) {
                 content()
             }

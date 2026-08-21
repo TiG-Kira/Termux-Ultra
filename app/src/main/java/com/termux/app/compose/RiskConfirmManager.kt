@@ -6,7 +6,8 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.view.WindowManager
-import android.widget.Toast
+import com.termux.app.utils.SnackbarHelper
+import com.google.android.material.snackbar.Snackbar
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -42,6 +43,9 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import top.yukonga.miuix.kmp.basic.TextButton
@@ -63,7 +67,10 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
 object RiskConfirmManager {
 
     const val PREFS_NAME = "termux_risk_confirm"
-    const val KEY_ENABLED = "risk_confirm_enabled"
+    const val KEY_ENABLED = "risk_confirm_enabled"       // 迁移用：旧的布尔开关
+    const val KEY_PROTECTION_LEVEL = "protection_level"   // 新的保护级别 (Int)
+    const val KEY_DETECTION_MODE = "detection_mode"       // 新的侦测模式 (Int)
+    const val KEY_PREVIOUS_DETECTION_MODE = "previous_detection_mode"  // 上次选择的侦测模式
     const val KEY_PENDING_SESSION_HANDLE = "pending_session_handle"
     const val KEY_PENDING_COMMAND = "pending_command"
     const val KEY_PENDING_RESULT = "pending_result"
@@ -87,6 +94,94 @@ object RiskConfirmManager {
     /** 检查是否应跳过风险确认 */
     fun shouldSkipRiskCheck(): Boolean = skipRiskCheck
 
+    /** 标记上一次命令是否为自动拦截（AUTO_BLOCK 模式） */
+    @Volatile
+    private var lastCommandAutoBlocked = false
+
+    /** 检查上一次命令是否为自动拦截 */
+    fun isLastCommandAutoBlocked(): Boolean = lastCommandAutoBlocked
+
+    /** 重置自动拦截标志 */
+    fun resetAutoBlockedFlag() {
+        lastCommandAutoBlocked = false
+    }
+
+    // ---- Snackbar 事件流 ----
+    data class SnackbarEvent(val message: String, val duration: Int = Snackbar.LENGTH_LONG)
+    // SharedFlow(replay=0): 活跃 subscriber 实时收到，新 subscriber 不收历史
+    // 仅终端详情页收集，主页不收集
+    private val _snackbarEvents = MutableSharedFlow<SnackbarEvent>(
+        replay = 0,
+        extraBufferCapacity = 32
+    )
+    val snackbarEvents: SharedFlow<SnackbarEvent> = _snackbarEvents
+
+    /** 发送 Snackbar 事件到所有活跃 collector。 */
+    fun emitSnackbar(message: String, duration: Int = Snackbar.LENGTH_LONG) {
+        _snackbarEvents.tryEmit(SnackbarEvent(message, duration))
+    }
+
+    // ---- 主页汇总 Snackbar（退出终端页时发送，显示统计信息） ----
+    // 使用 replay=1 确保新订阅者（主页）激活后能收到最后一个事件
+    data class SummarySnackbarEvent(
+        val message: String,
+        val duration: Int = Snackbar.LENGTH_LONG
+    )
+    private val _summarySnackbarEvents = MutableSharedFlow<SummarySnackbarEvent>(
+        replay = 1,
+        extraBufferCapacity = 8
+    )
+    val summarySnackbarEvents: SharedFlow<SummarySnackbarEvent> = _summarySnackbarEvents
+
+    /** 发送汇总 Snackbar 到主页（退出终端页时调用） */
+    fun emitSummarySnackbar(message: String, duration: Int = Snackbar.LENGTH_LONG) {
+        _summarySnackbarEvents.tryEmit(SummarySnackbarEvent(message, duration))
+    }
+
+    // ---- 危险命令计数（统计用） ----
+    private var dangerCommandCount: Int = 0
+    private var lastProtectionLevel: ProtectionLevel = ProtectionLevel.OFF
+
+    /** 增加危险命令计数，返回当前计数 */
+    fun incrementDangerCount(): Int {
+        dangerCommandCount++
+        return dangerCommandCount
+    }
+
+    /** 获取当前危险命令计数 */
+    fun getDangerCount(): Int = dangerCommandCount
+
+    /** 重置危险命令计数 */
+    fun resetDangerCount() {
+        dangerCommandCount = 0
+    }
+
+    /** 设置最后使用的保护级别 */
+    fun setLastProtectionLevel(level: ProtectionLevel) {
+        lastProtectionLevel = level
+    }
+
+    /** 获取最后使用的保护级别 */
+    fun getLastProtectionLevel(): ProtectionLevel = lastProtectionLevel
+
+    /**
+     * 检测设备是否拥有 ROOT 访问权限。
+     * 通过尝试执行 "su -c echo 1" 并检查输出判断。
+     *
+     * @param context Context
+     * @return true 表示设备已 root 且可用 su 命令
+     */
+    fun hasRootAccess(context: Context): Boolean {
+        return try {
+            val process = Runtime.getRuntime().exec(arrayOf("su", "-c", "echo", "1"))
+            val result = process.inputStream.bufferedReader().readText().trim()
+            process.waitFor()
+            result == "1"
+        } catch (_: Exception) {
+            false
+        }
+    }
+
     const val ACTION_RISK_RESULT = "com.termux.app.RISK_RESULT"
     const val EXTRA_RISK_RESULT = "extra_risk_result"
     const val EXTRA_SESSION_HANDLE = "extra_session_handle"
@@ -97,6 +192,21 @@ object RiskConfirmManager {
         CONTAINER,   // proot 容器
         VM,          // 虚拟机
         SSH          // SSH 远程连接
+    }
+
+    /** 保护级别 */
+    enum class ProtectionLevel(val displayName: String, val description: String) {
+        OFF("关闭", "不检测危险命令"),
+        WARN_ONLY("仅提示", "Snackbar 提示但不拦截"),
+        WARN_VERIFY("警告并验证", "弹窗 + 倒计时 + 生物认证"),
+        AUTO_BLOCK("自动拦截", "直接拒绝执行危险命令")
+    }
+
+    /** 侦测模式 */
+    enum class DetectionMode(val displayName: String) {
+        NONE("无"),
+        STATIC("静态侦测"),
+        RUNTIME("运行时解析")
     }
 
     /** 弹窗状态 */
@@ -150,20 +260,104 @@ object RiskConfirmManager {
     private var pendingTerminalSession: com.termux.terminal.TerminalSession? = null
 
     /** "关闭二次确认" 警告弹窗状态 */
-    data class DisableWarningState(val show: Boolean = false)
+    data class DisableWarningState(
+        val show: Boolean = false,
+        val targetLevel: ProtectionLevel = ProtectionLevel.OFF
+    )
     private val _disableWarningState = MutableStateFlow(DisableWarningState())
     val disableWarningState: StateFlow<DisableWarningState> = _disableWarningState.asStateFlow()
 
-    /** 获取二次确认是否开启 */
-    fun isEnabled(context: Context): Boolean {
+    /** 迁移旧的布尔开关到新的保护级别系统 */
+    private fun migrateIfNeeded(context: Context) {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        return prefs.getBoolean(KEY_ENABLED, true)
+        // 如果 KEY_PROTECTION_LEVEL 不存在但 KEY_ENABLED 存在，执行迁移
+        if (!prefs.contains(KEY_PROTECTION_LEVEL) && prefs.contains(KEY_ENABLED)) {
+            val oldEnabled = prefs.getBoolean(KEY_ENABLED, true)
+            val newLevel = if (oldEnabled) {
+                ProtectionLevel.WARN_VERIFY.ordinal  // 2
+            } else {
+                ProtectionLevel.OFF.ordinal             // 0
+            }
+            prefs.edit()
+                .putInt(KEY_PROTECTION_LEVEL, newLevel)
+                .apply()
+        }
     }
 
-    /** 设置二次确认开关 */
-    fun setEnabled(context: Context, enabled: Boolean) {
+    /** 获取当前保护级别 */
+    fun getProtectionLevel(context: Context): ProtectionLevel {
+        migrateIfNeeded(context)
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        prefs.edit().putBoolean(KEY_ENABLED, enabled).apply()
+        val ordinal = prefs.getInt(KEY_PROTECTION_LEVEL, ProtectionLevel.WARN_VERIFY.ordinal)
+        return ProtectionLevel.entries.getOrElse(ordinal) { ProtectionLevel.WARN_VERIFY }
+    }
+
+    /** 设置保护级别 */
+    fun setProtectionLevel(context: Context, level: ProtectionLevel) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val currentLevel = getProtectionLevel(context)
+        
+        // 如果切换到 OFF，保存当前检测模式到 previous，然后设置为 NONE
+        if (level == ProtectionLevel.OFF && currentLevel != ProtectionLevel.OFF) {
+            val currentDetection = getDetectionMode(context)
+            if (currentDetection != DetectionMode.NONE) {
+                prefs.edit()
+                    .putInt(KEY_PREVIOUS_DETECTION_MODE, currentDetection.ordinal)
+                    .putInt(KEY_DETECTION_MODE, DetectionMode.NONE.ordinal)
+                    .putInt(KEY_PROTECTION_LEVEL, level.ordinal)
+                    .apply()
+                return
+            }
+        }
+        
+        // 从 OFF 切换到其他等级时，恢复之前保存的检测模式
+        if (level != ProtectionLevel.OFF && currentLevel == ProtectionLevel.OFF) {
+            val previousDetection = prefs.getInt(KEY_PREVIOUS_DETECTION_MODE, DetectionMode.STATIC.ordinal)
+            prefs.edit()
+                .putInt(KEY_PROTECTION_LEVEL, level.ordinal)
+                .putInt(KEY_DETECTION_MODE, previousDetection)
+                .apply()
+            return
+        }
+        
+        prefs.edit()
+            .putInt(KEY_PROTECTION_LEVEL, level.ordinal)
+            .apply()
+    }
+
+    /** 获取侦测模式 */
+    fun getDetectionMode(context: Context): DetectionMode {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        // 如果防护等级为 OFF，返回 NONE
+        val protectionLevel = getProtectionLevel(context)
+        if (protectionLevel == ProtectionLevel.OFF) {
+            return DetectionMode.NONE
+        }
+        val ordinal = prefs.getInt(KEY_DETECTION_MODE, DetectionMode.STATIC.ordinal)
+        val mode = DetectionMode.entries.getOrElse(ordinal) { DetectionMode.STATIC }
+        // 如果存储的是 NONE（可能之前关闭了防护），返回 STATIC 作为默认
+        return if (mode == DetectionMode.NONE) DetectionMode.STATIC else mode
+    }
+
+    /** 设置侦测模式 */
+    fun setDetectionMode(context: Context, mode: DetectionMode) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit()
+            .putInt(KEY_DETECTION_MODE, mode.ordinal)
+            .apply()
+    }
+
+    /** @Deprecated 请使用 getProtectionLevel() 代替 */
+    @Deprecated("Use getProtectionLevel() instead", ReplaceWith("getProtectionLevel(context)"))
+    fun isEnabled(context: Context): Boolean {
+        return getProtectionLevel(context) != ProtectionLevel.OFF
+    }
+
+    /** @Deprecated 请使用 setProtectionLevel() 代替 */
+    @Deprecated("Use setProtectionLevel() instead", ReplaceWith("setProtectionLevel(context, level)"))
+    fun setEnabled(context: Context, enabled: Boolean) {
+        val level = if (enabled) ProtectionLevel.WARN_VERIFY else ProtectionLevel.OFF
+        setProtectionLevel(context, level)
     }
 
     /** 清除待处理的命令状态（公开方法，供 TermuxActivity 在处理完 Intent 结果后调用） */
@@ -280,11 +474,39 @@ object RiskConfirmManager {
         inNativeTermux: Boolean = true,
         environmentType: EnvironmentType = EnvironmentType.NATIVE
     ): Boolean {
-        if (!isEnabled(context)) return true
+        val level = getProtectionLevel(context)
+
+        // OFF: 直接放行
+        if (level == ProtectionLevel.OFF) return true
 
         val detection = RiskCommandDetector.detect(command, inNativeTermux)
         if (!detection.isDangerous) return true
 
+        // WARN_ONLY: Snackbar 提示但放行
+        if (level == ProtectionLevel.WARN_ONLY) {
+            Handler(Looper.getMainLooper()).post {
+                SnackbarHelper.show(
+                    context,
+                    detection.description,
+                    Snackbar.LENGTH_LONG
+                )
+            }
+            return true
+        }
+
+        // AUTO_BLOCK: 直接拦截
+        if (level == ProtectionLevel.AUTO_BLOCK) {
+            Handler(Looper.getMainLooper()).post {
+                SnackbarHelper.show(
+                    context,
+                    context.getString(R.string.access_denied),
+                    Snackbar.LENGTH_LONG
+                )
+            }
+            return false
+        }
+
+        // WARN_VERIFY: 完整弹窗验证流程
         val activity = context as? ComponentActivity
         val requestId = System.currentTimeMillis().toString()
 
@@ -340,11 +562,39 @@ object RiskConfirmManager {
         command: String,
         environmentType: EnvironmentType = EnvironmentType.NATIVE
     ): Boolean {
-        if (!isEnabled(context)) return true
+        val level = getProtectionLevel(context)
+
+        // OFF: 直接放行
+        if (level == ProtectionLevel.OFF) return true
 
         val detection = RiskCommandDetector.detect(command)
         if (!detection.isDangerous) return true
 
+        // WARN_ONLY: Snackbar 提示但放行
+        if (level == ProtectionLevel.WARN_ONLY) {
+            Handler(Looper.getMainLooper()).post {
+                SnackbarHelper.show(
+                    context,
+                    detection.description,
+                    Snackbar.LENGTH_LONG
+                )
+            }
+            return true
+        }
+
+        // AUTO_BLOCK: 直接拦截
+        if (level == ProtectionLevel.AUTO_BLOCK) {
+            Handler(Looper.getMainLooper()).post {
+                SnackbarHelper.show(
+                    context,
+                    context.getString(R.string.access_denied),
+                    Snackbar.LENGTH_LONG
+                )
+            }
+            return false
+        }
+
+        // WARN_VERIFY: 完整弹窗验证流程
         if (Looper.myLooper() == Looper.getMainLooper()) {
             val result = arrayOf(false)
             val latch = CountDownLatch(1)
@@ -371,7 +621,7 @@ object RiskConfirmManager {
     ): Boolean {
         if (blockingRequestActive) {
             Handler(Looper.getMainLooper()).post {
-                Toast.makeText(context, context.getString(R.string.access_denied), Toast.LENGTH_LONG).show()
+                SnackbarHelper.show(context, context.getString(R.string.access_denied), Snackbar.LENGTH_LONG)
             }
             return false
         }
@@ -528,7 +778,7 @@ object RiskConfirmManager {
      * 流程：检测高危 → 保存状态 → 跳转主页 → 主页弹窗 → 用户确认/取消 → 返回执行
      *
      * 特殊逻辑：
-     * - su/sudo 在非原生 Termux 环境（容器/VM/SSH）中：只 Toast 提醒，放行不拦截
+     * - su/sudo 在非原生 Termux 环境（容器/VM/SSH）中：只 Snackbar 提醒，放行不拦截
      * - su/sudo 在原生 Termux 环境中：完整拦截 + 弹窗
      * - 其他高危命令：无论环境如何均拦截
      *
@@ -538,7 +788,11 @@ object RiskConfirmManager {
      * @return true 表示命令已被拦截处理，false 表示非高危命令
      */
     fun handleTerminalCommand(context: Context, session: com.termux.terminal.TerminalSession, command: String): Boolean {
-        if (!isEnabled(context)) return false
+        val level = getProtectionLevel(context)
+        setLastProtectionLevel(level)
+
+        // OFF: 直接放行，不检测
+        if (level == ProtectionLevel.OFF) return false
 
         val trimmed = command.trim()
 
@@ -546,9 +800,30 @@ object RiskConfirmManager {
         val nativeDetection = RiskCommandDetector.detect(command, inNativeTermux = true)
         if (!nativeDetection.isDangerous) return false
 
+        // 记录危险命令计数
+        incrementDangerCount()
+
         // 检测当前环境
         val envType = detectEnvironment(context, session)
 
+        // --- 按保护级别分发 ---
+
+        // WARN_ONLY: Snackbar 提示但不拦截，显示危险命令的具体描述
+        if (level == ProtectionLevel.WARN_ONLY) {
+            val msg = nativeDetection.description
+            emitSnackbar(msg, Snackbar.LENGTH_LONG)
+            return false
+        }
+
+        // AUTO_BLOCK: 直接拦截，显示拒绝原因
+        if (level == ProtectionLevel.AUTO_BLOCK) {
+            lastCommandAutoBlocked = true
+            val msg = "危险操作被拒绝: ${nativeDetection.description}"
+            emitSnackbar(msg, Snackbar.LENGTH_LONG)
+            return true
+        }
+
+        // WARN_VERIFY: 完整拦截 + 弹窗验证流程
         // 如果是 su/sudo，检查是否在原生 Termux 环境
         if (nativeDetection.riskType == RiskCommandDetector.RiskType.SU_SUDO) {
             // 检查是否包装了其他危险命令（如 sudo shutdown、sudo poweroff 等）
@@ -562,13 +837,13 @@ object RiskConfirmManager {
             }
 
             if (envType != EnvironmentType.NATIVE) {
-                // 非原生环境：Toast 提醒后放行
+                // 非原生环境：Snackbar 提醒后放行
                 Handler(Looper.getMainLooper()).post {
-                    Toast.makeText(
+                    SnackbarHelper.show(
                         context,
                         context.getString(R.string.risk_command_container_sudo_warning),
-                        Toast.LENGTH_LONG
-                    ).show()
+                        Snackbar.LENGTH_LONG
+                    )
                 }
                 return false
             }
@@ -663,13 +938,18 @@ object RiskConfirmManager {
         startCountdown()
 
         // 设置弹窗状态（MainActivity 中的 RiskConfirmDialogHost 会观察到并显示）
-        _dialogState.value = DialogState(
+        val dialogState = DialogState(
             command = command,
             riskDescription = detection.description,
             riskType = detection.riskType?.displayName ?: "高危操作",
             environmentType = envType,
             isWindowsDiskCommand = detection.isWindowsDiskCommand
         )
+        _dialogState.value = dialogState
+        
+        // 记录日志帮助调试
+        android.util.Log.i("RiskConfirmManager", "Dialog state set: command=$command, envType=$envType, riskType=${detection.riskType}")
+        android.util.Log.i("RiskConfirmManager", "Starting MainActivity to show dialog...")
 
         // 60 秒超时自动拒绝并恢复会话
         Handler(Looper.getMainLooper()).postDelayed({
@@ -753,8 +1033,8 @@ object RiskConfirmManager {
     ): Boolean = detectEnvironment(context, session) == EnvironmentType.NATIVE
 
     /** 显示"关闭二次确认"的警告弹窗 */
-    fun showDisableWarning() {
-        _disableWarningState.value = DisableWarningState(show = true)
+    fun showDisableWarning(targetLevel: ProtectionLevel = ProtectionLevel.OFF) {
+        _disableWarningState.value = DisableWarningState(show = true, targetLevel = targetLevel)
     }
 
     /** 关闭"关闭二次确认"的警告弹窗 */
@@ -762,9 +1042,10 @@ object RiskConfirmManager {
         _disableWarningState.value = DisableWarningState(show = false)
     }
 
-    /** 用户确认关闭二次确认 */
+    /** 用户确认降级防护级别 */
     fun confirmDisable(context: Context) {
-        setEnabled(context, false)
+        val targetLevel = _disableWarningState.value.targetLevel
+        setProtectionLevel(context, targetLevel)
         hideDisableWarning()
     }
 }
@@ -774,9 +1055,16 @@ object RiskConfirmManager {
  *
  * 放置在 Activity 的 Compose 树顶层，通过观察 RiskConfirmManager.dialogState
  * 来渲染弹窗。必须保持 Activity 存活。
+ *
+ * @param snackbarHostState Snackbar 宿主状态，用于显示 Snackbar
+ * @param collectSnackbar 是否收集并显示 RiskConfirmManager 的 Snackbar 事件。
+ *        主页设为 false（由终端页独占显示），终端页设为 true。
  */
 @Composable
-fun RiskConfirmDialogHost() {
+fun RiskConfirmDialogHost(
+    snackbarHostState: top.yukonga.miuix.kmp.basic.SnackbarHostState? = null,
+    collectSnackbar: Boolean = true
+) {
     val dialogState by RiskConfirmManager.dialogState.collectAsState()
     val countdown by RiskConfirmManager.countdown.collectAsState()
     var checkboxChecked by remember { mutableStateOf(false) }
@@ -790,12 +1078,70 @@ fun RiskConfirmDialogHost() {
     val context = LocalContext.current
     val disableState by RiskConfirmManager.disableWarningState.collectAsState()
     var disableCheckboxChecked by remember { mutableStateOf(false) }
+    val snackbarScope = rememberCoroutineScope()
+    val showBlockedMessage: () -> Unit = {
+        val msg = context.getString(R.string.accessibility_guard_blocked_toast)
+        if (snackbarHostState != null) {
+            snackbarScope.launch {
+                snackbarHostState.showSnackbar(
+                    message = msg,
+                    duration = top.yukonga.miuix.kmp.basic.SnackbarDuration.Long
+                )
+            }
+        } else {
+            SnackbarHelper.show(context, msg, Snackbar.LENGTH_LONG)
+        }
+    }
     var isAuthenticating by remember { mutableStateOf(false) }
 
     LaunchedEffect(disableState.show) {
         if (!disableState.show) {
             disableCheckboxChecked = false
             isAuthenticating = false
+        }
+    }
+
+    // 仅在 collectSnackbar=true 时收集详细 Snackbar 事件（终端页）
+    if (collectSnackbar) {
+        LaunchedEffect(Unit) {
+            RiskConfirmManager.snackbarEvents.collect { event ->
+                val duration = if (event.duration >= Snackbar.LENGTH_LONG) {
+                    top.yukonga.miuix.kmp.basic.SnackbarDuration.Long
+                } else {
+                    top.yukonga.miuix.kmp.basic.SnackbarDuration.Short
+                }
+                if (snackbarHostState != null) {
+                    snackbarScope.launch {
+                        snackbarHostState.showSnackbar(
+                            message = event.message,
+                            duration = duration
+                        )
+                    }
+                } else {
+                    SnackbarHelper.show(context, event.message, event.duration)
+                }
+            }
+        }
+    } else {
+        // 主页：收集汇总 Snackbar（退出终端页时显示统计信息）
+        LaunchedEffect(Unit) {
+            RiskConfirmManager.summarySnackbarEvents.collect { event ->
+                val duration = if (event.duration >= Snackbar.LENGTH_LONG) {
+                    top.yukonga.miuix.kmp.basic.SnackbarDuration.Long
+                } else {
+                    top.yukonga.miuix.kmp.basic.SnackbarDuration.Short
+                }
+                if (snackbarHostState != null) {
+                    snackbarScope.launch {
+                        snackbarHostState.showSnackbar(
+                            message = event.message,
+                            duration = duration
+                        )
+                    }
+                } else {
+                    SnackbarHelper.show(context, event.message, event.duration)
+                }
+            }
         }
     }
 
@@ -870,13 +1216,13 @@ fun RiskConfirmDialogHost() {
                         ) {
                             TextButton(
                                 text = "${stringResource(R.string.risk_command_ssh_power_confirm_no)}(${countdown}s)",
-                                onClick = guardedOnClick(context, thirdPartyBlocked) {
+                                onClick = guardedOnClick(context, thirdPartyBlocked, showBlockedMessage) {
                                     RiskConfirmManager.cancel(context)
                                 },
                                 modifier = Modifier.weight(1f)
                             )
                             Button(
-                                onClick = guardedOnClick(context, thirdPartyBlocked) {
+                                onClick = guardedOnClick(context, thirdPartyBlocked, showBlockedMessage) {
                                     RiskConfirmManager.confirm(context)
                                 },
                                 modifier = Modifier.weight(1f),
@@ -997,13 +1343,13 @@ fun RiskConfirmDialogHost() {
                         ) {
                             TextButton(
                                 text = "${stringResource(R.string.cancel)}(${countdown}s)",
-                                onClick = guardedOnClick(context, thirdPartyBlocked) {
+                                onClick = guardedOnClick(context, thirdPartyBlocked, showBlockedMessage) {
                                     RiskConfirmManager.cancel(context)
                                 },
                                 modifier = Modifier.weight(1f)
                             )
                             Button(
-                                onClick = guardedOnClick(context, thirdPartyBlocked) {
+                                onClick = guardedOnClick(context, thirdPartyBlocked, showBlockedMessage) {
                                     RiskConfirmManager.confirm(context)
                                 },
                                 enabled = checkboxChecked,
@@ -1026,15 +1372,19 @@ fun RiskConfirmDialogHost() {
         }
     }
 
-    // 关闭二次确认的警告弹窗
+    // 调整增强防护模式的警告弹窗
     if (disableState.show) {
+        val isOff = disableState.targetLevel == RiskConfirmManager.ProtectionLevel.OFF
+        val summaryRes = if (isOff) R.string.risk_command_disable_off_message else R.string.risk_command_disable_warn_message
+        val checkboxRes = if (isOff) R.string.risk_command_disable_off_checkbox else R.string.risk_command_disable_warn_checkbox
+
         OverlayDialog(
             show = true,
             onDismissRequest = {
                 RiskConfirmManager.hideDisableWarning()
             },
             title = stringResource(R.string.risk_command_disable_title),
-            summary = stringResource(R.string.risk_command_disable_message),
+            summary = stringResource(summaryRes),
             content = {
                 Column(
                     modifier = Modifier
@@ -1044,7 +1394,7 @@ fun RiskConfirmDialogHost() {
                         .padding(top = 4.dp)
                 ) {
                     CheckboxPreference(
-                        title = stringResource(R.string.risk_command_disable_checkbox),
+                        title = stringResource(checkboxRes),
                         checked = disableCheckboxChecked,
                         onCheckedChange = { disableCheckboxChecked = it },
                         modifier = Modifier.fillMaxWidth()
@@ -1058,13 +1408,13 @@ fun RiskConfirmDialogHost() {
                     ) {
                         TextButton(
                             text = stringResource(R.string.cancel),
-                            onClick = guardedOnClick(context, thirdPartyBlocked) {
+                            onClick = guardedOnClick(context, thirdPartyBlocked, showBlockedMessage) {
                                 RiskConfirmManager.hideDisableWarning()
                             },
                             modifier = Modifier.weight(1f)
                         )
                         Button(
-                            onClick = guardedOnClick(context, thirdPartyBlocked) {
+                            onClick = guardedOnClick(context, thirdPartyBlocked, showBlockedMessage) {
                                 isAuthenticating = true
                                 val activity = context as? FragmentActivity
                                 if (activity != null) {
@@ -1073,11 +1423,17 @@ fun RiskConfirmDialogHost() {
                                         if (success) {
                                             RiskConfirmManager.confirmDisable(context)
                                         } else {
-                                            Toast.makeText(
-                                                context,
-                                                context.getString(R.string.risk_command_biometric_prompt),
-                                                Toast.LENGTH_SHORT
-                                            ).show()
+                                            val msg = context.getString(R.string.risk_command_biometric_prompt)
+                                            if (snackbarHostState != null) {
+                                                snackbarScope.launch {
+                                                    snackbarHostState.showSnackbar(
+                                                        message = msg,
+                                                        duration = top.yukonga.miuix.kmp.basic.SnackbarDuration.Short
+                                                    )
+                                                }
+                                            } else {
+                                                SnackbarHelper.show(context, msg, Snackbar.LENGTH_SHORT)
+                                            }
                                         }
                                     }
                                 } else {
@@ -1126,11 +1482,11 @@ private fun launchBiometricAuth(
     onResult: (Boolean) -> Unit
 ) {
     if (!hasBiometricAuthentication(activity)) {
-        Toast.makeText(
+        SnackbarHelper.show(
             activity,
             activity.getString(R.string.risk_command_biometric_not_set),
-            Toast.LENGTH_LONG
-        ).show()
+            Snackbar.LENGTH_LONG
+        )
         onResult(true)
         return
     }

@@ -13,6 +13,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.material3.RadioButton
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -31,6 +32,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.launch
 import top.yukonga.miuix.kmp.basic.HorizontalDivider
 import top.yukonga.miuix.kmp.basic.LinearProgressIndicator
 import top.yukonga.miuix.kmp.basic.Scaffold
@@ -44,11 +46,16 @@ import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.TextField
+import top.yukonga.miuix.kmp.basic.SnackbarHost
+import top.yukonga.miuix.kmp.basic.SnackbarHostState
+import top.yukonga.miuix.kmp.basic.SnackbarDuration
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.preference.SwitchPreference
 import top.yukonga.miuix.kmp.preference.CheckboxPreference
 import top.yukonga.miuix.kmp.preference.OverlayDropdownPreference
 import top.yukonga.miuix.kmp.preference.ArrowPreference
+import top.yukonga.miuix.kmp.preference.WindowSpinnerPreference
+import top.yukonga.miuix.kmp.basic.DropdownItem
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import com.termux.R
 import com.termux.app.LocaleHelper
@@ -72,6 +79,16 @@ data class SettingItem(
 @Composable
 fun SettingsScreen(onAboutClick: () -> Unit) {
     val context = LocalContext.current
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+    fun showSnackbar(message: String, isLong: Boolean = false) {
+        scope.launch {
+            snackbarHostState.showSnackbar(
+                message = message,
+                duration = if (isLong) SnackbarDuration.Long else SnackbarDuration.Short
+            )
+        }
+    }
     var showRestoreDialog by remember { mutableStateOf(false) }
     var showRestoreConfirmDialog by remember { mutableStateOf(false) }
     var showRestoreProgressDialog by remember { mutableStateOf(false) }
@@ -86,6 +103,15 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
     var launchRestore by remember { mutableStateOf(false) }
     var showAiReconfigConfirm by remember { mutableStateOf(false) }
     var showAiClearConfirm by remember { mutableStateOf(false) }
+    var showWhitelistDialog by remember { mutableStateOf(false) }
+    var tempWhitelistSkills by remember { mutableStateOf<Set<SkillType>>(emptySet()) }
+
+    // Whitelistable skills definition
+    val whitelistSkillLabels = remember {
+        listOf(
+            SkillType.CAPTURE_OUTPUT to "CAPTURE_OUTPUT — 执行命令并捕获输出",
+        )
+    }
     var showRestartPrompt by remember { mutableStateOf(false) }
     var showSystemPromptEditor by remember { mutableStateOf(false) }
     var showCustomSkillManager by remember { mutableStateOf(false) }
@@ -105,11 +131,19 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
     // 高风险命令二次确认
     var riskConfirmEnabled by remember { mutableStateOf(RiskConfirmManager.isEnabled(context)) }
 
-    // 监听关闭警告弹窗的结果，同步开关状态
+    // 防护等级和检测模式
+    var protectionLevel by remember { mutableStateOf(RiskConfirmManager.getProtectionLevel(context)) }
+    var detectionMode by remember { mutableStateOf(RiskConfirmManager.getDetectionMode(context)) }
+    var protectionLevelIndex by remember { mutableIntStateOf(RiskConfirmManager.getProtectionLevel(context).ordinal) }
+    var detectionModeIndex by remember { mutableIntStateOf(RiskConfirmManager.getDetectionMode(context).ordinal) }
+
+    // 监听关闭警告弹窗的结果，同步状态
     val disableWarningState by RiskConfirmManager.disableWarningState.collectAsState()
     LaunchedEffect(disableWarningState.show) {
         if (!disableWarningState.show) {
-            riskConfirmEnabled = RiskConfirmManager.isEnabled(context)
+            protectionLevel = RiskConfirmManager.getProtectionLevel(context)
+            protectionLevelIndex = protectionLevel.ordinal
+            riskConfirmEnabled = protectionLevel != RiskConfirmManager.ProtectionLevel.OFF
         }
     }
 
@@ -163,13 +197,18 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
     var showCriticalNavDialog by remember { mutableStateOf(false) }
     var pendingNavStyleIndex by remember { mutableStateOf(-1) }
 
+    // 卡片布局模式
+    var cardLayoutMode by remember {
+        mutableStateOf(prefs.getInt("KEY_CARD_LAYOUT_MODE", 0))
+    }
+
     val scrollBehavior = MiuixScrollBehavior()
 
     val restoreFileLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let {
             if (!isProcessing) {
                 isProcessing = true
-                android.widget.Toast.makeText(context, context.getString(R.string.restore_view_progress_toast), android.widget.Toast.LENGTH_SHORT).show()
+                showSnackbar(context.getString(R.string.restore_view_progress_toast))
                 NotificationHelper.createNotificationChannel(context)
 
                 val cancelIntent = Intent("com.termux.RESTORE_CANCEL")
@@ -238,12 +277,12 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
                     useCustomSystemPrompt = true
                     val fileName = uri.lastPathSegment?.substringAfterLast("/") ?: "custom_prompt.md"
                     systemPromptSource = fileName
-                    android.widget.Toast.makeText(context, "已加载自定义 System Prompt", android.widget.Toast.LENGTH_SHORT).show()
+                    showSnackbar("已加载自定义 System Prompt")
                 } else {
-                    android.widget.Toast.makeText(context, "文件内容为空", android.widget.Toast.LENGTH_SHORT).show()
+                    showSnackbar("文件内容为空")
                 }
             } catch (e: Exception) {
-                android.widget.Toast.makeText(context, "读取文件失败: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
+                showSnackbar("读取文件失败: ${e.message}")
             }
         }
     }
@@ -268,7 +307,7 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
             action = {
                 if (!isProcessing) {
                     isProcessing = true
-                    android.widget.Toast.makeText(context, context.getString(R.string.backup_view_progress_toast), android.widget.Toast.LENGTH_SHORT).show()
+                    showSnackbar(context.getString(R.string.backup_view_progress_toast))
                     NotificationHelper.createNotificationChannel(context)
 
                     val cancelIntent = Intent("com.termux.BACKUP_CANCEL")
@@ -318,40 +357,29 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
         )
     )
 
-    val systemSettings = remember(riskConfirmEnabled) { listOf(
-        SettingItem(
-            title = context.getString(R.string.termux_settings),
-            description = context.getString(R.string.termux_settings_description),
-            iconRes = R.drawable.ic_settings,
-            action = {
-                val intent = Intent(context, SettingsActivity::class.java)
-                context.startActivity(intent)
-            }
-        ),
-        SettingItem(
-            title = context.getString(R.string.about_preference_title),
-            description = context.getString(R.string.about_description),
-            iconRes = R.drawable.ic_info,
-            action = { onAboutClick() }
-        ),
-        SettingItem(
-            title = context.getString(R.string.risk_confirm_toggle_title),
-            description = context.getString(R.string.risk_confirm_toggle_summary),
-            iconRes = R.drawable.ic_shield,
-            action = {},
-            hasSwitch = true,
-            switchValue = riskConfirmEnabled,
-            onSwitchChange = { newVal ->
-                if (newVal) {
-                    riskConfirmEnabled = true
-                    RiskConfirmManager.setEnabled(context, true)
-                } else {
-                    RiskConfirmManager.showDisableWarning()
-                }
-            }
-        )
-    )
-}
+    val systemSettings = remember {
+        buildList {
+            add(
+                SettingItem(
+                    title = context.getString(R.string.termux_settings),
+                    description = context.getString(R.string.termux_settings_description),
+                    iconRes = R.drawable.ic_settings,
+                    action = {
+                        val intent = Intent(context, SettingsActivity::class.java)
+                        context.startActivity(intent)
+                    }
+                )
+            )
+            add(
+                SettingItem(
+                    title = context.getString(R.string.about_preference_title),
+                    description = context.getString(R.string.about_description),
+                    iconRes = R.drawable.ic_info,
+                    action = { onAboutClick() }
+                )
+            )
+        }
+    }
 
     // Tool configuration entries — only shown for tools that are enabled. Tools with a dedicated
     // settings UI open their Activity; tools without one (API/Boot) show a usage guide dialog.
@@ -383,7 +411,7 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
                     iconRes = R.drawable.ic_palette,
                     action = {
                         val intent = Intent().apply {
-                            component = ComponentName(context.packageName, "com.termux.styling.TermuxStyleActivity")
+                            component = ComponentName(context.packageName, "com.termux.app.activities.TermuxStylingActivity")
                         }
                         runCatching { context.startActivity(intent) }
                     }
@@ -396,7 +424,7 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
                     iconRes = R.drawable.ic_tools,
                     action = {
                         val intent = Intent().apply {
-                            component = ComponentName(context.packageName, "com.termux.tasker.EditConfigurationActivity")
+                            component = ComponentName(context.packageName, "com.termux.app.activities.TermuxTaskerActivity")
                         }
                         runCatching { context.startActivity(intent) }
                     }
@@ -409,7 +437,7 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
                     iconRes = R.drawable.ic_star,
                     action = {
                         val intent = Intent().apply {
-                            component = ComponentName(context.packageName, "com.termux.widget.activities.TermuxWidgetActivity")
+                            component = ComponentName(context.packageName, "com.termux.app.activities.TermuxWidgetActivity")
                         }
                         runCatching { context.startActivity(intent) }
                     }
@@ -419,7 +447,9 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
     }
 
     Scaffold(
+        modifier = Modifier.fillMaxSize(),
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        snackbarHost = { SnackbarHost(state = snackbarHostState) },
         topBar = {
             TopAppBar(title = context.getString(R.string.settings_title), scrollBehavior = scrollBehavior)
         }
@@ -488,6 +518,22 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
                             },
                             startAction = {
                                 SettingIcon(R.drawable.ic_navigation, contentDescription = context.getString(R.string.navigation_bar_style))
+                            }
+                        )
+                        HorizontalDivider(
+                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f),
+                            modifier = Modifier.padding(start = 72.dp, end = 16.dp)
+                        )
+                        SwitchPreference(
+                            title = "提示卡片横向布局",
+                            summary = "开启后主页的提示/状态卡片以横向滑动形式展示（终端卡片始终保持竖向排列）",
+                            checked = cardLayoutMode == 1,
+                            onCheckedChange = { enabled ->
+                                cardLayoutMode = if (enabled) 1 else 0
+                                prefs.edit().putInt("KEY_CARD_LAYOUT_MODE", cardLayoutMode).apply()
+                            },
+                            startAction = {
+                                SettingIcon(R.drawable.ic_swap, contentDescription = "提示卡片横向布局")
                             }
                         )
                     }
@@ -660,73 +706,20 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
                                 color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f),
                                 modifier = Modifier.padding(start = 72.dp, end = 16.dp)
                             )
-                            SwitchPreference(
+                            val whitelistCount = autoExecConfig.autoExecSkills.size
+                            val whitelistSummary = if (whitelistCount == 0) {
+                                "未选择任何技能，信任白名单未开启"
+                            } else {
+                                "已选择 $whitelistCount 个技能可自动执行"
+                            }
+                            ArrowPreference(
                                 title = "信任白名单",
-                                summary = "允许将某些技能（如 CAPTURE_OUTPUT）设为自动执行，无需点击确认。安全由你掌控。",
-                                checked = autoExecConfig.enabled,
-                                onCheckedChange = { enabled ->
-                                    autoExecConfig = autoExecConfig.copy(enabled = enabled)
-                                    AiTermuxPrefs.saveAutoExecConfig(context, autoExecConfig)
-                                },
+                                summary = whitelistSummary,
+                                onClick = { showWhitelistDialog = true },
                                 startAction = {
                                     SettingIcon(R.drawable.ic_shield, contentDescription = "信任白名单")
                                 }
                             )
-                            if (autoExecConfig.enabled) {
-                                HorizontalDivider(
-                                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f),
-                                    modifier = Modifier.padding(start = 72.dp, end = 16.dp)
-                                )
-                                Column(modifier = Modifier.padding(start = 72.dp)) {
-                                    Text(
-                                        text = "信任白名单中的技能将自动执行，无需点击确认。",
-                                        style = MiuixTheme.textStyles.body2,
-                                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                                        modifier = Modifier.padding(vertical = 4.dp)
-                                    )
-                                    Text(
-                                        text = "⚠️ 仅勾选你完全信任的技能。自动执行意味着 AI 可以直接触发操作，跳过人工确认。",
-                                        style = MiuixTheme.textStyles.body2,
-                                        color = Color(0xFFDC2626),
-                                        modifier = Modifier.padding(vertical = 4.dp)
-                                    )
-
-                                    val whitelistSkills = listOf(
-                                        SkillType.CAPTURE_OUTPUT to "CAPTURE_OUTPUT — 执行命令并捕获输出",
-                                    )
-
-                                    whitelistSkills.forEach { (skill, label) ->
-                                        val checked = autoExecConfig.autoExecSkills.contains(skill)
-                                        CheckboxPreference(
-                                            title = label,
-                                            checked = checked,
-                                            onCheckedChange = { isChecked ->
-                                                val newSet = if (isChecked) {
-                                                    autoExecConfig.autoExecSkills + skill
-                                                } else {
-                                                    autoExecConfig.autoExecSkills - skill
-                                                }
-                                                autoExecConfig = autoExecConfig.copy(autoExecSkills = newSet)
-                                                AiTermuxPrefs.saveAutoExecConfig(context, autoExecConfig)
-                                            },
-                                            modifier = Modifier.padding(vertical = 4.dp)
-                                        )
-                                    }
-
-                                    Spacer(Modifier.height(8.dp))
-                                    Text(
-                                        text = "以下技能无需加入白名单，默认自动执行：",
-                                        style = MiuixTheme.textStyles.body2,
-                                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                                    )
-                                    Text(
-                                        text = "GET_CURRENT_SESSION、CLIPBOARD_READ、CLIPBOARD_WRITE、FILE_READ、FILE_WRITE、FILE_DELETE 等",
-                                        style = MiuixTheme.textStyles.body2,
-                                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.7f),
-                                        modifier = Modifier.padding(top = 2.dp)
-                                    )
-                                }
-                            }
                             HorizontalDivider(
                                 color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f),
                                 modifier = Modifier.padding(start = 72.dp, end = 16.dp)
@@ -827,6 +820,95 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
                 item { SettingsGroupCard(items = toolConfigItems) }
             }
 
+            // ---------- Security Settings ----------
+            item { SmallTitle(text = "安全设置") }
+            item {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                ) {
+                    Column {
+                        val protectionItems = RiskConfirmManager.ProtectionLevel.entries.map { level ->
+                            DropdownItem(
+                                text = level.displayName,
+                                summary = level.description
+                            )
+                        }
+                        WindowSpinnerPreference(
+                            title = context.getString(R.string.protection_level_title),
+                            summary = protectionLevel.description,
+                            items = protectionItems,
+                            selectedIndex = protectionLevelIndex,
+                            onSelectedIndexChange = { idx ->
+                                val newLevel = RiskConfirmManager.ProtectionLevel.entries[idx]
+                                // 如果选择 OFF 或 WARN_ONLY，触发关闭弹窗确认
+                                if (newLevel == RiskConfirmManager.ProtectionLevel.OFF ||
+                                    newLevel == RiskConfirmManager.ProtectionLevel.WARN_ONLY) {
+                                    RiskConfirmManager.showDisableWarning(newLevel)
+                                } else {
+                                    protectionLevelIndex = idx
+                                    protectionLevel = newLevel
+                                    RiskConfirmManager.setProtectionLevel(context, newLevel)
+                                    riskConfirmEnabled = true
+                                }
+                            },
+                            startAction = {
+                                SettingIcon(R.drawable.ic_shield, contentDescription = context.getString(R.string.protection_level_title))
+                            }
+                        )
+                        HorizontalDivider(
+                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f),
+                            modifier = Modifier.padding(start = 72.dp, end = 16.dp)
+                        )
+                        val detectionEnabled = protectionLevel != RiskConfirmManager.ProtectionLevel.OFF
+                        val detectionItems = listOf(
+                            RiskConfirmManager.DetectionMode.STATIC to R.string.detection_mode_static_desc,
+                            RiskConfirmManager.DetectionMode.RUNTIME to R.string.detection_mode_runtime_desc
+                        ).map { (mode, descRes) ->
+                            DropdownItem(
+                                text = mode.displayName,
+                                summary = context.getString(descRes)
+                            )
+                        }
+                        // 计算在过滤后的列表中的索引
+                        val filteredDetectionIndex = when (detectionMode) {
+                            RiskConfirmManager.DetectionMode.RUNTIME -> 1
+                            else -> 0
+                        }
+                        WindowSpinnerPreference(
+                            title = context.getString(R.string.detection_mode_title),
+                            summary = if (detectionEnabled) {
+                                when (detectionMode) {
+                                    RiskConfirmManager.DetectionMode.RUNTIME -> context.getString(R.string.detection_mode_runtime_desc)
+                                    else -> context.getString(R.string.detection_mode_static_desc)
+                                }
+                            } else {
+                                context.getString(R.string.detection_mode_none_desc)
+                            },
+                            items = detectionItems,
+                            selectedIndex = filteredDetectionIndex,
+                            onSelectedIndexChange = { idx ->
+                                if (!detectionEnabled) return@WindowSpinnerPreference
+                                val mode = if (idx == 1) {
+                                    RiskConfirmManager.DetectionMode.RUNTIME
+                                } else {
+                                    RiskConfirmManager.DetectionMode.STATIC
+                                }
+                                detectionModeIndex = idx
+                                detectionMode = mode
+                                RiskConfirmManager.setDetectionMode(context, mode)
+                            },
+                            enabled = detectionEnabled,
+                            startAction = {
+                                SettingIcon(R.drawable.ic_detection, contentDescription = context.getString(R.string.detection_mode_title))
+                            }
+                        )
+                    }
+                }
+            }
+
             // ---------- System ----------
             item { SmallTitle(text = context.getString(R.string.system_category)) }
             item { SettingsGroupCard(items = systemSettings) }
@@ -897,18 +979,19 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
         show = showApiHelpDialog,
         onDismissRequest = { showApiHelpDialog = false },
         content = {
-        Column(modifier = Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
-            HelpContentWithCopyableCommands(
-                content = context.getString(R.string.termux_api_help_content),
-                context = context
+            Box(modifier = Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
+                HelpContentWithCopyableCommands(
+                    content = context.getString(R.string.termux_api_help_content),
+                    context = context,
+                    snackbarHostState = snackbarHostState
+                )
+            }
+            Spacer(Modifier.height(12.dp))
+            TextButton(
+                text = context.getString(R.string.ok),
+                onClick = { showApiHelpDialog = false },
+                modifier = Modifier.fillMaxWidth()
             )
-        }
-        Spacer(Modifier.height(12.dp))
-        TextButton(
-            text = context.getString(R.string.ok),
-            onClick = { showApiHelpDialog = false },
-            modifier = Modifier.fillMaxWidth()
-        )
         }
     )
 
@@ -918,18 +1001,19 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
         show = showBootHelpDialog,
         onDismissRequest = { showBootHelpDialog = false },
         content = {
-        Column(modifier = Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
-            HelpContentWithCopyableCommands(
-                content = context.getString(R.string.termux_boot_help_content),
-                context = context
+            Box(modifier = Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
+                HelpContentWithCopyableCommands(
+                    content = context.getString(R.string.termux_boot_help_content),
+                    context = context,
+                    snackbarHostState = snackbarHostState
+                )
+            }
+            Spacer(Modifier.height(12.dp))
+            TextButton(
+                text = context.getString(R.string.ok),
+                onClick = { showBootHelpDialog = false },
+                modifier = Modifier.fillMaxWidth()
             )
-        }
-        Spacer(Modifier.height(12.dp))
-        TextButton(
-            text = context.getString(R.string.ok),
-            onClick = { showBootHelpDialog = false },
-            modifier = Modifier.fillMaxWidth()
-        )
         }
     )
 
@@ -1018,9 +1102,9 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
                                     isProcessing = false
                                     showRestoreProgressDialog = false
                                     if (success) {
-                                        android.widget.Toast.makeText(context, context.getString(R.string.restore_complete), android.widget.Toast.LENGTH_SHORT).show()
+                                        showSnackbar(context.getString(R.string.restore_complete))
                                     } else {
-                                        android.widget.Toast.makeText(context, context.getString(R.string.restore_failed), android.widget.Toast.LENGTH_SHORT).show()
+                                        showSnackbar(context.getString(R.string.restore_failed))
                                     }
                                 }
                             }.start()
@@ -1165,7 +1249,90 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
         )
     }
 
+    // ---------- AI Termux：信任白名单选择对话框 ----------
+    if (showWhitelistDialog && aiTermuxEnabled) {
+        // Initialize temp skills from current config when dialog opens
+        LaunchedEffect(showWhitelistDialog) {
+            tempWhitelistSkills = autoExecConfig.autoExecSkills
+        }
+        OverlayDialog(
+            show = showWhitelistDialog,
+            onDismissRequest = { showWhitelistDialog = false },
+            title = "信任白名单",
+            summary = "选择允许自动执行的技能。未选择任何技能时，信任白名单将关闭。",
+            content = {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        text = "⚠️ 仅勾选你完全信任的技能。自动执行意味着 AI 可以直接触发操作，跳过人工确认。",
+                        fontSize = 13.sp,
+                        color = Color(0xFFDC2626),
+                        modifier = Modifier.padding(vertical = 8.dp)
+                    )
+
+                    whitelistSkillLabels.forEach { (skill, label) ->
+                        val checked = tempWhitelistSkills.contains(skill)
+                        CheckboxPreference(
+                            title = label,
+                            checked = checked,
+                            onCheckedChange = { isChecked ->
+                                tempWhitelistSkills = if (isChecked) {
+                                    tempWhitelistSkills + skill
+                                } else {
+                                    tempWhitelistSkills - skill
+                                }
+                            },
+                            modifier = Modifier.padding(vertical = 4.dp)
+                        )
+                    }
+
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = "以下技能无需加入白名单，默认自动执行：",
+                        fontSize = 13.sp,
+                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                    )
+                    Text(
+                        text = "GET_CURRENT_SESSION、CLIPBOARD_READ、CLIPBOARD_WRITE、FILE_READ、FILE_WRITE、FILE_DELETE 等",
+                        fontSize = 13.sp,
+                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.7f),
+                        modifier = Modifier.padding(top = 2.dp)
+                    )
+
+                    Spacer(Modifier.height(16.dp))
+                    Row(
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        TextButton(
+                            text = "取消",
+                            onClick = { showWhitelistDialog = false },
+                            modifier = Modifier.weight(1f)
+                        )
+                        Spacer(Modifier.width(20.dp))
+                        TextButton(
+                            text = "确定",
+                            onClick = {
+                                // If no skills selected, whitelist is disabled
+                                val enabled = tempWhitelistSkills.isNotEmpty()
+                                autoExecConfig = autoExecConfig.copy(
+                                    enabled = enabled,
+                                    autoExecSkills = tempWhitelistSkills
+                                )
+                                AiTermuxPrefs.saveAutoExecConfig(context, autoExecConfig)
+                                showWhitelistDialog = false
+                            },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.textButtonColorsPrimary()
+                        )
+                    }
+                }
+            }
+        )
+    }
+
     // ---------- 关闭高危命令二次确认：风险警告弹窗（由 RiskConfirmManager 统一处理） ----------
+
+    // 其余对话框...
 
     // ---------- AI Termux：编辑 System Prompt ----------
     var systemPromptText by remember { mutableStateOf(AiTermuxPrefs.getConfig(context).customSystemPrompt) }
@@ -1175,7 +1342,7 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
         show = showSystemPromptEditor,
         onDismissRequest = { showSystemPromptEditor = false },
         content = {
-        Column(
+        Box(
             modifier = Modifier
                 .heightIn(max = 400.dp)
                 .verticalScroll(rememberScrollState())
@@ -1275,15 +1442,13 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
                         AiTermuxPrefs.setUseCustomSystemPrompt(context, true)
                         useCustomSystemPrompt = true
                         systemPromptSource = file.name
-                        android.widget.Toast.makeText(context, "已加载自定义 System Prompt", android.widget.Toast.LENGTH_SHORT).show()
+                        showSnackbar("已加载自定义 System Prompt")
                     } else {
-                        android.widget.Toast.makeText(context, "文件内容为空", android.widget.Toast.LENGTH_SHORT).show()
+                        showSnackbar("文件内容为空")
                     }
-                } else {
-                    android.widget.Toast.makeText(context, "文件不存在", android.widget.Toast.LENGTH_SHORT).show()
                 }
             } catch (e: Exception) {
-                android.widget.Toast.makeText(context, "读取文件失败: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
+                showSnackbar("读取文件失败: ${e.message}")
             }
         }
     )
@@ -1311,7 +1476,7 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
                     useCustomSystemPrompt = false
                     systemPromptSource = ""
                     showSystemPromptRestoreConfirm = false
-                    android.widget.Toast.makeText(context, "已切换回官方 System Prompt", android.widget.Toast.LENGTH_SHORT).show()
+                    showSnackbar("已切换回官方 System Prompt")
                 },
                 colors = ButtonDefaults.textButtonColorsPrimary()
             )
@@ -1342,12 +1507,13 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
                 )
             }
         } else {
-            Column(
+            Box(
                 modifier = Modifier
                     .heightIn(max = 350.dp)
                     .verticalScroll(rememberScrollState())
             ) {
-                customSkills.forEach { skill ->
+                Column {
+                    customSkills.forEach { skill ->
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -1394,6 +1560,7 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
                             }
                         }
                     }
+                }
                 }
             }
         }
@@ -1461,11 +1628,12 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
         show = showAddEditSkillDialog,
         onDismissRequest = { showAddEditSkillDialog = false },
         content = {
-        Column(
+        Box(
             modifier = Modifier
                 .heightIn(max = 520.dp)
                 .verticalScroll(rememberScrollState())
         ) {
+            Column {
             TextField(
                 value = skillName,
                 onValueChange = { skillName = it },
@@ -1544,6 +1712,7 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
                 maxLines = Int.MAX_VALUE,
                 minLines = 3
             )
+            }
         }
         Spacer(Modifier.height(12.dp))
         Row(horizontalArrangement = Arrangement.SpaceBetween) {
@@ -1610,11 +1779,12 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
                 )
             }
         } else {
-            Column(
+            Box(
                 modifier = Modifier
                     .heightIn(max = 400.dp)
                     .verticalScroll(rememberScrollState())
             ) {
+                Column {
                 // System Prompt
                 Card(
                     modifier = Modifier
@@ -1698,6 +1868,7 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
                             }
                         }
                     }
+                }
                 }
             }
         }
@@ -1836,91 +2007,91 @@ private fun IntegratedToolSwitch(
 @Composable
 private fun HelpContentWithCopyableCommands(
     content: String,
-    context: Context
+    context: Context,
+    snackbarHostState: SnackbarHostState
 ) {
+    val scope = rememberCoroutineScope()
+    fun showSnackbar(message: String) {
+        scope.launch {
+            snackbarHostState.showSnackbar(message = message, duration = SnackbarDuration.Short)
+        }
+    }
     val lines = content.split("\n")
     val clipboard = remember {
         context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
     }
 
-    lines.forEachIndexed { index, rawLine ->
-        val trimmed = rawLine.trim()
-        if (trimmed.isEmpty()) {
-            Spacer(Modifier.height(8.dp))
-            return@forEachIndexed
-        }
-
-        // 提取命令部分
-        val commandText: String? = when {
-            // "• termux-battery-status — 电池信息" → 命令是 "termux-battery-status"
-            trimmed.startsWith("• ") -> {
-                val afterBullet = trimmed.substring(2).trim()
-                val dashIdx = afterBullet.indexOf(" — ")
-                if (dashIdx > 0) afterBullet.substring(0, dashIdx).trim()
-                else if (afterBullet.startsWith("termux-") || afterBullet.startsWith("pkg ")) afterBullet
-                else null
+    Column(modifier = Modifier.fillMaxWidth()) {
+        lines.forEachIndexed { index, rawLine ->
+            val trimmed = rawLine.trim()
+            if (trimmed.isEmpty()) {
+                Spacer(Modifier.height(8.dp))
+                return@forEachIndexed
             }
-            // 独立命令行
-            trimmed.startsWith("pkg ") ||
-            trimmed.startsWith("mkdir ") ||
-            trimmed.startsWith("termux-") ||
-            trimmed.startsWith("#!/") ||
-            trimmed.startsWith("sshd") ||
-            trimmed.startsWith("termux-wake-lock") -> trimmed
-            // "   #!/data/..." 缩进的脚本行
-            rawLine.trimStart().startsWith("#!/") -> rawLine.trimStart()
-            rawLine.trimStart().startsWith("termux-wake-lock") -> rawLine.trimStart()
-            rawLine.trimStart().startsWith("sshd") -> rawLine.trimStart()
-            else -> null
-        }
 
-        if (commandText != null) {
-            // 可复制命令行：命令文本 + 复制图标
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 2.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+            val commandText: String? = when {
+                trimmed.startsWith("• ") -> {
+                    val afterBullet = trimmed.substring(2).trim()
+                    val dashIdx = afterBullet.indexOf(" — ")
+                    if (dashIdx > 0) afterBullet.substring(0, dashIdx).trim()
+                    else if (afterBullet.startsWith("termux-") || afterBullet.startsWith("pkg ")) afterBullet
+                    else null
+                }
+                trimmed.startsWith("pkg ") ||
+                trimmed.startsWith("mkdir ") ||
+                trimmed.startsWith("termux-") ||
+                trimmed.startsWith("#!/") ||
+                trimmed.startsWith("sshd") ||
+                trimmed.startsWith("termux-wake-lock") -> trimmed
+                rawLine.trimStart().startsWith("#!/") -> rawLine.trimStart()
+                rawLine.trimStart().startsWith("termux-wake-lock") -> rawLine.trimStart()
+                rawLine.trimStart().startsWith("sshd") -> rawLine.trimStart()
+                else -> null
+            }
+
+            if (commandText != null) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = rawLine,
+                        fontSize = 13.sp,
+                        color = MiuixTheme.colorScheme.onSurface,
+                        lineHeight = 20.sp,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Box(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(MiuixTheme.colorScheme.primary.copy(alpha = 0.12f))
+                            .clickable {
+                                val clip = android.content.ClipData.newPlainText("命令", commandText)
+                                clipboard.setPrimaryClip(clip)
+                                showSnackbar("已复制: $commandText")
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_copy),
+                            contentDescription = "复制",
+                            modifier = Modifier.size(16.dp),
+                            tint = MiuixTheme.colorScheme.primary
+                        )
+                    }
+                }
+            } else {
                 Text(
                     text = rawLine,
-                    fontSize = 13.sp,
+                    fontSize = 14.sp,
                     color = MiuixTheme.colorScheme.onSurface,
-                    lineHeight = 20.sp,
-                    modifier = Modifier.weight(1f)
+                    lineHeight = 22.sp
                 )
-                Spacer(Modifier.width(4.dp))
-                Box(
-                    modifier = Modifier
-                        .size(28.dp)
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(MiuixTheme.colorScheme.primary.copy(alpha = 0.12f))
-                        .clickable {
-                            val clip = android.content.ClipData.newPlainText("命令", commandText)
-                            clipboard.setPrimaryClip(clip)
-                            android.widget.Toast.makeText(
-                                context, "已复制: $commandText",
-                                android.widget.Toast.LENGTH_SHORT
-                            ).show()
-                        },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_copy),
-                        contentDescription = "复制",
-                        modifier = Modifier.size(16.dp),
-                        tint = MiuixTheme.colorScheme.primary
-                    )
-                }
             }
-        } else {
-            // 普通文本行
-            Text(
-                text = rawLine,
-                fontSize = 14.sp,
-                color = MiuixTheme.colorScheme.onSurface,
-                lineHeight = 22.sp
-            )
         }
     }
 }

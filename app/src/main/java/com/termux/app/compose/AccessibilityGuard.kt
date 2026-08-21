@@ -2,7 +2,7 @@ package com.termux.app.compose
 
 import android.content.Context
 import android.view.accessibility.AccessibilityManager
-import android.widget.Toast
+import com.google.android.material.snackbar.Snackbar
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.runtime.Composable
@@ -15,6 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import com.termux.R
+import com.termux.app.utils.SnackbarHelper
 
 object AccessibilityGuard {
 
@@ -95,15 +96,18 @@ fun Modifier.physicalTouchDetector(): Modifier = this.pointerInput(Unit) {
 fun guardedOnClick(
     context: Context,
     thirdPartyBlocked: Boolean,
+    onBlocked: () -> Unit = {
+        SnackbarHelper.show(
+            context,
+            context.getString(R.string.accessibility_guard_blocked_toast),
+            Snackbar.LENGTH_LONG
+        )
+    },
     onClick: () -> Unit
 ): () -> Unit {
     return {
         if (thirdPartyBlocked && !AccessibilityGuard.wasPhysicalTouchRecent()) {
-            Toast.makeText(
-                context,
-                context.getString(R.string.accessibility_guard_blocked_toast),
-                Toast.LENGTH_LONG
-            ).show()
+            onBlocked()
         } else {
             onClick()
         }

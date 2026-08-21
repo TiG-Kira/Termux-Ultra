@@ -425,7 +425,7 @@ private fun scanTermuxVnc(context: Context, connections: MutableList<VncConnecti
 
 internal const val EXTRA_QEMU_AUDIO_MODE = "com.termux.app.vnc.QEMU_AUDIO_MODE"
 
-internal fun connectToVnc(context: Context, connection: VncConnection) {
+fun connectToVnc(context: Context, connection: VncConnection) {
     val serviceIntent = Intent(context, com.termux.app.TermuxService::class.java)
     context.startService(serviceIntent)
 

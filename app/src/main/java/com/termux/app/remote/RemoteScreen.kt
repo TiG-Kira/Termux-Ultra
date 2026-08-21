@@ -113,6 +113,7 @@ fun RemoteScreen(
     val topBarSwipeThresholdPx = with(LocalDensity.current) { 120.dp.toPx() }
 
     Scaffold(
+        modifier = Modifier.fillMaxSize(),
         topBar = {
             Box(
                 modifier = Modifier

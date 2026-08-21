@@ -8,7 +8,7 @@ import android.os.Build
 import android.os.Environment
 import android.provider.Settings
 import android.util.Log
-import android.widget.Toast
+import com.google.android.material.snackbar.Snackbar
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.ActivityResultLauncher
@@ -18,9 +18,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
 import com.termux.R
+import com.termux.app.TermuxInstaller
 import com.termux.app.compose.KiTerminalTheme
 import com.termux.app.compose.OobeScreen
-import com.termux.app.TermuxInstaller
+import com.termux.app.utils.SnackbarHelper
 
 class OobeActivity : ComponentActivity() {
 
@@ -87,7 +88,7 @@ class OobeActivity : ComponentActivity() {
                                 if (isNextEnabled) {
                                     performBootstrap()
                                 } else {
-                                    Toast.makeText(this, R.string.oobe_permission_required, Toast.LENGTH_SHORT).show()
+                                    SnackbarHelper.show(this@OobeActivity, getString(R.string.oobe_permission_required), Snackbar.LENGTH_SHORT)
                                 }
                             }
                         )

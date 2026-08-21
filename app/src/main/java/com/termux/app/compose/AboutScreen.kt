@@ -30,7 +30,6 @@ import coil.compose.AsyncImage
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.CircularProgressIndicator
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.Scaffold
@@ -47,7 +46,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import com.termux.R
 import com.termux.app.utils.UpdateChecker
+import com.termux.app.utils.UpdateResult
 import com.termux.app.utils.ApkDownloader
+import com.termux.BuildConfig
 
 @Composable
 fun AboutScreen(onBack: () -> Unit) {
@@ -59,7 +60,7 @@ fun AboutScreen(onBack: () -> Unit) {
 
     var gradientOffset by remember { mutableFloatStateOf(0f) }
     var checkingUpdate by remember { mutableStateOf(false) }
-    var updateResult by remember { mutableStateOf<UpdateChecker.UpdateResult?>(null) }
+    var updateResult by remember { mutableStateOf<UpdateResult?>(null) }
     var showUpdateDialog by remember { mutableStateOf(false) }
     var downloadingApk by remember { mutableStateOf(false) }
     var downloadProgress by remember { mutableStateOf(0) }
@@ -70,7 +71,8 @@ fun AboutScreen(onBack: () -> Unit) {
     var betaUpdateEnabled by remember { mutableStateOf(updatePrefs.getBoolean(KEY_ENABLE_BETA, false)) }
     var showBetaWarningDialog by remember { mutableStateOf(false) }
 
-    val currentVersion = remember { getVersionName(context) }
+    val currentVersion = remember { BuildConfig.VERSION_NAME }
+    val termuxCoreVersion = remember { context.getString(R.string.termux_core_version) }
 
     LaunchedEffect(Unit) {
         scope.launch {
@@ -120,6 +122,7 @@ fun AboutScreen(onBack: () -> Unit) {
             )
     ) {
         Scaffold(
+            modifier = Modifier.fillMaxSize(),
             contentWindowInsets = WindowInsets(0, 0, 0, 0),
             topBar = {
                 TopAppBar(
@@ -353,9 +356,14 @@ fun AboutScreen(onBack: () -> Unit) {
                                         text = context.getString(R.string.check_updates),
                                         style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Bold)
                                     )
-                                    if (updateResult?.hasUpdate == true) {
+                                    val hasUpdate = updateResult is UpdateResult.UpdateAvailable
+                                    if (hasUpdate) {
+                                        val available = updateResult as UpdateResult.UpdateAvailable
                                         Text(
-                                            text = if (updateResult!!.isPreRelease) context.getString(R.string.beta_version_available) else context.getString(R.string.new_version_available),
+                                            text = if (available.isBeta)
+                                                context.getString(R.string.beta_version_available)
+                                            else
+                                                context.getString(R.string.new_version_available),
                                             style = TextStyle(
                                                 fontSize = 13.sp,
                                                 color = MiuixTheme.colorScheme.error
@@ -437,7 +445,7 @@ fun AboutScreen(onBack: () -> Unit) {
                                 )
                             )
                             Text(
-                                text = "${context.getString(R.string.based_on_termux_version)} 0.118.3 稳定版",
+                                text = "${context.getString(R.string.based_on_termux_version)} $termuxCoreVersion 稳定版",
                                 style = TextStyle(
                                     fontSize = 12.sp,
                                     color = MiuixTheme.colorScheme.onSurfaceVariantSummary
@@ -487,22 +495,33 @@ fun AboutScreen(onBack: () -> Unit) {
             }
         }
 
+        val result = updateResult!!
         OverlayDialog(
             show = showUpdateDialog,
-            title = if (updateResult!!.hasUpdate) {
-                if (updateResult!!.isPreRelease) context.getString(R.string.beta_version_available)
-                else context.getString(R.string.new_version_found)
-            } else context.getString(R.string.up_to_date),
-            summary = if (updateResult!!.hasUpdate) {
-                val preReleaseTag = if (updateResult!!.isPreRelease) " (Beta) " else ""
-                "${context.getString(R.string.current_version)}: v${updateResult!!.currentVersion}\n${context.getString(R.string.latest_version)}: v${updateResult!!.latestVersion}${preReleaseTag}"
-            } else {
-                "${context.getString(R.string.is_latest)} v${updateResult!!.currentVersion}"
+            title = when (result) {
+                is UpdateResult.UpdateAvailable -> {
+                    if (result.isBeta) context.getString(R.string.beta_version_available)
+                    else context.getString(R.string.new_version_found)
+                }
+                is UpdateResult.UpToDate -> context.getString(R.string.up_to_date)
+                is UpdateResult.CheckFailed -> context.getString(R.string.up_to_date)
+            },
+            summary = when (result) {
+                is UpdateResult.UpdateAvailable -> {
+                    val preReleaseTag = if (result.isBeta) " (Beta) " else ""
+                    "${context.getString(R.string.current_version)}: ${result.currentVersionName}\n${context.getString(R.string.latest_version)}: ${result.latestVersionName}${preReleaseTag}"
+                }
+                is UpdateResult.UpToDate -> {
+                    "${context.getString(R.string.is_latest)} ${result.currentVersionName}"
+                }
+                is UpdateResult.CheckFailed -> {
+                    context.getString(R.string.up_to_date)
+                }
             },
             onDismissRequest = { showUpdateDialog = false },
             content = {
                 Column(modifier = Modifier.padding(top = 8.dp)) {
-                if (updateResult!!.hasUpdate && updateResult!!.releaseNotes.isNotBlank()) {
+                if (result is UpdateResult.UpdateAvailable && result.releaseNotes.isNotBlank()) {
                     Text(
                         text = context.getString(R.string.update_log),
                         style = TextStyle(
@@ -513,7 +532,7 @@ fun AboutScreen(onBack: () -> Unit) {
                         modifier = Modifier.padding(bottom = 4.dp)
                     )
                     MarkdownText(
-                        text = updateResult!!.releaseNotes,
+                        text = result.releaseNotes,
                         modifier = Modifier
                             .padding(bottom = 16.dp)
                             .heightIn(max = 200.dp)
@@ -577,9 +596,9 @@ fun AboutScreen(onBack: () -> Unit) {
                 }
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = if (updateResult!!.hasUpdate) Arrangement.spacedBy(8.dp) else Arrangement.Center
+                    horizontalArrangement = if (result is UpdateResult.UpdateAvailable) Arrangement.spacedBy(8.dp) else Arrangement.Center
                 ) {
-                    if (updateResult!!.hasUpdate) {
+                    if (result is UpdateResult.UpdateAvailable) {
                         TextButton(
                             text = context.getString(R.string.later),
                             onClick = { showUpdateDialog = false },
@@ -591,7 +610,7 @@ fun AboutScreen(onBack: () -> Unit) {
                             onClick = {
                                 val intent = android.content.Intent(
                                     android.content.Intent.ACTION_VIEW,
-                                    android.net.Uri.parse(updateResult!!.releaseUrl)
+                                    android.net.Uri.parse(result.releaseUrl)
                                 )
                                 context.startActivity(intent)
                                 showUpdateDialog = false
@@ -605,27 +624,27 @@ fun AboutScreen(onBack: () -> Unit) {
                                 downloadProgress = 0
                                 downloadedBytes = 0L
                                 totalBytes = 0L
-                                val downloadUrl = ApkDownloader.constructDownloadUrl(updateResult!!.latestVersion, context)
+                                val downloadUrl = ApkDownloader.constructDownloadUrl(result.latestVersionName, context)
                                 scope.launch(Dispatchers.IO) {
-                                    val result = ApkDownloader.downloadAndInstall(
+                                    val downloadResult = ApkDownloader.downloadAndInstall(
                                         context,
                                         downloadUrl,
-                                        updateResult!!.latestVersion
+                                        result.latestVersionName
                                     ) { progress, downloaded, total ->
                                         downloadProgress = progress
                                         downloadedBytes = downloaded
                                         totalBytes = total
                                     }
                                     downloadingApk = false
-                                    if (result.isFailure) {
+                                    if (downloadResult.isFailure) {
                                         val intent = android.content.Intent(
                                             android.content.Intent.ACTION_VIEW,
-                                            android.net.Uri.parse(updateResult!!.releaseUrl)
+                                            android.net.Uri.parse(result.releaseUrl)
                                         )
                                         context.startActivity(intent)
                                     } else {
                                         if (!ApkDownloader.hasInstallPermission(context)) {
-                                            pendingInstallVersion = updateResult!!.latestVersion
+                                            pendingInstallVersion = result.latestVersionName
                                         }
                                     }
                                     if (ApkDownloader.hasInstallPermission(context)) {
@@ -848,15 +867,6 @@ private fun formatUpdateFileSize(bytes: Long): String {
         bytes < 1024 * 1024 -> "${(bytes / 1024.0).toInt()} KB"
         bytes < 1024L * 1024 * 1024 -> "${(bytes / (1024.0 * 1024.0)).let { String.format("%.1f", it) }} MB"
         else -> "${(bytes / (1024.0 * 1024.0 * 1024.0)).let { String.format("%.2f", it) }} GB"
-    }
-}
-
-private fun getVersionName(context: android.content.Context): String {
-    return try {
-        val packageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
-        packageInfo?.versionName ?: "1.0.0"
-    } catch (e: android.content.pm.PackageManager.NameNotFoundException) {
-        "1.0.0"
     }
 }
 

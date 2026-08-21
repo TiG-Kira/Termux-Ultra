@@ -211,7 +211,7 @@
     <string name="msg_done">完毕</string>
     <string name="pref_forget_known_hosts">忘记已知主机</string>
     <string name="title_forget">忘记</string>
-    <string name="pref_forget_known_hosts_question">忘记已知 SSH 主机和信任的服务器证书？</string>
+    <string name="pref_forget_known_hosts_question">忘记已知 SSH 主机、信任的服务器证书以及所有已保存的 VNC 连接？</string>
     <string name="title_export_passwords_and_keys">导出密码和密钥</string>
     <string name="pref_gesture_action_left_press">长按</string>
     <string name="title_try">尝试</string>

@@ -125,6 +125,7 @@ class MainActivity : FragmentActivity() {
 
         try {
             WindowCompat.setDecorFitsSystemWindows(window, false)
+            window.navigationBarColor = android.graphics.Color.TRANSPARENT
 
             val prefs = getSharedPreferences("app_settings", Context.MODE_PRIVATE)
             val initialShowVnc = prefs.getBoolean("vnc_enabled", false)

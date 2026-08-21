@@ -250,7 +250,7 @@
     <string name="pref_saved_server_lock">Lock saved servers</string>
     <string name="pref_auto_reconnect">Reconnect automatically</string>
     <string name="pref_forget_known_hosts">Forget known hosts</string>
-    <string name="pref_forget_known_hosts_question">Forget known SSH hosts and trusted server certificates?</string>
+    <string name="pref_forget_known_hosts_question">Forget known SSH hosts, trusted server certificates, and all saved VNC connections?</string>
     <string name="pref_discovery">Discovery</string>
     <string name="pref_discovery_autorun">Autorun</string>
     <string name="pref_discovery_autorun_summary">Discover servers while on homepage</string>

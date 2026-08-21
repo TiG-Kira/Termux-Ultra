@@ -41,6 +41,8 @@ import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import com.termux.R
 import com.termux.app.TermuxService
+import com.termux.app.utils.SnackbarHelper
+import com.google.android.material.snackbar.Snackbar
 
 data class ResourceItem(
     val title: String,
@@ -67,6 +69,7 @@ fun ResourcesScreen() {
     val scrollBehavior = MiuixScrollBehavior()
 
     Scaffold(
+        modifier = Modifier.fillMaxSize(),
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(title = stringResource(R.string.resources_center), scrollBehavior = scrollBehavior)
@@ -280,7 +283,7 @@ fun ResourceCard(
                                 val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
                                 val clip = android.content.ClipData.newPlainText("执行指令", item.scriptUrl)
                                 clipboard.setPrimaryClip(clip)
-                                android.widget.Toast.makeText(context, "指令已复制到剪贴板", android.widget.Toast.LENGTH_SHORT).show()
+                                SnackbarHelper.show(context, "指令已复制到剪贴板", Snackbar.LENGTH_SHORT)
                             },
                             modifier = Modifier.clip(RoundedCornerShape(8.dp)),
                             colors = ButtonDefaults.buttonColors(
@@ -346,11 +349,11 @@ fun ResourceCard(
                             val runScript = java.io.File("$containerDir/run.sh")
                             val rootfsBash = java.io.File("$containerDir/rootfs/bin/bash")
                             if (!runScript.exists() || !rootfsBash.exists()) {
-                                android.widget.Toast.makeText(
+                                SnackbarHelper.show(
                                     context,
                                     "请先安装 Ubuntu 容器！请到资源页点击\"Ubuntu 容器安装\"",
-                                    android.widget.Toast.LENGTH_LONG
-                                ).show()
+                                    Snackbar.LENGTH_LONG
+                                )
                                 return
                             }
                         }
@@ -794,14 +797,18 @@ fun WarningNoteCard(modifier: Modifier = Modifier) {
 
 /** AI Termux 资源中心入口卡片 */
 @Composable
-fun AiTermuxEntryCard(modifier: Modifier = Modifier) {
+fun AiTermuxEntryCard(modifier: Modifier = Modifier, horizontalMode: Boolean = false) {
     val context = LocalContext.current
     val prefs = remember { context.getSharedPreferences("termux_prefs", android.content.Context.MODE_PRIVATE) }
-    var collapsed by remember { mutableStateOf(prefs.getBoolean("ai_termux_entry_collapsed", false)) }
+    var collapsed by remember { mutableStateOf(
+        if (horizontalMode) false else prefs.getBoolean("ai_termux_entry_collapsed", false)
+    ) }
 
     fun setCollapsed(value: Boolean) {
-        collapsed = value
-        prefs.edit().putBoolean("ai_termux_entry_collapsed", value).apply()
+        if (!horizontalMode) {
+            collapsed = value
+            prefs.edit().putBoolean("ai_termux_entry_collapsed", value).apply()
+        }
     }
 
     val gradient = Brush.linearGradient(
@@ -811,6 +818,97 @@ fun AiTermuxEntryCard(modifier: Modifier = Modifier) {
             Color(0xFFEC4899)
         )
     )
+
+    // 横向模式：保持渐变设计但统一尺寸
+    if (horizontalMode) {
+        MiuixCard(
+            modifier = modifier
+                .fillMaxWidth()
+                .height(140.dp),
+            onClick = {
+                val intent = Intent(context, com.termux.app.activities.AiTermuxActivity::class.java)
+                context.startActivity(intent)
+            },
+            showIndication = true
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(gradient)
+                    .drawWithCache {
+                        onDrawWithContent {
+                            drawCircle(
+                                color = Color.White.copy(alpha = 0.12f),
+                                radius = 55.dp.toPx(),
+                                center = androidx.compose.ui.geometry.Offset(
+                                    x = size.width - 15.dp.toPx(),
+                                    y = 5.dp.toPx()
+                                )
+                            )
+                            drawCircle(
+                                color = Color.White.copy(alpha = 0.08f),
+                                radius = 30.dp.toPx(),
+                                center = androidx.compose.ui.geometry.Offset(
+                                    x = 10.dp.toPx(),
+                                    y = size.height + 10.dp.toPx()
+                                )
+                            )
+                            drawContent()
+                        }
+                    }
+                    .padding(16.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxSize(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    // 左侧图标
+                    Box(
+                        modifier = Modifier
+                            .size(56.dp)
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(Color.White.copy(alpha = 0.2f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_lightbulb),
+                            contentDescription = null,
+                            modifier = Modifier.size(32.dp),
+                            tint = Color.White
+                        )
+                    }
+
+                    // 右侧文本
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Termux Agent",
+                            style = TextStyle(
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = "用自然语言管理 Termux 会话·虚拟机·VNC·文件",
+                            style = TextStyle(
+                                fontSize = 13.sp,
+                                color = Color.White.copy(alpha = 0.9f),
+                                lineHeight = 19.sp
+                            ),
+                            maxLines = 2,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            }
+        }
+        return
+    }
+
+    // 竖向模式保持原有设计
     MiuixCard(
         modifier = modifier,
         onClick = {

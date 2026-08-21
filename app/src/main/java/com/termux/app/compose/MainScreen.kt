@@ -1,7 +1,6 @@
 package com.termux.app.compose
 
 import android.content.Context
-import android.widget.Toast
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.EnterTransition
@@ -13,7 +12,9 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.offset
@@ -46,6 +47,9 @@ import top.yukonga.miuix.kmp.basic.NavigationBar
 import top.yukonga.miuix.kmp.basic.NavigationBarItem
 import top.yukonga.miuix.kmp.basic.FloatingNavigationBar
 import top.yukonga.miuix.kmp.basic.FloatingNavigationBarItem
+import top.yukonga.miuix.kmp.basic.SnackbarHost
+import top.yukonga.miuix.kmp.basic.SnackbarHostState
+import top.yukonga.miuix.kmp.basic.SnackbarDuration
 import com.termux.R
 import com.termux.shared.shell.TermuxSession
 
@@ -69,6 +73,7 @@ fun MainScreen(
     onRefreshSessions: () -> Unit = {}
 ) {
     val scope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
     var remoteSubTab by remember { mutableStateOf(0) }
     var previousTab by remember { mutableStateOf(selectedTab) }
     var rawDragOffset by remember { mutableFloatStateOf(0f) }
@@ -125,11 +130,10 @@ fun MainScreen(
     LaunchedEffect(glassNavFailed) {
         if (glassNavFailed) {
             navPrefs.edit().remove("glass_nav_crash_pending").apply()
-            Toast.makeText(
-                context,
-                context.getString(R.string.glass_nav_bar_fallback_toast),
-                Toast.LENGTH_LONG
-            ).show()
+            snackbarHostState.showSnackbar(
+                message = context.getString(R.string.glass_nav_bar_fallback_toast),
+                duration = SnackbarDuration.Long
+            )
         }
     }
 
@@ -200,7 +204,16 @@ fun MainScreen(
     }
 
     Scaffold(
+        modifier = Modifier.fillMaxSize(),
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        snackbarHost = { 
+            SnackbarHost(
+                state = snackbarHostState,
+                modifier = Modifier
+                    .padding(WindowInsets.navigationBars.asPaddingValues())
+                    .padding(bottom = 97.dp)
+            ) 
+        },
         bottomBar = {
             when (navStyle) {
                 2 -> {
@@ -494,7 +507,7 @@ fun MainScreen(
                         }
                     }
                 },
-                modifier = Modifier.graphicsLayer {
+                modifier = Modifier.fillMaxSize().graphicsLayer {
                     translationX = dragOffset
                 }
             ) { tab ->
@@ -539,9 +552,9 @@ fun MainScreen(
         }
 
         // 停止/退出确认弹窗（状态驱动，在主 Compose 树内渲染，避免 addView overlay 白屏）
-        StopConfirmDialogHost()
+        StopConfirmDialogHost(snackbarHostState)
 
-        // 风险命令确认弹窗
-        RiskConfirmDialogHost()
+        // 风险命令确认弹窗（主页不显示风险 Snackbar，由终端页独占）
+        RiskConfirmDialogHost(snackbarHostState, collectSnackbar = false)
     }
 }

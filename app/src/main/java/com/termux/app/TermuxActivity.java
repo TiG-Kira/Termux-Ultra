@@ -30,6 +30,7 @@ import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.widget.EditText;
 import android.widget.ImageButton;
+import android.widget.LinearLayout;
 import android.widget.ListView;
 import android.widget.RelativeLayout;
 import android.widget.Toast;
@@ -206,7 +207,15 @@ public final class TermuxActivity extends ComponentActivity implements ServiceCo
      *  the back button return to the launcher instead of finishing. */
     public static final String EXTRA_FALLBACK_MODE = "extra_fallback_mode";
 
+    /**
+     * Callback interface for requesting a context menu (used by Compose mode to show miuix-styled menu).
+     */
+    public interface OnContextMenuRequestedListener {
+        void onContextMenuRequested();
+    }
+
     private boolean mIsFallbackMode = false;
+    private OnContextMenuRequestedListener mContextMenuListener;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -218,97 +227,203 @@ public final class TermuxActivity extends ComponentActivity implements ServiceCo
             mActionRunHandled = savedInstanceState.getBoolean("mActionRunHandled", false);
         }
 
-        // Check for fallback mode flag (launched from FallbackHelper when miuix unavailable)
         mIsFallbackMode = getIntent() != null && getIntent().getBooleanExtra(EXTRA_FALLBACK_MODE, false);
 
-        // Handle the EXTRA_TRIGGER_STOP_SERVICE sent from the notification "end sessions" action.
-        // We'll process this in onStart() once the activity is visible (so that OverlayDialog
-        // can attach to a valid window), but remember the intent here so it's not lost after
-        // rotation or process death.
         Intent i = getIntent();
         if (i != null && i.getBooleanExtra(TermuxConstants.TERMUX_APP.TERMUX_ACTIVITY.EXTRA_TRIGGER_STOP_SERVICE, false)) {
             mPendingTriggerStopService = true;
-            // Clear the extra after reading so that we don't re-trigger on the next
-            // getIntent() call after e.g. screen rotation.
             i.removeExtra(TermuxConstants.TERMUX_APP.TERMUX_ACTIVITY.EXTRA_TRIGGER_STOP_SERVICE);
         }
 
-        // Check if a crash happened on last run of the app and show a
-        // notification with the crash details if it did
         CrashUtils.notifyAppCrashOnLastRun(this, LOG_TAG);
-
-        // Delete ReportInfo serialized object files from cache older than 14 days
         ReportActivity.deleteReportInfoFilesOlderThanXDays(this, 14, false);
 
-        // Load termux shared properties
         mProperties = new TermuxAppSharedProperties(this);
-
         setActivityTheme();
-
         super.onCreate(savedInstanceState);
 
-        setContentView(R.layout.activity_termux);
-
-        // Load termux shared preferences
-        // This will also fail if TermuxConstants.TERMUX_PACKAGE_NAME does not equal applicationId
-        mPreferences = TermuxAppSharedPreferences.build(this, true);
-        if (mPreferences == null) {
-            // An AlertDialog should have shown to kill the app, so we don't continue running activity code
-            mIsInvalidState = true;
+        if (mIsFallbackMode) {
+            setContentView(R.layout.activity_termux);
+            mPreferences = TermuxAppSharedPreferences.build(this, true);
+            if (mPreferences == null) { mIsInvalidState = true; return; }
+            setMargins();
+            mTermuxActivityRootView = findViewById(R.id.activity_termux_root_view);
+            mTermuxActivityRootView.setActivity(this);
+            mTermuxActivityBottomSpaceView = findViewById(R.id.activity_termux_bottom_space_view);
+            mTermuxActivityRootView.setOnApplyWindowInsetsListener(new TermuxActivityRootView.WindowInsetsListener());
+            View content = findViewById(android.R.id.content);
+            if (content != null) {
+                content.setOnApplyWindowInsetsListener((v, insets) -> {
+                    mNavBarHeight = insets.getSystemWindowInsetBottom();
+                    return insets;
+                });
+            }
+            if (mProperties.isUsingFullScreen()) getWindow().addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
+            setDrawerTheme();
+            getDrawer().setDrawerLockMode(DrawerLayout.LOCK_MODE_LOCKED_CLOSED, Gravity.LEFT);
+            setTermuxTerminalViewAndClients();
+            setTerminalToolbarView(savedInstanceState);
+            setSettingsButtonView();
+            setNewSessionButtonView();
+            setToggleKeyboardView();
+            setTerminalToolbar();
+            registerForContextMenu(mTerminalView);
+            startTermuxAndBindService();
             return;
         }
 
-        setMargins();
+        // === Compose mode ===
+        // Step 1: Inflate XML into a detached container to extract legacy views
+        // that existing code (TermuxTerminalViewClient etc.) still accesses via
+        // findViewById. The detached views are cached.
+        preInflateLegacyViews();
 
-        mTermuxActivityRootView = findViewById(R.id.activity_termux_root_view);
-        mTermuxActivityRootView.setActivity(this);
-        mTermuxActivityBottomSpaceView = findViewById(R.id.activity_termux_bottom_space_view);
-        mTermuxActivityRootView.setOnApplyWindowInsetsListener(new TermuxActivityRootView.WindowInsetsListener());
-
-        View content = findViewById(android.R.id.content);
-        content.setOnApplyWindowInsetsListener((v, insets) -> {
-            mNavBarHeight = insets.getSystemWindowInsetBottom();
-            return insets;
-        });
+        // Step 2: Initialize preferences and terminal clients
+        mPreferences = TermuxAppSharedPreferences.build(this, true);
+        if (mPreferences == null) { mIsInvalidState = true; return; }
 
         if (mProperties.isUsingFullScreen()) {
             getWindow().addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
         }
 
-        setDrawerTheme();
-
-        // 锁定侧边栏，禁止滑动手势打开，只能通过长按加号按钮打开
-        getDrawer().setDrawerLockMode(DrawerLayout.LOCK_MODE_LOCKED_CLOSED, Gravity.LEFT);
-
         setTermuxTerminalViewAndClients();
-
         setTerminalToolbarView(savedInstanceState);
 
-        setSettingsButtonView();
-
-        setNewSessionButtonView();
-
-        setToggleKeyboardView();
-
-        setTerminalToolbar();
+        // Step 3: Replace window content with Compose-based TerminalDetailScreen.
+        // TerminalView has already been extracted and detached; it will be re-hosted
+        // inside Compose via AndroidView. KiTerminalTheme wraps it with MiuixTheme.
+        com.termux.app.compose.TermuxActivityBridge.setTerminalDetailContent(
+            this,
+            mTerminalView,
+            () -> finishActivityIfNotFinishing()
+        );
 
         registerForContextMenu(mTerminalView);
+        startTermuxAndBindService();
+    }
 
-        // Start the {@link TermuxService} and make it run regardless of who is bound to it
+    private void startTermuxAndBindService() {
         Intent serviceIntent = new Intent(this, TermuxService.class);
         startService(serviceIntent);
 
-        // Attempt to bind to the service, this will call the {@link #onServiceConnected(ComponentName, IBinder)}
-        // callback if it succeeds.
         if (!bindService(serviceIntent, this, 0)) {
             Logger.logError(LOG_TAG, "bindService() failed");
-            // In fallback mode or on low-end devices, the service may not be available immediately.
-            // Do not throw; the activity can still show the terminal view without the service.
         }
 
-        // Send the {@link TermuxConstants#BROADCAST_TERMUX_OPENED} broadcast to notify apps that Termux
-        // app has been opened.
         TermuxUtils.sendTermuxOpenedBroadcast(this);
+    }
+
+    // Cached legacy views — extracted from XML in preInflateLegacyViews()
+    // and returned via the findViewById override below.
+    private View mLegacyRootView;
+    private DrawerLayout mLegacyDrawerLayout;
+    private ViewPager mLegacyToolbarPager;
+    private LinearLayout mLegacyLeftDrawer;
+    private ListView mLegacySessionsList;
+    private EditText mLegacyTextInput;
+    private ImageButton mLegacySettingsButton;
+    private View mLegacyNewSessionButton;
+    private View mLegacyToggleKeyboardButton;
+    private View mLegacyComposeToolbar;
+    private View mLegacyRootRelativeLayout;
+
+    /**
+     * Inflate {@code activity_termux.xml} into a detached container so we
+     * can extract and cache every view that legacy code still needs to find
+     * via {@link #findViewById(int)}. The cached views are never attached to
+     * the window — they exist purely as data sources for legacy APIs.
+     */
+    private void preInflateLegacyViews() {
+        android.view.LayoutInflater inflater = (android.view.LayoutInflater)
+            getSystemService(LAYOUT_INFLATER_SERVICE);
+        if (inflater == null) return;
+
+        android.widget.FrameLayout detachedRoot = new android.widget.FrameLayout(this);
+        detachedRoot.setLayoutParams(new android.view.ViewGroup.LayoutParams(
+            android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+            android.view.ViewGroup.LayoutParams.MATCH_PARENT
+        ));
+
+        mLegacyRootView = inflater.inflate(R.layout.activity_termux, detachedRoot, false);
+
+        if (mLegacyRootView instanceof android.view.ViewGroup) {
+            android.view.ViewGroup root = (android.view.ViewGroup) mLegacyRootView;
+
+            // Also set mTermuxActivityRootView (used by legacy clients via getTermuxActivityRootView())
+            if (mLegacyRootView instanceof TermuxActivityRootView) {
+                mTermuxActivityRootView = (TermuxActivityRootView) mLegacyRootView;
+                mTermuxActivityRootView.setActivity(this);
+            }
+
+            mLegacyComposeToolbar = root.findViewById(R.id.terminal_toolbar);
+
+            // Extract TerminalView — must be detached before being re-hosted by
+            // TerminalDetailScreen via AndroidView.
+            View terminalView = root.findViewById(R.id.terminal_view);
+            if (terminalView instanceof TerminalView) {
+                mTerminalView = (TerminalView) terminalView;
+                if (terminalView.getParent() instanceof android.view.ViewGroup) {
+                    ((android.view.ViewGroup) terminalView.getParent()).removeView(terminalView);
+                }
+            }
+
+            View bottomSpace = root.findViewById(R.id.activity_termux_bottom_space_view);
+            if (bottomSpace != null) mTermuxActivityBottomSpaceView = bottomSpace;
+
+            mLegacyRootRelativeLayout = root.findViewById(R.id.activity_termux_root_relative_layout);
+
+            View innerRoot = mLegacyRootRelativeLayout;
+            if (innerRoot instanceof android.view.ViewGroup) {
+                android.view.ViewGroup inner = (android.view.ViewGroup) innerRoot;
+
+                View drawer = inner.findViewById(R.id.drawer_layout);
+                if (drawer instanceof DrawerLayout) mLegacyDrawerLayout = (DrawerLayout) drawer;
+
+                View pager = inner.findViewById(R.id.terminal_toolbar_view_pager);
+                if (pager instanceof ViewPager) mLegacyToolbarPager = (ViewPager) pager;
+
+                View leftDrawer = inner.findViewById(R.id.left_drawer);
+                if (leftDrawer instanceof LinearLayout) mLegacyLeftDrawer = (LinearLayout) leftDrawer;
+
+                View sessionsList = inner.findViewById(R.id.terminal_sessions_list);
+                if (sessionsList instanceof ListView) mLegacySessionsList = (ListView) sessionsList;
+
+                View textInput = pager != null ? pager.findViewById(R.id.terminal_toolbar_text_input) : null;
+                if (textInput instanceof EditText) mLegacyTextInput = (EditText) textInput;
+
+                View settingsBtn = inner.findViewById(R.id.settings_button);
+                if (settingsBtn instanceof ImageButton) mLegacySettingsButton = (ImageButton) settingsBtn;
+
+                mLegacyNewSessionButton = inner.findViewById(R.id.new_session_button);
+                mLegacyToggleKeyboardButton = inner.findViewById(R.id.toggle_keyboard_button);
+            }
+        }
+    }
+
+    /**
+     * Override findViewById to return cached legacy views when Compose is
+     * the primary UI. This allows TermuxTerminalViewClient, toolbar code
+     * and other legacy components to keep working after setContent().
+     */
+    @Override
+    public <T extends View> T findViewById(int id) {
+        T v = super.findViewById(id);
+        if (v != null) return v;
+
+        if (id == R.id.activity_termux_root_view) return (T) mLegacyRootView;
+        if (id == R.id.activity_termux_root_relative_layout) return (T) mLegacyRootRelativeLayout;
+        if (id == R.id.drawer_layout) return (T) mLegacyDrawerLayout;
+        if (id == R.id.terminal_toolbar_view_pager) return (T) mLegacyToolbarPager;
+        if (id == R.id.terminal_toolbar_text_input) return (T) mLegacyTextInput;
+        if (id == R.id.left_drawer) return (T) mLegacyLeftDrawer;
+        if (id == R.id.terminal_sessions_list) return (T) mLegacySessionsList;
+        if (id == R.id.settings_button) return (T) mLegacySettingsButton;
+        if (id == R.id.new_session_button) return (T) mLegacyNewSessionButton;
+        if (id == R.id.toggle_keyboard_button) return (T) mLegacyToggleKeyboardButton;
+        if (id == R.id.terminal_toolbar) return (T) mLegacyComposeToolbar;
+        if (id == R.id.terminal_view) return (T) mTerminalView;
+
+        return null;
     }
 
     @Override
@@ -614,7 +729,10 @@ public final class TermuxActivity extends ComponentActivity implements ServiceCo
 
 
     public void addTermuxActivityRootViewGlobalLayoutListener() {
-        getTermuxActivityRootView().getViewTreeObserver().addOnGlobalLayoutListener(getTermuxActivityRootView());
+        TermuxActivityRootView root = getTermuxActivityRootView();
+        if (root != null) {
+            root.getViewTreeObserver().addOnGlobalLayoutListener(root);
+        }
     }
 
     public void removeTermuxActivityRootViewGlobalLayoutListener() {
@@ -630,7 +748,9 @@ public final class TermuxActivity extends ComponentActivity implements ServiceCo
         mTermuxTerminalViewClient = new TermuxTerminalViewClient(this, mTermuxTerminalSessionClient);
 
         // Set termux terminal view
-        mTerminalView = findViewById(R.id.terminal_view);
+        if (mTerminalView == null) {
+            mTerminalView = (TerminalView) findViewById(R.id.terminal_view);
+        }
         mTerminalView.setTerminalViewClient(mTermuxTerminalViewClient);
 
         if (mTermuxTerminalViewClient != null)
@@ -652,10 +772,13 @@ public final class TermuxActivity extends ComponentActivity implements ServiceCo
 
     private void setTerminalToolbarView(Bundle savedInstanceState) {
         final ViewPager terminalToolbarViewPager = getTerminalToolbarViewPager();
+        if (terminalToolbarViewPager == null) return;
         if (mPreferences.shouldShowTerminalToolbar()) terminalToolbarViewPager.setVisibility(View.VISIBLE);
 
         ViewGroup.LayoutParams layoutParams = terminalToolbarViewPager.getLayoutParams();
-        mTerminalToolbarDefaultHeight = layoutParams.height;
+        if (layoutParams != null) {
+            mTerminalToolbarDefaultHeight = layoutParams.height;
+        }
 
         setTerminalToolbarHeight();
 
@@ -895,19 +1018,37 @@ public final class TermuxActivity extends ComponentActivity implements ServiceCo
         }
     }
 
-    /** Show a toast and dismiss the last one if still visible. */
+    /** Show a snackbar and dismiss the last one if still visible. */
     public void showToast(String text, boolean longDuration) {
         if (text == null || text.isEmpty()) return;
-        if (mLastToast != null) mLastToast.cancel();
-        mLastToast = Toast.makeText(TermuxActivity.this, text, longDuration ? Toast.LENGTH_LONG : Toast.LENGTH_SHORT);
-        mLastToast.setGravity(Gravity.TOP, 0, 0);
-        mLastToast.show();
+        com.termux.app.utils.SnackbarHelper.INSTANCE.show(
+            this,
+            text,
+            com.termux.app.utils.SnackbarHelper.INSTANCE.getDuration(longDuration),
+            findViewById(android.R.id.content)
+        );
     }
 
 
 
+    /**
+     * Set listener to receive context menu requests (for Compose mode to show miuix-styled menu).
+     */
+    public void setOnContextMenuRequestedListener(OnContextMenuRequestedListener listener) {
+        mContextMenuListener = listener;
+    }
+
     @Override
     public void onCreateContextMenu(ContextMenu menu, View v, ContextMenuInfo menuInfo) {
+        // In Compose mode (non-fallback), delegate to Compose for miuix-styled context menu
+        if (!mIsFallbackMode && mContextMenuListener != null) {
+            TerminalSession currentSession = getCurrentSession();
+            if (currentSession == null) return;
+            mContextMenuListener.onContextMenuRequested();
+            return; // Don't create system Material menu
+        }
+
+        // Fallback mode: use standard Material context menu
         TerminalSession currentSession = getCurrentSession();
         if (currentSession == null) return;
 
@@ -1093,12 +1234,39 @@ public final class TermuxActivity extends ComponentActivity implements ServiceCo
         return (ViewPager) findViewById(R.id.terminal_toolbar_view_pager);
     }
 
+    /**
+     * Property accessor used by Compose TerminalToolbar composable to obtain
+     * the shared ViewPager instance that is wired up with PageAdapter and
+     * OnPageChangeListener in {@link #setTerminalToolbarView(Bundle)}.
+     */
+    public ViewPager getTerminalToolbarViewPagerInstance() {
+        return getTerminalToolbarViewPager();
+    }
+
+    /**
+     * Accessor for the default terminal toolbar height, used by Compose.
+     */
+    public int getTerminalToolbarDefaultHeightValue() {
+        return mTerminalToolbarDefaultHeight;
+    }
+
+    /**
+     * Update the cached text input EditText after Compose mounts the
+     * shared toolbar ViewPager. Called by TerminalToolbar composable via
+     * {@link #updateCachedToolbarTextInput(EditText)}.
+     */
+    public void updateCachedToolbarTextInput(EditText editText) {
+        mLegacyTextInput = editText;
+    }
+
     public boolean isTerminalViewSelected() {
-        return getTerminalToolbarViewPager().getCurrentItem() == 0;
+        ViewPager pager = getTerminalToolbarViewPager();
+        return pager != null && pager.getCurrentItem() == 0;
     }
 
     public boolean isTerminalToolbarTextInputViewSelected() {
-        return getTerminalToolbarViewPager().getCurrentItem() == 1;
+        ViewPager pager = getTerminalToolbarViewPager();
+        return pager != null && pager.getCurrentItem() == 1;
     }
 
 

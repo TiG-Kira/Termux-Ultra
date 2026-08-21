@@ -15,8 +15,11 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.lifecycleScope
+import com.termux.R
 import com.termux.app.TermuxService
+import com.termux.app.utils.SnackbarHelper
 import com.termux.shared.termux.TermuxConstants
+import com.google.android.material.snackbar.Snackbar
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -155,11 +158,25 @@ object StopConfirmDialog {
  * 作为主 Compose 树的一部分，而不是 overlay view，因此不会阻塞或遮挡主页面。
  */
 @Composable
-fun StopConfirmDialogHost() {
+fun StopConfirmDialogHost(snackbarHostState: top.yukonga.miuix.kmp.basic.SnackbarHostState? = null) {
     val context = LocalContext.current
     val dialogState by StopConfirmDialog.dialogState.collectAsState()
 
     val thirdPartyBlocked = rememberThirdPartyBlocked(context)
+    val snackbarScope = rememberCoroutineScope()
+    val showBlockedMessage: () -> Unit = {
+        val msg = context.getString(R.string.accessibility_guard_blocked_toast)
+        if (snackbarHostState != null) {
+            snackbarScope.launch {
+                snackbarHostState.showSnackbar(
+                    message = msg,
+                    duration = top.yukonga.miuix.kmp.basic.SnackbarDuration.Long
+                )
+            }
+        } else {
+            SnackbarHelper.show(context, msg, Snackbar.LENGTH_LONG)
+        }
+    }
 
     val activity = context as? ComponentActivity
     val window = activity?.window
@@ -191,14 +208,14 @@ fun StopConfirmDialogHost() {
                 ) {
                     TextButton(
                         text = "否",
-                        onClick = guardedOnClick(context, thirdPartyBlocked) {
+                        onClick = guardedOnClick(context, thirdPartyBlocked, showBlockedMessage) {
                             StopConfirmDialog.dismiss()
                         },
                         modifier = Modifier.weight(1f)
                     )
                     TextButton(
                         text = "是",
-                        onClick = guardedOnClick(context, thirdPartyBlocked) {
+                        onClick = guardedOnClick(context, thirdPartyBlocked, showBlockedMessage) {
                             StopConfirmDialog.confirm(context, state)
                         },
                         modifier = Modifier.weight(1f),

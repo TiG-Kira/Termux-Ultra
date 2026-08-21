@@ -7,10 +7,82 @@ import org.json.JSONObject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
+/**
+ * 版本号数据类，支持解析 `x.y.z.RB` 格式（如 `0.9.0.RB`）。
+ * RB = ReBuild 分支缩写。
+ */
+data class AppVersion(
+    val major: Int,
+    val minor: Int,
+    val patch: Int
+) : Comparable<AppVersion> {
+
+    companion object {
+        private val VERSION_REGEX = Regex("""^(\d+)\.(\d+)\.(\d+)\.RB$""")
+        private val PLAIN_REGEX = Regex("""^v?(\d+)\.(\d+)\.(\d+)$""")
+
+        /**
+         * 解析版本号字符串，支持 `0.9.0.RB` 和纯数字格式 `0.9.0`。
+         * @return AppVersion 或 null（格式不匹配）
+         */
+        fun parse(versionName: String): AppVersion? {
+            val versionMatch = VERSION_REGEX.find(versionName)
+            if (versionMatch != null) {
+                return AppVersion(
+                    major = versionMatch.groupValues[1].toInt(),
+                    minor = versionMatch.groupValues[2].toInt(),
+                    patch = versionMatch.groupValues[3].toInt()
+                )
+            }
+            // 兼容纯数字格式（如上游 Termux 版本号）
+            val plainMatch = PLAIN_REGEX.find(versionName)
+            if (plainMatch != null) {
+                return AppVersion(
+                    major = plainMatch.groupValues[1].toInt(),
+                    minor = plainMatch.groupValues[2].toInt(),
+                    patch = plainMatch.groupValues[3].toInt()
+                )
+            }
+            return null
+        }
+    }
+
+    override fun compareTo(other: AppVersion): Int {
+        return compareValuesBy(this, other, { it.major }, { it.minor }, { it.patch })
+    }
+
+    fun toVersionName(): String = "$major.$minor.$patch.RB"
+
+    fun toDisplayString(): String = "$major.$minor.$patch.RB"
+}
+
+/**
+ * 更新检查结果。
+ */
+sealed class UpdateResult {
+    data class UpdateAvailable(
+        val latestVersion: AppVersion,
+        val latestVersionName: String,
+        val currentVersion: AppVersion,
+        val currentVersionName: String,
+        val releaseUrl: String,
+        val apkDownloadUrl: String,
+        val releaseNotes: String,
+        val isBeta: Boolean
+    ) : UpdateResult()
+
+    data class UpToDate(
+        val currentVersion: AppVersion,
+        val currentVersionName: String
+    ) : UpdateResult()
+
+    data object CheckFailed : UpdateResult()
+}
+
 object UpdateChecker {
-    private const val GITHUB_RELEASE_URL = "https://api.github.com/repos/TiG-Kira/Termux-Ultra/releases/latest"
-    private const val GITHUB_RELEASES_LIST_URL = "https://api.github.com/repos/TiG-Kira/Termux-Ultra/releases?per_page=50"
-    private const val GITHUB_RELEASE_PAGE_URL = "https://github.com/TiG-Kira/Termux-Ultra/releases"
+    private const val GITHUB_REPO = "tig-kira/termux-ultra"
+    private const val GITHUB_RELEASES_LIST_URL = "https://api.github.com/repos/$GITHUB_REPO/releases?per_page=50"
+    private const val GITHUB_RELEASE_PAGE_URL = "https://github.com/$GITHUB_REPO/releases"
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
@@ -18,55 +90,103 @@ object UpdateChecker {
         .writeTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
         .build()
 
-    data class UpdateResult(
-        val hasUpdate: Boolean,
-        val latestVersion: String,
-        val currentVersion: String,
-        val releaseUrl: String,
-        val apkDownloadUrl: String,
-        val releaseNotes: String,
-        val isPreRelease: Boolean = false
-    )
-
     enum class ReleaseStatus {
         NORMAL,
         PRERELEASE,
         NOT_FOUND
     }
 
-    suspend fun checkForUpdates(currentVersion: String, includePreRelease: Boolean = false): UpdateResult {
-        return if (includePreRelease) {
-            checkForUpdatesWithPreRelease(currentVersion)
-        } else {
-            checkForUpdatesStable(currentVersion)
-        }
-    }
+    /**
+     * 检查更新。
+     * @param currentVersionName 当前版本号字符串（如 "R0.9.0"）
+     * @param betaEnabled 是否包含 Beta/Pre-release 版本
+     * @return UpdateResult
+     */
+    suspend fun checkForUpdates(
+        currentVersionName: String,
+        betaEnabled: Boolean = false
+    ): UpdateResult {
+        val currentVersion = AppVersion.parse(currentVersionName)
+            ?: return UpdateResult.CheckFailed
 
-    private suspend fun checkForUpdatesStable(currentVersion: String): UpdateResult {
-        return withContext(Dispatchers.IO) {
-            try {
+        return try {
+            withContext(Dispatchers.IO) {
                 val request = Request.Builder()
-                    .url(GITHUB_RELEASE_URL)
+                    .url(GITHUB_RELEASES_LIST_URL)
                     .header("Accept", "application/vnd.github.v3+json")
                     .build()
 
                 client.newCall(request).execute().use { response ->
                     if (!response.isSuccessful) {
-                        return@withContext buildNoUpdateResult(currentVersion)
+                        return@withContext UpdateResult.CheckFailed
                     }
 
                     val body = response.body?.string() ?: ""
-                    val json = JSONObject(body)
-                    val latestVersion = json.optString("tag_name", currentVersion)
-                        .removePrefix("v")
-                        .removePrefix("V")
-                    val releaseNotes = json.optString("body", "")
+                    val releases = JSONArray(body)
 
-                    val assets = json.optJSONArray("assets")
+                    // 查找与当前版本匹配的 tag，确认当前版本是否存在
+                    var currentTagMatched = false
+                    var bestRelease: JSONObject? = null
+                    var bestVersion: AppVersion? = null
+                    var bestVersionName = ""
+                    var bestIsPreRelease = false
+
+                    for (i in 0 until releases.length()) {
+                        val release = releases.getJSONObject(i)
+                        val isDraft = release.optBoolean("draft", false)
+                        if (isDraft) continue
+
+                        val tagName = release.optString("tag_name", "")
+                        val tagVersion = AppVersion.parse(tagName)
+
+                        // 检查 tag 是否为 R* 格式的 Termux Ultra 版本
+                        if (!tagName.startsWith("R") || tagVersion == null) continue
+
+                        // 检查是否与当前版本匹配
+                        if (tagName == currentVersionName) {
+                            currentTagMatched = true
+                        }
+
+                        // 根据 betaEnabled 筛选
+                        val isPreRelease = release.optBoolean("prerelease", false)
+                        if (!betaEnabled && isPreRelease) continue
+
+                        // 选择最高版本
+                        if (bestVersion == null || tagVersion > bestVersion) {
+                            bestVersion = tagVersion
+                            bestVersionName = tagName
+                            bestRelease = release
+                            bestIsPreRelease = isPreRelease
+                        }
+                    }
+
+                    // 找不到与当前版本匹配的 tag → 视为最新版
+                    if (!currentTagMatched) {
+                        return@withContext UpdateResult.UpToDate(
+                            currentVersion = currentVersion,
+                            currentVersionName = currentVersionName
+                        )
+                    }
+
+                    // 没有可用的新版本
+                    if (bestVersion == null || bestVersion <= currentVersion) {
+                        return@withContext UpdateResult.UpToDate(
+                            currentVersion = currentVersion,
+                            currentVersionName = currentVersionName
+                        )
+                    }
+
+                    // 有新版本可用
+                    val release = bestRelease!!
+                    val releaseUrl = release.optString("html_url", "")
+                        .ifEmpty { GITHUB_RELEASE_PAGE_URL }
+                    val releaseNotes = release.optString("body", "")
+
+                    val assets = release.optJSONArray("assets")
                     var apkUrl = ""
                     if (assets != null && assets.length() > 0) {
-                        for (i in 0 until assets.length()) {
-                            val asset = assets.getJSONObject(i)
+                        for (j in 0 until assets.length()) {
+                            val asset = assets.getJSONObject(j)
                             val name = asset.optString("name", "")
                             if (name.endsWith(".apk")) {
                                 apkUrl = asset.optString("browser_download_url", "")
@@ -75,115 +195,29 @@ object UpdateChecker {
                         }
                     }
 
-                    val hasUpdate = compareVersions(latestVersion, currentVersion) > 0
-
-                    UpdateResult(
-                        hasUpdate = hasUpdate,
-                        latestVersion = latestVersion,
-                        currentVersion = currentVersion,
-                        releaseUrl = GITHUB_RELEASE_PAGE_URL,
-                        apkDownloadUrl = apkUrl,
-                        releaseNotes = releaseNotes
-                    )
-                }
-            } catch (e: Exception) {
-                buildNoUpdateResult(currentVersion)
-            }
-        }
-    }
-
-    private suspend fun checkForUpdatesWithPreRelease(currentVersion: String): UpdateResult {
-        return withContext(Dispatchers.IO) {
-            try {
-                val request = Request.Builder()
-                    .url(GITHUB_RELEASES_LIST_URL)
-                    .header("Accept", "application/vnd.github.v3+json")
-                    .build()
-
-                client.newCall(request).execute().use { response ->
-                    if (!response.isSuccessful) {
-                        return@withContext buildNoUpdateResult(currentVersion)
-                    }
-
-                    val body = response.body?.string() ?: ""
-                    val releases = JSONArray(body)
-
-                    var bestVersion = currentVersion
-                    var bestReleaseNotes = ""
-                    var bestIsPreRelease = false
-                    var bestReleaseUrl = GITHUB_RELEASE_PAGE_URL
-                    var bestApkUrl = ""
-
-                    for (i in 0 until releases.length()) {
-                        val release = releases.getJSONObject(i)
-                        val isDraft = release.optBoolean("draft", false)
-                        if (isDraft) continue
-
-                        val tagName = release.optString("tag_name", "")
-                            .removePrefix("v")
-                            .removePrefix("V")
-
-                        val isPreRelease = release.optBoolean("prerelease", false)
-
-                        if (compareVersions(tagName, bestVersion) > 0 ||
-                            (compareVersions(tagName, bestVersion) == 0 && isPreRelease && !bestIsPreRelease)) {
-
-                            val releaseUrl = release.optString("html_url", "")
-                                .ifEmpty { GITHUB_RELEASE_PAGE_URL }
-
-                            val assets = release.optJSONArray("assets")
-                            var apkUrl = ""
-                            if (assets != null && assets.length() > 0) {
-                                for (j in 0 until assets.length()) {
-                                    val asset = assets.getJSONObject(j)
-                                    val name = asset.optString("name", "")
-                                    if (name.endsWith(".apk")) {
-                                        apkUrl = asset.optString("browser_download_url", "")
-                                        break
-                                    }
-                                }
-                            }
-
-                            bestVersion = tagName
-                            bestReleaseNotes = release.optString("body", "")
-                            bestIsPreRelease = isPreRelease
-                            bestReleaseUrl = releaseUrl
-                            bestApkUrl = apkUrl
-                        }
-                    }
-
-                    val hasUpdate = compareVersions(bestVersion, currentVersion) > 0
-
-                    UpdateResult(
-                        hasUpdate = hasUpdate,
+                    UpdateResult.UpdateAvailable(
                         latestVersion = bestVersion,
+                        latestVersionName = bestVersionName,
                         currentVersion = currentVersion,
-                        releaseUrl = bestReleaseUrl,
-                        apkDownloadUrl = bestApkUrl,
-                        releaseNotes = bestReleaseNotes,
-                        isPreRelease = bestIsPreRelease
+                        currentVersionName = currentVersionName,
+                        releaseUrl = releaseUrl,
+                        apkDownloadUrl = apkUrl,
+                        releaseNotes = releaseNotes,
+                        isBeta = bestIsPreRelease
                     )
                 }
-            } catch (e: Exception) {
-                buildNoUpdateResult(currentVersion)
             }
+        } catch (e: Exception) {
+            UpdateResult.CheckFailed
         }
     }
 
-    private fun buildNoUpdateResult(currentVersion: String): UpdateResult {
-        return UpdateResult(
-            hasUpdate = false,
-            latestVersion = currentVersion,
-            currentVersion = currentVersion,
-            releaseUrl = GITHUB_RELEASE_PAGE_URL,
-            apkDownloadUrl = "",
-            releaseNotes = ""
-        )
-    }
-
-    suspend fun getReleaseStatus(currentVersion: String): ReleaseStatus? {
-        return withContext(Dispatchers.IO) {
-            try {
+    /**
+     * 获取当前版本的 Release 状态（NORMAL / PRERELEASE / NOT_FOUND）。
+     */
+    suspend fun getReleaseStatus(currentVersionName: String): ReleaseStatus? {
+        return try {
+            withContext(Dispatchers.IO) {
                 val request = Request.Builder()
                     .url(GITHUB_RELEASES_LIST_URL)
                     .header("Accept", "application/vnd.github.v3+json")
@@ -200,9 +234,7 @@ object UpdateChecker {
                     for (i in 0 until releases.length()) {
                         val release = releases.getJSONObject(i)
                         val tagName = release.optString("tag_name", "")
-                            .removePrefix("v")
-                            .removePrefix("V")
-                        if (tagName == currentVersion) {
+                        if (tagName == currentVersionName) {
                             val isPrerelease = release.optBoolean("prerelease", false)
                             val isDraft = release.optBoolean("draft", false)
                             if (isDraft) {
@@ -218,23 +250,17 @@ object UpdateChecker {
 
                     ReleaseStatus.NOT_FOUND
                 }
-            } catch (e: Exception) {
-                null
             }
+        } catch (e: Exception) {
+            null
         }
     }
 
-    private fun compareVersions(v1: String, v2: String): Int {
-        val parts1 = v1.split(".").map { it.toIntOrNull() ?: 0 }
-        val parts2 = v2.split(".").map { it.toIntOrNull() ?: 0 }
-        val maxLength = maxOf(parts1.size, parts2.size)
-
-        for (i in 0 until maxLength) {
-            val p1 = parts1.getOrElse(i) { 0 }
-            val p2 = parts2.getOrElse(i) { 0 }
-            if (p1 > p2) return 1
-            if (p1 < p2) return -1
-        }
-        return 0
+    /**
+     * 构建 APK 下载 URL（根据版本名）。
+     * 格式: https://github.com/tig-kira/termux-ultra/releases/download/{versionName}/termux-ultra_{versionName}_universal.apk
+     */
+    fun constructDownloadUrl(versionName: String): String {
+        return "$GITHUB_RELEASE_PAGE_URL/download/$versionName/termux-ultra_${versionName}_universal.apk"
     }
 }
