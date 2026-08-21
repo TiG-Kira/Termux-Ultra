@@ -109,6 +109,7 @@ object RiskConfirmManager {
     // ---- Snackbar 事件流 ----
     data class SnackbarEvent(val message: String, val duration: Int = Snackbar.LENGTH_LONG)
     // SharedFlow(replay=0): 活跃 subscriber 实时收到，新 subscriber 不收历史
+    // 仅终端详情页收集，主页不收集
     private val _snackbarEvents = MutableSharedFlow<SnackbarEvent>(
         replay = 0,
         extraBufferCapacity = 32
@@ -120,18 +121,23 @@ object RiskConfirmManager {
         _snackbarEvents.tryEmit(SnackbarEvent(message, duration))
     }
 
-    // ---- 主页汇总 Snackbar（仅显示危险命令统计，不显示原始详情） ----
+    // ---- 主页汇总 Snackbar（退出终端页时发送，显示统计信息） ----
     data class SummarySnackbarEvent(
         val message: String,
         val duration: Int = Snackbar.LENGTH_LONG
     )
     private val _summarySnackbarEvents = MutableSharedFlow<SummarySnackbarEvent>(
         replay = 0,
-        extraBufferCapacity = 16
+        extraBufferCapacity = 8
     )
     val summarySnackbarEvents: SharedFlow<SummarySnackbarEvent> = _summarySnackbarEvents
 
-    // 危险命令计数（主页汇总显示用）
+    /** 发送汇总 Snackbar 到主页（退出终端页时调用） */
+    fun emitSummarySnackbar(message: String, duration: Int = Snackbar.LENGTH_LONG) {
+        _summarySnackbarEvents.tryEmit(SummarySnackbarEvent(message, duration))
+    }
+
+    // ---- 危险命令计数（统计用） ----
     private var dangerCommandCount: Int = 0
     private var lastProtectionLevel: ProtectionLevel = ProtectionLevel.OFF
 
@@ -141,15 +147,10 @@ object RiskConfirmManager {
         return dangerCommandCount
     }
 
-    /** 发送汇总 Snackbar 到主页 collector */
-    fun emitSummarySnackbar(message: String, duration: Int = Snackbar.LENGTH_LONG) {
-        _summarySnackbarEvents.tryEmit(SummarySnackbarEvent(message, duration))
-    }
-
     /** 获取当前危险命令计数 */
     fun getDangerCount(): Int = dangerCommandCount
 
-    /** 重置危险命令计数（主页汇总显示后调用） */
+    /** 重置危险命令计数 */
     fun resetDangerCount() {
         dangerCommandCount = 0
     }
@@ -798,8 +799,8 @@ object RiskConfirmManager {
         val nativeDetection = RiskCommandDetector.detect(command, inNativeTermux = true)
         if (!nativeDetection.isDangerous) return false
 
-        // 记录危险命令计数（供主页汇总显示）
-        val count = incrementDangerCount()
+        // 记录危险命令计数
+        incrementDangerCount()
 
         // 检测当前环境
         val envType = detectEnvironment(context, session)
@@ -810,11 +811,6 @@ object RiskConfirmManager {
         if (level == ProtectionLevel.WARN_ONLY) {
             val msg = nativeDetection.description
             emitSnackbar(msg, Snackbar.LENGTH_LONG)
-            // 同时发送汇总到主页
-            emitSummarySnackbar(
-                message = "已检测 $count 次危险命令，请注意会话使用安全。",
-                duration = Snackbar.LENGTH_LONG
-            )
             return false
         }
 
@@ -823,11 +819,6 @@ object RiskConfirmManager {
             lastCommandAutoBlocked = true
             val msg = "危险操作被拒绝: ${nativeDetection.description}"
             emitSnackbar(msg, Snackbar.LENGTH_LONG)
-            // 同时发送汇总到主页
-            emitSummarySnackbar(
-                message = "已拦截 $count 次危险命令，请注意会话使用安全。",
-                duration = Snackbar.LENGTH_LONG
-            )
             return true
         }
 
@@ -853,11 +844,6 @@ object RiskConfirmManager {
                         Snackbar.LENGTH_LONG
                     )
                 }
-                // 发送汇总 Snackbar 到主页
-                emitSummarySnackbar(
-                    message = "已检测 ${getDangerCount()} 次危险命令，请注意会话使用安全。",
-                    duration = Snackbar.LENGTH_LONG
-                )
                 return false
             }
         }
@@ -936,11 +922,6 @@ object RiskConfirmManager {
                     navigateBackToTermux(context, handle, RESULT_DENIED)
                 }
             }, 60000L)
-            // 发送汇总 Snackbar 到主页
-            emitSummarySnackbar(
-                message = "已拦截 ${getDangerCount()} 次危险命令，请注意会话使用安全。",
-                duration = Snackbar.LENGTH_LONG
-            )
             // 跳转到主页 Activity
             val intent = Intent(context, com.termux.app.MainActivity::class.java)
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
@@ -968,12 +949,6 @@ object RiskConfirmManager {
         // 记录日志帮助调试
         android.util.Log.i("RiskConfirmManager", "Dialog state set: command=$command, envType=$envType, riskType=${detection.riskType}")
         android.util.Log.i("RiskConfirmManager", "Starting MainActivity to show dialog...")
-
-        // 发送汇总 Snackbar 到主页（WARN_VERIFY 模式）
-        emitSummarySnackbar(
-            message = "已拦截 ${getDangerCount()} 次危险命令，请注意会话使用安全。",
-            duration = Snackbar.LENGTH_LONG
-        )
 
         // 60 秒超时自动拒绝并恢复会话
         Handler(Looper.getMainLooper()).postDelayed({
@@ -1147,7 +1122,7 @@ fun RiskConfirmDialogHost(
             }
         }
     } else {
-        // 主页：仅收集汇总 Snackbar（显示统计信息，不显示原始详情）
+        // 主页：收集汇总 Snackbar（退出终端页时显示统计信息）
         LaunchedEffect(Unit) {
             RiskConfirmManager.summarySnackbarEvents.collect { event ->
                 val duration = if (event.duration >= Snackbar.LENGTH_LONG) {

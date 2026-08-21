@@ -135,6 +135,21 @@ fun TerminalDetailScreen(
     val coroutineScope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
 
+    // 包装 onBack：退出时发送汇总 Snackbar 到主页
+    val handleExit = {
+        val count = RiskConfirmManager.getDangerCount()
+        if (count > 0) {
+            val level = RiskConfirmManager.getLastProtectionLevel()
+            val prefix = if (level == RiskConfirmManager.ProtectionLevel.WARN_ONLY) "已检测" else "已拦截"
+            RiskConfirmManager.emitSummarySnackbar(
+                message = "$prefix $count 次危险命令，请注意会话使用安全。",
+                duration = android.widget.Toast.LENGTH_LONG
+            )
+            RiskConfirmManager.resetDangerCount()
+        }
+        onBack()
+    }
+
     var localSessions by remember { mutableStateOf<List<TermuxSession>>(emptyList()) }
     var currentSessionName by remember { mutableStateOf("") }
     var showSessionList by remember { mutableStateOf(false) }
@@ -359,7 +374,7 @@ fun TerminalDetailScreen(
         sessionCount = localSessions.size
 
         if (sessionCount == 0) {
-            onBack()
+            handleExit()
         } else {
             coroutineScope.launch {
                 delay(100)
@@ -529,7 +544,7 @@ fun TerminalDetailScreen(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Row(modifier = Modifier.padding(start = 16.dp)) {
-                IconButton(onClick = { updateInteractionTime(); onBack() }) {
+                IconButton(onClick = { updateInteractionTime(); handleExit() }) {
                     Icon(
                         imageVector = MiuixIcons.Back,
                         contentDescription = null,
@@ -598,7 +613,7 @@ fun TerminalDetailScreen(
                         if (currentSession != null) {
                             closeCurrentSession()
                         } else {
-                            onBack()
+                            handleExit()
                         }
                     }, enabled = !currentSessionIsDead) {
                         Icon(
@@ -735,7 +750,7 @@ fun TerminalDetailScreen(
                         ) {
                             // 返回按钮
                             Row(modifier = Modifier.padding(start = 16.dp)) {
-                                IconButton(onClick = { updateInteractionTime(); onBack() }) {
+                                IconButton(onClick = { updateInteractionTime(); handleExit() }) {
                                     Icon(
                                         imageVector = MiuixIcons.Back,
                                         contentDescription = null,
@@ -820,7 +835,7 @@ fun TerminalDetailScreen(
                                         if (currentSession != null) {
                                             closeCurrentSession()
                                         } else {
-                                            onBack()
+                                            handleExit()
                                         }
                                     }, enabled = !currentSessionIsDead) {
                                         Icon(
