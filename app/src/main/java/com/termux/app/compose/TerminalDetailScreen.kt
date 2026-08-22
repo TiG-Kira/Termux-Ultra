@@ -76,6 +76,7 @@ import com.termux.app.activities.HelpActivity
 import com.termux.app.activities.SettingsActivity
 import com.termux.app.terminal.io.TerminalToolbarViewPager
 import com.termux.shared.shell.TermuxSession
+import com.termux.terminal.TerminalSession
 import com.termux.shared.view.KeyboardUtils
 import com.termux.terminal.TextStyle
 import com.termux.view.TerminalView
@@ -436,7 +437,56 @@ fun TerminalDetailScreen(
 
     fun resetTerminal() {
         val currentSession = activity.currentSession ?: return
-        currentSession.reset()
+        val service = termuxService ?: return
+
+        // 保存当前会话信息
+        val sessions = service.termuxSessions
+        val currentIndex = sessions.indexOfFirst { it.getTerminalSession() == currentSession }
+        val sessionName = currentSession.mSessionName
+            ?: context.getString(R.string.terminal)
+
+        // 移除当前会话（终止进程），但不触发退出逻辑
+        service.removeTermuxSession(currentSession)
+
+        // 记录当前会话数量，用于检测新会话是否创建成功
+        val sessionCountBefore = service.termuxSessions.size
+
+        // 创建新会话，使用相同的会话名称（会自动设置为当前会话）
+        activity.termuxTerminalSessionClient.addNewSession(false, sessionName)
+
+        // 获取新创建的会话
+        val newSessions = service.termuxSessions
+        val newSession = if (newSessions.size > sessionCountBefore) {
+            newSessions.lastOrNull()
+        } else {
+            activity.currentSession?.let { terminalSession ->
+                newSessions.firstOrNull { it.getTerminalSession() == terminalSession }
+            }
+        }
+
+        if (newSession != null && currentIndex >= 0 && currentIndex < newSessions.size) {
+            // 如果新会话在后面，移动到原位置以保持会话号不变
+            val newIndex = newSessions.indexOfFirst { it.getTerminalSession() == newSession }
+            if (newIndex > currentIndex) {
+                val reorderedSessions = newSessions.toMutableList()
+                val item = reorderedSessions.removeAt(newIndex)
+                reorderedSessions.add(currentIndex, item)
+                service.updateSessionList(reorderedSessions)
+                // 重新设置当前会话
+                activity.termuxTerminalSessionClient.setCurrentSession(newSession.getTerminalSession())
+            }
+        }
+
+        // 更新UI状态
+        localSessions = service.termuxSessions
+        sessionCount = localSessions.size
+        sessionKey++
+        coroutineScope.launch {
+            delay(100)
+            updateCurrentSessionName(activity, termuxService)
+        }
+
+        // 不显示"已停止"等提示，只显示重置成功
         activity.showToast(context.getString(R.string.msg_terminal_reset), true)
         showContextMenu = false
     }

@@ -246,6 +246,7 @@ object FallbackHelper {
 
     private fun showLowVersionDisabledHint(context: Context, page: ApiCompat.Page) {
         val pageName = when (page) {
+            ApiCompat.Page.OVERVIEW -> "总览"
             ApiCompat.Page.TERMINAL -> "终端"
             ApiCompat.Page.FILES -> "文件"
             ApiCompat.Page.REMOTE -> "远程"

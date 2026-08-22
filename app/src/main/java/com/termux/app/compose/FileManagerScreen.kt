@@ -701,10 +701,12 @@ fun FileManagerScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 16.dp)
-                            .background(if (isDark) Color(0xFF252525) else Color(0xFFF5F5F5))
                     ) {
                         Column(
-                            modifier = Modifier.padding(vertical = 4.dp)
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(if (isDark) Color(0xFF252525) else Color(0xFFF5F5F5))
+                                .padding(vertical = 4.dp)
                         ) {
                             Row(
                                 modifier = Modifier
@@ -839,11 +841,11 @@ fun FileManagerScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(horizontal = 16.dp)
-                                .background(if (isDark) Color(0xFF3D3514) else Color(0xFFFFF9C4))
                         ) {
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
+                                    .background(if (isDark) Color(0xFF3D3514) else Color(0xFFFFF9C4))
                                     .padding(14.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(10.dp)

@@ -79,6 +79,7 @@ fun MainScreen(
     var rawDragOffset by remember { mutableFloatStateOf(0f) }
     val dragOffsetAnimatable = remember { Animatable(0f) }
     var isSwipingInProgress by remember { mutableStateOf(false) }
+    var isOverviewEditMode by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
     val navBarStyle = remember {
@@ -140,20 +141,21 @@ fun MainScreen(
     val liquidGlassBackdrop = rememberLayerBackdrop()
 
     val direction = if (selectedTab > previousTab) 1 else -1
-    val isRemoteWithVnc = selectedTab == 2 && showVnc
+    val isRemoteWithVnc = selectedTab == 3 && showVnc
     val dragOffset = if (isSwipingInProgress) rawDragOffset else dragOffsetAnimatable.value
 
     // 页面可用性过滤：根据设备 API 支持程度隐藏无可用功能的页面入口。
-    // tab 索引 0-4 分别对应 终端/文件/远程/资源/设置 页面。
+    // tab 索引 0-5 分别对应 总览/终端/文件/远程/资源/设置 页面。
     fun pageForTab(tab: Int): ApiCompat.Page = when (tab) {
-        0 -> ApiCompat.Page.TERMINAL
-        1 -> ApiCompat.Page.FILES
-        2 -> ApiCompat.Page.REMOTE
-        3 -> ApiCompat.Page.RESOURCES
+        0 -> ApiCompat.Page.OVERVIEW
+        1 -> ApiCompat.Page.TERMINAL
+        2 -> ApiCompat.Page.FILES
+        3 -> ApiCompat.Page.REMOTE
+        4 -> ApiCompat.Page.RESOURCES
         else -> ApiCompat.Page.SETTINGS
     }
     val availableTabs = remember {
-        listOf(0, 1, 2, 3, 4).filter { ApiCompat.isPageAvailable(pageForTab(it)) }
+        listOf(0, 1, 2, 3, 4, 5).filter { ApiCompat.isPageAvailable(pageForTab(it)) }
     }
     // 若当前选中页被屏蔽，回退到第一个可用页
     LaunchedEffect(availableTabs) {
@@ -172,11 +174,11 @@ fun MainScreen(
 
         if (dragAmount < 0) {
             // Swipe left -> next
-            if (selectedTab == 2 && showVnc) {
+            if (selectedTab == 3 && showVnc) {
                 if (remoteSubTab == 0) {
                     remoteSubTab = 1
                 } else {
-                    nextAvailable(2)?.let {
+                    nextAvailable(3)?.let {
                         previousTab = selectedTab
                         onTabChange(it)
                     }
@@ -189,12 +191,12 @@ fun MainScreen(
             }
         } else {
             // Swipe right -> previous
-            if (selectedTab == 2 && showVnc && remoteSubTab == 1) {
+            if (selectedTab == 3 && showVnc && remoteSubTab == 1) {
                 remoteSubTab = 0
             } else {
                 prevAvailable(selectedTab)?.let {
                     previousTab = selectedTab
-                    if (selectedTab == 3 && showVnc && it == 2) {
+                    if (selectedTab == 4 && showVnc && it == 3) {
                         remoteSubTab = 1
                     }
                     onTabChange(it)
@@ -231,42 +233,50 @@ fun MainScreen(
                     ) {
                         if (0 in availableTabs) {
                             LiquidGlassNavigationBarItem(
-                                icon = ImageVector.vectorResource(R.drawable.ic_terminal),
-                                label = stringResource(R.string.terminal),
+                                icon = ImageVector.vectorResource(R.drawable.ic_overview),
+                                label = stringResource(R.string.overview),
                                 selected = selectedTab == 0,
                                 onClick = { previousTab = selectedTab; onTabChange(0) }
                             )
                         }
                         if (1 in availableTabs) {
                             LiquidGlassNavigationBarItem(
-                                icon = ImageVector.vectorResource(R.drawable.ic_files),
-                                label = stringResource(R.string.files),
+                                icon = ImageVector.vectorResource(R.drawable.ic_terminal),
+                                label = stringResource(R.string.terminal),
                                 selected = selectedTab == 1,
                                 onClick = { previousTab = selectedTab; onTabChange(1) }
                             )
                         }
                         if (2 in availableTabs) {
                             LiquidGlassNavigationBarItem(
-                                icon = ImageVector.vectorResource(R.drawable.ic_vnc),
-                                label = stringResource(R.string.remote),
+                                icon = ImageVector.vectorResource(R.drawable.ic_files),
+                                label = stringResource(R.string.files),
                                 selected = selectedTab == 2,
                                 onClick = { previousTab = selectedTab; onTabChange(2) }
                             )
                         }
                         if (3 in availableTabs) {
                             LiquidGlassNavigationBarItem(
-                                icon = ImageVector.vectorResource(R.drawable.ic_resources),
-                                label = stringResource(R.string.resources),
+                                icon = ImageVector.vectorResource(R.drawable.ic_vnc),
+                                label = stringResource(R.string.remote),
                                 selected = selectedTab == 3,
                                 onClick = { previousTab = selectedTab; onTabChange(3) }
                             )
                         }
                         if (4 in availableTabs) {
                             LiquidGlassNavigationBarItem(
-                                icon = ImageVector.vectorResource(R.drawable.ic_settings),
-                                label = stringResource(R.string.settings),
+                                icon = ImageVector.vectorResource(R.drawable.ic_resources),
+                                label = stringResource(R.string.resources),
                                 selected = selectedTab == 4,
                                 onClick = { previousTab = selectedTab; onTabChange(4) }
+                            )
+                        }
+                        if (5 in availableTabs) {
+                            LiquidGlassNavigationBarItem(
+                                icon = ImageVector.vectorResource(R.drawable.ic_settings),
+                                label = stringResource(R.string.settings),
+                                selected = selectedTab == 5,
+                                onClick = { previousTab = selectedTab; onTabChange(5) }
                             )
                         }
                     }
@@ -286,42 +296,50 @@ fun MainScreen(
                     ) {
                         if (0 in availableTabs) {
                             SoftLightNavigationBarItem(
-                                icon = ImageVector.vectorResource(R.drawable.ic_terminal),
-                                label = stringResource(R.string.terminal),
+                                icon = ImageVector.vectorResource(R.drawable.ic_overview),
+                                label = stringResource(R.string.overview),
                                 selected = selectedTab == 0,
                                 onClick = { previousTab = selectedTab; onTabChange(0) }
                             )
                         }
                         if (1 in availableTabs) {
                             SoftLightNavigationBarItem(
-                                icon = ImageVector.vectorResource(R.drawable.ic_files),
-                                label = stringResource(R.string.files),
+                                icon = ImageVector.vectorResource(R.drawable.ic_terminal),
+                                label = stringResource(R.string.terminal),
                                 selected = selectedTab == 1,
                                 onClick = { previousTab = selectedTab; onTabChange(1) }
                             )
                         }
                         if (2 in availableTabs) {
                             SoftLightNavigationBarItem(
-                                icon = ImageVector.vectorResource(R.drawable.ic_vnc),
-                                label = stringResource(R.string.remote),
+                                icon = ImageVector.vectorResource(R.drawable.ic_files),
+                                label = stringResource(R.string.files),
                                 selected = selectedTab == 2,
                                 onClick = { previousTab = selectedTab; onTabChange(2) }
                             )
                         }
                         if (3 in availableTabs) {
                             SoftLightNavigationBarItem(
-                                icon = ImageVector.vectorResource(R.drawable.ic_resources),
-                                label = stringResource(R.string.resources),
+                                icon = ImageVector.vectorResource(R.drawable.ic_vnc),
+                                label = stringResource(R.string.remote),
                                 selected = selectedTab == 3,
                                 onClick = { previousTab = selectedTab; onTabChange(3) }
                             )
                         }
                         if (4 in availableTabs) {
                             SoftLightNavigationBarItem(
-                                icon = ImageVector.vectorResource(R.drawable.ic_settings),
-                                label = stringResource(R.string.settings),
+                                icon = ImageVector.vectorResource(R.drawable.ic_resources),
+                                label = stringResource(R.string.resources),
                                 selected = selectedTab == 4,
                                 onClick = { previousTab = selectedTab; onTabChange(4) }
+                            )
+                        }
+                        if (5 in availableTabs) {
+                            SoftLightNavigationBarItem(
+                                icon = ImageVector.vectorResource(R.drawable.ic_settings),
+                                label = stringResource(R.string.settings),
+                                selected = selectedTab == 5,
+                                onClick = { previousTab = selectedTab; onTabChange(5) }
                             )
                         }
                     }
@@ -335,42 +353,50 @@ fun MainScreen(
                         FloatingNavigationBar() {
                             if (0 in availableTabs) {
                                 FloatingNavigationBarItem(
-                                    icon = ImageVector.vectorResource(R.drawable.ic_terminal),
-                                    label = stringResource(R.string.terminal),
+                                    icon = ImageVector.vectorResource(R.drawable.ic_overview),
+                                    label = stringResource(R.string.overview),
                                     selected = selectedTab == 0,
                                     onClick = { previousTab = selectedTab; onTabChange(0) }
                                 )
                             }
                             if (1 in availableTabs) {
                                 FloatingNavigationBarItem(
-                                    icon = ImageVector.vectorResource(R.drawable.ic_files),
-                                    label = stringResource(R.string.files),
+                                    icon = ImageVector.vectorResource(R.drawable.ic_terminal),
+                                    label = stringResource(R.string.terminal),
                                     selected = selectedTab == 1,
                                     onClick = { previousTab = selectedTab; onTabChange(1) }
                                 )
                             }
                             if (2 in availableTabs) {
                                 FloatingNavigationBarItem(
-                                    icon = ImageVector.vectorResource(R.drawable.ic_vnc),
-                                    label = stringResource(R.string.remote),
+                                    icon = ImageVector.vectorResource(R.drawable.ic_files),
+                                    label = stringResource(R.string.files),
                                     selected = selectedTab == 2,
                                     onClick = { previousTab = selectedTab; onTabChange(2) }
                                 )
                             }
                             if (3 in availableTabs) {
                                 FloatingNavigationBarItem(
-                                    icon = ImageVector.vectorResource(R.drawable.ic_resources),
-                                    label = stringResource(R.string.resources),
+                                    icon = ImageVector.vectorResource(R.drawable.ic_vnc),
+                                    label = stringResource(R.string.remote),
                                     selected = selectedTab == 3,
                                     onClick = { previousTab = selectedTab; onTabChange(3) }
                                 )
                             }
                             if (4 in availableTabs) {
                                 FloatingNavigationBarItem(
-                                    icon = ImageVector.vectorResource(R.drawable.ic_settings),
-                                    label = stringResource(R.string.settings),
+                                    icon = ImageVector.vectorResource(R.drawable.ic_resources),
+                                    label = stringResource(R.string.resources),
                                     selected = selectedTab == 4,
                                     onClick = { previousTab = selectedTab; onTabChange(4) }
+                                )
+                            }
+                            if (5 in availableTabs) {
+                                FloatingNavigationBarItem(
+                                    icon = ImageVector.vectorResource(R.drawable.ic_settings),
+                                    label = stringResource(R.string.settings),
+                                    selected = selectedTab == 5,
+                                    onClick = { previousTab = selectedTab; onTabChange(5) }
                                 )
                             }
                             }
@@ -380,42 +406,50 @@ fun MainScreen(
                     NavigationBar() {
                         if (0 in availableTabs) {
                             NavigationBarItem(
-                                icon = ImageVector.vectorResource(R.drawable.ic_terminal),
-                                label = stringResource(R.string.terminal),
+                                icon = ImageVector.vectorResource(R.drawable.ic_overview),
+                                label = stringResource(R.string.overview),
                                 selected = selectedTab == 0,
                                 onClick = { previousTab = selectedTab; onTabChange(0) }
                             )
                         }
                         if (1 in availableTabs) {
                             NavigationBarItem(
-                                icon = ImageVector.vectorResource(R.drawable.ic_files),
-                                label = stringResource(R.string.files),
+                                icon = ImageVector.vectorResource(R.drawable.ic_terminal),
+                                label = stringResource(R.string.terminal),
                                 selected = selectedTab == 1,
                                 onClick = { previousTab = selectedTab; onTabChange(1) }
                             )
                         }
                         if (2 in availableTabs) {
                             NavigationBarItem(
-                                icon = ImageVector.vectorResource(R.drawable.ic_vnc),
-                                label = stringResource(R.string.remote),
+                                icon = ImageVector.vectorResource(R.drawable.ic_files),
+                                label = stringResource(R.string.files),
                                 selected = selectedTab == 2,
                                 onClick = { previousTab = selectedTab; onTabChange(2) }
                             )
                         }
                         if (3 in availableTabs) {
                             NavigationBarItem(
-                                icon = ImageVector.vectorResource(R.drawable.ic_resources),
-                                label = stringResource(R.string.resources),
+                                icon = ImageVector.vectorResource(R.drawable.ic_vnc),
+                                label = stringResource(R.string.remote),
                                 selected = selectedTab == 3,
                                 onClick = { previousTab = selectedTab; onTabChange(3) }
                             )
                         }
                         if (4 in availableTabs) {
                             NavigationBarItem(
-                                icon = ImageVector.vectorResource(R.drawable.ic_settings),
-                                label = stringResource(R.string.settings),
+                                icon = ImageVector.vectorResource(R.drawable.ic_resources),
+                                label = stringResource(R.string.resources),
                                 selected = selectedTab == 4,
                                 onClick = { previousTab = selectedTab; onTabChange(4) }
+                            )
+                        }
+                        if (5 in availableTabs) {
+                            NavigationBarItem(
+                                icon = ImageVector.vectorResource(R.drawable.ic_settings),
+                                label = stringResource(R.string.settings),
+                                selected = selectedTab == 5,
+                                onClick = { previousTab = selectedTab; onTabChange(5) }
                             )
                         }
                     }
@@ -438,17 +472,23 @@ fun MainScreen(
                     }
                 )
                 .padding(contentPadding)
-                .pointerInput(selectedTab, showVnc) {
+                .pointerInput(selectedTab, showVnc, isOverviewEditMode) {
                     detectDragGestures(
                         onDragStart = {
+                            if (isOverviewEditMode) return@detectDragGestures
                             isSwipingInProgress = true
                             rawDragOffset = 0f
                         },
                         onDrag = { change, dragAmount ->
+                            if (isOverviewEditMode) return@detectDragGestures
                             change.consume()
                             rawDragOffset += dragAmount.x
                         },
                         onDragEnd = {
+                            if (isOverviewEditMode) {
+                                rawDragOffset = 0f
+                                return@detectDragGestures
+                            }
                             val exceeded = kotlin.math.abs(rawDragOffset) >= SWIPE_THRESHOLD
                             handleSwipe(rawDragOffset)
                             val finalOffset = rawDragOffset
@@ -466,6 +506,10 @@ fun MainScreen(
                             rawDragOffset = 0f
                         },
                         onDragCancel = {
+                            if (isOverviewEditMode) {
+                                rawDragOffset = 0f
+                                return@detectDragGestures
+                            }
                             val finalOffset = rawDragOffset
                             isSwipingInProgress = false
                             scope.launch {
@@ -508,7 +552,23 @@ fun MainScreen(
                 }
             ) { tab ->
                 when (tab) {
-                    0 -> TerminalListScreen(
+                    0 -> OverviewScreen(
+                        sessions = sessions,
+                        onSessionClick = onSessionClick,
+                        onNewTerminal = onNewTerminal,
+                        onStopAllSessions = {
+                            sessions.filter { it.getTerminalSession().isRunning }.forEach { session ->
+                                onStopTerminal(session)
+                            }
+                        },
+                        isWakeLockEnabled = isWakeLockEnabled,
+                        onToggleWakeLock = onToggleWakeLock,
+                        onRefresh = onRefreshSessions,
+                        onEditModeChanged = { isEditMode ->
+                            isOverviewEditMode = isEditMode
+                        }
+                    )
+                    1 -> TerminalListScreen(
                         sessions = sessions,
                         onSessionClick = onSessionClick,
                         onNewTerminal = onNewTerminal,
@@ -518,22 +578,22 @@ fun MainScreen(
                         onToggleWakeLock = onToggleWakeLock,
                         onRefresh = onRefreshSessions
                     )
-                    1 -> FileManagerScreen(onOpenFile = onExecuteScript)
-                    2 -> com.termux.app.remote.RemoteScreen(
+                    2 -> FileManagerScreen(onOpenFile = onExecuteScript)
+                    3 -> com.termux.app.remote.RemoteScreen(
                         showVnc = showVnc,
                         initialTab = remoteSubTab,
                         onTabChange = { remoteSubTab = it },
                         onGoToFiles = {
                             previousTab = selectedTab
-                            onTabChange(1)
+                            onTabChange(2)
                         },
                         onGoToResources = {
                             previousTab = selectedTab
-                            onTabChange(3)
+                            onTabChange(4)
                         }
                     )
-                    3 -> ResourcesScreen()
-                    4 -> SettingsScreen(onAboutClick = onAboutClick)
+                    4 -> ResourcesScreen()
+                    5 -> SettingsScreen(onAboutClick = onAboutClick)
                 }
             }
         }

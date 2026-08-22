@@ -374,113 +374,6 @@ fun TerminalListScreen(
                     modifier = Modifier.fillMaxSize()
                 ) {
                 if (useHorizontalLayout) {
-                // 横向提示卡片区域（每张卡片一个横向页面，全宽显示）
-                val tipPages = buildList<@Composable () -> Unit> {
-                    if (aiTermuxEnabled) add { AiTermuxEntryCard(horizontalMode = true) }
-                    if (showWelcomeCard) add {
-                        WelcomeCard(
-                            text = stringResource(R.string.terminal_welcome_message),
-                            onClose = {
-                                showWelcomeCard = false
-                                val prefs = context.getSharedPreferences("termux_prefs", android.content.Context.MODE_PRIVATE)
-                                prefs.edit().putBoolean("terminal_welcome_shown", true).apply()
-                            },
-                            horizontalMode = true
-                        )
-                    }
-                    if (showKeepAliveWarning) add {
-                        KeepAliveWarningCard(
-                            onClose = {
-                                showKeepAliveWarning = false
-                                val prefs = context.getSharedPreferences("termux_prefs", android.content.Context.MODE_PRIVATE)
-                                prefs.edit().putBoolean("keep_alive_warning_dismissed", true).apply()
-                            },
-                            horizontalMode = true
-                        )
-                    }
-                    val ctx = LocalContext.current
-                    val showLowCard = ApiCompat.hasAnyRuntimeDisabled() ||
-                        (ApiCompat.isLowAndroid && (ApiCompat.hasAnyForceEnabled(ctx) || true))
-                    if (showLowCard) {
-                        add { LowAndroidWarningCard(horizontalMode = true) }
-                    } else {
-                        val serviceStatus = remember(termuxService, isWakeLockEnabled, killedSessionName) {
-                            when {
-                                termuxService?.isMemoryKillActive() == true -> ServiceStatus.MEMORY_KILL
-                                termuxService?.isMemoryWarningActive() == true -> ServiceStatus.MEMORY_WARNING
-                                killedSessionName != null -> ServiceStatus.SESSION_KILLED
-                                termuxService == null -> ServiceStatus.SERVICE_STOPPED
-                                isWakeLockEnabled -> ServiceStatus.WAKE_LOCK_ACTIVE
-                                else -> ServiceStatus.NORMAL
-                            }
-                        }
-                        add { ServiceStatusCard(status = serviceStatus, killedSessionName = killedSessionName, horizontalMode = true) }
-                    }
-                }
-
-                val tipPageCount = tipPages.size
-
-                // 页面指示器
-                if (tipPageCount > 1) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 4.dp),
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        repeat(tipPageCount) { index ->
-                            Box(
-                                modifier = Modifier
-                                    .padding(horizontal = 4.dp)
-                                    .size(if (index == horizontalPage) 8.dp else 6.dp)
-                                    .clip(RoundedCornerShape(if (index == horizontalPage) 4.dp else 3.dp))
-                                    .background(
-                                        if (index == horizontalPage) MiuixTheme.colorScheme.primary
-                                        else MiuixTheme.colorScheme.onSurface.copy(alpha = 0.3f)
-                                    )
-                            )
-                        }
-                    }
-                    Spacer(Modifier.height(4.dp))
-                }
-
-                // 横向滚动卡片，每张卡片占满一屏，固定高度
-                val listState = rememberLazyListState()
-                // 同步滚动位置到指示器
-                LaunchedEffect(listState) {
-                    snapshotFlow { listState.firstVisibleItemIndex }
-                        .collect { index ->
-                            horizontalPage = index
-                        }
-                }
-                BoxWithConstraints(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp)
-                        .nestedScroll(scrollBehavior.nestedScrollConnection)
-                ) {
-                    val itemWidth = maxWidth
-                    LazyRow(
-                        state = listState,
-                        modifier = Modifier.fillMaxWidth(),
-                        contentPadding = PaddingValues(horizontal = 0.dp),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        items(tipPageCount) { index ->
-                            // 每张卡片严格占满父容器宽度，统一高度 140dp，间距 12dp
-                            Box(
-                                modifier = Modifier
-                                    .width(itemWidth)
-                                    .height(140.dp)
-                            ) {
-                                tipPages[index]()
-                            }
-                        }
-                    }
-                }
-
                 // 终端卡片区域（竖向网格，始终竖向）
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(2),
@@ -557,64 +450,6 @@ fun TerminalListScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                     contentPadding = PaddingValues(top = 8.dp, bottom = 92.dp)
                 ) {
-            if (aiTermuxEnabled) {
-                item(span = { GridItemSpan(2) }) {
-                    AiTermuxEntryCard()
-                }
-            }
-
-            if (showWelcomeCard) {
-                item(span = { GridItemSpan(2) }) {
-                    WelcomeCard(
-                        text = stringResource(R.string.terminal_welcome_message),
-                        onClose = {
-                            showWelcomeCard = false
-                            val prefs = context.getSharedPreferences("termux_prefs", android.content.Context.MODE_PRIVATE)
-                            prefs.edit().putBoolean("terminal_welcome_shown", true).apply()
-                        }
-                    )
-                }
-            }
-
-            if (showKeepAliveWarning) {
-                item(span = { GridItemSpan(2) }) {
-                    KeepAliveWarningCard(
-                        onClose = {
-                            showKeepAliveWarning = false
-                            val prefs = context.getSharedPreferences("termux_prefs", android.content.Context.MODE_PRIVATE)
-                            prefs.edit().putBoolean("keep_alive_warning_dismissed", true).apply()
-                        }
-                    )
-                }
-            }
-
-            item(span = { GridItemSpan(2) }) {
-                val ctx = LocalContext.current
-                // 低版本卡片显示条件：
-                //  1) 运行时触发过功能屏蔽（hasAnyRuntimeDisabled），或
-                //  2) Android 本身就是低版本（8-11）：有用户强制启用 → 红色风险卡必须常驻，
-                //     无强制启用 → 正常也显示黄色提示
-                // 高版本 Android：保持原有行为，仅 runtime 触发时降级
-                val showLowCard = ApiCompat.hasAnyRuntimeDisabled() ||
-                    (ApiCompat.isLowAndroid && (ApiCompat.hasAnyForceEnabled(ctx) || true))
-
-                if (showLowCard) {
-                    LowAndroidWarningCard()
-                } else {
-                    val serviceStatus = remember(termuxService, isWakeLockEnabled, killedSessionName) {
-                        when {
-                            termuxService?.isMemoryKillActive() == true -> ServiceStatus.MEMORY_KILL
-                            termuxService?.isMemoryWarningActive() == true -> ServiceStatus.MEMORY_WARNING
-                            killedSessionName != null -> ServiceStatus.SESSION_KILLED
-                            termuxService == null -> ServiceStatus.SERVICE_STOPPED
-                            isWakeLockEnabled -> ServiceStatus.WAKE_LOCK_ACTIVE
-                            else -> ServiceStatus.NORMAL
-                        }
-                    }
-                    ServiceStatusCard(status = serviceStatus, killedSessionName = killedSessionName)
-                }
-            }
-
             // 搜索过滤：同时对活跃会话和死亡会话按名称匹配
             if (localSessions.isEmpty() && filteredDeadSessions.isEmpty()) {
                 item(span = { GridItemSpan(2) }) {
@@ -1858,7 +1693,7 @@ fun HorizontalTipCard(
 
     Card(
         modifier = Modifier
-            .fillMaxWidth()
+            .width(340.dp)
             .height(140.dp)
             .then(cardModifier)
     ) {

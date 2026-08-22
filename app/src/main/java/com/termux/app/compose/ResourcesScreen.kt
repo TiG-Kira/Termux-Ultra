@@ -823,7 +823,7 @@ fun AiTermuxEntryCard(modifier: Modifier = Modifier, horizontalMode: Boolean = f
     if (horizontalMode) {
         MiuixCard(
             modifier = modifier
-                .fillMaxWidth()
+                .width(340.dp)
                 .height(140.dp),
             onClick = {
                 val intent = Intent(context, com.termux.app.activities.AiTermuxActivity::class.java)

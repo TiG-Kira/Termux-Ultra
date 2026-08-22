@@ -1253,6 +1253,15 @@ public final class TermuxService extends Service implements TermuxTask.TermuxTas
         return mTermuxSessions;
     }
 
+    /** Update the session list with a new ordered list. */
+    public synchronized void updateSessionList(List<TermuxSession> newSessions) {
+        mTermuxSessions.clear();
+        mTermuxSessions.addAll(newSessions);
+        if (mTermuxTerminalSessionClient != null)
+            mTermuxTerminalSessionClient.termuxSessionListNotifyUpdated();
+        updateNotification();
+    }
+
     @Nullable
     public synchronized TermuxSession getTermuxSession(int index) {
         if (index >= 0 && index < mTermuxSessions.size())

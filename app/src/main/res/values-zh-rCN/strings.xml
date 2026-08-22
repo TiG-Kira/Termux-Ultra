@@ -17,6 +17,7 @@
     <string name="nav_terminal">终端</string>
     <string name="nav_files">文件</string>
     <string name="nav_settings">设置</string>
+    <string name="nav_overview">总览</string>
 
     <string name="terminal_list_title">终端会话</string>
     <string name="new_terminal">新建终端</string>
@@ -644,8 +645,8 @@
     <string name="root_manage_loose_mode">宽松模式（取消自动拦截）</string>
 
     <!-- 卡片布局 -->
-    <string name="card_layout_title">卡片布局</string>
-    <string name="card_layout_summary">选择主页功能卡片的排列方式</string>
+    <string name="card_layout_title">提示卡片布局</string>
+    <string name="card_layout_summary">开启后主页的提示/状态卡片以横向滑动形式展示</string>
     <string name="card_layout_vertical">竖向（列表）</string>
     <string name="card_layout_horizontal">横向（滑动）</string>
 
@@ -675,5 +676,58 @@
     <string name="execute_in_terminal">在终端会话中执行</string>
     <string name="executable_required">需要指定可执行文件。</string>
     <string name="termux_app_not_installed_or_disabled_warning">Termux 应用未安装或已禁用。Termux:Tasker 插件应用运行插件命令需要 Termux 应用。</string>
+
+    <!-- Overview Page -->
+    <string name="overview">总览</string>
+    <string name="overview_title">总览</string>
+    <string name="overview_edit_mode">编辑模式</string>
+    <string name="overview_done">完成</string>
+    <string name="overview_card_tips">提示与 Agent</string>
+    <string name="overview_card_sessions">会话</string>
+    <string name="overview_card_cpu">Termux CPU 占用</string>
+    <string name="overview_card_gpu">Termux GPU 占用</string>
+    <string name="overview_card_processes">进程</string>
+    <string name="overview_card_stop_all">停止全部</string>
+    <string name="overview_running">运行中</string>
+    <string name="overview_stopped">已停止</string>
+    <string name="overview_no_sessions">暂无活跃会话</string>
+    <string name="overview_no_processes">无进程</string>
+    <string name="overview_process_name">进程</string>
+    <string name="overview_process_cpu">CPU %</string>
+    <string name="overview_frozen_tag">冻结</string>
+    <string name="overview_frozen_processes">冻结进程</string>
+    <string name="overview_frozen_count" formatted="true">%d 个冻结</string>
+    <string name="overview_frozen_more" formatted="true">还有 %d 个</string>
+    <string name="overview_process_mem">内存 %</string>
+    <string name="overview_stop_all_confirm">确定要停止所有会话吗？</string>
+    <string name="overview_stop_all_success">所有会话已停止</string>
+    <string name="overview_card_size_small">正方形</string>
+    <string name="overview_card_size_wide">宽版</string>
+    <string name="overview_card_visible">可见</string>
+    <string name="overview_card_hidden">已隐藏</string>
+    <string name="overview_no_cpu_data">CPU 数据不可用</string>
+    <string name="overview_no_gpu_data">GPU 数据不可用</string>
+    <string name="overview_gpu_peak">历史占用</string>
+    <string name="overview_cpu_temp">温度：%1$.0f°C</string>
+    <string name="overview_cpu_cores">核心：%1$d</string>
+    <string name="overview_ai_termux_desc">AI 驱动的终端助手</string>
+    <string name="overview_tips_desc">实用提示和快捷入口</string>
+    <string name="overview_card_settings">卡片设置</string>
+    <string name="overview_card_position">位置</string>
+    <string name="overview_card_size">尺寸</string>
+    <string name="overview_card_enabled">在总览页显示</string>
+    <string name="overview_add_card">添加卡片</string>
+    <string name="overview_already_added">已添加</string>
+    <string name="overview_move_up">上移</string>
+    <string name="overview_move_down">下移</string>
+    <string name="overview_delete_card">删除卡片</string>
+    <string name="overview_tips_agent_vertical_hint">竖向布局下此卡片仅支持宽版</string>
+    <string name="overview_resource_action">资源快捷方式</string>
+    <string name="overview_select_action">点击选择功能</string>
+    <string name="overview_select_action_title">选择功能</string>
+    <string name="overview_no_actions">暂无可用功能</string>
+    <string name="overview_utility_center">实用功能中心</string>
+    <string name="overview_third_party_center">第三方资源中心</string>
+    <string name="overview_system_function">系统功能</string>
 
 </resources>

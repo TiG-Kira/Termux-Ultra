@@ -34,7 +34,7 @@ object ApiCompat {
         get() = Build.VERSION.RELEASE ?: "unknown"
 
     /** 主页面枚举 */
-    enum class Page { TERMINAL, FILES, REMOTE, RESOURCES, SETTINGS }
+    enum class Page { OVERVIEW, TERMINAL, FILES, REMOTE, RESOURCES, SETTINGS }
 
     private const val PREFS_NAME = "termux_api_compat"
     private const val KEY_FORCE_PREFIX = "force_enable_"

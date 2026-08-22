@@ -17,6 +17,7 @@
     <string name="nav_terminal">Terminal</string>
     <string name="nav_files">Files</string>
     <string name="nav_settings">Settings</string>
+    <string name="nav_overview">Overview</string>
 
     <string name="terminal_list_title">Terminal Sessions</string>
     <string name="new_terminal">New Terminal</string>
@@ -765,5 +766,58 @@
     <string name="terminal_new_session_with_handle">New Session [%1$s]</string>
     <string name="terminal_session_ended">Session ended</string>
     <string name="terminal_session_ended_with_code">Session ended (exit code: %1$d)</string>
+
+    <!-- Overview Page -->
+    <string name="overview">Overview</string>
+    <string name="overview_title">Dashboard</string>
+    <string name="overview_edit_mode">Edit Mode</string>
+    <string name="overview_done">Done</string>
+    <string name="overview_card_tips">Tips &amp; Agent</string>
+    <string name="overview_card_sessions">Sessions</string>
+    <string name="overview_card_cpu">Termux CPU Usage</string>
+    <string name="overview_card_gpu">Termux GPU Usage</string>
+    <string name="overview_card_processes">Processes</string>
+    <string name="overview_card_stop_all">Stop All</string>
+    <string name="overview_running">Running</string>
+    <string name="overview_stopped">Stopped</string>
+    <string name="overview_no_sessions">No active sessions</string>
+    <string name="overview_no_processes">No processes</string>
+    <string name="overview_process_name">Process</string>
+    <string name="overview_process_cpu">CPU %</string>
+    <string name="overview_frozen_tag">Frozen</string>
+    <string name="overview_frozen_processes">Frozen Processes</string>
+    <string name="overview_frozen_count" formatted="true">%d frozen</string>
+    <string name="overview_frozen_more" formatted="true">%d more</string>
+    <string name="overview_process_mem">MEM %</string>
+    <string name="overview_stop_all_confirm">Are you sure you want to stop all sessions?</string>
+    <string name="overview_stop_all_success">All sessions stopped</string>
+    <string name="overview_card_size_small">Square</string>
+    <string name="overview_card_size_wide">Wide</string>
+    <string name="overview_card_visible">Visible</string>
+    <string name="overview_card_hidden">Hidden</string>
+    <string name="overview_no_cpu_data">CPU data unavailable</string>
+    <string name="overview_no_gpu_data">GPU data unavailable</string>
+    <string name="overview_gpu_peak">Historical peak</string>
+    <string name="overview_cpu_temp">Temperature: %1$.0f°C</string>
+    <string name="overview_cpu_cores">Cores: %1$d</string>
+    <string name="overview_ai_termux_desc">AI-powered terminal assistant</string>
+    <string name="overview_tips_desc">Helpful tips and quick entries</string>
+    <string name="overview_card_settings">Card Settings</string>
+    <string name="overview_card_position">Position</string>
+    <string name="overview_card_size">Size</string>
+    <string name="overview_card_enabled">Show on dashboard</string>
+    <string name="overview_add_card">Add Card</string>
+    <string name="overview_already_added">Already added</string>
+    <string name="overview_move_up">Move Up</string>
+    <string name="overview_move_down">Move Down</string>
+    <string name="overview_delete_card">Delete Card</string>
+    <string name="overview_tips_agent_vertical_hint">This card only supports wide layout in vertical mode</string>
+    <string name="overview_resource_action">Resource Shortcut</string>
+    <string name="overview_select_action">Click to select action</string>
+    <string name="overview_select_action_title">Select Action</string>
+    <string name="overview_no_actions">No actions available</string>
+    <string name="overview_utility_center">Utility Center</string>
+    <string name="overview_third_party_center">Third-Party Center</string>
+    <string name="overview_system_function">System Function</string>
 
 </resources>
