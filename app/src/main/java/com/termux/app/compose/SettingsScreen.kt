@@ -77,7 +77,10 @@ data class SettingItem(
 )
 
 @Composable
-fun SettingsScreen(onAboutClick: () -> Unit) {
+fun SettingsScreen(
+    onAboutClick: () -> Unit,
+    navBarBottomPadding: androidx.compose.ui.unit.Dp = 0.dp
+) {
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -459,7 +462,7 @@ fun SettingsScreen(onAboutClick: () -> Unit) {
                 .fillMaxSize()
                 .padding(padding)
                 .nestedScroll(scrollBehavior.nestedScrollConnection),
-            contentPadding = PaddingValues(bottom = 92.dp)
+            contentPadding = PaddingValues(bottom = navBarBottomPadding + 16.dp)
         ) {
             // ---------- Appearance ----------
             item { SmallTitle(text = context.getString(R.string.appearance)) }

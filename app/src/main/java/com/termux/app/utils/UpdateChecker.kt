@@ -8,7 +8,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /**
- * 版本号数据类，支持解析 `x.y.z.RB` 格式（如 `0.9.0.RB`）。
+ * 版本号数据类，支持解析 `R?x.y.z.RB` 格式（如 `0.9.0.RB` 或 `R0.9.0.RB`）。
  * RB = ReBuild 分支缩写。
  */
 data class AppVersion(
@@ -18,29 +18,28 @@ data class AppVersion(
 ) : Comparable<AppVersion> {
 
     companion object {
-        private val VERSION_REGEX = Regex("""^(\d+)\.(\d+)\.(\d+)\.RB$""")
-        private val PLAIN_REGEX = Regex("""^v?(\d+)\.(\d+)\.(\d+)$""")
+        private val VERSION_REGEX = Regex("""^(R|r)?(\d+)\.(\d+)\.(\d+)\.RB$""")
+        private val PLAIN_REGEX = Regex("""^v?(R|r)?(\d+)\.(\d+)\.(\d+)$""")
 
         /**
-         * 解析版本号字符串，支持 `0.9.0.RB` 和纯数字格式 `0.9.0`。
+         * 解析版本号字符串，支持 `0.9.0.RB`、`R0.9.0.RB` 和纯数字格式 `0.9.0`。
          * @return AppVersion 或 null（格式不匹配）
          */
         fun parse(versionName: String): AppVersion? {
             val versionMatch = VERSION_REGEX.find(versionName)
             if (versionMatch != null) {
                 return AppVersion(
-                    major = versionMatch.groupValues[1].toInt(),
-                    minor = versionMatch.groupValues[2].toInt(),
-                    patch = versionMatch.groupValues[3].toInt()
+                    major = versionMatch.groupValues[2].toInt(),
+                    minor = versionMatch.groupValues[3].toInt(),
+                    patch = versionMatch.groupValues[4].toInt()
                 )
             }
-            // 兼容纯数字格式（如上游 Termux 版本号）
             val plainMatch = PLAIN_REGEX.find(versionName)
             if (plainMatch != null) {
                 return AppVersion(
-                    major = plainMatch.groupValues[1].toInt(),
-                    minor = plainMatch.groupValues[2].toInt(),
-                    patch = plainMatch.groupValues[3].toInt()
+                    major = plainMatch.groupValues[2].toInt(),
+                    minor = plainMatch.groupValues[3].toInt(),
+                    patch = plainMatch.groupValues[4].toInt()
                 )
             }
             return null
@@ -98,7 +97,7 @@ object UpdateChecker {
 
     /**
      * 检查更新。
-     * @param currentVersionName 当前版本号字符串（如 "R0.9.0"）
+     * @param currentVersionName 当前版本号字符串（如 "1.0.0.RB" 或 "R1.0.0.RB"）
      * @param betaEnabled 是否包含 Beta/Pre-release 版本
      * @return UpdateResult
      */
@@ -124,7 +123,6 @@ object UpdateChecker {
                     val body = response.body?.string() ?: ""
                     val releases = JSONArray(body)
 
-                    // 查找与当前版本匹配的 tag，确认当前版本是否存在
                     var currentTagMatched = false
                     var bestRelease: JSONObject? = null
                     var bestVersion: AppVersion? = null
@@ -139,19 +137,15 @@ object UpdateChecker {
                         val tagName = release.optString("tag_name", "")
                         val tagVersion = AppVersion.parse(tagName)
 
-                        // 检查 tag 是否为 R* 格式的 Termux Ultra 版本
-                        if (!tagName.startsWith("R") || tagVersion == null) continue
+                        if (tagVersion == null) continue
 
-                        // 检查是否与当前版本匹配
-                        if (tagName == currentVersionName) {
+                        if (tagVersion == currentVersion) {
                             currentTagMatched = true
                         }
 
-                        // 根据 betaEnabled 筛选
                         val isPreRelease = release.optBoolean("prerelease", false)
                         if (!betaEnabled && isPreRelease) continue
 
-                        // 选择最高版本
                         if (bestVersion == null || tagVersion > bestVersion) {
                             bestVersion = tagVersion
                             bestVersionName = tagName
@@ -160,7 +154,6 @@ object UpdateChecker {
                         }
                     }
 
-                    // 找不到与当前版本匹配的 tag → 视为最新版
                     if (!currentTagMatched) {
                         return@withContext UpdateResult.UpToDate(
                             currentVersion = currentVersion,
@@ -168,7 +161,6 @@ object UpdateChecker {
                         )
                     }
 
-                    // 没有可用的新版本
                     if (bestVersion == null || bestVersion <= currentVersion) {
                         return@withContext UpdateResult.UpToDate(
                             currentVersion = currentVersion,
@@ -176,7 +168,6 @@ object UpdateChecker {
                         )
                     }
 
-                    // 有新版本可用
                     val release = bestRelease!!
                     val releaseUrl = release.optString("html_url", "")
                         .ifEmpty { GITHUB_RELEASE_PAGE_URL }
@@ -216,6 +207,9 @@ object UpdateChecker {
      * 获取当前版本的 Release 状态（NORMAL / PRERELEASE / NOT_FOUND）。
      */
     suspend fun getReleaseStatus(currentVersionName: String): ReleaseStatus? {
+        val currentVersion = AppVersion.parse(currentVersionName)
+            ?: return null
+
         return try {
             withContext(Dispatchers.IO) {
                 val request = Request.Builder()
@@ -234,7 +228,9 @@ object UpdateChecker {
                     for (i in 0 until releases.length()) {
                         val release = releases.getJSONObject(i)
                         val tagName = release.optString("tag_name", "")
-                        if (tagName == currentVersionName) {
+                        val tagVersion = AppVersion.parse(tagName)
+
+                        if (tagVersion != null && tagVersion == currentVersion) {
                             val isPrerelease = release.optBoolean("prerelease", false)
                             val isDraft = release.optBoolean("draft", false)
                             if (isDraft) {

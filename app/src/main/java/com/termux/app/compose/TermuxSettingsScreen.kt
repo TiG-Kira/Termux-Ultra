@@ -222,7 +222,7 @@ private fun MainTermuxSettingsPage(
 
     LazyColumn(
         modifier = modifier,
-        contentPadding = PaddingValues(bottom = 92.dp)
+        contentPadding = PaddingValues(bottom = 16.dp)
     ) {
         item { SmallTitle(text = stringResource(R.string.terminal)) }
         item {
@@ -364,7 +364,7 @@ private fun TerminalSettingsPage(
 ) {
     LazyColumn(
         modifier = modifier,
-        contentPadding = PaddingValues(bottom = 92.dp)
+        contentPadding = PaddingValues(bottom = 16.dp)
     ) {
         item { SmallTitle(text = stringResource(R.string.terminal)) }
         item {
@@ -418,7 +418,7 @@ private fun TerminalViewSettingsPage(
 
     LazyColumn(
         modifier = modifier,
-        contentPadding = PaddingValues(bottom = 92.dp)
+        contentPadding = PaddingValues(bottom = 16.dp)
     ) {
         item { SmallTitle(text = stringResource(R.string.termux_terminal_view_view_header)) }
         item {
@@ -456,7 +456,7 @@ private fun TerminalIoSettingsPage(
 
     LazyColumn(
         modifier = modifier,
-        contentPadding = PaddingValues(bottom = 92.dp)
+        contentPadding = PaddingValues(bottom = 16.dp)
     ) {
         item { SmallTitle(text = stringResource(R.string.termux_keyboard_header)) }
         item {
@@ -524,7 +524,7 @@ private fun DebuggingSettingsPage(
 
     LazyColumn(
         modifier = modifier,
-        contentPadding = PaddingValues(bottom = 92.dp)
+        contentPadding = PaddingValues(bottom = 16.dp)
     ) {
         item { SmallTitle(text = stringResource(R.string.termux_logging_header)) }
         item {
@@ -622,7 +622,7 @@ private fun PluginSettingsPage(
 
     LazyColumn(
         modifier = modifier,
-        contentPadding = PaddingValues(bottom = 92.dp)
+        contentPadding = PaddingValues(bottom = 16.dp)
     ) {
         item { SmallTitle(text = title) }
         item {

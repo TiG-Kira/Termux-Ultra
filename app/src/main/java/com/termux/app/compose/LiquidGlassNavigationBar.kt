@@ -35,9 +35,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawWithCache
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -45,8 +43,11 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.kyant.backdrop.Backdrop
@@ -60,16 +61,125 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
-private val GlassContainerHeight = 64.dp
-private val GlassContainerHorizontalPadding = 10.dp
-private val GlassContainerVerticalPadding = 6.dp
-private val GlassItemWidth = 56.dp
-private val GlassIndicatorWidth = 68.dp
-private val GlassIndicatorHeight = 52.dp
-private val GlassIndicatorExpandedWidth = 76.dp
-private val GlassIndicatorExpandedHeight = 56.dp
-private val GlassCornerRadius = 32.dp
-private val GlassBottomMargin = 18.dp
+data class ResponsiveNavDimensions(
+    val itemWidth: Dp,
+    val itemHeight: Dp,
+    val iconSize: Dp,
+    val labelSize: TextUnit,
+    val containerHeight: Dp,
+    val indicatorWidth: Dp,
+    val indicatorHeight: Dp,
+    val indicatorExpandedWidth: Dp,
+    val indicatorExpandedHeight: Dp,
+    val indicatorCornerRadius: Dp,
+    val cornerRadius: Dp,
+    val horizontalPadding: Dp,
+    val verticalPadding: Dp,
+    val bottomMargin: Dp,
+    val sideMargin: Dp,
+    val gap: Dp,
+    val totalHeight: Dp
+)
+
+enum class NavStyle {
+    DEFAULT,
+    GLASS,
+    SOFT_LIGHT,
+    FLOATING
+}
+
+@Composable
+fun computeNavDimensions(
+    itemCount: Int,
+    style: NavStyle = NavStyle.GLASS
+): ResponsiveNavDimensions {
+    val configuration = LocalConfiguration.current
+    val density = LocalDensity.current
+
+    val screenWidthDp = with(density) { configuration.screenWidthDp.dp }
+
+    val baseSideMargin = 16.dp
+    val availableWidth = (screenWidthDp - baseSideMargin * 2).coerceAtLeast(0.dp)
+
+    val minItemWidth = 36.dp
+    val maxItemWidth = 64.dp
+    val minIconSize = 16.dp
+    val maxIconSize = 24.dp
+
+    val gap = when (style) {
+        NavStyle.GLASS, NavStyle.SOFT_LIGHT, NavStyle.DEFAULT -> 4.dp
+        NavStyle.FLOATING -> 6.dp
+    }
+
+    val computedItemWidth = (availableWidth - gap * (itemCount - 1)) / itemCount
+    val itemWidth = computedItemWidth.coerceIn(minItemWidth, maxItemWidth)
+    val containerHeight = (itemWidth * 1.3f).coerceIn(46.dp, 80.dp)
+    val iconSize = (itemWidth * 0.42f).coerceIn(minIconSize, maxIconSize)
+    val labelSizeDp = (itemWidth * 0.2f).coerceIn(8.dp, 11.dp)
+    val labelSize = with(density) { labelSizeDp.toSp() }
+    val indicatorWidth = itemWidth * 1.02f
+    val indicatorHeight = containerHeight - 6.dp
+    val indicatorExpandedWidth = itemWidth * 1.08f
+    val indicatorExpandedHeight = containerHeight - 2.dp
+    val indicatorCornerRadius = indicatorHeight * 0.65f
+    val cornerRadius = containerHeight * 0.62f
+    val horizontalPadding = when (style) {
+        NavStyle.GLASS -> 5.dp
+        NavStyle.SOFT_LIGHT -> 6.dp
+        NavStyle.FLOATING -> 4.dp
+        NavStyle.DEFAULT -> 5.dp
+    }
+    val verticalPadding = when (style) {
+        NavStyle.GLASS -> 3.dp
+        NavStyle.SOFT_LIGHT -> 2.dp
+        NavStyle.FLOATING -> 0.dp
+        NavStyle.DEFAULT -> 3.dp
+    }
+    val bottomMargin = when (style) {
+        NavStyle.GLASS -> 24.dp
+        NavStyle.SOFT_LIGHT -> 20.dp
+        NavStyle.FLOATING -> 24.dp
+        NavStyle.DEFAULT -> 16.dp
+    }
+    val sideMargin = 16.dp
+
+    val totalHeight = when (style) {
+        NavStyle.GLASS, NavStyle.SOFT_LIGHT, NavStyle.FLOATING -> containerHeight + bottomMargin
+        NavStyle.DEFAULT -> containerHeight + bottomMargin
+    }
+
+    return ResponsiveNavDimensions(
+        itemWidth = itemWidth,
+        itemHeight = containerHeight,
+        iconSize = iconSize,
+        labelSize = labelSize,
+        containerHeight = containerHeight,
+        indicatorWidth = indicatorWidth,
+        indicatorHeight = indicatorHeight,
+        indicatorExpandedWidth = indicatorExpandedWidth,
+        indicatorExpandedHeight = indicatorExpandedHeight,
+        indicatorCornerRadius = indicatorCornerRadius,
+        cornerRadius = cornerRadius,
+        horizontalPadding = horizontalPadding,
+        verticalPadding = verticalPadding,
+        bottomMargin = bottomMargin,
+        sideMargin = sideMargin,
+        gap = gap,
+        totalHeight = totalHeight
+    )
+}
+
+@Composable
+fun getNavContainerHeight(
+    itemCount: Int,
+    style: NavStyle
+): Dp {
+    val dims = computeNavDimensions(itemCount, style)
+    return when (style) {
+        NavStyle.DEFAULT -> 56.dp
+        else -> dims.totalHeight
+    }
+}
 
 @Composable
 fun LiquidGlassNavigationBarItem(
@@ -77,7 +187,8 @@ fun LiquidGlassNavigationBarItem(
     label: String,
     selected: Boolean,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    dims: ResponsiveNavDimensions
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
@@ -109,7 +220,7 @@ fun LiquidGlassNavigationBarItem(
 
     Column(
         modifier = modifier
-            .width(GlassItemWidth)
+            .width(dims.itemWidth)
             .fillMaxHeight()
             .clickable(
                 interactionSource = interactionSource,
@@ -123,7 +234,7 @@ fun LiquidGlassNavigationBarItem(
             imageVector = icon,
             contentDescription = label,
             modifier = Modifier
-                .size(24.dp)
+                .size(dims.iconSize)
                 .graphicsLayer {
                     scaleX = scale
                     scaleY = scale
@@ -137,10 +248,10 @@ fun LiquidGlassNavigationBarItem(
 
         Text(
             text = label,
-            fontSize = 10.sp,
+            fontSize = dims.labelSize,
             color = labelColor,
             modifier = Modifier
-                .padding(top = 2.dp)
+                .padding(top = 1.dp)
                 .graphicsLayer {
                     alpha = labelAlpha
                 }
@@ -152,61 +263,30 @@ fun LiquidGlassNavigationBarItem(
 private fun LiquidGlassIndicator(
     offsetX: Float,
     isDragging: Boolean,
+    expandedScale: Float,
     backdrop: Backdrop,
+    dims: ResponsiveNavDimensions,
     modifier: Modifier = Modifier
 ) {
     val isDark = isSystemInDarkTheme()
-
-    val expandedScale by animateFloatAsState(
-        targetValue = if (!isDragging) 1.12f else 1f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioLowBouncy,
-            stiffness = Spring.StiffnessMedium
-        ),
-        label = "indicatorExpanded"
-    )
-
-    val indicatorWidth by animateDpAsState(
-        targetValue = if (!isDragging) GlassIndicatorExpandedWidth else GlassIndicatorWidth,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioLowBouncy,
-            stiffness = Spring.StiffnessMedium
-        ),
-        label = "indicatorWidth"
-    )
-
-    val indicatorHeight by animateDpAsState(
-        targetValue = if (!isDragging) GlassIndicatorExpandedHeight else GlassIndicatorHeight,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioLowBouncy,
-            stiffness = Spring.StiffnessMedium
-        ),
-        label = "indicatorHeight"
-    )
-
     val surfaceColor = if (isDark) {
-        Color.White.copy(alpha = 0.12f)
+        Color.White.copy(alpha = 0.08f)
     } else {
-        Color.White.copy(alpha = 0.65f)
+        Color.White.copy(alpha = 0.50f)
     }
 
     Box(
         modifier = modifier
-            .offset {
-                IntOffset(
-                    x = offsetX.roundToInt(),
-                    y = 0
-                )
-            }
-            .width(indicatorWidth)
-            .height(indicatorHeight)
+            .offset { IntOffset(x = offsetX.roundToInt(), y = 0) }
+            .width(dims.indicatorWidth)
+            .height(dims.indicatorHeight)
             .graphicsLayer {
                 scaleX = expandedScale
                 scaleY = expandedScale
             }
             .drawBackdrop(
                 backdrop = backdrop,
-                shape = { RoundedCornerShape(28.dp) },
+                shape = { RoundedCornerShape(dims.indicatorCornerRadius) },
                 effects = {
                     blur(radius = 12f)
                 },
@@ -256,13 +336,14 @@ fun LiquidGlassNavigationBarWithIndicator(
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit
 ) {
+    val dims = computeNavDimensions(itemCount, NavStyle.GLASS)
     var contentWidthPx by remember { mutableStateOf(0) }
     var dragOffset by remember { mutableFloatStateOf(0f) }
     var isDragging by remember { mutableStateOf(false) }
     val density = LocalDensity.current
-    val itemWidthPx = with(density) { GlassItemWidth.toPx() }
-    val indicatorWidthPx = with(density) { GlassIndicatorWidth.toPx() }
-    val indicatorExpandedWidthPx = with(density) { GlassIndicatorExpandedWidth.toPx() }
+    val itemWidthPx = with(density) { dims.itemWidth.toPx() }
+    val indicatorWidthPx = with(density) { dims.indicatorWidth.toPx() }
+    val indicatorExpandedWidthPx = with(density) { dims.indicatorExpandedWidth.toPx() }
     val isDark = isSystemInDarkTheme()
 
     LaunchedEffect(selectedIndex) {
@@ -307,20 +388,24 @@ fun LiquidGlassNavigationBarWithIndicator(
 
     Box(
         modifier = modifier
-            .padding(bottom = GlassBottomMargin)
+            .padding(
+                start = dims.sideMargin,
+                end = dims.sideMargin,
+                bottom = dims.bottomMargin
+            )
     ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(GlassContainerHeight)
+                .height(dims.containerHeight)
                 .drawBackdrop(
                     backdrop = backdrop,
-                    shape = { RoundedCornerShape(GlassCornerRadius) },
+                    shape = { RoundedCornerShape(dims.cornerRadius) },
                     effects = {
-                        blur(radius = 18f)
+                        blur(radius = 14f)
                         lens(
-                            refractionHeight = 28f,
-                            refractionAmount = 28f
+                            refractionHeight = 20f,
+                            refractionAmount = 20f
                         )
                     },
                     highlight = {
@@ -333,7 +418,7 @@ fun LiquidGlassNavigationBarWithIndicator(
                     },
                     shadow = {
                         Shadow(
-                            radius = 24.dp,
+                            radius = 16.dp,
                             color = if (isDark) {
                                 Color.Black.copy(alpha = 0.20f)
                             } else {
@@ -363,8 +448,8 @@ fun LiquidGlassNavigationBarWithIndicator(
                     .fillMaxWidth()
                     .fillMaxHeight()
                     .padding(
-                        horizontal = GlassContainerHorizontalPadding,
-                        vertical = GlassContainerVerticalPadding
+                        horizontal = dims.horizontalPadding,
+                        vertical = dims.verticalPadding
                     )
                     .onSizeChanged { size ->
                         contentWidthPx = size.width
@@ -378,16 +463,18 @@ fun LiquidGlassNavigationBarWithIndicator(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(GlassContainerHeight)
+                    .height(dims.containerHeight)
                     .padding(
-                        horizontal = GlassContainerHorizontalPadding,
-                        vertical = GlassContainerVerticalPadding
+                        horizontal = dims.horizontalPadding,
+                        vertical = dims.verticalPadding
                     )
             ) {
                 LiquidGlassIndicator(
                     offsetX = indicatorOffsetPx,
                     isDragging = isDragging,
+                    expandedScale = if (isDragging) 1.04f else 1f,
                     backdrop = backdrop,
+                    dims = dims,
                     modifier = Modifier
                         .pointerInput(selectedIndex, itemCount) {
                             var totalDrag = 0f
@@ -476,26 +563,14 @@ fun LiquidGlassNavigationBarWithIndicator(
     }
 }
 
-// ============================================================
-// Soft Light Navigation Bar - HyperOS style (flat gray indicator)
-// ============================================================
-private val SoftLightContainerHeight = 62.dp
-private val SoftLightItemWidth = 56.dp
-private val SoftLightIndicatorWidth = 56.dp
-private val SoftLightIndicatorHeight = 48.dp
-private val SoftLightCornerRadius = 34.dp
-private val SoftLightBarHorizontalPadding = 12.dp
-private val SoftLightBarVerticalPadding = 4.dp
-private val SoftLightBottomMargin = 14.dp
-private val SoftLightFadeHeight = 16.dp
-
 @Composable
 fun SoftLightNavigationBarItem(
     icon: ImageVector,
     label: String,
     selected: Boolean,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    dims: ResponsiveNavDimensions
 ) {
     val labelAlpha by animateFloatAsState(
         targetValue = if (selected) 1f else 0.45f,
@@ -505,7 +580,7 @@ fun SoftLightNavigationBarItem(
 
     Column(
         modifier = modifier
-            .width(SoftLightItemWidth)
+            .width(dims.itemWidth)
             .fillMaxHeight()
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
@@ -518,7 +593,7 @@ fun SoftLightNavigationBarItem(
         Icon(
             imageVector = icon,
             contentDescription = label,
-            modifier = Modifier.size(22.dp),
+            modifier = Modifier.size(dims.iconSize),
             tint = if (selected) {
                 MiuixTheme.colorScheme.onSurface
             } else {
@@ -528,10 +603,10 @@ fun SoftLightNavigationBarItem(
 
         Text(
             text = label,
-            fontSize = 9.sp,
+            fontSize = dims.labelSize,
             color = MiuixTheme.colorScheme.onSurface,
             modifier = Modifier
-                .padding(top = 2.dp)
+                .padding(top = 1.dp)
                 .graphicsLayer {
                     alpha = labelAlpha
                 }
@@ -542,6 +617,7 @@ fun SoftLightNavigationBarItem(
 @Composable
 private fun SoftLightIndicator(
     offsetX: Float,
+    dims: ResponsiveNavDimensions,
     modifier: Modifier = Modifier
 ) {
     val isDark = isSystemInDarkTheme()
@@ -554,11 +630,11 @@ private fun SoftLightIndicator(
     Box(
         modifier = modifier
             .offset { IntOffset(x = offsetX.roundToInt(), y = 0) }
-            .width(SoftLightIndicatorWidth)
-            .height(SoftLightIndicatorHeight)
+            .width(dims.indicatorWidth)
+            .height(dims.indicatorHeight)
             .background(
                 color = indicatorColor,
-                shape = RoundedCornerShape(24.dp)
+                shape = RoundedCornerShape(dims.cornerRadius * 0.7f)
             )
     )
 }
@@ -572,10 +648,11 @@ fun SoftLightNavigationBarWithIndicator(
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit
 ) {
+    val dims = computeNavDimensions(itemCount, NavStyle.SOFT_LIGHT)
     var contentWidthPx by remember { mutableStateOf(0) }
     val density = LocalDensity.current
-    val itemWidthPx = with(density) { SoftLightItemWidth.toPx() }
-    val indicatorWidthPx = with(density) { SoftLightIndicatorWidth.toPx() }
+    val itemWidthPx = with(density) { dims.itemWidth.toPx() }
+    val indicatorWidthPx = with(density) { dims.indicatorWidth.toPx() }
     val isDark = isSystemInDarkTheme()
 
     val baseTargetOffset = run {
@@ -607,18 +684,21 @@ fun SoftLightNavigationBarWithIndicator(
     }
 
     Box(
-        modifier = modifier.padding(bottom = SoftLightBottomMargin)
+        modifier = modifier.padding(
+            start = dims.sideMargin,
+            end = dims.sideMargin,
+            bottom = dims.bottomMargin
+        )
     ) {
-        // Main bar
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(SoftLightContainerHeight)
+                .height(dims.containerHeight)
                 .drawBackdrop(
                     backdrop = backdrop,
-                    shape = { RoundedCornerShape(SoftLightCornerRadius) },
+                    shape = { RoundedCornerShape(dims.cornerRadius) },
                     effects = {
-                        blur(radius = 18f)
+                        blur(radius = 14f)
                     },
                     highlight = {
                         Highlight(
@@ -630,7 +710,7 @@ fun SoftLightNavigationBarWithIndicator(
                     },
                     shadow = {
                         Shadow(
-                            radius = 16.dp,
+                            radius = 12.dp,
                             color = if (isDark) {
                                 Color.Black.copy(alpha = 0.12f)
                             } else {
@@ -643,14 +723,13 @@ fun SoftLightNavigationBarWithIndicator(
                     }
                 )
         ) {
-            // Items layer
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .fillMaxHeight()
                     .padding(
-                        horizontal = SoftLightBarHorizontalPadding,
-                        vertical = SoftLightBarVerticalPadding
+                        horizontal = dims.horizontalPadding,
+                        vertical = dims.verticalPadding
                     )
                     .onSizeChanged { size ->
                         contentWidthPx = size.width
@@ -661,14 +740,13 @@ fun SoftLightNavigationBarWithIndicator(
                 content()
             }
 
-            // Indicator + tap layer
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(SoftLightContainerHeight)
+                    .height(dims.containerHeight)
                     .padding(
-                        horizontal = SoftLightBarHorizontalPadding,
-                        vertical = SoftLightBarVerticalPadding
+                        horizontal = dims.horizontalPadding,
+                        vertical = dims.verticalPadding
                     )
                     .pointerInput(selectedIndex, itemCount) {
                         detectTapGestures(
@@ -696,21 +774,21 @@ fun SoftLightNavigationBarWithIndicator(
             ) {
                 SoftLightIndicator(
                     offsetX = indicatorOffsetPx,
+                    dims = dims,
                     modifier = Modifier
                 )
             }
         }
 
-        // Bottom gradient fade
         Box(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
-                .height(SoftLightFadeHeight)
+                .height(12.dp)
                 .graphicsLayer {
                     shape = RoundedCornerShape(
-                        bottomStart = SoftLightCornerRadius,
-                        bottomEnd = SoftLightCornerRadius
+                        bottomStart = dims.cornerRadius,
+                        bottomEnd = dims.cornerRadius
                     )
                     clip = true
                 }

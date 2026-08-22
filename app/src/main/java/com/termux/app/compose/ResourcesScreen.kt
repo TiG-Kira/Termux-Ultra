@@ -64,7 +64,9 @@ data class ResourceItem(
 data class TerminalSession(val id: String, val name: String)
 
 @Composable
-fun ResourcesScreen() {
+fun ResourcesScreen(
+    navBarBottomPadding: androidx.compose.ui.unit.Dp = 0.dp
+) {
     val context = LocalContext.current
     val scrollBehavior = MiuixScrollBehavior()
 
@@ -80,7 +82,7 @@ fun ResourcesScreen() {
                     .fillMaxSize()
                     .padding(padding)
                     .nestedScroll(scrollBehavior.nestedScrollConnection),
-                contentPadding = PaddingValues(bottom = 92.dp)
+                contentPadding = PaddingValues(bottom = navBarBottomPadding + 16.dp)
             ) {
                 item {
                     HeroWelcomeCard(
@@ -892,7 +894,7 @@ fun AiTermuxEntryCard(modifier: Modifier = Modifier, horizontalMode: Boolean = f
                         )
                         Spacer(Modifier.height(4.dp))
                         Text(
-                            text = "用自然语言管理 Termux 会话·虚拟机·VNC·文件",
+                            text = "与 Agent 沟通并帮您处理终端事务",
                             style = TextStyle(
                                 fontSize = 13.sp,
                                 color = Color.White.copy(alpha = 0.9f),
@@ -976,7 +978,7 @@ fun AiTermuxEntryCard(modifier: Modifier = Modifier, horizontalMode: Boolean = f
                             )
                         )
                         Text(
-                            text = "用自然语言管理 Termux 会话·虚拟机·VNC·文件",
+                            text = "与 Agent 沟通并帮您处理终端事务",
                             style = TextStyle(
                                 fontSize = 14.sp,
                                 color = Color.White.copy(alpha = 0.85f),
@@ -1018,7 +1020,7 @@ fun AiTermuxEntryCard(modifier: Modifier = Modifier, horizontalMode: Boolean = f
                             )
                             Spacer(Modifier.height(3.dp))
                             Text(
-                                text = "用自然语言管理 Termux\n会话·虚拟机·VNC·文件",
+                                text = "与 Agent 沟通并帮您处理终端事务",
                                 style = TextStyle(
                                     fontSize = 13.sp,
                                     color = Color.White.copy(alpha = 0.9f),

@@ -77,7 +77,8 @@ private const val ROOT_PATH = "/data/data/com.termux"
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun FileManagerScreen(
-    onOpenFile: (String, String) -> Unit = { _, _ -> }
+    onOpenFile: (String, String) -> Unit = { _, _ -> },
+    navBarBottomPadding: androidx.compose.ui.unit.Dp = 0.dp
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -462,7 +463,7 @@ fun FileManagerScreen(
                 .padding(padding)
                 .padding(horizontal = 16.dp)
                 .nestedScroll(scrollBehavior.nestedScrollConnection),
-            contentPadding = PaddingValues(top = 8.dp, bottom = 92.dp),
+            contentPadding = PaddingValues(top = 8.dp, bottom = navBarBottomPadding + 16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             if (showWarningCard) {

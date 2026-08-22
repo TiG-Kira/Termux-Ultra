@@ -184,6 +184,9 @@ public final class TermuxService extends Service implements TermuxTask.TermuxTas
         runStartForeground();
         registerMemoryBroadcastReceiver();
 
+        // 预加载增强防护缓存，避免首次命令读取 SharedPreferences 造成延迟
+        com.termux.app.compose.RiskConfirmManager.INSTANCE.preloadCache(this);
+
         // 注册终端输入拦截器，用于检测高危命令
         com.termux.terminal.TerminalSession.setInputInterceptor(new com.termux.terminal.TerminalSession.InputInterceptor() {
             @Override
@@ -866,6 +869,10 @@ public final class TermuxService extends Service implements TermuxTask.TermuxTas
         if (index >= 0) {
             mTermuxSessions.get(index).getTerminalSession().finishIfRunning();
             mTermuxSessions.remove(index);
+            // 清理环境缓存
+            if (sessionToRemove.mHandle != null) {
+                com.termux.app.compose.RiskConfirmManager.INSTANCE.invalidateEnvironmentCache(sessionToRemove.mHandle);
+            }
         }
 
         updateNotification();
@@ -889,6 +896,11 @@ public final class TermuxService extends Service implements TermuxTask.TermuxTas
             }
             session.getTerminalSession().finishIfRunning();
             mTermuxSessions.remove(index);
+            // 清理环境缓存
+            TerminalSession terminalSession = sessionToRemove.getTerminalSession();
+            if (terminalSession != null && terminalSession.mHandle != null) {
+                com.termux.app.compose.RiskConfirmManager.INSTANCE.invalidateEnvironmentCache(terminalSession.mHandle);
+            }
             final String finalSessionName = sessionName;
             new Handler(getMainLooper()).post(() ->
                 Toast.makeText(TermuxService.this, finalSessionName + " 已停止，返回代码: 137", Toast.LENGTH_SHORT).show()
@@ -925,6 +937,12 @@ public final class TermuxService extends Service implements TermuxTask.TermuxTas
                 PluginUtils.processPluginExecutionCommandResult(this, LOG_TAG, executionCommand);
 
             mTermuxSessions.remove(termuxSession);
+
+            // 清理环境缓存
+            String handle = termuxSession.getTerminalSession().mHandle;
+            if (handle != null) {
+                com.termux.app.compose.RiskConfirmManager.INSTANCE.invalidateEnvironmentCache(handle);
+            }
 
             // Notify {@link TermuxSessionsListViewController} that sessions list has been updated if
             // activity in is foreground
@@ -1677,14 +1695,13 @@ public final class TermuxService extends Service implements TermuxTask.TermuxTas
         mKilledSessionName = null;
     }
 
-    /** Check if high-risk command confirmation is enabled in preferences. */
+    /** Check if high-risk command confirmation is enabled in preferences (uses cached value for performance). */
     private boolean isRiskConfirmationEnabled() {
         try {
-            android.content.SharedPreferences prefs = getSharedPreferences(
-                com.termux.app.compose.RiskConfirmManager.PREFS_NAME,
-                Context.MODE_PRIVATE
-            );
-            return prefs.getBoolean(com.termux.app.compose.RiskConfirmManager.KEY_ENABLED, true);
+            // 使用 RiskConfirmManager 的缓存方法，避免直接读取 SharedPreferences
+            com.termux.app.compose.RiskConfirmManager.ProtectionLevel level = 
+                com.termux.app.compose.RiskConfirmManager.INSTANCE.getProtectionLevel(this);
+            return level != com.termux.app.compose.RiskConfirmManager.ProtectionLevel.OFF;
         } catch (Exception e) {
             return true;
         }

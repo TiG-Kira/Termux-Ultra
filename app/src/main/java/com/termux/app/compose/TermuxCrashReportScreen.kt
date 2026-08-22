@@ -11,12 +11,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.navigationBars
 import com.termux.R
 import com.termux.shared.termux.TermuxUtils
 import kotlinx.coroutines.launch
@@ -34,6 +37,10 @@ fun TermuxCrashReportScreen(
 ) {
     val context = LocalContext.current
     val scrollBehavior = MiuixScrollBehavior()
+    val density = LocalDensity.current
+    val systemNavBarsHeight = with(density) {
+        WindowInsets.navigationBars.getBottom(density).toDp()
+    }
     val reportText = remember { generateCrashReportText(context) }
     var showShareDialog by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
@@ -80,7 +87,7 @@ fun TermuxCrashReportScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .nestedScroll(scrollBehavior.nestedScrollConnection),
-                contentPadding = PaddingValues(bottom = 92.dp)
+                contentPadding = PaddingValues(bottom = systemNavBarsHeight + 26.dp)
             ) {
                 item {
                     Column(

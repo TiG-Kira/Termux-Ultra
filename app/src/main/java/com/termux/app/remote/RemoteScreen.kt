@@ -2,6 +2,7 @@ package com.termux.app.remote
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.gestures.detectDragGestures
@@ -62,12 +63,15 @@ fun RemoteScreen(
     initialTab: Int = 0,
     onTabChange: (Int) -> Unit = {},
     onGoToFiles: () -> Unit = {},
-    onGoToResources: () -> Unit = {}
+    onGoToResources: () -> Unit = {},
+    navBarBottomPadding: androidx.compose.ui.unit.Dp = 0.dp
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var selectedTabIndex by remember { mutableIntStateOf(initialTab) }
     val topBarDragOffset = remember { mutableFloatStateOf(0f) }
+    var contentAlphaState by remember { mutableFloatStateOf(1f) }
+    var isTopBarSwiiping by remember { mutableStateOf(false) }
     val isScanning = remember { mutableStateOf(false) }
     val vncAddRequested = remember { mutableStateOf(false) }
     val vncScanRequested = remember { mutableStateOf(false) }
@@ -111,6 +115,10 @@ fun RemoteScreen(
     val activeLabel = if (!showVnc || selectedTabIndex == 1) "SSH" else "VNC"
 
     val topBarSwipeThresholdPx = with(LocalDensity.current) { 120.dp.toPx() }
+    val screenWidthPx = with(LocalDensity.current) {
+        val config = androidx.compose.ui.platform.LocalConfiguration.current
+        config.screenWidthDp.dp.toPx()
+    }
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
@@ -119,21 +127,80 @@ fun RemoteScreen(
                 modifier = Modifier
                     .pointerInput(Unit) {
                         detectDragGestures(
-                            onDragStart = { topBarDragOffset.floatValue = 0f },
+                            onDragStart = {
+                                topBarDragOffset.floatValue = 0f
+                                isTopBarSwiiping = true
+                                contentAlphaState = 1f
+                            },
                             onDrag = { change, dragAmount ->
                                 change.consume()
                                 topBarDragOffset.floatValue += dragAmount.x
+                                val progress = if (screenWidthPx > 0f) {
+                                    kotlin.math.abs(topBarDragOffset.floatValue) / screenWidthPx
+                                } else {
+                                    0f
+                                }
+                                contentAlphaState = (1f - progress).coerceIn(0f, 1f)
                             },
                             onDragEnd = {
-                                val threshold = topBarSwipeThresholdPx
-                                if (topBarDragOffset.floatValue <= -threshold) {
-                                    onGoToResources()
-                                } else if (topBarDragOffset.floatValue >= threshold) {
-                                    onGoToFiles()
+                                val exceeded = kotlin.math.abs(topBarDragOffset.floatValue) >= topBarSwipeThresholdPx
+                                val startOffset = topBarDragOffset.floatValue
+
+                                scope.launch {
+                                    animate(
+                                        initialValue = 0f,
+                                        targetValue = 1f,
+                                        animationSpec = tween(300)
+                                    ) { fraction, _ ->
+                                        if (exceeded) {
+                                            contentAlphaState = (1f - fraction).coerceIn(0f, 1f)
+                                        } else {
+                                            val remaining = startOffset * (1f - fraction)
+                                            topBarDragOffset.floatValue = remaining
+                                            val progress = if (screenWidthPx > 0f) {
+                                                kotlin.math.abs(remaining) / screenWidthPx
+                                            } else {
+                                                0f
+                                            }
+                                            contentAlphaState = (1f - progress).coerceIn(0f, 1f)
+                                        }
+                                    }
+                                    topBarDragOffset.floatValue = 0f
+
+                                    if (exceeded) {
+                                        contentAlphaState = 1f
+                                        if (startOffset < 0) {
+                                            onGoToResources()
+                                        } else {
+                                            onGoToFiles()
+                                        }
+                                    } else {
+                                        contentAlphaState = 1f
+                                    }
+                                    isTopBarSwiiping = false
                                 }
-                                topBarDragOffset.floatValue = 0f
                             },
-                            onDragCancel = { topBarDragOffset.floatValue = 0f }
+                            onDragCancel = {
+                                val startOffset = topBarDragOffset.floatValue
+                                scope.launch {
+                                    animate(
+                                        initialValue = 0f,
+                                        targetValue = 1f,
+                                        animationSpec = tween(250)
+                                    ) { fraction, _ ->
+                                        topBarDragOffset.floatValue = startOffset * (1f - fraction)
+                                        val progress = if (screenWidthPx > 0f) {
+                                            kotlin.math.abs(topBarDragOffset.floatValue) / screenWidthPx
+                                        } else {
+                                            0f
+                                        }
+                                        contentAlphaState = (1f - progress).coerceIn(0f, 1f)
+                                    }
+                                    topBarDragOffset.floatValue = 0f
+                                    contentAlphaState = 1f
+                                    isTopBarSwiiping = false
+                                }
+                            }
                         )
                     }
             ) {
@@ -191,9 +258,19 @@ fun RemoteScreen(
             }
         }
     ) { padding ->
-        Box(modifier = Modifier.padding(padding)) {
+        Box(
+            modifier = Modifier
+                .padding(padding)
+                .graphicsLayer {
+                    alpha = contentAlphaState
+                }
+        ) {
             if (showVnc) {
-                Column(Modifier.fillMaxSize()) {
+                Column(
+                    Modifier
+                        .fillMaxSize()
+                        .padding(bottom = navBarBottomPadding)
+                ) {
                     TabRowWithContour(
                         tabs = listOf("VNC", "SSH"),
                         selectedTabIndex = selectedTabIndex,
@@ -397,13 +474,15 @@ fun RemoteScreen(
                                     onScanRequestedConsumed = { vncScanRequested.value = false },
                                     onScanStart = { isScanning.value = true },
                                     onScanEnd = { isScanning.value = false },
-                                    nestedScrollConnection = scrollBehavior.nestedScrollConnection
+                                    nestedScrollConnection = scrollBehavior.nestedScrollConnection,
+                                    navBarBottomPadding = navBarBottomPadding
                                 )
                                 1 -> com.termux.app.ssh.SshScreen(
                                     connections = sshConnections,
                                     addRequested = sshAddRequested.value,
                                     onAddRequestedConsumed = { sshAddRequested.value = false },
-                                    nestedScrollConnection = scrollBehavior.nestedScrollConnection
+                                    nestedScrollConnection = scrollBehavior.nestedScrollConnection,
+                                    navBarBottomPadding = navBarBottomPadding
                                 )
                                 else -> Box(Modifier.fillMaxSize())
                             }
@@ -411,7 +490,11 @@ fun RemoteScreen(
                     }
                 }
             } else {
-                Column(Modifier.fillMaxSize()) {
+                Column(
+                    Modifier
+                        .fillMaxSize()
+                        .padding(bottom = navBarBottomPadding)
+                ) {
                     val filtered = sshConnections.filter { conn ->
                         when (conn) {
                             is SshConnection -> conn.name.contains(searchQuery, ignoreCase = true) ||

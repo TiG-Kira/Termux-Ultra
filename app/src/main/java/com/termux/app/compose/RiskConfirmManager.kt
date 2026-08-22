@@ -106,6 +106,44 @@ object RiskConfirmManager {
         lastCommandAutoBlocked = false
     }
 
+    // ---- 性能优化：缓存防护等级和侦测模式，避免每次命令都读取 SharedPreferences ----
+    @Volatile
+    private var cachedProtectionLevel: ProtectionLevel? = null
+
+    @Volatile
+    private var cachedDetectionMode: DetectionMode? = null
+
+    /** 会话环境类型缓存（使用 WeakHashMap 避免内存泄漏） */
+    private val environmentCache = java.util.concurrent.ConcurrentHashMap<String, EnvironmentType>()
+
+    /** 清除指定会话的环境缓存 */
+    fun invalidateEnvironmentCache(sessionHandle: String) {
+        environmentCache.remove(sessionHandle)
+    }
+
+    /** 清除所有环境缓存 */
+    fun clearAllEnvironmentCache() {
+        environmentCache.clear()
+    }
+
+    /** 预加载缓存到内存（避免首次命令读取 SharedPreferences） */
+    fun preloadCache(context: Context) {
+        try {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val levelOrdinal = prefs.getInt(KEY_PROTECTION_LEVEL, ProtectionLevel.WARN_VERIFY.ordinal)
+            cachedProtectionLevel = ProtectionLevel.entries.getOrElse(levelOrdinal) { ProtectionLevel.WARN_VERIFY }
+            
+            if (cachedProtectionLevel != ProtectionLevel.OFF) {
+                val modeOrdinal = prefs.getInt(KEY_DETECTION_MODE, DetectionMode.STATIC.ordinal)
+                cachedDetectionMode = DetectionMode.entries.getOrElse(modeOrdinal) { DetectionMode.STATIC }
+            } else {
+                cachedDetectionMode = DetectionMode.NONE
+            }
+        } catch (_: Exception) {
+            // 忽略异常，保持缓存为 null
+        }
+    }
+
     // ---- Snackbar 事件流 ----
     data class SnackbarEvent(val message: String, val duration: Int = Snackbar.LENGTH_LONG)
     // SharedFlow(replay=0): 活跃 subscriber 实时收到，新 subscriber 不收历史
@@ -284,15 +322,18 @@ object RiskConfirmManager {
         }
     }
 
-    /** 获取当前保护级别 */
+    /** 获取当前保护级别（优先从缓存读取） */
     fun getProtectionLevel(context: Context): ProtectionLevel {
+        cachedProtectionLevel?.let { return it }
         migrateIfNeeded(context)
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val ordinal = prefs.getInt(KEY_PROTECTION_LEVEL, ProtectionLevel.WARN_VERIFY.ordinal)
-        return ProtectionLevel.entries.getOrElse(ordinal) { ProtectionLevel.WARN_VERIFY }
+        val level = ProtectionLevel.entries.getOrElse(ordinal) { ProtectionLevel.WARN_VERIFY }
+        cachedProtectionLevel = level
+        return level
     }
 
-    /** 设置保护级别 */
+    /** 设置保护级别（同时更新缓存） */
     fun setProtectionLevel(context: Context, level: ProtectionLevel) {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val currentLevel = getProtectionLevel(context)
@@ -306,6 +347,8 @@ object RiskConfirmManager {
                     .putInt(KEY_DETECTION_MODE, DetectionMode.NONE.ordinal)
                     .putInt(KEY_PROTECTION_LEVEL, level.ordinal)
                     .apply()
+                cachedProtectionLevel = level
+                cachedDetectionMode = DetectionMode.NONE
                 return
             }
         }
@@ -317,34 +360,43 @@ object RiskConfirmManager {
                 .putInt(KEY_PROTECTION_LEVEL, level.ordinal)
                 .putInt(KEY_DETECTION_MODE, previousDetection)
                 .apply()
+            cachedProtectionLevel = level
+            cachedDetectionMode = DetectionMode.entries.getOrElse(previousDetection) { DetectionMode.STATIC }
             return
         }
         
         prefs.edit()
             .putInt(KEY_PROTECTION_LEVEL, level.ordinal)
             .apply()
+        cachedProtectionLevel = level
     }
 
-    /** 获取侦测模式 */
+    /** 获取侦测模式（优先从缓存读取） */
     fun getDetectionMode(context: Context): DetectionMode {
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         // 如果防护等级为 OFF，返回 NONE
         val protectionLevel = getProtectionLevel(context)
         if (protectionLevel == ProtectionLevel.OFF) {
+            cachedDetectionMode = DetectionMode.NONE
             return DetectionMode.NONE
         }
+        cachedDetectionMode?.let { mode ->
+            if (mode != DetectionMode.NONE) return mode
+        }
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val ordinal = prefs.getInt(KEY_DETECTION_MODE, DetectionMode.STATIC.ordinal)
         val mode = DetectionMode.entries.getOrElse(ordinal) { DetectionMode.STATIC }
-        // 如果存储的是 NONE（可能之前关闭了防护），返回 STATIC 作为默认
-        return if (mode == DetectionMode.NONE) DetectionMode.STATIC else mode
+        val result = if (mode == DetectionMode.NONE) DetectionMode.STATIC else mode
+        cachedDetectionMode = result
+        return result
     }
 
-    /** 设置侦测模式 */
+    /** 设置侦测模式（同时更新缓存） */
     fun setDetectionMode(context: Context, mode: DetectionMode) {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         prefs.edit()
             .putInt(KEY_DETECTION_MODE, mode.ordinal)
             .apply()
+        cachedDetectionMode = mode
     }
 
     /** @Deprecated 请使用 getProtectionLevel() 代替 */
@@ -482,6 +534,28 @@ object RiskConfirmManager {
         val detection = RiskCommandDetector.detect(command, inNativeTermux)
         if (!detection.isDangerous) return true
 
+        // --- SSH 会话优化：大部分命令仅提示不弹窗 ---
+        if (environmentType == EnvironmentType.SSH && level == ProtectionLevel.WARN_VERIFY) {
+            when (detection.riskType) {
+                RiskCommandDetector.RiskType.SHUTDOWN_REBOOT,
+                RiskCommandDetector.RiskType.FORMAT,
+                RiskCommandDetector.RiskType.RM_RF_ROOT -> {
+                    // 这些命令在远程服务器上也很危险，继续弹窗流程
+                }
+                else -> {
+                    // 其他命令仅 Snackbar 提示，放行
+                    Handler(Looper.getMainLooper()).post {
+                        SnackbarHelper.show(
+                            context,
+                            "SSH远程: ${detection.description}",
+                            Snackbar.LENGTH_SHORT
+                        )
+                    }
+                    return true
+                }
+            }
+        }
+
         // WARN_ONLY: Snackbar 提示但放行
         if (level == ProtectionLevel.WARN_ONLY) {
             Handler(Looper.getMainLooper()).post {
@@ -569,6 +643,28 @@ object RiskConfirmManager {
 
         val detection = RiskCommandDetector.detect(command)
         if (!detection.isDangerous) return true
+
+        // --- SSH 会话优化：大部分命令仅提示不弹窗 ---
+        if (environmentType == EnvironmentType.SSH && level == ProtectionLevel.WARN_VERIFY) {
+            when (detection.riskType) {
+                RiskCommandDetector.RiskType.SHUTDOWN_REBOOT,
+                RiskCommandDetector.RiskType.FORMAT,
+                RiskCommandDetector.RiskType.RM_RF_ROOT -> {
+                    // 这些命令在远程服务器上也很危险，继续弹窗流程
+                }
+                else -> {
+                    // 其他命令仅 Snackbar 提示，放行
+                    Handler(Looper.getMainLooper()).post {
+                        SnackbarHelper.show(
+                            context,
+                            "SSH远程: ${detection.description}",
+                            Snackbar.LENGTH_SHORT
+                        )
+                    }
+                    return true
+                }
+            }
+        }
 
         // WARN_ONLY: Snackbar 提示但放行
         if (level == ProtectionLevel.WARN_ONLY) {
@@ -803,10 +899,60 @@ object RiskConfirmManager {
         // 记录危险命令计数
         incrementDangerCount()
 
-        // 检测当前环境
+        // 检测当前环境（带缓存）
         val envType = detectEnvironment(context, session)
 
-        // --- 按保护级别分发 ---
+        // --- SSH 会话快速路径优化 ---
+        // SSH 会话中，危险操作实际发生在远程设备，本地防护意义有限
+        // 对于非破坏性命令（su/sudo 等），直接放行
+        if (envType == EnvironmentType.SSH) {
+            // su/sudo 在 SSH 中：仅 Snackbar 提醒，放行
+            if (nativeDetection.riskType == RiskCommandDetector.RiskType.SU_SUDO) {
+                Handler(Looper.getMainLooper()).post {
+                    SnackbarHelper.show(
+                        context,
+                        context.getString(R.string.risk_command_container_sudo_warning),
+                        Snackbar.LENGTH_SHORT
+                    )
+                }
+                return false
+            }
+
+            // WARN_ONLY 级别：所有危险命令仅提示，放行
+            if (level == ProtectionLevel.WARN_ONLY) {
+                emitSnackbar(nativeDetection.description, Snackbar.LENGTH_SHORT)
+                return false
+            }
+
+            // WARN_VERIFY 级别：SSH 会话中大部分危险命令仅 Snackbar 提示
+            // SHUTDOWN_REBOOT 和 FORMAT 仍需弹窗（可能影响远程服务器可用性）
+            if (level == ProtectionLevel.WARN_VERIFY) {
+                when (nativeDetection.riskType) {
+                    RiskCommandDetector.RiskType.SHUTDOWN_REBOOT,
+                    RiskCommandDetector.RiskType.FORMAT,
+                    RiskCommandDetector.RiskType.RM_RF_ROOT -> {
+                        // 这些命令在远程服务器上也很危险，继续拦截流程
+                        return handleDangerousCommand(context, session, command, nativeDetection, envType)
+                    }
+                    else -> {
+                        // 其他命令仅 Snackbar 提示，放行
+                        val msg = "SSH远程: ${nativeDetection.description}"
+                        emitSnackbar(msg, Snackbar.LENGTH_SHORT)
+                        return false
+                    }
+                }
+            }
+
+            // AUTO_BLOCK 级别：SSH 会话中也直接拦截
+            if (level == ProtectionLevel.AUTO_BLOCK) {
+                lastCommandAutoBlocked = true
+                val msg = "危险操作被拒绝: ${nativeDetection.description}"
+                emitSnackbar(msg, Snackbar.LENGTH_LONG)
+                return true
+            }
+        }
+
+        // --- 非 SSH 环境（原生/容器/虚拟机）按原逻辑处理 ---
 
         // WARN_ONLY: Snackbar 提示但不拦截，显示危险命令的具体描述
         if (level == ProtectionLevel.WARN_ONLY) {
@@ -975,7 +1121,7 @@ object RiskConfirmManager {
     }
 
     /**
-     * 检测当前终端会话的运行环境。
+     * 检测当前终端会话的运行环境（带缓存优化）。
      *
      * @param context Context
      * @param session TerminalSession
@@ -985,6 +1131,11 @@ object RiskConfirmManager {
         context: Context,
         session: com.termux.terminal.TerminalSession
     ): EnvironmentType {
+        val sessionHandle = session.mHandle
+        
+        // 先从缓存读取
+        environmentCache[sessionHandle]?.let { return it }
+
         val shellPath = session.shellPath ?: ""
         val sessionName = session.mSessionName ?: ""
 
@@ -992,6 +1143,7 @@ object RiskConfirmManager {
         val containerIndicators = listOf("proot", "/rootfs/", "/container/")
         for (indicator in containerIndicators) {
             if (shellPath.contains(indicator, ignoreCase = true)) {
+                environmentCache[sessionHandle] = EnvironmentType.CONTAINER
                 return EnvironmentType.CONTAINER
             }
         }
@@ -1000,6 +1152,7 @@ object RiskConfirmManager {
         val vmIndicators = listOf("qemu", "/vm/", "/guest/")
         for (indicator in vmIndicators) {
             if (shellPath.contains(indicator, ignoreCase = true)) {
+                environmentCache[sessionHandle] = EnvironmentType.VM
                 return EnvironmentType.VM
             }
         }
@@ -1008,6 +1161,7 @@ object RiskConfirmManager {
         val sshIndicators = listOf("ssh", "scp", "sftp", "remote", "SSH-")
         for (indicator in sshIndicators) {
             if (sessionName.contains(indicator, ignoreCase = true)) {
+                environmentCache[sessionHandle] = EnvironmentType.SSH
                 return EnvironmentType.SSH
             }
         }
@@ -1017,12 +1171,14 @@ object RiskConfirmManager {
         if (args != null) {
             for (arg in args) {
                 if (arg != null && arg.contains("ssh", ignoreCase = true)) {
+                    environmentCache[sessionHandle] = EnvironmentType.SSH
                     return EnvironmentType.SSH
                 }
             }
         }
 
         // 默认视为原生 Termux 环境
+        environmentCache[sessionHandle] = EnvironmentType.NATIVE
         return EnvironmentType.NATIVE
     }
 

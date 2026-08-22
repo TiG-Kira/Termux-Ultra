@@ -26,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -33,6 +34,8 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.navigationBars
 import androidx.core.view.WindowCompat
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
@@ -64,6 +67,10 @@ class ThirdPartyCenterActivity : ComponentActivity() {
                 com.termux.app.compose.KiTerminalTheme {
                 val context = this@ThirdPartyCenterActivity
                 val scrollBehavior = MiuixScrollBehavior()
+                val density = LocalDensity.current
+                val systemNavBarsHeight = with(density) {
+                    WindowInsets.navigationBars.getBottom(density).toDp()
+                }
 
                 val prefs = remember { context.getSharedPreferences(THIRD_PARTY_PREFS, Context.MODE_PRIVATE) }
                 var resources by remember { mutableStateOf(loadResources(prefs, context)) }
@@ -254,7 +261,11 @@ class ThirdPartyCenterActivity : ComponentActivity() {
                             .fillMaxSize()
                             .padding(padding)
                             .nestedScroll(scrollBehavior.nestedScrollConnection),
-                        contentPadding = PaddingValues(16.dp),
+                        contentPadding = PaddingValues(
+                            start = 16.dp,
+                            end = 16.dp,
+                            bottom = systemNavBarsHeight + 26.dp
+                        ),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         item {
@@ -520,8 +531,9 @@ class ThirdPartyCenterActivity : ComponentActivity() {
                     id = "preset_moe",
                     name = context.getString(R.string.resource_moe),
                     description = context.getString(R.string.resource_moe_desc),
-                    script = "https://gitee.com/mo2/linux/raw/2/2.awk",
-                    url = "https://github.trss.me/Install/TMOE.html"
+                    script = "awk -f <(curl -L gitee.com/mo2/linux/raw/2/2.awk)",
+                    url = "https://github.trss.me/Install/TMOE.html",
+                    type = "moe_awk"
                 ),
                 ThirdPartyResource(
                     id = "preset_lightpanel",
@@ -591,6 +603,18 @@ private fun resolveThirdPartyCommand(r: ThirdPartyResource, context: Context): S
             scriptUrl = "install_lightpanel",
             iconRes = R.drawable.ic_terminal,
             needsLinuxContainer = true
+        )
+        return resolveCommand(item, context)
+    }
+
+    // Special type: moe_awk (TMOE Linux Manager - preset with display-only script)
+    if (r.type == "moe_awk") {
+        val item = ResourceItem(
+            title = r.name,
+            description = r.description,
+            url = r.url,
+            scriptUrl = "https://gitee.com/mo2/linux/raw/2/2.awk",
+            iconRes = R.drawable.ic_terminal
         )
         return resolveCommand(item, context)
     }

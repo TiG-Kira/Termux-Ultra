@@ -25,12 +25,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.navigationBars
 import androidx.core.view.WindowCompat
 import com.termux.R
 import com.termux.app.TermuxService
@@ -61,6 +64,10 @@ class UtilityCenterActivity : ComponentActivity() {
                 com.termux.app.compose.KiTerminalTheme {
                 val context = this@UtilityCenterActivity
                 val scrollBehavior = MiuixScrollBehavior()
+                val density = LocalDensity.current
+                val systemNavBarsHeight = with(density) {
+                    WindowInsets.navigationBars.getBottom(density).toDp()
+                }
 
                 val utilityItems = remember {
                     listOf(
@@ -230,7 +237,11 @@ class UtilityCenterActivity : ComponentActivity() {
                             .fillMaxSize()
                             .padding(padding)
                             .nestedScroll(scrollBehavior.nestedScrollConnection),
-                        contentPadding = PaddingValues(16.dp),
+                        contentPadding = PaddingValues(
+                            start = 16.dp,
+                            end = 16.dp,
+                            bottom = systemNavBarsHeight + 26.dp
+                        ),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         item {

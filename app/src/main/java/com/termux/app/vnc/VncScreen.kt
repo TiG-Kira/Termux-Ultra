@@ -44,7 +44,8 @@ fun VncScreen(
     onScanRequestedConsumed: () -> Unit,
     onScanStart: () -> Unit = {},
     onScanEnd: () -> Unit = {},
-    nestedScrollConnection: androidx.compose.ui.input.nestedscroll.NestedScrollConnection? = null
+    nestedScrollConnection: androidx.compose.ui.input.nestedscroll.NestedScrollConnection? = null,
+    navBarBottomPadding: androidx.compose.ui.unit.Dp = 0.dp
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -71,7 +72,7 @@ fun VncScreen(
     }
 
     LazyColumn(
-        contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 92.dp),
+        contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = navBarBottomPadding + 16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
         modifier = Modifier
             .fillMaxSize()

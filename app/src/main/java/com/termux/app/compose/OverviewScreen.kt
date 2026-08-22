@@ -1,5 +1,7 @@
 package com.termux.app.compose
 
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -27,6 +29,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -66,6 +69,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -83,6 +87,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -124,6 +129,7 @@ enum class OverviewCardType {
     SESSIONS,
     CPU_MONITOR,
     GPU_MONITOR,
+    MEMORY_MONITOR,
     PROCESS_LIST,
     STOP_ALL,
     RESOURCE_ACTION
@@ -251,8 +257,33 @@ data class ProcessInfo(
     val name: String,
     val cpuPercent: Float,
     val memPercent: Float,
-    val isFrozen: Boolean = false
-)
+    val memRssKb: Long = 0L,
+    val state: String = "S",
+    val isFrozen: Boolean = false,
+    val isTermuxRelated: Boolean = false,
+    val threadCount: Int = 0,
+    val hasRecentCpu: Boolean = false
+) {
+    val isRunning: Boolean get() = state == "R"
+    val isSleeping: Boolean get() = state == "S" || state == "D"
+    val isFrozenState: Boolean get() = state == "T" || state == "t"
+    val isBackgroundRunning: Boolean get() {
+        if (state == "R") return true
+        if (state == "D") return true
+        if (state == "S" && (threadCount > 1 || hasRecentCpu)) return true
+        return false
+    }
+    val stateLabel: String
+        get() = when {
+            isFrozen -> "冻结"
+            isRunning -> "运行"
+            isBackgroundRunning -> "后台运行"
+            state == "S" -> "休眠"
+            state == "D" -> "磁盘等待"
+            state == "Z" -> "僵尸"
+            else -> "未知"
+        }
+}
 
 // ============================================================
 // Card Configuration Manager
@@ -300,8 +331,9 @@ class OverviewCardManager(context: Context) {
             OverviewCardConfig("sessions", OverviewCardType.SESSIONS, isVisible = true, size = CardSize.WIDE, position = 1),
             OverviewCardConfig("cpu", OverviewCardType.CPU_MONITOR, isVisible = true, size = CardSize.SMALL, position = 2),
             OverviewCardConfig("gpu", OverviewCardType.GPU_MONITOR, isVisible = true, size = CardSize.SMALL, position = 3),
-            OverviewCardConfig("processes", OverviewCardType.PROCESS_LIST, isVisible = true, size = CardSize.WIDE, position = 4),
-            OverviewCardConfig("stop_all", OverviewCardType.STOP_ALL, isVisible = true, size = CardSize.SMALL, position = 5)
+            OverviewCardConfig("memory", OverviewCardType.MEMORY_MONITOR, isVisible = true, size = CardSize.SMALL, position = 4),
+            OverviewCardConfig("processes", OverviewCardType.PROCESS_LIST, isVisible = true, size = CardSize.WIDE, position = 5),
+            OverviewCardConfig("stop_all", OverviewCardType.STOP_ALL, isVisible = true, size = CardSize.SMALL, position = 6)
         )
     }
     
@@ -355,7 +387,8 @@ fun OverviewScreen(
     onToggleWakeLock: () -> Unit,
     onExecuteScript: (String, String) -> Unit = { _, _ -> },
     onRefresh: () -> Unit = {},
-    onEditModeChanged: (Boolean) -> Unit = {}
+    onEditModeChanged: (Boolean) -> Unit = {},
+    navBarBottomPadding: androidx.compose.ui.unit.Dp = 0.dp
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -375,8 +408,11 @@ fun OverviewScreen(
     var cpuUsage by remember { mutableFloatStateOf(0f) }
     var cpuTemperature by remember { mutableFloatStateOf(0f) }
     var gpuUsage by remember { mutableFloatStateOf(0f) }
+    var memUsage by remember { mutableFloatStateOf(0f) }
+    var memTotalKb by remember { mutableLongStateOf(0L) }
     var cpuHistory by remember { mutableStateOf<List<Float>>(emptyList()) }
     var gpuHistory by remember { mutableStateOf<List<Float>>(emptyList()) }
+    var memHistory by remember { mutableStateOf<List<Float>>(emptyList()) }
     
     // Process list
     var processList by remember { mutableStateOf<List<ProcessInfo>>(emptyList()) }
@@ -396,12 +432,18 @@ fun OverviewScreen(
     }
     
     // CPU/GPU monitoring loop
-    LaunchedEffect(Unit) {
+    LaunchedEffect(sessions) {
         // First call to initialize baseline
-        readCpuUsage()
+        val sessionPids = sessions.mapNotNull { 
+            it.getTerminalSession()?.shellPid?.takeIf { pid -> pid > 0 } 
+        }.toSet()
+        readCpuUsage(sessionPids)
         delay(500)
         while (true) {
-            cpuUsage = readCpuUsage()
+            val currentSessionPids = sessions.mapNotNull { 
+                it.getTerminalSession()?.shellPid?.takeIf { pid -> pid > 0 } 
+            }.toSet()
+            cpuUsage = readCpuUsage(currentSessionPids)
             cpuTemperature = readCpuTemperature()
             
             // Try GraphicsStatsManager first (most reliable for Android N+)
@@ -415,20 +457,30 @@ fun OverviewScreen(
             // Update GPU usage only if available, keep last known value otherwise
             gpuUsage = newGpuUsage
             
+            // Update memory usage
+            val (memPct, memKb) = readMemoryUsage(currentSessionPids)
+            memUsage = memPct
+            memTotalKb = memKb
+            
             // Update history for charts
             MonitorHistory.addCpu(cpuUsage)
             MonitorHistory.addGpu(gpuUsage)
+            MonitorHistory.addMem(memUsage)
             cpuHistory = MonitorHistory.getCpuHistory()
             gpuHistory = MonitorHistory.getGpuHistory()
+            memHistory = MonitorHistory.getMemHistory()
             
             delay(1000)
         }
     }
     
     // Process list monitoring
-    LaunchedEffect(Unit) {
+    LaunchedEffect(sessions) {
         while (true) {
-            processList = readProcessList()
+            val sessionPids = sessions.mapNotNull { 
+                it.getTerminalSession()?.shellPid?.takeIf { pid -> pid > 0 } 
+            }.toSet()
+            processList = readProcessList(sessionPids)
             delay(2000)
         }
     }
@@ -442,7 +494,37 @@ fun OverviewScreen(
         val card = cards.find { it.id == selectedCardId!! }
         if (card != null) {
             val sortedCards = cards.sortedBy { it.position }
-            val currentIndex = sortedCards.indexOfFirst { it.id == card.id }
+            
+            // Calculate row structure for the grid layout
+            // WIDE cards occupy full row (span=2), SMALL cards pair up per row
+            val rows = mutableListOf<List<OverviewCardConfig>>()
+            var i = 0
+            while (i < sortedCards.size) {
+                if (sortedCards[i].size == CardSize.WIDE) {
+                    rows.add(listOf(sortedCards[i]))
+                    i++
+                } else {
+                    val row = mutableListOf<OverviewCardConfig>()
+                    row.add(sortedCards[i])
+                    i++
+                    if (i < sortedCards.size && sortedCards[i].size == CardSize.SMALL) {
+                        row.add(sortedCards[i])
+                        i++
+                    }
+                    rows.add(row)
+                }
+            }
+            
+            // Find which row contains the current card
+            val currentRowIndex = rows.indexOfFirst { row -> row.any { it.id == card.id } }
+            val canMoveUp = currentRowIndex > 0
+            val canMoveDown = currentRowIndex >= 0 && currentRowIndex < rows.size - 1
+            
+            // Helper to rebuild cards list from rows
+            fun rebuildCardsFromRows(rowList: List<List<OverviewCardConfig>>): List<OverviewCardConfig> {
+                val flatList = rowList.flatten()
+                return flatList.mapIndexed { index, c -> c.copy(position = index) }
+            }
             
             OverlayDialog(
                 show = showCardSettings,
@@ -505,32 +587,28 @@ fun OverviewScreen(
                             TextButton(
                                 text = "↑ ${stringResource(R.string.overview_move_up)}",
                                 onClick = {
-                                    if (currentIndex > 0) {
-                                        val newIndex = currentIndex - 1
-                                        val updatedList = sortedCards.toMutableList()
-                                        val movedCard = updatedList.removeAt(currentIndex)
-                                        updatedList.add(newIndex, movedCard)
-                                        cards = updatedList.mapIndexed { index, c ->
-                                            c.copy(position = index)
-                                        }
+                                    if (canMoveUp) {
+                                        val updatedRows = rows.toMutableList()
+                                        val temp = updatedRows[currentRowIndex]
+                                        updatedRows[currentRowIndex] = updatedRows[currentRowIndex - 1]
+                                        updatedRows[currentRowIndex - 1] = temp
+                                        cards = rebuildCardsFromRows(updatedRows)
                                     }
                                 },
-                                enabled = currentIndex > 0
+                                enabled = canMoveUp
                             )
                             TextButton(
                                 text = "↓ ${stringResource(R.string.overview_move_down)}",
                                 onClick = {
-                                    if (currentIndex < sortedCards.size - 1) {
-                                        val newIndex = currentIndex + 1
-                                        val updatedList = sortedCards.toMutableList()
-                                        val movedCard = updatedList.removeAt(currentIndex)
-                                        updatedList.add(newIndex, movedCard)
-                                        cards = updatedList.mapIndexed { index, c ->
-                                            c.copy(position = index)
-                                        }
+                                    if (canMoveDown) {
+                                        val updatedRows = rows.toMutableList()
+                                        val temp = updatedRows[currentRowIndex]
+                                        updatedRows[currentRowIndex] = updatedRows[currentRowIndex + 1]
+                                        updatedRows[currentRowIndex + 1] = temp
+                                        cards = rebuildCardsFromRows(updatedRows)
                                     }
                                 },
-                                enabled = currentIndex < sortedCards.size - 1
+                                enabled = canMoveDown
                             )
                         }
                         
@@ -754,7 +832,7 @@ fun OverviewScreen(
                 .nestedScroll(scrollBehavior.nestedScrollConnection),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
-            contentPadding = PaddingValues(top = 8.dp, bottom = 92.dp, start = 16.dp, end = 16.dp)
+            contentPadding = PaddingValues(top = 8.dp, bottom = navBarBottomPadding + 16.dp, start = 16.dp, end = 16.dp)
         ) {
             items(
                 items = orderedCards,
@@ -769,19 +847,26 @@ fun OverviewScreen(
                     cpuUsage = cpuUsage,
                     cpuTemperature = cpuTemperature,
                     gpuUsage = gpuUsage,
+                    memUsage = memUsage,
+                    memTotalKb = memTotalKb,
                     cpuHistory = cpuHistory,
                     gpuHistory = gpuHistory,
+                    memHistory = memHistory,
                     processList = processList,
                     runningSessions = runningSessions,
                     stoppedSessions = stoppedSessions,
                     sessions = sessions,
+                    isWakeLockEnabled = isWakeLockEnabled,
                     onSessionClick = onSessionClick,
                     onStopAllSessions = onStopAllSessions,
                     onNewTerminal = onNewTerminal,
                     onExecuteScript = onExecuteScript,
                     selectedCardId = selectedCardId,
                     onCardSelected = { selectedCardId = it },
-                    onShowCardSettings = { showCardSettings = true }
+                    onShowCardSettings = { showCardSettings = true },
+                    onUpdateCard = { updatedCard ->
+                        cards = cards.map { if (it.id == updatedCard.id) updatedCard else it }
+                    }
                 )
             }
         }
@@ -796,6 +881,8 @@ fun OverviewScreen(
 private fun TipsAgentCard(
     card: OverviewCardConfig,
     isEditMode: Boolean,
+    isWakeLockEnabled: Boolean,
+    runningSessionsCount: Int,
     onEditClick: () -> Unit
 ) {
     val context = LocalContext.current
@@ -808,6 +895,10 @@ private fun TipsAgentCard(
     var showWelcomeCard by remember { mutableStateOf(false) }
     var showKeepAliveWarning by remember { mutableStateOf(false) }
     var showLowCard by remember { mutableStateOf(false) }
+    
+    val serviceStatus = remember(isWakeLockEnabled, runningSessionsCount) {
+        determineServiceStatus(context, isWakeLockEnabled, runningSessionsCount)
+    }
     
     LaunchedEffect(Unit) {
         val prefs = context.getSharedPreferences("termux_prefs", Context.MODE_PRIVATE)
@@ -856,6 +947,7 @@ private fun TipsAgentCard(
                 showWelcomeCard = showWelcomeCard,
                 showKeepAliveWarning = showKeepAliveWarning,
                 showLowCard = showLowCard,
+                serviceStatus = serviceStatus,
                 onWelcomeClose = {
                     showWelcomeCard = false
                     context.getSharedPreferences("termux_prefs", Context.MODE_PRIVATE)
@@ -873,6 +965,7 @@ private fun TipsAgentCard(
                 showWelcomeCard = showWelcomeCard,
                 showKeepAliveWarning = showKeepAliveWarning,
                 showLowCard = showLowCard,
+                serviceStatus = serviceStatus,
                 onWelcomeClose = {
                     showWelcomeCard = false
                     context.getSharedPreferences("termux_prefs", Context.MODE_PRIVATE)
@@ -894,6 +987,7 @@ private fun HorizontalTipsContent(
     showWelcomeCard: Boolean,
     showKeepAliveWarning: Boolean,
     showLowCard: Boolean,
+    serviceStatus: ServiceStatus,
     onWelcomeClose: () -> Unit,
     onKeepAliveClose: () -> Unit
 ) {
@@ -934,7 +1028,7 @@ private fun HorizontalTipsContent(
         } else {
             item {
                 ServiceStatusCard(
-                    status = ServiceStatus.NORMAL,
+                    status = serviceStatus,
                     killedSessionName = null,
                     horizontalMode = true
                 )
@@ -949,6 +1043,7 @@ private fun VerticalTipsContent(
     showWelcomeCard: Boolean,
     showKeepAliveWarning: Boolean,
     showLowCard: Boolean,
+    serviceStatus: ServiceStatus,
     onWelcomeClose: () -> Unit,
     onKeepAliveClose: () -> Unit
 ) {
@@ -978,11 +1073,34 @@ private fun VerticalTipsContent(
             LowAndroidWarningCard(horizontalMode = false)
         } else {
             ServiceStatusCard(
-                status = ServiceStatus.NORMAL,
+                status = serviceStatus,
                 killedSessionName = null,
                 horizontalMode = false
             )
         }
+    }
+}
+
+// ============================================================
+// Service Status Helper
+// ============================================================
+
+private fun determineServiceStatus(
+    context: Context,
+    isWakeLockEnabled: Boolean,
+    runningSessionsCount: Int
+): ServiceStatus {
+    val prefs = context.getSharedPreferences("termux_prefs", Context.MODE_PRIVATE)
+    
+    val memoryWarningActive = prefs.getBoolean("memory_warning_active", false)
+    val memoryKillActive = prefs.getBoolean("memory_kill_active", false)
+    
+    return when {
+        memoryKillActive -> ServiceStatus.MEMORY_KILL
+        memoryWarningActive -> ServiceStatus.MEMORY_WARNING
+        isWakeLockEnabled -> ServiceStatus.WAKE_LOCK_ACTIVE
+        runningSessionsCount > 0 -> ServiceStatus.NORMAL
+        else -> ServiceStatus.SERVICE_STOPPED
     }
 }
 
@@ -1001,9 +1119,13 @@ private fun SessionsCard(
     onEditClick: () -> Unit
 ) {
     val isDark = isSystemInDarkTheme()
+    val config = LocalConfiguration.current
+    val cardHeight = ((config.screenWidthDp - 40) / 2).dp
     
     Card(
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(cardHeight)
     ) {
         Column(
             modifier = Modifier
@@ -1036,12 +1158,14 @@ private fun SessionsCard(
             Spacer(modifier = Modifier.height(8.dp))
             
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // Running sessions
                 Box(
                     modifier = Modifier
+                        .fillMaxHeight()
                         .weight(1f)
                         .clip(RoundedCornerShape(10.dp))
                         .background(
@@ -1053,62 +1177,68 @@ private fun SessionsCard(
                                 onSessionClick(running.first())
                             }
                         }
-                        .padding(10.dp)
+                        .padding(12.dp),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Column {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
                                 imageVector = Icons.Rounded.PlayArrow,
                                 contentDescription = null,
-                                modifier = Modifier.size(14.dp),
+                                modifier = Modifier.size(16.dp),
                                 tint = Color(0xFF4CAF50)
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
                                 text = stringResource(R.string.overview_running),
-                                fontSize = 11.sp,
+                                fontSize = 12.sp,
                                 color = Color(0xFF4CAF50)
                             )
                         }
-                        Spacer(modifier = Modifier.height(4.dp))
+                        Spacer(modifier = Modifier.height(6.dp))
                         Text(
                             text = runningCount.toString(),
-                            fontSize = 20.sp,
+                            fontSize = 28.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color(0xFF4CAF50)
                         )
                     }
                 }
                 
-                // Stopped sessions
                 Box(
                     modifier = Modifier
+                        .fillMaxHeight()
                         .weight(1f)
                         .clip(RoundedCornerShape(10.dp))
                         .background(
                             if (isDark) Color(0xFF3B1414) else Color(0xFFFFEBEE)
                         )
-                        .padding(10.dp)
+                        .padding(12.dp),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Column {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
                                 imageVector = Icons.Rounded.Stop,
                                 contentDescription = null,
-                                modifier = Modifier.size(14.dp),
+                                modifier = Modifier.size(16.dp),
                                 tint = Color(0xFFE57373)
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
                                 text = stringResource(R.string.overview_stopped),
-                                fontSize = 11.sp,
+                                fontSize = 12.sp,
                                 color = Color(0xFFE57373)
                             )
                         }
-                        Spacer(modifier = Modifier.height(4.dp))
+                        Spacer(modifier = Modifier.height(6.dp))
                         Text(
                             text = stoppedCount.toString(),
-                            fontSize = 20.sp,
+                            fontSize = 28.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color(0xFFE57373)
                         )
@@ -1133,10 +1263,15 @@ private fun CpuMonitorCard(
     onEditClick: () -> Unit
 ) {
     val isDark = isSystemInDarkTheme()
-    val usageColor = getUsageColor(usage)
+    val cpuMaxCapacity = remember { getCpuMaxCapacity() }
+    val usageColor = getUsageColor(usage, cpuMaxCapacity)
+    val config = LocalConfiguration.current
+    val cardHeight = ((config.screenWidthDp - 40) / 2).dp
     
     Card(
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(cardHeight)
     ) {
         Column(
             modifier = Modifier
@@ -1175,9 +1310,10 @@ private fun CpuMonitorCard(
             
             Spacer(modifier = Modifier.height(6.dp))
             
-            // Usage value and chart
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(
@@ -1186,7 +1322,7 @@ private fun CpuMonitorCard(
                 ) {
                     Text(
                         text = "${usage.toInt()}%",
-                        fontSize = 24.sp,
+                        fontSize = 32.sp,
                         fontWeight = FontWeight.Bold,
                         color = usageColor
                     )
@@ -1197,18 +1333,22 @@ private fun CpuMonitorCard(
                 ) {
                     UsageChart(
                         data = history,
-                        color = usageColor
+                        color = usageColor,
+                        modifier = Modifier.fillMaxWidth().height(48.dp),
+                        maxValue = cpuMaxCapacity
                     )
                 }
             }
             
+            Spacer(modifier = Modifier.height(4.dp))
             if (temperature > 0f) {
-                Spacer(modifier = Modifier.height(6.dp))
                 Text(
                     text = stringResource(R.string.overview_cpu_temp, temperature),
-                    fontSize = 11.sp,
+                    fontSize = 12.sp,
                     color = MiuixTheme.colorScheme.onSurfaceVariantSummary
                 )
+            } else {
+                Spacer(modifier = Modifier.height(16.dp))
             }
         }
     }
@@ -1233,9 +1373,13 @@ private fun GpuMonitorCard(
     val validHistory = MonitorHistory.getValidGpuHistory()
     val usageColor = if (isGpuAvailable) getUsageColor(usage) 
                       else MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.6f)
+    val config = LocalConfiguration.current
+    val cardHeight = ((config.screenWidthDp - 40) / 2).dp
     
     Card(
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(cardHeight)
     ) {
         Column(
             modifier = Modifier
@@ -1275,9 +1419,10 @@ private fun GpuMonitorCard(
             
             Spacer(modifier = Modifier.height(6.dp))
             
-            // Usage value and chart
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(
@@ -1287,14 +1432,14 @@ private fun GpuMonitorCard(
                     if (isGpuAvailable) {
                         Text(
                             text = "${usage.toInt()}%",
-                            fontSize = 24.sp,
+                            fontSize = 32.sp,
                             fontWeight = FontWeight.Bold,
                             color = usageColor
                         )
                     } else if (hasHistoricalData) {
                         Text(
                             text = "${peakUsage.toInt()}%",
-                            fontSize = 24.sp,
+                            fontSize = 28.sp,
                             fontWeight = FontWeight.Bold,
                             color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.6f)
                         )
@@ -1306,7 +1451,7 @@ private fun GpuMonitorCard(
                     } else {
                         Text(
                             text = "N/A",
-                            fontSize = 22.sp,
+                            fontSize = 28.sp,
                             fontWeight = FontWeight.Bold,
                             color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.6f)
                         )
@@ -1319,12 +1464,14 @@ private fun GpuMonitorCard(
                     if (isGpuAvailable) {
                         UsageChart(
                             data = history,
-                            color = usageColor
+                            color = usageColor,
+                            modifier = Modifier.height(48.dp)
                         )
                     } else if (hasHistoricalData) {
                         UsageChart(
                             data = validHistory,
-                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.4f)
+                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.4f),
+                            modifier = Modifier.height(48.dp)
                         )
                     } else {
                         Text(
@@ -1335,6 +1482,115 @@ private fun GpuMonitorCard(
                     }
                 }
             }
+            
+            Spacer(modifier = Modifier.height(4.dp))
+            if (!isGpuAvailable) {
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+        }
+    }
+}
+
+// ============================================================
+// Memory Monitor Card
+// ============================================================
+
+@Composable
+private fun MemoryMonitorCard(
+    card: OverviewCardConfig,
+    usage: Float,
+    totalKb: Long,
+    history: List<Float>,
+    isEditMode: Boolean,
+    onEditClick: () -> Unit
+) {
+    val usageColor = getUsageColor(usage)
+    val config = LocalConfiguration.current
+    val cardHeight = ((config.screenWidthDp - 40) / 2).dp
+    
+    val memFormatted = when {
+        totalKb >= 1024 * 1024 -> String.format("%.1f GB", totalKb / (1024.0 * 1024.0))
+        totalKb >= 1024 -> String.format("%.0f MB", totalKb / 1024.0)
+        else -> "${totalKb} KB"
+    }
+    
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(cardHeight)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.Memory,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                    tint = MiuixTheme.colorScheme.primary
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = stringResource(R.string.overview_card_memory),
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = MiuixTheme.colorScheme.onSurface,
+                    modifier = Modifier.weight(1f)
+                )
+                if (isEditMode) {
+                    IconButton(onClick = onEditClick) {
+                        Icon(
+                            imageVector = Icons.Rounded.Edit,
+                            contentDescription = null,
+                            modifier = Modifier.size(14.dp),
+                            tint = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                        )
+                    }
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(6.dp))
+            
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(
+                        text = "${usage.toInt()}%",
+                        fontSize = 32.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = usageColor
+                    )
+                }
+                Column(
+                    horizontalAlignment = Alignment.Start,
+                    modifier = Modifier.weight(2f)
+                ) {
+                    UsageChart(
+                        data = history,
+                        color = usageColor,
+                        modifier = Modifier.fillMaxWidth().height(48.dp)
+                    )
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = stringResource(R.string.overview_memory_used, memFormatted),
+                fontSize = 12.sp,
+                color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+            )
         }
     }
 }
@@ -1347,12 +1603,11 @@ private fun GpuMonitorCard(
 private fun UsageChart(
     data: List<Float>,
     color: Color,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    maxValue: Float = 0f
 ) {
     Canvas(
-        modifier = modifier
-            .fillMaxWidth()
-            .height(40.dp)
+        modifier = Modifier.fillMaxWidth().height(40.dp).then(modifier)
     ) {
         if (data.isEmpty()) {
             drawRect(
@@ -1363,7 +1618,10 @@ private fun UsageChart(
         }
         
         val stepX = size.width / (MAX_CHART_POINTS - 1).coerceAtLeast(1)
-        val maxY = 100f
+        val maxY = when {
+            maxValue > 0f -> maxValue
+            else -> maxOf(100f, data.maxOrNull() ?: 100f)
+        }
         val barWidth = size.height / maxY
         
         // Draw gradient background fill
@@ -1378,7 +1636,7 @@ private fun UsageChart(
         
         for ((index, value) in dataToDraw.withIndex()) {
             val x = index * stepX
-            val y = size.height - (value.coerceIn(0f, 100f) * barWidth)
+            val y = size.height - (value.coerceIn(0f, maxY) * barWidth)
             
             if (index == 0) {
                 path.moveTo(x, y)
@@ -1420,7 +1678,7 @@ private fun UsageChart(
             val lastIndex = dataToDraw.size - 1
             val lastValue = dataToDraw[lastIndex]
             val lastX = lastIndex * stepX
-            val lastY = size.height - (lastValue.coerceIn(0f, 100f) * barWidth)
+            val lastY = size.height - (lastValue.coerceIn(0f, maxY) * barWidth)
             
             drawCircle(
                 color = color,
@@ -1445,16 +1703,23 @@ private fun ProcessListCard(
     onEditClick: () -> Unit
 ) {
     val frozenCount = processes.count { it.isFrozen }
+    val runningCount = processes.count { it.isRunning }
+    val backgroundCount = processes.count { it.isBackgroundRunning && !it.isFrozen }
+    val sleepingCount = processes.count { it.isSleeping && !it.isBackgroundRunning && !it.isFrozen }
     val activeProcesses = processes.filter { !it.isFrozen }
     val frozenProcesses = processes.filter { it.isFrozen }
+    val config = LocalConfiguration.current
+    val cardHeight = ((config.screenWidthDp - 40) / 2).dp
     
     Card(
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(cardHeight)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp)
+                .padding(12.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -1463,17 +1728,68 @@ private fun ProcessListCard(
                 Icon(
                     imageVector = Icons.Rounded.Speed,
                     contentDescription = null,
-                    modifier = Modifier.size(20.dp),
+                    modifier = Modifier.size(18.dp),
                     tint = MiuixTheme.colorScheme.primary
                 )
-                Spacer(modifier = Modifier.width(8.dp))
+                Spacer(modifier = Modifier.width(6.dp))
                 Text(
                     text = stringResource(R.string.overview_card_processes),
-                    fontSize = 14.sp,
+                    fontSize = 13.sp,
                     fontWeight = FontWeight.Medium,
                     color = MiuixTheme.colorScheme.onSurface,
                     modifier = Modifier.weight(1f)
                 )
+                if (runningCount > 0) {
+                    Box(
+                        modifier = Modifier
+                            .background(
+                                color = Color(0xFF4CAF50).copy(alpha = 0.15f),
+                                shape = RoundedCornerShape(4.dp)
+                            )
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = "运行 $runningCount",
+                            fontSize = 10.sp,
+                            color = Color(0xFF4CAF50)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(4.dp))
+                }
+                if (backgroundCount > 0) {
+                    Box(
+                        modifier = Modifier
+                            .background(
+                                color = Color(0xFFFF9800).copy(alpha = 0.15f),
+                                shape = RoundedCornerShape(4.dp)
+                            )
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = "后台 $backgroundCount",
+                            fontSize = 10.sp,
+                            color = Color(0xFFFF9800)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(4.dp))
+                }
+                if (sleepingCount > 0) {
+                    Box(
+                        modifier = Modifier
+                            .background(
+                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.15f),
+                                shape = RoundedCornerShape(4.dp)
+                            )
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = "休眠 $sleepingCount",
+                            fontSize = 10.sp,
+                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(4.dp))
+                }
                 if (frozenCount > 0) {
                     Box(
                         modifier = Modifier
@@ -1505,95 +1821,92 @@ private fun ProcessListCard(
             
             Spacer(modifier = Modifier.height(12.dp))
             
-            if (processes.isEmpty()) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 16.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = stringResource(R.string.overview_no_processes),
-                        fontSize = 13.sp,
-                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                    )
-                }
-            } else {
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    // Header
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState())
+            ) {
+                if (processes.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 16.dp),
+                        contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = stringResource(R.string.overview_process_name),
-                            fontSize = 11.sp,
+                            text = stringResource(R.string.overview_no_processes),
+                            fontSize = 13.sp,
                             color = MiuixTheme.colorScheme.onSurfaceVariantSummary
                         )
+                    }
+                } else {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
                         Row(
-                            horizontalArrangement = Arrangement.spacedBy(16.dp)
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Text(
-                                text = stringResource(R.string.overview_process_cpu),
+                                text = stringResource(R.string.overview_process_name),
                                 fontSize = 11.sp,
                                 color = MiuixTheme.colorScheme.onSurfaceVariantSummary
                             )
-                        }
-                    }
-                    
-                    HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-                    
-                    // Active processes (top 5)
-                    activeProcesses.take(5).forEach { process ->
-                        ProcessItemRow(process)
-                    }
-                    
-                    // Frozen processes (show up to 3)
-                    if (frozenProcesses.isNotEmpty()) {
-                        if (activeProcesses.isNotEmpty()) {
-                            Spacer(modifier = Modifier.height(4.dp))
-                        }
-                        
-                        // Frozen section header
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Rounded.Pause,
-                                contentDescription = null,
-                                modifier = Modifier.size(12.dp),
-                                tint = MiuixTheme.colorScheme.error
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = stringResource(R.string.overview_frozen_processes),
-                                fontSize = 11.sp,
-                                color = MiuixTheme.colorScheme.error
-                            )
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(16.dp)
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.overview_process_cpu),
+                                    fontSize = 11.sp,
+                                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                                )
+                                Text(
+                                    text = stringResource(R.string.overview_process_mem),
+                                    fontSize = 11.sp,
+                                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                                )
+                            }
                         }
                         
-                        HorizontalDivider(
-                            modifier = Modifier.padding(vertical = 4.dp),
-                            color = MiuixTheme.colorScheme.error.copy(alpha = 0.3f)
-                        )
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
                         
-                        // Frozen process list
-                        frozenProcesses.take(3).forEach { process ->
+                        activeProcesses.forEach { process ->
                             ProcessItemRow(process)
                         }
                         
-                        // Show more indicator
-                        if (frozenProcesses.size > 3) {
-                            Text(
-                                text = stringResource(R.string.overview_frozen_more, frozenProcesses.size - 3),
-                                fontSize = 10.sp,
-                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                                modifier = Modifier.padding(top = 2.dp)
+                        if (frozenProcesses.isNotEmpty()) {
+                            if (activeProcesses.isNotEmpty()) {
+                                Spacer(modifier = Modifier.height(4.dp))
+                            }
+                            
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Pause,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(12.dp),
+                                    tint = MiuixTheme.colorScheme.error
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = stringResource(R.string.overview_frozen_processes),
+                                    fontSize = 11.sp,
+                                    color = MiuixTheme.colorScheme.error
+                                )
+                            }
+                            
+                            HorizontalDivider(
+                                modifier = Modifier.padding(vertical = 4.dp),
+                                color = MiuixTheme.colorScheme.error.copy(alpha = 0.3f)
                             )
+                            
+                            frozenProcesses.forEach { process ->
+                                ProcessItemRow(process)
+                            }
                         }
                     }
                 }
@@ -1616,41 +1929,104 @@ private fun ProcessItemRow(process: ProcessInfo) {
             Text(
                 text = process.name,
                 fontSize = 12.sp,
-                color = if (process.isFrozen) 
-                    MiuixTheme.colorScheme.onSurfaceVariantSummary
-                else 
-                    MiuixTheme.colorScheme.onSurface,
+                color = when {
+                    process.isFrozen -> MiuixTheme.colorScheme.onSurfaceVariantSummary
+                    process.isTermuxRelated -> MiuixTheme.colorScheme.primary
+                    else -> MiuixTheme.colorScheme.onSurface
+                },
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f)
             )
-            if (process.isFrozen) {
-                Spacer(modifier = Modifier.width(6.dp))
+            
+            Spacer(modifier = Modifier.width(4.dp))
+            
+            val stateColor = when {
+                process.isFrozen -> MiuixTheme.colorScheme.error
+                process.isRunning -> Color(0xFF4CAF50)
+                process.isBackgroundRunning -> Color(0xFFFF9800)
+                process.isSleeping -> MiuixTheme.colorScheme.onSurfaceVariantSummary
+                else -> MiuixTheme.colorScheme.onSurfaceVariantSummary
+            }
+            Box(
+                modifier = Modifier
+                    .background(
+                        color = stateColor.copy(alpha = 0.15f),
+                        shape = RoundedCornerShape(3.dp)
+                    )
+                    .padding(horizontal = 4.dp, vertical = 1.dp)
+            ) {
+                Text(
+                    text = process.stateLabel,
+                    fontSize = 9.sp,
+                    color = stateColor
+                )
+            }
+            
+            if (process.threadCount > 1) {
+                Spacer(modifier = Modifier.width(2.dp))
                 Box(
                     modifier = Modifier
                         .background(
-                            color = MiuixTheme.colorScheme.error.copy(alpha = 0.15f),
+                            color = Color(0xFF2196F3).copy(alpha = 0.15f),
                             shape = RoundedCornerShape(3.dp)
                         )
-                        .padding(horizontal = 4.dp, vertical = 1.dp)
+                        .padding(horizontal = 3.dp, vertical = 1.dp)
                 ) {
                     Text(
-                        text = stringResource(R.string.overview_frozen_tag),
+                        text = "${process.threadCount}T",
                         fontSize = 9.sp,
-                        color = MiuixTheme.colorScheme.error
+                        color = Color(0xFF2196F3)
+                    )
+                }
+            }
+            
+            if (process.isTermuxRelated && !process.isFrozen) {
+                Spacer(modifier = Modifier.width(3.dp))
+                Box(
+                    modifier = Modifier
+                        .background(
+                            color = MiuixTheme.colorScheme.primary.copy(alpha = 0.15f),
+                            shape = RoundedCornerShape(3.dp)
+                        )
+                        .padding(horizontal = 3.dp, vertical = 1.dp)
+                ) {
+                    Text(
+                        text = "T",
+                        fontSize = 9.sp,
+                        color = MiuixTheme.colorScheme.primary
                     )
                 }
             }
         }
-        Text(
-            text = if (process.isFrozen) "—" else "${process.cpuPercent.toInt()}%",
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Medium,
-            color = if (process.isFrozen) 
-                MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.5f)
-            else 
-                getUsageColor(process.cpuPercent)
-        )
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = if (process.isFrozen) "—" else "${process.cpuPercent.toInt()}%",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Medium,
+                color = if (process.isFrozen) 
+                    MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.5f)
+                else 
+                    getUsageColor(process.cpuPercent.coerceIn(0f, 100f))
+            )
+            val memFormatted = when {
+                process.memRssKb >= 1024 * 1024 -> String.format("%.1fG", process.memRssKb / (1024.0 * 1024.0))
+                process.memRssKb >= 1024 -> String.format("%.0fM", process.memRssKb / 1024.0)
+                else -> "${process.memRssKb}K"
+            }
+            Text(
+                text = if (process.isFrozen) "—" else memFormatted,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Medium,
+                color = if (process.isFrozen)
+                    MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.5f)
+                else
+                    getUsageColor(process.memPercent.coerceIn(0f, 100f))
+            )
+        }
     }
 }
 
@@ -1668,10 +2044,13 @@ private fun StopAllCard(
 ) {
     val isDark = isSystemInDarkTheme()
     var showConfirmDialog by remember { mutableStateOf(false) }
+    val config = LocalConfiguration.current
+    val cardHeight = ((config.screenWidthDp - 40) / 2).dp
     
     Card(
         modifier = Modifier
             .fillMaxWidth()
+            .height(cardHeight)
             .clickable(enabled = !isEditMode && sessionCount > 0) {
                 showConfirmDialog = true
             }
@@ -1679,8 +2058,7 @@ private fun StopAllCard(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+                .padding(12.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -1689,13 +2067,13 @@ private fun StopAllCard(
                 Icon(
                     imageVector = Icons.Rounded.Stop,
                     contentDescription = null,
-                    modifier = Modifier.size(20.dp),
+                    modifier = Modifier.size(18.dp),
                     tint = Color(0xFFE57373)
                 )
-                Spacer(modifier = Modifier.width(8.dp))
+                Spacer(modifier = Modifier.width(6.dp))
                 Text(
                     text = stringResource(R.string.overview_card_stop_all),
-                    fontSize = 14.sp,
+                    fontSize = 13.sp,
                     fontWeight = FontWeight.Medium,
                     color = MiuixTheme.colorScheme.onSurface,
                     modifier = Modifier.weight(1f)
@@ -1705,40 +2083,48 @@ private fun StopAllCard(
                         Icon(
                             imageVector = Icons.Rounded.Edit,
                             contentDescription = null,
-                            modifier = Modifier.size(16.dp),
+                            modifier = Modifier.size(14.dp),
                             tint = MiuixTheme.colorScheme.onSurfaceVariantSummary
                         )
                     }
                 }
             }
             
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(6.dp))
             
-            Box(
+            Column(
                 modifier = Modifier
-                    .size(56.dp)
-                    .clip(RoundedCornerShape(28.dp))
-                    .background(
-                        if (sessionCount > 0) Color(0xFFFFEBEE) else Color(0xFFE0E0E0)
-                    ),
-                contentAlignment = Alignment.Center
+                    .fillMaxWidth()
+                    .weight(1f),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
             ) {
-                Icon(
-                    imageVector = Icons.Rounded.Delete,
-                    contentDescription = null,
-                    modifier = Modifier.size(28.dp),
-                    tint = if (sessionCount > 0) Color(0xFFE57373) else Color(0xFFBDBDBD)
+                Box(
+                    modifier = Modifier
+                        .size(64.dp)
+                        .clip(RoundedCornerShape(32.dp))
+                        .background(
+                            if (sessionCount > 0) Color(0xFFFFEBEE) else Color(0xFFE0E0E0)
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Delete,
+                        contentDescription = null,
+                        modifier = Modifier.size(32.dp),
+                        tint = if (sessionCount > 0) Color(0xFFE57373) else Color(0xFFBDBDBD)
+                    )
+                }
+                
+                Spacer(modifier = Modifier.height(10.dp))
+                
+                Text(
+                    text = if (sessionCount > 0) "$sessionCount ${stringResource(R.string.overview_running)}" 
+                        else stringResource(R.string.overview_no_sessions),
+                    fontSize = 14.sp,
+                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary
                 )
             }
-            
-            Spacer(modifier = Modifier.height(8.dp))
-            
-            Text(
-                text = if (sessionCount > 0) "$sessionCount ${stringResource(R.string.overview_running)}" 
-                    else stringResource(R.string.overview_no_sessions),
-                fontSize = 13.sp,
-                color = MiuixTheme.colorScheme.onSurfaceVariantSummary
-            )
         }
     }
     
@@ -1790,12 +2176,17 @@ private fun StopAllCard(
 // Helper Functions
 // ============================================================
 
-fun getUsageColor(usage: Float): Color {
+fun getUsageColor(usage: Float, maxValue: Float = 100f): Color {
+    val ratio = if (maxValue > 0f) usage / maxValue else usage / 100f
     return when {
-        usage < 50f -> Color(0xFF4CAF50)
-        usage < 80f -> Color(0xFFFF9800)
+        ratio < 0.5f -> Color(0xFF4CAF50)
+        ratio < 0.8f -> Color(0xFFFF9800)
         else -> Color(0xFFF44336)
     }
+}
+
+fun getCpuMaxCapacity(): Float {
+    return Runtime.getRuntime().availableProcessors() * 100f
 }
 
 fun getCardTypeName(type: OverviewCardType): String {
@@ -1804,6 +2195,7 @@ fun getCardTypeName(type: OverviewCardType): String {
         OverviewCardType.SESSIONS -> "Sessions"
         OverviewCardType.CPU_MONITOR -> "CPU Monitor"
         OverviewCardType.GPU_MONITOR -> "GPU Monitor"
+        OverviewCardType.MEMORY_MONITOR -> "Memory Monitor"
         OverviewCardType.PROCESS_LIST -> "Process List"
         OverviewCardType.STOP_ALL -> "Stop All"
         OverviewCardType.RESOURCE_ACTION -> "Resource Action"
@@ -1816,6 +2208,7 @@ fun getCardIcon(type: OverviewCardType): ImageVector {
         OverviewCardType.SESSIONS -> Icons.Rounded.Memory
         OverviewCardType.CPU_MONITOR -> Icons.Rounded.Monitor
         OverviewCardType.GPU_MONITOR -> Icons.Rounded.Speed
+        OverviewCardType.MEMORY_MONITOR -> Icons.Rounded.Memory
         OverviewCardType.PROCESS_LIST -> Icons.Rounded.List
         OverviewCardType.STOP_ALL -> Icons.Rounded.Stop
         OverviewCardType.RESOURCE_ACTION -> Icons.Rounded.PlayArrow
@@ -1896,8 +2289,9 @@ private fun readProcStat(): CpuStats? {
     }
 }
 
-fun readCpuUsage(): Float {
+fun readCpuUsage(sessionPids: Set<Int> = emptySet()): Float {
     return try {
+        val numCores = Runtime.getRuntime().availableProcessors()
         val process = Runtime.getRuntime().exec(arrayOf("ps", "-A", "-o", "PID,NAME,%CPU"))
         val reader = process.inputStream.bufferedReader()
         val lines = reader.readLines()
@@ -1910,21 +2304,33 @@ fun readCpuUsage(): Float {
             if (trimmed.isEmpty()) continue
             val parts = trimmed.split("\\s+".toRegex())
             if (parts.size >= 3) {
+                val pid = parts[0].toIntOrNull() ?: continue
                 val name = parts[1]
                 val cpuStr = parts[2]
-                // Filter Termux-related processes
-                if (name.contains("termux", ignoreCase = true) || 
-                    name.contains("bash", ignoreCase = true) ||
-                    name.contains("ps", ignoreCase = true)) {
-                    val cpu = cpuStr.toFloatOrNull() ?: 0f
+                val cpu = cpuStr.toFloatOrNull() ?: 0f
+                if (isTermuxProcess(name, pid, sessionPids)) {
                     totalCpu += cpu
                 }
             }
         }
-        totalCpu.coerceIn(0f, 100f)
+        totalCpu.coerceIn(0f, numCores * 100f)
     } catch (e: Exception) {
         0f
     }
+}
+
+private fun isTermuxProcess(name: String, pid: Int, sessionPids: Set<Int>): Boolean {
+    if (sessionPids.contains(pid)) return true
+    return name.contains("termux", ignoreCase = true) ||
+        name.contains("com.termux", ignoreCase = true) ||
+        name.contains("bash", ignoreCase = true) ||
+        name.contains("mosh", ignoreCase = true) ||
+        name.contains("qemu", ignoreCase = true) ||
+        name.contains("proot", ignoreCase = true) ||
+        name.contains("ssh", ignoreCase = true) ||
+        name.contains("vnc", ignoreCase = true) ||
+        name.contains("tmux", ignoreCase = true) ||
+        name.contains("ps", ignoreCase = true)
 }
 
 // GPU detection using GraphicsStatsManager (API 24+) via reflection
@@ -2109,6 +2515,7 @@ object MonitorHistory {
     private const val MAX_HISTORY = 30
     private val cpuHistory = mutableListOf<Float>()
     private val gpuHistory = mutableListOf<Float>()
+    private val memHistory = mutableListOf<Float>()
     private var gpuPeak = 0f
     
     @Synchronized
@@ -2127,10 +2534,19 @@ object MonitorHistory {
     }
     
     @Synchronized
+    fun addMem(value: Float) {
+        memHistory.add(value)
+        if (memHistory.size > MAX_HISTORY) memHistory.removeAt(0)
+    }
+    
+    @Synchronized
     fun getCpuHistory(): List<Float> = cpuHistory.toList()
     
     @Synchronized
     fun getGpuHistory(): List<Float> = gpuHistory.toList()
+    
+    @Synchronized
+    fun getMemHistory(): List<Float> = memHistory.toList()
     
     @Synchronized
     fun getGpuPeak(): Float = gpuPeak
@@ -2145,6 +2561,7 @@ object MonitorHistory {
     fun reset() {
         cpuHistory.clear()
         gpuHistory.clear()
+        memHistory.clear()
         gpuPeak = 0f
     }
 }
@@ -2173,68 +2590,201 @@ fun readCpuTemperature(): Float {
     }
 }
 
-fun readProcessList(): List<ProcessInfo> {
+fun readProcessList(sessionPids: Set<Int> = emptySet()): List<ProcessInfo> {
     val processes = mutableListOf<ProcessInfo>()
     val frozenProcesses = mutableListOf<ProcessInfo>()
-    
+
     try {
-        // Get process list with state information
-        val process = Runtime.getRuntime().exec(arrayOf("ps", "-A", "-o", "PID,STATE,NAME,%CPU,%MEM"))
+        val procDir = java.io.File("/proc")
+        val pidDirs = procDir.listFiles { file -> file.isDirectory && file.name.all { it.isDigit() } }
+            ?: return emptyList()
+
+        val cpuMap = readProcessCpuFromPs()
+
+        for (pidDir in pidDirs) {
+            val pid = pidDir.name.toIntOrNull() ?: continue
+
+            try {
+                val statusFile = java.io.File(pidDir, "status")
+                if (!statusFile.exists() || !statusFile.canRead()) continue
+
+                val statusContent = statusFile.readText()
+                val nameLine = statusContent.lines().find { it.startsWith("Name:") }
+                val stateLine = statusContent.lines().find { it.startsWith("State:") }
+
+                if (nameLine == null || stateLine == null) continue
+
+                val name = nameLine.substringAfter("Name:").trim()
+                val stateParts = stateLine.trim().split("\\s+".toRegex())
+                val state = stateParts.getOrNull(1) ?: "S"
+
+                val isFrozen = state == "T" || state == "t"
+                val freezerFrozen = checkFreezerState(pid)
+                val effectivelyFrozen = isFrozen || freezerFrozen
+
+                val threadCount = readThreadCount(pid)
+
+                val vmRSSLine = statusContent.lines().find { it.startsWith("VmRSS:") }
+                val memRssKb = vmRSSLine?.filter { it.isDigit() }?.toLongOrNull() ?: 0L
+                val totalMemBytes = try {
+                    val memInfoFile = java.io.File("/proc/meminfo")
+                    if (memInfoFile.exists() && memInfoFile.canRead()) {
+                        val memTotalLine = memInfoFile.readText().lines().find { it.startsWith("MemTotal:") }
+                        memTotalLine?.filter { it.isDigit() }?.toLongOrNull()?.times(1024) ?: 0L
+                    } else 0L
+                } catch (_: Exception) { 0L }
+                val memPercent = if (totalMemBytes > 0) (memRssKb * 1024).toFloat() / totalMemBytes * 100f else 0f
+
+                var cpuPercent = 0f
+                var hasRecentCpu = false
+
+                if (!effectivelyFrozen) {
+                    val psCpu = cpuMap[pid]
+                    if (psCpu != null) {
+                        cpuPercent = psCpu.coerceIn(0f, 500f)
+                        hasRecentCpu = cpuPercent > 0.5f
+                    }
+                }
+
+                val isTermuxRelated = sessionPids.contains(pid) ||
+                    name.contains("termux", ignoreCase = true) ||
+                    name.contains("com.termux", ignoreCase = true) ||
+                    name.contains("qemu", ignoreCase = true) ||
+                    name.contains("proot", ignoreCase = true) ||
+                    name.contains("ssh", ignoreCase = true) ||
+                    name.contains("vnc", ignoreCase = true) ||
+                    name.contains("tmux", ignoreCase = true)
+
+                val processInfo = ProcessInfo(
+                    pid = pid,
+                    name = name,
+                    cpuPercent = cpuPercent,
+                    memPercent = memPercent,
+                    memRssKb = memRssKb,
+                    state = state,
+                    isFrozen = effectivelyFrozen,
+                    isTermuxRelated = isTermuxRelated,
+                    threadCount = threadCount,
+                    hasRecentCpu = hasRecentCpu
+                )
+
+                if (effectivelyFrozen) {
+                    frozenProcesses.add(processInfo)
+                } else {
+                    processes.add(processInfo)
+                }
+            } catch (_: Exception) {
+            }
+        }
+
+        val activeProcesses = processes.sortedWith(
+            compareByDescending<ProcessInfo> { it.isTermuxRelated }
+                .thenByDescending { it.isBackgroundRunning }
+                .thenByDescending { it.cpuPercent }
+                .thenBy { it.name }
+        )
+        val sortedFrozen = frozenProcesses.sortedBy { it.name }
+
+        return activeProcesses + sortedFrozen
+    } catch (_: Exception) {
+        return emptyList()
+    }
+}
+
+private fun readThreadCount(pid: Int): Int {
+    return try {
+        val taskDir = java.io.File("/proc/$pid/task")
+        if (!taskDir.exists()) return 0
+        taskDir.listFiles()?.size ?: 0
+    } catch (_: Exception) {
+        0
+    }
+}
+
+private fun readTotalCpuTime(): Long {
+    fun parseStat(text: String): Long {
+        val firstLine = text.lines().firstOrNull { it.startsWith("cpu ") } ?: return 0
+        return firstLine.trim().split("\\s+".toRegex())
+            .drop(1)
+            .sumOf { it.toLongOrNull() ?: 0L }
+    }
+    return try {
+        val statFile = java.io.File("/proc/stat")
+        if (statFile.exists() && statFile.canRead()) {
+            val direct = parseStat(statFile.readText())
+            if (direct > 0) return direct
+        }
+        val process = Runtime.getRuntime().exec(arrayOf("cat", "/proc/stat"))
+        val text = process.inputStream.bufferedReader().readText()
+        parseStat(text)
+    } catch (_: Exception) {
+        0
+    }
+}
+
+private fun readProcessCpuFromPs(): Map<Int, Float> {
+    val cpuMap = mutableMapOf<Int, Float>()
+    fun parseLines(lines: List<String>) {
+        for (line in lines.drop(1)) {
+            val trimmed = line.trim()
+            if (trimmed.isEmpty()) continue
+            val parts = trimmed.split("\\s+".toRegex())
+            if (parts.size >= 2) {
+                val pid = parts[0].toIntOrNull() ?: continue
+                val cpuStr = parts[1].filter { it.isDigit() || it == '.' || it == '-' }
+                val cpu = cpuStr.toFloatOrNull() ?: 0f
+                cpuMap[pid] = cpu.coerceIn(0f, 500f)
+            }
+        }
+    }
+    try {
+        val process = Runtime.getRuntime().exec(arrayOf("ps", "-A", "-o", "PID,%CPU"))
         val reader = process.inputStream.bufferedReader()
         val lines = reader.readLines()
         reader.close()
         process.waitFor()
-        
-        // Skip header line
-        if (lines.size > 1) {
-            for (i in 1 until lines.size) {
-                val line = lines[i].trim()
-                val parts = line.split("\\s+".toRegex())
-                if (parts.size >= 5) {
-                    val pid = parts[0].toIntOrNull() ?: continue
-                    val state = parts[1]
-                    val name = parts[2]
-                    val cpu = parts[3].toFloatOrNull() ?: 0f
-                    val mem = parts[4].toFloatOrNull() ?: 0f
-                    
-                    // Check if process is frozen (state 'T' or 't' means stopped/frozen)
-                    val isFrozen = state.startsWith("T") || state.startsWith("t")
-                    
-                    // Also check cgroup freezer state
-                    val freezerFrozen = checkFreezerState(pid)
-                    
-                    if (cpu > 0.1f || isFrozen || freezerFrozen) {
-                        val processInfo = ProcessInfo(
-                            pid = pid,
-                            name = name,
-                            cpuPercent = if (isFrozen || freezerFrozen) 0f else cpu,
-                            memPercent = mem,
-                            isFrozen = isFrozen || freezerFrozen
-                        )
-                        
-                        if (processInfo.isFrozen) {
-                            frozenProcesses.add(processInfo)
-                        } else {
-                            processes.add(processInfo)
-                        }
-                    }
+        parseLines(lines)
+    } catch (_: Exception) {
+    }
+    if (cpuMap.isEmpty()) {
+        try {
+            val process = Runtime.getRuntime().exec(arrayOf("ps", "-A"))
+            val reader = process.inputStream.bufferedReader()
+            val lines = reader.readLines()
+            reader.close()
+            process.waitFor()
+            for (line in lines.drop(1)) {
+                val trimmed = line.trim()
+                if (trimmed.isEmpty()) continue
+                val parts = trimmed.split("\\s+".toRegex())
+                if (parts.size >= 2) {
+                    val pid = parts[1].toIntOrNull() ?: continue
+                    cpuMap[pid] = 0f
                 }
             }
+        } catch (_: Exception) {
         }
-    } catch (_: Exception) {}
-    
-    // Merge: active processes first, then frozen processes
-    // Sort active by CPU usage, frozen by name
-    val activeProcesses = processes.sortedByDescending { it.cpuPercent }.take(10)
-    val sortedFrozen = frozenProcesses.sortedBy { it.name }
-    
-    // Combine and return top processes
-    return (activeProcesses + sortedFrozen).take(15)
+    }
+    return cpuMap
+}
+
+private fun readProcessMemoryPercent(pid: Int): Float {
+    return try {
+        val statusFile = java.io.File("/proc/$pid/status")
+        if (!statusFile.exists() || !statusFile.canRead()) return 0f
+        val vmRSSLine = statusFile.readText().lines().find { it.startsWith("VmRSS:") }
+            ?: return 0f
+        val kb = vmRSSLine.filter { it.isDigit() }.toLongOrNull() ?: 0L
+        val runtime = java.lang.Runtime.getRuntime()
+        val totalMem = runtime.totalMemory() + runtime.freeMemory()
+        if (totalMem > 0) (kb * 1024).toFloat() / totalMem * 100f else 0f
+    } catch (_: Exception) {
+        0f
+    }
 }
 
 private fun checkFreezerState(pid: Int): Boolean {
     return try {
-        // Check cgroup v2 freezer state
         val freezerFile = java.io.File("/proc/$pid/freezer_state")
         if (freezerFile.exists() && freezerFile.canRead()) {
             val state = freezerFile.readText().trim()
@@ -2242,14 +2792,11 @@ private fun checkFreezerState(pid: Int): Boolean {
                 return true
             }
         }
-        
-        // Check cgroup v1
+
         val cgroupFile = java.io.File("/proc/$pid/cgroup")
         if (cgroupFile.exists() && cgroupFile.canRead()) {
             val content = cgroupFile.readText()
-            // If the process is in a frozen cgroup
             if (content.contains("freezer") || content.contains("frozen")) {
-                // Try to check the freezer state
                 val pathParts = content.trim().split(":")
                 if (pathParts.size >= 3) {
                     val freezerPath = "/sys/fs/cgroup/freezer/${pathParts[2].trim()}"
@@ -2263,12 +2810,10 @@ private fun checkFreezerState(pid: Int): Boolean {
                 }
             }
         }
-        
-        // Check /proc/pid/status for stopped state
+
         val statusFile = java.io.File("/proc/$pid/status")
         if (statusFile.exists() && statusFile.canRead()) {
             val status = statusFile.readText()
-            // Look for State line with 'T' character
             val stateLine = status.lines().find { it.startsWith("State:") }
             if (stateLine != null) {
                 val stateChar = stateLine.trim().split("\\s+".toRegex()).getOrNull(1)
@@ -2277,10 +2822,79 @@ private fun checkFreezerState(pid: Int): Boolean {
                 }
             }
         }
-        
+
         false
     } catch (_: Exception) {
         false
+    }
+}
+
+private fun readMemoryUsage(sessionPids: Set<Int> = emptySet()): Pair<Float, Long> {
+    var totalRssKb = 0L
+    var processCount = 0
+    
+    try {
+        val procDir = java.io.File("/proc")
+        val pidDirs = procDir.listFiles { file -> file.isDirectory && file.name.all { it.isDigit() } }
+            ?: return Pair(0f, 0L)
+        
+        for (pidDir in pidDirs) {
+            val pid = pidDir.name.toIntOrNull() ?: continue
+            
+            try {
+                val statusFile = java.io.File(pidDir, "status")
+                if (!statusFile.exists() || !statusFile.canRead()) continue
+                
+                val statusContent = statusFile.readText()
+                val nameLine = statusContent.lines().find { it.startsWith("Name:") }
+                if (nameLine == null) continue
+                
+                val name = nameLine.substringAfter("Name:").trim()
+                
+                val isTermuxRelated = sessionPids.contains(pid) ||
+                    name.contains("termux", ignoreCase = true) ||
+                    name.contains("com.termux", ignoreCase = true) ||
+                    name.contains("qemu", ignoreCase = true) ||
+                    name.contains("proot", ignoreCase = true) ||
+                    name.contains("ssh", ignoreCase = true) ||
+                    name.contains("vnc", ignoreCase = true) ||
+                    name.contains("tmux", ignoreCase = true)
+                
+                if (!isTermuxRelated) continue
+                
+                val stateLine = statusContent.lines().find { it.startsWith("State:") }
+                val state = stateLine?.trim()?.split("\\s+".toRegex())?.getOrNull(1) ?: "S"
+                val isFrozen = state == "T" || state == "t"
+                if (isFrozen) continue
+                
+                val vmRSSLine = statusContent.lines().find { it.startsWith("VmRSS:") }
+                if (vmRSSLine != null) {
+                    val kb = vmRSSLine.filter { it.isDigit() }.toLongOrNull() ?: 0L
+                    totalRssKb += kb
+                    processCount++
+                }
+            } catch (_: Exception) {
+            }
+        }
+        
+        val runtime = java.lang.Runtime.getRuntime()
+        val totalMem = runtime.totalMemory() + runtime.freeMemory()
+        val sysTotalMem = try {
+            val memInfo = java.io.File("/proc/meminfo").readText()
+            val memTotalLine = memInfo.lines().find { it.startsWith("MemTotal:") }
+            if (memTotalLine != null) {
+                memTotalLine.filter { it.isDigit() }.toLongOrNull()?.times(1024) ?: totalMem
+            } else totalMem
+        } catch (_: Exception) {
+            totalMem
+        }
+        
+        val rssBytes = totalRssKb * 1024
+        val percent = if (sysTotalMem > 0) (rssBytes.toFloat() / sysTotalMem) * 100f else 0f
+        
+        return Pair(percent, totalRssKb)
+    } catch (_: Exception) {
+        return Pair(0f, 0L)
     }
 }
 
@@ -2299,17 +2913,19 @@ private fun ResourceActionCard(
 ) {
     val action = card.resourceActionId?.let { ResourceActions.getActionById(context, it) }
     var showSelectDialog by remember { mutableStateOf(false) }
+    val config = LocalConfiguration.current
+    val cardHeight = ((config.screenWidthDp - 40) / 2).dp
     
     Card(
         modifier = Modifier
             .fillMaxWidth()
+            .height(cardHeight)
             .clickable {
                 if (action != null) {
                     if (!isEditMode) {
                         onLaunchAction(action)
                     }
                 } else {
-                    // No action selected, open selection dialog
                     showSelectDialog = true
                 }
             }
@@ -2317,7 +2933,7 @@ private fun ResourceActionCard(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp)
+                .padding(12.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -2326,65 +2942,64 @@ private fun ResourceActionCard(
                 Icon(
                     imageVector = Icons.Rounded.PlayArrow,
                     contentDescription = null,
-                    modifier = Modifier.size(20.dp),
+                    modifier = Modifier.size(18.dp),
                     tint = MiuixTheme.colorScheme.primary
                 )
-                Spacer(modifier = Modifier.width(8.dp))
+                Spacer(modifier = Modifier.width(6.dp))
                 Text(
                     text = if (action != null) action.name else stringResource(R.string.overview_resource_action),
-                    fontSize = 14.sp,
+                    fontSize = 13.sp,
                     fontWeight = FontWeight.Medium,
                     color = MiuixTheme.colorScheme.onSurface,
                     modifier = Modifier.weight(1f),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                // Edit button - always visible for changing selection
                 IconButton(onClick = {
-                    if (action != null) {
-                        // Open selection dialog to change action
-                        showSelectDialog = true
+                    if (isEditMode) {
+                        onEditClick()
                     } else {
-                        // Open selection dialog to add action
                         showSelectDialog = true
                     }
                 }) {
                     Icon(
                         imageVector = Icons.Rounded.Edit,
                         contentDescription = null,
-                        modifier = Modifier.size(16.dp),
+                        modifier = Modifier.size(14.dp),
                         tint = MiuixTheme.colorScheme.onSurfaceVariantSummary
                     )
                 }
             }
             
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(6.dp))
             
             if (action != null) {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
                         painter = painterResource(id = action.iconRes),
                         contentDescription = null,
-                        modifier = Modifier.size(32.dp),
+                        modifier = Modifier.size(40.dp),
                         tint = MiuixTheme.colorScheme.primary
                     )
-                    Spacer(modifier = Modifier.width(12.dp))
+                    Spacer(modifier = Modifier.width(10.dp))
                     Column(
                         modifier = Modifier.weight(1f)
                     ) {
                         if (action.description.isNotEmpty()) {
                             Text(
                                 text = action.description,
-                                fontSize = 11.sp,
+                                fontSize = 12.sp,
                                 color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
                                 maxLines = 2,
                                 overflow = TextOverflow.Ellipsis
                             )
+                            Spacer(modifier = Modifier.height(4.dp))
                         }
-                        Spacer(modifier = Modifier.height(4.dp))
                         val categoryText = when (action.category) {
                             ResourceActionCategory.UTILITY_CENTER -> stringResource(R.string.overview_utility_center)
                             ResourceActionCategory.THIRD_PARTY_CENTER -> stringResource(R.string.overview_third_party_center)
@@ -2408,34 +3023,30 @@ private fun ResourceActionCard(
                     Icon(
                         imageVector = Icons.Rounded.PlayArrow,
                         contentDescription = null,
-                        modifier = Modifier.size(24.dp),
+                        modifier = Modifier.size(28.dp),
                         tint = MiuixTheme.colorScheme.primary.copy(alpha = 0.6f)
                     )
                 }
             } else {
-                Box(
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable { showSelectDialog = true }
-                        .padding(vertical = 12.dp),
-                    contentAlignment = Alignment.Center
+                        .weight(1f),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
                 ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.Add,
-                            contentDescription = null,
-                            modifier = Modifier.size(32.dp),
-                            tint = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = stringResource(R.string.overview_select_action),
-                            fontSize = 12.sp,
-                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                        )
-                    }
+                    Icon(
+                        imageVector = Icons.Rounded.Add,
+                        contentDescription = null,
+                        modifier = Modifier.size(40.dp),
+                        tint = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
+                        text = stringResource(R.string.overview_select_action),
+                        fontSize = 13.sp,
+                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                    )
                 }
             }
         }
@@ -2612,26 +3223,184 @@ fun launchResourceAction(
     action: ResourceAction,
     onExecuteScript: (String, String) -> Unit
 ) {
-    when (action.type) {
-        "qemu_on_vnc" -> {
+    when {
+        action.copyToClipboard -> {
+            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            val clip = ClipData.newPlainText(action.name, action.script ?: action.url ?: "")
+            clipboard.setPrimaryClip(clip)
+        }
+        
+        action.type == "qemu_on_vnc" -> {
             val intent = Intent(context, com.termux.app.activities.QemuVmActivity::class.java)
             context.startActivity(intent)
         }
-        else -> {
-            val script = action.script
-            if (script != null) {
-                // Use onExecuteScript to create a new terminal and execute the script
-                onExecuteScript(action.name, script)
-            } else {
-                action.url?.let { url ->
-                    try {
-                        val browserIntent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url))
-                        browserIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                        context.startActivity(browserIntent)
-                    } catch (_: Exception) {}
-                }
-            }
+        
+        action.type == "install_lightpanel" -> {
+            val command = resolveAssetScript(context, "install_lightpanel")
+            onExecuteScript(action.name, command)
         }
+        
+        action.type == "install_debian_container" -> {
+            val command = resolveAssetScript(context, "install_linux_container.sh")
+            onExecuteScript(action.name, "bash $command")
+        }
+        
+        action.type == "install_qemu_in_container" -> {
+            val command = resolveContainerScript(context, "install_qemu.sh")
+            onExecuteScript(action.name, command)
+        }
+        
+        action.type == "qemu_termux" -> {
+            val command = resolveQemuTermuxScript(context)
+            onExecuteScript(action.name, command)
+        }
+        
+        action.type == "python_pkg" -> {
+            onExecuteScript(action.name, action.script ?: "pkg install python -y")
+        }
+        
+        action.needsContainerCheck -> {
+            val command = action.script?.let { 
+                resolveRunInContainerScript(context, it) 
+            } ?: action.script ?: action.url ?: ""
+            onExecuteScript(action.name, command)
+        }
+        
+        action.script?.startsWith("http") == true -> {
+            val command = resolveUrlScript(action.script ?: "")
+            onExecuteScript(action.name, command)
+        }
+        
+        action.script != null -> {
+            onExecuteScript(action.name, action.script)
+        }
+        
+        action.url != null -> {
+            try {
+                val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(action.url))
+                browserIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                context.startActivity(browserIntent)
+            } catch (_: Exception) {}
+        }
+    }
+}
+
+private fun resolveAssetScript(context: Context, assetName: String): String {
+    val scriptPath = "/data/data/com.termux/files/home/$assetName"
+    return try {
+        val inputStream = context.assets.open(assetName)
+        val outputStream = java.io.FileOutputStream(scriptPath)
+        inputStream.copyTo(outputStream)
+        inputStream.close()
+        outputStream.close()
+        java.io.File(scriptPath).setExecutable(true)
+        scriptPath
+    } catch (e: Exception) {
+        e.printStackTrace()
+        scriptPath
+    }
+}
+
+private fun resolveContainerScript(context: Context, scriptName: String): String {
+    val containerDir = "/data/data/com.termux/files/home/debian-container"
+    val installScriptPath = "/data/data/com.termux/files/home/$scriptName"
+    val runInContainerPath = "/data/data/com.termux/files/home/run_in_container.sh"
+    
+    try {
+        val installInputStream = context.assets.open(scriptName)
+        val installOutputStream = java.io.FileOutputStream(installScriptPath)
+        installInputStream.copyTo(installOutputStream)
+        installInputStream.close()
+        installOutputStream.close()
+        java.io.File(installScriptPath).setExecutable(true)
+    } catch (e: Exception) {
+        e.printStackTrace()
+    }
+    
+    try {
+        val runInputStream = context.assets.open("run_in_container.sh")
+        val runOutputStream = java.io.FileOutputStream(runInContainerPath)
+        runInputStream.copyTo(runOutputStream)
+        runInputStream.close()
+        runOutputStream.close()
+        java.io.File(runInContainerPath).setExecutable(true)
+    } catch (e: Exception) {
+        e.printStackTrace()
+    }
+    
+    return "bash $runInContainerPath $installScriptPath"
+}
+
+private fun resolveQemuTermuxScript(context: Context): String {
+    val setupScriptPath = "/data/data/com.termux/files/home/qemu_termux_setup.sh"
+    val genSeedIsoPath = "/data/data/com.termux/files/home/gen_seed_iso.sh"
+    
+    try {
+        val inputStream = context.assets.open("qemu_termux_setup.sh")
+        val outputStream = java.io.FileOutputStream(setupScriptPath)
+        inputStream.copyTo(outputStream)
+        inputStream.close()
+        outputStream.close()
+        java.io.File(setupScriptPath).setExecutable(true)
+    } catch (e: Exception) {
+        e.printStackTrace()
+    }
+    
+    try {
+        val inputStream = context.assets.open("gen_seed_iso.sh")
+        val outputStream = java.io.FileOutputStream(genSeedIsoPath)
+        inputStream.copyTo(outputStream)
+        inputStream.close()
+        outputStream.close()
+        java.io.File(genSeedIsoPath).setExecutable(true)
+    } catch (e: Exception) {
+        e.printStackTrace()
+    }
+    
+    return "bash $setupScriptPath"
+}
+
+private fun resolveRunInContainerScript(context: Context, script: String): String {
+    val runInContainerPath = "/data/data/com.termux/files/home/run_in_container.sh"
+    val containerRunPath = "/data/data/com.termux/files/home/container_run.sh"
+    
+    try {
+        val inputStream = context.assets.open("run_in_container.sh")
+        val outputStream = java.io.FileOutputStream(runInContainerPath)
+        inputStream.copyTo(outputStream)
+        inputStream.close()
+        outputStream.close()
+        java.io.File(runInContainerPath).setExecutable(true)
+    } catch (e: Exception) {
+        e.printStackTrace()
+    }
+    
+    try {
+        val inputStream = context.assets.open("container_run.sh")
+        val outputStream = java.io.FileOutputStream(containerRunPath)
+        inputStream.copyTo(outputStream)
+        inputStream.close()
+        outputStream.close()
+        java.io.File(containerRunPath).setExecutable(true)
+    } catch (e: Exception) {
+        e.printStackTrace()
+    }
+    
+    return "bash $runInContainerPath $script"
+}
+
+private fun resolveUrlScript(url: String): String {
+    return when {
+        url.endsWith(".awk") -> """awk '$url'"""
+        url.endsWith(".py") -> {
+            val fileName = url.substringAfterLast("/")
+            """curl -sL $url -o /data/data/com.termux/files/home/$fileName && python /data/data/com.termux/files/home/$fileName"""
+        }
+        url.endsWith(".sh") -> {
+            val fileName = url.substringAfterLast("/")
+            """curl -sL $url -o /data/data/com.termux/files/home/$fileName && bash /data/data/com.termux/files/home/$fileName"""
+        }
+        else -> """curl -sL $url | bash"""
     }
 }
 
@@ -2647,25 +3416,32 @@ private fun CardItem(
     cpuUsage: Float,
     cpuTemperature: Float,
     gpuUsage: Float,
+    memUsage: Float,
+    memTotalKb: Long,
     cpuHistory: List<Float>,
     gpuHistory: List<Float>,
+    memHistory: List<Float>,
     processList: List<ProcessInfo>,
     runningSessions: List<TermuxSession>,
     stoppedSessions: List<TermuxSession>,
     sessions: List<TermuxSession>,
+    isWakeLockEnabled: Boolean,
     onSessionClick: (TermuxSession) -> Unit,
     onStopAllSessions: () -> Unit,
     onNewTerminal: () -> Unit,
     onExecuteScript: (String, String) -> Unit,
     selectedCardId: String?,
     onCardSelected: (String) -> Unit,
-    onShowCardSettings: () -> Unit
+    onShowCardSettings: () -> Unit,
+    onUpdateCard: (OverviewCardConfig) -> Unit = {}
 ) {
     when (card.type) {
         OverviewCardType.TIPS_AGENT -> {
             TipsAgentCard(
                 card = card,
                 isEditMode = isEditMode,
+                isWakeLockEnabled = isWakeLockEnabled,
+                runningSessionsCount = runningSessions.size,
                 onEditClick = {
                     onCardSelected(card.id)
                     onShowCardSettings()
@@ -2711,6 +3487,19 @@ private fun CardItem(
                 }
             )
         }
+        OverviewCardType.MEMORY_MONITOR -> {
+            MemoryMonitorCard(
+                card = card,
+                usage = memUsage,
+                totalKb = memTotalKb,
+                history = memHistory,
+                isEditMode = isEditMode,
+                onEditClick = {
+                    onCardSelected(card.id)
+                    onShowCardSettings()
+                }
+            )
+        }
         OverviewCardType.PROCESS_LIST -> {
             ProcessListCard(
                 card = card,
@@ -2743,6 +3532,7 @@ private fun CardItem(
                     val cardManager = OverviewCardManager.getInstance(context)
                     val updatedCard = card.copy(resourceActionId = actionId)
                     cardManager.updateCard(updatedCard)
+                    onUpdateCard(updatedCard)
                 },
                 onLaunchAction = { action: ResourceAction ->
                     launchResourceAction(context, action, onExecuteScript)
@@ -2767,89 +3557,5 @@ private fun CardItem(
  */
 private fun calculateWaterfallOrder(cards: List<OverviewCardConfig>): List<OverviewCardConfig> {
     if (cards.isEmpty()) return cards
-    
-    // Estimate card heights (in arbitrary units, just for comparison)
-    fun estimateHeight(card: OverviewCardConfig): Int {
-        return when (card.type) {
-            OverviewCardType.CPU_MONITOR -> 80
-            OverviewCardType.GPU_MONITOR -> 80
-            OverviewCardType.SESSIONS -> 90
-            OverviewCardType.PROCESS_LIST -> 120
-            OverviewCardType.TIPS_AGENT -> 70
-            OverviewCardType.RESOURCE_ACTION -> 100
-            OverviewCardType.STOP_ALL -> 80
-            else -> 80
-        }
-    }
-    
-    // Separate cards by size
-    val smallCards = cards.filter { it.size == CardSize.SMALL }
-    val wideCards = cards.filter { it.size == CardSize.WIDE }
-    
-    // Build the layout column by column
-    val result = mutableListOf<OverviewCardConfig>()
-    var leftHeight = 0
-    var rightHeight = 0
-    var smallIndex = 0
-    var wideIndex = 0
-    
-    // Interleave: place small cards in the shorter column,
-    // and insert wide cards when heights are balanced
-    while (smallIndex < smallCards.size || wideIndex < wideCards.size) {
-        // Determine if we should place a wide card or a small card
-        val canPlaceWide = wideIndex < wideCards.size
-        val canPlaceSmall = smallIndex < smallCards.size
-        
-        if (!canPlaceSmall && canPlaceWide) {
-            // Only wide cards left
-            result.add(wideCards[wideIndex])
-            val h = estimateHeight(wideCards[wideIndex])
-            leftHeight += h
-            rightHeight += h
-            wideIndex++
-        } else if (!canPlaceWide && canPlaceSmall) {
-            // Only small cards left
-            val card = smallCards[smallIndex]
-            result.add(card)
-            val h = estimateHeight(card)
-            if (leftHeight <= rightHeight) {
-                leftHeight += h
-            } else {
-                rightHeight += h
-            }
-            smallIndex++
-        } else if (canPlaceWide && canPlaceSmall) {
-            // Decide whether to place wide or small card
-            // Place wide card when heights are close (difference < threshold)
-            val heightDiff = kotlin.math.abs(leftHeight - rightHeight)
-            val wideCard = wideCards[wideIndex]
-            val wideHeight = estimateHeight(wideCard)
-            
-            // Place wide card if it helps balance or if heights are already close
-            // and the wide card won't create too much imbalance
-            val wouldBalance = (leftHeight <= rightHeight && leftHeight + wideHeight <= rightHeight) ||
-                              (rightHeight < leftHeight && rightHeight + wideHeight <= leftHeight)
-            
-            if (heightDiff < 40 || wouldBalance) {
-                // Place wide card
-                result.add(wideCard)
-                leftHeight += wideHeight
-                rightHeight += wideHeight
-                wideIndex++
-            } else {
-                // Place small card in the shorter column
-                val card = smallCards[smallIndex]
-                result.add(card)
-                val h = estimateHeight(card)
-                if (leftHeight <= rightHeight) {
-                    leftHeight += h
-                } else {
-                    rightHeight += h
-                }
-                smallIndex++
-            }
-        }
-    }
-    
-    return result
+    return cards.sortedBy { it.position }
 }

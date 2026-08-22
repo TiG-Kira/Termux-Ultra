@@ -304,8 +304,8 @@
     <string name="service_status_normal_desc">Termux service detection will continuously check terminal running status. Wake lock is currently disabled, session background persistence capability is weak. If you need stronger background persistence, please enable wake lock.</string>
     <string name="service_status_wake_lock">Wake Lock Enabled</string>
     <string name="service_status_wake_lock_desc">Termux service detection will continuously check terminal running status.</string>
-    <string name="service_status_stopped">Service Stopped</string>
-    <string name="service_status_stopped_desc">Current terminal service is stopped, all unsaved changes in terminal sessions will be lost.</string>
+    <string name="service_status_stopped">Service Not Running</string>
+    <string name="service_status_stopped_desc">Termux service is not running. Please create a new session to start the service. If the service was stopped unexpectedly, you may lose unsaved changes.</string>
     <string name="service_status_killed">Session Killed by System</string>
     <string name="service_status_killed_desc">Detected that %1$s was closed by system, unsaved changes in this session will be lost.</string>
     <string name="shell_script_warning">Please run scripts with caution. First check if the script contains dangerous operations targeting your device, especially when executing scripts with ROOT privileges. Executing dangerous scripts may cause kernel panic or device boot failure. Remember: with great power comes great responsibility. Neither the original Termux author nor Termux Ultra developers are responsible for hardware or software damage or data loss caused by users executing unknown scripts.</string>
@@ -483,7 +483,7 @@
     <string name="advanced_options">Advanced Options</string>
     <string name="option_need_container">Requires Linux container</string>
     <string name="option_copy_to_clipboard">Copy to clipboard instead of executing</string>
-    <string name="resource_moe">MOE</string>
+    <string name="resource_moe">TMOE Linux Manager</string>
     <string name="resource_moe_desc">TMOE Linux manager, one-click setup of chroot/PRoot containers and various Linux distros</string>
     <string name="resource_lightpanel">Lightpanel</string>
     <string name="resource_lightpanel_desc">Ultra-light server management panel for lightweight Linux devices. Single binary, zero dependencies, no Docker. Supports app store, process guard, log management, system monitoring. Fits OpenWrt, Termux, ARM devices.</string>
@@ -776,6 +776,7 @@
     <string name="overview_card_sessions">Sessions</string>
     <string name="overview_card_cpu">Termux CPU Usage</string>
     <string name="overview_card_gpu">Termux GPU Usage</string>
+    <string name="overview_card_memory">Termux Memory Usage</string>
     <string name="overview_card_processes">Processes</string>
     <string name="overview_card_stop_all">Stop All</string>
     <string name="overview_running">Running</string>
@@ -788,7 +789,7 @@
     <string name="overview_frozen_processes">Frozen Processes</string>
     <string name="overview_frozen_count" formatted="true">%d frozen</string>
     <string name="overview_frozen_more" formatted="true">%d more</string>
-    <string name="overview_process_mem">MEM %</string>
+    <string name="overview_process_mem">MEM</string>
     <string name="overview_stop_all_confirm">Are you sure you want to stop all sessions?</string>
     <string name="overview_stop_all_success">All sessions stopped</string>
     <string name="overview_card_size_small">Square</string>
@@ -799,8 +800,9 @@
     <string name="overview_no_gpu_data">GPU data unavailable</string>
     <string name="overview_gpu_peak">Historical peak</string>
     <string name="overview_cpu_temp">Temperature: %1$.0f°C</string>
+    <string name="overview_memory_used">Used: %1$s</string>
     <string name="overview_cpu_cores">Cores: %1$d</string>
-    <string name="overview_ai_termux_desc">AI-powered terminal assistant</string>
+    <string name="overview_ai_termux_desc">与 Agent 沟通并帮您处理终端事务</string>
     <string name="overview_tips_desc">Helpful tips and quick entries</string>
     <string name="overview_card_settings">Card Settings</string>
     <string name="overview_card_position">Position</string>

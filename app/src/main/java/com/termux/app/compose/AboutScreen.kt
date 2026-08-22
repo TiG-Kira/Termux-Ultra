@@ -18,12 +18,15 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.navigationBars
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.toBitmap
 import coil.compose.AsyncImage
@@ -55,6 +58,10 @@ fun AboutScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     val scrollBehavior = MiuixScrollBehavior()
     val scope = rememberCoroutineScope()
+    val density = LocalDensity.current
+    val systemNavBarsHeight = with(density) {
+        WindowInsets.navigationBars.getBottom(density).toDp()
+    }
 
     val updatePrefs = remember { context.getSharedPreferences(PREF_UPDATE, android.content.Context.MODE_PRIVATE) }
 
@@ -153,7 +160,7 @@ fun AboutScreen(onBack: () -> Unit) {
                     .nestedScroll(scrollBehavior.nestedScrollConnection),
                 contentPadding = PaddingValues(
                     top = paddingValues.calculateTopPadding(),
-                    bottom = 80.dp
+                    bottom = systemNavBarsHeight + 26.dp
                 ),
                 verticalArrangement = Arrangement.Top
             ) {

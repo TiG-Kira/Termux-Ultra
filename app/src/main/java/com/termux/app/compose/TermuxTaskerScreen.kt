@@ -100,7 +100,7 @@ fun TermuxTaskerScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .nestedScroll(scrollBehavior.nestedScrollConnection),
-                contentPadding = PaddingValues(bottom = 92.dp)
+                contentPadding = PaddingValues(bottom = 16.dp)
             ) {
                 termuxAccessibleWarning?.let { warning ->
                     item {

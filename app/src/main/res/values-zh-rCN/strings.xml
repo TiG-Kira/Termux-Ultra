@@ -291,8 +291,8 @@
     <string name="service_status_normal_desc">Termux 服务检测将持续检查终端运行状态。当前未开启唤醒锁，会话的后台留存能力偏弱，如需要加强后台留存能力，请开启唤醒锁。</string>
     <string name="service_status_wake_lock">唤醒锁已开启</string>
     <string name="service_status_wake_lock_desc">Termux 服务检测将持续检查终端运行状态。</string>
-    <string name="service_status_stopped">服务被停止</string>
-    <string name="service_status_stopped_desc">当前终端服务被停止，终端所有会话内未保存的更改会丢失。</string>
+    <string name="service_status_stopped">服务未运行</string>
+    <string name="service_status_stopped_desc">当前未运行 Termux 服务，请新建会话以启动服务。若服务是意外停止的，您可能会丢失未保存的更改。</string>
     <string name="service_status_killed">有会话被系统关闭</string>
     <string name="service_status_killed_desc">检测到%1$s被系统关闭，此会话内未保存的更改会丢失。</string>
     <string name="shell_script_warning">请谨慎运行脚本，先查看脚本内是否存在针对设备的危险操作，特别是以 ROOT 权限执行脚本，执行危险脚本有可能导致内核 Panic 或设备无法启动。请记住：能力越大，责任越大。Termux 原作者或 Termux Ultra 开发人员不对用户执行未知脚本造成的软硬件损坏或数据丢失负责。</string>
@@ -412,7 +412,7 @@
     <string name="advanced_options">高级选项</string>
     <string name="option_need_container">需要 Linux 容器</string>
     <string name="option_copy_to_clipboard">复制到剪贴板（不执行）</string>
-    <string name="resource_moe">MOE 全能</string>
+    <string name="resource_moe">TMOE Linux Manager</string>
     <string name="resource_moe_desc">TMOE Linux 管理器，一键配置 chroot/PRoot 容器、安装各种 Linux 发行版</string>
     <string name="resource_lightpanel">朱雀面板</string>
     <string name="resource_lightpanel_desc">一款专为轻量 Linux 设备设计的极致轻量服务器管理面板，单二进制、零依赖、无 Docker，支持应用商店、进程守护、日志管理、系统监控等功能，完美适配 OpenWrt、Termux、ARM 设备等所有 Linux 环境</string>
@@ -686,6 +686,7 @@
     <string name="overview_card_sessions">会话</string>
     <string name="overview_card_cpu">Termux CPU 占用</string>
     <string name="overview_card_gpu">Termux GPU 占用</string>
+    <string name="overview_card_memory">Termux 内存占用</string>
     <string name="overview_card_processes">进程</string>
     <string name="overview_card_stop_all">停止全部</string>
     <string name="overview_running">运行中</string>
@@ -698,7 +699,7 @@
     <string name="overview_frozen_processes">冻结进程</string>
     <string name="overview_frozen_count" formatted="true">%d 个冻结</string>
     <string name="overview_frozen_more" formatted="true">还有 %d 个</string>
-    <string name="overview_process_mem">内存 %</string>
+    <string name="overview_process_mem">内存</string>
     <string name="overview_stop_all_confirm">确定要停止所有会话吗？</string>
     <string name="overview_stop_all_success">所有会话已停止</string>
     <string name="overview_card_size_small">正方形</string>
@@ -709,8 +710,9 @@
     <string name="overview_no_gpu_data">GPU 数据不可用</string>
     <string name="overview_gpu_peak">历史占用</string>
     <string name="overview_cpu_temp">温度：%1$.0f°C</string>
+    <string name="overview_memory_used">已用：%1$s</string>
     <string name="overview_cpu_cores">核心：%1$d</string>
-    <string name="overview_ai_termux_desc">AI 驱动的终端助手</string>
+    <string name="overview_ai_termux_desc">与 Agent 沟通并帮您处理终端事务</string>
     <string name="overview_tips_desc">实用提示和快捷入口</string>
     <string name="overview_card_settings">卡片设置</string>
     <string name="overview_card_position">位置</string>

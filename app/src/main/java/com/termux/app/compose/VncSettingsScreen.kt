@@ -141,7 +141,7 @@ private fun MainVncSettingsPage(
 ) {
     LazyColumn(
         modifier = modifier,
-        contentPadding = PaddingValues(bottom = 92.dp)
+        contentPadding = PaddingValues(bottom = 16.dp)
     ) {
         item { SmallTitle(text = stringResource(R.string.vnc_settings_title)) }
         item {
@@ -230,7 +230,7 @@ private fun ViewerSettingsPage(
 
     LazyColumn(
         modifier = modifier,
-        contentPadding = PaddingValues(bottom = 92.dp)
+        contentPadding = PaddingValues(bottom = 16.dp)
     ) {
         item { SmallTitle(text = stringResource(R.string.pref_viewer)) }
         item {
@@ -608,7 +608,7 @@ private fun InputSettingsPage(
 
     LazyColumn(
         modifier = modifier,
-        contentPadding = PaddingValues(bottom = 92.dp)
+        contentPadding = PaddingValues(bottom = 16.dp)
     ) {
         item { SmallTitle(text = stringResource(R.string.pref_gesture)) }
         item {
@@ -1040,7 +1040,7 @@ private fun ServerSettingsPage(
     Box(modifier = modifier) {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(bottom = 92.dp)
+            contentPadding = PaddingValues(bottom = 16.dp)
         ) {
             item { SmallTitle(text = stringResource(R.string.pref_servers)) }
             item {

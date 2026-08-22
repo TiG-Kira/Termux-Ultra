@@ -44,6 +44,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import top.yukonga.miuix.kmp.basic.Scaffold
@@ -80,7 +81,8 @@ fun TerminalListScreen(
     onRenameTerminal: (TermuxSession, String) -> Unit,
     isWakeLockEnabled: Boolean,
     onToggleWakeLock: () -> Unit,
-    onRefresh: () -> Unit = {}
+    onRefresh: () -> Unit = {},
+    navBarBottomPadding: androidx.compose.ui.unit.Dp = 0.dp
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -383,7 +385,7 @@ fun TerminalListScreen(
                         .nestedScroll(scrollBehavior.nestedScrollConnection),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
-                    contentPadding = PaddingValues(bottom = 92.dp)
+                    contentPadding = PaddingValues(bottom = navBarBottomPadding + 16.dp)
                 ) {
                     // 搜索过滤后的活跃会话
                     if (localSessions.isEmpty() && filteredDeadSessions.isEmpty()) {
@@ -448,7 +450,7 @@ fun TerminalListScreen(
                         .nestedScroll(scrollBehavior.nestedScrollConnection),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
-                    contentPadding = PaddingValues(top = 8.dp, bottom = 92.dp)
+                    contentPadding = PaddingValues(top = 8.dp, bottom = navBarBottomPadding + 16.dp)
                 ) {
             // 搜索过滤：同时对活跃会话和死亡会话按名称匹配
             if (localSessions.isEmpty() && filteredDeadSessions.isEmpty()) {
@@ -592,12 +594,13 @@ private fun TerminalCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
+            .aspectRatio(1f)
             .clip(RoundedCornerShape(20.dp))
             .clickable(enabled = !isDead, onClick = onClick)
     ) {
         Column(
             modifier = Modifier
-                .fillMaxWidth()
+                .fillMaxSize()
                 .padding(16.dp)
         ) {
             Row(
@@ -629,7 +632,9 @@ private fun TerminalCard(
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
                         color = titleColor,
-                        lineHeight = 22.sp
+                        lineHeight = 22.sp,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
                     )
                     if (statusText != null) {
                         Text(
@@ -638,18 +643,19 @@ private fun TerminalCard(
                             fontWeight = FontWeight.Normal,
                             color = if (isDead) Color(0xFFD32F2F) else MiuixTheme.colorScheme.onSurfaceVariantSummary,
                             lineHeight = 16.sp,
-                            modifier = Modifier.padding(top = 2.dp)
+                            modifier = Modifier.padding(top = 2.dp),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                 }
             }
-            Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.weight(1f))
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)
             ) {
                 if (isDead) {
-                    // 已结束会话：显示"消除"按钮（红色），点击后强制从 TermuxService 移除
                     IconButton(
                         onClick = onDismissDead,
                         modifier = Modifier
@@ -664,7 +670,6 @@ private fun TerminalCard(
                         )
                     }
                 } else {
-                    // 活跃会话：原有的编辑 + 停止按钮
                     IconButton(
                         onClick = onRename,
                         modifier = Modifier
@@ -718,11 +723,12 @@ private fun DeadSessionCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
+            .aspectRatio(1f)
             .clip(RoundedCornerShape(20.dp))
     ) {
         Column(
             modifier = Modifier
-                .fillMaxWidth()
+                .fillMaxSize()
                 .padding(16.dp)
         ) {
             Row(
@@ -752,7 +758,9 @@ private fun DeadSessionCard(
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
                         color = titleColor,
-                        lineHeight = 22.sp
+                        lineHeight = 22.sp,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
                     )
                     Text(
                         text = "退出代码:${info.exitCode}",
@@ -760,11 +768,13 @@ private fun DeadSessionCard(
                         fontWeight = FontWeight.Normal,
                         color = subColor,
                         lineHeight = 16.sp,
-                        modifier = Modifier.padding(top = 2.dp)
+                        modifier = Modifier.padding(top = 2.dp),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
             }
-            Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.weight(1f))
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)

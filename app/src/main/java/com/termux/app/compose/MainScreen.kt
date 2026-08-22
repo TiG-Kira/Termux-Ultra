@@ -6,7 +6,10 @@ import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Box
@@ -27,17 +30,21 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
 import com.kyant.backdrop.backdrops.LayerBackdrop
 import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
@@ -77,9 +84,18 @@ fun MainScreen(
     var remoteSubTab by remember { mutableStateOf(0) }
     var previousTab by remember { mutableStateOf(selectedTab) }
     var rawDragOffset by remember { mutableFloatStateOf(0f) }
+    val density = LocalDensity.current
+    val systemNavBarsHeight = with(density) {
+        WindowInsets.navigationBars.getBottom(density).toDp()
+    }
     val dragOffsetAnimatable = remember { Animatable(0f) }
     var isSwipingInProgress by remember { mutableStateOf(false) }
     var isOverviewEditMode by remember { mutableStateOf(false) }
+    var swipeTargetTab by remember { mutableStateOf<Int?>(null) }
+    val configuration = LocalConfiguration.current
+    val screenWidthPx = with(density) { configuration.screenWidthDp.dp.toPx() }
+    var currentPageAlphaState by remember { mutableFloatStateOf(1f) }
+    var skipNextTransition by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
     val navBarStyle = remember {
@@ -106,6 +122,40 @@ fun MainScreen(
         useFloatingNav -> 1
         useSoftLightNav -> 3
         else -> 0
+    }
+
+    // 页面可用性过滤：根据设备 API 支持程度隐藏无可用功能的页面入口。
+    // tab 索引 0-5 分别对应 总览/终端/文件/远程/资源/设置 页面。
+    fun pageForTab(tab: Int): ApiCompat.Page = when (tab) {
+        0 -> ApiCompat.Page.OVERVIEW
+        1 -> ApiCompat.Page.TERMINAL
+        2 -> ApiCompat.Page.FILES
+        3 -> ApiCompat.Page.REMOTE
+        4 -> ApiCompat.Page.RESOURCES
+        else -> ApiCompat.Page.SETTINGS
+    }
+    val availableTabs = remember {
+        listOf(0, 1, 2, 3, 4, 5).filter { ApiCompat.isPageAvailable(pageForTab(it)) }
+    }
+
+    val navStyleForHeight = when (navStyle) {
+        2 -> NavStyle.GLASS
+        3 -> NavStyle.SOFT_LIGHT
+        1 -> NavStyle.FLOATING
+        else -> NavStyle.DEFAULT
+    }
+    val navContainerHeight = getNavContainerHeight(availableTabs.size, navStyleForHeight)
+    val totalNavHeight = if (navStyle == 0) {
+        navContainerHeight + systemNavBarsHeight
+    } else {
+        navContainerHeight
+    }
+    val snackbarBottomPadding = when (navStyle) {
+        // 浮动导航栏使用 offset(y = bottomMargin - 4.dp) 定位
+        // 实际底部距屏幕底部约 4.dp，所以总高度 = systemBars + containerHeight + 4.dp
+        1 -> systemNavBarsHeight + navContainerHeight + 16.dp
+        // 玻璃/柔光/默认导航栏：总高度已包含 bottomMargin
+        else -> systemNavBarsHeight + navContainerHeight + 12.dp
     }
 
     LaunchedEffect(navStyle) {
@@ -143,20 +193,12 @@ fun MainScreen(
     val direction = if (selectedTab > previousTab) 1 else -1
     val isRemoteWithVnc = selectedTab == 3 && showVnc
     val dragOffset = if (isSwipingInProgress) rawDragOffset else dragOffsetAnimatable.value
+    val swipeProgress = if (isSwipingInProgress && swipeTargetTab != null) {
+        (kotlin.math.abs(rawDragOffset) / screenWidthPx).coerceIn(0f, 1f)
+    } else {
+        0f
+    }
 
-    // 页面可用性过滤：根据设备 API 支持程度隐藏无可用功能的页面入口。
-    // tab 索引 0-5 分别对应 总览/终端/文件/远程/资源/设置 页面。
-    fun pageForTab(tab: Int): ApiCompat.Page = when (tab) {
-        0 -> ApiCompat.Page.OVERVIEW
-        1 -> ApiCompat.Page.TERMINAL
-        2 -> ApiCompat.Page.FILES
-        3 -> ApiCompat.Page.REMOTE
-        4 -> ApiCompat.Page.RESOURCES
-        else -> ApiCompat.Page.SETTINGS
-    }
-    val availableTabs = remember {
-        listOf(0, 1, 2, 3, 4, 5).filter { ApiCompat.isPageAvailable(pageForTab(it)) }
-    }
     // 若当前选中页被屏蔽，回退到第一个可用页
     LaunchedEffect(availableTabs) {
         if (selectedTab !in availableTabs) {
@@ -208,17 +250,10 @@ fun MainScreen(
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        snackbarHost = { 
-            SnackbarHost(
-                state = snackbarHostState,
-                modifier = Modifier
-                    .padding(WindowInsets.navigationBars.asPaddingValues())
-                    .padding(bottom = 97.dp)
-            ) 
-        },
         bottomBar = {
             when (navStyle) {
                 2 -> {
+                    val glassDims = computeNavDimensions(availableTabs.size, NavStyle.GLASS)
                     LiquidGlassNavigationBarWithIndicator(
                         selectedIndex = selectedTab,
                         itemCount = availableTabs.size,
@@ -236,7 +271,8 @@ fun MainScreen(
                                 icon = ImageVector.vectorResource(R.drawable.ic_overview),
                                 label = stringResource(R.string.overview),
                                 selected = selectedTab == 0,
-                                onClick = { previousTab = selectedTab; onTabChange(0) }
+                                onClick = { previousTab = selectedTab; onTabChange(0) },
+                                dims = glassDims
                             )
                         }
                         if (1 in availableTabs) {
@@ -244,7 +280,8 @@ fun MainScreen(
                                 icon = ImageVector.vectorResource(R.drawable.ic_terminal),
                                 label = stringResource(R.string.terminal),
                                 selected = selectedTab == 1,
-                                onClick = { previousTab = selectedTab; onTabChange(1) }
+                                onClick = { previousTab = selectedTab; onTabChange(1) },
+                                dims = glassDims
                             )
                         }
                         if (2 in availableTabs) {
@@ -252,7 +289,8 @@ fun MainScreen(
                                 icon = ImageVector.vectorResource(R.drawable.ic_files),
                                 label = stringResource(R.string.files),
                                 selected = selectedTab == 2,
-                                onClick = { previousTab = selectedTab; onTabChange(2) }
+                                onClick = { previousTab = selectedTab; onTabChange(2) },
+                                dims = glassDims
                             )
                         }
                         if (3 in availableTabs) {
@@ -260,7 +298,8 @@ fun MainScreen(
                                 icon = ImageVector.vectorResource(R.drawable.ic_vnc),
                                 label = stringResource(R.string.remote),
                                 selected = selectedTab == 3,
-                                onClick = { previousTab = selectedTab; onTabChange(3) }
+                                onClick = { previousTab = selectedTab; onTabChange(3) },
+                                dims = glassDims
                             )
                         }
                         if (4 in availableTabs) {
@@ -268,7 +307,8 @@ fun MainScreen(
                                 icon = ImageVector.vectorResource(R.drawable.ic_resources),
                                 label = stringResource(R.string.resources),
                                 selected = selectedTab == 4,
-                                onClick = { previousTab = selectedTab; onTabChange(4) }
+                                onClick = { previousTab = selectedTab; onTabChange(4) },
+                                dims = glassDims
                             )
                         }
                         if (5 in availableTabs) {
@@ -276,12 +316,14 @@ fun MainScreen(
                                 icon = ImageVector.vectorResource(R.drawable.ic_settings),
                                 label = stringResource(R.string.settings),
                                 selected = selectedTab == 5,
-                                onClick = { previousTab = selectedTab; onTabChange(5) }
+                                onClick = { previousTab = selectedTab; onTabChange(5) },
+                                dims = glassDims
                             )
                         }
                     }
                 }
                 3 -> {
+                    val softLightDims = computeNavDimensions(availableTabs.size, NavStyle.SOFT_LIGHT)
                     SoftLightNavigationBarWithIndicator(
                         selectedIndex = selectedTab,
                         itemCount = availableTabs.size,
@@ -299,7 +341,8 @@ fun MainScreen(
                                 icon = ImageVector.vectorResource(R.drawable.ic_overview),
                                 label = stringResource(R.string.overview),
                                 selected = selectedTab == 0,
-                                onClick = { previousTab = selectedTab; onTabChange(0) }
+                                onClick = { previousTab = selectedTab; onTabChange(0) },
+                                dims = softLightDims
                             )
                         }
                         if (1 in availableTabs) {
@@ -307,7 +350,8 @@ fun MainScreen(
                                 icon = ImageVector.vectorResource(R.drawable.ic_terminal),
                                 label = stringResource(R.string.terminal),
                                 selected = selectedTab == 1,
-                                onClick = { previousTab = selectedTab; onTabChange(1) }
+                                onClick = { previousTab = selectedTab; onTabChange(1) },
+                                dims = softLightDims
                             )
                         }
                         if (2 in availableTabs) {
@@ -315,7 +359,8 @@ fun MainScreen(
                                 icon = ImageVector.vectorResource(R.drawable.ic_files),
                                 label = stringResource(R.string.files),
                                 selected = selectedTab == 2,
-                                onClick = { previousTab = selectedTab; onTabChange(2) }
+                                onClick = { previousTab = selectedTab; onTabChange(2) },
+                                dims = softLightDims
                             )
                         }
                         if (3 in availableTabs) {
@@ -323,7 +368,8 @@ fun MainScreen(
                                 icon = ImageVector.vectorResource(R.drawable.ic_vnc),
                                 label = stringResource(R.string.remote),
                                 selected = selectedTab == 3,
-                                onClick = { previousTab = selectedTab; onTabChange(3) }
+                                onClick = { previousTab = selectedTab; onTabChange(3) },
+                                dims = softLightDims
                             )
                         }
                         if (4 in availableTabs) {
@@ -331,7 +377,8 @@ fun MainScreen(
                                 icon = ImageVector.vectorResource(R.drawable.ic_resources),
                                 label = stringResource(R.string.resources),
                                 selected = selectedTab == 4,
-                                onClick = { previousTab = selectedTab; onTabChange(4) }
+                                onClick = { previousTab = selectedTab; onTabChange(4) },
+                                dims = softLightDims
                             )
                         }
                         if (5 in availableTabs) {
@@ -339,18 +386,40 @@ fun MainScreen(
                                 icon = ImageVector.vectorResource(R.drawable.ic_settings),
                                 label = stringResource(R.string.settings),
                                 selected = selectedTab == 5,
-                                onClick = { previousTab = selectedTab; onTabChange(5) }
+                                onClick = { previousTab = selectedTab; onTabChange(5) },
+                                dims = softLightDims
                             )
                         }
                     }
                 }
                 1 -> {
+                    val floatingDims = computeNavDimensions(availableTabs.size, NavStyle.FLOATING)
+                    val configuration = LocalConfiguration.current
+                    val density = LocalDensity.current
+                    val screenWidthDp = with(density) { configuration.screenWidthDp.dp }
+                    val sidePadding = 12.dp * 2
+                    val availableWidthPx = with(density) { (screenWidthDp - sidePadding).toPx() }
+                    val baseItemWidthPx = with(density) { 72.dp.toPx() }
+                    val baseGapPx = with(density) { 16.dp.toPx() }
+                    val baseWidthPx = availableTabs.size * baseItemWidthPx + (availableTabs.size - 1) * baseGapPx
+                    val scaleFactor = if (baseWidthPx > availableWidthPx) {
+                        (availableWidthPx / baseWidthPx).coerceAtLeast(0.85f)
+                    } else {
+                        1.0f
+                    }
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .offset(y = 14.dp)
+                            .offset(y = floatingDims.bottomMargin - 4.dp),
+                        contentAlignment = Alignment.Center
                     ) {
-                        FloatingNavigationBar() {
+                        Box(
+                            modifier = Modifier.graphicsLayer {
+                                scaleX = scaleFactor
+                                scaleY = scaleFactor
+                            }
+                        ) {
+                            FloatingNavigationBar() {
                             if (0 in availableTabs) {
                                 FloatingNavigationBarItem(
                                     icon = ImageVector.vectorResource(R.drawable.ic_overview),
@@ -400,6 +469,7 @@ fun MainScreen(
                                 )
                             }
                             }
+                        }
                     }
                 }
                 else -> {
@@ -472,118 +542,230 @@ fun MainScreen(
                     }
                 )
                 .padding(contentPadding)
-                .pointerInput(selectedTab, showVnc, isOverviewEditMode) {
+                .pointerInput(selectedTab, showVnc, isOverviewEditMode, availableTabs) {
                     detectDragGestures(
                         onDragStart = {
                             if (isOverviewEditMode) return@detectDragGestures
                             isSwipingInProgress = true
                             rawDragOffset = 0f
+                            swipeTargetTab = null
+                            currentPageAlphaState = 1f
                         },
                         onDrag = { change, dragAmount ->
                             if (isOverviewEditMode) return@detectDragGestures
                             change.consume()
                             rawDragOffset += dragAmount.x
+                            val progress = if (screenWidthPx > 0f) {
+                                kotlin.math.abs(rawDragOffset) / screenWidthPx
+                            } else {
+                                0f
+                            }
+                            val isSubTabSwipe = selectedTab == 3 && showVnc && (
+                                (remoteSubTab == 0 && rawDragOffset < 0) ||
+                                (remoteSubTab == 1 && rawDragOffset > 0)
+                            )
+                            currentPageAlphaState = if (!isSubTabSwipe) {
+                                (1f - progress).coerceIn(0f, 1f)
+                            } else {
+                                1f
+                            }
+                            if (swipeTargetTab == null && kotlin.math.abs(rawDragOffset) > 10f) {
+                                if (rawDragOffset < 0) {
+                                    if (!(selectedTab == 3 && showVnc && remoteSubTab == 0)) {
+                                        availableTabs.filter { it > selectedTab }.minOrNull()?.let {
+                                            swipeTargetTab = it
+                                        }
+                                    }
+                                } else {
+                                    if (!(selectedTab == 3 && showVnc && remoteSubTab == 1)) {
+                                        availableTabs.filter { it < selectedTab }.maxOrNull()?.let {
+                                            swipeTargetTab = it
+                                        }
+                                    }
+                                }
+                            }
                         },
                         onDragEnd = {
                             if (isOverviewEditMode) {
                                 rawDragOffset = 0f
+                                swipeTargetTab = null
                                 return@detectDragGestures
                             }
                             val exceeded = kotlin.math.abs(rawDragOffset) >= SWIPE_THRESHOLD
-                            handleSwipe(rawDragOffset)
                             val finalOffset = rawDragOffset
-                            isSwipingInProgress = false
-                            if (!exceeded) {
-                                scope.launch {
-                                    dragOffsetAnimatable.snapTo(finalOffset)
-                                    dragOffsetAnimatable.animateTo(0f, animationSpec = tween(200))
-                                }
+                            val isMainTabSwipe = swipeTargetTab != null
+                            val isSubTabSwipe = selectedTab == 3 && showVnc && (
+                                (remoteSubTab == 0 && rawDragOffset < 0) ||
+                                (remoteSubTab == 1 && rawDragOffset > 0)
+                            )
+                            val startOffset = rawDragOffset
+                            val endOffset = if (exceeded && isMainTabSwipe) {
+                                if (rawDragOffset > 0) screenWidthPx else -screenWidthPx
                             } else {
-                                scope.launch {
-                                    dragOffsetAnimatable.snapTo(0f)
+                                0f
+                            }
+
+                            scope.launch {
+                                animate(
+                                    initialValue = 0f,
+                                    targetValue = 1f,
+                                    animationSpec = tween(300)
+                                ) { fraction, _ ->
+                                    rawDragOffset = startOffset + (endOffset - startOffset) * fraction
+                                    if (!isSubTabSwipe) {
+                                        val progress = if (screenWidthPx > 0f) {
+                                            kotlin.math.abs(rawDragOffset) / screenWidthPx
+                                        } else {
+                                            0f
+                                        }
+                                        currentPageAlphaState = (1f - progress).coerceIn(0f, 1f)
+                                    }
+                                }
+                                rawDragOffset = endOffset
+
+                                if (exceeded && isMainTabSwipe) {
+                                    // Animation complete: overlay is fully faded out
+                                    // Commit tab change - AnimatedContent is already showing target page
+                                    handleSwipe(finalOffset)
+                                    isSwipingInProgress = false
+                                    swipeTargetTab = null
+                                    rawDragOffset = 0f
+                                    currentPageAlphaState = 1f
+                                } else if (exceeded && !isSubTabSwipe) {
+                                    // Sub-tab swipe exceeded threshold
+                                    skipNextTransition = true
+                                    handleSwipe(finalOffset)
+                                    kotlinx.coroutines.delay(50)
+                                    skipNextTransition = false
+                                    isSwipingInProgress = false
+                                    swipeTargetTab = null
+                                    rawDragOffset = 0f
+                                    currentPageAlphaState = 1f
+                                } else {
+                                    // Not exceeded, spring back
+                                    // Need to skip transition when returning to current page
+                                    skipNextTransition = true
+                                    isSwipingInProgress = false
+                                    swipeTargetTab = null
+                                    kotlinx.coroutines.delay(50)
+                                    skipNextTransition = false
+                                    rawDragOffset = 0f
+                                    currentPageAlphaState = 1f
                                 }
                             }
-                            rawDragOffset = 0f
                         },
                         onDragCancel = {
                             if (isOverviewEditMode) {
                                 rawDragOffset = 0f
+                                swipeTargetTab = null
                                 return@detectDragGestures
                             }
-                            val finalOffset = rawDragOffset
-                            isSwipingInProgress = false
+                            val startOffset = rawDragOffset
+                            val isSubTabSwipe = selectedTab == 3 && showVnc && (
+                                (remoteSubTab == 0 && rawDragOffset < 0) ||
+                                (remoteSubTab == 1 && rawDragOffset > 0)
+                            )
                             scope.launch {
-                                dragOffsetAnimatable.snapTo(finalOffset)
-                                dragOffsetAnimatable.animateTo(0f, animationSpec = tween(200))
+                                animate(
+                                    initialValue = 0f,
+                                    targetValue = 1f,
+                                    animationSpec = tween(300)
+                                ) { fraction, _ ->
+                                    rawDragOffset = startOffset * (1f - fraction)
+                                    if (!isSubTabSwipe) {
+                                        val progress = if (screenWidthPx > 0f) {
+                                            kotlin.math.abs(rawDragOffset) / screenWidthPx
+                                        } else {
+                                            0f
+                                        }
+                                        currentPageAlphaState = (1f - progress).coerceIn(0f, 1f)
+                                    }
+                                }
+                                // Skip transition when returning to current page
+                                skipNextTransition = true
+                                isSwipingInProgress = false
+                                swipeTargetTab = null
+                                rawDragOffset = 0f
+                                currentPageAlphaState = 1f
+                                kotlinx.coroutines.delay(50)
+                                skipNextTransition = false
                             }
-                            rawDragOffset = 0f
                         }
                     )
                 }
         ) {
+            // During swipe, AnimatedContent renders the target page underneath
+            // The current page is shown as an overlay on top
+            val animatedTargetState = if (isSwipingInProgress && swipeTargetTab != null) swipeTargetTab!! else selectedTab
+
             AnimatedContent(
-                targetState = selectedTab,
+                targetState = animatedTargetState,
                 label = "MainScreenTransition",
                 transitionSpec = {
-                    if (targetState != initialState && (isSwipingInProgress || kotlin.math.abs(dragOffset) > 0f)) {
+                    // Skip transition during swipe or when skipNextTransition is set
+                    if (targetState != initialState && (isSwipingInProgress || kotlin.math.abs(dragOffset) > 0f || skipNextTransition)) {
                         EnterTransition.None togetherWith ExitTransition.None
                     } else {
-                        if (selectedTab > previousTab) {
-                            slideIntoContainer(
-                                AnimatedContentTransitionScope.SlideDirection.Left,
-                                animationSpec = tween(200)
-                            ) togetherWith slideOutOfContainer(
-                                AnimatedContentTransitionScope.SlideDirection.Left,
-                                animationSpec = tween(200)
-                            )
-                        } else {
-                            slideIntoContainer(
-                                AnimatedContentTransitionScope.SlideDirection.Right,
-                                animationSpec = tween(200)
-                            ) togetherWith slideOutOfContainer(
-                                AnimatedContentTransitionScope.SlideDirection.Right,
-                                animationSpec = tween(200)
-                            )
-                        }
+                        fadeIn(
+                            animationSpec = tween(durationMillis = 300)
+                        ) togetherWith fadeOut(
+                            animationSpec = tween(durationMillis = 150)
+                        )
                     }
-                },
-                modifier = Modifier.fillMaxSize().graphicsLayer {
-                    translationX = dragOffset
                 }
             ) { tab ->
-                when (tab) {
-                    0 -> OverviewScreen(
-                        sessions = sessions,
-                        onSessionClick = onSessionClick,
-                        onNewTerminal = onNewTerminal,
-                        onStopAllSessions = {
-                            sessions.filter { it.getTerminalSession().isRunning }.forEach { session ->
-                                onStopTerminal(session)
-                            }
-                        },
-                        isWakeLockEnabled = isWakeLockEnabled,
-                        onToggleWakeLock = onToggleWakeLock,
-                        onExecuteScript = onExecuteScript,
-                        onRefresh = onRefreshSessions,
-                        onEditModeChanged = { isEditMode ->
-                            isOverviewEditMode = isEditMode
+                PageContentForTab(
+                    tab = tab,
+                    sessions = sessions,
+                    onSessionClick = onSessionClick,
+                    onNewTerminal = onNewTerminal,
+                    onStopTerminal = onStopTerminal,
+                    onRenameTerminal = onRenameTerminal,
+                    onExecuteScript = onExecuteScript,
+                    onAboutClick = onAboutClick,
+                    showVnc = showVnc,
+                    isWakeLockEnabled = isWakeLockEnabled,
+                    onToggleWakeLock = onToggleWakeLock,
+                    onRefreshSessions = onRefreshSessions,
+                    onOverviewEditModeChanged = { isOverviewEditMode = it },
+                    onRemoteSubTabChange = { remoteSubTab = it },
+                    onGoToFiles = {
+                        previousTab = tab
+                        onTabChange(2)
+                    },
+                    onGoToResources = {
+                        previousTab = tab
+                        onTabChange(4)
+                    },
+                    navBarBottomPadding = totalNavHeight
+                )
+            }
+
+            // Current page overlay on top (fades out as user swipes)
+            if (isSwipingInProgress && swipeTargetTab != null && swipeTargetTab != selectedTab) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer {
+                            translationX = rawDragOffset
+                            alpha = currentPageAlphaState
                         }
-                    )
-                    1 -> TerminalListScreen(
+                ) {
+                    PageContentForTab(
+                        tab = selectedTab,
                         sessions = sessions,
                         onSessionClick = onSessionClick,
                         onNewTerminal = onNewTerminal,
                         onStopTerminal = onStopTerminal,
                         onRenameTerminal = onRenameTerminal,
+                        onExecuteScript = onExecuteScript,
+                        onAboutClick = onAboutClick,
+                        showVnc = showVnc,
                         isWakeLockEnabled = isWakeLockEnabled,
                         onToggleWakeLock = onToggleWakeLock,
-                        onRefresh = onRefreshSessions
-                    )
-                    2 -> FileManagerScreen(onOpenFile = onExecuteScript)
-                    3 -> com.termux.app.remote.RemoteScreen(
-                        showVnc = showVnc,
-                        initialTab = remoteSubTab,
-                        onTabChange = { remoteSubTab = it },
+                        onRefreshSessions = onRefreshSessions,
+                        onOverviewEditModeChanged = { isOverviewEditMode = it },
+                        onRemoteSubTabChange = { remoteSubTab = it },
                         onGoToFiles = {
                             previousTab = selectedTab
                             onTabChange(2)
@@ -591,12 +773,20 @@ fun MainScreen(
                         onGoToResources = {
                             previousTab = selectedTab
                             onTabChange(4)
-                        }
+                        },
+                        navBarBottomPadding = totalNavHeight
                     )
-                    4 -> ResourcesScreen()
-                    5 -> SettingsScreen(onAboutClick = onAboutClick)
                 }
             }
+        }
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(bottom = snackbarBottomPadding),
+            contentAlignment = Alignment.BottomCenter
+        ) {
+            SnackbarHost(state = snackbarHostState)
         }
 
         val stopDialogState by StopConfirmDialog.dialogState.collectAsState()
@@ -613,5 +803,73 @@ fun MainScreen(
 
         // 风险命令确认弹窗（主页不显示风险 Snackbar，由终端页独占）
         RiskConfirmDialogHost(snackbarHostState, collectSnackbar = false)
+    }
+}
+
+@Composable
+private fun PageContentForTab(
+    tab: Int,
+    sessions: List<TermuxSession>,
+    onSessionClick: (TermuxSession) -> Unit,
+    onNewTerminal: () -> Unit,
+    onStopTerminal: (TermuxSession) -> Unit,
+    onRenameTerminal: (TermuxSession, String) -> Unit,
+    onExecuteScript: (String, String) -> Unit,
+    onAboutClick: () -> Unit,
+    showVnc: Boolean,
+    isWakeLockEnabled: Boolean,
+    onToggleWakeLock: () -> Unit,
+    onRefreshSessions: () -> Unit,
+    onOverviewEditModeChanged: (Boolean) -> Unit,
+    onRemoteSubTabChange: (Int) -> Unit,
+    onGoToFiles: () -> Unit,
+    onGoToResources: () -> Unit,
+    navBarBottomPadding: Dp
+) {
+    when (tab) {
+        0 -> OverviewScreen(
+            sessions = sessions,
+            onSessionClick = onSessionClick,
+            onNewTerminal = onNewTerminal,
+            onStopAllSessions = {
+                sessions.filter { it.getTerminalSession().isRunning }.forEach { session ->
+                    onStopTerminal(session)
+                }
+            },
+            isWakeLockEnabled = isWakeLockEnabled,
+            onToggleWakeLock = onToggleWakeLock,
+            onExecuteScript = onExecuteScript,
+            onRefresh = onRefreshSessions,
+            onEditModeChanged = onOverviewEditModeChanged,
+            navBarBottomPadding = navBarBottomPadding
+        )
+        1 -> TerminalListScreen(
+            sessions = sessions,
+            onSessionClick = onSessionClick,
+            onNewTerminal = onNewTerminal,
+            onStopTerminal = onStopTerminal,
+            onRenameTerminal = onRenameTerminal,
+            isWakeLockEnabled = isWakeLockEnabled,
+            onToggleWakeLock = onToggleWakeLock,
+            onRefresh = onRefreshSessions,
+            navBarBottomPadding = navBarBottomPadding
+        )
+        2 -> FileManagerScreen(
+            onOpenFile = onExecuteScript,
+            navBarBottomPadding = navBarBottomPadding
+        )
+        3 -> com.termux.app.remote.RemoteScreen(
+            showVnc = showVnc,
+            initialTab = 0,
+            onTabChange = onRemoteSubTabChange,
+            onGoToFiles = onGoToFiles,
+            onGoToResources = onGoToResources,
+            navBarBottomPadding = navBarBottomPadding
+        )
+        4 -> ResourcesScreen(navBarBottomPadding = navBarBottomPadding)
+        5 -> SettingsScreen(
+            onAboutClick = onAboutClick,
+            navBarBottomPadding = navBarBottomPadding
+        )
     }
 }
