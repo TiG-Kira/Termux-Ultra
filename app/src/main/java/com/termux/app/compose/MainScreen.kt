@@ -563,6 +563,7 @@ fun MainScreen(
                         },
                         isWakeLockEnabled = isWakeLockEnabled,
                         onToggleWakeLock = onToggleWakeLock,
+                        onExecuteScript = onExecuteScript,
                         onRefresh = onRefreshSessions,
                         onEditModeChanged = { isEditMode ->
                             isOverviewEditMode = isEditMode

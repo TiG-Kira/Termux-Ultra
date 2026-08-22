@@ -729,5 +729,6 @@
     <string name="overview_utility_center">实用功能中心</string>
     <string name="overview_third_party_center">第三方资源中心</string>
     <string name="overview_system_function">系统功能</string>
+    <string name="overview_can_add_multiple">可添加多个</string>
 
 </resources>

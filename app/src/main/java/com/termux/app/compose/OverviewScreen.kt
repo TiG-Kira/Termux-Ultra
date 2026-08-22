@@ -353,6 +353,7 @@ fun OverviewScreen(
     onStopAllSessions: () -> Unit,
     isWakeLockEnabled: Boolean,
     onToggleWakeLock: () -> Unit,
+    onExecuteScript: (String, String) -> Unit = { _, _ -> },
     onRefresh: () -> Unit = {},
     onEditModeChanged: (Boolean) -> Unit = {}
 ) {
@@ -433,7 +434,6 @@ fun OverviewScreen(
     }
     
     val scrollBehavior = MiuixScrollBehavior()
-    val gridState = rememberLazyGridState()
     
     val filteredCards = cards.filter { it.isVisible }.sortedBy { it.position }
     
@@ -618,7 +618,9 @@ fun OverviewScreen(
         val availableTypes = OverviewCardType.values().filter { type ->
             type != OverviewCardType.STOP_ALL // STOP_ALL can't be added manually
         }
-        val existingTypes = cards.map { it.type }.toSet()
+        // RESOURCE_ACTION can be added multiple times
+        val existingTypes = cards.filter { it.type != OverviewCardType.RESOURCE_ACTION }
+            .map { it.type }.toSet()
         
         OverlayDialog(
             show = showAddCardDialog,
@@ -631,7 +633,8 @@ fun OverviewScreen(
                         .padding(vertical = 8.dp)
                 ) {
                     availableTypes.forEach { type ->
-                        val isAlreadyAdded = existingTypes.contains(type)
+                        // RESOURCE_ACTION type can always be added
+                        val isAlreadyAdded = type != OverviewCardType.RESOURCE_ACTION && existingTypes.contains(type)
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -685,6 +688,12 @@ fun OverviewScreen(
                                     fontSize = 13.sp,
                                     color = MiuixTheme.colorScheme.onSurfaceVariantSummary
                                 )
+                            } else if (type == OverviewCardType.RESOURCE_ACTION) {
+                                Text(
+                                    text = stringResource(R.string.overview_can_add_multiple),
+                                    fontSize = 13.sp,
+                                    color = MiuixTheme.colorScheme.primary
+                                )
                             }
                         }
                         if (type != availableTypes.last()) {
@@ -732,117 +741,48 @@ fun OverviewScreen(
             )
         }
     ) { padding ->
+        // Calculate waterfall layout: reorder cards for optimal placement
+        val orderedCards = remember(filteredCards) {
+            calculateWaterfallOrder(filteredCards)
+        }
+        
         LazyVerticalGrid(
             columns = GridCells.Fixed(2),
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
                 .nestedScroll(scrollBehavior.nestedScrollConnection),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            contentPadding = PaddingValues(top = 8.dp, bottom = 92.dp, start = 16.dp, end = 16.dp),
-            state = gridState
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            contentPadding = PaddingValues(top = 8.dp, bottom = 92.dp, start = 16.dp, end = 16.dp)
         ) {
             items(
-                items = filteredCards,
+                items = orderedCards,
                 span = { card ->
                     if (card.size == CardSize.WIDE) GridItemSpan(2) else GridItemSpan(1)
                 }
             ) { card ->
-                when (card.type) {
-                    OverviewCardType.TIPS_AGENT -> {
-                        TipsAgentCard(
-                            card = card,
-                            isEditMode = isEditMode,
-                            onEditClick = {
-                                selectedCardId = card.id
-                                showCardSettings = true
-                            }
-                        )
-                    }
-                    OverviewCardType.SESSIONS -> {
-                        SessionsCard(
-                            card = card,
-                            runningCount = runningSessions.size,
-                            stoppedCount = stoppedSessions.size,
-                            sessions = sessions,
-                            onSessionClick = onSessionClick,
-                            onEditClick = {
-                                selectedCardId = card.id
-                                showCardSettings = true
-                            },
-                            isEditMode = isEditMode
-                        )
-                    }
-                    OverviewCardType.CPU_MONITOR -> {
-                        CpuMonitorCard(
-                            card = card,
-                            usage = cpuUsage,
-                            temperature = cpuTemperature,
-                            history = cpuHistory,
-                            isEditMode = isEditMode,
-                            onEditClick = {
-                                selectedCardId = card.id
-                                showCardSettings = true
-                            }
-                        )
-                    }
-                    OverviewCardType.GPU_MONITOR -> {
-                        GpuMonitorCard(
-                            card = card,
-                            usage = gpuUsage,
-                            history = gpuHistory,
-                            isEditMode = isEditMode,
-                            onEditClick = {
-                                selectedCardId = card.id
-                                showCardSettings = true
-                            }
-                        )
-                    }
-                    OverviewCardType.PROCESS_LIST -> {
-                        ProcessListCard(
-                            card = card,
-                            processes = processList,
-                            isEditMode = isEditMode,
-                            onEditClick = {
-                                selectedCardId = card.id
-                                showCardSettings = true
-                            }
-                        )
-                    }
-                    OverviewCardType.STOP_ALL -> {
-                        StopAllCard(
-                            card = card,
-                            sessionCount = sessions.size,
-                            isEditMode = isEditMode,
-                            onStopAll = {
-                                onStopAllSessions()
-                            },
-                            onEditClick = {
-                                selectedCardId = card.id
-                                showCardSettings = true
-                            }
-                        )
-                    }
-                    OverviewCardType.RESOURCE_ACTION -> {
-                        ResourceActionCard(
-                            card = card,
-                            context = context,
-                            isEditMode = isEditMode,
-                            onActionSelected = { actionId: String ->
-                                val updatedCard = card.copy(resourceActionId = actionId)
-                                cardManager.updateCard(updatedCard)
-                            },
-                            onLaunchAction = { action: ResourceAction ->
-                                launchResourceAction(context, action, onNewTerminal)
-                            },
-                            onEditClick = {
-                                selectedCardId = card.id
-                                showCardSettings = true
-                            }
-                        )
-                    }
-                }
+                CardItem(
+                    card = card,
+                    context = context,
+                    isEditMode = isEditMode,
+                    cpuUsage = cpuUsage,
+                    cpuTemperature = cpuTemperature,
+                    gpuUsage = gpuUsage,
+                    cpuHistory = cpuHistory,
+                    gpuHistory = gpuHistory,
+                    processList = processList,
+                    runningSessions = runningSessions,
+                    stoppedSessions = stoppedSessions,
+                    sessions = sessions,
+                    onSessionClick = onSessionClick,
+                    onStopAllSessions = onStopAllSessions,
+                    onNewTerminal = onNewTerminal,
+                    onExecuteScript = onExecuteScript,
+                    selectedCardId = selectedCardId,
+                    onCardSelected = { selectedCardId = it },
+                    onShowCardSettings = { showCardSettings = true }
+                )
             }
         }
     }
@@ -1068,7 +1008,7 @@ private fun SessionsCard(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp)
+                .padding(12.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -1076,8 +1016,8 @@ private fun SessionsCard(
             ) {
                 Text(
                     text = stringResource(R.string.overview_card_sessions),
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium,
                     color = MiuixTheme.colorScheme.onSurface,
                     modifier = Modifier.weight(1f)
                 )
@@ -1086,24 +1026,24 @@ private fun SessionsCard(
                         Icon(
                             imageVector = Icons.Rounded.Edit,
                             contentDescription = null,
-                            modifier = Modifier.size(18.dp),
+                            modifier = Modifier.size(16.dp),
                             tint = MiuixTheme.colorScheme.onSurfaceVariantSummary
                         )
                     }
                 }
             }
             
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(8.dp))
             
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 // Running sessions
                 Box(
                     modifier = Modifier
                         .weight(1f)
-                        .clip(RoundedCornerShape(12.dp))
+                        .clip(RoundedCornerShape(10.dp))
                         .background(
                             if (isDark) Color(0xFF1B3A1F) else Color(0xFFE8F5E9)
                         )
@@ -1113,27 +1053,27 @@ private fun SessionsCard(
                                 onSessionClick(running.first())
                             }
                         }
-                        .padding(12.dp)
+                        .padding(10.dp)
                 ) {
                     Column {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
                                 imageVector = Icons.Rounded.PlayArrow,
                                 contentDescription = null,
-                                modifier = Modifier.size(16.dp),
+                                modifier = Modifier.size(14.dp),
                                 tint = Color(0xFF4CAF50)
                             )
-                            Spacer(modifier = Modifier.width(6.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
                             Text(
                                 text = stringResource(R.string.overview_running),
-                                fontSize = 12.sp,
+                                fontSize = 11.sp,
                                 color = Color(0xFF4CAF50)
                             )
                         }
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
                             text = runningCount.toString(),
-                            fontSize = 24.sp,
+                            fontSize = 20.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color(0xFF4CAF50)
                         )
@@ -1144,31 +1084,31 @@ private fun SessionsCard(
                 Box(
                     modifier = Modifier
                         .weight(1f)
-                        .clip(RoundedCornerShape(12.dp))
+                        .clip(RoundedCornerShape(10.dp))
                         .background(
                             if (isDark) Color(0xFF3B1414) else Color(0xFFFFEBEE)
                         )
-                        .padding(12.dp)
+                        .padding(10.dp)
                 ) {
                     Column {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
                                 imageVector = Icons.Rounded.Stop,
                                 contentDescription = null,
-                                modifier = Modifier.size(16.dp),
+                                modifier = Modifier.size(14.dp),
                                 tint = Color(0xFFE57373)
                             )
-                            Spacer(modifier = Modifier.width(6.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
                             Text(
                                 text = stringResource(R.string.overview_stopped),
-                                fontSize = 12.sp,
+                                fontSize = 11.sp,
                                 color = Color(0xFFE57373)
                             )
                         }
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
                             text = stoppedCount.toString(),
-                            fontSize = 24.sp,
+                            fontSize = 20.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color(0xFFE57373)
                         )
@@ -1201,7 +1141,7 @@ private fun CpuMonitorCard(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp)
+                .padding(12.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -1210,13 +1150,13 @@ private fun CpuMonitorCard(
                 Icon(
                     imageVector = Icons.Rounded.Memory,
                     contentDescription = null,
-                    modifier = Modifier.size(20.dp),
+                    modifier = Modifier.size(18.dp),
                     tint = MiuixTheme.colorScheme.primary
                 )
-                Spacer(modifier = Modifier.width(8.dp))
+                Spacer(modifier = Modifier.width(6.dp))
                 Text(
                     text = stringResource(R.string.overview_card_cpu),
-                    fontSize = 14.sp,
+                    fontSize = 13.sp,
                     fontWeight = FontWeight.Medium,
                     color = MiuixTheme.colorScheme.onSurface,
                     modifier = Modifier.weight(1f)
@@ -1226,14 +1166,14 @@ private fun CpuMonitorCard(
                         Icon(
                             imageVector = Icons.Rounded.Edit,
                             contentDescription = null,
-                            modifier = Modifier.size(16.dp),
+                            modifier = Modifier.size(14.dp),
                             tint = MiuixTheme.colorScheme.onSurfaceVariantSummary
                         )
                     }
                 }
             }
             
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(6.dp))
             
             // Usage value and chart
             Row(
@@ -1246,7 +1186,7 @@ private fun CpuMonitorCard(
                 ) {
                     Text(
                         text = "${usage.toInt()}%",
-                        fontSize = 28.sp,
+                        fontSize = 24.sp,
                         fontWeight = FontWeight.Bold,
                         color = usageColor
                     )
@@ -1263,10 +1203,10 @@ private fun CpuMonitorCard(
             }
             
             if (temperature > 0f) {
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(6.dp))
                 Text(
                     text = stringResource(R.string.overview_cpu_temp, temperature),
-                    fontSize = 12.sp,
+                    fontSize = 11.sp,
                     color = MiuixTheme.colorScheme.onSurfaceVariantSummary
                 )
             }
@@ -1300,7 +1240,7 @@ private fun GpuMonitorCard(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp)
+                .padding(12.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -1309,14 +1249,14 @@ private fun GpuMonitorCard(
                 Icon(
                     imageVector = Icons.Rounded.Monitor,
                     contentDescription = null,
-                    modifier = Modifier.size(20.dp),
+                    modifier = Modifier.size(18.dp),
                     tint = if (isGpuAvailable) MiuixTheme.colorScheme.primary 
                            else MiuixTheme.colorScheme.onSurfaceVariantSummary
                 )
-                Spacer(modifier = Modifier.width(8.dp))
+                Spacer(modifier = Modifier.width(6.dp))
                 Text(
                     text = stringResource(R.string.overview_card_gpu),
-                    fontSize = 14.sp,
+                    fontSize = 13.sp,
                     fontWeight = FontWeight.Medium,
                     color = MiuixTheme.colorScheme.onSurface,
                     modifier = Modifier.weight(1f)
@@ -1326,14 +1266,14 @@ private fun GpuMonitorCard(
                         Icon(
                             imageVector = Icons.Rounded.Edit,
                             contentDescription = null,
-                            modifier = Modifier.size(16.dp),
+                            modifier = Modifier.size(14.dp),
                             tint = MiuixTheme.colorScheme.onSurfaceVariantSummary
                         )
                     }
                 }
             }
             
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(6.dp))
             
             // Usage value and chart
             Row(
@@ -1347,14 +1287,14 @@ private fun GpuMonitorCard(
                     if (isGpuAvailable) {
                         Text(
                             text = "${usage.toInt()}%",
-                            fontSize = 28.sp,
+                            fontSize = 24.sp,
                             fontWeight = FontWeight.Bold,
                             color = usageColor
                         )
                     } else if (hasHistoricalData) {
                         Text(
                             text = "${peakUsage.toInt()}%",
-                            fontSize = 28.sp,
+                            fontSize = 24.sp,
                             fontWeight = FontWeight.Bold,
                             color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.6f)
                         )
@@ -1366,7 +1306,7 @@ private fun GpuMonitorCard(
                     } else {
                         Text(
                             text = "N/A",
-                            fontSize = 24.sp,
+                            fontSize = 22.sp,
                             fontWeight = FontWeight.Bold,
                             color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.6f)
                         )
@@ -2363,8 +2303,15 @@ private fun ResourceActionCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(enabled = !isEditMode && action != null) {
-                action?.let { onLaunchAction(it) }
+            .clickable {
+                if (action != null) {
+                    if (!isEditMode) {
+                        onLaunchAction(action)
+                    }
+                } else {
+                    // No action selected, open selection dialog
+                    showSelectDialog = true
+                }
             }
     ) {
         Column(
@@ -2392,15 +2339,22 @@ private fun ResourceActionCard(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                if (isEditMode) {
-                    IconButton(onClick = onEditClick) {
-                        Icon(
-                            imageVector = Icons.Rounded.Edit,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp),
-                            tint = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                        )
+                // Edit button - always visible for changing selection
+                IconButton(onClick = {
+                    if (action != null) {
+                        // Open selection dialog to change action
+                        showSelectDialog = true
+                    } else {
+                        // Open selection dialog to add action
+                        showSelectDialog = true
                     }
+                }) {
+                    Icon(
+                        imageVector = Icons.Rounded.Edit,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                        tint = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                    )
                 }
             }
             
@@ -2462,9 +2416,7 @@ private fun ResourceActionCard(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable(enabled = isEditMode) {
-                            showSelectDialog = true
-                        }
+                        .clickable { showSelectDialog = true }
                         .padding(vertical = 12.dp),
                     contentAlignment = Alignment.Center
                 ) {
@@ -2658,45 +2610,18 @@ private fun ResourceActionSelectionDialog(
 fun launchResourceAction(
     context: Context,
     action: ResourceAction,
-    onNewTerminal: () -> Unit
+    onExecuteScript: (String, String) -> Unit
 ) {
     when (action.type) {
         "qemu_on_vnc" -> {
             val intent = Intent(context, com.termux.app.activities.QemuVmActivity::class.java)
             context.startActivity(intent)
         }
-        "qemu_termux", "install_qemu_in_container" -> {
-            val script = action.script ?: return
-            onNewTerminal()
-            val intent = Intent("com.termux.app.ACTION_EXECUTE_SCRIPT").apply {
-                putExtra("script", script)
-                putExtra("type", action.type)
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-            context.sendBroadcast(intent)
-        }
-        "install_debian_container" -> {
-            val script = action.script ?: return
-            onNewTerminal()
-            val intent = Intent("com.termux.app.ACTION_EXECUTE_SCRIPT").apply {
-                putExtra("script", script)
-                putExtra("type", action.type)
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-            context.sendBroadcast(intent)
-        }
         else -> {
             val script = action.script
             if (script != null) {
-                onNewTerminal()
-                val intent = Intent("com.termux.app.ACTION_EXECUTE_SCRIPT").apply {
-                    putExtra("script", script)
-                    putExtra("url", action.url ?: "")
-                    putExtra("needsContainerCheck", action.needsContainerCheck)
-                    putExtra("copyToClipboard", action.copyToClipboard)
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                }
-                context.sendBroadcast(intent)
+                // Use onExecuteScript to create a new terminal and execute the script
+                onExecuteScript(action.name, script)
             } else {
                 action.url?.let { url ->
                     try {
@@ -2708,4 +2633,223 @@ fun launchResourceAction(
             }
         }
     }
+}
+
+// ============================================================
+// Card Item - Unified card renderer
+// ============================================================
+
+@Composable
+private fun CardItem(
+    card: OverviewCardConfig,
+    context: Context,
+    isEditMode: Boolean,
+    cpuUsage: Float,
+    cpuTemperature: Float,
+    gpuUsage: Float,
+    cpuHistory: List<Float>,
+    gpuHistory: List<Float>,
+    processList: List<ProcessInfo>,
+    runningSessions: List<TermuxSession>,
+    stoppedSessions: List<TermuxSession>,
+    sessions: List<TermuxSession>,
+    onSessionClick: (TermuxSession) -> Unit,
+    onStopAllSessions: () -> Unit,
+    onNewTerminal: () -> Unit,
+    onExecuteScript: (String, String) -> Unit,
+    selectedCardId: String?,
+    onCardSelected: (String) -> Unit,
+    onShowCardSettings: () -> Unit
+) {
+    when (card.type) {
+        OverviewCardType.TIPS_AGENT -> {
+            TipsAgentCard(
+                card = card,
+                isEditMode = isEditMode,
+                onEditClick = {
+                    onCardSelected(card.id)
+                    onShowCardSettings()
+                }
+            )
+        }
+        OverviewCardType.SESSIONS -> {
+            SessionsCard(
+                card = card,
+                runningCount = runningSessions.size,
+                stoppedCount = stoppedSessions.size,
+                sessions = sessions,
+                onSessionClick = onSessionClick,
+                onEditClick = {
+                    onCardSelected(card.id)
+                    onShowCardSettings()
+                },
+                isEditMode = isEditMode
+            )
+        }
+        OverviewCardType.CPU_MONITOR -> {
+            CpuMonitorCard(
+                card = card,
+                usage = cpuUsage,
+                temperature = cpuTemperature,
+                history = cpuHistory,
+                isEditMode = isEditMode,
+                onEditClick = {
+                    onCardSelected(card.id)
+                    onShowCardSettings()
+                }
+            )
+        }
+        OverviewCardType.GPU_MONITOR -> {
+            GpuMonitorCard(
+                card = card,
+                usage = gpuUsage,
+                history = gpuHistory,
+                isEditMode = isEditMode,
+                onEditClick = {
+                    onCardSelected(card.id)
+                    onShowCardSettings()
+                }
+            )
+        }
+        OverviewCardType.PROCESS_LIST -> {
+            ProcessListCard(
+                card = card,
+                processes = processList,
+                isEditMode = isEditMode,
+                onEditClick = {
+                    onCardSelected(card.id)
+                    onShowCardSettings()
+                }
+            )
+        }
+        OverviewCardType.STOP_ALL -> {
+            StopAllCard(
+                card = card,
+                sessionCount = sessions.size,
+                isEditMode = isEditMode,
+                onStopAll = onStopAllSessions,
+                onEditClick = {
+                    onCardSelected(card.id)
+                    onShowCardSettings()
+                }
+            )
+        }
+        OverviewCardType.RESOURCE_ACTION -> {
+            ResourceActionCard(
+                card = card,
+                context = context,
+                isEditMode = isEditMode,
+                onActionSelected = { actionId: String ->
+                    val cardManager = OverviewCardManager.getInstance(context)
+                    val updatedCard = card.copy(resourceActionId = actionId)
+                    cardManager.updateCard(updatedCard)
+                },
+                onLaunchAction = { action: ResourceAction ->
+                    launchResourceAction(context, action, onExecuteScript)
+                },
+                onEditClick = {
+                    onCardSelected(card.id)
+                    onShowCardSettings()
+                }
+            )
+        }
+    }
+}
+
+// ============================================================
+// Waterfall Layout Calculator
+// ============================================================
+
+/**
+ * Calculate the optimal order for cards in a waterfall layout.
+ * Small cards are placed in columns trying to keep heights balanced.
+ * Wide cards are inserted at positions where both columns have similar heights.
+ */
+private fun calculateWaterfallOrder(cards: List<OverviewCardConfig>): List<OverviewCardConfig> {
+    if (cards.isEmpty()) return cards
+    
+    // Estimate card heights (in arbitrary units, just for comparison)
+    fun estimateHeight(card: OverviewCardConfig): Int {
+        return when (card.type) {
+            OverviewCardType.CPU_MONITOR -> 80
+            OverviewCardType.GPU_MONITOR -> 80
+            OverviewCardType.SESSIONS -> 90
+            OverviewCardType.PROCESS_LIST -> 120
+            OverviewCardType.TIPS_AGENT -> 70
+            OverviewCardType.RESOURCE_ACTION -> 100
+            OverviewCardType.STOP_ALL -> 80
+            else -> 80
+        }
+    }
+    
+    // Separate cards by size
+    val smallCards = cards.filter { it.size == CardSize.SMALL }
+    val wideCards = cards.filter { it.size == CardSize.WIDE }
+    
+    // Build the layout column by column
+    val result = mutableListOf<OverviewCardConfig>()
+    var leftHeight = 0
+    var rightHeight = 0
+    var smallIndex = 0
+    var wideIndex = 0
+    
+    // Interleave: place small cards in the shorter column,
+    // and insert wide cards when heights are balanced
+    while (smallIndex < smallCards.size || wideIndex < wideCards.size) {
+        // Determine if we should place a wide card or a small card
+        val canPlaceWide = wideIndex < wideCards.size
+        val canPlaceSmall = smallIndex < smallCards.size
+        
+        if (!canPlaceSmall && canPlaceWide) {
+            // Only wide cards left
+            result.add(wideCards[wideIndex])
+            val h = estimateHeight(wideCards[wideIndex])
+            leftHeight += h
+            rightHeight += h
+            wideIndex++
+        } else if (!canPlaceWide && canPlaceSmall) {
+            // Only small cards left
+            val card = smallCards[smallIndex]
+            result.add(card)
+            val h = estimateHeight(card)
+            if (leftHeight <= rightHeight) {
+                leftHeight += h
+            } else {
+                rightHeight += h
+            }
+            smallIndex++
+        } else if (canPlaceWide && canPlaceSmall) {
+            // Decide whether to place wide or small card
+            // Place wide card when heights are close (difference < threshold)
+            val heightDiff = kotlin.math.abs(leftHeight - rightHeight)
+            val wideCard = wideCards[wideIndex]
+            val wideHeight = estimateHeight(wideCard)
+            
+            // Place wide card if it helps balance or if heights are already close
+            // and the wide card won't create too much imbalance
+            val wouldBalance = (leftHeight <= rightHeight && leftHeight + wideHeight <= rightHeight) ||
+                              (rightHeight < leftHeight && rightHeight + wideHeight <= leftHeight)
+            
+            if (heightDiff < 40 || wouldBalance) {
+                // Place wide card
+                result.add(wideCard)
+                leftHeight += wideHeight
+                rightHeight += wideHeight
+                wideIndex++
+            } else {
+                // Place small card in the shorter column
+                val card = smallCards[smallIndex]
+                result.add(card)
+                val h = estimateHeight(card)
+                if (leftHeight <= rightHeight) {
+                    leftHeight += h
+                } else {
+                    rightHeight += h
+                }
+                smallIndex++
+            }
+        }
+    }
+    
+    return result
 }

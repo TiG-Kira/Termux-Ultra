@@ -819,5 +819,6 @@
     <string name="overview_utility_center">Utility Center</string>
     <string name="overview_third_party_center">Third-Party Center</string>
     <string name="overview_system_function">System Function</string>
+    <string name="overview_can_add_multiple">Can add multiple</string>
 
 </resources>
