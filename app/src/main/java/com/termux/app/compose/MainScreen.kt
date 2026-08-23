@@ -569,7 +569,7 @@ fun MainScreen(
                             } else {
                                 1f
                             }
-                            if (swipeTargetTab == null && kotlin.math.abs(rawDragOffset) > 10f) {
+                            if (kotlin.math.abs(rawDragOffset) > 10f) {
                                 if (rawDragOffset < 0) {
                                     if (!(selectedTab == 3 && showVnc && remoteSubTab == 0)) {
                                         availableTabs.filter { it > selectedTab }.minOrNull()?.let {

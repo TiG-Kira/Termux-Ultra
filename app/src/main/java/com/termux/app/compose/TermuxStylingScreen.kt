@@ -73,8 +73,8 @@ fun TermuxStylingScreen(
     var showFontDialog by remember { mutableStateOf(false) }
     var showColorLicense by remember { mutableStateOf<StyleItem?>(null) }
     var showFontLicense by remember { mutableStateOf<StyleItem?>(null) }
-    var currentColor by remember { mutableStateOf(getCurrentStyle(context, "colors.properties")) }
-    var currentFont by remember { mutableStateOf(getCurrentStyle(context, "font.ttf")) }
+    var currentColor by remember { mutableStateOf(getCurrentStyle(context, "colors.properties", "color")) }
+    var currentFont by remember { mutableStateOf(getCurrentStyle(context, "font.ttf", "font")) }
 
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
@@ -222,11 +222,17 @@ private fun loadStyleItems(context: Context, assetFolder: String, extension: Str
     return items
 }
 
-private fun getCurrentStyle(context: Context, fileName: String): String {
+private fun getCurrentStyle(context: Context, fileName: String, styleType: String): String {
+    val prefs = context.getSharedPreferences("termux_styling", Context.MODE_PRIVATE)
+    val savedName = prefs.getString("selected_${styleType}_name", null)
+    if (savedName != null) return savedName
     return try {
         val termuxDir = getTermuxDir(context)
         val file = File(termuxDir, fileName)
-        if (file.exists()) "Custom" else "Default"
+        if (file.exists()) {
+            val content = file.readText().trim()
+            if (content.startsWith("# Using default")) "Default" else "Custom"
+        } else "Default"
     } catch (_: Exception) {
         "Default"
     }
@@ -263,6 +269,13 @@ private fun copyStyleFile(context: Context, item: StyleItem, isColors: Boolean) 
             }
         }
         atomicFile.finishWrite(out)
+
+        val styleType = if (isColors) "color" else "font"
+        val displayName = if (isDefault) "Default" else item.displayName
+        context.getSharedPreferences("termux_styling", Context.MODE_PRIVATE)
+            .edit()
+            .putString("selected_${styleType}_name", displayName)
+            .apply()
 
         val actionReload = "com.termux.app.reload_style"
         val executeIntent = Intent(actionReload)

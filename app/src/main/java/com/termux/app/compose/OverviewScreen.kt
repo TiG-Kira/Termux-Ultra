@@ -2051,6 +2051,7 @@ private fun StopAllCard(
         modifier = Modifier
             .fillMaxWidth()
             .height(cardHeight)
+            .clip(RoundedCornerShape(16.dp))
             .clickable(enabled = !isEditMode && sessionCount > 0) {
                 showConfirmDialog = true
             }
@@ -2920,6 +2921,7 @@ private fun ResourceActionCard(
         modifier = Modifier
             .fillMaxWidth()
             .height(cardHeight)
+            .clip(RoundedCornerShape(16.dp))
             .clickable {
                 if (action != null) {
                     if (!isEditMode) {
@@ -3100,6 +3102,7 @@ private fun ResourceActionSelectionDialog(
                     ).forEachIndexed { index, title ->
                         Box(
                             modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
                                 .clickable { selectedTab = index }
                                 .background(
                                     color = if (selectedTab == index) 
@@ -3152,6 +3155,7 @@ private fun ResourceActionSelectionDialog(
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
+                                    .clip(RoundedCornerShape(12.dp))
                                     .clickable { onActionSelected(action.id) }
                                     .background(
                                         color = if (isSelected) 
