@@ -139,6 +139,8 @@ object UpdateChecker {
 
                         if (tagVersion == null) continue
 
+                        if (tagVersion.major != currentVersion.major) continue
+
                         if (tagVersion == currentVersion) {
                             currentTagMatched = true
                         }
@@ -230,7 +232,7 @@ object UpdateChecker {
                         val tagName = release.optString("tag_name", "")
                         val tagVersion = AppVersion.parse(tagName)
 
-                        if (tagVersion != null && tagVersion == currentVersion) {
+                        if (tagVersion != null && tagVersion.major == currentVersion.major && tagVersion == currentVersion) {
                             val isPrerelease = release.optBoolean("prerelease", false)
                             val isDraft = release.optBoolean("draft", false)
                             if (isDraft) {
