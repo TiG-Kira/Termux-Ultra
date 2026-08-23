@@ -17,10 +17,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -33,6 +33,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.google.gson.Gson
 import top.yukonga.miuix.kmp.basic.TopAppBar
+import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 class PluginWebViewActivity : ComponentActivity() {
@@ -41,6 +43,7 @@ class PluginWebViewActivity : ComponentActivity() {
         private const val EXTRA_PLUGIN_ID = "plugin_id"
         private const val EXTRA_ENTRY_PATH = "entry_path"
         private const val EXTRA_TITLE = "title"
+    private const val EXTRA_URL = "url"
 
         fun start(context: Context, pluginId: String, entryPath: String, title: String? = null) {
             val intent = Intent(context, PluginWebViewActivity::class.java).apply {
@@ -140,16 +143,18 @@ class PluginWebViewActivity : ComponentActivity() {
                 TopAppBar(
                     title = title,
                     navigationIcon = {
-                        IconButton(
-                            onClick = onBack,
+                        Box(
                             modifier = Modifier
-                                .padding(horizontal = 8.dp)
+                                .size(40.dp)
                                 .clip(CircleShape)
+                                .clickable { onBack() },
+                            contentAlignment = Alignment.Center
                         ) {
                             Icon(
-                                imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
+                                imageVector = MiuixIcons.Back,
                                 contentDescription = "返回",
-                                tint = MiuixTheme.colorScheme.onSurface
+                                tint = MiuixTheme.colorScheme.onSurface,
+                                modifier = Modifier.size(24.dp)
                             )
                         }
                     }
@@ -165,7 +170,7 @@ class PluginWebViewActivity : ComponentActivity() {
                 AndroidView(
                     factory = { ctx ->
                         WebView(ctx).apply {
-                            setBackgroundColor(android.graphics.Color.TRANSPARENT)
+                            setBackgroundColor(0)
                             settings.apply {
                                 javaScriptEnabled = true
                                 domStorageEnabled = true
@@ -196,6 +201,11 @@ class PluginWebViewActivity : ComponentActivity() {
                                     } else {
                                         false
                                     }
+                                }
+
+                                override fun onPageFinished(view: WebView?, url: String?) {
+                                    super.onPageFinished(view, url)
+                                    view?.injectBackgroundFix()
                                 }
                             }
 
@@ -330,5 +340,22 @@ class PluginWebViewActivity : ComponentActivity() {
             )
             return gson.toJson(info)
         }
+    }
+
+    private fun WebView.injectBackgroundFix() {
+        val js = """
+            (function() {
+                var style = document.createElement('style');
+                style.textContent = 'html,body{margin:0;padding:0;height:100%}html{background:transparent!important}';
+                document.head.appendChild(style);
+                if(document.body && document.body.style && !document.body.style.background) {
+                    var computed = window.getComputedStyle(document.body);
+                    if(computed && computed.backgroundImage && computed.backgroundImage !== 'none') {
+                        document.documentElement.style.background = computed.backgroundImage;
+                    }
+                }
+            })();
+        """.trimIndent()
+        evaluateJavascript(js, null)
     }
 }

@@ -275,7 +275,7 @@
         <activity
             android:name="com.termux.app.plugin.PluginWebViewActivity"
             android:exported="false"
-            android:theme="@style/Theme.Termux" />
+            android:theme="@style/Theme.Termux.Transparent" />
 
         <provider
             android:name=".filepicker.TermuxDocumentsProvider"

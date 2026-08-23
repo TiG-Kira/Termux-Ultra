@@ -1,6 +1,7 @@
 package com.termux.app.plugin
 
 import android.net.Uri
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -20,7 +21,8 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Stop
-import androidx.compose.material.icons.automirrored.rounded.ArrowForward
+import androidx.compose.material.icons.rounded.Home
+import androidx.compose.material.icons.rounded.Info
 import androidx.compose.runtime.*
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
@@ -272,7 +274,18 @@ fun PluginCenterScreen() {
                         },
                         onDisable = { disablePlugin(plugin) },
                         onUninstall = { showUninstallDialog = plugin },
-                        onViewContent = { showPluginContentDialog = plugin }
+                        onViewContent = { showPluginContentDialog = plugin },
+                        onOpenH5Home = {
+                            val h5Home = plugin.manifest.entryPoints?.h5Home
+                            if (h5Home?.enabled == true) {
+                                PluginWebViewActivity.start(
+                                    context = context,
+                                    pluginId = plugin.id,
+                                    entryPath = h5Home.entry,
+                                    title = h5Home.title ?: plugin.manifest.name
+                                )
+                            }
+                        }
                     )
                 }
             }
@@ -313,11 +326,13 @@ private fun PluginItemCard(
     onEnable: () -> Unit,
     onDisable: () -> Unit,
     onUninstall: () -> Unit,
-    onViewContent: () -> Unit
+    onViewContent: () -> Unit,
+    onOpenH5Home: () -> Unit
 ) {
     val isDark = androidx.compose.foundation.isSystemInDarkTheme()
     val cardBg = if (isDark) Color(0xFF1A1A1A) else Color(0xFFFAFAFA)
     val onSurface = MiuixTheme.colorScheme.onSurface
+    val hasH5Home = plugin.manifest.entryPoints?.h5Home?.enabled == true
     val stateColor = when (plugin.state) {
         PluginState.ENABLED -> Color(0xFF4CAF50)
         PluginState.DISABLED -> Color(0xFF9E9E9E)
@@ -447,10 +462,42 @@ private fun PluginItemCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(12.dp),
-                horizontalArrangement = Arrangement.End,
+                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                val needsSetup = plugin.state == PluginState.INSTALLED || plugin.state == PluginState.NEEDS_PERMISSION
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (hasH5Home) {
+                        Button(
+                            onClick = onOpenH5Home,
+                            modifier = Modifier.clip(RoundedCornerShape(8.dp)),
+                            colors = ButtonDefaults.buttonColors(
+                                color = if (isDark) Color(0xFF424242) else Color(0xFFE0E0E0)
+                            )
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Home,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp),
+                                tint = onSurface
+                            )
+                            Text(
+                                text = "插件主页",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = onSurface
+                            )
+                        }
+                    }
+                }
+
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    val needsSetup = plugin.state == PluginState.INSTALLED || plugin.state == PluginState.NEEDS_PERMISSION
 
                 Button(
                     onClick = onViewContent,
@@ -462,7 +509,7 @@ private fun PluginItemCard(
                     )
                 ) {
                     Icon(
-                        imageVector = Icons.AutoMirrored.Rounded.ArrowForward,
+                        imageVector = Icons.Rounded.Info,
                         contentDescription = null,
                         modifier = Modifier.size(16.dp),
                         tint = onSurface
@@ -545,6 +592,7 @@ private fun PluginItemCard(
                         modifier = Modifier.size(16.dp),
                         tint = Color(0xFFF44336)
                     )
+                }
                 }
             }
         }
