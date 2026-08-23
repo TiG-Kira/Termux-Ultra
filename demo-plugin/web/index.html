@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
@@ -17,6 +17,25 @@
         .header { text-align: center; padding: 20px 0 30px; color: #fff; }
         .header h1 { font-size: 24px; margin-bottom: 8px; }
         .header p { font-size: 14px; opacity: 0.9; }
+        .nav {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 16px;
+        }
+        .nav-btn {
+            flex: 1;
+            padding: 10px 14px;
+            background: rgba(255,255,255,0.3);
+            color: #fff;
+            border: 1px solid rgba(255,255,255,0.5);
+            border-radius: 10px;
+            font-size: 13px;
+            font-weight: 600;
+            text-align: center;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .nav-btn:active { background: rgba(255,255,255,0.5); }
         .card {
             background: #fff;
             border-radius: 16px;
@@ -104,6 +123,12 @@
             <p>Termux Ultra 插件系统示例</p>
         </div>
 
+        <div class="nav">
+            <div class="nav-btn" onclick="navigateTo('index.html')">🏠 主页</div>
+            <div class="nav-btn" onclick="navigateTo('about.html')">ℹ️ 关于</div>
+            <div class="nav-btn" onclick="navigateTo('settings.html')">⚙️ 设置</div>
+        </div>
+
         <div class="card">
             <h2>插件信息</h2>
             <div class="info-grid">
@@ -174,6 +199,10 @@
             toast.textContent = msg;
             toast.classList.add('show');
             setTimeout(function() { toast.classList.remove('show'); }, 2000);
+        }
+
+        function navigateTo(page) {
+            window.location.href = page;
         }
 
         function updatePluginInfo() {

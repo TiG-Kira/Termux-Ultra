@@ -155,7 +155,7 @@ class PluginWebViewActivity : ComponentActivity() {
                     }
                 )
             },
-            containerColor = MiuixTheme.colorScheme.background
+            containerColor = Color.Transparent
         ) { padding ->
             Box(
                 modifier = Modifier
@@ -165,6 +165,7 @@ class PluginWebViewActivity : ComponentActivity() {
                 AndroidView(
                     factory = { ctx ->
                         WebView(ctx).apply {
+                            setBackgroundColor(android.graphics.Color.TRANSPARENT)
                             settings.apply {
                                 javaScriptEnabled = true
                                 domStorageEnabled = true

@@ -1,4 +1,4 @@
-package com.termux.app.compose
+﻿package com.termux.app.compose
 
 import android.content.Context
 import com.google.gson.Gson
@@ -1162,7 +1162,7 @@ object AiTermuxPrefs {
             if (file2.exists()) return true
             val file3 = java.io.File("/data/adb/magisk")
             if (file3.exists()) return true
-            java.lang.Runtime.getRuntime().exec(arrayOf("which", "su")).waitFor() == 0
+            java.io.File(com.termux.shared.termux.TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/su").exists()
         } catch (e: Exception) {
             false
         }

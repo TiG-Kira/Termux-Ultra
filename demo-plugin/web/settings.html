@@ -1,0 +1,278 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>插件设置 - Termux Ultra</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            color: #333;
+        }
+        .container { max-width: 600px; margin: 0 auto; }
+        .header { text-align: center; padding: 20px 0 30px; color: #fff; }
+        .header h1 { font-size: 24px; margin-bottom: 8px; }
+        .header p { font-size: 14px; opacity: 0.9; }
+        .nav { display: flex; gap: 10px; margin-bottom: 16px; }
+        .nav-btn {
+            flex: 1; padding: 10px 14px;
+            background: rgba(255,255,255,0.3); color: #fff;
+            border: 1px solid rgba(255,255,255,0.5); border-radius: 10px;
+            font-size: 13px; font-weight: 600; text-align: center; cursor: pointer;
+            transition: background 0.2s;
+        }
+        .nav-btn:active { background: rgba(255,255,255,0.5); }
+        .card {
+            background: #fff; border-radius: 16px; padding: 20px; margin-bottom: 16px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+        }
+        .card h2 { font-size: 16px; margin-bottom: 12px; color: #333; display: flex; align-items: center; }
+        .card h2::before {
+            content: ''; display: inline-block;
+            width: 4px; height: 16px; background: #667eea;
+            border-radius: 2px; margin-right: 8px;
+        }
+        .setting-row {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 12px 0; border-bottom: 1px solid #eee;
+        }
+        .setting-row:last-child { border-bottom: none; }
+        .setting-label { font-size: 14px; color: #333; }
+        .setting-desc { font-size: 12px; color: #888; margin-top: 2px; }
+        .switch {
+            position: relative; width: 48px; height: 28px;
+            background: #ddd; border-radius: 14px;
+            transition: background 0.3s; cursor: pointer;
+        }
+        .switch.active { background: #667eea; }
+        .switch::after {
+            content: ''; position: absolute;
+            top: 2px; left: 2px; width: 24px; height: 24px;
+            background: #fff; border-radius: 50%;
+            transition: transform 0.3s;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        .switch.active::after { transform: translateX(20px); }
+        .btn {
+            display: block; width: 100%; padding: 14px 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #fff; border: none; border-radius: 12px;
+            font-size: 15px; font-weight: 600; cursor: pointer;
+            margin-bottom: 10px; transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .btn:active { transform: scale(0.98); box-shadow: 0 2px 10px rgba(0,0,0,0.2); }
+        .btn-secondary { background: #f5f5f5; color: #333; }
+        .btn-secondary:active { background: #e8e8e8; }
+        .result {
+            background: #f8f8f8; border-radius: 10px; padding: 12px; margin-top: 10px;
+            font-family: "SF Mono", "Monaco", "Consolas", monospace;
+            font-size: 12px; white-space: pre-wrap; word-break: break-all;
+            max-height: 200px; overflow-y: auto; color: #333;
+        }
+        .input-group { display: flex; gap: 8px; margin-top: 10px; }
+        .input-group input {
+            flex: 1; padding: 10px 14px;
+            border: 1px solid #ddd; border-radius: 10px;
+            font-size: 14px; outline: none;
+        }
+        .input-group input:focus { border-color: #667eea; }
+        .input-group button {
+            padding: 10px 16px; border: none; border-radius: 10px;
+            background: #667eea; color: #fff; font-size: 14px; font-weight: 600; cursor: pointer;
+        }
+        .toast {
+            position: fixed; top: 20px; left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.8); color: #fff;
+            padding: 10px 20px; border-radius: 20px;
+            font-size: 13px; z-index: 1000;
+            opacity: 0; transition: opacity 0.3s; pointer-events: none;
+        }
+        .toast.show { opacity: 1; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>⚙️ 插件设置</h1>
+            <p>管理 Demo 插件配置</p>
+        </div>
+
+        <div class="nav">
+            <div class="nav-btn" onclick="navigateTo('index.html')">🏠 主页</div>
+            <div class="nav-btn" onclick="navigateTo('about.html')">ℹ️ 关于</div>
+            <div class="nav-btn" onclick="navigateTo('settings.html')">⚙️ 设置</div>
+        </div>
+
+        <div class="card">
+            <h2>功能开关</h2>
+            <div class="setting-row">
+                <div>
+                    <div class="setting-label">自动执行演示</div>
+                    <div class="setting-desc">启动时自动运行环境检查</div>
+                </div>
+                <div class="switch" id="autoSwitch" onclick="toggleSwitch('autoSwitch', 'autoRun')"></div>
+            </div>
+            <div class="setting-row">
+                <div>
+                    <div class="setting-label">调试模式</div>
+                    <div class="setting-desc">显示详细日志信息</div>
+                </div>
+                <div class="switch" id="debugSwitch" onclick="toggleSwitch('debugSwitch', 'debugMode')"></div>
+            </div>
+            <div class="setting-row">
+                <div>
+                    <div class="setting-label">通知提醒</div>
+                    <div class="setting-desc">命令完成时发送通知</div>
+                </div>
+                <div class="switch" id="notifySwitch" onclick="toggleSwitch('notifySwitch', 'notifyOnComplete')"></div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>自定义命令</h2>
+            <p style="font-size:13px; color:#666; margin-bottom:10px;">设置自定义命令，点击时将执行该命令</p>
+            <div class="input-group">
+                <input type="text" id="customCmd" placeholder="输入自定义命令..." value="">
+                <button onclick="saveCustomCmd()">保存</button>
+            </div>
+            <button class="btn" style="margin-top:12px;" onclick="runCustomCmd()">执行自定义命令</button>
+            <div class="result" id="cmdResult">尚未执行命令...</div>
+        </div>
+
+        <div class="card">
+            <h2>配置管理</h2>
+            <button class="btn" onclick="exportConfig()">导出配置</button>
+            <button class="btn btn-secondary" onclick="resetConfig()">重置配置</button>
+            <div class="result" id="configResult">点击上方按钮管理配置...</div>
+        </div>
+
+        <div class="card">
+            <h2>持久化存储测试</h2>
+            <button class="btn" onclick="saveTimestamp()">保存当前时间戳</button>
+            <button class="btn btn-secondary" onclick="loadTimestamp()">读取保存的时间戳</button>
+            <div class="result" id="timestampResult">点击按钮测试配置持久化...</div>
+        </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <script>
+        var bridge = window.TermuxUltra;
+
+        function showToast(msg) {
+            var toast = document.getElementById('toast');
+            toast.textContent = msg;
+            toast.classList.add('show');
+            setTimeout(function() { toast.classList.remove('show'); }, 2000);
+        }
+
+        function navigateTo(page) {
+            window.location.href = page;
+        }
+
+        function toggleSwitch(switchId, configKey) {
+            var sw = document.getElementById(switchId);
+            var isActive = sw.classList.toggle('active');
+            if (bridge && bridge.setConfig) {
+                bridge.setConfig(configKey, isActive ? 'true' : 'false');
+            }
+            showToast((isActive ? '已开启' : '已关闭') + ': ' + configKey);
+        }
+
+        function loadInitialConfig() {
+            if (!bridge || !bridge.getConfig) return;
+            try {
+                var config = JSON.parse(bridge.getConfig());
+                if (config.autoRun === 'true') document.getElementById('autoSwitch').classList.add('active');
+                if (config.debugMode === 'true') document.getElementById('debugSwitch').classList.add('active');
+                if (config.notifyOnComplete === 'true') document.getElementById('notifySwitch').classList.add('active');
+                if (config.customCommand) document.getElementById('customCmd').value = config.customCommand;
+            } catch(e) {}
+        }
+
+        function saveCustomCmd() {
+            var cmd = document.getElementById('customCmd').value.trim();
+            if (!bridge || !bridge.setConfig) {
+                showToast('JS Bridge 不可用');
+                return;
+            }
+            if (bridge.setConfig('customCommand', cmd)) {
+                showToast('命令已保存');
+            }
+        }
+
+        function runCustomCmd() {
+            if (!bridge || !bridge.exec) {
+                showToast('JS Bridge 不可用');
+                return;
+            }
+            var cmd = document.getElementById('customCmd').value.trim();
+            if (!cmd) {
+                showToast('请先输入命令');
+                return;
+            }
+            var result = JSON.parse(bridge.exec(cmd));
+            var display = result.success ? result.output : '错误: ' + (result.error || '未知');
+            document.getElementById('cmdResult').textContent = display;
+        }
+
+        function exportConfig() {
+            if (!bridge || !bridge.getConfig) {
+                showToast('JS Bridge 不可用');
+                return;
+            }
+            var config = JSON.parse(bridge.getConfig());
+            document.getElementById('configResult').textContent = JSON.stringify(config, null, 2);
+        }
+
+        function resetConfig() {
+            if (!bridge || !bridge.setConfig) {
+                showToast('JS Bridge 不可用');
+                return;
+            }
+            bridge.setConfig('autoRun', 'false');
+            bridge.setConfig('debugMode', 'false');
+            bridge.setConfig('notifyOnComplete', 'false');
+            bridge.setConfig('customCommand', '');
+            document.getElementById('autoSwitch').classList.remove('active');
+            document.getElementById('debugSwitch').classList.remove('active');
+            document.getElementById('notifySwitch').classList.remove('active');
+            document.getElementById('customCmd').value = '';
+            document.getElementById('configResult').textContent = '配置已重置';
+            showToast('配置已重置');
+        }
+
+        function saveTimestamp() {
+            if (!bridge || !bridge.setConfig) {
+                showToast('JS Bridge 不可用');
+                return;
+            }
+            var now = new Date().toISOString();
+            bridge.setConfig('savedTimestamp', now);
+            document.getElementById('timestampResult').textContent = '已保存: ' + now;
+            showToast('时间戳已保存');
+        }
+
+        function loadTimestamp() {
+            if (!bridge || !bridge.getConfig) {
+                showToast('JS Bridge 不可用');
+                return;
+            }
+            var config = JSON.parse(bridge.getConfig());
+            var ts = config.savedTimestamp;
+            if (ts) {
+                document.getElementById('timestampResult').textContent = '保存的时间戳: ' + ts;
+            } else {
+                document.getElementById('timestampResult').textContent = '尚未保存时间戳';
+            }
+        }
+
+        loadInitialConfig();
+    </script>
+</body>
+</html>

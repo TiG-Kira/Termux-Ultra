@@ -431,8 +431,9 @@ private fun PluginItemCard(
                     if (plugin.manifest.entryPoints?.agentSkills?.isNotEmpty() == true) {
                         EntryTag(text = "技能卡片", color = Color(0xFF4CAF50))
                     }
-                    if (plugin.manifest.entryPoints?.h5Home?.enabled == true) {
-                        EntryTag(text = "H5 主页", color = Color(0xFFFF9800))
+                    if (plugin.manifest.entryPoints?.h5Home?.enabled == true ||
+                        plugin.manifest.entryPoints?.pages?.isNotEmpty() == true) {
+                        EntryTag(text = stringResource(R.string.plugin_h5_pages), color = Color(0xFFFF9800))
                     }
                     if (plugin.manifest.systemPrompt != null) {
                         EntryTag(text = "System Prompt", color = Color(0xFF9C27B0))
@@ -804,7 +805,6 @@ private fun PluginContentDialog(
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
-    val h5Homes = plugin?.let { p -> PluginManager.getPluginH5Homes(context).filter { home -> home.pluginId == p.id } } ?: emptyList()
     val skills = plugin?.let { p -> PluginManager.getPluginSkills(context).filter { skill -> skill.id.startsWith(p.id) } } ?: emptyList()
     val resourceCards = plugin?.let { p -> PluginManager.getPluginResourceCards(context).filter { card -> card.id.startsWith(p.id) } } ?: emptyList()
 
@@ -826,6 +826,8 @@ private fun PluginContentDialog(
         content = {
             if (plugin == null) return@WindowDialog
             val activePlugin = plugin
+            val h5Entries = activePlugin.manifest.getAllH5Entries()
+
             Column(modifier = Modifier.padding(top = 12.dp)) {
                 if (skills.isNotEmpty()) {
                     Text(
@@ -895,28 +897,40 @@ private fun PluginContentDialog(
                     )
                 }
 
-                if (h5Homes.isNotEmpty() && activePlugin.state == PluginState.ENABLED) {
+                if (h5Entries.isNotEmpty() && activePlugin.state == PluginState.ENABLED) {
                     Spacer(Modifier.height(20.dp))
-                    Button(
-                        onClick = {
-                            PluginWebViewActivity.start(
-                                context,
-                                activePlugin.id,
-                                h5Homes.first().entry,
-                                activePlugin.manifest.name
-                            )
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(10.dp)),
-                        colors = ButtonDefaults.buttonColors(color = MiuixTheme.colorScheme.primary)
-                    ) {
-                        Text(
-                            text = stringResource(R.string.plugin_h5_home),
+                    Text(
+                        text = stringResource(R.string.plugin_h5_pages),
+                        style = androidx.compose.ui.text.TextStyle(
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Bold,
-                            color = Color.White
+                            color = MiuixTheme.colorScheme.onSurface
                         )
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    h5Entries.forEach { (title, entry) ->
+                        Button(
+                            onClick = {
+                                PluginWebViewActivity.start(
+                                    context,
+                                    activePlugin.id,
+                                    entry,
+                                    title
+                                )
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .padding(vertical = 2.dp),
+                            colors = ButtonDefaults.buttonColors(color = MiuixTheme.colorScheme.primary)
+                        ) {
+                            Text(
+                                text = title,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                        }
                     }
                 }
 

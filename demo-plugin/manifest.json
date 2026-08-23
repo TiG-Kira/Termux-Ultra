@@ -1,9 +1,9 @@
-{
+﻿{
   "id": "com.termux.ultra.demo",
   "name": "Demo Plugin",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "minHostVersion": "1.2.0",
-  "description": "Termux Ultra 官方示例插件，展示插件系统的完整功能。包含 H5 主页、资源卡片、技能卡片和 System Prompt 追加。",
+  "description": "Termux Ultra 官方示例插件，展示插件系统的完整功能。包含多页面 H5 界面、资源卡片、技能卡片和 System Prompt 注入。",
   "author": "Termux Ultra Team",
   "icon": null,
   "permissions": [
@@ -13,6 +13,25 @@
     "INTERNET_ACCESS"
   ],
   "entryPoints": {
+    "h5Home": {
+      "enabled": true,
+      "entry": "web/index.html",
+      "title": "Demo 主页"
+    },
+    "pages": [
+      {
+        "id": "demo_about",
+        "title": "关于 Demo",
+        "type": "h5",
+        "entry": "web/about.html"
+      },
+      {
+        "id": "demo_settings",
+        "title": "插件设置",
+        "type": "h5",
+        "entry": "web/settings.html"
+      }
+    ],
     "resourceCards": [
       {
         "id": "demo_info",
@@ -54,12 +73,7 @@
         "hasOutput": true,
         "riskLevel": "NONE"
       }
-    ],
-    "h5Home": {
-      "enabled": true,
-      "entry": "web/index.html"
-    },
-    "pages": []
+    ]
   },
   "systemPrompt": {
     "mode": "APPEND",

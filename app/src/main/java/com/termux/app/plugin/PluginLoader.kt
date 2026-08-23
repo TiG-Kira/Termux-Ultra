@@ -117,13 +117,13 @@ object PluginLoader {
     }
 
     private fun validatePluginContents(pluginDir: File, manifest: PluginManifest) {
-        manifest.entryPoints?.h5Home?.let { h5Home ->
-            if (h5Home.enabled && h5Home.entry.isNotBlank()) {
-                val entryFile = File(pluginDir, h5Home.entry)
+        manifest.getAllH5Entries().forEach { (title, entry) ->
+            if (entry.isNotBlank()) {
+                val entryFile = File(pluginDir, entry)
                 if (!entryFile.exists()) {
                     throw IllegalStateException(
-                        "插件 H5 入口文件不存在: ${h5Home.entry}，" +
-                        "请确保插件包中包含完整的 web 目录结构"
+                        "插件 H5 入口文件不存在: $entry (页面: $title)，" +
+                        "请确保插件包中包含完整的文件结构"
                     )
                 }
             }

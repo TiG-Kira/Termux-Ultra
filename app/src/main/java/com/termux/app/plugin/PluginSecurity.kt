@@ -1,6 +1,7 @@
-package com.termux.app.plugin
+﻿package com.termux.app.plugin
 
 import android.content.Context
+import com.termux.shared.termux.TermuxConstants
 
 object PluginSecurity {
 
@@ -206,7 +207,7 @@ object PluginSecurity {
             if (file2.exists()) return true
             val file3 = java.io.File("/data/adb/magisk")
             if (file3.exists()) return true
-            java.lang.Runtime.getRuntime().exec(arrayOf("which", "su")).waitFor() == 0
+            java.io.File(TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/su").exists()
         } catch (e: Exception) {
             false
         }

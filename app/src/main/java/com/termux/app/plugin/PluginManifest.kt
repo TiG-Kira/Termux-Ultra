@@ -1,7 +1,6 @@
 package com.termux.app.plugin
 
 import com.google.gson.Gson
-import com.google.gson.annotations.SerializedName
 
 data class PluginManifest(
     val id: String,
@@ -23,6 +22,21 @@ data class PluginManifest(
                 null
             }
         }
+    }
+
+    fun getAllH5Entries(): List<Pair<String, String>> {
+        val entries = mutableListOf<Pair<String, String>>()
+        entryPoints?.h5Home?.let { h5 ->
+            if (h5.enabled && h5.entry.isNotBlank()) {
+                entries.add((h5.title ?: name) to h5.entry)
+            }
+        }
+        entryPoints?.pages?.forEach { page ->
+            if (page.type == "h5" && !page.entry.isNullOrBlank()) {
+                entries.add(page.title to page.entry.orEmpty())
+            }
+        }
+        return entries
     }
 }
 
@@ -70,7 +84,8 @@ data class PluginSkillRef(
 
 data class PluginH5HomeRef(
     val enabled: Boolean = false,
-    val entry: String = "web/index.html"
+    val entry: String = "web/index.html",
+    val title: String? = null
 )
 
 data class PluginPageRef(

@@ -16,12 +16,13 @@
 
 ### 插件系统（v1.2.0.RB）
 - 全新插件系统，支持 ZIP/TUP 格式插件包安装
-- 插件可扩展：资源卡片、设置项、Agent Skill、H5 主页
+- 插件可扩展：资源卡片、设置项、Agent Skill、H5 多页面界面
 - 插件可屏蔽：系统功能、设置项目、导航页面
 - 插件权限管理：ROOT 执行、会话访问、文件读写、跨应用联动
 - Agent 插件接口：System Prompt 追加/修改/覆盖、自定义 Skill
 - 跨应用联动桥：Broadcast、ContentProvider、Webhook
-- H5 插件主页：WebView + JavaScript Bridge
+- H5 多页面界面：WebView + JavaScript Bridge（`window.TermuxUltra`）
+- 多 H5 入口：主页面（h5Home）+ 子页面（pages 数组），插件中心分入口展示
 
 ### AI 助手（v118.3.63）
 - 内置 AI 助手，支持通过自然语言与终端交互
@@ -113,12 +114,13 @@
   - 增加资源页卡片入口
   - 增加/修改设置项
   - 提供自定义 Agent Skill
-  - 提供 H5 插件主页
+  - 提供 H5 多页面界面（主页 + 子页面）
   - 屏蔽/禁用系统功能
-  - 修改 Agent System Prompt
+  - 修改 Agent System Prompt（APPEND/MODIFY/OVERWRITE）
   - 跨应用联动
 - **权限系统**：ROOT 执行、会话访问、文件读写等
 - **管理界面**：插件安装、启用/禁用、配置、卸载
+- **H5 Bridge**：`window.TermuxUltra` 对象，支持 exec/getConfig/setConfig/readFile 等 API
 
 ### 仪表盘与设置
 - 网络信息卡片：实时刷新公网 IP 与所属国家
@@ -310,13 +312,15 @@ Termux Ultra v1.2.0 引入了插件系统，允许第三方开发者扩展应用
 my-plugin/
 ├── manifest.json          # 必须：插件清单
 ├── icon.png               # 建议：192x192 PNG 图标
-├── web/                   # 可选：H5 主页
-│   └── index.html
-├── skills/                # 可选：自定义 Skill（JSON 定义）
-│   └── my_skill.json
-└── prompts/               # 可选：System Prompt 扩展
-    └── system_prompt.md
+├── web/                   # 可选：H5 页面目录（所有 H5 文件放在此）
+│   ├── index.html         # 主页（h5Home.entry 指定）
+│   ├── about.html         # 子页面（pages[].entry 指定）
+│   └── settings.html      # 子页面
+└── skills/                # 可选：自定义 Skill（JSON 定义）
+    └── my_skill.json
 ```
+
+> **H5 文件位置规范**：所有 H5 文件（HTML、CSS、JS、图片）必须打包在插件根目录下，`manifest.json` 中的 `entry` 字段使用相对于插件根目录的路径（如 `web/index.html`）。插件安装时会校验所有 `entry` 指向的文件是否存在，缺失则报错。
 
 ### manifest.json 必填字段
 
@@ -401,7 +405,7 @@ my-plugin/
 {
   "systemPrompt": {
     "mode": "APPEND",
-    "content": "prompts/system_prompt.md"
+    "content": "## 插件附加指令\n你可以使用以下额外功能：\n- 使用技能 A 检查环境\n- 使用技能 B 打招呼"
   }
 }
 ```
@@ -409,47 +413,75 @@ my-plugin/
 修改模式说明：
 - `APPEND`：追加内容到核心 Prompt 末尾（低风险）
 - `MODIFY`：替换指定段落（中风险）
-- `OVERWRITE`：完全覆盖核心规则（**极高风险**，系统会强制警告）
+- `OVERWRITE`：完全覆盖核心规则（**极高风险**，系统会弹出二次确认警告）
+
+> **注意**：`content` 字段为内联文本内容，直接写入 System Prompt，不支持文件路径引用。OVERWRITE 模式下，插件的 System Prompt 将完全替换原有的 System Prompt，设置中的自定义 System Prompt 入口会变为"还原 System Prompt"。
 
 ### H5 插件主页
 
-创建 `web/index.html` 作为插件主页入口：
+插件支持**多页面 H5 界面**，通过 `manifest.json` 的 `entryPoints` 配置：
 
-```html
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>我的插件</title>
-  <script>
-    // 等待 Bridge 就绪
-    window.addEventListener('bridgeReady', () => {
-      // 执行 Shell 命令
-      termux.execShell('echo Hello');
-      // 获取插件配置
-      const config = termux.getConfig();
-    });
-  </script>
-</head>
-<body>
-  <h1>我的插件主页</h1>
-</body>
-</html>
+```json
+{
+  "entryPoints": {
+    "h5Home": {
+      "enabled": true,
+      "entry": "web/index.html",
+      "title": "插件主页标题"
+    },
+    "pages": [
+      {
+        "id": "page_about",
+        "title": "关于",
+        "type": "h5",
+        "entry": "web/about.html"
+      },
+      {
+        "id": "page_settings",
+        "title": "设置",
+        "type": "h5",
+        "entry": "web/settings.html"
+      }
+    ]
+  }
+}
 ```
 
-可用的 JavaScript Bridge API：
+- `h5Home`：主入口页面，`title` 为插件中心显示名称
+- `pages`：子页面数组，每个子页面需指定 `id`、`title`、`type`（固定为 `"h5"`）和 `entry`
+- 所有 `entry` 路径相对于插件根目录，安装时自动校验文件存在性
+
+**H5 页面间导航**：在 WebView 中通过相对路径跳转：
+
+```html
+<a href="about.html">关于</a>
+<a href="settings.html">设置</a>
+```
+
+#### JS Bridge API
+
+H5 页面通过 `window.TermuxUltra` 对象访问原生能力：
 
 | API | 说明 |
 |-----|------|
-| `termux.execShell(command)` | 执行 Shell 命令 |
-| `termux.getSessions()` | 获取终端会话列表 |
-| `termux.getConfig()` | 获取插件配置 |
-| `termux.setConfig(key, value)` | 保存配置项 |
-| `termux.openResource(id)` | 打开关联资源卡片 |
-| `termux.readFile(path)` | 读取文件 |
-| `termux.toast(message)` | 显示 Toast 提示 |
-| `termux.requestPermission(perm)` | 请求权限 |
+| `getPluginInfo()` | 获取插件元信息（返回 JSON 字符串） |
+| `getConfig()` | 获取插件配置（返回 JSON 字符串） |
+| `setConfig(key, value)` | 保存配置项 |
+| `exec(command)` | 执行终端命令（返回 JSON 字符串） |
+| `readFile(path)` | 读取插件包内文件内容 |
+| `openUrl(url)` | 在外部浏览器打开链接 |
+| `toast(message)` | 显示 Toast 提示 |
+| `getDeviceInfo()` | 获取设备信息（返回 JSON 字符串） |
+| `finishPage()` | 关闭当前插件页面 |
+
+**示例**：
+
+```javascript
+var bridge = window.TermuxUltra;
+var info = JSON.parse(bridge.getPluginInfo());
+var result = JSON.parse(bridge.exec('echo Hello from ' + info.name));
+bridge.toast('命令执行完成');
+```
 
 ### 打包与安装
 
@@ -473,12 +505,14 @@ adb push ../my-plugin.tup /sdcard/Download/
 
 ### 示例插件
 
-项目 `demo-plugin/` 目录包含一个完整的示例插件，展示了：
-- 基本 manifest.json 配置
-- 资源卡片定义
-- Agent Skill 定义
-- H5 主页实现
-- System Prompt 追加
+项目 `demo-plugin/` 目录包含一个完整的示例插件（版本 v1.1.0），展示了：
+- 多页面 H5 界面（主页 + 关于页 + 设置页），通过 `h5Home` + `pages` 数组配置
+- JS Bridge API 完整使用示例（`window.TermuxUltra` 对象）
+- 资源卡片定义（SHELL_COMMAND 类型）
+- Agent Skill 定义（自定义 handler）
+- System Prompt 追加（APPEND 模式）
+- 插件配置持久化（setConfig / getConfig）
+- 打包为 .tup 的完整流程
 
 ## 调试
 

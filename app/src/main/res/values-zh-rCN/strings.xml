@@ -826,6 +826,7 @@
     <string name="plugin_author">作者</string>
     <string name="plugin_description">描述</string>
     <string name="plugin_h5_home">插件主页</string>
+    <string name="plugin_h5_pages">H5 页面</string>
     <string name="plugin_skill_card">技能卡片</string>
     <string name="plugin_sys_prompt">系统提示词</string>
     <string name="plugin_entry_resource">功能卡片</string>

@@ -388,6 +388,7 @@ fun SshConfigDialog(
     val showInternalFilePicker = remember { mutableStateOf(false) }
     val isGeneratingKey = remember { mutableStateOf(false) }
     val keyGenMessage = remember { mutableStateOf("") }
+    val keyGenError = remember { mutableStateOf(false) }
 
     OverlayDialog(
         show = showDialog.value,
@@ -481,7 +482,8 @@ fun SshConfigDialog(
                                 privateKeyPath = privateKeyPath,
                                 showFilePicker = showInternalFilePicker,
                                 isGenerating = isGeneratingKey,
-                                keyGenMessage = keyGenMessage
+                                keyGenMessage = keyGenMessage,
+                                keyGenError = keyGenError
                             )
                         } else {
                             TextField(
@@ -513,7 +515,8 @@ fun SshConfigDialog(
                                 privateKeyPath = privateKeyPath,
                                 showFilePicker = showInternalFilePicker,
                                 isGenerating = isGeneratingKey,
-                                keyGenMessage = keyGenMessage
+                                keyGenMessage = keyGenMessage,
+                                keyGenError = keyGenError
                             )
                         }
                     } else {
@@ -554,7 +557,8 @@ fun SshConfigDialog(
                             privateKeyPath = privateKeyPath,
                             showFilePicker = showInternalFilePicker,
                             isGenerating = isGeneratingKey,
-                            keyGenMessage = keyGenMessage
+                            keyGenMessage = keyGenMessage,
+                            keyGenError = keyGenError
                         )
                     }
                 } else {
@@ -595,7 +599,8 @@ fun SshConfigDialog(
                         privateKeyPath = privateKeyPath,
                         showFilePicker = showInternalFilePicker,
                         isGenerating = isGeneratingKey,
-                        keyGenMessage = keyGenMessage
+                        keyGenMessage = keyGenMessage,
+                        keyGenError = keyGenError
                     )
                 }
 
@@ -681,11 +686,13 @@ private fun PrivateKeyPicker(
     privateKeyPath: androidx.compose.runtime.MutableState<String>,
     showFilePicker: androidx.compose.runtime.MutableState<Boolean>,
     isGenerating: androidx.compose.runtime.MutableState<Boolean>,
-    keyGenMessage: androidx.compose.runtime.MutableState<String>
+    keyGenMessage: androidx.compose.runtime.MutableState<String>,
+    keyGenError: androidx.compose.runtime.MutableState<Boolean>
 ) {
     val scope = rememberCoroutineScope()
     val hasKey = privateKeyPath.value
     val isLoading = isGenerating.value
+    val hasResult = keyGenMessage.value.isNotEmpty() && !isLoading
 
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(
@@ -733,11 +740,30 @@ private fun PrivateKeyPicker(
             )
         }
 
+        if (hasResult) {
+            val bgColor = if (keyGenError.value) MiuixTheme.colorScheme.errorContainer else MiuixTheme.colorScheme.primaryContainer
+            val textColor = if (keyGenError.value) MiuixTheme.colorScheme.onErrorContainer else MiuixTheme.colorScheme.onPrimaryContainer
+            Text(
+                text = keyGenMessage.value,
+                fontSize = 13.sp,
+                color = textColor,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(bgColor)
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
+            )
+        }
+
         Row(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Button(
-                onClick = { showFilePicker.value = true },
+                onClick = {
+                    keyGenMessage.value = ""
+                    keyGenError.value = false
+                    showFilePicker.value = true
+                },
                 modifier = Modifier.weight(1f),
                 enabled = !isLoading,
                 colors = ButtonDefaults.buttonColors(
@@ -754,6 +780,8 @@ private fun PrivateKeyPicker(
 
             Button(
                 onClick = {
+                    keyGenMessage.value = ""
+                    keyGenError.value = false
                     scope.launch {
                         generateSshKey(
                             context = context,
@@ -761,7 +789,8 @@ private fun PrivateKeyPicker(
                                 privateKeyPath.value = path
                             },
                             message = keyGenMessage,
-                            isGenerating = isGenerating
+                            isGenerating = isGenerating,
+                            isError = keyGenError
                         )
                     }
                 },
@@ -786,9 +815,11 @@ private suspend fun generateSshKey(
     context: Context,
     onKeyGenerated: (String) -> Unit,
     message: androidx.compose.runtime.MutableState<String>,
-    isGenerating: androidx.compose.runtime.MutableState<Boolean>
+    isGenerating: androidx.compose.runtime.MutableState<Boolean>,
+    isError: androidx.compose.runtime.MutableState<Boolean>
 ) = withContext(Dispatchers.IO) {
     isGenerating.value = true
+    isError.value = false
 
     try {
         message.value = "正在安装 openssh..."
@@ -801,6 +832,7 @@ private suspend fun generateSshKey(
         val sshKeygenFile = File("/data/data/com.termux/files/usr/bin/ssh-keygen")
         if (!sshKeygenFile.exists()) {
             message.value = context.getString(R.string.ssh_private_key_create_failed) + ": ssh-keygen 未找到，请手动安装 openssh"
+            isError.value = true
             isGenerating.value = false
             return@withContext
         }
@@ -837,15 +869,19 @@ private suspend fun generateSshKey(
                 privateKeyFile.setWritable(false, false)
 
                 message.value = context.getString(R.string.ssh_private_key_created)
+                isError.value = false
                 onKeyGenerated(keyPath)
             } else {
                 message.value = context.getString(R.string.ssh_private_key_create_failed) + ": key file not found"
+                isError.value = true
             }
         } else {
             message.value = context.getString(R.string.ssh_private_key_create_failed) + ": $output"
+            isError.value = true
         }
     } catch (e: Exception) {
         message.value = context.getString(R.string.ssh_private_key_create_failed) + ": ${e.message}"
+        isError.value = true
     }
 
     isGenerating.value = false

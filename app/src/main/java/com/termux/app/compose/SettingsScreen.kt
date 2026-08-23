@@ -480,7 +480,7 @@ fun SettingsScreen(
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        snackbarHost = { SnackbarHost(state = snackbarHostState) },
+        snackbarHost = { Box(modifier = Modifier.fillMaxSize().padding(bottom = navBarBottomPadding), contentAlignment = Alignment.BottomCenter) { SnackbarHost(state = snackbarHostState) } },
         topBar = {
             TopAppBar(title = context.getString(R.string.settings_title), scrollBehavior = scrollBehavior)
         }

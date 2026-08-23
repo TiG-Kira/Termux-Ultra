@@ -4,6 +4,11 @@ import android.content.Context
 import android.content.Intent
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import com.termux.shared.models.ExecutionCommand
+import com.termux.shared.shell.TermuxTask
+import com.termux.shared.shell.TermuxShellEnvironmentClient
+import com.termux.shared.termux.TermuxConstants
+import com.termux.shared.logger.Logger
 import java.io.File
 
 object PluginManager {
@@ -181,15 +186,45 @@ object PluginManager {
         }
 
         return try {
-            val process = Runtime.getRuntime().exec(arrayOf("bash", "-c", command))
-            val output = process.inputStream.bufferedReader().readText()
-            val error = process.errorStream.bufferedReader().readText()
-            val exitCode = process.waitFor()
+            val shellPath = TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/bash"
+            val executionCommand = ExecutionCommand(
+                System.currentTimeMillis().toInt(),
+                shellPath,
+                arrayOf("-c", command),
+                null,
+                null,
+                true,
+                false
+            )
+            executionCommand.commandLabel = "Plugin Shell Command"
+            executionCommand.backgroundCustomLogLevel = Logger.LOG_LEVEL_OFF
 
-            if (exitCode == 0) {
-                Result.success(output.trim())
+            val termuxTask = TermuxTask.execute(
+                context,
+                executionCommand,
+                null,
+                TermuxShellEnvironmentClient(),
+                true
+            )
+
+            if (termuxTask == null) {
+                val errMsg = executionCommand.resultData.errorsList?.firstOrNull()?.message
+                    ?: "命令执行失败: 无法启动 TermuxTask"
+                Result.failure(Exception(errMsg))
+            } else if (executionCommand.isStateFailed()) {
+                val errMsg = executionCommand.resultData.errorsList?.firstOrNull()?.message
+                    ?: "命令执行失败 (exit=${executionCommand.resultData.exitCode})"
+                Result.failure(Exception(errMsg))
             } else {
-                Result.failure(Exception("命令执行失败 (exit=$exitCode): ${error.trim()}"))
+                val stdout = executionCommand.resultData.stdout?.toString()?.trim() ?: ""
+                val stderr = executionCommand.resultData.stderr?.toString()?.trim() ?: ""
+                val exitCode = executionCommand.resultData.exitCode ?: -1
+
+                if (exitCode == 0) {
+                    Result.success(stdout)
+                } else {
+                    Result.failure(Exception("命令执行失败 (exit=$exitCode): $stderr"))
+                }
             }
         } catch (e: Exception) {
             Result.failure(e)
