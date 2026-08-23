@@ -258,7 +258,7 @@
     <string name="file_size">大小</string>
     <string name="file_date">修改日期</string>
     <string name="confirm">确认</string>
-    <string name="resources">资源</string>
+    <string name="resources">功能</string>
     <string name="resource_termux_setup">Termux 配置</string>
     <string name="resource_termux_setup_desc">配置 Termux 环境</string>
     <string name="resource_minecraft_server">Minecraft 服务器</string>
@@ -373,8 +373,57 @@
     <string name="ssh_field_password_optional">密码（可选）</string>
     <string name="ssh_save">保存</string>
 
+    <!-- SSH 连接类型对话框 -->
+    <string name="ssh_select_connection_type">选择连接类型</string>
+    <string name="ssh_type_openpilot_comma">OpenPilot / Comma 设备</string>
+    <string name="ssh_type_local">本机</string>
+    <string name="ssh_type_other">其他设备</string>
+    <string name="ssh_type_openpilot_comma_desc">连接到 OpenPilot 或 Comma 设备</string>
+    <string name="ssh_type_local_desc">连接到 localhost</string>
+    <string name="ssh_type_other_desc">连接到任意 SSH 服务器</string>
+
+    <!-- SSH OpenPilot/Comma 对话框 -->
+    <string name="ssh_device_type_title">设备类型</string>
+    <string name="ssh_device_openpilot">OpenPilot</string>
+    <string name="ssh_device_comma">Comma</string>
+    <string name="ssh_connection_method_title">连接方式</string>
+    <string name="ssh_method_device_ip">使用设备 IP 地址</string>
+    <string name="ssh_method_dongle_id">使用 Dongle ID</string>
+    <string name="ssh_comma_dongle_warning">使用 Dongle ID 需要您拥有 Comma Prime 订阅。</string>
+    <string name="ssh_field_dongle_id">Dongle ID</string>
+    <string name="ssh_field_github_username">GitHub 用户名</string>
+    <string name="ssh_field_private_key_path">SSH 私钥路径</string>
+    <string name="ssh_field_device_ip">设备 IP 地址</string>
+    <string name="ssh_hint_device_ip">例如 192.168.1.100</string>
+    <string name="ssh_hint_dongle_id">16 位 dongle ID</string>
+    <string name="ssh_hint_private_key">设备上 SSH 私钥的路径</string>
+    <string name="ssh_default_user_openpilot">root</string>
+    <string name="ssh_default_user_comma">comma</string>
+    <string name="ssh_default_user_local">root</string>
+
+    <!-- SSH 私钥管理 -->
+    <string name="ssh_private_key_select">选择密钥文件</string>
+    <string name="ssh_private_key_create">创建新密钥</string>
+    <string name="ssh_private_key_creating">正在创建私钥...</string>
+    <string name="ssh_private_key_created">私钥已创建</string>
+    <string name="ssh_private_key_create_failed">创建密钥失败</string>
+    <string name="ssh_private_key_path_hint">未选择密钥</string>
+    <string name="ssh_private_key_select_file">选择文件</string>
+    <string name="ssh_private_key_create_key">创建新密钥</string>
+    <string name="ssh_keygen_comment">由 Termux Ultra 生成</string>
+    <string name="ssh_keygen_bits">4096</string>
+
+    <!-- SSH 标签 -->
+    <string name="ssh_tag_openpilot">OpenPilot</string>
+    <string name="ssh_tag_comma">Comma</string>
+    <string name="ssh_tag_local">本地</string>
+    <string name="ssh_tag_other">其他设备</string>
+
+    <!-- SSH 本机对话框 -->
+    <string name="ssh_local_desc">连接到 localhost</string>
+
     <!-- 资源中心 -->
-    <string name="resources_center">资源中心</string>
+    <string name="resources_center">功能中心</string>
     <string name="utility_center">实用功能中心</string>
     <string name="third_party_center">第三方资源中心</string>
     <string name="utility_center_desc">官方维护的实用工具：QEMU with VNC、Debian QEMU、Ubuntu 容器、tmux、QEMU 安装等</string>
@@ -383,7 +432,7 @@
     <string name="resource_center_warning">实用功能中心的功能由 Termux Ultra 官方维护；第三方资源中心的脚本由第三方开发者维护，使用前请自行评估安全性。</string>
     <string name="resource_quick_entry">快速入口</string>
     <string name="resource_tips">使用提示</string>
-    <string name="resource_center_welcome_subtitle">探索 Termux Ultra 资源中心</string>
+    <string name="resource_center_welcome_subtitle">探索 Termux 的新可能</string>
     <string name="resource_center_welcome_desc">汇集官方维护工具与第三方脚本资源，按需选择，安全使用。</string>
     <string name="enter">进入</string>
     <string name="official_maintained_short">官方维护</string>
@@ -724,7 +773,7 @@
     <string name="overview_move_down">下移</string>
     <string name="overview_delete_card">删除卡片</string>
     <string name="overview_tips_agent_vertical_hint">竖向布局下此卡片仅支持宽版</string>
-    <string name="overview_resource_action">资源快捷方式</string>
+    <string name="overview_resource_action">功能快捷方式</string>
     <string name="overview_select_action">点击选择功能</string>
     <string name="overview_select_action_title">选择功能</string>
     <string name="overview_no_actions">暂无可用功能</string>
@@ -732,5 +781,62 @@
     <string name="overview_third_party_center">第三方资源中心</string>
     <string name="overview_system_function">系统功能</string>
     <string name="overview_can_add_multiple">可添加多个</string>
+
+    <!-- Plugin System -->
+    <string name="plugin_center">插件中心</string>
+    <string name="plugin_center_desc">扩展 Termux Ultra 功能的插件系统</string>
+    <string name="plugin_manage">管理插件</string>
+    <string name="plugin_install">安装插件</string>
+    <string name="plugin_install_desc">从 .tup 或 .zip 文件安装插件</string>
+    <string name="plugin_no_plugins">暂无已安装的插件</string>
+    <string name="plugin_install_success">插件「%1$s」安装成功</string>
+    <string name="plugin_install_failed">插件安装失败：%1$s</string>
+    <string name="plugin_enable">启用</string>
+    <string name="plugin_disable">禁用</string>
+    <string name="plugin_uninstall">卸载</string>
+    <string name="plugin_uninstall_confirm">确定要卸载「%1$s」吗？此操作无法撤销。</string>
+    <string name="plugin_permissions">权限</string>
+    <string name="plugin_permissions_required">所需权限</string>
+    <string name="plugin_permissions_granted">已授予权限</string>
+    <string name="plugin_permission_root">ROOT 执行</string>
+    <string name="plugin_permission_root_desc">允许插件以 ROOT 权限执行命令</string>
+    <string name="plugin_permission_session">终端会话访问</string>
+    <string name="plugin_permission_session_desc">允许插件在 Termux 终端会话中执行命令</string>
+    <string name="plugin_permission_fs_read">文件系统读取</string>
+    <string name="plugin_permission_fs_read_desc">允许插件读取 Termux 环境中的文件</string>
+    <string name="plugin_permission_fs_write">文件系统写入</string>
+    <string name="plugin_permission_fs_write_desc">允许插件在 Termux 环境中写入文件</string>
+    <string name="plugin_permission_agent">修改 Agent</string>
+    <string name="plugin_permission_agent_desc">允许插件修改 Termux Agent 的 System Prompt 和技能卡片</string>
+    <string name="plugin_permission_h5">H5 WebView</string>
+    <string name="plugin_permission_h5_desc">允许插件在应用内显示 H5 网页</string>
+    <string name="plugin_permission_bridge">跨应用桥接</string>
+    <string name="plugin_permission_bridge_desc">允许插件通过 Intent/Broadcast 与其他应用交互</string>
+    <string name="plugin_permission_internet">网络访问</string>
+    <string name="plugin_permission_internet_desc">允许插件发起网络请求</string>
+    <string name="plugin_risk_low">低风险</string>
+    <string name="plugin_risk_medium">中风险</string>
+    <string name="plugin_risk_high">高风险</string>
+    <string name="plugin_state_installed">已安装</string>
+    <string name="plugin_state_enabled">已启用</string>
+    <string name="plugin_state_disabled">已禁用</string>
+    <string name="plugin_state_corrupted">已损坏</string>
+    <string name="plugin_state_needs_permission">待授权</string>
+    <string name="plugin_version">版本</string>
+    <string name="plugin_author">作者</string>
+    <string name="plugin_description">描述</string>
+    <string name="plugin_h5_home">插件主页</string>
+    <string name="plugin_skill_card">技能卡片</string>
+    <string name="plugin_sys_prompt">系统提示词</string>
+    <string name="plugin_entry_resource">功能卡片</string>
+    <string name="plugin_warning_high_permission">此插件请求高风险权限，请在授予前仔细审阅。</string>
+    <string name="plugin_dialog_permission_title">授予插件权限？</string>
+    <string name="plugin_dialog_permission_message">插件「%1$s」请求以下权限，请审阅后授予以启用插件。</string>
+    <string name="plugin_dialog_confirm">授权并启用</string>
+    <string name="plugin_dialog_cancel">取消</string>
+    <string name="plugin_dialog_overwrite_title">⚠️ 系统提示词覆盖警告</string>
+    <string name="plugin_dialog_overwrite_message">插件「%1$s」使用 OVERWRITE 模式，将完全替换当前系统提示词的部分内容，这可能会显著改变 Agent 的行为。\n\n是否确认继续？</string>
+    <string name="plugin_dialog_overwrite_confirm">我已知晓，确认覆盖</string>
+    <string name="plugin_dialog_overwrite_cancel">取消</string>
 
 </resources>

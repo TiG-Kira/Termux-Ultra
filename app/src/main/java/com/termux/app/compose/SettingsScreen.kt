@@ -11,6 +11,7 @@ import android.content.BroadcastReceiver
 import android.content.IntentFilter
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.fragment.app.FragmentActivity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.material3.RadioButton
@@ -44,6 +45,7 @@ import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.Switch
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
+import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.basic.SnackbarHost
@@ -63,6 +65,8 @@ import com.termux.app.activities.SettingsActivity
 import com.termux.app.compose.AiTermuxPrefs
 import com.termux.app.compose.AiTermuxConfig
 import com.termux.app.compose.SkillType
+import com.termux.app.utils.SnackbarHelper
+import com.google.android.material.snackbar.Snackbar
 import java.io.File
 
 
@@ -130,6 +134,9 @@ fun SettingsScreen(
     var aiDeveloperMode by remember { mutableStateOf(AiTermuxPrefs.isDeveloperMode(context)) }
     var autoExecConfig by remember { mutableStateOf(AiTermuxPrefs.getAutoExecConfig(context)) }
     var useCustomSystemPrompt by remember { mutableStateOf(AiTermuxPrefs.isUsingCustomSystemPrompt(context)) }
+    var unlimitedMode by remember { mutableStateOf(AiTermuxPrefs.isUnlimitedMode(context)) }
+    var rootAutoShell by remember { mutableStateOf(AiTermuxPrefs.isRootAutoShell(context)) }
+    var showUnlimitedModeConfirm by remember { mutableStateOf(false) }
 
     // 高风险命令二次确认
     var riskConfirmEnabled by remember { mutableStateOf(RiskConfirmManager.isEnabled(context)) }
@@ -147,6 +154,16 @@ fun SettingsScreen(
             protectionLevel = RiskConfirmManager.getProtectionLevel(context)
             protectionLevelIndex = protectionLevel.ordinal
             riskConfirmEnabled = protectionLevel != RiskConfirmManager.ProtectionLevel.OFF
+            // 宽松模式 + ROOT + 开发者模式：自动开启无限制模式
+            if (protectionLevel == RiskConfirmManager.ProtectionLevel.OFF
+                && aiDeveloperMode
+                && AiTermuxPrefs.isRootAvailable()
+                && !unlimitedMode) {
+                unlimitedMode = true
+                AiTermuxPrefs.setUnlimitedMode(context, true)
+                rootAutoShell = true
+                AiTermuxPrefs.setRootAutoShell(context, true)
+            }
         }
     }
 
@@ -369,6 +386,17 @@ fun SettingsScreen(
                     iconRes = R.drawable.ic_settings,
                     action = {
                         val intent = Intent(context, SettingsActivity::class.java)
+                        context.startActivity(intent)
+                    }
+                )
+            )
+            add(
+                SettingItem(
+                    title = context.getString(R.string.storage_title),
+                    description = context.getString(R.string.storage_description),
+                    iconRes = R.drawable.ic_storage,
+                    action = {
+                        val intent = Intent(context, com.termux.app.activities.StorageActivity::class.java)
                         context.startActivity(intent)
                     }
                 )
@@ -710,14 +738,15 @@ fun SettingsScreen(
                                 modifier = Modifier.padding(start = 72.dp, end = 16.dp)
                             )
                             val whitelistCount = autoExecConfig.autoExecSkills.size
-                            val whitelistSummary = if (whitelistCount == 0) {
-                                "未选择任何技能，信任白名单未开启"
-                            } else {
-                                "已选择 $whitelistCount 个技能可自动执行"
+                            val whitelistSummary = when {
+                                unlimitedMode -> "已打开Agent 无限制模式，无需手动配置"
+                                whitelistCount == 0 -> "未选择任何技能，信任白名单未开启"
+                                else -> "已选择 $whitelistCount 个技能可自动执行"
                             }
                             ArrowPreference(
                                 title = "信任白名单",
                                 summary = whitelistSummary,
+                                enabled = !unlimitedMode,
                                 onClick = { showWhitelistDialog = true },
                                 startAction = {
                                     SettingIcon(R.drawable.ic_shield, contentDescription = "信任白名单")
@@ -804,13 +833,55 @@ fun SettingsScreen(
                                     modifier = Modifier.padding(start = 72.dp, end = 16.dp)
                                 )
                                 ArrowPreference(
-                                    title = "完整对话记录",
-                                    summary = "查看包含 System 提示在内的完整对话历史",
-                                    onClick = { showFullHistoryViewer = true },
-                                    startAction = {
-                                        SettingIcon(R.drawable.ic_files, contentDescription = "完整对话记录")
+                                        title = "完整对话记录",
+                                        summary = "查看包含 System 提示在内的完整对话历史",
+                                        onClick = { showFullHistoryViewer = true },
+                                        startAction = {
+                                            SettingIcon(R.drawable.ic_files, contentDescription = "完整对话记录")
+                                        }
+                                    )
+                                    HorizontalDivider(
+                                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f),
+                                        modifier = Modifier.padding(start = 72.dp, end = 16.dp)
+                                    )
+                                    SwitchPreference(
+                                        title = "无限制模式",
+                                        summary = if (unlimitedMode) {
+                                            "已开启：放开全部限制，允许任意命令和 SSH 连接，ROOT 设备自动提权"
+                                        } else {
+                                            "放开所有安全限制，允许 Agent 执行任意命令、SSH 连接、ROOT 提权等，需生物验证二次确认"
+                                        },
+                                        checked = unlimitedMode,
+                                        onCheckedChange = { newValue ->
+                                            if (newValue) {
+                                                showUnlimitedModeConfirm = true
+                                            } else {
+                                                unlimitedMode = false
+                                                AiTermuxPrefs.setUnlimitedMode(context, false)
+                                            }
+                                        },
+                                        startAction = {
+                                            SettingIcon(R.drawable.ic_shield, contentDescription = "无限制模式")
+                                        }
+                                    )
+                                    if (unlimitedMode) {
+                                        HorizontalDivider(
+                                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f),
+                                            modifier = Modifier.padding(start = 72.dp, end = 16.dp)
+                                        )
+                                        SwitchPreference(
+                                            title = "ROOT 自动 Shell",
+                                            summary = "检测到 ROOT 时，Agent 自动使用 su 执行命令，无需手动确认",
+                                            checked = rootAutoShell,
+                                            onCheckedChange = {
+                                                rootAutoShell = it
+                                                AiTermuxPrefs.setRootAutoShell(context, it)
+                                            },
+                                            startAction = {
+                                                SettingIcon(R.drawable.ic_key, contentDescription = "ROOT 自动 Shell")
+                                            }
+                                        )
                                     }
-                                )
                             }
                         }
                     }
@@ -849,7 +920,7 @@ fun SettingsScreen(
                                 // 如果选择 OFF 或 WARN_ONLY，触发关闭弹窗确认
                                 if (newLevel == RiskConfirmManager.ProtectionLevel.OFF ||
                                     newLevel == RiskConfirmManager.ProtectionLevel.WARN_ONLY) {
-                                    RiskConfirmManager.showDisableWarning(newLevel)
+                                    RiskConfirmManager.showDisableWarning(context, newLevel)
                                 } else {
                                     protectionLevelIndex = idx
                                     protectionLevel = newLevel
@@ -1902,6 +1973,110 @@ fun SettingsScreen(
                 colors = ButtonDefaults.textButtonColorsPrimary()
             )
         }
+        }
+    )
+
+    // ---------- 无限制模式二次确认弹窗 ----------
+    var unlimitedCheckboxChecked by remember { mutableStateOf(false) }
+    var isUnlimitedAuthenticating by remember { mutableStateOf(false) }
+    LaunchedEffect(showUnlimitedModeConfirm) {
+        if (!showUnlimitedModeConfirm) {
+            unlimitedCheckboxChecked = false
+            isUnlimitedAuthenticating = false
+        }
+    }
+    val unlimitedScope = rememberCoroutineScope()
+    val unlimitedShowBlocked: () -> Unit = {
+        val msg = context.getString(R.string.accessibility_guard_blocked_toast)
+        SnackbarHelper.show(context, msg, Snackbar.LENGTH_LONG)
+    }
+    OverlayDialog(
+        show = showUnlimitedModeConfirm,
+        onDismissRequest = {
+            showUnlimitedModeConfirm = false
+        },
+        title = "开启无限制模式",
+        summary = "此模式将彻底放开 Termux Agent 的所有安全限制",
+        content = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 4.dp)
+            ) {
+                Text(
+                    text = "开启后：\n• 所有命令无需二次确认，Agent 可直接执行\n• 允许任意 SSH 连接到远程主机\n• ROOT 设备自动使用 su 提权执行命令\n• 所有 System 安全规则约束将被无视\n\n此操作风险极高，请确认设备在可信环境下使用。",
+                    fontSize = 13.sp,
+                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                    lineHeight = 20.sp,
+                    modifier = Modifier.padding(bottom = 12.dp)
+                )
+
+                CheckboxPreference(
+                    title = "我已了解风险，确认开启无限制模式",
+                    checked = unlimitedCheckboxChecked,
+                    onCheckedChange = { unlimitedCheckboxChecked = it },
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(Modifier.height(16.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(20.dp)
+                ) {
+                    Button(
+                        onClick = {
+                            showUnlimitedModeConfirm = false
+                        },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(
+                            color = Color.Transparent
+                        )
+                    ) {
+                        Text(
+                            text = "取消",
+                            color = MiuixTheme.colorScheme.onSurface,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                    Button(
+                        onClick = {
+                            isUnlimitedAuthenticating = true
+                            val activity = context as? FragmentActivity
+                            if (activity != null) {
+                                launchBiometricAuth(activity) { success ->
+                                    isUnlimitedAuthenticating = false
+                                    if (success) {
+                                        unlimitedMode = true
+                                        AiTermuxPrefs.setUnlimitedMode(context, true)
+                                        showUnlimitedModeConfirm = false
+                                    } else {
+                                        val msg = context.getString(R.string.risk_command_biometric_prompt)
+                                        SnackbarHelper.show(context, msg, Snackbar.LENGTH_SHORT)
+                                    }
+                                }
+                            } else {
+                                unlimitedMode = true
+                                AiTermuxPrefs.setUnlimitedMode(context, true)
+                                showUnlimitedModeConfirm = false
+                            }
+                        },
+                        enabled = unlimitedCheckboxChecked && !isUnlimitedAuthenticating,
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(
+                            color = if (unlimitedCheckboxChecked && !isUnlimitedAuthenticating) Color(0xFFD32F2F) else Color(0xFFBDBDBD)
+                        )
+                    ) {
+                        Text(
+                            text = "确认开启",
+                            color = Color.White,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+            }
         }
     )
 }

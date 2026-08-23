@@ -22,7 +22,21 @@ public class SshConnectionManager {
     public List<SshConnection> getConnections() {
         String json = prefs.getString(KEY_CONNECTIONS, "[]");
         Type type = new TypeToken<ArrayList<SshConnection>>() {}.getType();
-        return gson.fromJson(json, type);
+        List<SshConnection> connections = gson.fromJson(json, type);
+        if (connections == null) {
+            connections = new ArrayList<>();
+        }
+        for (int i = 0; i < connections.size(); i++) {
+            SshConnection c = connections.get(i);
+            if (c.connectionType == null || c.connectionType.isEmpty()) {
+                connections.set(i, new SshConnection(
+                    c.id, c.name, c.host, c.port, c.username, c.password,
+                    c.privateKeyPath != null ? c.privateKeyPath : "",
+                    SshConnection.TYPE_OTHER, "", ""
+                ));
+            }
+        }
+        return connections;
     }
 
     public void saveConnection(SshConnection connection) {

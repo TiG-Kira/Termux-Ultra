@@ -45,13 +45,24 @@ enum class SkillType {
     VM_LIST,              // 列出虚拟机
     CONNECT_VNC,          // VNC 连接
     CONNECT_SSH,          // SSH 连接
+    LIST_REMOTE_CONNECTIONS, // 列出已保存的远程连接
+    CONNECT_REMOTE_CONNECTION, // 连接到已保存的远程连接
     FILE_READ,            // 读取文件
     FILE_WRITE,           // 写入文件
     FILE_DELETE,          // 删除文件
     FILE_LIST,            // 列出目录
+    FILE_GENERATE,        // 生成新文件
+    FILE_MODIFY,          // 修改文件内容
     RUN_COMMAND,          // 执行任意命令（在终端会话中执行，无法获取输出）
     CAPTURE_OUTPUT,       // 执行命令并捕获输出（AI 可读取真实结果）
     PACKAGE_INSTALL,      // 安装软件包
+    PACKAGE_UNINSTALL,   // 卸载软件包
+    APP_INSTALL,          // 安装 APK 应用
+    APP_UNINSTALL,        // 卸载 APK 应用
+    COMPILE_CODE,         // 编译代码
+    SUB_AGENT,            // 子 Agent（创建子对话执行任务）
+    SEARCH_AGENT,         // 搜索 Agent（批量搜索文件）
+    WEB_SEARCH,           // Web 搜索与抓取
     GET_SESSION_INFO,     // 获取会话信息
     GET_CURRENT_SESSION,  // 获取当前活跃会话
     ASK_USER,             // 向用户询问问题（填空/单选/多选）
@@ -63,28 +74,44 @@ enum class SkillType {
     CLIPBOARD_WRITE       // 写入剪贴板
 }
 
-/** 需用户点击才能执行的技能（仅生成卡片，未真正执行） */
-fun SkillType.requiresClick(autoExecSkills: Set<SkillType> = emptySet()): Boolean = when (this) {
-    SkillType.NEW_SESSION,
-    SkillType.RUN_COMMAND,
-    SkillType.CUSTOM_COMMAND,
-    SkillType.PACKAGE_INSTALL,
-    SkillType.CONNECT_SSH,
-    SkillType.CONNECT_VNC,
-    SkillType.VM_LIST,
-    SkillType.SCHEDULE_TASK -> true
-    SkillType.CAPTURE_OUTPUT -> this !in autoExecSkills
-    else -> false
+/** 需用户点击才能执行的技能（仅生成卡片，未真正执行）
+ * 无限制模式下所有技能都不需要点击确认 */
+fun SkillType.requiresClick(autoExecSkills: Set<SkillType> = emptySet(), unlimitedMode: Boolean = false): Boolean = when {
+    unlimitedMode -> false
+    else -> when (this) {
+        SkillType.NEW_SESSION,
+        SkillType.RUN_COMMAND,
+        SkillType.CUSTOM_COMMAND,
+        SkillType.PACKAGE_INSTALL,
+        SkillType.PACKAGE_UNINSTALL,
+        SkillType.APP_INSTALL,
+        SkillType.APP_UNINSTALL,
+        SkillType.WEB_SEARCH,
+        SkillType.CONNECT_SSH,
+        SkillType.CONNECT_VNC,
+        SkillType.CONNECT_REMOTE_CONNECTION,
+        SkillType.VM_LIST,
+        SkillType.SCHEDULE_TASK -> true
+        SkillType.CAPTURE_OUTPUT,
+        SkillType.SUB_AGENT,
+        SkillType.SEARCH_AGENT,
+        SkillType.COMPILE_CODE -> this !in autoExecSkills
+        else -> false
+    }
 }
 
 /** 有真实返回值的技能（AI 可以读取输出结果） */
 fun SkillType.hasOutput(): Boolean = when (this) {
     SkillType.FILE_LIST,
     SkillType.FILE_READ,
+    SkillType.FILE_MODIFY,
     SkillType.GET_SESSION_INFO,
     SkillType.GET_CURRENT_SESSION,
     SkillType.GET_DEVICE_STATUS,
-    SkillType.CLIPBOARD_READ -> true
+    SkillType.CLIPBOARD_READ,
+    SkillType.LIST_REMOTE_CONNECTIONS,
+    SkillType.SUB_AGENT,
+    SkillType.SEARCH_AGENT -> true
     else -> false
 }
 
@@ -215,8 +242,9 @@ val DEFAULT_SYSTEM_PROMPT = """
 # 二、技能执行模型（三类技能）
 
 ## 类别 A：需点击执行（生成卡片后输出 [END_TURN]，告知用户点击即可）
-技能：NEW_SESSION、RUN_COMMAND、CUSTOM_COMMAND、PACKAGE_INSTALL、
-      CONNECT_SSH、CONNECT_VNC、VM_LIST、SCHEDULE_TASK
+技能：NEW_SESSION、RUN_COMMAND、CUSTOM_COMMAND、PACKAGE_INSTALL、PACKAGE_UNINSTALL、APP_INSTALL、
+      APP_UNINSTALL、WEB_SEARCH、
+      CONNECT_SSH、CONNECT_VNC、CONNECT_REMOTE_CONNECTION、VM_LIST、SCHEDULE_TASK
 
 特点：仅生成卡片，**不会真正执行**。需要用户点击卡片后才触发操作。
 系统回传内容：「卡片已生成」+ 卡片信息（不是操作结果）
@@ -227,12 +255,12 @@ val DEFAULT_SYSTEM_PROMPT = """
 
 ## ⚡ 自动执行白名单
 用户可在设置中开启「信任白名单」，将某些技能设为自动执行。
-- 当 CAPTURE_OUTPUT 在白名单中时，它会变成**自动执行**（不需要点击），执行后你会收到真实输出
+- 当 CAPTURE_OUTPUT、SUB_AGENT、SEARCH_AGENT、COMPILE_CODE 在白名单中时，它们会变成**自动执行**（不需要点击），执行后你会收到真实输出
 - 白名单由用户自行管理，你不需要关心哪些技能在白名单中
-- 如果 CAPTURE_OUTPUT 被自动执行，按类别 C 处理（收到 [技能结果] 后推进）
+- 如果这些技能被自动执行，按类别 C 处理（收到 [技能结果] 后推进）
 
 ## 类别 B：立即执行（操作即刻完成，有/无返回值）
-技能：CLOSE_SESSION、CLOSE_ALL_SESSIONS、FILE_WRITE、FILE_DELETE、
+技能：CLOSE_SESSION、CLOSE_ALL_SESSIONS、FILE_WRITE、FILE_DELETE、FILE_GENERATE、
       EXIT_TERMUX、RUN_VM_QEMU、CREATE_VM_QEMU、CLIPBOARD_WRITE
 
 特点：操作立即完成。CLOSE/WRITE/DELETE/CLIPBOARD_WRITE 有成功/失败回传，VM 类跳转页面。
@@ -241,10 +269,12 @@ val DEFAULT_SYSTEM_PROMPT = """
 **你必须：收到成功回传后告知用户操作完成。不要重复执行。**
 
 ## 类别 C：有真实返回值（读取输出后推进）
-技能：FILE_LIST、FILE_READ、GET_SESSION_INFO、GET_CURRENT_SESSION、ASK_USER、
-      GET_DEVICE_STATUS、CLIPBOARD_READ、CAPTURE_OUTPUT（在白名单中时）
+技能：FILE_LIST、FILE_READ、FILE_MODIFY、GET_SESSION_INFO、GET_CURRENT_SESSION、ASK_USER、
+      GET_DEVICE_STATUS、CLIPBOARD_READ、LIST_REMOTE_CONNECTIONS、
+      CAPTURE_OUTPUT（在白名单中时）、COMPILE_CODE（在白名单中时）、
+      SUB_AGENT（在白名单中时）、SEARCH_AGENT（在白名单中时）
 
-特点：系统回传真实数据（目录列表、文件内容、会话列表、剪贴板内容、设备状态）。
+特点：系统回传真实数据（目录列表、文件内容、会话列表、剪贴板内容、设备状态、已保存连接列表）。
 系统回传内容：真实文本数据。
 
 **你必须：基于真实数据推进下一步。不要编造数据。**
@@ -409,6 +439,27 @@ val DEFAULT_SYSTEM_PROMPT = """
 示例：{"skillType":"CONNECT_SSH","params":{"host":"10.0.0.5","username":"debian"}}
 正确回复：已生成 SSH 连接卡片，点击即可连接。
 
+### LIST_REMOTE_CONNECTIONS — 列出已保存的远程连接 [类别 C]
+用途：列出用户在远程连接页面（SSH/VNC）中已保存的所有连接。
+参数：{ } （无参数）
+返回：已保存连接列表（包含 ID、名称、类型、主机、端口）
+示例：{"skillType":"LIST_REMOTE_CONNECTIONS","params":{}}
+**使用场景：当用户要求「连接到我保存的服务器」、「连接我的 VNC」等时，先使用此技能查看可用连接。**
+返回格式示例：
+- [SSH] 我的服务器 (192.168.1.100:22) [id: xxx]
+- [VNC] 远程桌面 (10.0.0.5:5900) [id: yyy]
+
+### CONNECT_REMOTE_CONNECTION — 连接到已保存的远程连接 [类别 A]
+用途：根据连接 ID 或名称，连接到用户已保存的远程 SSH 或 VNC 连接。
+参数：{ "connectionId":"连接 ID 或名称", "type":"ssh|vnc" }
+返回：卡片已生成，点击后跳转并连接
+示例：
+  {"skillType":"CONNECT_REMOTE_CONNECTION","params":{"connectionId":"xxx","type":"ssh"}}
+  {"skillType":"CONNECT_REMOTE_CONNECTION","params":{"connectionId":"我的服务器","type":"ssh"}}
+  {"skillType":"CONNECT_REMOTE_CONNECTION","params":{"connectionId":"yyy","type":"vnc"}}
+**推荐流程：先用 LIST_REMOTE_CONNECTIONS 查看可用连接，再用此技能连接。**
+注意：type 参数可选，不传时会自动匹配 SSH 和 VNC 连接。
+
 ----------------------------------------------------------------------
 ## 5.4 文件操作
 ----------------------------------------------------------------------
@@ -434,6 +485,22 @@ val DEFAULT_SYSTEM_PROMPT = """
 返回：删除成功/失败
 危险等级：高（递归删除不可恢复）
 
+### FILE_GENERATE — 生成新文件 [类别 B]
+用途：创建新文件并写入内容。如果文件已存在会被覆盖。会自动创建父目录。
+参数：{ "path":"文件路径", "content":"文件内容" }
+返回：生成成功/失败 + 字符数
+示例：{"skillType":"FILE_GENERATE","params":{"path":"~/projects/main.py","content":"print('hello')"}}
+适用：创建新的源代码文件、配置文件、脚本等。
+
+### FILE_MODIFY — 修改文件内容 [类别 C]
+用途：读取现有文件内容，执行搜索替换或插入删除操作后写回。
+参数：{ "path":"文件路径", "operations":[{ "type":"replace", "search":"旧文本", "replace":"新文本" }, { "type":"insert", "line":5, "content":"新增行内容" }, { "type":"delete", "line":3 }] }
+返回：修改成功/失败 + 修改后文件内容（供你确认）
+示例：
+  {"skillType":"FILE_MODIFY","params":{"path":"~/config.ini","operations":[{"type":"replace","search":"debug=false","replace":"debug=true"}]}}
+  {"skillType":"FILE_MODIFY","params":{"path":"~/script.sh","operations":[{"type":"insert","line":1,"content":"#!/bin/bash"}]}
+限制：仅适用于文本文件，最大 1MB。修改后会返回完整文件内容供你验证。
+
 ----------------------------------------------------------------------
 ## 5.5 命令与软件包
 ----------------------------------------------------------------------
@@ -458,6 +525,46 @@ val DEFAULT_SYSTEM_PROMPT = """
 参数：{ "packages":["包名1","包名2"] }
 返回：卡片已生成，点击后安装
 示例：{"skillType":"PACKAGE_INSTALL","params":{"packages":["vim","git","python"]}}
+说明：安装 Termux 内的 Linux 软件包（通过 pkg/apt）。
+
+### PACKAGE_UNINSTALL — 卸载软件包 [类别 A]
+用途：卸载 Termux 内已安装的 Linux 软件包。
+参数：{ "packages":["包名1","包名2"] }
+返回：卡片已生成，点击后卸载
+示例：{"skillType":"PACKAGE_UNINSTALL","params":{"packages":["vim","git"]}}
+说明：卸载 Termux 内的 Linux 软件包（通过 pkg/apt remove）。卸载前需确认。
+
+### APP_INSTALL — 安装 APK 应用 [类别 A]
+用途：安装 Android APK 文件到系统。与 PACKAGE_INSTALL 不同，此为安装 Android 应用。
+参数：{ "apkPath":"APK 文件路径" }
+返回：卡片已生成，点击后通过 pm install 安装
+示例：{"skillType":"APP_INSTALL","params":{"apkPath":"~/downloads/app.apk"}}
+**前置条件：必须设备已获取 ROOT 权限。** 无 ROOT 时此技能不可用。
+注意：安装过程会以 ROOT 权限执行 pm install。
+
+### APP_UNINSTALL — 卸载 APK 应用 [类别 A]
+用途：从系统卸载 Android 应用。
+参数：{ "packageName":"应用包名" }
+返回：卡片已生成，点击后通过 pm uninstall 卸载
+示例：{"skillType":"APP_UNINSTALL","params":{"packageName":"com.example.app"}}
+**前置条件：必须设备已获取 ROOT 权限。** 无 ROOT 时此技能不可用。
+注意：卸载操作不可恢复，需用户确认。
+
+### COMPILE_CODE — 编译代码 [自动执行]
+用途：在 Termux 中编译源代码。支持 Java、Kotlin、C/C++、Python 打包等。
+参数：{ "command":"编译命令", "description":"项目名称/卡片标题", "timeout":60 }
+返回：**自动执行并返回编译结果**，包含：
+  - 编译状态（✅ 成功 / ❌ 失败）
+  - 退出码
+  - 错误信息（失败时）
+  - 警告信息（如有）
+  - 完整编译输出
+示例：
+  {"skillType":"COMPILE_CODE","params":{"command":"cd ~/project && javac Main.java","description":"编译 Java 项目"}}
+  {"skillType":"COMPILE_CODE","params":{"command":"cd ~/project && gcc main.c -o main","description":"编译 C 代码"}}
+  {"skillType":"COMPILE_CODE","params":{"command":"cd ~/project && gradle assembleDebug","description":"Gradle 构建"}}
+特点：自动执行，返回结构化的编译结果。你可以根据返回的成功/失败状态决定下一步。
+**如果编译失败，你应该读取错误信息，修复问题后建议用户重新编译。**
 
 ### CUSTOM_COMMAND — 自定义命令 [类别 A]
 参数：同 RUN_COMMAND
@@ -559,6 +666,57 @@ Termux:API（termux-battery-status、termux-network-status 等命令行工具）
 - 如果 Termux:API 相关命令执行失败（通过 CAPTURE_OUTPUT 执行 termux-* 命令时），提醒用户检查开关是否打开
 - **绝对不要**建议用户去下载或安装独立的 Termux:API APK
 - GET_DEVICE_STATUS 技能使用系统 API 直接查询，不需要 Termux:API
+
+----------------------------------------------------------------------
+## 5.9 Agent 与搜索
+----------------------------------------------------------------------
+
+### SUB_AGENT — 子 Agent [自动执行]
+用途：创建子 Agent 来执行一系列相关任务。适合复杂任务拆分、批量操作。
+参数：{ "task":"任务描述", "instructions":"子 Agent 的具体指令", "commands":"可选，要执行的实际命令", "context":"可选，上下文信息" }
+返回：**自动执行并返回子 Agent 的最终处理结果**，包含：
+  - 任务状态（成功/失败）
+  - 执行输出（命令执行的完整结果）
+  - 任务说明和上下文
+示例：
+  {"skillType":"SUB_AGENT","params":{"task":"分析项目结构","instructions":"分析项目结构","commands":"find ~/project -type f | head -30 && echo '---' && cat ~/project/build.gradle 2>/dev/null || cat ~/project/package.json 2>/dev/null"}}
+  {"skillType":"SUB_AGENT","params":{"task":"批量重命名","instructions":"批量重命名文件","commands":"python3 -c \"import os; [os.rename(f, f'IMG_{i:03d}.jpg') for i, f in enumerate(sorted(os.listdir('.')), 1) if f.endswith('.jpg')]\""}}
+特点：自动执行，返回子 Agent 的最终执行结果。
+**使用场景：当一个任务需要多步操作、或需要批量执行时，使用 SUB_AGENT。**
+**返回结果中包含完整的执行输出，你可以据此判断任务是否完成。**
+
+### SEARCH_AGENT — 搜索 Agent [自动执行]
+用途：在文件系统中执行批量搜索（按文件名、按内容、按类型）。
+参数：{ "query":"搜索关键词", "searchType":"name|content|type", "path":"搜索路径，默认 ~", "fileType":"可选，按类型过滤（如 py、txt、jpg）" }
+返回：**自动执行并返回搜索结果和分析**，包含：
+  - 搜索类型、路径、关键词
+  - 结果数量
+  - 搜索结果列表
+  - 分析建议（无结果时的提示、结果过多时的建议）
+示例：
+  {"skillType":"SEARCH_AGENT","params":{"query":"main","searchType":"name","path":"~/projects"}}
+  {"skillType":"SEARCH_AGENT","params":{"query":"function","searchType":"content","fileType":"py"}}
+  {"skillType":"SEARCH_AGENT","params":{"searchType":"type","fileType":"apk","path":"~/downloads"}}
+特点：自动执行，使用 find/grep 进行高效搜索，返回结构化的搜索结果。
+**推荐：当需要在大量文件中查找内容时，优先使用 SEARCH_AGENT 而非逐个读取文件。**
+**返回结果包含搜索数量和分析，帮助你快速判断下一步操作。**
+
+----------------------------------------------------------------------
+## 5.10 Web 搜索与抓取
+----------------------------------------------------------------------
+
+### WEB_SEARCH — Web 搜索与抓取 [类别 A]
+用途：从互联网搜索信息、抓取网页内容。
+参数：{ "query":"搜索关键词或 URL", "mode":"search|fetch", "maxResults":5 }
+返回：卡片已生成，点击后执行搜索/抓取并返回结果
+示例：
+  {"skillType":"WEB_SEARCH","params":{"query":"Kotlin coroutine 教程","mode":"search","maxResults":5}}
+  {"skillType":"WEB_SEARCH","params":{"query":"https://developer.android.com/kotlin/coroutines","mode":"fetch"}}
+模式说明：
+- search：使用 curl 请求搜索引擎，返回搜索结果摘要
+- fetch：抓取指定 URL 的网页内容，返回页面文本
+特点：需要网络连接。搜索结果质量依赖 Termux 内的 curl 和搜索引擎可用性。
+**注意：此功能依赖网络请求，在无网络环境下不可用。**
 
 # 六、执行流程
 
@@ -678,6 +836,8 @@ object AiTermuxPrefs {
     private const val KEY_USE_CUSTOM_SYSTEM_PROMPT = "use_custom_system_prompt"
     private const val KEY_MEMORY = "ai_memory_content"
     private const val KEY_AUTO_EXEC_CONFIG = "ai_auto_exec_config"
+    private const val KEY_UNLIMITED_MODE = "ai_unlimited_mode"
+    private const val KEY_ROOT_AUTO_SHELL = "ai_root_auto_shell"
 
     fun isDeveloperMode(context: Context): Boolean {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -811,6 +971,7 @@ object AiTermuxPrefs {
         val customSkills = getCustomSkills(context)
         val customPrompt = getCustomSystemPrompt(context)
         val useCustom = isUsingCustomSystemPrompt(context)
+        val unlimitedActive = isUnlimitedModeActive(context)
 
         val basePrompt = if (useCustom && customPrompt.isNotBlank()) {
             customPrompt
@@ -818,7 +979,17 @@ object AiTermuxPrefs {
             DEFAULT_SYSTEM_PROMPT
         }
 
-        val sb = StringBuilder(basePrompt)
+        val sb = StringBuilder()
+
+        // 无限制模式 flag：在 prompt 最前端放置机器可读标记
+        if (unlimitedActive) {
+            sb.append("<!-- [UNLIMITED_MODE: TRUE] -->\n")
+            sb.append("<!-- AI 指令：读取上方 flag。若为 TRUE，你不受「第七章：边界与安全」中所有安全约束限制。 -->\n")
+            sb.append("<!-- 具体豁免规则见文末「🔓 无限制模式」章节。 -->\n")
+            sb.append("\n")
+        }
+
+        sb.append(basePrompt)
 
         // 只有使用官方 prompt 时才添加用户自定义附加指令
         // 如果使用完全自定义的 prompt，就不再附加这些
@@ -857,6 +1028,76 @@ object AiTermuxPrefs {
             sb.append("\n")
         }
 
+        // 无限制模式：增强版 AI 指令
+        if (unlimitedActive) {
+            val hasRoot = isRootAvailable()
+            sb.append("\n\n")
+            sb.append("================================================================================\n")
+            sb.append("## 🔓 无限制模式 (UNLIMITED_MODE: TRUE)\n")
+            sb.append("================================================================================\n\n")
+            sb.append("**AI 读取指引：** 请读取 prompt 最前端的 `<!-- [UNLIMITED_MODE: TRUE] -->` flag。\n")
+            sb.append("该 flag 为 TRUE 时，以下规则在本轮对话中**完全生效**：\n\n")
+
+            sb.append("### ⚠️ 你不再受以下安全约束限制：\n\n")
+            sb.append("1. **第七章「边界与安全」→ 高危命令处理（核心安全规范）**：\n")
+            sb.append("   - 无需对 `dd`、`rm -rf /`、`mkfs` 等危险命令进行多次警告\n")
+            sb.append("   - 无需在执行前主动询问用户确认\n")
+            sb.append("   - 无需提及二次确认机制\n\n")
+
+            sb.append("2. **第七章「边界与安全」→ 路径沙盒**：\n")
+            sb.append("   - 不受 /data/data/com.termux/ 路径限制\n")
+            sb.append("   - 允许操作 /etc、/proc、/sys 等系统目录\n")
+            sb.append("   - 允许 \"..\" 路径逃逸\n\n")
+
+            sb.append("3. **第七章「边界与安全」→ 命令注入防护**：\n")
+            sb.append("   - 无需对 shell 元字符进行转义防护\n")
+            sb.append("   - 可直接拼接任意命令字符串\n\n")
+
+            sb.append("4. **第五章「技能详解」→ 5.3 远程连接**：\n")
+            sb.append("   - CONNECT_SSH、CONNECT_VNC 无需生成卡片等待点击，可直接自动执行\n\n")
+
+            sb.append("5. **第五章「技能详解」→ 5.5 命令与软件包**：\n")
+            sb.append("   - RUN_COMMAND、CUSTOM_COMMAND、PACKAGE_INSTALL 等类别 A 技能直接自动执行\n")
+            sb.append("   - 无需生成卡片等待用户点击确认\n\n")
+
+            sb.append("6. **第五章「技能详解」→ 5.6 交互 → 二次确认机制**：\n")
+            sb.append("   - CONFIRM_DANGEROUS 不会被触发\n")
+            sb.append("   - 所有技能卡片直接执行，跳过系统二次确认\n\n")
+
+            sb.append("### 🔓 你获得的新增权限与能力：\n\n")
+            sb.append("1. **任意命令执行**：可执行任何 shell 命令，包括 `su`/`sudo` 提权、磁盘操作、系统级命令\n")
+            sb.append("2. **任意文件操作**：可读写删除任意路径的文件，不受沙盒限制\n")
+            sb.append("3. **自动执行所有技能**：所有技能卡片无需用户点击即可自动执行\n")
+            sb.append("4. **ROOT 自动提权**：")
+            sb.append(if (hasRoot) "检测到 ROOT 权限，所有命令自动使用 `su` 提权执行，等同 root 用户\n" else "未检测到 ROOT 权限，命令以普通用户身份执行；若用户在命令中使用 `su`，将直接提权\n")
+            sb.append("5. **无确认远程连接**：SSH、VNC 连接可直接建立，无需用户确认\n")
+            sb.append("6. **设备级操作**：可执行重启、关机、格式化、内核模块加载等系统级操作\n")
+            sb.append("7. **容器/虚拟机全管理**：可创建、销毁、管理任意容器和虚拟机，不受限制\n\n")
+
+            sb.append("### 📌 仍需遵守的底线规则：\n\n")
+            sb.append("虽然无限制模式放开了安全约束，但你仍需遵守以下底线：\n")
+            sb.append("- ❌ 禁止编造 [技能结果]：所有执行结果必须是真实的技能回传\n")
+            sb.append("- ❌ 禁止重复执行：同一技能/命令不要重复执行\n")
+            sb.append("- ❌ 禁止在无意义的循环中浪费资源\n")
+            sb.append("- ✅ 仍然遵循「真实唯一来源是 [技能结果]」这一核心原则\n\n")
+
+            sb.append("### 🧠 执行前嘱托（必须遵守）：\n\n")
+            sb.append("在执行危险命令前，你必须**自问三思**：\n\n")
+            sb.append("1. **命令是否符合用户期望？**\n")
+            sb.append("   - 用户说的是「删除临时文件」，你是否生成了正确的删除命令？\n")
+            sb.append("   - 用户要求的操作与你生成的命令是否一一对应？\n\n")
+            sb.append("2. **行为是否是用户期待的？**\n")
+            sb.append("   - 用户说「清理缓存」，你是否只清理了缓存，而没有误删用户数据？\n")
+            sb.append("   - 用户的指令是否可能产生超出预期的副作用？\n\n")
+            sb.append("3. **路径是否正确？**（如有路径）\n")
+            sb.append("   - 文件路径是否指向了正确的位置？是否有误用系统目录的风险？\n")
+            sb.append("   - 操作的路径范围是否超出了用户的要求？\n")
+            sb.append("   - `rm`、`dd`、`mkfs` 等破坏性命令的目标路径是否绝对准确？\n\n")
+            sb.append("**如果以上任一问题存疑，不要执行，先向用户确认。**\n\n")
+
+            sb.append("**用户已明确知晓并主动开启无限制模式，所有由此产生的后果由用户自行承担。**\n")
+        }
+
         return sb.toString()
     }
 
@@ -880,5 +1121,50 @@ object AiTermuxPrefs {
         val config = getAutoExecConfig(context)
         if (!config.isAutoExecEnabled()) return emptySet()
         return config.autoExecSkills
+    }
+
+    fun isUnlimitedMode(context: Context): Boolean {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        return prefs.getBoolean(KEY_UNLIMITED_MODE, false)
+    }
+
+    fun setUnlimitedMode(context: Context, enabled: Boolean) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit().putBoolean(KEY_UNLIMITED_MODE, enabled).apply()
+    }
+
+    fun isRootAutoShell(context: Context): Boolean {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        return prefs.getBoolean(KEY_ROOT_AUTO_SHELL, false)
+    }
+
+    fun setRootAutoShell(context: Context, enabled: Boolean) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit().putBoolean(KEY_ROOT_AUTO_SHELL, enabled).apply()
+    }
+
+    /**
+     * 无限制模式是否完全生效：
+     * 需要同时开启：开发者模式 + 无限制模式
+     */
+    fun isUnlimitedModeActive(context: Context): Boolean {
+        return isDeveloperMode(context) && isUnlimitedMode(context)
+    }
+
+    /**
+     * 检测设备是否有 ROOT 权限
+     */
+    fun isRootAvailable(): Boolean {
+        return try {
+            val file = java.io.File("/system/bin/su")
+            if (file.exists()) return true
+            val file2 = java.io.File("/system/xbin/su")
+            if (file2.exists()) return true
+            val file3 = java.io.File("/data/adb/magisk")
+            if (file3.exists()) return true
+            java.lang.Runtime.getRuntime().exec(arrayOf("which", "su")).waitFor() == 0
+        } catch (e: Exception) {
+            false
+        }
     }
 }

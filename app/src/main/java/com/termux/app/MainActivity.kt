@@ -62,12 +62,14 @@ class MainActivity : FragmentActivity() {
 
     /** True if activity was launched (or is being resumed) from the notification
      *  "end sessions" action. When true, we show a data-loss warning dialog if VM/container
-     *  processes are running, and then instruct TermuxService to force-stop sessions. */
+     *  processes are running, and then instruct TermuxService to force-stop sessions.
+     *  Note: StopConfirmDialog.start() now directly launches AlertDialogActivity (WindowDialog) */
     private var pendingTriggerStopService = false
 
     /** True if activity was launched (or is being resumed) from the notification
      *  "quit app" action. When true, we show a data-loss warning dialog if VM/container
-     *  processes are running, and then instruct TermuxService to force-quit the app. */
+     *  processes are running, and then instruct TermuxService to force-quit the app.
+     *  Note: StopConfirmDialog.start() now directly launches AlertDialogActivity (WindowDialog) */
     private var pendingTriggerQuitApp = false
 
     /** If between onStart() and onStop(). Used to decide whether to show the OverlayDialog

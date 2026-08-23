@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Demo Plugin - Termux Ultra</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            color: #333;
+        }
+        .container { max-width: 600px; margin: 0 auto; }
+        .header { text-align: center; padding: 20px 0 30px; color: #fff; }
+        .header h1 { font-size: 24px; margin-bottom: 8px; }
+        .header p { font-size: 14px; opacity: 0.9; }
+        .card {
+            background: #fff;
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 16px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+        }
+        .card h2 { font-size: 16px; margin-bottom: 12px; color: #333; display: flex; align-items: center; }
+        .card h2::before {
+            content: '';
+            display: inline-block;
+            width: 4px; height: 16px;
+            background: #667eea;
+            border-radius: 2px;
+            margin-right: 8px;
+        }
+        .btn {
+            display: block;
+            width: 100%;
+            padding: 14px 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #fff;
+            border: none;
+            border-radius: 12px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            margin-bottom: 10px;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .btn:active { transform: scale(0.98); box-shadow: 0 2px 10px rgba(0,0,0,0.2); }
+        .btn-secondary {
+            background: #f5f5f5;
+            color: #333;
+        }
+        .btn-secondary:active { background: #e8e8e8; }
+        .result {
+            background: #f8f8f8;
+            border-radius: 10px;
+            padding: 12px;
+            margin-top: 10px;
+            font-family: "SF Mono", "Monaco", "Consolas", monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+            word-break: break-all;
+            max-height: 200px;
+            overflow-y: auto;
+            color: #333;
+        }
+        .info-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+        .info-item {
+            background: #f8f8f8;
+            border-radius: 10px;
+            padding: 12px;
+            text-align: center;
+        }
+        .info-item .label { font-size: 11px; color: #888; margin-bottom: 4px; }
+        .info-item .value { font-size: 14px; font-weight: 600; color: #333; }
+        .toast {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.8);
+            color: #fff;
+            padding: 10px 20px;
+            border-radius: 20px;
+            font-size: 13px;
+            z-index: 1000;
+            opacity: 0;
+            transition: opacity 0.3s;
+            pointer-events: none;
+        }
+        .toast.show { opacity: 1; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚀 Demo Plugin</h1>
+            <p>Termux Ultra 插件系统示例</p>
+        </div>
+
+        <div class="card">
+            <h2>插件信息</h2>
+            <div class="info-grid">
+                <div class="info-item">
+                    <div class="label">插件 ID</div>
+                    <div class="value" id="pluginId">-</div>
+                </div>
+                <div class="info-item">
+                    <div class="label">版本</div>
+                    <div class="value" id="pluginVersion">-</div>
+                </div>
+                <div class="info-item">
+                    <div class="label">启用状态</div>
+                    <div class="value" id="pluginEnabled">-</div>
+                </div>
+                <div class="info-item">
+                    <div class="label">ROOT 可用</div>
+                    <div class="value" id="rootAvailable">-</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>命令执行</h2>
+            <button class="btn" onclick="runCommand('echo Hello from Demo Plugin! && uname -a')">
+                执行：系统信息
+            </button>
+            <button class="btn" onclick="runCommand('pkg list-installed 2>/dev/null | wc -l')">
+                执行：统计包数量
+            </button>
+            <button class="btn btn-secondary" onclick="runCommand('whoami && pwd && date')">
+                执行：用户与时间
+            </button>
+            <div class="result" id="cmdResult">点击按钮执行命令，结果将显示在这里...</div>
+        </div>
+
+        <div class="card">
+            <h2>插件配置</h2>
+            <button class="btn" onclick="setDemoConfig()">保存配置</button>
+            <button class="btn btn-secondary" onclick="getDemoConfig()">读取配置</button>
+            <div class="result" id="configResult">点击按钮读写插件配置...</div>
+        </div>
+
+        <div class="card">
+            <h2>设备信息</h2>
+            <button class="btn" onclick="getDeviceInfo()">获取设备信息</button>
+            <div class="result" id="deviceResult">点击查看设备信息...</div>
+        </div>
+
+        <div class="card">
+            <h2>其他</h2>
+            <button class="btn btn-secondary" onclick="openExternalUrl('https://github.com')">
+                打开外部链接
+            </button>
+            <button class="btn btn-secondary" onclick="finishActivity()">
+                关闭插件页面
+            </button>
+        </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <script>
+        var bridge = window.TermuxUltra;
+
+        function showToast(msg) {
+            var toast = document.getElementById('toast');
+            toast.textContent = msg;
+            toast.classList.add('show');
+            setTimeout(function() { toast.classList.remove('show'); }, 2000);
+        }
+
+        function updatePluginInfo() {
+            if (bridge && bridge.getPluginInfo) {
+                var info = JSON.parse(bridge.getPluginInfo());
+                document.getElementById('pluginId').textContent = info.id || '-';
+                document.getElementById('pluginVersion').textContent = info.version || '-';
+                document.getElementById('pluginEnabled').textContent = info.enabled ? '✅' : '❌';
+            }
+        }
+
+        function updateRootStatus() {
+            if (bridge && bridge.getDeviceInfo) {
+                var info = JSON.parse(bridge.getDeviceInfo());
+                document.getElementById('rootAvailable').textContent = info.rootAvailable ? '✅' : '❌';
+            }
+        }
+
+        function runCommand(cmd) {
+            if (!bridge || !bridge.exec) {
+                showToast('JS Bridge 不可用');
+                return;
+            }
+            var result = JSON.parse(bridge.exec(cmd));
+            var display = result.success ? result.output : '错误: ' + (result.error || '未知');
+            document.getElementById('cmdResult').textContent = display;
+        }
+
+        function setDemoConfig() {
+            if (!bridge || !bridge.setConfig) {
+                showToast('JS Bridge 不可用');
+                return;
+            }
+            var ok = bridge.setConfig('lastRun', new Date().toISOString());
+            showToast(ok ? '配置已保存' : '保存失败');
+        }
+
+        function getDemoConfig() {
+            if (!bridge || !bridge.getConfig) {
+                showToast('JS Bridge 不可用');
+                return;
+            }
+            var config = JSON.parse(bridge.getConfig());
+            document.getElementById('configResult').textContent = JSON.stringify(config, null, 2);
+        }
+
+        function getDeviceInfo() {
+            if (!bridge || !bridge.getDeviceInfo) {
+                showToast('JS Bridge 不可用');
+                return;
+            }
+            var info = JSON.parse(bridge.getDeviceInfo());
+            document.getElementById('deviceResult').textContent = JSON.stringify(info, null, 2);
+        }
+
+        function openExternalUrl(url) {
+            if (!bridge || !bridge.openUrl) {
+                window.open(url, '_blank');
+                return;
+            }
+            bridge.openUrl(url);
+        }
+
+        function finishActivity() {
+            if (bridge && bridge.finishPage) {
+                bridge.finishPage();
+            } else {
+                showToast('无法关闭');
+            }
+        }
+
+        updatePluginInfo();
+        updateRootStatus();
+    </script>
+</body>
+</html>

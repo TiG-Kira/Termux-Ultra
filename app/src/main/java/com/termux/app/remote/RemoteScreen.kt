@@ -287,7 +287,8 @@ fun RemoteScreen(
                                 conn.host.contains(searchQuery, ignoreCase = true)
                             is SshConnection -> conn.name.contains(searchQuery, ignoreCase = true) ||
                                 conn.host.contains(searchQuery, ignoreCase = true) ||
-                                conn.username.contains(searchQuery, ignoreCase = true)
+                                conn.username.contains(searchQuery, ignoreCase = true) ||
+                                conn.dongleId.contains(searchQuery, ignoreCase = true)
                             else -> false
                         } || searchQuery.isEmpty()
                     }
@@ -360,7 +361,23 @@ fun RemoteScreen(
                                         filtered.forEach { conn ->
                                             val (cName, cDetail) = when (conn) {
                                                 is VncConnection -> conn.name to "${conn.host}:${conn.port}"
-                                                is SshConnection -> conn.name to "${conn.username}@${conn.host}:${conn.port}"
+                                                is SshConnection -> {
+                                                    val tag = when (conn.connectionType) {
+                                                        "openpilot" -> "[OpenPilot] "
+                                                        "comma" -> "[Comma] "
+                                                        "local" -> "[本地] "
+                                                        else -> ""
+                                                    }
+                                                    val detail = when (conn.connectionType) {
+                                                        "local" -> "${conn.username}@localhost:${conn.port}"
+                                                        "comma" -> {
+                                                            if (conn.deviceType == "external") "${conn.username}@${conn.dongleId} (${context.getString(R.string.ssh_method_dongle_id)})"
+                                                            else "${conn.username}@${conn.host}:${conn.port}"
+                                                        }
+                                                        else -> "${conn.username}@${conn.host}:${conn.port}"
+                                                    }
+                                                    conn.name to "$tag$detail"
+                                                }
                                                 else -> "" to ""
                                             }
                                             Row(
@@ -371,6 +388,7 @@ fun RemoteScreen(
                                                         when (conn) {
                                                             is VncConnection -> connectToVnc(context, conn)
                                                             is SshConnection -> connectToSsh(context, conn)
+                                                            else -> {}
                                                         }
                                                         searchExpanded = false
                                                         searchQuery = ""
@@ -496,12 +514,11 @@ fun RemoteScreen(
                         .padding(bottom = navBarBottomPadding)
                 ) {
                     val filtered = sshConnections.filter { conn ->
-                        when (conn) {
-                            is SshConnection -> conn.name.contains(searchQuery, ignoreCase = true) ||
-                                conn.host.contains(searchQuery, ignoreCase = true) ||
-                                conn.username.contains(searchQuery, ignoreCase = true)
-                            else -> false
-                        } || searchQuery.isEmpty()
+                        conn.name.contains(searchQuery, ignoreCase = true) ||
+                            conn.host.contains(searchQuery, ignoreCase = true) ||
+                            conn.username.contains(searchQuery, ignoreCase = true) ||
+                            conn.dongleId.contains(searchQuery, ignoreCase = true) ||
+                            searchQuery.isEmpty()
                     }
 
                     SearchBar(
@@ -571,18 +588,30 @@ fun RemoteScreen(
                                     ) {
                                         filtered.forEach { conn ->
                                             val (cName, cDetail) = when (conn) {
-                                                is SshConnection -> conn.name to "${conn.username}@${conn.host}:${conn.port}"
-                                                else -> "" to ""
+                                                is SshConnection -> {
+                                                    val tag = when (conn.connectionType) {
+                                                        "openpilot" -> "[OpenPilot] "
+                                                        "comma" -> "[Comma] "
+                                                        "local" -> "[本地] "
+                                                        else -> ""
+                                                    }
+                                                    val detail = when (conn.connectionType) {
+                                                        "local" -> "${conn.username}@localhost:${conn.port}"
+                                                        "comma" -> {
+                                                            if (conn.deviceType == "external") "${conn.username}@${conn.dongleId} (${context.getString(R.string.ssh_method_dongle_id)})"
+                                                            else "${conn.username}@${conn.host}:${conn.port}"
+                                                        }
+                                                        else -> "${conn.username}@${conn.host}:${conn.port}"
+                                                    }
+                                                    conn.name to "$tag$detail"
+                                                }
                                             }
                                             Row(
                                                 modifier = Modifier
                                                     .fillMaxWidth()
                                                     .clip(RoundedCornerShape(12.dp))
                                                     .clickable {
-                                                        when (conn) {
-                                                            is SshConnection -> connectToSsh(context, conn)
-                                                            else -> {}
-                                                        }
+                                                        connectToSsh(context, conn)
                                                         searchExpanded = false
                                                         searchQuery = ""
                                                     }

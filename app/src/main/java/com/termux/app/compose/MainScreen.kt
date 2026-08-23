@@ -789,17 +789,12 @@ fun MainScreen(
             SnackbarHost(state = snackbarHostState)
         }
 
-        val stopDialogState by StopConfirmDialog.dialogState.collectAsState()
         val riskDialogState by RiskConfirmManager.dialogState.collectAsState()
-        val disableWarningState by RiskConfirmManager.disableWarningState.collectAsState()
-        val showAuthorizationMask = stopDialogState != null || riskDialogState != null || disableWarningState.show
+        val showAuthorizationMask = riskDialogState != null
 
         if (showAuthorizationMask) {
             AuthorizationMask()
         }
-
-        // 停止/退出确认弹窗（状态驱动，在主 Compose 树内渲染，避免 addView overlay 白屏）
-        StopConfirmDialogHost(snackbarHostState)
 
         // 风险命令确认弹窗（主页不显示风险 Snackbar，由终端页独占）
         RiskConfirmDialogHost(snackbarHostState, collectSnackbar = false)

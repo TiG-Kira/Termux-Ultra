@@ -376,21 +376,10 @@ public final class TermuxService extends Service implements TermuxTask.TermuxTas
         boolean hasDangerousProcesses = detection.getQemuCount() > 0 || detection.getContainerRunning();
 
         if (hasDangerousProcesses) {
-            // 点击结束会话，先进入主页（MainActivity），然后在主页弹出OverlayDialog警告
-            Logger.logDebug(LOG_TAG, "QEMU or proot container running; delegating stop confirmation to MainActivity dialog (qemu=" + detection.getQemuCount() + ", container=" + detection.getContainerRunning() + ")");
-            Intent dialogIntent = new Intent(this, com.termux.app.MainActivity.class);
-            dialogIntent.putExtra(TermuxConstants.TERMUX_APP.TERMUX_ACTIVITY.EXTRA_TRIGGER_STOP_SERVICE, true);
-            dialogIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            // If app needs Display-over-other-apps to launch activity from service, respect that:
-            if (com.termux.shared.packages.PermissionUtils.validateDisplayOverOtherAppsPermissionForPostAndroid10(this, true)) {
-                startActivity(dialogIntent);
-            } else {
-                // If permission is missing, at least bring activity to front via existing task
-                dialogIntent.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);
-                try { startActivity(dialogIntent); } catch (Exception e) {
-                    Logger.logStackTraceWithMessage(LOG_TAG, "Failed to launch MainActivity for stop confirmation", e);
-                }
-            }
+            // 有容器/虚拟机运行：直接启动 AlertDialogActivity 显示 WindowDialog 警告
+            Logger.logDebug(LOG_TAG, "QEMU or proot container running; launching AlertDialogActivity for stop confirmation (qemu=" + detection.getQemuCount() + ", container=" + detection.getContainerRunning() + ")");
+            com.termux.app.compose.StopConfirmDialog.startWithDetection(
+                    this, false, detection.getQemuCount(), detection.getContainerRunning());
             return;
         }
 
@@ -417,19 +406,10 @@ public final class TermuxService extends Service implements TermuxTask.TermuxTas
         boolean hasDangerousProcesses = detection.getQemuCount() > 0 || detection.getContainerRunning();
 
         if (hasDangerousProcesses) {
-            // 有容器/虚拟机运行：进入主页弹窗确认
-            Logger.logDebug(LOG_TAG, "QEMU or proot container running; delegating quit confirmation to MainActivity dialog (qemu=" + detection.getQemuCount() + ", container=" + detection.getContainerRunning() + ")");
-            Intent dialogIntent = new Intent(this, com.termux.app.MainActivity.class);
-            dialogIntent.putExtra(TermuxConstants.TERMUX_APP.TERMUX_ACTIVITY.EXTRA_TRIGGER_QUIT_APP, true);
-            dialogIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            if (com.termux.shared.packages.PermissionUtils.validateDisplayOverOtherAppsPermissionForPostAndroid10(this, true)) {
-                startActivity(dialogIntent);
-            } else {
-                dialogIntent.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);
-                try { startActivity(dialogIntent); } catch (Exception e) {
-                    Logger.logStackTraceWithMessage(LOG_TAG, "Failed to launch MainActivity for quit confirmation", e);
-                }
-            }
+            // 有容器/虚拟机运行：直接启动 AlertDialogActivity 显示 WindowDialog 警告
+            Logger.logDebug(LOG_TAG, "QEMU or proot container running; launching AlertDialogActivity for quit confirmation (qemu=" + detection.getQemuCount() + ", container=" + detection.getContainerRunning() + ")");
+            com.termux.app.compose.StopConfirmDialog.startWithDetection(
+                    this, true, detection.getQemuCount(), detection.getContainerRunning());
             return;
         }
 

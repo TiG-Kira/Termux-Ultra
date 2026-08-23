@@ -48,7 +48,6 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
@@ -93,6 +92,14 @@ object RiskConfirmManager {
 
     /** 检查是否应跳过风险确认 */
     fun shouldSkipRiskCheck(): Boolean = skipRiskCheck
+
+    /**
+     * 检查无限制模式是否激活。
+     * 无限制模式下：跳过所有风险确认，放开 Agent 全部限制。
+     */
+    fun isUnlimitedModeActive(context: Context): Boolean {
+        return AiTermuxPrefs.isUnlimitedModeActive(context)
+    }
 
     /** 标记上一次命令是否为自动拦截（AUTO_BLOCK 模式） */
     @Volatile
@@ -333,7 +340,7 @@ object RiskConfirmManager {
         return level
     }
 
-    /** 设置保护级别（同时更新缓存） */
+    /** 设置保护级别（同时更新缓存，并通知 SettingsScreen 刷新） */
     fun setProtectionLevel(context: Context, level: ProtectionLevel) {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val currentLevel = getProtectionLevel(context)
@@ -349,6 +356,7 @@ object RiskConfirmManager {
                     .apply()
                 cachedProtectionLevel = level
                 cachedDetectionMode = DetectionMode.NONE
+                _disableWarningState.value = DisableWarningState()
                 return
             }
         }
@@ -362,6 +370,7 @@ object RiskConfirmManager {
                 .apply()
             cachedProtectionLevel = level
             cachedDetectionMode = DetectionMode.entries.getOrElse(previousDetection) { DetectionMode.STATIC }
+            _disableWarningState.value = DisableWarningState()
             return
         }
         
@@ -369,6 +378,7 @@ object RiskConfirmManager {
             .putInt(KEY_PROTECTION_LEVEL, level.ordinal)
             .apply()
         cachedProtectionLevel = level
+        _disableWarningState.value = DisableWarningState()
     }
 
     /** 获取侦测模式（优先从缓存读取） */
@@ -526,6 +536,9 @@ object RiskConfirmManager {
         inNativeTermux: Boolean = true,
         environmentType: EnvironmentType = EnvironmentType.NATIVE
     ): Boolean {
+        // 无限制模式：直接放行所有命令
+        if (isUnlimitedModeActive(context)) return true
+
         val level = getProtectionLevel(context)
 
         // OFF: 直接放行
@@ -636,6 +649,9 @@ object RiskConfirmManager {
         command: String,
         environmentType: EnvironmentType = EnvironmentType.NATIVE
     ): Boolean {
+        // 无限制模式：直接放行所有命令
+        if (isUnlimitedModeActive(context)) return true
+
         val level = getProtectionLevel(context)
 
         // OFF: 直接放行
@@ -884,6 +900,9 @@ object RiskConfirmManager {
      * @return true 表示命令已被拦截处理，false 表示非高危命令
      */
     fun handleTerminalCommand(context: Context, session: com.termux.terminal.TerminalSession, command: String): Boolean {
+        // 无限制模式：仅对 Agent 命令放行（shouldSkipRiskCheck 为 true），用户手敲命令仍按保护级别检查
+        if (isUnlimitedModeActive(context) && shouldSkipRiskCheck()) return false
+
         val level = getProtectionLevel(context)
         setLastProtectionLevel(level)
 
@@ -1188,14 +1207,19 @@ object RiskConfirmManager {
         session: com.termux.terminal.TerminalSession
     ): Boolean = detectEnvironment(context, session) == EnvironmentType.NATIVE
 
-    /** 显示"关闭二次确认"的警告弹窗 */
-    fun showDisableWarning(targetLevel: ProtectionLevel = ProtectionLevel.OFF) {
+    /** 显示"关闭二次确认"的警告弹窗（迁移到 WindowDialog，通过 AlertDialogActivity） */
+    fun showDisableWarning(context: Context, targetLevel: ProtectionLevel = ProtectionLevel.OFF) {
         _disableWarningState.value = DisableWarningState(show = true, targetLevel = targetLevel)
+        try {
+            com.termux.app.activities.AlertDialogActivity.startDisableWarning(context, targetLevel)
+        } catch (_: Exception) {
+            // Activity 启动失败时保留状态，走旧的 OverlayDialog 兜底
+        }
     }
 
-    /** 关闭"关闭二次确认"的警告弹窗 */
+    /** 关闭"关闭二次确认"的警告弹窗（保留用于兼容） */
     fun hideDisableWarning() {
-        _disableWarningState.value = DisableWarningState(show = false)
+        _disableWarningState.value = DisableWarningState()
     }
 
     /** 用户确认降级防护级别 */
@@ -1236,8 +1260,6 @@ fun RiskConfirmDialogHost(
     }
 
     val context = LocalContext.current
-    val disableState by RiskConfirmManager.disableWarningState.collectAsState()
-    var disableCheckboxChecked by remember { mutableStateOf(false) }
     val snackbarScope = rememberCoroutineScope()
     val showBlockedMessage: () -> Unit = {
         val msg = context.getString(R.string.accessibility_guard_blocked_toast)
@@ -1250,14 +1272,6 @@ fun RiskConfirmDialogHost(
             }
         } else {
             SnackbarHelper.show(context, msg, Snackbar.LENGTH_LONG)
-        }
-    }
-    var isAuthenticating by remember { mutableStateOf(false) }
-
-    LaunchedEffect(disableState.show) {
-        if (!disableState.show) {
-            disableCheckboxChecked = false
-            isAuthenticating = false
         }
     }
 
@@ -1314,8 +1328,8 @@ fun RiskConfirmDialogHost(
     val activity = context as? ComponentActivity
     val window = activity?.window
 
-    LaunchedEffect(dialogState != null || disableState.show) {
-        if (dialogState != null || disableState.show) {
+    LaunchedEffect(dialogState != null) {
+        if (dialogState != null) {
             window?.setFlags(
                 WindowManager.LayoutParams.FLAG_SECURE,
                 WindowManager.LayoutParams.FLAG_SECURE
@@ -1378,13 +1392,22 @@ fun RiskConfirmDialogHost(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(20.dp)
                         ) {
-                            TextButton(
-                                text = "${stringResource(R.string.risk_command_ssh_power_confirm_no)}(${countdown}s)",
+                            Button(
                                 onClick = guardedOnClick(context, thirdPartyBlocked, showBlockedMessage) {
                                     RiskConfirmManager.cancel(context)
                                 },
-                                modifier = Modifier.weight(1f)
-                            )
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.buttonColors(
+                                    color = Color.Transparent
+                                )
+                            ) {
+                                Text(
+                                    text = "${stringResource(R.string.risk_command_ssh_power_confirm_no)}(${countdown}s)",
+                                    color = MiuixTheme.colorScheme.onSurface,
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
                             Button(
                                 onClick = guardedOnClick(context, thirdPartyBlocked, showBlockedMessage) {
                                     RiskConfirmManager.confirm(context)
@@ -1505,13 +1528,22 @@ fun RiskConfirmDialogHost(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(20.dp)
                         ) {
-                            TextButton(
-                                text = "${stringResource(R.string.cancel)}(${countdown}s)",
+                            Button(
                                 onClick = guardedOnClick(context, thirdPartyBlocked, showBlockedMessage) {
                                     RiskConfirmManager.cancel(context)
                                 },
-                                modifier = Modifier.weight(1f)
-                            )
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.buttonColors(
+                                    color = Color.Transparent
+                                )
+                            ) {
+                                Text(
+                                    text = "${stringResource(R.string.cancel)}(${countdown}s)",
+                                    color = MiuixTheme.colorScheme.onSurface,
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
                             Button(
                                 onClick = guardedOnClick(context, thirdPartyBlocked, showBlockedMessage) {
                                     RiskConfirmManager.confirm(context)
@@ -1535,93 +1567,6 @@ fun RiskConfirmDialogHost(
             )
         }
     }
-
-    // 调整增强防护模式的警告弹窗
-    if (disableState.show) {
-        val isOff = disableState.targetLevel == RiskConfirmManager.ProtectionLevel.OFF
-        val summaryRes = if (isOff) R.string.risk_command_disable_off_message else R.string.risk_command_disable_warn_message
-        val checkboxRes = if (isOff) R.string.risk_command_disable_off_checkbox else R.string.risk_command_disable_warn_checkbox
-
-        OverlayDialog(
-            show = true,
-            onDismissRequest = {
-                RiskConfirmManager.hideDisableWarning()
-            },
-            title = stringResource(R.string.risk_command_disable_title),
-            summary = stringResource(summaryRes),
-            content = {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .physicalTouchDetector()
-                        .accessibilityGuard(thirdPartyBlocked)
-                        .padding(top = 4.dp)
-                ) {
-                    CheckboxPreference(
-                        title = stringResource(checkboxRes),
-                        checked = disableCheckboxChecked,
-                        onCheckedChange = { disableCheckboxChecked = it },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
-                    Spacer(Modifier.height(16.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(20.dp)
-                    ) {
-                        TextButton(
-                            text = stringResource(R.string.cancel),
-                            onClick = guardedOnClick(context, thirdPartyBlocked, showBlockedMessage) {
-                                RiskConfirmManager.hideDisableWarning()
-                            },
-                            modifier = Modifier.weight(1f)
-                        )
-                        Button(
-                            onClick = guardedOnClick(context, thirdPartyBlocked, showBlockedMessage) {
-                                isAuthenticating = true
-                                val activity = context as? FragmentActivity
-                                if (activity != null) {
-                                    launchBiometricAuth(activity) { success ->
-                                        isAuthenticating = false
-                                        if (success) {
-                                            RiskConfirmManager.confirmDisable(context)
-                                        } else {
-                                            val msg = context.getString(R.string.risk_command_biometric_prompt)
-                                            if (snackbarHostState != null) {
-                                                snackbarScope.launch {
-                                                    snackbarHostState.showSnackbar(
-                                                        message = msg,
-                                                        duration = top.yukonga.miuix.kmp.basic.SnackbarDuration.Short
-                                                    )
-                                                }
-                                            } else {
-                                                SnackbarHelper.show(context, msg, Snackbar.LENGTH_SHORT)
-                                            }
-                                        }
-                                    }
-                                } else {
-                                    RiskConfirmManager.confirmDisable(context)
-                                }
-                            },
-                            enabled = disableCheckboxChecked && !isAuthenticating,
-                            modifier = Modifier.weight(1f),
-                            colors = ButtonDefaults.buttonColors(
-                                color = if (disableCheckboxChecked && !isAuthenticating) Color(0xFFD32F2F) else Color(0xFFBDBDBD)
-                            )
-                        ) {
-                            Text(
-                                text = stringResource(R.string.risk_command_disable_confirm),
-                                color = Color.White,
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.Medium
-                            )
-                        }
-                    }
-                }
-            }
-        )
-    }
 }
 
 /**
@@ -1641,7 +1586,7 @@ private fun hasBiometricAuthentication(activity: ComponentActivity): Boolean {
  * 如果设备未设置任何生物验证或屏幕锁，则跳过验证并提示用户。
  * 使用 startClass2BiometricOrCredentialAuthentication 兼容 FragmentActivity。
  */
-private fun launchBiometricAuth(
+fun launchBiometricAuth(
     activity: FragmentActivity,
     onResult: (Boolean) -> Unit
 ) {

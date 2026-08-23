@@ -136,6 +136,24 @@ fun ResourcesScreen(
                 }
 
                 item {
+                    EntryCard(
+                        title = stringResource(R.string.plugin_center),
+                        subtitle = stringResource(R.string.plugin_center_desc),
+                        iconRes = R.drawable.ic_extension,
+                        iconBackground = Color(0xFF00BCD4).copy(alpha = 0.15f),
+                        iconTint = Color(0xFF00BCD4),
+                        accentColor = Color(0xFF00BCD4),
+                        onClick = {
+                            val intent = Intent(context, com.termux.app.plugin.PluginCenterActivity::class.java)
+                            context.startActivity(intent)
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                    )
+                }
+
+                item {
                     SmallTitle(text = stringResource(R.string.resource_tips))
                 }
 

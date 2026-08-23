@@ -41,6 +41,7 @@ import com.termux.app.compose.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import top.yukonga.miuix.kmp.basic.Card as MiuixCard
 import top.yukonga.miuix.kmp.basic.*
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
@@ -245,8 +246,10 @@ class UtilityCenterActivity : ComponentActivity() {
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         item {
-                            Card(
-                                modifier = Modifier.fillMaxWidth().background(MiuixTheme.colorScheme.surfaceVariant)
+                            MiuixCard(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(16.dp))
                             ) {
                                 Column(modifier = Modifier.padding(16.dp)) {
                                     Text(

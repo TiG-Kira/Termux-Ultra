@@ -1,0 +1,69 @@
+{
+  "id": "com.termux.ultra.demo",
+  "name": "Demo Plugin",
+  "version": "1.0.0",
+  "minHostVersion": "1.2.0",
+  "description": "Termux Ultra 官方示例插件，展示插件系统的完整功能。包含 H5 主页、资源卡片、技能卡片和 System Prompt 追加。",
+  "author": "Termux Ultra Team",
+  "icon": null,
+  "permissions": [
+    "H5_WEBVIEW",
+    "TERMUX_SESSION_ACCESS",
+    "FILE_SYSTEM_READ",
+    "INTERNET_ACCESS"
+  ],
+  "entryPoints": {
+    "resourceCards": [
+      {
+        "id": "demo_info",
+        "title": "演示：系统信息",
+        "description": "快速查看 Termux 环境信息",
+        "action": {
+          "type": "SHELL_COMMAND",
+          "command": "echo 'Termux Ultra Demo Plugin' && uname -a && echo 'Packages:' && pkg list-installed 2>/dev/null | wc -l"
+        }
+      },
+      {
+        "id": "demo_uptime",
+        "title": "演示：系统运行时间",
+        "description": "显示设备运行时长和负载",
+        "action": {
+          "type": "SHELL_COMMAND",
+          "command": "uptime 2>/dev/null || echo 'uptime not available'"
+        }
+      }
+    ],
+    "agentSkills": [
+      {
+        "id": "demo_hello",
+        "name": "打招呼",
+        "description": "以插件名义向用户问好",
+        "category": "演示",
+        "handler": "echo 'Hello from Demo Plugin!'",
+        "requiresClick": false,
+        "hasOutput": true,
+        "riskLevel": "NONE"
+      },
+      {
+        "id": "demo_check_env",
+        "name": "检查环境",
+        "description": "检查 Termux 运行环境是否正常",
+        "category": "系统",
+        "handler": "echo 'Checking environment...' && which bash && which pkg && echo 'OK'",
+        "requiresClick": false,
+        "hasOutput": true,
+        "riskLevel": "NONE"
+      }
+    ],
+    "h5Home": {
+      "enabled": true,
+      "entry": "web/index.html"
+    },
+    "pages": []
+  },
+  "systemPrompt": {
+    "mode": "APPEND",
+    "content": "## Demo 插件附加指令\n你可以使用以下额外功能：\n- 使用 demo_check_env 技能检查环境\n- 使用 demo_hello 技能打招呼\n- 资源页的演示卡片可以快速执行命令\n- 插件主页提供 H5 交互界面",
+    "cardFormat": null
+  }
+}

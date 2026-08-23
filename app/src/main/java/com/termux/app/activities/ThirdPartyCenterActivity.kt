@@ -44,6 +44,7 @@ import com.termux.app.compose.*
 import com.termux.app.compose.TerminalSession
 import com.termux.app.compose.getRunningSessions
 import com.termux.app.utils.SnackbarHelper
+import top.yukonga.miuix.kmp.basic.Card as MiuixCard
 import top.yukonga.miuix.kmp.basic.*
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
@@ -269,8 +270,10 @@ class ThirdPartyCenterActivity : ComponentActivity() {
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         item {
-                            Card(
-                                modifier = Modifier.fillMaxWidth().background(MiuixTheme.colorScheme.surfaceVariant)
+                            MiuixCard(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(16.dp))
                             ) {
                                 Column(modifier = Modifier.padding(16.dp)) {
                                     Text(
@@ -288,8 +291,10 @@ class ThirdPartyCenterActivity : ComponentActivity() {
 
                         if (resources.isEmpty()) {
                             item {
-                                Card(
-                                    modifier = Modifier.fillMaxWidth().background(MiuixTheme.colorScheme.surfaceVariant)
+                                MiuixCard(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(16.dp))
                                 ) {
                                     Column(
                                         modifier = Modifier
@@ -664,14 +669,15 @@ private fun ThirdPartyResourceCard(
 ) {
     val context = LocalContext.current
     val isDark = isSystemInDarkTheme()
-    val cardBackgroundColor = if (isDark) Color(0xFF1A1A1A) else Color(0xFFFAFAFA)
     val onSurfaceColor = MiuixTheme.colorScheme.onSurface
     val primaryColor = MiuixTheme.colorScheme.primary
     val surfaceVariantColor = MiuixTheme.colorScheme.surfaceVariant
     val dividerColor = onSurfaceColor.copy(alpha = 0.15f)
 
-    Card(
-        modifier = Modifier.fillMaxWidth().background(cardBackgroundColor)
+    MiuixCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
     ) {
         Column {
             Row(

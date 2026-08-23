@@ -20,7 +20,10 @@ import com.termux.shared.models.ExecutionCommand
 import com.termux.shared.shell.TermuxShellEnvironmentClient
 import com.termux.shared.shell.TermuxShellUtils
 import com.termux.shared.shell.TermuxTask
-import com.termux.shared.termux.TermuxConstants
+import com.termux.app.ssh.SshConnection
+import com.termux.app.ssh.SshConnectionManager
+import com.termux.app.vnc.VncConnection
+import com.termux.app.vnc.VncConnectionManager
 import com.gaurav.avnc.ui.vnc.VncActivity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -33,6 +36,7 @@ import java.io.DataOutputStream
 import java.io.File
 import java.io.InputStreamReader
 import java.net.HttpURLConnection
+import java.net.URLEncoder
 import java.net.URL
 
 /** ---------- 技能执行器 ---------- */
@@ -55,8 +59,17 @@ object SkillExecutor {
     private const val TERMUX_ROOT = "/data/data/com.termux"
     private val HOME_DIR = "$TERMUX_ROOT/files/home"
 
-    /** 危险操作检测：返回危险原因，不危险返回 null */
-    fun checkDangerous(skillType: SkillType, params: JsonObject): String? {
+    /** 检查无限制模式是否激活 */
+    private fun isUnlimitedMode(context: Context): Boolean {
+        return AiTermuxPrefs.isUnlimitedModeActive(context)
+    }
+
+    /** 危险操作检测：返回危险原因，不危险返回 null。
+     * 无限制模式下跳过所有危险检测。 */
+    fun checkDangerous(context: Context, skillType: SkillType, params: JsonObject): String? {
+        // 无限制模式：跳过所有危险检测
+        if (isUnlimitedMode(context)) return null
+
         return when (skillType) {
             SkillType.FILE_DELETE -> {
                 val path = if (params.has("path")) params.get("path").asString else ""
@@ -225,7 +238,7 @@ object SkillExecutor {
      * @param content AI 回复的完整文本
      * @param preParsedSkillCount 预先解析到的技能块数量（用于交叉验证，避免正则遗漏导致误判）
      */
-    fun detectFakeOutput(content: String, preParsedSkillCount: Int = -1): FakeOutputCheck {
+    fun detectFakeOutput(content: String, preParsedSkillCount: Int = -1, context: Context? = null): FakeOutputCheck {
         val violations = mutableListOf<String>()
         val lower = content.lowercase()
 
@@ -410,6 +423,10 @@ object SkillExecutor {
 
         // ---------- 禁令 5：虚构的命令/系统输出 ----------
         // 即使有技能块，也要检查技能块之外是否有伪造输出
+        // 无限制模式下跳过禁令5，由用户自行评判
+        if (context != null && isUnlimitedMode(context)) {
+            // 无限制模式：跳过禁令5检测
+        } else {
         val fakeOutputPatterns = listOf(
             """\[D\]\s+\S+""",
             """\[F\]\s+\S+""",
@@ -443,6 +460,7 @@ object SkillExecutor {
                     break
                 }
             }
+        }
         }
 
         return FakeOutputCheck(violations.isNotEmpty(), violations)
@@ -483,13 +501,24 @@ object SkillExecutor {
             SkillType.VM_LIST -> execVmList(context, termuxService, params)
             SkillType.CONNECT_VNC -> execConnectVnc(context, params)
             SkillType.CONNECT_SSH -> execConnectSsh(context, termuxService, params)
+            SkillType.LIST_REMOTE_CONNECTIONS -> execListRemoteConnections(context)
+            SkillType.CONNECT_REMOTE_CONNECTION -> execConnectRemoteConnection(context, termuxService, params)
             SkillType.FILE_LIST -> execFileList(params)
             SkillType.FILE_READ -> execFileRead(params)
             SkillType.FILE_WRITE -> execFileWrite(params)
             SkillType.FILE_DELETE -> execFileDelete(params)
+            SkillType.FILE_GENERATE -> execFileGenerate(params)
+            SkillType.FILE_MODIFY -> execFileModify(params)
             SkillType.RUN_COMMAND -> execRunCommand(context, termuxService, params)
             SkillType.CAPTURE_OUTPUT -> execCaptureOutput(context, termuxService, params)
             SkillType.PACKAGE_INSTALL -> execPackageInstall(context, termuxService, params)
+            SkillType.PACKAGE_UNINSTALL -> execPackageUninstall(context, termuxService, params)
+            SkillType.APP_INSTALL -> execAppInstall(context, termuxService, params)
+            SkillType.APP_UNINSTALL -> execAppUninstall(context, termuxService, params)
+            SkillType.COMPILE_CODE -> execCompileCode(context, termuxService, params)
+            SkillType.SUB_AGENT -> execSubAgent(context, termuxService, params)
+            SkillType.SEARCH_AGENT -> execSearchAgent(context, termuxService, params)
+            SkillType.WEB_SEARCH -> execWebSearch(context, termuxService, params)
             SkillType.CONFIRM_DANGEROUS -> SkillExecutionResult(false, "危险操作需在 UI 中确认后执行")
             SkillType.SCHEDULE_TASK -> execScheduleTask(context, params)
             SkillType.GET_DEVICE_STATUS -> execGetDeviceStatus(context, termuxService, params)
@@ -549,6 +578,7 @@ object SkillExecutor {
     ): SkillExecutionResult = withContext(Dispatchers.Main.immediate) {
         if (termuxService == null) return@withContext SkillExecutionResult(false, "Termux 服务未连接")
         val name = if (params.has("name")) params.get("name").asString else null
+        val unlimited = isUnlimitedMode(context)
         return@withContext try {
             val session = termuxService.createTermuxSession(
                 null, null, null, null, false, name
@@ -557,12 +587,19 @@ object SkillExecutor {
                 val ts = session.getTerminalSession()
                 val handle = ts.mHandle.toString()
                 val displayName = ts.mSessionName ?: "Terminal"
+                // 无限制模式：自动将会话转到前台
+                if (unlimited) {
+                    val i = Intent(context, TermuxActivity::class.java)
+                    i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    i.putExtra("sessionHandle", handle)
+                    context.startActivity(i)
+                }
                 SkillExecutionResult(
-                    true, "已生成终端会话卡片",
+                    true, if (unlimited) "已创建并激活终端会话" else "已生成终端会话卡片",
                     SkillCardData(
                         skillType = SkillType.NEW_SESSION,
-                        title = "已新建终端会话",
-                        description = "会话名称: $displayName（点击卡片以初始化终端）",
+                        title = if (unlimited) "已新建并激活终端会话" else "已新建终端会话",
+                        description = "会话名称: $displayName" + if (unlimited) "" else "（点击卡片以初始化终端）",
                         status = SkillStatus.COMPLETED,
                         sessionId = handle,
                         sessionName = displayName
@@ -804,9 +841,12 @@ object SkillExecutor {
         val timeoutSeconds = (if (params.has("timeout")) params.get("timeout").asInt else 30).coerceIn(5, 120)
         val description = if (params.has("description")) params.get("description").asString else command
 
-        val danger = Regex("""rm\s+-[a-zA-Z]*r[a-zA-Z]*\s+/\b|mkfs|dd\s+if=.*/dev/block|:\(\)\{ :\|:\& \};:""")
-        if (danger.containsMatchIn(command)) {
-            return@withContext SkillExecutionResult(false, "检测到危险命令，已拒绝执行")
+        // 无限制模式下跳过危险命令检测
+        if (!isUnlimitedMode(context)) {
+            val danger = Regex("""rm\s+-[a-zA-Z]*r[a-zA-Z]*\s+/\b|mkfs|dd\s+if=.*/dev/block|:\(\)\{ :\|:\& \};:""")
+            if (danger.containsMatchIn(command)) {
+                return@withContext SkillExecutionResult(false, "检测到危险命令，已拒绝执行")
+            }
         }
 
         return@withContext try {
@@ -938,6 +978,7 @@ object SkillExecutor {
         val port = if (params.has("port")) params.get("port").asInt else 22
         val username = if (params.has("username")) params.get("username").asString else "root"
         val password = if (params.has("password")) params.get("password").asString else ""
+        val unlimited = isUnlimitedMode(context)
         return@withContext try {
             if (termuxService == null) return@withContext SkillExecutionResult(false, "Termux 服务未连接")
             val sshCmd = buildString {
@@ -953,14 +994,22 @@ object SkillExecutor {
             )
             if (session != null) {
                 val ts = session.getTerminalSession()
+                val handle = ts.mHandle.toString()
+                // 无限制模式：自动将 SSH 会话转到前台
+                if (unlimited) {
+                    val i = Intent(context, TermuxActivity::class.java)
+                    i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    i.putExtra("sessionHandle", handle)
+                    context.startActivity(i)
+                }
                 SkillExecutionResult(
-                    true, "已生成 SSH 连接卡片",
+                    true, if (unlimited) "已创建 SSH 连接会话" else "已生成 SSH 连接卡片",
                     SkillCardData(
                         skillType = SkillType.CONNECT_SSH,
                         title = "SSH 连接",
-                        description = "$username@$host:$port（点击卡片以连接）",
+                        description = "$username@$host:$port" + if (unlimited) "" else "（点击卡片以连接）",
                         status = SkillStatus.COMPLETED,
-                        sessionId = ts.mHandle.toString(),
+                        sessionId = handle,
                         sessionName = ts.mSessionName ?: "SSH-$host",
                         connectionAddress = "$host:$port"
                     )
@@ -970,6 +1019,130 @@ object SkillExecutor {
             }
         } catch (e: Exception) {
             SkillExecutionResult(false, "SSH 连接失败: ${e.message}")
+        }
+    }
+
+    private suspend fun execListRemoteConnections(context: Context): SkillExecutionResult = withContext(Dispatchers.IO) {
+        val sshMgr = SshConnectionManager(context)
+        val vncMgr = VncConnectionManager(context)
+        val sshList = sshMgr.connections
+        val vncList = vncMgr.connections
+
+        val sb = StringBuilder()
+        sb.appendLine("=== 已保存的远程连接 ===")
+        sb.appendLine()
+
+        if (sshList.isNotEmpty()) {
+            sb.appendLine("【SSH 连接】")
+            for (ssh in sshList) {
+                sb.appendLine("- [SSH] ${ssh.name} (${ssh.host}:${ssh.port}) [id: ${ssh.id}]")
+            }
+            sb.appendLine()
+        }
+
+        if (vncList.isNotEmpty()) {
+            sb.appendLine("【VNC 连接】")
+            for (vnc in vncList) {
+                sb.appendLine("- [VNC] ${vnc.name} (${vnc.host}:${vnc.port}) [id: ${vnc.id}]")
+            }
+            sb.appendLine()
+        }
+
+        val total = sshList.size + vncList.size
+        if (total == 0) {
+            sb.appendLine("暂无已保存的远程连接。")
+        } else {
+            sb.appendLine("共 $total 个连接。使用 connectionId 指定要连接的连接。")
+        }
+
+        SkillExecutionResult(
+            true, "已列出远程连接",
+            SkillCardData(
+                skillType = SkillType.LIST_REMOTE_CONNECTIONS,
+                title = "远程连接列表",
+                description = "${sshList.size} 个 SSH + ${vncList.size} 个 VNC",
+                status = SkillStatus.COMPLETED,
+                output = sb.toString()
+            )
+        )
+    }
+
+    private suspend fun execConnectRemoteConnection(
+        context: Context,
+        termuxService: TermuxService?,
+        params: JsonObject
+    ): SkillExecutionResult = withContext(Dispatchers.IO) {
+        val connectionId = if (params.has("connectionId")) params.get("connectionId").asString else ""
+        val typeFilter = if (params.has("type")) params.get("type").asString else ""
+        if (connectionId.isBlank()) return@withContext SkillExecutionResult(false, "未指定连接 ID 或名称")
+        if (termuxService == null) return@withContext SkillExecutionResult(false, "Termux 服务未连接")
+
+        val sshMgr = SshConnectionManager(context)
+        val vncMgr = VncConnectionManager(context)
+
+        var foundSsh: SshConnection? = null
+        var foundVnc: VncConnection? = null
+
+        if (typeFilter.isBlank() || typeFilter == "ssh") {
+            foundSsh = sshMgr.connections.firstOrNull {
+                it.id == connectionId || it.name == connectionId
+            }
+        }
+        if (typeFilter.isBlank() || typeFilter == "vnc") {
+            foundVnc = vncMgr.connections.firstOrNull {
+                it.id == connectionId || it.name == connectionId
+            }
+        }
+
+        when {
+            foundSsh != null -> {
+                val ssh = foundSsh
+                val sshCmd = buildString {
+                    append("ssh ")
+                    if (ssh.port != 22) append("-p ${ssh.port} ")
+                    append("${ssh.username}@${ssh.host}")
+                    if (ssh.privateKeyPath.isNotBlank()) {
+                        insert(0, "ssh -i '${ssh.privateKeyPath}' ")
+                    } else if (ssh.password.isNotBlank()) {
+                        insert(0, "sshpass -p '${ssh.password.replace("'", "'\\''")}' ")
+                    }
+                }
+                val session = termuxService.createTermuxSession(
+                    null, arrayOf("-c", sshCmd), null, null, false, "SSH-${ssh.name}"
+                )
+                if (session != null) {
+                    val ts = session.getTerminalSession()
+                    val handle = ts.mHandle.toString()
+                    SkillExecutionResult(
+                        true, "已生成 SSH 连接卡片",
+                        SkillCardData(
+                            skillType = SkillType.CONNECT_REMOTE_CONNECTION,
+                            title = "SSH 连接: ${ssh.name}",
+                            description = "${ssh.username}@${ssh.host}:${ssh.port}（点击卡片以连接）",
+                            status = SkillStatus.COMPLETED,
+                            sessionId = handle,
+                            sessionName = ts.mSessionName ?: "SSH-${ssh.name}",
+                            connectionAddress = "${ssh.host}:${ssh.port}"
+                        )
+                    )
+                } else {
+                    SkillExecutionResult(false, "创建 SSH 会话失败")
+                }
+            }
+            foundVnc != null -> {
+                val vnc = foundVnc
+                SkillExecutionResult(
+                    true, "已生成 VNC 连接卡片",
+                    SkillCardData(
+                        skillType = SkillType.CONNECT_REMOTE_CONNECTION,
+                        title = "VNC 连接: ${vnc.name}",
+                        description = "${vnc.host}:${vnc.port}（点击卡片以连接）",
+                        status = SkillStatus.COMPLETED,
+                        connectionAddress = "${vnc.host}:${vnc.port}"
+                    )
+                )
+            }
+            else -> SkillExecutionResult(false, "未找到匹配的远程连接: $connectionId")
         }
     }
 
@@ -1118,7 +1291,8 @@ object SkillExecutor {
         val sessionName = if (params.has("sessionName")) params.get("sessionName").asString else null
 
         // 高危命令二次确认（如果已经由 Agent 流程确认过则跳过）
-        if (!RiskConfirmManager.shouldSkipRiskCheck()) {
+        // 无限制模式下跳过所有风险确认
+        if (!RiskConfirmManager.shouldSkipRiskCheck() && !isUnlimitedMode(context)) {
             val confirmed = RiskConfirmManager.requestConfirmation(context, command)
             if (!confirmed) {
                 return@withContext SkillExecutionResult(
@@ -1129,6 +1303,7 @@ object SkillExecutor {
         }
 
         return@withContext try {
+            val unlimited = isUnlimitedMode(context)
             // 优先用 sessionId 或 sessionName 查找已有会话
             val lookUpKey = sessionId.ifBlank { sessionName ?: "" }
             if (lookUpKey.isNotBlank()) {
@@ -1148,7 +1323,7 @@ object SkillExecutor {
                     // 写入命令（追加换行）
                     ts.write(command + "\n")
                     SkillExecutionResult(
-                        true, "已生成命令卡片",
+                        true, if (unlimited) "命令已自动执行" else "已生成命令卡片",
                         SkillCardData(
                             skillType = SkillType.RUN_COMMAND,
                             title = "执行命令",
@@ -1168,14 +1343,22 @@ object SkillExecutor {
                 )
                 if (newSession != null) {
                     val ts = newSession.getTerminalSession()
+                    val handle = ts.mHandle.toString()
+                    // 无限制模式：自动将会话转到前台
+                    if (unlimited) {
+                        val i = Intent(context, TermuxActivity::class.java)
+                        i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        i.putExtra("sessionHandle", handle)
+                        context.startActivity(i)
+                    }
                     SkillExecutionResult(
-                        true, "已生成命令卡片",
+                        true, if (unlimited) "命令已自动执行" else "已生成命令卡片",
                         SkillCardData(
                             skillType = SkillType.RUN_COMMAND,
                             title = "新会话执行命令",
                             description = command,
                             status = SkillStatus.COMPLETED,
-                            sessionId = ts.mHandle.toString(),
+                            sessionId = handle,
                             sessionName = ts.mSessionName ?: "Terminal",
                             command = command
                         )
@@ -1215,6 +1398,458 @@ object SkillExecutor {
         return execRunCommand(context, termuxService, wrappedParams)
     }
 
+    private suspend fun execPackageUninstall(
+        context: Context,
+        termuxService: TermuxService?,
+        params: JsonObject
+    ): SkillExecutionResult {
+        if (termuxService == null) return SkillExecutionResult(false, "Termux 服务未连接")
+        val pkgs = try {
+            val arr = params.getAsJsonArray("packages")
+            (0 until arr.size()).map { arr[it].asString }
+        } catch (_: Exception) { emptyList() }
+        if (pkgs.isEmpty()) return SkillExecutionResult(false, "未指定卸载包")
+        val command = "pkg remove -y ${pkgs.joinToString(" ")}"
+        val wrappedParams = JsonObject().apply {
+            addProperty("command", command)
+            addProperty("sessionName", "卸载-${pkgs.first()}")
+        }
+        return execRunCommand(context, termuxService, wrappedParams)
+    }
+
+    private suspend fun execFileGenerate(params: JsonObject): SkillExecutionResult {
+        val pathParam = if (params.has("path")) params.get("path").asString else ""
+        if (pathParam.isBlank()) return SkillExecutionResult(false, "未指定文件路径")
+        val content = if (params.has("content")) params.get("content").asString else ""
+        val path = resolvePath(pathParam)
+        return try {
+            val file = File(path)
+            file.parentFile?.mkdirs()
+            file.writeText(content)
+            SkillExecutionResult(
+                true, "已生成文件",
+                SkillCardData(
+                    skillType = SkillType.FILE_GENERATE,
+                    title = "生成文件",
+                    description = "$path (${content.length} 字符)",
+                    status = SkillStatus.COMPLETED,
+                    filePath = path
+                )
+            )
+        } catch (e: Exception) {
+            SkillExecutionResult(false, "生成文件出错: ${e.message}")
+        }
+    }
+
+    private suspend fun execFileModify(params: JsonObject): SkillExecutionResult {
+        val pathParam = if (params.has("path")) params.get("path").asString else ""
+        if (pathParam.isBlank()) return SkillExecutionResult(false, "未指定文件路径")
+        val path = resolvePath(pathParam)
+        val operations = try {
+            val arr = params.getAsJsonArray("operations")
+            (0 until arr.size()).map { arr[it].asJsonObject }
+        } catch (_: Exception) { emptyList() }
+        if (operations.isEmpty()) return SkillExecutionResult(false, "未指定修改操作")
+
+        return try {
+            val file = File(path)
+            if (!file.exists()) return SkillExecutionResult(false, "文件不存在: $path")
+            if (!file.isFile) return SkillExecutionResult(false, "不是文件: $path")
+            if (file.length() > 1024 * 1024) return SkillExecutionResult(false, "文件过大（>1MB），无法修改")
+
+            var content = file.readText()
+            val lines = content.lines().toMutableList()
+
+            for (op in operations) {
+                when (op.get("type")?.asString) {
+                    "replace" -> {
+                        val search = op.get("search")?.asString ?: ""
+                        val replace = op.get("replace")?.asString ?: ""
+                        content = content.replace(search, replace)
+                    }
+                    "insert" -> {
+                        val line = op.get("line")?.asInt ?: 0
+                        val insertContent = op.get("content")?.asString ?: ""
+                        val safeLine = line.coerceIn(0, lines.size)
+                        lines.add(safeLine, insertContent)
+                    }
+                    "delete" -> {
+                        val line = op.get("line")?.asInt ?: 0
+                        if (line in 1..lines.size) {
+                            lines.removeAt(line - 1)
+                        }
+                    }
+                }
+            }
+
+            if (operations.any { it.get("type")?.asString == "insert" || it.get("type")?.asString == "delete" }) {
+                content = lines.joinToString("\n")
+            }
+
+            file.writeText(content)
+            SkillExecutionResult(
+                true, "已修改文件",
+                SkillCardData(
+                    skillType = SkillType.FILE_MODIFY,
+                    title = "修改文件",
+                    description = "$path (${operations.size} 处修改)",
+                    status = SkillStatus.COMPLETED,
+                    filePath = path,
+                    output = content
+                )
+            )
+        } catch (e: Exception) {
+            SkillExecutionResult(false, "修改文件出错: ${e.message}")
+        }
+    }
+
+    private suspend fun execAppInstall(
+        context: Context,
+        termuxService: TermuxService?,
+        params: JsonObject
+    ): SkillExecutionResult = withContext(Dispatchers.IO) {
+        if (termuxService == null) return@withContext SkillExecutionResult(false, "Termux 服务未连接")
+        if (!AiTermuxPrefs.isRootAvailable()) return@withContext SkillExecutionResult(false, "APP_INSTALL 需要 ROOT 权限，但设备未获取 ROOT")
+        val apkPath = if (params.has("apkPath")) params.get("apkPath").asString else ""
+        if (apkPath.isBlank()) return@withContext SkillExecutionResult(false, "未指定 APK 路径")
+        val resolvedPath = resolvePath(apkPath)
+        val file = File(resolvedPath)
+        if (!file.exists()) return@withContext SkillExecutionResult(false, "APK 文件不存在: $resolvedPath")
+
+        val command = "su -c pm install -r \"$resolvedPath\""
+        val wrappedParams = JsonObject().apply {
+            addProperty("command", command)
+            addProperty("description", "安装 APK (ROOT)")
+        }
+        execCaptureOutput(context, termuxService, wrappedParams)
+    }
+
+    private suspend fun execAppUninstall(
+        context: Context,
+        termuxService: TermuxService?,
+        params: JsonObject
+    ): SkillExecutionResult = withContext(Dispatchers.IO) {
+        if (termuxService == null) return@withContext SkillExecutionResult(false, "Termux 服务未连接")
+        if (!AiTermuxPrefs.isRootAvailable()) return@withContext SkillExecutionResult(false, "APP_UNINSTALL 需要 ROOT 权限，但设备未获取 ROOT")
+        val packageName = if (params.has("packageName")) params.get("packageName").asString else ""
+        if (packageName.isBlank()) return@withContext SkillExecutionResult(false, "未指定应用包名")
+
+        val command = "su -c pm uninstall \"$packageName\""
+        val wrappedParams = JsonObject().apply {
+            addProperty("command", command)
+            addProperty("description", "卸载应用 (ROOT)")
+        }
+        execCaptureOutput(context, termuxService, wrappedParams)
+    }
+
+    private suspend fun execCompileCode(
+        context: Context,
+        termuxService: TermuxService?,
+        params: JsonObject
+    ): SkillExecutionResult = withContext(Dispatchers.IO) {
+        if (termuxService == null) return@withContext SkillExecutionResult(false, "Termux 服务未连接")
+        val command = if (params.has("command")) params.get("command").asString else ""
+        if (command.isBlank()) return@withContext SkillExecutionResult(false, "未指定编译命令")
+        val description = if (params.has("description")) params.get("description").asString else "编译代码"
+        val timeout = if (params.has("timeout")) params.get("timeout").asInt else 60
+
+        val wrappedParams = JsonObject().apply {
+            addProperty("command", command)
+            addProperty("description", description)
+            addProperty("timeout", timeout)
+        }
+        val result = execCaptureOutput(context, termuxService, wrappedParams)
+
+        // 分析编译结果
+        val rawOutput = result.skillCard?.output ?: ""
+        val isSuccess = result.success && !rawOutput.contains("error", ignoreCase = true)
+        val hasErrors = rawOutput.contains("error:", ignoreCase = true) ||
+                rawOutput.contains("Error:", ignoreCase = true) ||
+                rawOutput.contains("FAILED", ignoreCase = true)
+
+        val compileStatus = buildString {
+            appendLine("=== 编译结果 ===")
+            appendLine("项目: $description")
+            appendLine("编译状态: ${if (isSuccess && !hasErrors) "✅ 成功" else "❌ 失败"}")
+            if (result.message.contains("exit=")) {
+                appendLine("退出码: ${result.message.substringAfter("exit=").trim()}")
+            }
+            appendLine()
+
+            if (hasErrors) {
+                // 提取错误信息
+                val errorLines = rawOutput.lines()
+                    .filter { it.contains("error:", ignoreCase = true) ||
+                            it.contains("Error:", ignoreCase = true) ||
+                            it.contains("FAILED", ignoreCase = true) }
+                    .take(20)
+
+                if (errorLines.isNotEmpty()) {
+                    appendLine("--- 错误信息 ---")
+                    for (line in errorLines) {
+                        appendLine("  $line")
+                    }
+                    appendLine()
+                }
+
+                // 提取警告信息（仅显示前5条）
+                val warningLines = rawOutput.lines()
+                    .filter { it.contains("warning:", ignoreCase = true) ||
+                            it.contains("Warning:", ignoreCase = true) }
+                    .take(5)
+                if (warningLines.isNotEmpty()) {
+                    appendLine("--- 警告 (前${warningLines.size}条) ---")
+                    for (line in warningLines) {
+                        appendLine("  $line")
+                    }
+                    appendLine()
+                }
+            } else {
+                // 成功时显示统计信息
+                val warnCount = rawOutput.lines().count {
+                    it.contains("warning:", ignoreCase = true)
+                }
+                if (warnCount > 0) {
+                    appendLine("编译成功，但有 $warnCount 条警告。")
+                } else {
+                    appendLine("编译成功，无错误无警告。")
+                }
+            }
+
+            appendLine()
+            appendLine("--- 完整输出 ---")
+            appendLine(rawOutput.take(5000))
+        }
+
+        SkillExecutionResult(
+            success = isSuccess && !hasErrors,
+            message = if (isSuccess && !hasErrors) "编译成功" else "编译失败",
+            skillCard = SkillCardData(
+                skillType = SkillType.COMPILE_CODE,
+                title = "编译: $description",
+                description = if (isSuccess && !hasErrors) "编译成功" else "编译失败",
+                status = if (isSuccess && !hasErrors) SkillStatus.COMPLETED else SkillStatus.FAILED,
+                output = compileStatus
+            )
+        )
+    }
+
+    private suspend fun execSubAgent(
+        context: Context,
+        termuxService: TermuxService?,
+        params: JsonObject
+    ): SkillExecutionResult = withContext(Dispatchers.IO) {
+        if (termuxService == null) return@withContext SkillExecutionResult(false, "Termux 服务未连接")
+        val task = if (params.has("task")) params.get("task").asString else "子任务"
+        val instructions = if (params.has("instructions")) params.get("instructions").asString else ""
+        val agentContext = if (params.has("context")) params.get("context").asString else ""
+        val commandsParam = if (params.has("commands")) params.get("commands").asString else ""
+
+        val fullInstructions = buildString {
+            appendLine("# 子 Agent 任务: $task")
+            if (agentContext.isNotBlank()) {
+                appendLine("## 上下文: $agentContext")
+            }
+            appendLine("## 指令:")
+            appendLine(instructions.ifBlank { "请根据任务描述执行相应操作。" })
+        }
+
+        if (commandsParam.isNotBlank()) {
+            // 自动执行模式：直接执行指定命令，返回结果
+            val script = buildString {
+                appendLine("echo '=== 子 Agent 任务开始 ==='")
+                appendLine("echo \"任务: $task\"")
+                appendLine("echo '--- 任务说明 ---'")
+                appendLine("cat << 'SUBAGENTEOF'")
+                appendLine(fullInstructions)
+                appendLine("SUBAGENTEOF")
+                appendLine("echo '--- 开始执行 ---'")
+                appendLine(commandsParam)
+                appendLine("echo '--- 执行结束 ---'")
+                appendLine("echo \"子 Agent 任务 [$task] 已完成\"")
+            }
+
+            val wrappedParams = JsonObject().apply {
+                addProperty("command", script)
+                addProperty("description", task)
+                addProperty("timeout", 120)
+            }
+            val result = execCaptureOutput(context, termuxService, wrappedParams)
+
+            // 格式化结果，添加子 Agent 任务摘要
+            val formattedOutput = buildString {
+                appendLine("=== 子 Agent 执行结果 ===")
+                appendLine("任务: $task")
+                appendLine("状态: ${if (result.success) "成功" else "失败"}")
+                if (result.message.isNotBlank()) appendLine("详情: ${result.message}")
+                appendLine()
+                appendLine("--- 执行输出 ---")
+                appendLine(result.skillCard?.output ?: "(无输出)")
+            }
+
+            SkillExecutionResult(
+                result.success,
+                result.message,
+                SkillCardData(
+                    skillType = SkillType.SUB_AGENT,
+                    title = "子 Agent: $task",
+                    description = if (result.success) "任务已完成" else "任务执行失败",
+                    status = if (result.success) SkillStatus.COMPLETED else SkillStatus.FAILED,
+                    output = formattedOutput
+                )
+            )
+        } else {
+            // 非自动执行模式：创建子会话，写入指令
+            val script = buildString {
+                appendLine("cat > /tmp/sub_agent_task.md << 'SUBAGENTEOF'")
+                appendLine(fullInstructions)
+                appendLine("SUBAGENTEOF")
+                appendLine("echo '=== 子 Agent 任务已创建 ==='")
+                appendLine("echo \"任务: $task\"")
+                appendLine("echo \"指令已写入 /tmp/sub_agent_task.md\"")
+                appendLine("echo '请在终端中完成任务后回复主 AI。'")
+            }
+
+            val wrappedParams = JsonObject().apply {
+                addProperty("command", script)
+                addProperty("description", task)
+                addProperty("sessionName", "SubAgent-$task")
+            }
+            val result = execCaptureOutput(context, termuxService, wrappedParams)
+
+            SkillExecutionResult(
+                result.success,
+                result.message,
+                SkillCardData(
+                    skillType = SkillType.SUB_AGENT,
+                    title = "子 Agent: $task",
+                    description = "子会话已创建，等待执行",
+                    status = SkillStatus.COMPLETED,
+                    output = result.skillCard?.output ?: "子 Agent 任务已创建"
+                )
+            )
+        }
+    }
+
+    private suspend fun execSearchAgent(
+        context: Context,
+        termuxService: TermuxService?,
+        params: JsonObject
+    ): SkillExecutionResult = withContext(Dispatchers.IO) {
+        if (termuxService == null) return@withContext SkillExecutionResult(false, "Termux 服务未连接")
+        val searchType = if (params.has("searchType")) params.get("searchType").asString else "name"
+        val query = if (params.has("query")) params.get("query").asString else ""
+        val searchPath = if (params.has("path")) params.get("path").asString else "~"
+        val fileType = if (params.has("fileType")) params.get("fileType").asString else ""
+        val resolvedPath = resolvePath(searchPath)
+
+        val command = when (searchType) {
+            "name" -> {
+                val namePattern = if (query.isBlank()) "*" else "*${query}*"
+                "find '$resolvedPath' -maxdepth 5 -name '$namePattern' -type f 2>/dev/null | head -200"
+            }
+            "content" -> {
+                val typeFilter = if (fileType.isNotBlank()) "-name '*.$fileType'" else "-type f"
+                "find '$resolvedPath' -maxdepth 5 $typeFilter -exec grep -l '$query' {} \\; 2>/dev/null | head -200"
+            }
+            "type" -> {
+                "find '$resolvedPath' -maxdepth 5 -name '*.$fileType' -type f 2>/dev/null | head -200"
+            }
+            else -> "find '$resolvedPath' -maxdepth 5 -name '*${query}*' -type f 2>/dev/null | head -200"
+        }
+
+        val description = when (searchType) {
+            "name" -> "搜索文件名: $query"
+            "content" -> "搜索文件内容: $query"
+            "type" -> "搜索文件类型: .$fileType"
+            else -> "搜索: $query"
+        }
+
+        val wrappedParams = JsonObject().apply {
+            addProperty("command", command)
+            addProperty("description", description)
+        }
+        val result = execCaptureOutput(context, termuxService, wrappedParams)
+
+        // 解析搜索结果并添加摘要
+        val rawOutput = result.skillCard?.output ?: ""
+        val lines = rawOutput.lines().filter { it.isNotBlank() && !it.startsWith("(命令") }
+        val resultCount = lines.size
+
+        val searchSummary = buildString {
+            appendLine("=== 搜索结果 ===")
+            appendLine("搜索类型: ${when(searchType) { "name" -> "文件名"; "content" -> "文件内容"; "type" -> "文件类型"; else -> "通用" }}")
+            appendLine("搜索路径: $resolvedPath")
+            appendLine("搜索关键词: ${query.ifBlank { "(全部)" }}")
+            if (fileType.isNotBlank()) appendLine("文件类型过滤: .$fileType")
+            appendLine("结果数量: $resultCount 个文件")
+            appendLine()
+            if (resultCount > 0) {
+                appendLine("--- 搜索结果 ---")
+                appendLine(rawOutput)
+                appendLine()
+                appendLine("--- 分析 ---")
+                when {
+                    resultCount == 0 -> appendLine("未找到匹配的文件。")
+                    resultCount <= 10 -> appendLine("找到 $resultCount 个匹配文件，请查看上方列表。")
+                    else -> appendLine("找到 $resultCount 个匹配文件（可能已截断），建议缩小搜索范围。")
+                }
+            } else {
+                appendLine("未找到匹配的文件。请尝试：")
+                appendLine("- 检查搜索路径是否正确")
+                appendLine("- 使用更宽泛的关键词")
+                appendLine("- 确认文件是否存在")
+            }
+        }
+
+        SkillExecutionResult(
+            result.success,
+            result.message,
+            SkillCardData(
+                skillType = SkillType.SEARCH_AGENT,
+                title = "搜索: $query",
+                description = "$resultCount 个结果",
+                status = if (result.success) SkillStatus.COMPLETED else SkillStatus.FAILED,
+                output = searchSummary
+            )
+        )
+    }
+
+    private suspend fun execWebSearch(
+        context: Context,
+        termuxService: TermuxService?,
+        params: JsonObject
+    ): SkillExecutionResult = withContext(Dispatchers.IO) {
+        if (termuxService == null) return@withContext SkillExecutionResult(false, "Termux 服务未连接")
+        val query = if (params.has("query")) params.get("query").asString else ""
+        val mode = if (params.has("mode")) params.get("mode").asString else "search"
+        if (query.isBlank()) return@withContext SkillExecutionResult(false, "未指定搜索关键词或 URL")
+        val maxResults = if (params.has("maxResults")) params.get("maxResults").asInt else 5
+
+        val command = when (mode) {
+            "fetch" -> {
+                "curl -sL --max-time 30 '$query' 2>/dev/null | head -500"
+            }
+            else -> {
+                val encodedQuery = java.net.URLEncoder.encode(query, "UTF-8")
+                "curl -sL --max-time 15 \"https://api.duckduckgo.com/?q=$encodedQuery&format=json&no_html=1&skip_disambig=1\" 2>/dev/null | python3 -c \"" +
+                        "import sys,json;" +
+                        "d=json.load(sys.stdin);" +
+                        "print(d.get('AbstractText','') or d.get('Heading','No results'));" +
+                        "for t in d.get('RelatedTopics',[])[:$maxResults]:" +
+                        " print(t.get('Text','') if isinstance(t,dict) else t)" +
+                        "\" 2>/dev/null || echo '搜索失败，请检查网络连接'"
+            }
+        }
+
+        val description = if (mode == "fetch") "抓取网页: $query" else "搜索: $query"
+        val wrappedParams = JsonObject().apply {
+            addProperty("command", command)
+            addProperty("description", description)
+        }
+        execCaptureOutput(context, termuxService, wrappedParams)
+    }
+
     private fun humanSize(bytes: Long): String {
         if (bytes < 1024) return "${bytes}B"
         val kb = bytes / 1024.0
@@ -1233,7 +1868,13 @@ object SkillExecutor {
             SkillType.CAPTURE_OUTPUT,
             SkillType.CUSTOM_COMMAND,
             SkillType.VM_LIST,
-            SkillType.CONNECT_SSH -> {
+            SkillType.APP_INSTALL,
+            SkillType.APP_UNINSTALL,
+            SkillType.PACKAGE_UNINSTALL,
+            SkillType.SUB_AGENT,
+            SkillType.SEARCH_AGENT,
+            SkillType.WEB_SEARCH,
+            SkillType.CONNECT_REMOTE_CONNECTION -> {
                 card.sessionId?.let { handle ->
                     try {
                         val intent = Intent(context, TermuxActivity::class.java)
@@ -1241,6 +1882,18 @@ object SkillExecutor {
                         intent.putExtra("sessionHandle", handle.toLongOrNull() ?: 0L)
                         context.startActivity(intent)
                     } catch (_: Exception) { }
+                }
+                if (card.sessionId.isNullOrBlank()) {
+                    card.connectionAddress?.let { addr ->
+                        try {
+                            val intent = Intent(context, VncActivity::class.java)
+                            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            val parts = addr.split(":")
+                            intent.putExtra("host", parts.getOrNull(0) ?: addr)
+                            intent.putExtra("port", parts.getOrNull(1)?.toIntOrNull() ?: 5900)
+                            context.startActivity(intent)
+                        } catch (_: Exception) { }
+                    }
                 }
             }
             SkillType.CONNECT_VNC -> {

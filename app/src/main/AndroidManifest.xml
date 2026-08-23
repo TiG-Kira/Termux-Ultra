@@ -94,6 +94,17 @@
             android:exported="false" />
 
         <activity
+            android:name=".plugin.PluginCenterActivity"
+            android:label="@string/plugin_center"
+            android:exported="false" />
+
+        <activity
+            android:name=".plugin.PluginWebViewActivity"
+            android:label="插件"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|screenLayout|uiMode" />
+
+        <activity
             android:name=".app.TerminalDetailActivity"
             android:label="@string/application_name" />
 
@@ -199,10 +210,23 @@
             android:theme="@style/Theme.AppCompat.DayNight.NoActionBar" />
 
         <activity
+            android:name=".app.activities.StorageActivity"
+            android:exported="false"
+            android:label="@string/storage_title"
+            android:theme="@style/Theme.AppCompat.DayNight.NoActionBar" />
+
+        <activity
             android:name=".app.activities.TermuxWidgetActivity"
             android:exported="false"
             android:label="@string/title_widget_settings"
             android:theme="@style/Theme.AppCompat.DayNight.NoActionBar" />
+
+        <activity
+            android:name=".app.activities.AlertDialogActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Termux.Transparent"
+            android:excludeFromRecents="true"
+            android:noHistory="true" />
 
         <activity
             android:name=".shared.activities.ReportActivity"
@@ -241,6 +265,17 @@
                 <data android:mimeType="video/*" />
             </intent-filter>
         </activity>
+
+        <activity
+            android:name="com.termux.app.plugin.PluginCenterActivity"
+            android:exported="false"
+            android:label="@string/plugin_center"
+            android:theme="@style/Theme.Termux" />
+
+        <activity
+            android:name="com.termux.app.plugin.PluginWebViewActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Termux" />
 
         <provider
             android:name=".filepicker.TermuxDocumentsProvider"

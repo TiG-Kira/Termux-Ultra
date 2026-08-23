@@ -32,6 +32,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Send
 import androidx.compose.runtime.*
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -55,6 +56,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner
 import com.termux.R
 import com.termux.app.TermuxService
 import com.termux.app.compose.*
@@ -67,7 +69,7 @@ import kotlinx.coroutines.withContext
 import top.yukonga.miuix.kmp.basic.*
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
-import top.yukonga.miuix.kmp.overlay.OverlayDialog
+import top.yukonga.miuix.kmp.window.WindowDialog
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import java.io.File
 
@@ -79,8 +81,14 @@ class AiTermuxActivity : FragmentActivity() {
         val vm: AiTermuxViewModel by viewModels()
         handlePendingAgentResult(vm)
         setContent {
-            com.termux.app.compose.KiTerminalTheme {
-                AiTermuxRoot(vm) { finish() }
+            val navDispatcher = NavigationHelper.createDispatcher()
+            val navDispatcherOwner = NavigationHelper.createOwner(navDispatcher)
+            CompositionLocalProvider(
+                LocalNavigationEventDispatcherOwner provides navDispatcherOwner
+            ) {
+                com.termux.app.compose.KiTerminalTheme {
+                    AiTermuxRoot(vm) { finish() }
+                }
             }
         }
     }
@@ -507,6 +515,9 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
         var lastSkillKey: String? = null
         var consecutiveSameSkill = 0
         val maxConsecutiveSameSkill = 3
+        // [END_TURN] 容错计数：AI 连续多少轮未输出 [END_TURN] 才截断
+        var missingEndTurnRounds = 0
+        val maxMissingEndTurnRounds = 5
         // AI 文本回复历史：检测纯文本重复（AI 反复回答同样的问题）
         val recentAiReplies = mutableListOf<String>()
         val maxReplyHistory = 5
@@ -668,7 +679,7 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
             val preParsedCount = preParsedSkills.size
 
             // === 假输出检测（传入预解析数量进行交叉验证）===
-            val fakeCheck = SkillExecutor.detectFakeOutput(replyText, preParsedCount)
+            val fakeCheck = SkillExecutor.detectFakeOutput(replyText, preParsedCount, ctx)
 
             // 二次校验：如果预解析找到了技能块，放宽检测标准
             val finalViolations = if (preParsedCount > 0 && fakeCheck.isFake) {
@@ -916,21 +927,34 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
                     currentUserText = duplicateWarning!!
                     continue
                 }
-                // 无 END_TURN 但也没有违规 → AI 忘记标记，安全终止并警告
-                android.util.Log.w("AiTermux", "AI 未输出 [END_TURN]，安全终止")
-                synchronized(messages) {
-                    val idx = messages.indexOfFirst { it.id == streamMsgId }
-                    if (idx >= 0) {
-                        messages[idx] = messages[idx].copy(
-                            content = plainText.ifBlank { replyText } +
-                                    "\n\n⚠️ AI 未输出结束标记，已自动停止（下次将提醒 AI 输出 [END_TURN]）",
-                            isWarning = true
-                        )
+                // 无 END_TURN 但也没有违规：
+                // 增加容错：等待更多轮次，只有 AI 反复不输出 [END_TURN] 时才截断
+                missingEndTurnRounds++
+                if (missingEndTurnRounds >= maxMissingEndTurnRounds) {
+                    android.util.Log.w("AiTermux", "AI 连续 $missingEndTurnRounds 轮未输出 [END_TURN]，安全终止")
+                    synchronized(messages) {
+                        val idx = messages.indexOfFirst { it.id == streamMsgId }
+                        if (idx >= 0) {
+                            messages[idx] = messages[idx].copy(
+                                content = plainText.ifBlank { replyText } +
+                                        "\n\n⚠️ AI 未输出结束标记，已自动停止（下次将提醒 AI 输出 [END_TURN]）",
+                                isWarning = true
+                            )
+                        }
                     }
+                    AiTermuxPrefs.saveChatHistory(ctx, messages.toList())
+                    return
                 }
-                AiTermuxPrefs.saveChatHistory(ctx, messages.toList())
-                return
+                // 容错轮次内：继续让 AI 回复，附带警告提醒
+                android.util.Log.d("AiTermux", "AI 未输出 [END_TURN]，容错轮次 $missingEndTurnRounds/$maxMissingEndTurnRounds，继续询问")
+                currentUserText = buildString {
+                    append(plainText.ifBlank { replyText })
+                    append("\n\n[系统提示] 请在本轮回复结尾输出 [END_TURN] 表示完成。")
+                }
+                continue
             }
+            // 有技能要执行，重置容错计数
+            missingEndTurnRounds = 0
 
             var needsUserInput = false
             var lastResultText: String? = null
@@ -938,7 +962,7 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
 
             for ((skillTypeStr, params) in skillsToExecute) {
                 val st = runCatching { SkillType.valueOf(skillTypeStr) }.getOrNull()
-                val dangerReason = if (st != null) SkillExecutor.checkDangerous(st, params) else null
+                val dangerReason = if (st != null) SkillExecutor.checkDangerous(ctx, st, params) else null
                 if (dangerReason != null && st != null) {
                     val dangerCard = SkillCardData(
                         skillType = SkillType.CONFIRM_DANGEROUS,
@@ -1034,8 +1058,9 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
 
             // 如果所有执行的技能都是"需点击执行"类型，终止循环
             // AI 已经生成了卡片并告知用户点击，不应再继续生成更多卡片
+            val unlimitedModeActive = AiTermuxPrefs.isUnlimitedModeActive(ctx)
             if (executedSkillTypes.isNotEmpty() &&
-                executedSkillTypes.all { it.requiresClick(autoExecSkills) }) {
+                executedSkillTypes.all { it.requiresClick(autoExecSkills, unlimitedModeActive) }) {
                 return
             }
 
@@ -1996,7 +2021,7 @@ private fun ChatBubble(msg: ChatMessage, vm: AiTermuxViewModel) {
     // 原始 API 响应对话框
     if (showRawResponse && msg.rawResponse?.isNotBlank() == true) {
         val ctx = LocalContext.current
-        OverlayDialog(
+        WindowDialog(
             show = showRawResponse,
             onDismissRequest = { showRawResponse = false },
             title = "原始 API 响应",
@@ -2117,6 +2142,12 @@ private fun ReasoningBlock(reasoning: String, isDone: Boolean, isDark: Boolean) 
 
 @Composable
 private fun SkillCard(msgId: String, card: SkillCardData, errorMsg: String?, isDark: Boolean, vm: AiTermuxViewModel) {
+    // Sub Agent / Search Agent 使用可折叠大卡片
+    if (card.skillType == SkillType.SUB_AGENT || card.skillType == SkillType.SEARCH_AGENT) {
+        AgentSkillCard(msgId = msgId, card = card, errorMsg = errorMsg, isDark = isDark, vm = vm)
+        return
+    }
+
     val ctx = LocalContext.current
     // ASK_USER / CONFIRM_DANGEROUS 需要可交互，状态为 RUNNING 时显示交互组件
     val isInteractive = (card.skillType == SkillType.ASK_USER || card.skillType == SkillType.CONFIRM_DANGEROUS)
@@ -2137,19 +2168,25 @@ private fun SkillCard(msgId: String, card: SkillCardData, errorMsg: String?, isD
         SkillType.CLOSE_ALL_SESSIONS, SkillType.EXIT_TERMUX,
         SkillType.GET_SESSION_INFO, SkillType.GET_CURRENT_SESSION,
         SkillType.RUN_COMMAND, SkillType.CAPTURE_OUTPUT,
-        SkillType.CUSTOM_COMMAND -> R.drawable.ic_terminal
+        SkillType.CUSTOM_COMMAND, SkillType.COMPILE_CODE -> R.drawable.ic_terminal
         SkillType.RUN_VM_QEMU, SkillType.CREATE_VM_QEMU,
         SkillType.VM_LIST -> R.drawable.ic_computer
         SkillType.CONNECT_VNC -> R.drawable.ic_vnc
         SkillType.CONNECT_SSH -> R.drawable.ic_ssh
+        SkillType.LIST_REMOTE_CONNECTIONS, SkillType.CONNECT_REMOTE_CONNECTION -> R.drawable.ic_link
         SkillType.FILE_LIST, SkillType.FILE_READ,
-        SkillType.FILE_WRITE, SkillType.FILE_DELETE -> R.drawable.ic_files
-        SkillType.PACKAGE_INSTALL -> R.drawable.ic_download
+        SkillType.FILE_WRITE, SkillType.FILE_DELETE,
+        SkillType.FILE_GENERATE, SkillType.FILE_MODIFY -> R.drawable.ic_files
+        SkillType.PACKAGE_INSTALL, SkillType.PACKAGE_UNINSTALL, SkillType.APP_INSTALL -> R.drawable.ic_download
+        SkillType.APP_UNINSTALL -> R.drawable.ic_delete
         SkillType.ASK_USER -> R.drawable.ic_help
         SkillType.CONFIRM_DANGEROUS -> R.drawable.ic_warning
         SkillType.SCHEDULE_TASK -> R.drawable.ic_service_notification
         SkillType.GET_DEVICE_STATUS -> R.drawable.ic_info
         SkillType.CLIPBOARD_READ, SkillType.CLIPBOARD_WRITE -> R.drawable.ic_copy
+        SkillType.SUB_AGENT -> R.drawable.ic_code
+        SkillType.SEARCH_AGENT -> R.drawable.ic_search
+        SkillType.WEB_SEARCH -> R.drawable.ic_web
     }
 
     val cardBg = if (isDark) Color(0xFF1A1A1A) else Color(0xFFFAFAFA)
@@ -2158,8 +2195,11 @@ private fun SkillCard(msgId: String, card: SkillCardData, errorMsg: String?, isD
     val clickable = card.skillType in setOf(
         SkillType.NEW_SESSION, SkillType.CLOSE_SESSION, SkillType.RUN_COMMAND,
         SkillType.CAPTURE_OUTPUT, SkillType.CONNECT_SSH, SkillType.CONNECT_VNC,
+        SkillType.CONNECT_REMOTE_CONNECTION,
         SkillType.RUN_VM_QEMU, SkillType.CREATE_VM_QEMU,
-        SkillType.VM_LIST, SkillType.CUSTOM_COMMAND, SkillType.EXIT_TERMUX
+        SkillType.VM_LIST, SkillType.CUSTOM_COMMAND, SkillType.EXIT_TERMUX,
+        SkillType.APP_INSTALL, SkillType.APP_UNINSTALL,
+        SkillType.PACKAGE_UNINSTALL, SkillType.WEB_SEARCH
     )
 
     Box(
@@ -2517,6 +2557,244 @@ private fun SkillCard(msgId: String, card: SkillCardData, errorMsg: String?, isD
                         }
 
                         else -> {}
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** -------------------- Agent 技能卡片（可折叠大卡片）-------------------- */
+
+@Composable
+private fun AgentSkillCard(msgId: String, card: SkillCardData, errorMsg: String?, isDark: Boolean, vm: AiTermuxViewModel) {
+    var expanded by remember { mutableStateOf(false) }
+    val isSubAgent = card.skillType == SkillType.SUB_AGENT
+    val agentLabel = if (isSubAgent) "Sub Agent" else "Search Agent"
+    val agentIcon = if (isSubAgent) R.drawable.ic_code else R.drawable.ic_search
+
+    val (statusColor, statusBg, statusText) = when {
+        card.status == SkillStatus.RUNNING -> Triple(Color(0xFF2563EB), Color(0xFF2563EB).copy(alpha = 0.12f), "执行中")
+        card.status == SkillStatus.COMPLETED -> Triple(Color(0xFF16A34A), Color(0xFF16A34A).copy(alpha = 0.12f), "已完成")
+        card.status == SkillStatus.FAILED -> Triple(Color(0xFFDC2626), Color(0xFFDC2626).copy(alpha = 0.12f), "失败")
+        else -> Triple(Color(0xFF64748B), Color(0xFF64748B).copy(alpha = 0.12f), "未知")
+    }
+
+    val cardBg = if (isDark) Color(0xFF1A1A1A) else Color(0xFFFAFAFA)
+    val borderColor = if (isDark) Color(0xFF2C2C2C) else Color(0xFFE8E8E8)
+
+    val outputLines = card.output?.lines() ?: emptyList()
+    val lastTwoLines = if (outputLines.size >= 2) {
+        outputLines.takeLast(2).joinToString("\n")
+    } else {
+        outputLines.joinToString("\n")
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+    ) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(16.dp))
+                .background(cardBg)
+        ) {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                // Header row
+                Row(
+                    modifier = Modifier
+                        .padding(14.dp)
+                        .fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .width(56.dp)
+                            .height(56.dp)
+                            .clip(RoundedCornerShape(28.dp))
+                            .background(statusBg),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            painter = painterResource(agentIcon),
+                            contentDescription = null,
+                            modifier = Modifier.size(26.dp),
+                            tint = statusColor
+                        )
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                text = card.title,
+                                style = TextStyle(
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MiuixTheme.colorScheme.onSurface
+                                )
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(999.dp))
+                                    .background(statusBg)
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            ) {
+                                Text(
+                                    text = statusText,
+                                    fontSize = 10.sp,
+                                    color = statusColor,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        }
+                        Spacer(Modifier.height(3.dp))
+                        Text(
+                            text = "$agentLabel · ${card.description}",
+                            style = TextStyle(
+                                fontSize = 12.sp,
+                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                            )
+                        )
+                    }
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(if (isDark) Color(0xFF2A2A2A) else Color(0xFFF0F0F0))
+                            .clickable { expanded = !expanded }
+                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = if (expanded) "收起 ▲" else "展开 ▼",
+                            style = TextStyle(
+                                fontSize = 11.sp,
+                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                            )
+                        )
+                    }
+                }
+
+                // Content section
+                if (expanded) {
+                    HorizontalDivider(color = borderColor)
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        if (!card.output.isNullOrBlank()) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Text(text = "💭", fontSize = 13.sp)
+                                Text(
+                                    text = "执行过程",
+                                    style = TextStyle(
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = MiuixTheme.colorScheme.onSurface
+                                    )
+                                )
+                            }
+                            Spacer(Modifier.height(8.dp))
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(if (isDark) Color(0xFF111) else Color(0xFF1E1E1E))
+                                    .padding(12.dp)
+                            ) {
+                                Text(
+                                    text = card.output.orEmpty(),
+                                    style = TextStyle(
+                                        fontSize = 12.sp,
+                                        color = Color(0xFFD4D4D4),
+                                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                        lineHeight = 18.sp
+                                    )
+                                )
+                            }
+                        }
+
+                        if (!errorMsg.isNullOrBlank() || card.status == SkillStatus.FAILED) {
+                            val errText = errorMsg ?: card.description
+                            if (errText.isNotBlank()) {
+                                Spacer(Modifier.height(10.dp))
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(Color(0xFFFEE2E2).copy(alpha = if (isDark) 0.15f else 1f))
+                                        .padding(10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Icon(
+                                        painter = painterResource(R.drawable.ic_error),
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp),
+                                        tint = Color(0xFFDC2626)
+                                    )
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text("执行出错", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFFDC2626))
+                                        Spacer(Modifier.height(2.dp))
+                                        Text(errText, fontSize = 12.sp, color = Color(0xFFB91C1C))
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    // Collapsed: show status and last 2 lines
+                    HorizontalDivider(color = borderColor)
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            if (card.status == SkillStatus.RUNNING) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(8.dp)
+                                        .clip(CircleShape)
+                                        .background(statusColor)
+                                )
+                                Text(
+                                    text = "$agentLabel 正在执行…",
+                                    style = TextStyle(fontSize = 12.sp, color = statusColor)
+                                )
+                            } else {
+                                Icon(
+                                    painter = painterResource(
+                                        if (card.status == SkillStatus.COMPLETED) R.drawable.ic_info
+                                        else R.drawable.ic_error
+                                    ),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(14.dp),
+                                    tint = statusColor
+                                )
+                                Text(
+                                    text = "$agentLabel ${if (card.status == SkillStatus.COMPLETED) "执行完成" else "执行失败"}",
+                                    style = TextStyle(fontSize = 12.sp, color = statusColor)
+                                )
+                            }
+                        }
+                        if (lastTwoLines.isNotBlank()) {
+                            Spacer(Modifier.height(6.dp))
+                            Text(
+                                text = lastTwoLines,
+                                style = TextStyle(
+                                    fontSize = 12.sp,
+                                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                    lineHeight = 18.sp
+                                ),
+                                maxLines = 2,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                            )
+                        }
                     }
                 }
             }
