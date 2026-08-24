@@ -559,7 +559,7 @@
     <string name="restore_complete">Restore complete</string>
     <string name="restore_failed_error">An error occurred during restore</string>
     <string name="cancel_action">Cancel</string>
-    <string name="initializing">Initializing閳</string>
+    <string name="initializing">Initializing...</string>
     <string name="backed_up_size">Backed up: %1$d MB</string>
     <string name="restored_size">Restored: %1$d MB</string>
     <string name="backup_view_progress_toast">Backing up, check the notification bar for progress</string>
@@ -592,7 +592,7 @@
     <string name="termux_api_help_summary">View common Termux:API commands</string>
     <string name="termux_boot_help">Boot Startup Guide</string>
     <string name="termux_boot_help_summary">Learn how to add boot scripts</string>
-    <string name="termux_api_help_content">Termux:API provides commands to access Android features from the terminal. Common commands:\n\n閳?termux-battery-status 閳?battery info\n閳?termux-camera-photo 閳?take a photo\n閳?termux-clipboard-get / termux-clipboard-set 閳?clipboard\n閳?termux-notification 閳?post a notification\n閳?termux-toast 閳?show a toast\n閳?termux-vibrate 閳?vibrate device\n閳?termux-location 閳?get GPS location\n閳?termux-sms-list / termux-sms-send 閳?SMS\n閳?termux-tts-speak 閳?text to speech\n閳?termux-wifi-connectioninfo 閳?WiFi info\n\nInstall the termux-api package first:\npkg install termux-api</string>
+    <string name="termux_api_help_content">Termux:API provides commands to access Android features from the terminal. Common commands:\n\n•termux-battery-status •battery info\n•termux-camera-photo •take a photo\n•termux-clipboard-get / termux-clipboard-set •clipboard\n•termux-notification •post a notification\n•termux-toast •show a toast\n•termux-vibrate •vibrate device\n•termux-location •get GPS location\n•termux-sms-list / termux-sms-send •SMS\n•termux-tts-speak •text to speech\n•termux-wifi-connectioninfo •WiFi info\n\nInstall the termux-api package first:\npkg install termux-api</string>
     <string name="termux_boot_help_content">Termux:Boot runs scripts automatically when the device starts.\n\nTo add a boot script:\n\n1. Create the directory:\n   mkdir -p ~/.termux/boot\n2. Place executable scripts in ~/.termux/boot/\n3. Scripts run in sorted order on boot.\n\nExample (~/.termux/boot/start-ssh):\n   #!/data/data/com.termux/files/usr/bin/sh\n   termux-wake-lock\n   sshd</string>
     <string name="feature_not_enabled_title">Feature not enabled</string>
     <string name="feature_not_enabled_message">\"%1$s\" is not enabled. Go to Settings to enable it?</string>
@@ -605,7 +605,7 @@
 
     <!-- Low Android version optimization -->
     <string name="low_android_warning_title">Termux May Be Running on an Older Device</string>
-    <string name="low_android_warning_message">Your Android version is outdated. Some features are disabled automatically 閳?they either require unavailable APIs or may cause heavy performance overhead on older devices. You may force閳ユ吂nable at your own risk; no support will be provided.</string>
+    <string name="low_android_warning_message">Your Android version is outdated. Some features are disabled automatically •they either require unavailable APIs or may cause heavy performance overhead on older devices. You may force‑nable at your own risk; no support will be provided.</string>
     <string name="low_android_version_info">Current Android: %1$s (SDK %2$d)</string>
     <string name="low_android_feature_disabled">Requires %1$s or above</string>
     <string name="low_android_terminal_mode_title">Locked to terminal mode</string>
@@ -616,13 +616,13 @@
 
     <!-- Low Android force-enable warnings -->
     <string name="force_enable_dialog_title">Performance Warning for Older Devices</string>
-    <string name="force_enable_dialog_message">You are enabling \"%3$s\" on Android %1$s (SDK %2$d). It is recommended to use this feature on %4$s or above.\n\nThis feature is designed for newer-generation devices. Although the system APIs are available, older hardware has limited memory and processing capacity. Enabling it may impose a significant burden on your device.\n\nForce-enabling may result in:\n\n閳?Noticeable UI stuttering and frame drops\n閳?High CPU/RAM usage and device overheating\n閳?App or system process termination due to insufficient memory\n閳?Background apps being more readily reclaimed by the system\n\nProceed at your own risk. Issues arising from enabling this feature on older devices are not eligible for technical support.</string>
+    <string name="force_enable_dialog_message">You are enabling \"%3$s\" on Android %1$s (SDK %2$d). It is recommended to use this feature on %4$s or above.\n\nThis feature is designed for newer-generation devices. Although the system APIs are available, older hardware has limited memory and processing capacity. Enabling it may impose a significant burden on your device.\n\nForce-enabling may result in:\n\n•Noticeable UI stuttering and frame drops\n•High CPU/RAM usage and device overheating\n•App or system process termination due to insufficient memory\n•Background apps being more readily reclaimed by the system\n\nProceed at your own risk. Issues arising from enabling this feature on older devices are not eligible for technical support.</string>
     <string name="force_enable_anyway">Enable Anyway</string>
     <string name="force_enable_do_not">Cancel</string>
 
     <!-- Critical API-incompatibility warning (pure API not supported) -->
-    <string name="critical_force_enable_dialog_title">閳跨媴绗?Incompatible with Current System</string>
-    <string name="critical_force_enable_dialog_message">You are attempting to use \"%3$s\" on Android %1$s (SDK %2$d). This feature requires %4$s or above.\n\nThis is a pure API-level incompatibility 閳?the required rendering APIs do not exist on your current system. Force-enabling is very likely to cause:\n\n閳?Immediate crash or black screen\n閳?Severe rendering distortion\n閳?System UI instability\n閳?Memory or GPU resource leaks causing device lag or overheating\n閳?It may appear to work briefly before failures occur\n閳?(Rare) Incompatible components may leak Surface / graphics handles, causing rendering failures across other apps\n\nContinue at your own risk. No support will be provided.</string>
+    <string name="critical_force_enable_dialog_title">• Incompatible with Current System</string>
+    <string name="critical_force_enable_dialog_message">You are attempting to use \"%3$s\" on Android %1$s (SDK %2$d). This feature requires %4$s or above.\n\nThis is a pure API-level incompatibility •the required rendering APIs do not exist on your current system. Force-enabling is very likely to cause:\n\n•Immediate crash or black screen\n•Severe rendering distortion\n•System UI instability\n•Memory or GPU resource leaks causing device lag or overheating\n•It may appear to work briefly before failures occur\n•(Rare) Incompatible components may leak Surface / graphics handles, causing rendering failures across other apps\n\nContinue at your own risk. No support will be provided.</string>
     <string name="critical_force_enable_confirm_text">I understand the risks, force-enable</string>
     <string name="critical_force_enable_action_continue">Continue</string>
     <string name="critical_force_enable_cancel">Abort</string>
@@ -764,7 +764,7 @@
 
     <!-- Protection Level -->
     <string name="protection_level_title">Enhanced Protection Mode</string>
-    <string name="protection_level_summary">Current: %1$s 閳?%2$s</string>
+    <string name="protection_level_summary">Current: %1$s •%2$s</string>
     <string name="protection_level_dialog_summary">Choose how aggressively dangerous commands are handled. Higher levels provide stronger safety but may interrupt your workflow more.</string>
     <string name="protection_level_off">Off</string>
     <string name="protection_level_off_desc">No detection, all commands pass through</string>
@@ -780,11 +780,11 @@
     <string name="detection_mode_summary">Current: %1$s</string>
     <string name="detection_mode_dialog_summary">Choose how dangerous commands are detected. Static scanning checks command patterns before execution; runtime parsing intercepts commands as they run.</string>
     <string name="detection_mode_none">None</string>
-    <string name="detection_mode_none_desc">No automatic detection 閳?relies on manual or trusted input only</string>
+    <string name="detection_mode_none_desc">No automatic detection •relies on manual or trusted input only</string>
     <string name="detection_mode_static">Static Detection</string>
-    <string name="detection_mode_static_desc">Regex-based command pattern matching before execution 閳?fast and lightweight</string>
+    <string name="detection_mode_static_desc">Regex-based command pattern matching before execution •fast and lightweight</string>
     <string name="detection_mode_runtime">Runtime Parsing</string>
-    <string name="detection_mode_runtime_desc">Runtime command parsing and interception 閳?catches dynamically constructed dangerous commands</string>
+    <string name="detection_mode_runtime_desc">Runtime command parsing and interception •catches dynamically constructed dangerous commands</string>
 
     <!-- Script Detection -->
     <string name="script_detection_title">Script Safety Check</string>
@@ -850,10 +850,10 @@
     <string name="overview_no_cpu_data">CPU data unavailable</string>
     <string name="overview_no_gpu_data">GPU data unavailable</string>
     <string name="overview_gpu_peak">Historical peak</string>
-    <string name="overview_cpu_temp">Temperature: %1$.0f鎺矯</string>
+    <string name="overview_cpu_temp">Temperature: %1$.0f°C</string>
     <string name="overview_memory_used">Used: %1$s</string>
     <string name="overview_cpu_cores">Cores: %1$d</string>
-    <string name="overview_ai_termux_desc">娑?Agent 濞岀喖鈧艾鑻熺敮顔藉亶婢跺嫮鎮婄紒鍫㈩伂娴滃濮</string>
+    <string name="overview_ai_termux_desc">AI Agent, simplifying complex Termux operations</string>
     <string name="overview_tips_desc">Helpful tips and quick entries</string>
     <string name="overview_card_settings">Card Settings</string>
     <string name="overview_card_position">Position</string>
@@ -927,7 +927,7 @@
     <string name="plugin_dialog_permission_message">Plugin \'%1$s\' requests the following permissions. Please review and grant to enable the plugin.</string>
     <string name="plugin_dialog_confirm">Authorize &amp; Enable</string>
     <string name="plugin_dialog_cancel">Cancel</string>
-    <string name="plugin_dialog_overwrite_title">閳跨媴绗?System Prompt Overwrite Warning</string>
+    <string name="plugin_dialog_overwrite_title">• System Prompt Overwrite Warning</string>
     <string name="plugin_dialog_overwrite_message">Plugin \'%1$s\' uses OVERWRITE mode, which will completely replace the current System Prompt content. This may significantly change Agent behavior.\n\nAre you sure you want to continue?</string>
     <string name="plugin_dialog_overwrite_confirm">I understand, confirm overwrite</string>
     <string name="plugin_dialog_overwrite_cancel">Cancel</string>
@@ -990,4 +990,29 @@
     <string name="storage_size_kb">%1$.1f KB</string>
     <string name="storage_size_mb">%1$.1f MB</string>
     <string name="storage_size_gb">%1$.2f GB</string>
+    <string name="storage_category_estimate_note">分类占用按文件逻辑大小估算，可能与系统统计存在差异</string>
+
+    <!-- Log Management -->
+    <string name="log_management">Log Management</string>
+    <string name="log_management_desc">View and manage application logs</string>
+    <string name="clear_logs">Clear</string>
+    <string name="confirm_clear_logs">Clear Logs</string>
+    <string name="confirm_clear_logs_message">Are you sure you want to clear all logs? This action cannot be undone.</string>
+
+    <string name="no_logs">No logs available</string>
+    <string name="all">All</string>
+    <string name="log_level_info">Info</string>
+    <string name="log_level_warning">Warning</string>
+    <string name="log_level_exception">Exception</string>
+
+    <!-- Crash Dialog -->
+    <string name="crash_dialog_title">Application Error</string>
+    <string name="crash_dialog_message">An error occurred. The application will attempt to recover.\n\nError details:\n%1$s</string>
+    <string name="crash_dialog_severe_title">Critical Error</string>
+    <string name="crash_dialog_severe_message">A critical error occurred. The application cannot recover automatically.\n\nError details:\n%1$s</string>
+    <string name="view_crash_report">View Crash Report</string>
+    <string name="view_logs">View Logs</string>
+    <string name="use_fallback_mode">Use Fallback Mode</string>
+    <string name="close_app">Close App</string>
 </resources>
+

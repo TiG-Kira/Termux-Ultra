@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Termux Ultra</string>
     <string name="application_name">Termux Ultra</string>
@@ -842,4 +842,26 @@
     <string name="plugin_dialog_overwrite_confirm">我已知晓，确认覆盖</string>
     <string name="plugin_dialog_overwrite_cancel">取消</string>
 
+    <!-- 日志管理 -->
+    <string name="log_management">日志管理</string>
+    <string name="log_management_desc">查看和管理应用日志</string>
+    <string name="clear_logs">清空</string>
+    <string name="confirm_clear_logs">清空日志</string>
+    <string name="confirm_clear_logs_message">确定要清空所有日志吗？此操作无法撤销。</string>
+    <string name="no_logs">暂无日志</string>
+    <string name="all">全部</string>
+    <string name="log_level_info">信息</string>
+    <string name="log_level_warning">警告</string>
+    <string name="log_level_exception">异常</string>
+
+    <!-- 崩溃对话框 -->
+    <string name="crash_dialog_title">应用错误</string>
+    <string name="crash_dialog_message">发生错误，应用将尝试恢复。</string>
+    <string name="crash_dialog_severe_title">严重错误</string>
+    <string name="crash_dialog_severe_message">发生严重错误，应用无法自动恢复。</string>
+    <string name="view_crash_report">查看崩溃报告</string>
+    <string name="view_logs">查看日志</string>
+    <string name="use_fallback_mode">使用降级模式</string>
+    <string name="close_app">关闭应用</string>
 </resources>
+

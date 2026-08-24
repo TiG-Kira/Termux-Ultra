@@ -392,6 +392,17 @@ fun SettingsScreen(
             )
             add(
                 SettingItem(
+                    title = context.getString(R.string.log_management),
+                    description = context.getString(R.string.log_management_desc),
+                    iconRes = R.drawable.ic_bug,
+                    action = {
+                        val intent = Intent(context, com.termux.app.activities.LogViewerActivity::class.java)
+                        context.startActivity(intent)
+                    }
+                )
+            )
+            add(
+                SettingItem(
                     title = context.getString(R.string.storage_title),
                     description = context.getString(R.string.storage_description),
                     iconRes = R.drawable.ic_storage,

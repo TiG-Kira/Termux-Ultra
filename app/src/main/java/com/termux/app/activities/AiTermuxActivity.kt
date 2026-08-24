@@ -1335,7 +1335,7 @@ private fun AiSetupScreen(vm: AiTermuxViewModel, onBack: () -> Unit) {
                                                     )
                                                     vm.updateConfig(cfg)
                                                 } else {
-                                                    SnackbarHelper.show(ctx, "下载失败：", Snackbar.LENGTH_LONG, null)
+                                                    SnackbarHelper.show(ctx, "下载失败：" + localProgressMsg, Snackbar.LENGTH_LONG, null)
                                                 }
                                                 localDownloading = false
                                                 localRefresh++
@@ -1394,6 +1394,7 @@ private fun AiSetupScreen(vm: AiTermuxViewModel, onBack: () -> Unit) {
                     singleLine = true
                 )
             }
+
             }
 
             item { SectionTitle("5. 温度 (%.1f)".format(temperature)) }
@@ -1476,6 +1477,7 @@ private fun AiSetupScreen(vm: AiTermuxViewModel, onBack: () -> Unit) {
                         onClick = {
                             if (provider == "local") {
                                 if (!AiLocalModel.isLocalModelReady()) {
+                                    AiLocalModel.resetLocalModelConfigIfConfigured()
                                     testResult = "❌ 请先完成本地大模型的下载与配置"
                                     return@Button
                                 }

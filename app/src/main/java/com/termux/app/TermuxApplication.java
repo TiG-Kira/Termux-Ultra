@@ -52,6 +52,9 @@ public class TermuxApplication extends Application {
     public void onCreate() {
         super.onCreate();
 
+        // Initialize LogManager first
+        com.termux.app.utils.LogManager.init(this);
+
         TermuxCrashUtils.setCrashHandler(this);
         setLogLevel();
 

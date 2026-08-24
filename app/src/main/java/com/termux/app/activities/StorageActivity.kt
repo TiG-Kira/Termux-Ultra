@@ -1,8 +1,12 @@
 package com.termux.app.activities
 
+import android.app.usage.StorageStatsManager
+import android.content.Context
 import android.os.Bundle
 import android.os.Environment
+import android.os.Process
 import android.os.StatFs
+import android.os.storage.StorageManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
@@ -248,6 +252,23 @@ private fun scanTermuxStorage(context: android.content.Context): List<CategorySt
     }.sortedByDescending { it.sizeBytes }
 }
 
+
+/**
+ * 获取与 Android 系统设置中一致的当前应用总占用（app + data，含缓存）。
+ * 使用 StorageStatsManager 查询本 UID 的统计信息，避免文件大小累加导致的虚高。
+ */
+private fun getAccurateAppStorageBytes(context: Context): Long {
+    return try {
+        val storageStatsManager = context.getSystemService(Context.STORAGE_STATS_SERVICE) as StorageStatsManager
+        val storageManager = context.getSystemService(Context.STORAGE_SERVICE) as StorageManager
+        val uuid = storageManager.getUuidForPath(Environment.getDataDirectory()) ?: StorageManager.UUID_DEFAULT
+        val stats = storageStatsManager.queryStatsForUid(uuid, Process.myUid())
+        stats.appBytes + stats.dataBytes
+    } catch (_: Exception) {
+        0L
+    }
+}
+
 private fun cleanItem(item: CleanableItem): Boolean {
     return try {
         val file = File(item.path)
@@ -270,8 +291,8 @@ fun StorageScreen(onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
     var isScanning by remember { mutableStateOf(true) }
     var categories by remember { mutableStateOf<List<CategoryStorage>>(emptyList()) }
+    var accurateUsedBytes by remember { mutableStateOf(0L) }
     var showCleanConfirm by remember { mutableStateOf(false) }
-    var cleaningItems by remember { mutableStateOf<List<CleanableItem>>(emptyList()) }
     var showResult by remember { mutableStateOf(false) }
     var resultMessage by remember { mutableStateOf("") }
     var selectedCleanablePaths by remember { mutableStateOf<Set<String>>(emptySet()) }
@@ -279,9 +300,11 @@ fun StorageScreen(onBack: () -> Unit) {
 
     suspend fun scan() {
         isScanning = true
-        categories = withContext(Dispatchers.IO) {
-            scanTermuxStorage(context)
+        val (scannedCategories, accurateBytes) = withContext(Dispatchers.IO) {
+            scanTermuxStorage(context) to getAccurateAppStorageBytes(context)
         }
+        categories = scannedCategories
+        accurateUsedBytes = accurateBytes
         isScanning = false
     }
 
@@ -309,34 +332,34 @@ fun StorageScreen(onBack: () -> Unit) {
         stat.blockCountLong * stat.blockSizeLong
     }
 
-    val usedBytes by remember(categories) {
-        mutableStateOf(categories.sumOf { it.sizeBytes })
+    val freeBytes by remember(categories) {
+        mutableStateOf(
+            StatFs(Environment.getDataDirectory().path).availableBytes
+        )
     }
-
-    val freeBytes = totalStorageBytes - usedBytes
 
     val allCleanableItems = categories.flatMap { it.cleanableItems }
     val totalCleanableBytes = allCleanableItems.sumOf { it.sizeBytes }
 
-    fun doClean(items: List<CleanableItem>) {
-        cleaningItems = items
+    fun doClean() {
         showCleanConfirm = true
     }
 
     fun confirmClean() {
         showCleanConfirm = false
+        val itemsToClean = allCleanableItems.filter { it.path in selectedCleanablePaths }
         val failedItems = mutableListOf<String>()
-        cleaningItems.forEach { item ->
+        itemsToClean.forEach { item ->
             if (!cleanItem(item)) {
                 failedItems.add(item.name)
             }
         }
         scope.launch {
+            val totalFreed = itemsToClean.sumOf { it.sizeBytes }
+            selectedCleanablePaths = emptySet()
             categories = withContext(Dispatchers.IO) {
                 scanTermuxStorage(context)
             }
-            selectedCleanablePaths = emptySet()
-            val totalFreed = cleaningItems.sumOf { it.sizeBytes }
             resultMessage = if (failedItems.isEmpty()) {
                 context.getString(R.string.storage_clean_success, formatSize(context, totalFreed))
             } else {
@@ -402,7 +425,7 @@ fun StorageScreen(onBack: () -> Unit) {
                                 )
                                 Text(
                                     text = if (isScanning) context.getString(R.string.storage_scanning)
-                                    else formatSize(context, usedBytes),
+                                    else formatSize(context, accurateUsedBytes),
                                     fontSize = 28.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = MiuixTheme.colorScheme.onSurface,
@@ -435,7 +458,7 @@ fun StorageScreen(onBack: () -> Unit) {
                         Spacer(modifier = Modifier.height(12.dp))
 
                         if (!isScanning && totalStorageBytes > 0) {
-                            val usagePercent = (usedBytes.toDouble() / totalStorageBytes * 100).coerceIn(0.0, 100.0)
+                            val usagePercent = (accurateUsedBytes.toDouble() / totalStorageBytes * 100).coerceIn(0.0, 100.0)
                             LinearProgressIndicator(
                                 progress = (usagePercent / 100).toFloat(),
                                 modifier = Modifier
@@ -448,6 +471,12 @@ fun StorageScreen(onBack: () -> Unit) {
                                 text = String.format("%.1f%%", usagePercent),
                                 fontSize = 12.sp,
                                 color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                            )
+                            Text(
+                                text = context.getString(R.string.storage_category_estimate_note),
+                                fontSize = 11.sp,
+                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                modifier = Modifier.padding(top = 8.dp)
                             )
                         }
                     }
@@ -601,7 +630,7 @@ fun StorageScreen(onBack: () -> Unit) {
                                 Spacer(modifier = Modifier.height(16.dp))
 
                                 Button(
-                                    onClick = { doClean(selectedCleanable) },
+                                    onClick = { doClean() },
                                     enabled = selectedCleanable.isNotEmpty(),
                                     modifier = Modifier.fillMaxWidth()
                                 ) {
@@ -639,85 +668,87 @@ fun StorageScreen(onBack: () -> Unit) {
                 }
             }
         }
-    }
+        // 清理确认对话框
+        val cleaningItems = allCleanableItems.filter { it.path in selectedCleanablePaths }
+        OverlayDialog(
+            title = context.getString(R.string.storage_clean_confirm_title),
+            summary = context.getString(
+                R.string.storage_clean_confirm_summary,
+                cleaningItems.size,
+                formatSize(context, cleaningItems.sumOf { it.sizeBytes })
+            ),
+            show = showCleanConfirm,
+            onDismissRequest = { showCleanConfirm = false },
+            content = {
+                Column {
+                    Button(
+                        onClick = { confirmClean() },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = context.getString(R.string.storage_clean_confirm),
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    TextButton(
+                        text = context.getString(R.string.storage_clean_cancel),
+                        onClick = { showCleanConfirm = false },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+        )
 
-    // 清理确认对话框
-    OverlayDialog(
-        title = context.getString(R.string.storage_clean_confirm_title),
-        summary = context.getString(
-            R.string.storage_clean_confirm_summary,
-            cleaningItems.size,
-            formatSize(context, cleaningItems.sumOf { it.sizeBytes })
-        ),
-        show = showCleanConfirm,
-        onDismissRequest = { showCleanConfirm = false },
-        content = {
-            Column {
+        // 清理结果对话框
+        OverlayDialog(
+            title = "清理结果",
+            summary = resultMessage,
+            show = showResult,
+            onDismissRequest = { showResult = false },
+            content = {
                 Button(
-                    onClick = { confirmClean() },
+                    onClick = { showResult = false },
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
-                        text = context.getString(R.string.storage_clean_confirm),
-                        fontSize = 14.sp,
+                        text = context.getString(R.string.ok),
                         fontWeight = FontWeight.Bold,
                         color = Color.White
                     )
                 }
-                Spacer(modifier = Modifier.height(8.dp))
-                TextButton(
-                    text = context.getString(R.string.storage_clean_cancel),
-                    onClick = { showCleanConfirm = false },
-                    modifier = Modifier.fillMaxWidth()
-                )
             }
-        }
-    )
-
-    // 清理结果对话框
-    OverlayDialog(
-        title = "清理结果",
-        summary = resultMessage,
-        show = showResult,
-        onDismissRequest = { showResult = false },
-        content = {
-            Button(
-                onClick = { showResult = false },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(
-                    text = context.getString(R.string.ok),
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White
-                )
-            }
-        }
-    )
+        )
+    }
 }
-// 本地大模型详情页
-@androidx.compose.runtime.Composable
-private fun LocalModelDetailScreen(
-    onBack: () -> Unit,
-    onDeleted: () -> Unit
-) {
-    val context = LocalContext.current
-    val scrollBehavior = MiuixScrollBehavior()
-    val scope = rememberCoroutineScope()
-    var refresh by remember { mutableStateOf(0) }
-    var showDeleteConfirm by remember { mutableStateOf(false) }
 
-    val selected = AiLocalModel.getSelectedModel()
-    val installed = remember(refresh) { AiLocalModel.isLocalModelReady() }
-    val size = remember(refresh) { AiLocalModel.getInstalledModelSize() }
-    val path = remember(refresh) { AiLocalModel.modelDir().absolutePath }
-    val downloadedAt = remember(refresh) { AiLocalModel.getDownloadedAt() }
-    val dateText = remember(downloadedAt) {
-        if (downloadedAt > 0) {
-            try {
-                java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault())
-                    .format(java.util.Date(downloadedAt))
-            } catch (e: Exception) { "" }
-        } else ""
+
+    // 本地大模型详情页
+    @androidx.compose.runtime.Composable
+    private fun LocalModelDetailScreen(
+        onBack: () -> Unit,
+        onDeleted: () -> Unit
+    ) {
+        val context = LocalContext.current
+        val scrollBehavior = MiuixScrollBehavior()
+        val scope = rememberCoroutineScope()
+        var refresh by remember { mutableStateOf(0) }
+        var showDeleteConfirm by remember { mutableStateOf(false) }
+
+        val selected = AiLocalModel.getSelectedModel()
+        val installed = remember(refresh) { AiLocalModel.isLocalModelReady() }
+        val size = remember(refresh) { AiLocalModel.getInstalledModelSize() }
+        val path = remember(refresh) { AiLocalModel.modelDir().absolutePath }
+        val downloadedAt = remember(refresh) { AiLocalModel.getDownloadedAt() }
+        val dateText = remember(downloadedAt) {
+            if (downloadedAt > 0) {
+                try {
+                    java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault())
+                        .format(java.util.Date(downloadedAt))
+                } catch (e: Exception) { "" }
+            } else ""
     }
 
     Scaffold(
@@ -795,44 +826,46 @@ private fun LocalModelDetailScreen(
                 }
             }
         }
-    }
 
-    OverlayDialog(
-        title = context.getString(R.string.storage_local_model_delete),
-        summary = context.getString(R.string.storage_local_model_delete_confirm_summary),
-        show = showDeleteConfirm,
-        onDismissRequest = { showDeleteConfirm = false },
-        content = {
-            Column {
-                Button(
-                    onClick = {
-                        showDeleteConfirm = false
-                        scope.launch {
-                            withContext(Dispatchers.IO) { AiLocalModel.deleteModel() }
-                            onDeleted()
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth().height(48.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        color = if (androidx.compose.foundation.isSystemInDarkTheme()) Color(0xFF5B0000) else Color(0xFFFFEBEE)
-                    )
-                ) {
-                    Text(
-                        text = context.getString(R.string.storage_local_model_delete),
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFFD32F2F)
+        OverlayDialog(
+            title = context.getString(R.string.storage_local_model_delete),
+            summary = context.getString(R.string.storage_local_model_delete_confirm_summary),
+            show = showDeleteConfirm,
+            onDismissRequest = { showDeleteConfirm = false },
+            content = {
+                Column {
+                    Button(
+                        onClick = {
+                            showDeleteConfirm = false
+                            scope.launch {
+                                withContext(Dispatchers.IO) { AiLocalModel.deleteModel() }
+                                onDeleted()
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth().height(48.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            color = if (androidx.compose.foundation.isSystemInDarkTheme()) Color(0xFF5B0000) else Color(0xFFFFEBEE)
+                        )
+                    ) {
+                        Text(
+                            text = context.getString(R.string.storage_local_model_delete),
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFFD32F2F)
+                        )
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    TextButton(
+                        text = context.getString(R.string.storage_clean_cancel),
+                        onClick = { showDeleteConfirm = false },
+                        modifier = Modifier.fillMaxWidth()
                     )
                 }
-                Spacer(Modifier.height(8.dp))
-                TextButton(
-                    text = context.getString(R.string.storage_clean_cancel),
-                    onClick = { showDeleteConfirm = false },
-                    modifier = Modifier.fillMaxWidth()
-                )
             }
-        }
-    )
+        )
+    }
+
+
 }
 
 @androidx.compose.runtime.Composable

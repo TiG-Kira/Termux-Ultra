@@ -1,4 +1,4 @@
-package com.termux.app.plugin
+﻿package com.termux.app.plugin
 
 import android.annotation.SuppressLint
 import android.content.Context
@@ -171,6 +171,7 @@ class PluginWebViewActivity : ComponentActivity() {
                     factory = { ctx ->
                         WebView(ctx).apply {
                             setBackgroundColor(0)
+                            setLayerType(android.view.View.LAYER_TYPE_SOFTWARE, null)
                             settings.apply {
                                 javaScriptEnabled = true
                                 domStorageEnabled = true
@@ -345,14 +346,23 @@ class PluginWebViewActivity : ComponentActivity() {
     private fun WebView.injectBackgroundFix() {
         val js = """
             (function() {
-                var style = document.createElement('style');
-                style.textContent = 'html,body{margin:0;padding:0;height:100%}html{background:transparent!important}';
-                document.head.appendChild(style);
-                if(document.body && document.body.style && !document.body.style.background) {
-                    var computed = window.getComputedStyle(document.body);
-                    if(computed && computed.backgroundImage && computed.backgroundImage !== 'none') {
-                        document.documentElement.style.background = computed.backgroundImage;
-                    }
+                var html = document.documentElement;
+                var body = document.body;
+                if (html) { html.style.margin = '0'; html.style.padding = '0'; html.style.minHeight = '100%'; }
+                if (body) { body.style.margin = '0'; body.style.padding = '0'; body.style.minHeight = '100vh'; }
+                var target = body || html;
+                if (!target) return;
+                var computed = window.getComputedStyle(target);
+                var bgImage = computed.backgroundImage;
+                var bgColor = computed.backgroundColor;
+                var bg = '';
+                if (bgImage && bgImage !== 'none') {
+                    bg = bgImage;
+                } else if (bgColor && bgColor !== 'rgba(0, 0, 0, 0)' && bgColor !== 'transparent') {
+                    bg = bgColor;
+                }
+                if (bg) {
+                    html.style.setProperty('background', bg, 'important');
                 }
             })();
         """.trimIndent()

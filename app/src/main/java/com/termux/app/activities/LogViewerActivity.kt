@@ -5,14 +5,14 @@ import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.ui.unit.Dp
 import androidx.core.view.WindowCompat
 import androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner
 import com.termux.app.compose.KiTerminalTheme
+import com.termux.app.compose.LogViewerScreen
 import com.termux.app.compose.NavigationHelper
-import com.termux.app.compose.ResourcesScreen
 
-class FeatureCenterActivity : ComponentActivity() {
+class LogViewerActivity : ComponentActivity() {
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_NAVIGATION)
@@ -25,7 +25,9 @@ class FeatureCenterActivity : ComponentActivity() {
                 LocalNavigationEventDispatcherOwner provides navDispatcherOwner
             ) {
                 KiTerminalTheme {
-                    ResourcesScreen(navBarBottomPadding = Dp(0f), showBackButton = true)
+                    LogViewerScreen(
+                        onBack = { finish() }
+                    )
                 }
             }
         }

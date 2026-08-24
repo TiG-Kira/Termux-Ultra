@@ -231,6 +231,15 @@ class MainActivity : FragmentActivity() {
                 }
             }
         } catch (t: Throwable) {
+            // 记录异常日志
+            try {
+                com.termux.app.utils.LogManager.getInstance().exception(
+                    "MainActivity",
+                    "渲染异常: ${t.message}",
+                    t
+                )
+            } catch (ignored: Throwable) {}
+
             // 启动阶段渲染异常 → 按崩溃位置粒度降级：
             // 能识别到具体页面的 → 屏蔽该页面并重建（让 MainScreen 过滤入口）
             // 无法识别 → 终端锁定 Fallback
@@ -273,6 +282,15 @@ class MainActivity : FragmentActivity() {
                 handler.postDelayed(sessionRefreshCallback, sessionRefreshPeriodMs)
             }
         } catch (t: Throwable) {
+            // 记录异常日志
+            try {
+                com.termux.app.utils.LogManager.getInstance().exception(
+                    "MainActivity",
+                    "onResume 异常: ${t.message}",
+                    t
+                )
+            } catch (ignored: Throwable) {}
+
             // onResume 期间也可能因低版本缺少 API 而崩溃，统一走分级降级
             FallbackHelper.onMainRenderFailure(this, t)
         }

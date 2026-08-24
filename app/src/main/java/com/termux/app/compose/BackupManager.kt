@@ -51,7 +51,7 @@ object BackupManager {
     fun createBackup(context: Context, onProgress: ((Int, Int, String) -> Unit)? = null): String? {
         isBackupCancelled = false
         return try {
-            val backupDir = File(Environment.getExternalStorageDirectory(), "TermuxBackup")
+            val backupDir = File(Environment.getExternalStorageDirectory(), "Termux/Backup")
             backupDir.mkdirs()
 
             val timestamp = System.currentTimeMillis()
@@ -218,7 +218,7 @@ object BackupManager {
     }
 
     fun getBackupFiles(context: Context): List<File> {
-        val backupDir = File(Environment.getExternalStorageDirectory(), "TermuxBackup")
+        val backupDir = File(Environment.getExternalStorageDirectory(), "Termux/Backup")
         return backupDir.listFiles { _, name ->
             name.startsWith("termuxbackup_") && (name.endsWith(".zip") || name.endsWith(".tar.xz") || name.endsWith(".tar.gz") || name.endsWith(".tar"))
         }?.toList() ?: emptyList()

@@ -10,6 +10,7 @@ import androidx.core.app.NotificationCompat
 import com.google.android.material.snackbar.Snackbar
 import com.termux.R
 import com.termux.app.compose.ApiCompat
+import com.termux.app.utils.LogManager
 import com.termux.app.utils.SnackbarHelper
 
 /**
@@ -118,9 +119,8 @@ object FallbackHelper {
             return
         }
 
-        // 无法映射到具体页面：终端锁定 Fallback
-        ApiCompat.markMiuixUiFailed()
-        enterTerminalOnlyMode(mainActivity)
+        // 无法映射到具体页面：弹出崩溃对话框，让用户选择操作
+        showCrashDialog(mainActivity, throwable, canRecover = true)
     }
 
     /**
@@ -135,13 +135,18 @@ object FallbackHelper {
     /**
      * 终端锁定：先检查/初始化 bootstrap → 启动 TermuxActivity（作为主页）。
      * 若 bootstrap 初始化或跳转过程中也抛异常 → fatalExit(-1)。
+     *
+     * @param showNotify 是否发送降级通知，降级模式手动触发时传 false。
      */
-    fun enterTerminalOnlyMode(activity: Activity) {
-        showNotification(
-            activity,
-            title = activity.getString(R.string.low_android_terminal_mode_title),
-            message = activity.getString(R.string.low_android_terminal_mode_message)
-        )
+    @JvmOverloads
+    fun enterTerminalOnlyMode(activity: Activity, showNotify: Boolean = true) {
+        if (showNotify) {
+            showNotification(
+                activity,
+                title = activity.getString(R.string.low_android_terminal_mode_title),
+                message = activity.getString(R.string.low_android_terminal_mode_message)
+            )
+        }
         try {
             TermuxInstaller.setupBootstrapIfNeeded(activity) {
                 activity.runOnUiThread {
@@ -150,6 +155,17 @@ object FallbackHelper {
             }
         } catch (t: Throwable) {
             fatalExit(activity)
+        }
+    }
+
+    /**
+     * 启用降级模式（不发送通知），用于崩溃对话框中选择降级模式。
+     * 直接标记 miuix 失败并进入终端锁定模式（跳过通知）。
+     */
+    fun enableFallbackMode(context: Context) {
+        ApiCompat.markMiuixUiFailed()
+        if (context is Activity) {
+            enterTerminalOnlyMode(context, showNotify = false)
         }
     }
 
@@ -174,6 +190,37 @@ object FallbackHelper {
         } catch (ignored: Throwable) {
         }
         System.exit(-1)
+    }
+
+    // ─── 内部辅助：崩溃对话框 ──────────────────────────────────────
+
+    /**
+     * 显示崩溃对话框，让用户选择查看崩溃报告、查看日志、确认（可恢复时）
+     * 或使用降级模式、关闭应用（不可恢复时）
+     */
+    private fun showCrashDialog(activity: Activity, throwable: Throwable, canRecover: Boolean) {
+        try {
+            val errorMessage = buildString {
+                append(throwable.javaClass.simpleName)
+                append(": ")
+                append(throwable.message ?: "Unknown error")
+            }
+
+            com.termux.app.activities.AlertDialogActivity.startCrashError(
+                activity,
+                errorMessage,
+                canRecover
+            )
+        } catch (dialogError: Throwable) {
+            // 如果连对话框都弹不出来，直接尝试进入终端锁定模式
+            try {
+                ApiCompat.markMiuixUiFailed()
+                enterTerminalOnlyMode(activity)
+            } catch (terminalError: Throwable) {
+                // 最后的尝试失败，只能退出应用
+                fatalExit(activity)
+            }
+        }
     }
 
     // ─── 内部辅助：Throwable → Page 映射 ──────────────────────────

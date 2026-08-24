@@ -112,14 +112,45 @@ object AiLocalModel {
         return isModelInstalled(entry)
     }
 
-    /** llama.cpp 是否已安装 */
-    fun isLlamaCppInstalled(): Boolean = File(llamaCliPath()).exists()
+    /** llama.cpp 是否已安装（检查二进制存在且可执行） */
+    fun isLlamaCppInstalled(): Boolean {
+        val cli = File(llamaCliPath())
+        if (!cli.exists() || !cli.canExecute()) return false
+        return runCatching {
+            val pb = ProcessBuilder(llamaCliPath(), "--version")
+            pb.environment()["PATH"] = prefixDir() + "/bin:" + (pb.environment()["PATH"] ?: "")
+            pb.redirectErrorStream(true)
+            val proc = pb.start()
+            val ok = proc.waitFor(10, java.util.concurrent.TimeUnit.SECONDS)
+            ok && proc.exitValue() == 0
+        }.getOrDefault(false)
+    }
 
     /** 已安装模型占用磁盘空间 */
     fun getInstalledModelSize(): Long {
         val entry = getSelectedModel() ?: return 0L
         val f = modelFile(entry)
         return if (f.exists()) f.length() else 0L
+    }
+
+    /** 发现本地模型未就绪时，清除记录并重置 AI 配置里的 local provider flag */
+    fun resetLocalModelConfigIfConfigured() {
+        val c = appContext ?: return
+        c.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            ?.edit()
+            ?.remove(KEY_SELECTED_MODEL_ID)
+            ?.remove(KEY_DOWNLOADED_AT)
+            ?.apply()
+        runCatching {
+            val cfg = AiTermuxPrefs.getConfig(c)
+            if (cfg.providerConfig.provider == "local") {
+                val reset = cfg.copy(
+                    providerConfig = cfg.providerConfig.copy(provider = "custom"),
+                    isConfigured = false
+                )
+                AiTermuxPrefs.saveConfig(c, reset)
+            }
+        }
     }
 
     /** 删除本地大模型，返回释放的字节数 */
@@ -176,9 +207,10 @@ object AiLocalModel {
             // 1. 确保 llama.cpp 已安装
             if (!isLlamaCppInstalled()) {
                 onProgress(0f, "正在安装 llama.cpp 运行时…")
-                runPkgInstall()
+                val installResult = runPkgInstall()
                 if (!isLlamaCppInstalled()) {
-                    onProgress(0f, "llama.cpp 安装失败，请稍后重试")
+                    onProgress(0f, "llama.cpp 安装失败：Termux 包仓库中可能不包含 llama.cpp，请手动在 Termux 中执行 pkg install llama.cpp")
+                    resetLocalModelConfigIfConfigured()
                     return@withContext false
                 }
             }
@@ -246,22 +278,50 @@ object AiLocalModel {
                 val tmp = File(modelDir(), "${entry.fileName}.part")
                 tmp.delete()
             } catch (_: Exception) {}
-            onProgress(0f, "下载失败：${e.message ?: "未知错误"}")
+            android.util.Log.e("AiLocalModel", "Download failed: ${e.javaClass.name}", e)
+            val detail = e.toString()
+            val errorMsg = when {
+                e is java.net.UnknownHostException -> "无法连接服务器，请检查网络或VPN"
+                e is java.net.SocketTimeoutException -> "连接超时，请检查网络"
+                e is javax.net.ssl.SSLException -> "SSL连接失败，请检查网络或VPN"
+                e is java.io.IOException && e.message != null -> "网络错误：${e.message}"
+                detail.contains("403") -> "下载被拒绝(403)，请检查网络"
+                detail.contains("404") -> "文件不存在(404)，链接可能已失效"
+                else -> "下载失败(${e.javaClass.simpleName})，请检查网络后重试"
+            }
+            resetLocalModelConfigIfConfigured()
+            onProgress(0f, errorMsg)
             false
         }
     }
 
-    private fun runPkgInstall() {
-        try {
-            val pb = ProcessBuilder(
-                prefixDir() + "/bin/sh", "-c",
-                "pkg install -y llama.cpp 2>&1"
-            )
-            pb.redirectErrorStream(true)
-            val proc = pb.start()
-            proc.inputStream.bufferedReader().use { it.readText() }
-            proc.waitFor()
-        } catch (_: Exception) {}
+    private fun runPkgInstall(): String {
+        val commands = listOf(
+            "pkg install -y llama.cpp 2>&1",
+            "apt install -y llama.cpp 2>&1",
+            "pkg install -y llama-cpp 2>&1",
+            "apt install -y llama-cpp 2>&1"
+        )
+        for (cmd in commands) {
+            try {
+                android.util.Log.d("AiLocalModel", "Trying: $cmd")
+                val pb = ProcessBuilder(
+                    prefixDir() + "/bin/sh", "-c", cmd
+                )
+                pb.redirectErrorStream(true)
+                pb.environment()["PATH"] = prefixDir() + "/bin:" + (pb.environment()["PATH"] ?: "")
+                val proc = pb.start()
+                val output = proc.inputStream.bufferedReader().use { it.readText() }
+                val exitCode = proc.waitFor()
+                android.util.Log.d("AiLocalModel", "Exit code: $exitCode, output: $output")
+                if (exitCode == 0 && isLlamaCppInstalled()) {
+                    return "ok"
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("AiLocalModel", "Install failed for: $cmd", e)
+            }
+        }
+        return "failed"
     }
 
     /** 构造 Qwen chat 模板提示词 */
@@ -307,8 +367,14 @@ object AiLocalModel {
 
     private fun requireReady(): String? {
         val entry = getSelectedModel() ?: return "未配置本地大模型，请先完成下载配置"
-        if (!isLlamaCppInstalled()) return "未检测到 llama.cpp，请先在「本地大模型」中完成下载与自动配置"
-        if (!isModelInstalled(entry)) return "本地模型文件不存在，请重新下载"
+        if (!isLlamaCppInstalled()) {
+            resetLocalModelConfigIfConfigured()
+            return "未检测到 llama.cpp，请先在「本地大模型」中完成下载与自动配置"
+        }
+        if (!isModelInstalled(entry)) {
+            resetLocalModelConfigIfConfigured()
+            return "本地模型文件不存在，请重新下载"
+        }
         return null
     }
 
@@ -327,11 +393,18 @@ object AiLocalModel {
         val promptFile = writePromptFile(buildChatPrompt(messages))
             ?: run { emit(StreamChunk.Error("无法写入提示词临时文件")); return@flow }
 
+        var proc: Process? = null
         try {
             val pb = buildProcess(entry, promptFile, config.temperature)
             pb.redirectErrorStream(false)
-            val proc = pb.start()
-            proc.errorStream.bufferedReader().use { it.readText() } // 丢弃加载日志
+            proc = pb.start()
+
+            // 在后台线程读取 stderr，防止管道缓冲区满导致卡死
+            val stderrThread = Thread({
+                try {
+                    proc?.errorStream?.bufferedReader()?.use { it.readText() }
+                } catch (_: Exception) {}
+            }, "llama-stderr").apply { isDaemon = true; start() }
 
             val reader = BufferedReader(InputStreamReader(proc.inputStream, Charsets.UTF_8))
             val fullText = StringBuilder()
@@ -339,6 +412,7 @@ object AiLocalModel {
             while (true) {
                 if (isCancelled()) {
                     proc.destroy()
+                    proc.waitFor(3, java.util.concurrent.TimeUnit.SECONDS)
                     emit(StreamChunk.Cancelled)
                     break
                 }
@@ -347,12 +421,15 @@ object AiLocalModel {
                 fullText.append(line).append('\n')
                 emit(StreamChunk.Content(line + "\n"))
             }
-            proc.waitFor()
+            proc.waitFor(60, java.util.concurrent.TimeUnit.SECONDS)
+            stderrThread.join(3000)
             val output = fullText.toString().trim('\n')
             emit(StreamChunk.Done(fullText = output))
         } catch (e: Exception) {
-            emit(StreamChunk.Error("本地模型推理失败：${e.message ?: "未知错误"}"))
+            android.util.Log.e("AiLocalModel", "Local inference failed", e)
+            emit(StreamChunk.Error("本地模型推理失败：${e.message ?: e.javaClass.simpleName}"))
         } finally {
+            try { proc?.destroy() } catch (_: Exception) {}
             promptFile.delete()
         }
     }

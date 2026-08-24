@@ -10,6 +10,8 @@ import com.termux.shared.markdown.MarkdownUtils;
 import com.termux.shared.models.errors.Error;
 import com.termux.shared.termux.AndroidUtils;
 
+import java.lang.reflect.Method;
+
 import java.nio.charset.Charset;
 
 /**
@@ -74,6 +76,25 @@ public class CrashHandler implements Thread.UncaughtExceptionHandler {
                         Charset.defaultCharset(), reportString.toString(), false);
         if (error != null) {
             Logger.logErrorExtended(LOG_TAG, error.toString());
+        }
+
+        // Also record the exception in the app log manager
+        logExceptionToLogManager(throwable);
+    }
+
+    /**
+     * Try to record the exception into the app's {@code LogManager} via reflection,
+     * since termux-shared cannot depend on the app module directly.
+     */
+    private static void logExceptionToLogManager(Throwable throwable) {
+        try {
+            Class<?> logManagerClass = Class.forName("com.termux.app.utils.LogManager");
+            Method getInstance = logManagerClass.getMethod("getInstance");
+            Object instance = getInstance.invoke(null);
+            Method exceptionMethod = logManagerClass.getMethod("exception", String.class, String.class, Throwable.class);
+            exceptionMethod.invoke(instance, "CrashHandler", "Uncaught exception", throwable);
+        } catch (Throwable ignored) {
+            // LogManager not available in this build
         }
     }
 

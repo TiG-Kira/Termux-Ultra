@@ -1,4 +1,4 @@
-package com.termux.app.compose
+﻿package com.termux.app.compose
 
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -52,6 +52,7 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Edit
@@ -64,6 +65,8 @@ import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.rounded.Stop
+import androidx.compose.material.icons.rounded.CheckCircleOutline
+import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.automirrored.rounded.ArrowForward
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -87,6 +90,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
@@ -106,6 +110,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import top.yukonga.miuix.kmp.basic.Button
+import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.DropdownEntry
 import top.yukonga.miuix.kmp.basic.DropdownItem
@@ -1020,7 +1026,7 @@ private fun TipsAgentCard(
 }
 
 @Composable
-private fun HorizontalTipsContent(
+fun HorizontalTipsContent(
     aiTermuxEnabled: Boolean,
     showWelcomeCard: Boolean,
     showKeepAliveWarning: Boolean,
@@ -1030,7 +1036,8 @@ private fun HorizontalTipsContent(
     onKeepAliveClose: () -> Unit
 ) {
     val context = LocalContext.current
-    
+    val isDark = isSystemInDarkTheme()
+
     LazyRow(
         state = rememberLazyListState(),
         modifier = Modifier.fillMaxWidth(),
@@ -1044,32 +1051,53 @@ private fun HorizontalTipsContent(
         }
         if (showWelcomeCard) {
             item {
-                WelcomeCard(
-                    text = stringResource(R.string.terminal_welcome_message),
-                    onClose = onWelcomeClose,
-                    horizontalMode = true
+                val welcomeGradient = if (isDark)
+                    Brush.linearGradient(listOf(Color(0xFF1E40AF), Color(0xFF5B21B6)))
+                else
+                    Brush.linearGradient(listOf(Color(0xFF2563EB), Color(0xFF7C3AED)))
+                OverviewHorizontalTipCard(
+                    gradient = welcomeGradient,
+                    icon = Icons.Rounded.Info,
+                    iconTint = Color.White,
+                    iconBackgroundColor = Color.Transparent,
+                    iconStyle = HeroIconStyle.FROSTED_GLASS,
+                    title = stringResource(R.string.terminal_welcome_title),
+                    description = stringResource(R.string.terminal_welcome_message),
+                    titleColor = Color.White,
+                    descriptionColor = Color.White.copy(alpha = 0.72f),
+                    onClose = onWelcomeClose
                 )
             }
         }
         if (showKeepAliveWarning) {
             item {
-                KeepAliveWarningCard(
+                OverviewHorizontalTipCard(
+                    backgroundColor = if (isDark) Color(0xFF3D3514) else Color(0xFFFFF9C4),
+                    icon = Icons.Rounded.Warning,
+                    iconTint = Color.White,
+                    iconBackgroundColor = Color.Transparent,
+                    iconStyle = HeroIconStyle.GRADIENT,
+                    iconGradientColors = listOf(Color(0xFFF59E0B), Color(0xFFFDD835)),
+                    title = stringResource(R.string.keep_alive_warning_title),
+                    description = stringResource(R.string.keep_alive_warning_message),
+                    titleColor = if (isDark) Color.White else Color.Black,
+                    descriptionColor = if (isDark) Color.White.copy(alpha = 0.8f) else Color.Black.copy(alpha = 0.8f),
+                    statusBadgeText = "需注意",
+                    statusBadgeColor = if (isDark) Color(0xFFFCD34D) else Color(0xFFB45309),
+                    statusBadgeBackgroundColor = if (isDark) Color(0xFFFCD34D).copy(alpha = 0.14f) else Color(0xFFF59E0B).copy(alpha = 0.14f),
                     onClose = onKeepAliveClose,
-                    horizontalMode = true
+                    closeButtonColor = if (isDark) Color(0xFFFCD34D).copy(alpha = 0.15f) else Color(0xFFB45309).copy(alpha = 0.15f),
+                    closeButtonIconColor = if (isDark) Color(0xFFFCD34D) else Color(0xFFB45309)
                 )
             }
         }
         if (showLowCard) {
             item {
-                LowAndroidWarningCard(horizontalMode = true)
+                LowAndroidOverviewTipCard(context = context)
             }
         } else {
             item {
-                ServiceStatusCard(
-                    status = serviceStatus,
-                    killedSessionName = null,
-                    horizontalMode = true
-                )
+                ServiceStatusOverviewTipCard(status = serviceStatus)
             }
         }
     }
@@ -1119,6 +1147,374 @@ private fun VerticalTipsContent(
     }
 }
 
+@Composable
+private fun ServiceStatusOverviewTipCard(status: ServiceStatus) {
+    val isDark = isSystemInDarkTheme()
+
+    val title = when (status) {
+        ServiceStatus.NORMAL -> stringResource(R.string.service_status_normal)
+        ServiceStatus.WAKE_LOCK_ACTIVE -> stringResource(R.string.service_status_wake_lock)
+        ServiceStatus.SERVICE_STOPPED -> stringResource(R.string.service_status_stopped)
+        ServiceStatus.MEMORY_WARNING -> stringResource(R.string.memory_warning_title)
+        ServiceStatus.MEMORY_KILL -> stringResource(R.string.memory_kill_title)
+        ServiceStatus.SESSION_KILLED -> stringResource(R.string.service_status_killed)
+    }
+
+    val description = when (status) {
+        ServiceStatus.NORMAL -> stringResource(R.string.service_status_normal_desc)
+        ServiceStatus.WAKE_LOCK_ACTIVE -> stringResource(R.string.service_status_wake_lock_desc)
+        ServiceStatus.SERVICE_STOPPED -> stringResource(R.string.service_status_stopped_desc)
+        ServiceStatus.MEMORY_WARNING -> stringResource(R.string.memory_warning_message)
+        ServiceStatus.MEMORY_KILL -> stringResource(R.string.memory_kill_message)
+        ServiceStatus.SESSION_KILLED -> stringResource(R.string.service_status_killed_desc, "unknown")
+    }
+
+    val (cardColor, iconColor, icon) = when (status) {
+        ServiceStatus.NORMAL -> Triple(if (isDark) Color(0xFF1A3825) else Color(0xFFDFFAE4), Color(0xFF36D167), Icons.Rounded.CheckCircleOutline)
+        ServiceStatus.WAKE_LOCK_ACTIVE -> Triple(if (isDark) Color(0xFF1A3825) else Color(0xFFDFFAE4), Color(0xFF36D167), Icons.Rounded.CheckCircleOutline)
+        ServiceStatus.SERVICE_STOPPED -> Triple(if (isDark) Color(0xFF3B1414) else Color(0xFFFFEBEE), Color(0xFFFF5252), Icons.Rounded.ErrorOutline)
+        ServiceStatus.MEMORY_WARNING -> Triple(if (isDark) Color(0xFF3D3514) else Color(0xFFFFF9C4), Color(0xFFFDD835), Icons.Rounded.Warning)
+        ServiceStatus.MEMORY_KILL -> Triple(if (isDark) Color(0xFF3B1414) else Color(0xFFFFEBEE), Color(0xFFFF5252), Icons.Rounded.Warning)
+        ServiceStatus.SESSION_KILLED -> Triple(if (isDark) Color(0xFF3B1414) else Color(0xFFFFEBEE), Color(0xFFFF5252), Icons.Rounded.Warning)
+    }
+    val iconGradColors = when (status) {
+        ServiceStatus.NORMAL, ServiceStatus.WAKE_LOCK_ACTIVE -> listOf(Color(0xFF36D167), Color(0xFF22C55E))
+        ServiceStatus.SERVICE_STOPPED, ServiceStatus.MEMORY_KILL, ServiceStatus.SESSION_KILLED -> listOf(Color(0xFFEF4444), Color(0xFFFF5252))
+        ServiceStatus.MEMORY_WARNING -> listOf(Color(0xFFF59E0B), Color(0xFFFDD835))
+    }
+    val (badgeText, badgeColor) = when (status) {
+        ServiceStatus.NORMAL, ServiceStatus.WAKE_LOCK_ACTIVE -> "运行中" to Color(0xFF36D167)
+        ServiceStatus.SERVICE_STOPPED -> "已停止" to Color(0xFFFF5252)
+        ServiceStatus.MEMORY_WARNING -> "需注意" to Color(0xFFF59E0B)
+        ServiceStatus.MEMORY_KILL -> "内存不足" to Color(0xFFFF5252)
+        ServiceStatus.SESSION_KILLED -> "已终止" to Color(0xFFFF5252)
+    }
+
+    OverviewHorizontalTipCard(
+        backgroundColor = cardColor,
+        icon = icon,
+        iconTint = Color.White,
+        iconBackgroundColor = Color.Transparent,
+        iconStyle = HeroIconStyle.GRADIENT,
+        iconGradientColors = iconGradColors,
+        title = title,
+        description = description,
+        titleColor = if (isDark) Color.White else Color.Black,
+        descriptionColor = if (isDark) Color.White.copy(alpha = 0.8f) else Color.Black.copy(alpha = 0.8f),
+        statusBadgeText = badgeText,
+        statusBadgeColor = badgeColor,
+        statusBadgeBackgroundColor = badgeColor.copy(alpha = 0.14f)
+    )
+}
+@Composable
+private fun LowAndroidOverviewTipCard(context: Context) {
+    val isDark = isSystemInDarkTheme()
+    var forceEnabled by remember { mutableStateOf(ApiCompat.forceEnabledFeatures(context)) }
+    val hasForce = forceEnabled.isNotEmpty()
+    var showDisableDialog by remember { mutableStateOf(false) }
+
+    val title = if (hasForce) {
+        stringResource(R.string.low_android_force_enabled_title)
+    } else {
+        stringResource(R.string.low_android_warning_title)
+    }
+    val versionInfo = stringResource(
+        R.string.low_android_version_info,
+        ApiCompat.androidReleaseName,
+        ApiCompat.sdkInt
+    )
+    val message = if (hasForce) {
+        val list = forceEnabled.joinToString("、") { it.label }
+        stringResource(R.string.low_android_force_enabled_desc,
+            ApiCompat.androidReleaseName, ApiCompat.sdkInt, list)
+    } else {
+        stringResource(R.string.low_android_warning_message)
+    }
+    val briefDescription = "$versionInfo · $message"
+
+    if (hasForce) {
+        OverviewHorizontalTipCard(
+            backgroundColor = if (isDark) Color(0xFF3B1414) else Color(0xFFFFEBEE),
+            icon = Icons.Rounded.Warning,
+            iconTint = Color.White,
+            iconBackgroundColor = Color.Transparent,
+            iconStyle = HeroIconStyle.GRADIENT,
+            iconGradientColors = listOf(Color(0xFFEF4444), Color(0xFFFF5252)),
+            title = title,
+            description = briefDescription,
+            titleColor = if (isDark) Color.White else Color.Black,
+            descriptionColor = if (isDark) Color.White.copy(alpha = 0.8f) else Color.Black.copy(alpha = 0.8f),
+            statusBadgeText = "强制启用",
+            statusBadgeColor = Color(0xFFFF5252),
+            statusBadgeBackgroundColor = Color(0xFFFF5252).copy(alpha = 0.14f),
+            actionButton = {
+                Button(
+                    onClick = { showDisableDialog = true },
+                    modifier = Modifier
+                        .padding(top = 6.dp)
+                        .clip(RoundedCornerShape(50)),
+                    colors = ButtonDefaults.buttonColors(
+                        color = Color(0xFFFF5252)
+                    )
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Close,
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text(
+                        text = stringResource(R.string.low_android_force_disable_button),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                }
+            }
+        )
+    } else {
+        val androidGradient = if (isDark)
+            Brush.linearGradient(listOf(Color(0xFF9A3412), Color(0xFFB45309)))
+        else
+            Brush.linearGradient(listOf(Color(0xFFEA580C), Color(0xFFF59E0B)))
+        OverviewHorizontalTipCard(
+            gradient = androidGradient,
+            icon = Icons.Rounded.Warning,
+            iconTint = Color.White,
+            iconBackgroundColor = Color.Transparent,
+            iconStyle = HeroIconStyle.FROSTED_GLASS,
+            title = title,
+            description = briefDescription,
+            titleColor = Color.White,
+            descriptionColor = Color.White.copy(alpha = 0.72f)
+        )
+    }
+
+    if (showDisableDialog) {
+        OverlayDialog(
+            show = true,
+            onDismissRequest = { showDisableDialog = false },
+            title = stringResource(R.string.low_android_force_disable_dialog_title),
+            content = {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        text = stringResource(R.string.low_android_force_disable_dialog_message),
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium,
+                        lineHeight = 21.sp,
+                        color = MiuixTheme.colorScheme.onSurface
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Row(
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        TextButton(
+                            text = stringResource(R.string.low_android_force_disable_cancel),
+                            onClick = { showDisableDialog = false },
+                            modifier = Modifier.weight(1f)
+                        )
+                        Spacer(Modifier.width(20.dp))
+                        TextButton(
+                            text = stringResource(R.string.low_android_force_disable_confirm),
+                            onClick = {
+                                ApiCompat.clearAllForceEnabled(context)
+                                forceEnabled = ApiCompat.forceEnabledFeatures(context)
+                                showDisableDialog = false
+                            },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.textButtonColorsPrimary()
+                        )
+                    }
+                }
+            }
+        )
+    }
+}
+@Composable
+fun OverviewHorizontalTipCard(
+    modifier: Modifier = Modifier,
+    backgroundColor: Color = Color.Transparent,
+    gradient: Brush? = null,
+    icon: ImageVector? = null,
+    iconPainter: Painter? = null,
+    iconTint: Color = Color.White,
+    iconBackgroundColor: Color,
+    iconStyle: HeroIconStyle = HeroIconStyle.SOLID,
+    iconGradientColors: List<Color>? = null,
+    title: String,
+    description: String,
+    titleColor: Color = Color.White,
+    descriptionColor: Color = Color.White.copy(alpha = 0.85f),
+    statusBadgeText: String? = null,
+    statusBadgeColor: Color = Color.White,
+    statusBadgeBackgroundColor: Color = Color.White.copy(alpha = 0.2f),
+    onClose: (() -> Unit)? = null,
+    closeButtonColor: Color = Color.White.copy(alpha = 0.15f),
+    closeButtonIconColor: Color = Color.White.copy(alpha = 0.85f),
+    actionButton: (@Composable () -> Unit)? = null,
+    onClick: (() -> Unit)? = null
+) {
+    val cardModifier = if (onClick != null) {
+        Modifier.clickable { onClick() }
+    } else {
+        Modifier
+    }
+
+    Card(
+        modifier = modifier
+            .width(340.dp)
+            .height(140.dp)
+            .then(cardModifier)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .clip(RoundedCornerShape(20.dp))
+                .background(brush = gradient ?: Brush.verticalGradient(listOf(backgroundColor, backgroundColor)))
+        ) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .offset(x = 20.dp, y = (-32).dp)
+                    .size(104.dp)
+                    .clip(RoundedCornerShape(52.dp))
+                    .background(Color.White.copy(alpha = 0.08f))
+            )
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .offset(x = (-50).dp, y = 38.dp)
+                    .size(72.dp)
+                    .clip(RoundedCornerShape(36.dp))
+                    .background(Color.White.copy(alpha = 0.05f))
+            )
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .offset(x = (-64).dp, y = 14.dp)
+                    .size(36.dp)
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(Color.White.copy(alpha = 0.06f))
+            )
+
+            if (onClose != null) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(12.dp)
+                        .size(28.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(closeButtonColor)
+                        .clickable(onClick = onClose),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Close,
+                        contentDescription = null,
+                        modifier = Modifier.size(15.dp),
+                        tint = closeButtonIconColor
+                    )
+                }
+            }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(18.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(52.dp)
+                        .clip(RoundedCornerShape(18.dp))
+                        .then(
+                            when (iconStyle) {
+                                HeroIconStyle.SOLID -> Modifier.background(iconBackgroundColor)
+                                HeroIconStyle.FROSTED_GLASS -> Modifier.background(Color.White.copy(alpha = 0.2f))
+                                HeroIconStyle.GRADIENT -> Modifier.background(
+                                    Brush.linearGradient(
+                                        iconGradientColors ?: listOf(iconBackgroundColor, iconBackgroundColor)
+                                    )
+                                )
+                            }
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    when {
+                        icon != null -> Icon(
+                            imageVector = icon,
+                            contentDescription = null,
+                            tint = iconTint,
+                            modifier = Modifier.size(26.dp)
+                        )
+                        iconPainter != null -> Icon(
+                            painter = iconPainter,
+                            contentDescription = null,
+                            tint = iconTint,
+                            modifier = Modifier.size(26.dp)
+                        )
+                    }
+                }
+
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = title,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = titleColor,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        if (statusBadgeText != null) {
+                            Row(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(50))
+                                    .background(statusBadgeBackgroundColor)
+                                    .padding(horizontal = 8.dp, vertical = 3.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(3.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(6.dp)
+                                        .clip(RoundedCornerShape(50))
+                                        .background(statusBadgeColor)
+                                )
+                                Text(
+                                    text = statusBadgeText,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = statusBadgeColor
+                                )
+                            }
+                        }
+                    }
+                    Text(
+                        text = description,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = descriptionColor,
+                        lineHeight = 19.sp,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    if (actionButton != null) {
+                        actionButton()
+                    }
+                }
+            }
+        }
+    }
+}
 // ============================================================
 // Service Status Helper
 // ============================================================
@@ -1159,134 +1555,127 @@ private fun SessionsCard(
     val isDark = isSystemInDarkTheme()
     val config = LocalConfiguration.current
     val cardHeight = ((config.screenWidthDp - 40) / 2).dp
-    
+    val runningGradient = if (isDark) {
+        Brush.linearGradient(listOf(Color(0xFF1B3A1F), Color(0xFF2D4A32)))
+    } else {
+        Brush.linearGradient(listOf(Color(0xFFE8F5E9), Color(0xFFD4EDDA)))
+    }
+    val stoppedGradient = if (isDark) {
+        Brush.linearGradient(listOf(Color(0xFF3B1414), Color(0xFF4A1E1E)))
+    } else {
+        Brush.linearGradient(listOf(Color(0xFFFFEBEE), Color(0xFFFFCDD2)))
+    }
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .height(cardHeight)
+            .clip(RoundedCornerShape(20.dp))
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = stringResource(R.string.overview_card_sessions),
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = MiuixTheme.colorScheme.onSurface,
-                    modifier = Modifier.weight(1f)
-                )
-                if (isEditMode) {
-                    IconButton(onClick = onEditClick) {
-                        Icon(
-                            imageVector = Icons.Rounded.Edit,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp),
-                            tint = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                        )
-                    }
-                }
+        PremiumCardBackground(
+            gradient = if (isDark) {
+                Brush.linearGradient(listOf(Color(0xFF1C1C1E), Color(0xFF2C2C2E)))
+            } else {
+                Brush.linearGradient(listOf(Color(0xFFFAFAFA), Color(0xFFF5F5F7)))
             }
-            
-            Spacer(modifier = Modifier.height(8.dp))
-            
-            Row(
+        ) {
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .weight(1f),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    .padding(16.dp)
             ) {
-                Box(
+                PremiumCardHeader(
+                    icon = Icons.Rounded.List,
+                    title = stringResource(R.string.overview_card_sessions),
+                    iconTint = Color(0xFF4CAF50),
+                    isEditMode = isEditMode,
+                    onEditClick = onEditClick
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Row(
                     modifier = Modifier
-                        .fillMaxHeight()
-                        .weight(1f)
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(
-                            if (isDark) Color(0xFF1B3A1F) else Color(0xFFE8F5E9)
-                        )
-                        .clickable(enabled = !isEditMode && sessions.isNotEmpty()) {
-                            val running = sessions.filter { it.getTerminalSession().isRunning }
-                            if (running.isNotEmpty()) {
-                                onSessionClick(running.first())
-                            }
-                        }
-                        .padding(12.dp),
-                    contentAlignment = Alignment.Center
+                        .fillMaxWidth()
+                        .weight(1f),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally
+                    Box(
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .weight(1f)
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(runningGradient)
+                            .clickable(enabled = !isEditMode && sessions.isNotEmpty()) {
+                                val running = sessions.filter { it.getTerminalSession().isRunning }
+                                if (running.isNotEmpty()) {
+                                    onSessionClick(running.first())
+                                }
+                            }
+                            .padding(12.dp),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Icon(
                                 imageVector = Icons.Rounded.PlayArrow,
                                 contentDescription = null,
-                                modifier = Modifier.size(16.dp),
+                                modifier = Modifier.size(24.dp),
                                 tint = Color(0xFF4CAF50)
                             )
-                            Spacer(modifier = Modifier.width(4.dp))
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = runningCount.toString(),
+                                fontSize = 34.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF4CAF50)
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
                             Text(
                                 text = stringResource(R.string.overview_running),
                                 fontSize = 12.sp,
-                                color = Color(0xFF4CAF50)
+                                fontWeight = FontWeight.Medium,
+                                color = Color(0xFF4CAF50).copy(alpha = 0.85f)
                             )
                         }
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Text(
-                            text = runningCount.toString(),
-                            fontSize = 28.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFF4CAF50)
-                        )
                     }
-                }
-                
-                Box(
-                    modifier = Modifier
-                        .fillMaxHeight()
-                        .weight(1f)
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(
-                            if (isDark) Color(0xFF3B1414) else Color(0xFFFFEBEE)
-                        )
-                        .padding(12.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .weight(1f)
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(stoppedGradient)
+                            .padding(12.dp),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Icon(
                                 imageVector = Icons.Rounded.Stop,
                                 contentDescription = null,
-                                modifier = Modifier.size(16.dp),
+                                modifier = Modifier.size(24.dp),
                                 tint = Color(0xFFE57373)
                             )
-                            Spacer(modifier = Modifier.width(4.dp))
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = stoppedCount.toString(),
+                                fontSize = 34.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFFE57373)
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
                             Text(
                                 text = stringResource(R.string.overview_stopped),
                                 fontSize = 12.sp,
-                                color = Color(0xFFE57373)
+                                fontWeight = FontWeight.Medium,
+                                color = Color(0xFFE57373).copy(alpha = 0.85f)
                             )
                         }
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Text(
-                            text = stoppedCount.toString(),
-                            fontSize = 28.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFFE57373)
-                        )
                     }
                 }
             }
         }
     }
 }
-
 // ============================================================
 // CPU Monitor Card
 // ============================================================
@@ -1305,88 +1694,78 @@ private fun CpuMonitorCard(
     val usageColor = getUsageColor(usage, cpuMaxCapacity)
     val config = LocalConfiguration.current
     val cardHeight = ((config.screenWidthDp - 40) / 2).dp
-    
+    val ratio = if (cpuMaxCapacity > 0f) usage / cpuMaxCapacity else usage / 100f
+    val iconTint = when {
+        ratio < 0.5f -> Color(0xFF4CAF50)
+        ratio < 0.8f -> Color(0xFFFF9800)
+        else -> Color(0xFFF44336)
+    }
+    val gradient = if (isDark) {
+        Brush.linearGradient(listOf(Color(0xFF1C1C1E), Color(0xFF2C2C2E)))
+    } else {
+        Brush.linearGradient(listOf(Color(0xFFFAFAFA), Color(0xFFF5F5F7)))
+    }
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .height(cardHeight)
+            .clip(RoundedCornerShape(20.dp))
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
+        PremiumCardBackground(gradient = gradient) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
             ) {
-                Icon(
-                    imageVector = Icons.Rounded.Memory,
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp),
-                    tint = MiuixTheme.colorScheme.primary
+                PremiumCardHeader(
+                    icon = Icons.Rounded.Memory,
+                    title = stringResource(R.string.overview_card_cpu),
+                    iconTint = iconTint,
+                    isEditMode = isEditMode,
+                    onEditClick = onEditClick
                 )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(
-                    text = stringResource(R.string.overview_card_cpu),
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = MiuixTheme.colorScheme.onSurface,
-                    modifier = Modifier.weight(1f)
-                )
-                if (isEditMode) {
-                    IconButton(onClick = onEditClick) {
-                        Icon(
-                            imageVector = Icons.Rounded.Edit,
-                            contentDescription = null,
-                            modifier = Modifier.size(14.dp),
-                            tint = MiuixTheme.colorScheme.onSurfaceVariantSummary
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(
+                            text = "%",
+                            fontSize = 36.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = usageColor
+                        )
+                        if (temperature > 0f) {
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = stringResource(R.string.overview_cpu_temp, temperature),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                            )
+                        }
+                    }
+                    Column(
+                        horizontalAlignment = Alignment.Start,
+                        modifier = Modifier.weight(2f)
+                    ) {
+                        UsageChart(
+                            data = history,
+                            color = usageColor,
+                            modifier = Modifier.fillMaxWidth().height(52.dp),
+                            maxValue = cpuMaxCapacity
                         )
                     }
                 }
-            }
-            
-            Spacer(modifier = Modifier.height(6.dp))
-            
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text(
-                        text = "${usage.toInt()}%",
-                        fontSize = 32.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = usageColor
-                    )
-                }
-                Column(
-                    horizontalAlignment = Alignment.Start,
-                    modifier = Modifier.weight(2f)
-                ) {
-                    UsageChart(
-                        data = history,
-                        color = usageColor,
-                        modifier = Modifier.fillMaxWidth().height(48.dp),
-                        maxValue = cpuMaxCapacity
-                    )
-                }
-            }
-            
-            Spacer(modifier = Modifier.height(4.dp))
-            if (temperature > 0f) {
-                Text(
-                    text = stringResource(R.string.overview_cpu_temp, temperature),
-                    fontSize = 12.sp,
-                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                )
-            } else {
-                Spacer(modifier = Modifier.height(16.dp))
             }
         }
     }
@@ -1534,7 +1913,7 @@ private fun GpuMonitorCard(
 // ============================================================
 
 @Composable
-private fun MemoryMonitorCard(
+fun MemoryMonitorCard(
     card: OverviewCardConfig,
     usage: Float,
     totalKb: Long,
@@ -1543,92 +1922,81 @@ private fun MemoryMonitorCard(
     onEditClick: () -> Unit
 ) {
     val usageColor = getUsageColor(usage)
+    val isDark = isSystemInDarkTheme()
     val config = LocalConfiguration.current
     val cardHeight = ((config.screenWidthDp - 40) / 2).dp
-    
+
     val memFormatted = when {
         totalKb >= 1024 * 1024 -> String.format("%.1f GB", totalKb / (1024.0 * 1024.0))
         totalKb >= 1024 -> String.format("%.0f MB", totalKb / 1024.0)
         else -> "${totalKb} KB"
     }
-    
+
+    val gradient = if (isDark) {
+        Brush.linearGradient(listOf(Color(0xFF1C1C1E), Color(0xFF2C2C2E)))
+    } else {
+        Brush.linearGradient(listOf(Color(0xFFFAFAFA), Color(0xFFF5F5F7)))
+    }
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .height(cardHeight)
+            .clip(RoundedCornerShape(20.dp))
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
+        PremiumCardBackground(gradient = gradient) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
             ) {
-                Icon(
-                    imageVector = Icons.Rounded.Memory,
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp),
-                    tint = MiuixTheme.colorScheme.primary
+                PremiumCardHeader(
+                    icon = Icons.Rounded.Memory,
+                    title = stringResource(R.string.overview_card_memory),
+                    iconTint = usageColor,
+                    isEditMode = isEditMode,
+                    onEditClick = onEditClick
                 )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(
-                    text = stringResource(R.string.overview_card_memory),
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = MiuixTheme.colorScheme.onSurface,
-                    modifier = Modifier.weight(1f)
-                )
-                if (isEditMode) {
-                    IconButton(onClick = onEditClick) {
-                        Icon(
-                            imageVector = Icons.Rounded.Edit,
-                            contentDescription = null,
-                            modifier = Modifier.size(14.dp),
-                            tint = MiuixTheme.colorScheme.onSurfaceVariantSummary
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    PremiumMetricBlock(
+                        value = "${usage.toInt()}%",
+                        label = stringResource(R.string.overview_memory_used, memFormatted),
+                        color = usageColor,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Box(
+                        modifier = Modifier
+                            .weight(1.6f)
+                            .height(52.dp)
+                    ) {
+                        UsageChart(
+                            data = history,
+                            color = usageColor,
+                            modifier = Modifier.fillMaxWidth().height(52.dp)
                         )
                     }
                 }
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                PremiumStatusBadge(
+                    text = when {
+                        usage >= 80f -> "高占用"
+                        usage >= 50f -> "中等占用"
+                        else -> "正常"
+                    },
+                    color = usageColor
+                )
             }
-            
-            Spacer(modifier = Modifier.height(6.dp))
-            
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text(
-                        text = "${usage.toInt()}%",
-                        fontSize = 32.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = usageColor
-                    )
-                }
-                Column(
-                    horizontalAlignment = Alignment.Start,
-                    modifier = Modifier.weight(2f)
-                ) {
-                    UsageChart(
-                        data = history,
-                        color = usageColor,
-                        modifier = Modifier.fillMaxWidth().height(48.dp)
-                    )
-                }
-            }
-            
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = stringResource(R.string.overview_memory_used, memFormatted),
-                fontSize = 12.sp,
-                color = MiuixTheme.colorScheme.onSurfaceVariantSummary
-            )
         }
     }
 }
@@ -1734,7 +2102,7 @@ private const val MAX_CHART_POINTS = 30
 // ============================================================
 
 @Composable
-private fun ProcessListCard(
+fun ProcessListCard(
     card: OverviewCardConfig,
     processes: List<ProcessInfo>,
     isEditMode: Boolean,
@@ -1746,204 +2114,159 @@ private fun ProcessListCard(
     val sleepingCount = processes.count { it.isSleeping && !it.isBackgroundRunning && !it.isFrozen }
     val activeProcesses = processes.filter { !it.isFrozen }
     val frozenProcesses = processes.filter { it.isFrozen }
+    val isDark = isSystemInDarkTheme()
     val config = LocalConfiguration.current
     val cardHeight = ((config.screenWidthDp - 40) / 2).dp
-    
+
+    val gradient = if (isDark) {
+        Brush.linearGradient(listOf(Color(0xFF1C1C1E), Color(0xFF2C2C2E)))
+    } else {
+        Brush.linearGradient(listOf(Color(0xFFFAFAFA), Color(0xFFF5F5F7)))
+    }
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .height(cardHeight)
+            .clip(RoundedCornerShape(20.dp))
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
+        PremiumCardBackground(gradient = gradient) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
             ) {
-                Icon(
-                    imageVector = Icons.Rounded.Speed,
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp),
-                    tint = MiuixTheme.colorScheme.primary
+                PremiumCardHeader(
+                    icon = Icons.Rounded.Speed,
+                    title = stringResource(R.string.overview_card_processes),
+                    iconTint = Color(0xFF2196F3),
+                    isEditMode = isEditMode,
+                    onEditClick = onEditClick
                 )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(
-                    text = stringResource(R.string.overview_card_processes),
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = MiuixTheme.colorScheme.onSurface,
-                    modifier = Modifier.weight(1f)
-                )
-                if (runningCount > 0) {
-                    Box(
-                        modifier = Modifier
-                            .background(
-                                color = Color(0xFF4CAF50).copy(alpha = 0.15f),
-                                shape = RoundedCornerShape(4.dp)
-                            )
-                            .padding(horizontal = 6.dp, vertical = 2.dp)
-                    ) {
-                        Text(
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    if (runningCount > 0) {
+                        PremiumStatusBadge(
                             text = "运行 $runningCount",
-                            fontSize = 10.sp,
                             color = Color(0xFF4CAF50)
                         )
                     }
-                    Spacer(modifier = Modifier.width(4.dp))
-                }
-                if (backgroundCount > 0) {
-                    Box(
-                        modifier = Modifier
-                            .background(
-                                color = Color(0xFFFF9800).copy(alpha = 0.15f),
-                                shape = RoundedCornerShape(4.dp)
-                            )
-                            .padding(horizontal = 6.dp, vertical = 2.dp)
-                    ) {
-                        Text(
+                    if (backgroundCount > 0) {
+                        PremiumStatusBadge(
                             text = "后台 $backgroundCount",
-                            fontSize = 10.sp,
                             color = Color(0xFFFF9800)
                         )
                     }
-                    Spacer(modifier = Modifier.width(4.dp))
-                }
-                if (sleepingCount > 0) {
-                    Box(
-                        modifier = Modifier
-                            .background(
-                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.15f),
-                                shape = RoundedCornerShape(4.dp)
-                            )
-                            .padding(horizontal = 6.dp, vertical = 2.dp)
-                    ) {
-                        Text(
+                    if (sleepingCount > 0) {
+                        PremiumStatusBadge(
                             text = "休眠 $sleepingCount",
-                            fontSize = 10.sp,
                             color = MiuixTheme.colorScheme.onSurfaceVariantSummary
                         )
                     }
-                    Spacer(modifier = Modifier.width(4.dp))
-                }
-                if (frozenCount > 0) {
-                    Box(
-                        modifier = Modifier
-                            .background(
-                                color = MiuixTheme.colorScheme.error.copy(alpha = 0.15f),
-                                shape = RoundedCornerShape(4.dp)
-                            )
-                            .padding(horizontal = 6.dp, vertical = 2.dp)
-                    ) {
-                        Text(
+                    if (frozenCount > 0) {
+                        PremiumStatusBadge(
                             text = stringResource(R.string.overview_frozen_count, frozenCount),
-                            fontSize = 10.sp,
                             color = MiuixTheme.colorScheme.error
                         )
                     }
-                    Spacer(modifier = Modifier.width(8.dp))
                 }
-                if (isEditMode) {
-                    IconButton(onClick = onEditClick) {
-                        Icon(
-                            imageVector = Icons.Rounded.Edit,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp),
-                            tint = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                        )
-                    }
-                }
-            }
-            
-            Spacer(modifier = Modifier.height(12.dp))
-            
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-                    .verticalScroll(rememberScrollState())
-            ) {
-                if (processes.isEmpty()) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 16.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = stringResource(R.string.overview_no_processes),
-                            fontSize = 13.sp,
-                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                        )
-                    }
-                } else {
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    if (processes.isEmpty()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 16.dp),
+                            contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = stringResource(R.string.overview_process_name),
-                                fontSize = 11.sp,
+                                text = stringResource(R.string.overview_no_processes),
+                                fontSize = 13.sp,
                                 color = MiuixTheme.colorScheme.onSurfaceVariantSummary
                             )
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(16.dp)
-                            ) {
-                                Text(
-                                    text = stringResource(R.string.overview_process_cpu),
-                                    fontSize = 11.sp,
-                                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                                )
-                                Text(
-                                    text = stringResource(R.string.overview_process_mem),
-                                    fontSize = 11.sp,
-                                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                                )
-                            }
                         }
-                        
-                        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-                        
-                        activeProcesses.forEach { process ->
-                            ProcessItemRow(process)
-                        }
-                        
-                        if (frozenProcesses.isNotEmpty()) {
-                            if (activeProcesses.isNotEmpty()) {
-                                Spacer(modifier = Modifier.height(4.dp))
-                            }
-                            
+                    } else {
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically
+                                horizontalArrangement = Arrangement.SpaceBetween
                             ) {
-                                Icon(
-                                    imageVector = Icons.Rounded.Pause,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(12.dp),
-                                    tint = MiuixTheme.colorScheme.error
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
                                 Text(
-                                    text = stringResource(R.string.overview_frozen_processes),
+                                    text = stringResource(R.string.overview_process_name),
                                     fontSize = 11.sp,
-                                    color = MiuixTheme.colorScheme.error
+                                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary
                                 )
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                                ) {
+                                    Text(
+                                        text = stringResource(R.string.overview_process_cpu),
+                                        fontSize = 11.sp,
+                                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                                    )
+                                    Text(
+                                        text = stringResource(R.string.overview_process_mem),
+                                        fontSize = 11.sp,
+                                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                                    )
+                                }
                             }
-                            
+
                             HorizontalDivider(
                                 modifier = Modifier.padding(vertical = 4.dp),
-                                color = MiuixTheme.colorScheme.error.copy(alpha = 0.3f)
+                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.15f)
                             )
-                            
-                            frozenProcesses.forEach { process ->
+
+                            activeProcesses.forEach { process ->
                                 ProcessItemRow(process)
+                            }
+
+                            if (frozenProcesses.isNotEmpty()) {
+                                if (activeProcesses.isNotEmpty()) {
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                }
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Pause,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(12.dp),
+                                        tint = MiuixTheme.colorScheme.error
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = stringResource(R.string.overview_frozen_processes),
+                                        fontSize = 11.sp,
+                                        color = MiuixTheme.colorScheme.error
+                                    )
+                                }
+
+                                HorizontalDivider(
+                                    modifier = Modifier.padding(vertical = 4.dp),
+                                    color = MiuixTheme.colorScheme.error.copy(alpha = 0.3f)
+                                )
+
+                                frozenProcesses.forEach { process ->
+                                    ProcessItemRow(process)
+                                }
                             }
                         }
                     }
@@ -2073,7 +2396,7 @@ private fun ProcessItemRow(process: ProcessInfo) {
 // ============================================================
 
 @Composable
-private fun StopAllCard(
+fun StopAllCard(
     card: OverviewCardConfig,
     sessionCount: Int,
     isEditMode: Boolean,
@@ -2084,90 +2407,83 @@ private fun StopAllCard(
     var showConfirmDialog by remember { mutableStateOf(false) }
     val config = LocalConfiguration.current
     val cardHeight = ((config.screenWidthDp - 40) / 2).dp
-    
+
+    val accentColor = if (sessionCount > 0) Color(0xFFE57373) else MiuixTheme.colorScheme.onSurfaceVariantSummary
+    val gradient = if (sessionCount > 0) {
+        if (isDark) {
+            Brush.linearGradient(listOf(Color(0xFF3B1414), Color(0xFF4A1E1E)))
+        } else {
+            Brush.linearGradient(listOf(Color(0xFFFFEBEE), Color(0xFFFFCDD2)))
+        }
+    } else {
+        if (isDark) {
+            Brush.linearGradient(listOf(Color(0xFF1C1C1E), Color(0xFF2C2C2E)))
+        } else {
+            Brush.linearGradient(listOf(Color(0xFFFAFAFA), Color(0xFFF5F5F7)))
+        }
+    }
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .height(cardHeight)
-            .clip(RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(20.dp))
             .clickable(enabled = !isEditMode && sessionCount > 0) {
                 showConfirmDialog = true
             }
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    imageVector = Icons.Rounded.Stop,
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp),
-                    tint = Color(0xFFE57373)
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(
-                    text = stringResource(R.string.overview_card_stop_all),
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = MiuixTheme.colorScheme.onSurface,
-                    modifier = Modifier.weight(1f)
-                )
-                if (isEditMode) {
-                    IconButton(onClick = onEditClick) {
-                        Icon(
-                            imageVector = Icons.Rounded.Edit,
-                            contentDescription = null,
-                            modifier = Modifier.size(14.dp),
-                            tint = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                        )
-                    }
-                }
-            }
-            
-            Spacer(modifier = Modifier.height(6.dp))
-            
+        PremiumCardBackground(gradient = gradient) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .weight(1f),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
+                    .padding(16.dp)
             ) {
-                Box(
+                PremiumCardHeader(
+                    icon = Icons.Rounded.Stop,
+                    title = stringResource(R.string.overview_card_stop_all),
+                    iconTint = accentColor,
+                    isEditMode = isEditMode,
+                    onEditClick = onEditClick
+                )
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Column(
                     modifier = Modifier
-                        .size(64.dp)
-                        .clip(RoundedCornerShape(32.dp))
-                        .background(
-                            if (sessionCount > 0) Color(0xFFFFEBEE) else Color(0xFFE0E0E0)
-                        ),
-                    contentAlignment = Alignment.Center
+                        .fillMaxWidth()
+                        .weight(1f),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
                 ) {
-                    Icon(
-                        imageVector = Icons.Rounded.Delete,
-                        contentDescription = null,
-                        modifier = Modifier.size(32.dp),
-                        tint = if (sessionCount > 0) Color(0xFFE57373) else Color(0xFFBDBDBD)
+                    Box(
+                        modifier = Modifier
+                            .size(68.dp)
+                            .clip(RoundedCornerShape(24.dp))
+                            .background(accentColor.copy(alpha = 0.16f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Delete,
+                            contentDescription = null,
+                            modifier = Modifier.size(30.dp),
+                            tint = accentColor
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Text(
+                        text = if (sessionCount > 0) "$sessionCount ${stringResource(R.string.overview_running)}"
+                            else stringResource(R.string.overview_no_sessions),
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = if (sessionCount > 0) accentColor else MiuixTheme.colorScheme.onSurfaceVariantSummary
                     )
                 }
-                
-                Spacer(modifier = Modifier.height(10.dp))
-                
-                Text(
-                    text = if (sessionCount > 0) "$sessionCount ${stringResource(R.string.overview_running)}" 
-                        else stringResource(R.string.overview_no_sessions),
-                    fontSize = 14.sp,
-                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                )
             }
         }
     }
-    
-    // Confirm dialog
+
     if (showConfirmDialog) {
         OverlayDialog(
             show = showConfirmDialog,
@@ -2201,12 +2517,152 @@ private fun StopAllCard(
                                 showConfirmDialog = false
                                 onStopAll()
                             },
-                            colors = top.yukonga.miuix.kmp.basic.ButtonDefaults.textButtonColorsPrimary(),
+                            colors = ButtonDefaults.textButtonColorsPrimary(),
                             modifier = Modifier.weight(1f)
                         )
                     }
                 }
             }
+        )
+    }
+}
+
+
+// ============================================================
+// Premium Overview Card Design System
+// ============================================================
+
+@Composable
+private fun PremiumCardBackground(
+    modifier: Modifier = Modifier,
+    gradient: Brush,
+    content: @Composable () -> Unit
+) {
+    Box(modifier = modifier.fillMaxSize()) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(gradient)
+        )
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .offset(x = 24.dp, y = (-28).dp)
+                .size(96.dp)
+                .clip(RoundedCornerShape(48.dp))
+                .background(Color.White.copy(alpha = 0.08f))
+        )
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .offset(x = (-16).dp, y = 20.dp)
+                .size(56.dp)
+                .clip(RoundedCornerShape(28.dp))
+                .background(Color.White.copy(alpha = 0.05f))
+        )
+        content()
+    }
+}
+
+@Composable
+private fun PremiumCardHeader(
+    icon: ImageVector,
+    title: String,
+    iconTint: Color = MiuixTheme.colorScheme.primary,
+    isEditMode: Boolean = false,
+    onEditClick: () -> Unit = {}
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(34.dp)
+                .clip(RoundedCornerShape(11.dp))
+                .background(iconTint.copy(alpha = 0.12f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                modifier = Modifier.size(19.dp),
+                tint = iconTint
+            )
+        }
+        Spacer(modifier = Modifier.width(10.dp))
+        Text(
+            text = title,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = MiuixTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f)
+        )
+        if (isEditMode) {
+            IconButton(onClick = onEditClick) {
+                Icon(
+                    imageVector = Icons.Rounded.Edit,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                    tint = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun PremiumMetricBlock(
+    value: String,
+    label: String,
+    color: Color,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = value,
+            fontSize = 32.sp,
+            fontWeight = FontWeight.Bold,
+            color = color
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = label,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Medium,
+            color = color.copy(alpha = 0.85f)
+        )
+    }
+}
+
+@Composable
+private fun PremiumStatusBadge(
+    text: String,
+    color: Color,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .clip(RoundedCornerShape(50))
+            .background(color.copy(alpha = 0.14f))
+            .padding(horizontal = 8.dp, vertical = 3.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(5.dp)
+                .clip(RoundedCornerShape(50))
+                .background(color)
+        )
+        Text(
+            text = text,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = color
         )
     }
 }
@@ -2945,7 +3401,7 @@ private fun readMemoryUsage(sessionPids: Set<Int> = emptySet()): Pair<Float, Lon
 // ============================================================
 
 @Composable
-private fun FeatureCenterCard(
+fun FeatureCenterCard(
     card: OverviewCardConfig,
     isEditMode: Boolean,
     onEditClick: () -> Unit
@@ -2966,7 +3422,7 @@ private fun FeatureCenterCard(
         modifier = Modifier
             .fillMaxWidth()
             .height(cardHeight)
-            .clip(RoundedCornerShape(if (isWide) 24.dp else 16.dp))
+            .clip(RoundedCornerShape(20.dp))
             .background(gradient)
             .clickable(enabled = !isEditMode) {
                 if (!isEditMode) {
@@ -2974,34 +3430,49 @@ private fun FeatureCenterCard(
                     context.startActivity(intent)
                 }
             }
-            .padding(if (isWide) 20.dp else 14.dp)
+            .padding(if (isWide) 20.dp else 16.dp)
     ) {
-        // Decorative circle
         Box(
             modifier = Modifier
-                .size(if (isWide) 120.dp else 80.dp)
+                .size(if (isWide) 120.dp else 96.dp)
                 .offset(x = 30.dp, y = (-40).dp)
                 .align(Alignment.TopEnd)
                 .alpha(0.12f)
                 .background(Color.White, RoundedCornerShape(60.dp))
         )
 
+        Box(
+            modifier = Modifier
+                .size(if (isWide) 56.dp else 44.dp)
+                .offset(x = (-20).dp, y = 60.dp)
+                .align(Alignment.BottomEnd)
+                .alpha(0.08f)
+                .background(Color.White, RoundedCornerShape(28.dp))
+        )
+
         Column {
-            // Small header: icon + label
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_resources),
-                    contentDescription = null,
-                    modifier = Modifier.size(if (isWide) 18.dp else 14.dp),
-                    tint = Color.White.copy(alpha = 0.85f)
-                )
-                Spacer(modifier = Modifier.width(6.dp))
+                Box(
+                    modifier = Modifier
+                        .size(if (isWide) 36.dp else 32.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color.White.copy(alpha = 0.18f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_resources),
+                        contentDescription = null,
+                        modifier = Modifier.size(if (isWide) 20.dp else 18.dp),
+                        tint = Color.White.copy(alpha = 0.95f)
+                    )
+                }
+                Spacer(modifier = Modifier.width(10.dp))
                 Text(
                     text = stringResource(R.string.overview_feature_center_label),
                     style = TextStyle(
-                        fontSize = if (isWide) 12.sp else 11.sp,
+                        fontSize = if (isWide) 13.sp else 12.sp,
                         fontWeight = FontWeight.Medium,
-                        color = Color.White.copy(alpha = 0.85f)
+                        color = Color.White.copy(alpha = 0.9f)
                     ),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -3010,36 +3481,35 @@ private fun FeatureCenterCard(
                 if (isEditMode) {
                     Box(
                         modifier = Modifier
-                            .size(28.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .clickable { onEditClick() },
+                            .size(32.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .clickable { onEditClick() }
+                            .background(Color.White.copy(alpha = 0.12f)),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.Rounded.Edit,
                             contentDescription = null,
                             modifier = Modifier.size(16.dp),
-                            tint = Color.White.copy(alpha = 0.8f)
+                            tint = Color.White.copy(alpha = 0.9f)
                         )
                     }
                 }
             }
 
-            Spacer(Modifier.height(if (isWide) 4.dp else 3.dp))
+            Spacer(Modifier.height(if (isWide) 8.dp else 6.dp))
 
-            // Large title
             Text(
                 text = stringResource(R.string.resource_center_welcome_subtitle),
                 style = TextStyle(
-                    fontSize = if (isWide) 22.sp else 16.sp,
+                    fontSize = if (isWide) 22.sp else 18.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color.White
                 )
             )
 
-            Spacer(Modifier.height(if (isWide) 10.dp else 6.dp))
+            Spacer(Modifier.height(if (isWide) 10.dp else 8.dp))
 
-            // Description
             Text(
                 text = stringResource(R.string.feature_center_desc),
                 style = TextStyle(
@@ -3060,7 +3530,7 @@ private fun FeatureCenterCard(
 // ============================================================
 
 @Composable
-private fun ResourceActionCard(
+fun ResourceActionCard(
     card: OverviewCardConfig,
     context: Context,
     isEditMode: Boolean,
@@ -3070,14 +3540,21 @@ private fun ResourceActionCard(
 ) {
     val action = card.resourceActionId?.let { ResourceActions.getActionById(context, it) }
     var showSelectDialog by remember { mutableStateOf(false) }
+    val isDark = isSystemInDarkTheme()
     val config = LocalConfiguration.current
     val cardHeight = ((config.screenWidthDp - 40) / 2).dp
-    
+
+    val gradient = if (isDark) {
+        Brush.linearGradient(listOf(Color(0xFF1C1C1E), Color(0xFF2C2C2E)))
+    } else {
+        Brush.linearGradient(listOf(Color(0xFFFAFAFA), Color(0xFFF5F5F7)))
+    }
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .height(cardHeight)
-            .clip(RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(20.dp))
             .clickable {
                 if (action != null) {
                     if (!isEditMode) {
@@ -3088,128 +3565,152 @@ private fun ResourceActionCard(
                 }
             }
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
+        PremiumCardBackground(gradient = gradient) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
             ) {
-                Icon(
-                    imageVector = Icons.Rounded.PlayArrow,
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp),
-                    tint = MiuixTheme.colorScheme.primary
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(
-                    text = if (action != null) action.name else stringResource(R.string.overview_resource_action),
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = MiuixTheme.colorScheme.onSurface,
-                    modifier = Modifier.weight(1f),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                IconButton(onClick = {
-                    if (isEditMode) {
-                        onEditClick()
-                    } else {
-                        showSelectDialog = true
-                    }
-                }) {
-                    Icon(
-                        imageVector = Icons.Rounded.Edit,
-                        contentDescription = null,
-                        modifier = Modifier.size(14.dp),
-                        tint = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                    )
-                }
-            }
-            
-            Spacer(modifier = Modifier.height(6.dp))
-            
-            if (action != null) {
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f),
+                    modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        painter = painterResource(id = action.iconRes),
-                        contentDescription = null,
-                        modifier = Modifier.size(40.dp),
-                        tint = MiuixTheme.colorScheme.primary
-                    )
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Column(
-                        modifier = Modifier.weight(1f)
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(MiuixTheme.colorScheme.primary.copy(alpha = 0.12f)),
+                        contentAlignment = Alignment.Center
                     ) {
-                        if (action.description.isNotEmpty()) {
-                            Text(
-                                text = action.description,
-                                fontSize = 12.sp,
-                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
+                        Icon(
+                            imageVector = Icons.Rounded.PlayArrow,
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp),
+                            tint = MiuixTheme.colorScheme.primary
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Text(
+                        text = if (action != null) action.name else stringResource(R.string.overview_resource_action),
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MiuixTheme.colorScheme.onSurface,
+                        modifier = Modifier.weight(1f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    IconButton(onClick = {
+                        if (isEditMode) {
+                            onEditClick()
+                        } else {
+                            showSelectDialog = true
                         }
-                        val categoryText = when (action.category) {
-                            ResourceActionCategory.UTILITY_CENTER -> stringResource(R.string.overview_utility_center)
-                            ResourceActionCategory.THIRD_PARTY_CENTER -> stringResource(R.string.overview_third_party_center)
-                            ResourceActionCategory.SYSTEM_FUNCTION -> stringResource(R.string.overview_system_function)
-                        }
+                    }) {
+                        Icon(
+                            imageVector = Icons.Rounded.Edit,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                            tint = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                if (action != null) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Box(
                             modifier = Modifier
-                                .background(
-                                    color = MiuixTheme.colorScheme.primary.copy(alpha = 0.1f),
-                                    shape = RoundedCornerShape(4.dp)
-                                )
-                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                                .size(48.dp)
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(MiuixTheme.colorScheme.primary.copy(alpha = 0.12f)),
+                            contentAlignment = Alignment.Center
                         ) {
-                            Text(
+                            Icon(
+                                painter = painterResource(id = action.iconRes),
+                                contentDescription = null,
+                                modifier = Modifier.size(26.dp),
+                                tint = MiuixTheme.colorScheme.primary
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            if (action.description.isNotEmpty()) {
+                                Text(
+                                    text = action.description,
+                                    fontSize = 12.sp,
+                                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                            }
+                            val categoryText = when (action.category) {
+                                ResourceActionCategory.UTILITY_CENTER -> stringResource(R.string.overview_utility_center)
+                                ResourceActionCategory.THIRD_PARTY_CENTER -> stringResource(R.string.overview_third_party_center)
+                                ResourceActionCategory.SYSTEM_FUNCTION -> stringResource(R.string.overview_system_function)
+                            }
+                            PremiumStatusBadge(
                                 text = categoryText,
-                                fontSize = 10.sp,
                                 color = MiuixTheme.colorScheme.primary
                             )
                         }
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(RoundedCornerShape(18.dp))
+                                .background(MiuixTheme.colorScheme.primary.copy(alpha = 0.12f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.PlayArrow,
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp),
+                                tint = MiuixTheme.colorScheme.primary
+                            )
+                        }
                     }
-                    Icon(
-                        imageVector = Icons.Rounded.PlayArrow,
-                        contentDescription = null,
-                        modifier = Modifier.size(28.dp),
-                        tint = MiuixTheme.colorScheme.primary.copy(alpha = 0.6f)
-                    )
-                }
-            } else {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.Add,
-                        contentDescription = null,
-                        modifier = Modifier.size(40.dp),
-                        tint = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                    )
-                    Spacer(modifier = Modifier.height(10.dp))
-                    Text(
-                        text = stringResource(R.string.overview_select_action),
-                        fontSize = 13.sp,
-                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                    )
+                } else {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(56.dp)
+                                .clip(RoundedCornerShape(20.dp))
+                                .background(MiuixTheme.colorScheme.primary.copy(alpha = 0.1f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Add,
+                                contentDescription = null,
+                                modifier = Modifier.size(28.dp),
+                                tint = MiuixTheme.colorScheme.primary
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Text(
+                            text = stringResource(R.string.overview_select_action),
+                            fontSize = 13.sp,
+                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                        )
+                    }
                 }
             }
         }
     }
-    
+
     ResourceActionSelectionDialog(
         context = context,
         show = showSelectDialog,

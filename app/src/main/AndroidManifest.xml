@@ -99,17 +99,6 @@
             android:exported="false" />
 
         <activity
-            android:name=".plugin.PluginCenterActivity"
-            android:label="@string/plugin_center"
-            android:exported="false" />
-
-        <activity
-            android:name=".plugin.PluginWebViewActivity"
-            android:label="插件"
-            android:exported="false"
-            android:configChanges="orientation|screenSize|screenLayout|uiMode" />
-
-        <activity
             android:name=".app.TerminalDetailActivity"
             android:label="@string/application_name" />
 
@@ -203,6 +192,12 @@
             android:theme="@style/Theme.AppCompat.DayNight.NoActionBar" />
 
         <activity
+            android:name=".app.activities.LogViewerActivity"
+            android:exported="false"
+            android:label="@string/log_management"
+            android:theme="@style/Theme.AppCompat.DayNight.NoActionBar" />
+
+        <activity
             android:name=".app.activities.TermuxStylingActivity"
             android:exported="false"
             android:label="@string/title_styling"
@@ -280,7 +275,8 @@
         <activity
             android:name="com.termux.app.plugin.PluginWebViewActivity"
             android:exported="false"
-            android:theme="@style/Theme.Termux.Transparent" />
+            android:configChanges="orientation|screenSize|screenLayout|uiMode"
+            android:theme="@style/Theme.AppCompat.DayNight.NoActionBar" />
 
         <provider
             android:name=".filepicker.TermuxDocumentsProvider"

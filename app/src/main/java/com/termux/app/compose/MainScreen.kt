@@ -135,7 +135,7 @@ fun MainScreen(
         else -> ApiCompat.Page.SETTINGS
     }
     val availableTabs = remember {
-        listOf(0, 1, 2, 3, 5).filter { ApiCompat.isPageAvailable(pageForTab(it)) }
+        listOf(0, 1, 2, 3, 4).filter { ApiCompat.isPageAvailable(pageForTab(it)) }
     }
 
     val navStyleForHeight = when (navStyle) {
@@ -252,7 +252,7 @@ fun MainScreen(
                 2 -> {
                     val glassDims = computeNavDimensions(availableTabs.size, NavStyle.GLASS)
                     LiquidGlassNavigationBarWithIndicator(
-                        selectedIndex = selectedTab,
+                        selectedIndex = availableTabs.indexOf(selectedTab).coerceAtLeast(0),
                         itemCount = availableTabs.size,
                         backdrop = liquidGlassBackdrop,
                         onIndexChange = { index ->
@@ -299,12 +299,12 @@ fun MainScreen(
                                 dims = glassDims
                             )
                         }
-                        if (5 in availableTabs) {
+                        if (4 in availableTabs) {
                             LiquidGlassNavigationBarItem(
                                 icon = ImageVector.vectorResource(R.drawable.ic_settings),
                                 label = stringResource(R.string.settings),
-                                selected = selectedTab == 5,
-                                onClick = { previousTab = selectedTab; onTabChange(5) },
+                                selected = selectedTab == 4,
+                                onClick = { previousTab = selectedTab; onTabChange(4) },
                                 dims = glassDims
                             )
                         }
@@ -313,7 +313,7 @@ fun MainScreen(
                 3 -> {
                     val softLightDims = computeNavDimensions(availableTabs.size, NavStyle.SOFT_LIGHT)
                     SoftLightNavigationBarWithIndicator(
-                        selectedIndex = selectedTab,
+                        selectedIndex = availableTabs.indexOf(selectedTab).coerceAtLeast(0),
                         itemCount = availableTabs.size,
                         backdrop = liquidGlassBackdrop,
                         onIndexChange = { index ->
@@ -360,12 +360,12 @@ fun MainScreen(
                                 dims = softLightDims
                             )
                         }
-                        if (5 in availableTabs) {
+                        if (4 in availableTabs) {
                             SoftLightNavigationBarItem(
                                 icon = ImageVector.vectorResource(R.drawable.ic_settings),
                                 label = stringResource(R.string.settings),
-                                selected = selectedTab == 5,
-                                onClick = { previousTab = selectedTab; onTabChange(5) },
+                                selected = selectedTab == 4,
+                                onClick = { previousTab = selectedTab; onTabChange(4) },
                                 dims = softLightDims
                             )
                         }
@@ -431,12 +431,12 @@ fun MainScreen(
                                     onClick = { previousTab = selectedTab; onTabChange(3) }
                                 )
                             }
-                            if (5 in availableTabs) {
+                            if (4 in availableTabs) {
                                 FloatingNavigationBarItem(
                                     icon = ImageVector.vectorResource(R.drawable.ic_settings),
                                     label = stringResource(R.string.settings),
-                                    selected = selectedTab == 5,
-                                    onClick = { previousTab = selectedTab; onTabChange(5) }
+                                    selected = selectedTab == 4,
+                                    onClick = { previousTab = selectedTab; onTabChange(4) }
                                 )
                             }
                             }
@@ -477,12 +477,12 @@ fun MainScreen(
                                 onClick = { previousTab = selectedTab; onTabChange(3) }
                             )
                         }
-                        if (5 in availableTabs) {
+                        if (4 in availableTabs) {
                             NavigationBarItem(
                                 icon = ImageVector.vectorResource(R.drawable.ic_settings),
                                 label = stringResource(R.string.settings),
-                                selected = selectedTab == 5,
-                                onClick = { previousTab = selectedTab; onTabChange(5) }
+                                selected = selectedTab == 4,
+                                onClick = { previousTab = selectedTab; onTabChange(4) }
                             )
                         }
                     }
@@ -698,7 +698,7 @@ fun MainScreen(
                     },
                     onGoToSettings = {
                         previousTab = tab
-                        onTabChange(5)
+                        onTabChange(4)
                     },
                     navBarBottomPadding = totalNavHeight
                 )
@@ -735,7 +735,7 @@ fun MainScreen(
                         },
                         onGoToSettings = {
                             previousTab = selectedTab
-                            onTabChange(5)
+                            onTabChange(4)
                         },
                         navBarBottomPadding = totalNavHeight
                     )
@@ -824,7 +824,7 @@ private fun PageContentForTab(
             onGoToSettings = onGoToSettings,
             navBarBottomPadding = navBarBottomPadding
         )
-        5 -> SettingsScreen(
+        4 -> SettingsScreen(
             onAboutClick = onAboutClick,
             navBarBottomPadding = navBarBottomPadding
         )
