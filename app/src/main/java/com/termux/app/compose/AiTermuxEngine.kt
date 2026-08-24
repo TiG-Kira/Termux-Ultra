@@ -2408,6 +2408,10 @@ object AiApiClient {
         config: AiProviderConfig,
         messages: List<OpenAiMessage>
     ): ChatCompletionResponse = withContext(Dispatchers.IO) {
+        // 本地大模型：走设备端 llama.cpp 推理
+        if (config.provider == "local") {
+            return@withContext AiLocalModel.completeLocal(config, messages)
+        }
         try {
             val baseUrl = config.apiBaseUrl.trimEnd('/')
             val url = URL("$baseUrl/chat/completions")
@@ -2461,7 +2465,12 @@ object AiApiClient {
         config: AiProviderConfig,
         messages: List<OpenAiMessage>,
         isCancelled: () -> Boolean
-    ): Flow<StreamChunk> = flow {
+    ): Flow<StreamChunk> {
+        // 本地大模型：走设备端 llama.cpp 流式推理
+        if (config.provider == "local") {
+            return AiLocalModel.chatStreamLocal(config, messages, isCancelled)
+        }
+        return flow {
         try {
             val baseUrl = config.apiBaseUrl.trimEnd('/')
             val url = URL("$baseUrl/chat/completions")
@@ -2622,6 +2631,7 @@ object AiApiClient {
             emit(StreamChunk.Error("请求失败: ${e.message ?: "未知错误"}"))
         }
     }.flowOn(Dispatchers.IO)
+}
 }
 
 /**

@@ -1,4 +1,4 @@
-﻿package com.termux.app.activities
+package com.termux.app.activities
 
 import android.content.ComponentName
 import android.content.Context
@@ -232,7 +232,12 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
     }
 
     fun updateConfig(newConfig: AiTermuxConfig) {
-        config = newConfig.copy(isConfigured = newConfig.providerConfig.apiKey.isNotBlank())
+        val configured = if (newConfig.providerConfig.provider == "local") {
+            AiLocalModel.isLocalModelReady()
+        } else {
+            newConfig.providerConfig.apiKey.isNotBlank()
+        }
+        config = newConfig.copy(isConfigured = configured)
         AiTermuxPrefs.saveConfig(getApplication(), config)
     }
 
@@ -1154,6 +1159,16 @@ private fun AiSetupScreen(vm: AiTermuxViewModel, onBack: () -> Unit) {
     var testing by remember { mutableStateOf(false) }
     var testResult by remember { mutableStateOf<String?>(null) }
 
+    // ---- 本地大模型状态 ----
+    var localDownloading by remember { mutableStateOf(false) }
+    var localProgress by remember { mutableStateOf(0f) }
+    var localProgressMsg by remember { mutableStateOf("") }
+    var localRefresh by remember { mutableStateOf(0) }
+    var localLlamaReady by remember { mutableStateOf(AiLocalModel.isLlamaCppInstalled()) }
+
+    LaunchedEffect(Unit) { AiLocalModel.init(ctx) }
+    LaunchedEffect(localRefresh) { localLlamaReady = AiLocalModel.isLlamaCppInstalled() }
+
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
@@ -1236,10 +1251,115 @@ private fun AiSetupScreen(vm: AiTermuxViewModel, onBack: () -> Unit) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     ProviderChip("OpenAI 兼容", "custom", provider, isDark) { provider = it }
                     ProviderChip("直接 OpenAI", "openai", provider, isDark) { provider = it }
+                    ProviderChip("本地大模型", "local", provider, isDark) { provider = it }
                 }
             }
 
-            item { SectionTitle("2. API Key（必填）") }
+
+            if (provider == "local") {
+                item { SectionTitle("本地大模型（离线 · 设备端运行）") }
+
+                item {
+                    Card(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Row {
+                                Icon(
+                                    painter = painterResource(id = R.drawable.ic_warning),
+                                    contentDescription = null,
+                                    tint = if (isDark) Color(0xFFFFB300) else Color(0xFFF57C00),
+                                    modifier = Modifier.size(20.dp).align(Alignment.CenterVertically)
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    text = "资源占用较高",
+                                    fontSize = 14.sp, fontWeight = FontWeight.Bold,
+                                    color = if (isDark) Color(0xFFFFB300) else Color(0xFFF57C00)
+                                )
+                            }
+                            Spacer(Modifier.height(6.dp))
+                            Text(
+                                text = "本地大模型在设备端运行，会占用较多内存与电量，推理速度有限。建议在具备充足存储、内存（≥ 2GB 空闲）与散热的设备上使用，下载约需 950MB 空间。",
+                                fontSize = 12.sp,
+                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                            )
+                        }
+                    }
+                }
+
+                LOCAL_MODELS.forEach { entry ->
+                    item {
+                        val scope = rememberCoroutineScope()
+                        val installed = remember(localRefresh) { AiLocalModel.isModelInstalled(entry) }
+                        Card(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Text(entry.displayName, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = MiuixTheme.colorScheme.onSurface)
+                                Text(entry.description, fontSize = 12.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+                                Spacer(Modifier.height(10.dp))
+                                if (localDownloading) {
+                                    if (localProgress in 0f..1f) {
+                                        LinearProgressIndicator(progress = localProgress, modifier = Modifier.fillMaxWidth())
+                                    }
+                                    Spacer(Modifier.height(6.dp))
+                                    Text(localProgressMsg, fontSize = 12.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+                                } else if (installed) {
+                                    Text(
+                                        text = "已安装 · 已配置",
+                                        fontSize = 13.sp, fontWeight = FontWeight.Medium,
+                                        color = MiuixTheme.colorScheme.primary
+                                    )
+                                } else {
+                                    Button(
+                                        onClick = {
+                                            scope.launch {
+                                                localDownloading = true
+                                                localProgress = 0f
+                                                localProgressMsg = "正在准备下载…"
+                                                val ok = AiLocalModel.downloadModel(entry) { p, msg ->
+                                                    localProgress = p
+                                                    localProgressMsg = msg
+                                                }
+                                                if (ok) {
+                                                    localProgress = 1f
+                                                    localProgressMsg = "模型下载完成，已自动配置"
+                                                    val cfg = AiTermuxConfig(
+                                                        providerConfig = AiProviderConfig(
+                                                            provider = "local", apiKey = "", apiBaseUrl = "",
+                                                            model = entry.displayName, temperature = temperature,
+                                                            localModelId = entry.id
+                                                        ),
+                                                        customSystemPrompt = customPrompt
+                                                    )
+                                                    vm.updateConfig(cfg)
+                                                } else {
+                                                    SnackbarHelper.show(ctx, "下载失败：", Snackbar.LENGTH_LONG, null)
+                                                }
+                                                localDownloading = false
+                                                localRefresh++
+                                            }
+                                        },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        colors = ButtonDefaults.buttonColors(color = MiuixTheme.colorScheme.primary)
+                                    ) {
+                                        Text(
+                                            text = "下载并配置（约 950MB）",
+                                            fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color.White
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                item { Spacer(Modifier.height(8.dp)) }
+            }
+
+            if (provider != "local") {
+                item { SectionTitle("2. API Key（必填）") }
             item {
                 TextField(
                     value = apiKey,
@@ -1273,6 +1393,7 @@ private fun AiSetupScreen(vm: AiTermuxViewModel, onBack: () -> Unit) {
                     useLabelAsPlaceholder = true,
                     singleLine = true
                 )
+            }
             }
 
             item { SectionTitle("5. 温度 (%.1f)".format(temperature)) }
@@ -1339,7 +1460,7 @@ private fun AiSetupScreen(vm: AiTermuxViewModel, onBack: () -> Unit) {
                                 testing = false
                             }
                         },
-                        enabled = apiKey.isNotBlank() && !testing,
+                        enabled = provider != "local" && apiKey.isNotBlank() && !testing,
                         modifier = Modifier
                             .weight(1f)
                             .height(48.dp)
@@ -1353,6 +1474,25 @@ private fun AiSetupScreen(vm: AiTermuxViewModel, onBack: () -> Unit) {
                     }
                     Button(
                         onClick = {
+                            if (provider == "local") {
+                                if (!AiLocalModel.isLocalModelReady()) {
+                                    testResult = "❌ 请先完成本地大模型的下载与配置"
+                                    return@Button
+                                }
+                                val localCfg = AiTermuxConfig(
+                                    providerConfig = AiProviderConfig(
+                                        provider = "local", apiKey = "", apiBaseUrl = "",
+                                        model = AiLocalModel.getSelectedModel()?.displayName ?: "本地模型",
+                                        temperature = temperature,
+                                        localModelId = AiLocalModel.getSelectedModelId()
+                                    ),
+                                    customSystemPrompt = customPrompt,
+                                    isConfigured = true
+                                )
+                                vm.updateConfig(localCfg)
+                                SnackbarHelper.show(ctx, "本地大模型已配置，进入对话界面", Snackbar.LENGTH_SHORT, null)
+                                return@Button
+                            }
                             if (apiKey.isBlank()) {
                                 testResult = "❌ 请先填写 API Key"
                                 return@Button
@@ -1378,6 +1518,15 @@ private fun AiSetupScreen(vm: AiTermuxViewModel, onBack: () -> Unit) {
 
             item { Spacer(Modifier.height(32.dp)) }
         }
+    }
+}
+
+private fun formatByteCount(bytes: Long): String {
+    return when {
+        bytes < 1024 -> "$bytes B"
+        bytes < 1024 * 1024 -> String.format("%.1f KB", bytes / 1024.0)
+        bytes < 1024L * 1024 * 1024 -> String.format("%.1f MB", bytes / (1024.0 * 1024.0))
+        else -> String.format("%.2f GB", bytes / (1024.0 * 1024.0 * 1024.0))
     }
 }
 

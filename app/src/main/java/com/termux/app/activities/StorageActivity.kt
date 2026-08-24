@@ -25,6 +25,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
 import com.termux.R
+import com.termux.app.compose.AiLocalModel
+import com.termux.app.compose.LOCAL_MODELS
 import com.termux.app.compose.KiTerminalTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -62,6 +64,7 @@ enum class StorageCategory(val labelRes: Int, val descRes: Int, val iconRes: Int
     USER_DOCS(R.string.storage_category_user_docs, R.string.storage_category_user_docs_desc, R.drawable.ic_files),
     CONTAINERS(R.string.storage_category_containers, R.string.storage_category_containers_desc, R.drawable.ic_launch),
     VM_FILES(R.string.storage_category_vm, R.string.storage_category_vm_desc, R.drawable.ic_vnc),
+    LOCAL_MODEL(R.string.storage_category_local_model, R.string.storage_category_local_model_desc, R.drawable.ic_computer),
     OTHER(R.string.storage_category_other, R.string.storage_category_other_desc, R.drawable.ic_tools)
 }
 
@@ -168,6 +171,9 @@ private fun scanTermuxStorage(context: android.content.Context): List<CategorySt
         }
     }
 
+    // 本地大模型: 设备端 AI 模型占用
+    addToCategory(StorageCategory.LOCAL_MODEL, AiLocalModel.getInstalledModelSize())
+
     // 其它: 缓存
     val cacheSize = getDirSize(appCacheDir)
     addToCategory(StorageCategory.OTHER, cacheSize)
@@ -269,17 +275,7 @@ fun StorageScreen(onBack: () -> Unit) {
     var showResult by remember { mutableStateOf(false) }
     var resultMessage by remember { mutableStateOf("") }
     var selectedCleanablePaths by remember { mutableStateOf<Set<String>>(emptySet()) }
-
-    val totalStorageBytes = remember {
-        val stat = StatFs(Environment.getDataDirectory().path)
-        stat.blockCountLong * stat.blockSizeLong
-    }
-
-    val usedBytes by remember(categories) {
-        mutableStateOf(categories.sumOf { it.sizeBytes })
-    }
-
-    val freeBytes = totalStorageBytes - usedBytes
+    var showLocalModelDetail by remember { mutableStateOf(false) }
 
     suspend fun scan() {
         isScanning = true
@@ -292,6 +288,32 @@ fun StorageScreen(onBack: () -> Unit) {
     LaunchedEffect(Unit) {
         scan()
     }
+
+    // 本地大模型详情页（替换当前页面）
+    if (showLocalModelDetail) {
+        LocalModelDetailScreen(
+            onBack = {
+                showLocalModelDetail = false
+                scope.launch { scan() }
+            },
+            onDeleted = {
+                showLocalModelDetail = false
+                scope.launch { scan() }
+            }
+        )
+        return
+    }
+
+    val totalStorageBytes = remember {
+        val stat = StatFs(Environment.getDataDirectory().path)
+        stat.blockCountLong * stat.blockSizeLong
+    }
+
+    val usedBytes by remember(categories) {
+        mutableStateOf(categories.sumOf { it.sizeBytes })
+    }
+
+    val freeBytes = totalStorageBytes - usedBytes
 
     val allCleanableItems = categories.flatMap { it.cleanableItems }
     val totalCleanableBytes = allCleanableItems.sumOf { it.sizeBytes }
@@ -452,10 +474,15 @@ fun StorageScreen(onBack: () -> Unit) {
                 }
             } else {
                 items(categories.filter { it.sizeBytes > 0 }) { catStorage ->
+                    val isLocalModel = catStorage.category == StorageCategory.LOCAL_MODEL
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 16.dp, vertical = 4.dp)
+                            .then(
+                                if (isLocalModel) Modifier.clickable { showLocalModelDetail = true }
+                                else Modifier
+                            )
                     ) {
                         Row(
                             modifier = Modifier
@@ -666,4 +693,181 @@ fun StorageScreen(onBack: () -> Unit) {
             }
         }
     )
+}
+// 本地大模型详情页
+@androidx.compose.runtime.Composable
+private fun LocalModelDetailScreen(
+    onBack: () -> Unit,
+    onDeleted: () -> Unit
+) {
+    val context = LocalContext.current
+    val scrollBehavior = MiuixScrollBehavior()
+    val scope = rememberCoroutineScope()
+    var refresh by remember { mutableStateOf(0) }
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+
+    val selected = AiLocalModel.getSelectedModel()
+    val installed = remember(refresh) { AiLocalModel.isLocalModelReady() }
+    val size = remember(refresh) { AiLocalModel.getInstalledModelSize() }
+    val path = remember(refresh) { AiLocalModel.modelDir().absolutePath }
+    val downloadedAt = remember(refresh) { AiLocalModel.getDownloadedAt() }
+    val dateText = remember(downloadedAt) {
+        if (downloadedAt > 0) {
+            try {
+                java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault())
+                    .format(java.util.Date(downloadedAt))
+            } catch (e: Exception) { "" }
+        } else ""
+    }
+
+    Scaffold(
+        modifier = Modifier.fillMaxSize(),
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        topBar = {
+            TopAppBar(
+                title = context.getString(R.string.storage_local_model_detail_title),
+                scrollBehavior = scrollBehavior,
+                navigationIcon = {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .clickable { onBack() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = MiuixIcons.Back,
+                            contentDescription = context.getString(R.string.back),
+                            tint = MiuixTheme.colorScheme.onSurface,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                }
+            )
+        }
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+        ) {
+            itemDetailCard(
+                icon = R.drawable.ic_computer,
+                title = context.getString(R.string.storage_local_model_name),
+                summary = selected?.displayName ?: context.getString(R.string.storage_local_model_not_installed)
+            )
+            itemDetailCard(
+                icon = R.drawable.ic_storage,
+                title = context.getString(R.string.storage_local_model_occupancy),
+                summary = if (installed) formatSize(context, size) else context.getString(R.string.storage_local_model_not_installed)
+            )
+            itemDetailCard(
+                icon = R.drawable.ic_folder,
+                title = context.getString(R.string.storage_local_model_location),
+                summary = path
+            )
+            if (dateText.isNotBlank()) {
+                itemDetailCard(
+                    icon = R.drawable.ic_download,
+                    title = context.getString(R.string.storage_local_model_downloaded_at),
+                    summary = dateText
+                )
+            }
+
+            Spacer(Modifier.height(24.dp))
+
+            if (installed) {
+                Button(
+                    onClick = { showDeleteConfirm = true },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        color = if (androidx.compose.foundation.isSystemInDarkTheme()) Color(0xFF5B0000) else Color(0xFFFFEBEE)
+                    )
+                ) {
+                    Text(
+                        text = context.getString(R.string.storage_local_model_delete),
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFFD32F2F)
+                    )
+                }
+            }
+        }
+    }
+
+    OverlayDialog(
+        title = context.getString(R.string.storage_local_model_delete),
+        summary = context.getString(R.string.storage_local_model_delete_confirm_summary),
+        show = showDeleteConfirm,
+        onDismissRequest = { showDeleteConfirm = false },
+        content = {
+            Column {
+                Button(
+                    onClick = {
+                        showDeleteConfirm = false
+                        scope.launch {
+                            withContext(Dispatchers.IO) { AiLocalModel.deleteModel() }
+                            onDeleted()
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        color = if (androidx.compose.foundation.isSystemInDarkTheme()) Color(0xFF5B0000) else Color(0xFFFFEBEE)
+                    )
+                ) {
+                    Text(
+                        text = context.getString(R.string.storage_local_model_delete),
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFFD32F2F)
+                    )
+                }
+                Spacer(Modifier.height(8.dp))
+                TextButton(
+                    text = context.getString(R.string.storage_clean_cancel),
+                    onClick = { showDeleteConfirm = false },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
+    )
+}
+
+@androidx.compose.runtime.Composable
+private fun itemDetailCard(icon: Int, title: String, summary: String) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(MiuixTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    painter = painterResource(id = icon),
+                    contentDescription = null,
+                    tint = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                    modifier = Modifier.size(22.dp)
+                )
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(title, fontSize = 13.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+                Spacer(Modifier.height(2.dp))
+                Text(summary, fontSize = 14.sp, fontWeight = FontWeight.Medium, color = MiuixTheme.colorScheme.onSurface)
+            }
+        }
+    }
 }

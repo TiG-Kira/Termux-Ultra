@@ -951,6 +951,17 @@
     <string name="storage_category_vm_desc">QEMU 虚拟机镜像和文件</string>
     <string name="storage_category_other">其它</string>
     <string name="storage_category_other_desc">缓存、临时文件等</string>
+    <string name="storage_category_local_model">本地大模型</string>
+    <string name="storage_category_local_model_desc">设备端 AI 模型文件</string>
+    <string name="storage_local_model_detail_title">本地大模型</string>
+    <string name="storage_local_model_name">模型</string>
+    <string name="storage_local_model_occupancy">占用空间</string>
+    <string name="storage_local_model_location">存放路径</string>
+    <string name="storage_local_model_not_installed">尚未下载本地大模型</string>
+    <string name="storage_local_model_downloaded_at">下载时间</string>
+    <string name="storage_local_model_delete">删除本地大模型</string>
+    <string name="storage_local_model_delete_confirm_summary">将删除已下载的本地大模型文件，并重置 Termux Agent 到未配置状态。确定要删除吗？</string>
+    <string name="storage_local_model_deleted">已删除本地大模型，Agent 已重置为未配置状态</string>
     <string name="storage_scanning">正在扫描存储...</string>
     <string name="storage_scan_complete">扫描完成</string>
     <string name="storage_refresh">刷新</string>

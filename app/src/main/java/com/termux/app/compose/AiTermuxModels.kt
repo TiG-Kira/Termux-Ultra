@@ -6,11 +6,12 @@ import com.google.gson.reflect.TypeToken
 
 /** AI 提供商配置 */
 data class AiProviderConfig(
-    val provider: String = "custom",          // "openai", "custom"
+    val provider: String = "custom",          // "openai", "custom", "local"
     val apiKey: String = "",
     val apiBaseUrl: String = "https://api.openai.com/v1",
     val model: String = "gpt-4o-mini",
-    val temperature: Float = 0.7f
+    val temperature: Float = 0.7f,
+    val localModelId: String = ""             // 本地大模型标识（provider == "local" 时使用）
 )
 
 /** AI 配置（包含提供商和自定义 system prompt） */
