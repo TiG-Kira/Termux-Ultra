@@ -32,6 +32,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -63,6 +64,7 @@ import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.rounded.Stop
+import androidx.compose.material.icons.automirrored.rounded.ArrowForward
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -91,6 +93,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -132,7 +135,8 @@ enum class OverviewCardType {
     MEMORY_MONITOR,
     PROCESS_LIST,
     STOP_ALL,
-    RESOURCE_ACTION
+    RESOURCE_ACTION,
+    FEATURE_CENTER
 }
 
 enum class CardSize {
@@ -294,6 +298,8 @@ class OverviewCardManager(context: Context) {
     
     companion object {
         private var instance: OverviewCardManager? = null
+        private const val FEATURE_CENTER_CARD_ID = "feature_center"
+        private const val FEATURE_CENTER_MIGRATION_KEY = "feature_center_migration_done"
         
         fun getInstance(context: Context): OverviewCardManager {
             if (instance == null) {
@@ -306,7 +312,7 @@ class OverviewCardManager(context: Context) {
     fun getCards(): List<OverviewCardConfig> {
         val cardOrder = prefs.getString("card_order", null)
         if (cardOrder != null) {
-            return cardOrder.split(",").mapIndexed { index, id ->
+            val cards = cardOrder.split(",").mapIndexed { index, id ->
                 val type = OverviewCardType.valueOf(
                     prefs.getString("${id}_type", OverviewCardType.TIPS_AGENT.name) ?: OverviewCardType.TIPS_AGENT.name
                 )
@@ -321,8 +327,35 @@ class OverviewCardManager(context: Context) {
                     resourceActionId = prefs.getString("${id}_resource_action_id", null)
                 )
             }
+            // Migration: add feature_center card for upgrading users
+            return ensureFeatureCenterCard(cards)
         }
         return getDefaultCards()
+    }
+    
+    private fun ensureFeatureCenterCard(cards: List<OverviewCardConfig>): List<OverviewCardConfig> {
+        val hasFeatureCenter = cards.any { it.type == OverviewCardType.FEATURE_CENTER }
+        if (hasFeatureCenter) return cards
+        
+        val migrationDone = prefs.getBoolean(FEATURE_CENTER_MIGRATION_KEY, false)
+        if (migrationDone) return cards  // User already had the option to add/remove; don't force-add
+        
+        // First migration: add the feature center card
+        val newCard = OverviewCardConfig(
+            id = FEATURE_CENTER_CARD_ID,
+            type = OverviewCardType.FEATURE_CENTER,
+            isVisible = true,
+            size = CardSize.WIDE,
+            position = cards.size
+        )
+        val updatedCards = (cards + newCard).mapIndexed { index, c -> c.copy(position = index) }
+        prefs.edit().putBoolean(FEATURE_CENTER_MIGRATION_KEY, true).apply()
+        saveCards(updatedCards)
+        return updatedCards
+    }
+    
+    fun markFeatureCenterDeleted() {
+        prefs.edit().putBoolean(FEATURE_CENTER_MIGRATION_KEY, true).apply()
     }
     
     fun getDefaultCards(): List<OverviewCardConfig> {
@@ -333,7 +366,8 @@ class OverviewCardManager(context: Context) {
             OverviewCardConfig("gpu", OverviewCardType.GPU_MONITOR, isVisible = true, size = CardSize.SMALL, position = 3),
             OverviewCardConfig("memory", OverviewCardType.MEMORY_MONITOR, isVisible = true, size = CardSize.SMALL, position = 4),
             OverviewCardConfig("processes", OverviewCardType.PROCESS_LIST, isVisible = true, size = CardSize.WIDE, position = 5),
-            OverviewCardConfig("stop_all", OverviewCardType.STOP_ALL, isVisible = true, size = CardSize.SMALL, position = 6)
+            OverviewCardConfig("stop_all", OverviewCardType.STOP_ALL, isVisible = true, size = CardSize.SMALL, position = 6),
+            OverviewCardConfig(FEATURE_CENTER_CARD_ID, OverviewCardType.FEATURE_CENTER, isVisible = true, size = CardSize.WIDE, position = 7)
         )
     }
     
@@ -680,6 +714,10 @@ fun OverviewScreen(
                                 text = stringResource(R.string.overview_delete_card),
                                 onClick = {
                                     cards = cards.filter { it.id != card.id }
+                                    // If deleting FEATURE_CENTER card, mark migration as done so it won't be auto-added again
+                                    if (card.type == OverviewCardType.FEATURE_CENTER) {
+                                        OverviewCardManager.getInstance(context).markFeatureCenterDeleted()
+                                    }
                                     showCardSettings = false
                                 },
                                 colors = top.yukonga.miuix.kmp.basic.ButtonDefaults.textButtonColors()
@@ -2200,6 +2238,7 @@ fun getCardTypeName(type: OverviewCardType): String {
         OverviewCardType.PROCESS_LIST -> "Process List"
         OverviewCardType.STOP_ALL -> "Stop All"
         OverviewCardType.RESOURCE_ACTION -> "Resource Action"
+        OverviewCardType.FEATURE_CENTER -> "Feature Center"
     }
 }
 
@@ -2213,6 +2252,7 @@ fun getCardIcon(type: OverviewCardType): ImageVector {
         OverviewCardType.PROCESS_LIST -> Icons.Rounded.List
         OverviewCardType.STOP_ALL -> Icons.Rounded.Stop
         OverviewCardType.RESOURCE_ACTION -> Icons.Rounded.PlayArrow
+        OverviewCardType.FEATURE_CENTER -> Icons.Rounded.Monitor
     }
 }
 
@@ -2900,6 +2940,122 @@ private fun readMemoryUsage(sessionPids: Set<Int> = emptySet()): Pair<Float, Lon
 }
 
 // ============================================================
+// ============================================================
+// Feature Center Card (HeroWelcomeCard style)
+// ============================================================
+
+@Composable
+private fun FeatureCenterCard(
+    card: OverviewCardConfig,
+    isEditMode: Boolean,
+    onEditClick: () -> Unit
+) {
+    val context = LocalContext.current
+    val config = LocalConfiguration.current
+    val cardHeight = ((config.screenWidthDp - 40) / 2).dp
+    val gradient = Brush.linearGradient(
+        colors = listOf(
+            Color(0xFF2563EB),
+            Color(0xFF4F46E5),
+            Color(0xFF7C3AED)
+        )
+    )
+    val isWide = card.size == CardSize.WIDE
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(cardHeight)
+            .clip(RoundedCornerShape(if (isWide) 24.dp else 16.dp))
+            .background(gradient)
+            .clickable(enabled = !isEditMode) {
+                if (!isEditMode) {
+                    val intent = Intent(context, com.termux.app.activities.FeatureCenterActivity::class.java)
+                    context.startActivity(intent)
+                }
+            }
+            .padding(if (isWide) 20.dp else 14.dp)
+    ) {
+        // Decorative circle
+        Box(
+            modifier = Modifier
+                .size(if (isWide) 120.dp else 80.dp)
+                .offset(x = 30.dp, y = (-40).dp)
+                .align(Alignment.TopEnd)
+                .alpha(0.12f)
+                .background(Color.White, RoundedCornerShape(60.dp))
+        )
+
+        Column {
+            // Small header: icon + label
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_resources),
+                    contentDescription = null,
+                    modifier = Modifier.size(if (isWide) 18.dp else 14.dp),
+                    tint = Color.White.copy(alpha = 0.85f)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = stringResource(R.string.overview_feature_center_label),
+                    style = TextStyle(
+                        fontSize = if (isWide) 12.sp else 11.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = Color.White.copy(alpha = 0.85f)
+                    ),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
+                if (isEditMode) {
+                    Box(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { onEditClick() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Edit,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                            tint = Color.White.copy(alpha = 0.8f)
+                        )
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(if (isWide) 4.dp else 3.dp))
+
+            // Large title
+            Text(
+                text = stringResource(R.string.resource_center_welcome_subtitle),
+                style = TextStyle(
+                    fontSize = if (isWide) 22.sp else 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+            )
+
+            Spacer(Modifier.height(if (isWide) 10.dp else 6.dp))
+
+            // Description
+            Text(
+                text = stringResource(R.string.feature_center_desc),
+                style = TextStyle(
+                    fontSize = if (isWide) 14.sp else 12.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = Color.White.copy(alpha = 0.9f),
+                    lineHeight = if (isWide) 22.sp else 18.sp
+                ),
+                maxLines = if (isWide) 3 else 2,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+// ============================================================
 // Resource Action Card
 // ============================================================
 
@@ -3541,6 +3697,16 @@ private fun CardItem(
                 onLaunchAction = { action: ResourceAction ->
                     launchResourceAction(context, action, onExecuteScript)
                 },
+                onEditClick = {
+                    onCardSelected(card.id)
+                    onShowCardSettings()
+                }
+            )
+        }
+        OverviewCardType.FEATURE_CENTER -> {
+            FeatureCenterCard(
+                card = card,
+                isEditMode = isEditMode,
                 onEditClick = {
                     onCardSelected(card.id)
                     onShowCardSettings()

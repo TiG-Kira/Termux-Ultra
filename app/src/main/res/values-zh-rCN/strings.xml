@@ -424,6 +424,8 @@
 
     <!-- 资源中心 -->
     <string name="resources_center">功能中心</string>
+    <string name="feature_center_desc">点击卡片进入功能中心，按需使用，注意使用安全。</string>
+    <string name="overview_feature_center_label">Termux Ultra 功能中心</string>
     <string name="utility_center">实用功能中心</string>
     <string name="third_party_center">第三方资源中心</string>
     <string name="utility_center_desc">官方维护的实用工具：QEMU with VNC、Debian QEMU、Ubuntu 容器、tmux、QEMU 安装等</string>

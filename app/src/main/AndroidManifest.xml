@@ -94,6 +94,11 @@
             android:exported="false" />
 
         <activity
+            android:name=".app.activities.FeatureCenterActivity"
+            android:label="@string/resources_center"
+            android:exported="false" />
+
+        <activity
             android:name=".plugin.PluginCenterActivity"
             android:label="@string/plugin_center"
             android:exported="false" />

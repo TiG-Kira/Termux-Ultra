@@ -1,4 +1,4 @@
-package com.termux.app.activities
+﻿package com.termux.app.activities
 
 import android.content.ComponentName
 import android.content.Context
@@ -750,11 +750,35 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
             // 更新最终消息（可能包含技能卡片）
             // 注意：以下所有处理仅基于 replyText（实际回复内容），
             // reasoningContent（深度思考）不参与任何检测/解析/执行逻辑
-            // 检测并移除 [END_TURN] 结束标记
-            val hasEndTurn = replyText.contains("[END_TURN]")
+            // 智能完成检测：不依赖 [END_TURN]，无技能调用即视为回复完毕
             val cleanedReply = replyText.replace("[END_TURN]", "").trimEnd()
             val plainText = SkillExecutor.stripSkillBlocks(cleanedReply)
             val skills = SkillExecutor.parseSkillBlocks(cleanedReply)
+            val hasSkills = skills.isNotEmpty()
+
+
+            // === 检测 AI 创造的新工具（new_tool 标签）===
+            val newToolBlocks = SkillExecutor.parseNewToolBlocks(replyText)
+            for (toolData in newToolBlocks) {
+                try {
+                    val savedSkill = AiTermuxPrefs.saveNewTool(ctx, toolData)
+                    if (savedSkill != null) {
+                        android.util.Log.i("AiTermux", "新技能已保存: ")
+                        synchronized(messages) {
+                            val idx2 = messages.indexOfFirst { it.id == streamMsgId }
+                            if (idx2 >= 0) {
+                                val currentContent = messages[idx2].content
+                                messages[idx2] = messages[idx2].copy(
+                                    content = currentContent + "\n\n🛠️ AI 创造了新技能: **** - ",
+                                    isWarning = false
+                                )
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.e("AiTermux", "Failed to save new tool", e)
+                }
+            }
 
             // === 去重检查 1：与之前被幻觉拦截的技能卡片比较 ===
             val newSkills = mutableListOf<Pair<String, JsonObject>>()
@@ -914,46 +938,19 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
                 "[系统警告] 你违反了输出规范禁令第四条：禁止重复执行已执行过的技能。以下 ${skippedSkills.size} 个技能已跳过执行。请直接回答用户的问题，不要再重复执行已完成的操作。"
             } else null
 
-            // === 终止逻辑：基于 [END_TURN] 标记 ===
+            // === 智能终止逻辑 ===
             if (skillsToExecute.isEmpty()) {
-                // 无新技能要执行
-                if (hasEndTurn) {
-                    // AI 标记了结束 → 终止（即使是违规警告后 AI 回复了文本）
-                    android.util.Log.d("AiTermux", "AI 输出 [END_TURN]（无技能），终止循环")
-                    return
-                }
+                // 无新技能要执行 → 视为回复完成
                 if (hasDuplicateViolation) {
-                    // 违规且无 END_TURN → 发送警告让 AI 回复文本
                     currentUserText = duplicateWarning!!
                     continue
                 }
-                // 无 END_TURN 但也没有违规：
-                // 增加容错：等待更多轮次，只有 AI 反复不输出 [END_TURN] 时才截断
-                missingEndTurnRounds++
-                if (missingEndTurnRounds >= maxMissingEndTurnRounds) {
-                    android.util.Log.w("AiTermux", "AI 连续 $missingEndTurnRounds 轮未输出 [END_TURN]，安全终止")
-                    synchronized(messages) {
-                        val idx = messages.indexOfFirst { it.id == streamMsgId }
-                        if (idx >= 0) {
-                            messages[idx] = messages[idx].copy(
-                                content = plainText.ifBlank { replyText } +
-                                        "\n\n⚠️ AI 未输出结束标记，已自动停止（下次将提醒 AI 输出 [END_TURN]）",
-                                isWarning = true
-                            )
-                        }
-                    }
-                    AiTermuxPrefs.saveChatHistory(ctx, messages.toList())
-                    return
-                }
-                // 容错轮次内：继续让 AI 回复，附带警告提醒
-                android.util.Log.d("AiTermux", "AI 未输出 [END_TURN]，容错轮次 $missingEndTurnRounds/$maxMissingEndTurnRounds，继续询问")
-                currentUserText = buildString {
-                    append(plainText.ifBlank { replyText })
-                    append("\n\n[系统提示] 请在本轮回复结尾输出 [END_TURN] 表示完成。")
-                }
-                continue
+                android.util.Log.d("AiTermux", "AI 回复完成（无技能），终止循环")
+                return
             }
             // 有技能要执行，重置容错计数
+            missingEndTurnRounds = 0
+
             missingEndTurnRounds = 0
 
             var needsUserInput = false
@@ -1064,21 +1061,17 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
                 return
             }
 
-            // AI 输出了 [END_TURN] → 执行完技能后终止，不再回传结果给 AI
-            if (hasEndTurn) {
-                android.util.Log.d("AiTermux", "AI 输出 [END_TURN]（有技能已执行），终止循环")
+            // 执行完技能后，如果没有需要回传的结果则直接终止
+            if (executedSkillTypes.isNotEmpty() &&
+                executedSkillTypes.all { it.requiresClick(autoExecSkills, unlimitedModeActive) }) {
                 return
             }
 
-            // 构建回传给 AI 的结果消息（仅当 AI 未标记结束时才回传）
-            val baseResult = lastResultText ?: "(技能执行完成，无输出)"
-            val missingEndTurnWarning = if (!hasEndTurn) {
-                "\n\n[系统警告] 你上一轮回复遗漏了 [END_TURN] 结束标记，导致系统再次调用你。请在本轮回复结尾务必输出 [END_TURN]。"
-            } else ""
+            val missingEndTurnWarning = ""  // 已移除 END_TURN 依赖，保留空字符串供兼容
             currentUserText = if (hasDuplicateViolation) {
-                "$baseResult\n\n$duplicateWarning$missingEndTurnWarning"
+                "\n\n"
             } else {
-                "$baseResult$missingEndTurnWarning"
+                ""
             }
         }
     }

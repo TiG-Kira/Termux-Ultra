@@ -63,7 +63,7 @@ fun RemoteScreen(
     initialTab: Int = 0,
     onTabChange: (Int) -> Unit = {},
     onGoToFiles: () -> Unit = {},
-    onGoToResources: () -> Unit = {},
+    onGoToSettings: () -> Unit = {},
     navBarBottomPadding: androidx.compose.ui.unit.Dp = 0.dp
 ) {
     val context = LocalContext.current
@@ -170,7 +170,7 @@ fun RemoteScreen(
                                     if (exceeded) {
                                         contentAlphaState = 1f
                                         if (startOffset < 0) {
-                                            onGoToResources()
+                                            onGoToSettings()
                                         } else {
                                             onGoToFiles()
                                         }

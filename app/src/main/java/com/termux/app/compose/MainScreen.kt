@@ -1,6 +1,7 @@
-package com.termux.app.compose
+﻿package com.termux.app.compose
 
 import android.content.Context
+
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.EnterTransition
@@ -125,17 +126,16 @@ fun MainScreen(
     }
 
     // 页面可用性过滤：根据设备 API 支持程度隐藏无可用功能的页面入口。
-    // tab 索引 0-5 分别对应 总览/终端/文件/远程/资源/设置 页面。
+    // tab 索引 0-4 分别对应 总览/终端/文件/远程/设置 页面。
     fun pageForTab(tab: Int): ApiCompat.Page = when (tab) {
         0 -> ApiCompat.Page.OVERVIEW
         1 -> ApiCompat.Page.TERMINAL
         2 -> ApiCompat.Page.FILES
         3 -> ApiCompat.Page.REMOTE
-        4 -> ApiCompat.Page.RESOURCES
         else -> ApiCompat.Page.SETTINGS
     }
     val availableTabs = remember {
-        listOf(0, 1, 2, 3, 4, 5).filter { ApiCompat.isPageAvailable(pageForTab(it)) }
+        listOf(0, 1, 2, 3, 5).filter { ApiCompat.isPageAvailable(pageForTab(it)) }
     }
 
     val navStyleForHeight = when (navStyle) {
@@ -238,9 +238,6 @@ fun MainScreen(
             } else {
                 prevAvailable(selectedTab)?.let {
                     previousTab = selectedTab
-                    if (selectedTab == 4 && showVnc && it == 3) {
-                        remoteSubTab = 1
-                    }
                     onTabChange(it)
                 }
             }
@@ -302,15 +299,6 @@ fun MainScreen(
                                 dims = glassDims
                             )
                         }
-                        if (4 in availableTabs) {
-                            LiquidGlassNavigationBarItem(
-                                icon = ImageVector.vectorResource(R.drawable.ic_resources),
-                                label = stringResource(R.string.resources),
-                                selected = selectedTab == 4,
-                                onClick = { previousTab = selectedTab; onTabChange(4) },
-                                dims = glassDims
-                            )
-                        }
                         if (5 in availableTabs) {
                             LiquidGlassNavigationBarItem(
                                 icon = ImageVector.vectorResource(R.drawable.ic_settings),
@@ -369,15 +357,6 @@ fun MainScreen(
                                 label = stringResource(R.string.remote),
                                 selected = selectedTab == 3,
                                 onClick = { previousTab = selectedTab; onTabChange(3) },
-                                dims = softLightDims
-                            )
-                        }
-                        if (4 in availableTabs) {
-                            SoftLightNavigationBarItem(
-                                icon = ImageVector.vectorResource(R.drawable.ic_resources),
-                                label = stringResource(R.string.resources),
-                                selected = selectedTab == 4,
-                                onClick = { previousTab = selectedTab; onTabChange(4) },
                                 dims = softLightDims
                             )
                         }
@@ -452,14 +431,6 @@ fun MainScreen(
                                     onClick = { previousTab = selectedTab; onTabChange(3) }
                                 )
                             }
-                            if (4 in availableTabs) {
-                                FloatingNavigationBarItem(
-                                    icon = ImageVector.vectorResource(R.drawable.ic_resources),
-                                    label = stringResource(R.string.resources),
-                                    selected = selectedTab == 4,
-                                    onClick = { previousTab = selectedTab; onTabChange(4) }
-                                )
-                            }
                             if (5 in availableTabs) {
                                 FloatingNavigationBarItem(
                                     icon = ImageVector.vectorResource(R.drawable.ic_settings),
@@ -504,14 +475,6 @@ fun MainScreen(
                                 label = stringResource(R.string.remote),
                                 selected = selectedTab == 3,
                                 onClick = { previousTab = selectedTab; onTabChange(3) }
-                            )
-                        }
-                        if (4 in availableTabs) {
-                            NavigationBarItem(
-                                icon = ImageVector.vectorResource(R.drawable.ic_resources),
-                                label = stringResource(R.string.resources),
-                                selected = selectedTab == 4,
-                                onClick = { previousTab = selectedTab; onTabChange(4) }
                             )
                         }
                         if (5 in availableTabs) {
@@ -733,9 +696,9 @@ fun MainScreen(
                         previousTab = tab
                         onTabChange(2)
                     },
-                    onGoToResources = {
+                    onGoToSettings = {
                         previousTab = tab
-                        onTabChange(4)
+                        onTabChange(5)
                     },
                     navBarBottomPadding = totalNavHeight
                 )
@@ -770,9 +733,9 @@ fun MainScreen(
                             previousTab = selectedTab
                             onTabChange(2)
                         },
-                        onGoToResources = {
+                        onGoToSettings = {
                             previousTab = selectedTab
-                            onTabChange(4)
+                            onTabChange(5)
                         },
                         navBarBottomPadding = totalNavHeight
                     )
@@ -818,7 +781,7 @@ private fun PageContentForTab(
     onOverviewEditModeChanged: (Boolean) -> Unit,
     onRemoteSubTabChange: (Int) -> Unit,
     onGoToFiles: () -> Unit,
-    onGoToResources: () -> Unit,
+    onGoToSettings: () -> Unit,
     navBarBottomPadding: Dp
 ) {
     when (tab) {
@@ -858,10 +821,9 @@ private fun PageContentForTab(
             initialTab = 0,
             onTabChange = onRemoteSubTabChange,
             onGoToFiles = onGoToFiles,
-            onGoToResources = onGoToResources,
+            onGoToSettings = onGoToSettings,
             navBarBottomPadding = navBarBottomPadding
         )
-        4 -> ResourcesScreen(navBarBottomPadding = navBarBottomPadding)
         5 -> SettingsScreen(
             onAboutClick = onAboutClick,
             navBarBottomPadding = navBarBottomPadding

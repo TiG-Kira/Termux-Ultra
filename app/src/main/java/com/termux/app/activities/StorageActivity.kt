@@ -34,6 +34,7 @@ import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
+import top.yukonga.miuix.kmp.preference.CheckboxPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import java.io.File
 
@@ -267,6 +268,7 @@ fun StorageScreen(onBack: () -> Unit) {
     var cleaningItems by remember { mutableStateOf<List<CleanableItem>>(emptyList()) }
     var showResult by remember { mutableStateOf(false) }
     var resultMessage by remember { mutableStateOf("") }
+    var selectedCleanablePaths by remember { mutableStateOf<Set<String>>(emptySet()) }
 
     val totalStorageBytes = remember {
         val stat = StatFs(Environment.getDataDirectory().path)
@@ -311,6 +313,7 @@ fun StorageScreen(onBack: () -> Unit) {
             categories = withContext(Dispatchers.IO) {
                 scanTermuxStorage(context)
             }
+            selectedCleanablePaths = emptySet()
             val totalFreed = cleaningItems.sumOf { it.sizeBytes }
             resultMessage = if (failedItems.isEmpty()) {
                 context.getString(R.string.storage_clean_success, formatSize(context, totalFreed))
@@ -537,38 +540,30 @@ fun StorageScreen(onBack: () -> Unit) {
 
                                 Spacer(modifier = Modifier.height(8.dp))
 
+                                val selectedCleanable = allCleanableItems.filter { it.path in selectedCleanablePaths }
+                                CheckboxPreference(
+                                    title = "全选",
+                                    summary = "${allCleanableItems.size} 项可选 · ${formatSize(context, totalCleanableBytes)}",
+                                    checked = selectedCleanable.isNotEmpty() && selectedCleanable.size == allCleanableItems.size,
+                                    onCheckedChange = { all ->
+                                        selectedCleanablePaths =
+                                            if (all) allCleanableItems.map { it.path }.toSet() else emptySet()
+                                    },
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+
                                 allCleanableItems.forEachIndexed { index, item ->
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(vertical = 8.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Icon(
-                                            painter = painterResource(id = R.drawable.ic_delete),
-                                            contentDescription = null,
-                                            tint = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                                            modifier = Modifier.size(18.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(12.dp))
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Text(
-                                                text = context.getString(item.type.labelRes),
-                                                fontSize = 14.sp,
-                                                color = MiuixTheme.colorScheme.onSurface
-                                            )
-                                            Text(
-                                                text = item.description,
-                                                fontSize = 12.sp,
-                                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                                            )
-                                        }
-                                        Text(
-                                            text = formatSize(context, item.sizeBytes),
-                                            fontSize = 13.sp,
-                                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                                        )
-                                    }
+                                    CheckboxPreference(
+                                        title = item.name,
+                                        summary = "${item.description} · ${formatSize(context, item.sizeBytes)}",
+                                        checked = item.path in selectedCleanablePaths,
+                                        onCheckedChange = { isChecked ->
+                                            selectedCleanablePaths =
+                                                if (isChecked) selectedCleanablePaths + item.path
+                                                else selectedCleanablePaths - item.path
+                                        },
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
                                     if (index < allCleanableItems.lastIndex) {
                                         HorizontalDivider(
                                             color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f)
@@ -579,7 +574,8 @@ fun StorageScreen(onBack: () -> Unit) {
                                 Spacer(modifier = Modifier.height(16.dp))
 
                                 Button(
-                                    onClick = { doClean(allCleanableItems) },
+                                    onClick = { doClean(selectedCleanable) },
+                                    enabled = selectedCleanable.isNotEmpty(),
                                     modifier = Modifier.fillMaxWidth()
                                 ) {
                                     Text(

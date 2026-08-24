@@ -1,4 +1,4 @@
-package com.termux.app.compose
+﻿package com.termux.app.compose
 
 import android.app.Activity
 import android.content.Context
@@ -13,6 +13,7 @@ import android.location.LocationManager
 import com.google.gson.Gson
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
+import com.google.gson.JsonPrimitive
 import com.termux.app.TermuxService
 import com.termux.app.TermuxActivity
 import com.termux.app.activities.QemuVmActivity
@@ -123,7 +124,7 @@ object SkillExecutor {
         return null
     }
 
-    /** 从 AI 回复内容中解析技能块（支持多种代码块标记或直接 JSON） */
+    /** 从 AI 回复内容中解析技能块（支持多种代码块标记、直接 JSON、以及行业标准 tool_call 格式） */
     fun parseSkillBlocks(content: String): List<Pair<String, JsonObject>> {
         val results = mutableListOf<Pair<String, JsonObject>>()
         val seen = mutableSetOf<String>()
@@ -150,7 +151,10 @@ object SkillExecutor {
             } catch (_: Exception) { }
         }
 
-        // 策略 2: 直接在文本中查找包含 skillType 的 JSON 对象（兜底，与策略1互补）
+        // 策略 2: 解析行业标准 <tool_call> / <tool_call> XML 格式
+        parseToolCallBlocks(content, results, seen)
+
+        // 策略 3: 直接在文本中查找包含 skillType 的 JSON 对象（兜底）
         if (results.isEmpty()) {
             val jsonPattern = Regex("""\{[^{}]*"skillType"[^{}]*\}""", RegexOption.DOT_MATCHES_ALL)
             for (match in jsonPattern.findAll(content)) {
@@ -169,9 +173,78 @@ object SkillExecutor {
         return results
     }
 
+    /** 解析行业标准 <tool_call> / <tool_call> XML 格式的技能调用 */
+    private fun parseToolCallBlocks(
+        content: String,
+        results: MutableList<Pair<String, JsonObject>>,
+        seen: MutableSet<String>
+    ) {
+        val toolCallPattern = Regex(
+            """<tool_call>([\s\S]*?)</tool_call>""",
+            RegexOption.DOT_MATCHES_ALL
+        )
+        for (match in toolCallPattern.findAll(content)) {
+            val block = match.groupValues.getOrNull(1)?.trim() ?: continue
+            val namePattern = Regex(
+                """<tool_name>\s*([\s\S]*?)\s*</tool_name>""",
+                RegexOption.DOT_MATCHES_ALL
+            )
+            val nameMatch = namePattern.find(block) ?: continue
+            val skillType = nameMatch.groupValues[1].trim()
+            if (skillType.isBlank() || !isValidSkillType(skillType)) continue
+            var params = JsonObject()
+            val paramPattern = Regex(
+                """<parameter\s+name\s*=\s*["']([^"']+)["']\s*>([\s\S]*?)</parameter>""",
+                RegexOption.DOT_MATCHES_ALL
+            )
+            val jsonObject = JsonObject()
+            paramPattern.findAll(block).forEach { pm ->
+                val pname = pm.groupValues[1].trim()
+                val pval = pm.groupValues[2].trim()
+                try { jsonObject.add(pname, JsonPrimitive(pval)) } catch (_: Exception) { }
+            }
+            params = jsonObject
+            val key = """$skillType:${params}"""
+            if (key !in seen) {
+                seen.add(key)
+                results.add(skillType to params)
+            }
+        }
+    }
+
+    /** 解析 <new_tool> 块，提取 AI 自主创造的新技能 */
+    fun parseNewToolBlocks(content: String): List<Map<String, String>> {
+        val results = mutableListOf<Map<String, String>>()
+        val pattern = Regex(
+            """<new_tool>([\s\S]*?)</new_tool>""",
+            RegexOption.DOT_MATCHES_ALL
+        )
+        for (match in pattern.findAll(content)) {
+            val block = match.groupValues.getOrNull(1)?.trim() ?: continue
+            val tool = mutableMapOf<String, String>()
+            val tagPattern = Regex(
+                """<(tool_name\|description\|system_prompt\|skill_json\|implementation_type)>[\s\S]*?</\1>""",
+                RegexOption.DOT_MATCHES_ALL
+            )
+            for (tagMatch in tagPattern.findAll(block)) {
+                val tagName = tagMatch.groupValues[1].trim()
+                val tagStart = tagMatch.value.indexOf(">") + 1
+                val tagEnd = tagMatch.value.lastIndexOf("</")
+                val tagValue = if (tagStart >= 0 && tagEnd > tagStart) {
+                    tagMatch.value.substring(tagStart, tagEnd).trim()
+                } else ""
+                tool[tagName] = tagValue
+            }
+            if (tool.containsKey("tool_name") && tool["tool_name"]!!.isNotBlank()) {
+                results.add(tool)
+            }
+        }
+        return results
+    }
+
     private fun isValidSkillType(type: String): Boolean {
         return try {
-            SkillType.valueOf(type)
+            SkillType.valueOf(type.uppercase())
             true
         } catch (_: Exception) {
             false
@@ -198,11 +271,18 @@ object SkillExecutor {
             }
         }
 
-        // 2. 移除直接内联的 JSON 技能对象
+        // 2. 移除所有 <tool_call> 行业标准格式块
+        val toolCallStrip = Regex(
+            """""<tool_call>([\s\S]*?)</tool_call>""""",
+            RegexOption.DOT_MATCHES_ALL
+        )
+        result = toolCallStrip.replace(result, """""").trim()
+
+        // 3. 移除直接内联的 JSON 技能对象
         val jsonPattern = Regex("""\{[^{}]*"skillType"[^{}]*\}""", RegexOption.DOT_MATCHES_ALL)
         result = jsonPattern.replace(result, "").trim()
 
-        // 3. 过滤 AI 编造的伪造结果段落
+        // 4. 过滤 AI 编造的伪造结果段落
         //    删除以 "技能执行结果"、"技能名称:"、"操作:"、"状态:" 开头的伪造结果块
         val fakeResultPattern = Regex(
             """[\r\n]*[*_#\s]*技能执行结果[*_#\s]*[\r\n]+[\s\S]*?(?=[\r\n]{2,}|$)""",
@@ -210,18 +290,18 @@ object SkillExecutor {
         )
         result = fakeResultPattern.replace(result, "")
 
-        // 4. 过滤以 "技能名称:"、"操作:"、"状态:" 等开头的连续伪造行
+        // 5. 过滤以 "技能名称:"、"操作:"、"状态:" 等开头的连续伪造行
         val fakeLinePattern = Regex(
             """^[*_#\s]*(技能名称|操作(?:说明)?|状态(?:说明)?|详细信息)[:：].*$""",
             RegexOption.MULTILINE
         )
         result = fakeLinePattern.replace(result, "")
 
-        // 5. 过滤 AI 虚构的 "---" 分隔线（在伪造结果上下文中）
+        // 6. 过滤 AI 虚构的 "---" 分隔线（在伪造结果上下文中）
         val separatorPattern = Regex("""^[*_#\s]*-{3,}[*_#\s]*$""", RegexOption.MULTILINE)
         result = separatorPattern.replace(result, "")
 
-        // 6. 清理残留的空行
+        // 7. 清理残留的空行
         result = result.replace(Regex("""\n{3,}"""), "\n\n")
 
         return result.trim()
