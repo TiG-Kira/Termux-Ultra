@@ -37,10 +37,30 @@ public class LogManager {
     private static LogManager instance;
     private final Context appContext;
     private final File logFile;
-    private final SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.getDefault());
 
     private Thread logcatThread;
     private final AtomicBoolean logcatRunning = new AtomicBoolean(false);
+
+    private final ThreadLocal<SimpleDateFormat> dateFormatThreadLocal = new ThreadLocal<SimpleDateFormat>() {
+        @Override
+        protected SimpleDateFormat initialValue() {
+            return new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.getDefault());
+        }
+    };
+
+    private final ThreadLocal<SimpleDateFormat> logcatTimeFormatThreadLocal = new ThreadLocal<SimpleDateFormat>() {
+        @Override
+        protected SimpleDateFormat initialValue() {
+            return new SimpleDateFormat("MM-dd HH:mm:ss.SSS", Locale.getDefault());
+        }
+    };
+
+    private static final ThreadLocal<SimpleDateFormat> displayTimeFormatThreadLocal = new ThreadLocal<SimpleDateFormat>() {
+        @Override
+        protected SimpleDateFormat initialValue() {
+            return new SimpleDateFormat("MM-dd HH:mm:ss", Locale.getDefault());
+        }
+    };
 
     // 日志缓存：避免高频重复解析同一文件
     private List<LogEntry> cachedLogs;
@@ -96,7 +116,7 @@ public class LogManager {
      * 内部日志记录方法
      */
     private synchronized void log(int level, String tag, String message, Throwable throwable) {
-        String timestamp = dateFormat.format(new Date());
+        String timestamp = dateFormatThreadLocal.get().format(new Date());
         String levelStr = getLevelString(level);
 
         StringBuilder logEntry = new StringBuilder();
@@ -217,7 +237,7 @@ public class LogManager {
             String tag = line.substring(cursor, colonIndex).trim();
             String message = line.substring(colonIndex + 1).trim();
 
-            String timestampStr = dateFormat.format(timestamp);
+            String timestampStr = dateFormatThreadLocal.get().format(timestamp);
             String levelStr = getLevelString(level);
 
             StringBuilder logEntry = new StringBuilder();
@@ -231,21 +251,56 @@ public class LogManager {
                 writer.write(logEntry.toString());
             }
         } catch (Exception e) {
-            Log.e(TAG, "Failed to parse logcat line: " + line, e);
+            // 不记录完整异常栈，避免 logcat 收集形成循环
+            Log.w(TAG, "Skipped unparseable logcat line: " + e.getClass().getSimpleName());
         }
     }
 
     private Date parseLogcatTime(String timePart) {
         try {
-            SimpleDateFormat sdf = new SimpleDateFormat("MM-dd HH:mm:ss.SSS", Locale.getDefault());
+            SimpleDateFormat sdf = logcatTimeFormatThreadLocal.get();
             Date date = sdf.parse(timePart);
             if (date == null) return null;
-            // 补全年份（取当前年）
             Calendar now = Calendar.getInstance();
             Calendar parsed = Calendar.getInstance();
             parsed.setTime(date);
             parsed.set(Calendar.YEAR, now.get(Calendar.YEAR));
             return parsed.getTime();
+        } catch (ArrayIndexOutOfBoundsException e) {
+            // Android SimpleDateFormat/Calendar 在某些 locale 下可能触发 ArrayIndexOutOfBoundsException
+            // 回退方案：手动解析时间字符串
+            try {
+                return parseLogcatTimeFallback(timePart);
+            } catch (Exception e2) {
+                return null;
+            }
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * 回退的 logcat 时间解析方法，使用字符串手动解析避免 SimpleDateFormat 的已知 bug。
+     */
+    private Date parseLogcatTimeFallback(String timePart) {
+        // 格式: MM-dd HH:mm:ss.SSS
+        if (timePart == null || timePart.length() < 18) return null;
+        try {
+            int month = Integer.parseInt(timePart.substring(0, 2));
+            int day = Integer.parseInt(timePart.substring(3, 5));
+            int hour = Integer.parseInt(timePart.substring(6, 8));
+            int minute = Integer.parseInt(timePart.substring(9, 11));
+            int second = Integer.parseInt(timePart.substring(12, 14));
+            int millis = Integer.parseInt(timePart.substring(15, 18));
+
+            Calendar cal = Calendar.getInstance();
+            cal.set(Calendar.MONTH, month - 1);
+            cal.set(Calendar.DAY_OF_MONTH, day);
+            cal.set(Calendar.HOUR_OF_DAY, hour);
+            cal.set(Calendar.MINUTE, minute);
+            cal.set(Calendar.SECOND, second);
+            cal.set(Calendar.MILLISECOND, millis);
+            return cal.getTime();
         } catch (Exception e) {
             return null;
         }
@@ -355,13 +410,13 @@ public class LogManager {
 
     private LogEntry parseLogEntry(String entryStr) {
         try {
-            // 格式: [timestamp] [level] [tag] message
             int firstBracket = entryStr.indexOf('[');
             int firstClose = entryStr.indexOf(']', firstBracket);
             if (firstBracket == -1 || firstClose == -1) return null;
 
             String timestampStr = entryStr.substring(firstBracket + 1, firstClose).trim();
-            Date timestamp = dateFormat.parse(timestampStr);
+            Date timestamp = parseTimestampSafely(timestampStr);
+            if (timestamp == null) return null;
 
             int secondBracket = entryStr.indexOf('[', firstClose);
             int secondClose = entryStr.indexOf(']', secondBracket);
@@ -380,7 +435,50 @@ public class LogManager {
 
             return new LogEntry(timestamp.getTime(), level, tag, message);
         } catch (Exception e) {
-            Log.e(TAG, "Failed to parse log entry", e);
+            // 不记录完整异常栈到 logcat，避免形成: 异常->logcat->收集->再异常 的恶性循环
+            Log.w(TAG, "Skipped unparseable log entry: " + e.getClass().getSimpleName());
+            return null;
+        }
+    }
+
+    /**
+     * 安全解析日志时间戳，处理 ArrayIndexOutOfBoundsException 等已知的 SimpleDateFormat bug。
+     */
+    private Date parseTimestampSafely(String timestampStr) {
+        try {
+            return dateFormatThreadLocal.get().parse(timestampStr);
+        } catch (ArrayIndexOutOfBoundsException e) {
+            // SimpleDateFormat 在某些 locale 下的已知 bug，使用手动解析回退
+            return parseTimestampFallback(timestampStr);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * 手动解析 yyyy-MM-dd HH:mm:ss.SSS 格式时间戳。
+     */
+    private Date parseTimestampFallback(String timestampStr) {
+        if (timestampStr == null || timestampStr.length() < 23) return null;
+        try {
+            int year = Integer.parseInt(timestampStr.substring(0, 4));
+            int month = Integer.parseInt(timestampStr.substring(5, 7));
+            int day = Integer.parseInt(timestampStr.substring(8, 10));
+            int hour = Integer.parseInt(timestampStr.substring(11, 13));
+            int minute = Integer.parseInt(timestampStr.substring(14, 16));
+            int second = Integer.parseInt(timestampStr.substring(17, 19));
+            int millis = Integer.parseInt(timestampStr.substring(20, 23));
+
+            Calendar cal = Calendar.getInstance();
+            cal.set(Calendar.YEAR, year);
+            cal.set(Calendar.MONTH, month - 1);
+            cal.set(Calendar.DAY_OF_MONTH, day);
+            cal.set(Calendar.HOUR_OF_DAY, hour);
+            cal.set(Calendar.MINUTE, minute);
+            cal.set(Calendar.SECOND, second);
+            cal.set(Calendar.MILLISECOND, millis);
+            return cal.getTime();
+        } catch (Exception e) {
             return null;
         }
     }
@@ -452,7 +550,7 @@ public class LogManager {
             try (BufferedWriter writer = new BufferedWriter(new FileWriter(logFile, false))) {
                 for (LogEntry entry : filteredEntries) {
                     StringBuilder logEntry = new StringBuilder();
-                    logEntry.append("[").append(dateFormat.format(new Date(entry.timestamp))).append("] ")
+                    logEntry.append("[").append(dateFormatThreadLocal.get().format(new Date(entry.timestamp))).append("] ")
                             .append("[").append(getLevelString(entry.level)).append("] ")
                             .append("[").append(entry.tag).append("] ")
                             .append(entry.message).append("\n");
@@ -519,7 +617,7 @@ public class LogManager {
         }
 
         public String getFormattedTime() {
-            SimpleDateFormat sdf = new SimpleDateFormat("MM-dd HH:mm:ss", Locale.getDefault());
+            SimpleDateFormat sdf = displayTimeFormatThreadLocal.get();
             return sdf.format(new Date(timestamp));
         }
 

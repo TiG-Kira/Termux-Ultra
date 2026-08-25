@@ -1,0 +1,34 @@
+{
+  "skill": "solo-graphic-generation",
+  "skillVersion": "2026.08.06.21.24.57",
+  "graphicStrategyGate": "bitmap-first",
+  "textCriticality": "low",
+  "copyDensity": "none",
+  "bitmapFirstAllowed": true,
+  "layoutStaticRequired": false,
+  "routingReason": "image itself is the requested deliverable",
+  "requestedSize": "1024×1024",
+  "actualImageSize": "square_hd",
+  "sizeConfirmedByUser": true,
+  "assetCount": 2,
+  "assets": [
+    {
+      "filename": "kiterminal-modern-logo.jpg",
+      "title": "KiTerminal 现代 Logo",
+      "intendedSize": "1024×1024",
+      "status": "success",
+      "designNodeId": "image-001"
+    },
+    {
+      "filename": "kiterminal-flat-logo.jpg",
+      "title": "KiTerminal 扁平 Logo",
+      "intendedSize": "1024×1024",
+      "status": "success",
+      "designNodeId": "image-002"
+    }
+  ],
+  "validation": {
+    "status": "manual-check-passed",
+    "note": "Node runtime unavailable; validated design JSON and asset reference manually."
+  }
+}

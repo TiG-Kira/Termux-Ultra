@@ -15,6 +15,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -45,13 +52,18 @@ import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.preference.SwitchPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import com.termux.R
 import com.termux.app.utils.UpdateChecker
 import com.termux.app.utils.UpdateResult
 import com.termux.app.utils.ApkDownloader
 import com.termux.BuildConfig
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.runtime.derivedStateOf
+import kotlinx.coroutines.flow.collect
 
 @Composable
 fun AboutScreen(onBack: () -> Unit) {
@@ -65,7 +77,6 @@ fun AboutScreen(onBack: () -> Unit) {
 
     val updatePrefs = remember { context.getSharedPreferences(PREF_UPDATE, android.content.Context.MODE_PRIVATE) }
 
-    var gradientOffset by remember { mutableFloatStateOf(0f) }
     var checkingUpdate by remember { mutableStateOf(false) }
     var updateResult by remember { mutableStateOf<UpdateResult?>(null) }
     var showUpdateDialog by remember { mutableStateOf(false) }
@@ -81,15 +92,17 @@ fun AboutScreen(onBack: () -> Unit) {
     val currentVersion = remember { BuildConfig.VERSION_NAME }
     val termuxCoreVersion = remember { context.getString(R.string.termux_core_version) }
 
-    LaunchedEffect(Unit) {
-        scope.launch {
-            while (true) {
-                gradientOffset += 0.002f
-                if (gradientOffset > 1f) gradientOffset = 0f
-                delay(16)
-            }
-        }
-    }
+    // 呼吸渐变动画 (FeatureCenterCard 风格)
+    val infiniteTransition = rememberInfiniteTransition(label = "breathingGradient")
+    val gradientFraction by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 6500, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "gradientBreathing"
+    )
 
     LaunchedEffect(Unit) {
         scope.launch {
@@ -101,61 +114,86 @@ fun AboutScreen(onBack: () -> Unit) {
     }
 
     val darkTheme = isSystemInDarkTheme()
-    val gradientColors = if (darkTheme) {
-        listOf(
-            Color(0xFF1a1a2e),
-            Color(0xFF16213e),
-            Color(0xFF0f3460),
-            Color(0xFF1a1a2e)
+
+    // 呼吸渐变颜色 (FeatureCenterCard 风格)
+    val lightGradient = Brush.verticalGradient(
+        colors = listOf(
+            lerp(Color(0xFF60A5FA), Color(0xFF93C5FD), gradientFraction),
+            lerp(Color(0xFF818CF8), Color(0xFFC4B5FD), gradientFraction),
+            lerp(Color(0xFFA78BFA), Color(0xFFF0ABFC), gradientFraction)
         )
-    } else {
-        listOf(
-            Color(0xFFfce7f3),
-            Color(0xFFe0e7ff),
-            Color(0xFFc7d2fe),
-            Color(0xFFfbcfe8)
+    )
+    val darkGradient = Brush.verticalGradient(
+        colors = listOf(
+            lerp(Color(0xFF1E3A5F), Color(0xFF0F172A), gradientFraction),
+            lerp(Color(0xFF312E81), Color(0xFF1E1B4B), gradientFraction),
+            lerp(Color(0xFF4C1D95), Color(0xFF1A1A2E), gradientFraction)
         )
+    )
+    // 滚动状态跟踪
+    val listState = rememberLazyListState()
+    val headerHeightPx = with(density) { 100.dp.toPx() }
+    var scrollFraction by remember { mutableStateOf(0f) }
+    LaunchedEffect(listState) {
+        snapshotFlow { listState.layoutInfo.visibleItemsInfo.firstOrNull()?.offset ?: 0 }
+            .collect { offset ->
+                val firstIndex = listState.firstVisibleItemIndex
+                scrollFraction = if (firstIndex == 0) {
+                    (-offset.toFloat() / headerHeightPx).coerceIn(0f, 1f)
+                } else {
+                    1f
+                }
+            }
     }
+
+    // TopAppBar 透明度动画
+    val topBarAlphaAnim by animateFloatAsState(
+        targetValue = scrollFraction,
+        label = "topBarAlpha"
+    )
+
+    // 页面遮罩透明度动画 (亮色: surface, 暗色: surface)
+    val pageMaskAlphaAnim by animateFloatAsState(
+        targetValue = scrollFraction,
+        label = "pageMaskAlpha"
+    )
+
+    // 头部卡片淡出动画
+    val headerAlphaAnim by animateFloatAsState(
+        targetValue = 1f - scrollFraction,
+        label = "headerAlpha"
+    )
+
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    colors = gradientColors,
-                    startY = gradientOffset * 2000f,
-                    endY = gradientOffset * 2000f + 1000f
-                )
-            )
+            .background(if (darkTheme) darkGradient else lightGradient)
     ) {
+        // 页面遮罩: 亮色白/暗色黑, 跟随上滑渐显
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer { alpha = pageMaskAlphaAnim }
+                .background(MiuixTheme.colorScheme.surface)
+        )
         Scaffold(
             modifier = Modifier.fillMaxSize(),
             containerColor = Color.Transparent,
             contentWindowInsets = WindowInsets(0, 0, 0, 0),
             topBar = {
                 TopAppBar(
+                    modifier = Modifier.graphicsLayer { alpha = topBarAlphaAnim },
                     title = context.getString(R.string.about_preference_title),
                     scrollBehavior = scrollBehavior,
                     navigationIcon = {
-                        Box(
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(CircleShape)
-                                .clickable { onBack() },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = MiuixIcons.Back,
-                                contentDescription = context.getString(R.string.back),
-                                tint = MiuixTheme.colorScheme.onSurface,
-                                modifier = Modifier.size(24.dp)
-                            )
-                        }
+                        Spacer(modifier = Modifier.size(40.dp))
                     }
                 )
             }
         ) { paddingValues ->
             LazyColumn(
+                state = listState,
                 modifier = Modifier
                     .fillMaxSize()
                     .nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -167,7 +205,9 @@ fun AboutScreen(onBack: () -> Unit) {
             ) {
                 item {
                     Column(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .graphicsLayer { alpha = headerAlphaAnim },
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center
                     ) {
@@ -727,6 +767,31 @@ fun AboutScreen(onBack: () -> Unit) {
             }
         }
     )
+    }
+
+    // 独立返回按钮: 最顶层, 始终可见
+    val statusBarHeightPx = WindowInsets.statusBars.getTop(LocalDensity.current)
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(start = 16.dp)
+            .padding(top = (statusBarHeightPx.toFloat() / density.density).dp + 4.dp),
+        contentAlignment = Alignment.TopStart
+    ) {
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .clip(CircleShape)
+                .clickable { onBack() },
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = MiuixIcons.Back,
+                contentDescription = context.getString(R.string.back),
+                tint = MiuixTheme.colorScheme.onSurface,
+                modifier = Modifier.size(24.dp)
+            )
+        }
     }
 }
 }

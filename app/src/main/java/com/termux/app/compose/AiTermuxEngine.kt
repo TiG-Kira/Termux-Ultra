@@ -2655,7 +2655,11 @@ object AiApiClient {
                         else -> emit(chunk)
                     }
                 }
-                if (localFinishedOk || localErrMsg == null) return@flow
+                if (localFinishedOk) return@flow  // Explicit Done received
+            if (localErrMsg == null) {
+                android.util.Log.w("AiTermuxEngine", "Local flow completed without Done or Error - may be abnormal")
+                return@flow
+            }
                 val canFallback = AiTermuxPrefs.isFallbackOnlineEnabled(context)
                     && AiTermuxPrefs.isFallbackOnlineConfigReady(context)
                 if (!canFallback) {

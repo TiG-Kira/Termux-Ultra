@@ -699,11 +699,17 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
                 return
             }
 
-            // 如果流式返回的是空内容（无思考也无回复），删掉占位消息
+            // 如果流式返回的是空内容（无思考也无回复），显示诊断信息而非静默删除
             if (replyText.isBlank()) {
+                android.util.Log.e("AiTermux", "AI returned empty output with no content and no reasoning")
                 synchronized(messages) {
                     val idx = messages.indexOfFirst { it.id == streamMsgId }
-                    if (idx >= 0) messages.removeAt(idx)
+                    if (idx >= 0) {
+                        messages[idx] = messages[idx].copy(
+                            content = "⚠️ AI 未输出任何内容（可能是本地模型推理异常）",
+                            errorMessage = "本地模型返回为空，可能原因：模型输出格式不匹配、进程启动失败、或模型文件异常"
+                        )
+                    }
                 }
                 AiTermuxPrefs.saveChatHistory(ctx, messages.toList())
                 return

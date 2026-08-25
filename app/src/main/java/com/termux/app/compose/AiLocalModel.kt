@@ -1070,6 +1070,7 @@ object AiLocalModel {
             val fullText = StringBuilder()
 
             var state = ParseState.BANNER
+            var nonMatchingLines = 0
 
             val assistantMarker = "<|im_start|>assistant"
             val endMarker = "<|im_end|>"
@@ -1089,6 +1090,7 @@ object AiLocalModel {
                     ParseState.BANNER -> {
                         if (trimmed.contains("<|im_start|>")) {
                             state = ParseState.PROMPT_ECHO
+                            nonMatchingLines = 0
                             if (trimmed.contains(assistantMarker)) {
                                 val idx = trimmed.indexOf(assistantMarker)
                                 val after = trimmed.substring(idx + assistantMarker.length).trim()
@@ -1105,6 +1107,17 @@ object AiLocalModel {
                             if (t.startsWith("Loading model") || t.startsWith("build") || t.startsWith("model ") || t.startsWith("llama_model_loader")) {
                                 val first80 = if (trimmed.length > 80) trimmed.take(80) else trimmed
                                 emit(StreamChunk.Prepare("加载模型中…", first80))
+                                nonMatchingLines = 0
+                            } else if (trimmed.isNotBlank()) {
+                                nonMatchingLines++
+                                if (nonMatchingLines >= 5) {
+                                    android.util.Log.w("AiLocalModel", "No ChatML markers detected, falling back to plain text capture")
+                                    state = ParseState.RESPONSE
+                                    fullText.append(trimmed).append('\n')
+                                    emit(StreamChunk.Content(trimmed + "\n"))
+                                    nonMatchingLines = 0
+                                    continue
+                                }
                             }
                             continue
                         }
@@ -1120,6 +1133,16 @@ object AiLocalModel {
                                 emit(StreamChunk.Content(content + "\n"))
                                 state = ParseState.RESPONSE
                             }
+                            nonMatchingLines = 0
+                            continue
+                        }
+                        nonMatchingLines++
+                        if (nonMatchingLines >= 10) {
+                            android.util.Log.w("AiLocalModel", "Stuck in PROMPT_ECHO too long, falling back to plain text")
+                            state = ParseState.RESPONSE
+                            fullText.append(trimmed).append('\n')
+                            emit(StreamChunk.Content(trimmed + "\n"))
+                            nonMatchingLines = 0
                             continue
                         }
                         continue
@@ -1142,7 +1165,7 @@ object AiLocalModel {
                             }
                             continue
                         }
-                        val content = trimmed.removePrefix("> ")
+                        val content = if (trimmed.startsWith("> ")) trimmed.removePrefix("> ") else trimmed
                         if (content.isEmpty()) continue
                         fullText.append(content).append('\n')
                         emit(StreamChunk.Content(content + "\n"))
@@ -1156,6 +1179,7 @@ object AiLocalModel {
             runCatching { stderrThread.join(3000) }
 
             val output = fullText.toString().trimEnd('\n').trim()
+            android.util.Log.d("AiLocalModel", "CLI output length=${output.length}, first200=${output.take(200)}")
             emit(StreamChunk.Done(fullText = output))
         } catch (e: Exception) {
             android.util.Log.e("AiLocalModel", "Local inference (cli) failed", e)

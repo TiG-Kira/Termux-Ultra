@@ -119,81 +119,85 @@ fun LogViewerScreen(
             )
         }
     ) { paddingValues ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
+        Box(
+            modifier = Modifier.fillMaxSize()
         ) {
-            LogFilterBar(
-                selectedLevel = selectedLevel,
-                onLevelSelected = { selectedLevel = it }
-            )
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues)
+            ) {
+                LogFilterBar(
+                    selectedLevel = selectedLevel,
+                    onLevelSelected = { selectedLevel = it }
+                )
 
-            if (logs.isEmpty()) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = stringResource(R.string.no_logs),
-                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                        fontSize = 16.sp
-                    )
-                }
-            } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(vertical = 8.dp)
-                ) {
-                    items(
-                        items = logs,
-                        key = { entry -> "${entry.timestamp}_${entry.level}_${entry.tag}_${entry.message.hashCode()}" }
-                    ) { logEntry ->
-                        LogItem(logEntry = logEntry)
+                if (logs.isEmpty()) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = stringResource(R.string.no_logs),
+                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                            fontSize = 16.sp
+                        )
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(vertical = 8.dp)
+                    ) {
+                        items(
+                            items = logs,
+                            key = { entry -> "${entry.timestamp}_${entry.level}_${entry.tag}_${entry.message.hashCode()}" }
+                        ) { logEntry ->
+                            LogItem(logEntry = logEntry)
+                        }
                     }
                 }
             }
-        }
-    }
 
-    if (showClearDialog) {
-        OverlayDialog(
-            show = showClearDialog,
-            onDismissRequest = { showClearDialog = false },
-            title = stringResource(R.string.confirm_clear_logs),
-            summary = stringResource(R.string.confirm_clear_logs_message),
-            content = {
-                TextButton(
-                    text = stringResource(R.string.cancel),
-                    onClick = { showClearDialog = false }
-                )
-                TextButton(
-                    text = stringResource(R.string.confirm),
-                    onClick = {
-                        scope.launch {
-                            logManager.stopLogcatCollection()
-                            val cleared = logManager.clearLogs()
-                            if (cleared) {
-                                lastFileModTime = 0L
-                                logs = emptyList()
-                                snackbarHostState.showSnackbar(
-                                    message = logsClearedMessage,
-                                    duration = SnackbarDuration.Short
-                                )
-                            } else {
-                                snackbarHostState.showSnackbar(
-                                    message = noLogsToClearMessage,
-                                    duration = SnackbarDuration.Short
-                                )
-                            }
-                            showClearDialog = false
-                            logManager.startLogcatCollection()
-                        }
-                    },
-                    colors = ButtonDefaults.textButtonColorsPrimary()
+            if (showClearDialog) {
+                OverlayDialog(
+                    show = showClearDialog,
+                    onDismissRequest = { showClearDialog = false },
+                    title = stringResource(R.string.confirm_clear_logs),
+                    summary = stringResource(R.string.confirm_clear_logs_message),
+                    content = {
+                        TextButton(
+                            text = stringResource(R.string.cancel),
+                            onClick = { showClearDialog = false }
+                        )
+                        TextButton(
+                            text = stringResource(R.string.confirm),
+                            onClick = {
+                                scope.launch {
+                                    logManager.stopLogcatCollection()
+                                    val cleared = logManager.clearLogs()
+                                    showClearDialog = false
+                                    if (cleared) {
+                                        lastFileModTime = 0L
+                                        logs = emptyList()
+                                        snackbarHostState.showSnackbar(
+                                            message = logsClearedMessage,
+                                            duration = SnackbarDuration.Short
+                                        )
+                                    } else {
+                                        snackbarHostState.showSnackbar(
+                                            message = noLogsToClearMessage,
+                                            duration = SnackbarDuration.Short
+                                        )
+                                    }
+                                    logManager.startLogcatCollection()
+                                }
+                            },
+                            colors = ButtonDefaults.textButtonColorsPrimary()
+                        )
+                    }
                 )
             }
-        )
+        }
     }
 }
 

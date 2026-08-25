@@ -14,7 +14,6 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
@@ -110,7 +109,6 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
@@ -121,7 +119,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.Canvas
 import com.termux.R
-import com.termux.BuildConfig
 import com.termux.app.TermuxService
 import com.termux.shared.shell.TermuxSession
 import kotlinx.coroutines.Dispatchers
@@ -574,17 +571,6 @@ fun OverviewScreen(
     val scrollBehavior = MiuixScrollBehavior()
     val lazyGridState = rememberLazyGridState()
     
-    // Animated gradient background (similar to FeatureCenterCard breathing effect)
-    val infiniteTransition = rememberInfiniteTransition(label = "overviewBg")
-    val gradientFraction by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(6500, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "overviewGradient"
-    )
     
     val filteredCards = cards.filter { it.isVisible }.sortedBy { it.position }
     
@@ -887,109 +873,43 @@ fun OverviewScreen(
         )
     }
     
-    // Calculate scroll-based animation values
-    val headerHeightPx = with(LocalDensity.current) { 120.dp.toPx() }
-    val scrollProgress = (lazyGridState.firstVisibleItemIndex * 1000f + 
-        lazyGridState.firstVisibleItemScrollOffset.toFloat()) / headerHeightPx
-    val headerAlpha = (1f - scrollProgress.coerceIn(0f, 1f))
-    val topBarAlpha = scrollProgress.coerceIn(0f, 1f)
-    val backgroundAlpha = scrollProgress.coerceIn(0f, 1f)
     
-    // Animate alpha values for TopAppBar and background
-    val topBarAlphaAnim by animateFloatAsState(
-        targetValue = topBarAlpha,
-        label = "topBarAlpha"
-    )
-    val backgroundAlphaAnim by animateFloatAsState(
-        targetValue = backgroundAlpha,
-        label = "bgAlpha"
-    )
-    // Compute animated colors
-    val topBarColorAnim = if (isDarkTheme) 
-        Color.Black.copy(alpha = topBarAlphaAnim) 
-    else 
-        Color.White.copy(alpha = topBarAlphaAnim)
-    val pageBackgroundColorAnim = if (isDarkTheme) 
-        Color(0xFF1C1C1E).copy(alpha = backgroundAlphaAnim) 
-    else 
-        Color(0xFFF2F2F7).copy(alpha = backgroundAlphaAnim)
-    
-    val currentVersion = remember { BuildConfig.VERSION_NAME }
-    
-    Box(modifier = Modifier.fillMaxSize()) {
-        // Animated gradient background (FeatureCenterCard style breathing)
-        val lightGradient = Brush.verticalGradient(
-            colors = listOf(
-                lerp(Color(0xFF2563EB), Color(0xFF38BDF8), gradientFraction),
-                lerp(Color(0xFF4F46E5), Color(0xFF818CF8), gradientFraction),
-                lerp(Color(0xFF7C3AED), Color(0xFFE879F9), gradientFraction)
-            )
-        )
-        val darkGradient = Brush.verticalGradient(
-            colors = listOf(
-                lerp(Color(0xFF1E3A5F), Color(0xFF0F172A), gradientFraction),
-                lerp(Color(0xFF312E81), Color(0xFF1E1B4B), gradientFraction),
-                lerp(Color(0xFF4C1D95), Color(0xFF1A1A2E), gradientFraction)
-            )
-        )
-        
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(if (isDarkTheme) darkGradient else lightGradient)
-        )
-        
-        // Solid color overlay that appears on scroll
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(pageBackgroundColorAnim)
-        )
-        
-        Scaffold(
-            modifier = Modifier.fillMaxSize(),
-            containerColor = Color.Transparent,
-            contentWindowInsets = WindowInsets(0, 0, 0, 0),
-            topBar = {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(topBarColorAnim)
-                ) {
-                    TopAppBar(
-                        title = stringResource(R.string.overview_title),
-                        scrollBehavior = scrollBehavior,
-                        
-                        actions = {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                IconButton(onClick = {
-                                    showAddCardDialog = true
-                                }) {
-                                    Icon(
-                                        imageVector = Icons.Rounded.Add,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(24.dp),
-                                        tint = MiuixTheme.colorScheme.onSurface
-                                    )
-                                }
-                                IconButton(onClick = {
-                                    isEditMode = !isEditMode
-                                }) {
-                                    Icon(
-                                        imageVector = if (isEditMode) Icons.Rounded.Check else Icons.Rounded.Edit,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(24.dp),
-                                        tint = MiuixTheme.colorScheme.onSurface
-                                    )
-                                }
-                            }
+    Scaffold(
+        modifier = Modifier.fillMaxSize(),
+        topBar = {
+            TopAppBar(
+                title = stringResource(R.string.overview_title),
+                scrollBehavior = scrollBehavior,
+                
+                actions = {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        IconButton(onClick = {
+                            showAddCardDialog = true
+                        }) {
+                            Icon(
+                                imageVector = Icons.Rounded.Add,
+                                contentDescription = null,
+                                modifier = Modifier.size(24.dp),
+                                tint = MiuixTheme.colorScheme.onSurface
+                            )
                         }
-                    )
+                        IconButton(onClick = {
+                            isEditMode = !isEditMode
+                        }) {
+                            Icon(
+                                imageVector = if (isEditMode) Icons.Rounded.Check else Icons.Rounded.Edit,
+                                contentDescription = null,
+                                modifier = Modifier.size(24.dp),
+                                tint = MiuixTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
                 }
-            }
-        ) { padding ->
+            )
+        }
+    ) { padding ->
         val orderedCards = remember(filteredCards) {
             calculateWaterfallOrder(filteredCards)
         }
@@ -1005,53 +925,6 @@ fun OverviewScreen(
             verticalArrangement = Arrangement.spacedBy(8.dp),
             contentPadding = PaddingValues(top = 8.dp, bottom = navBarBottomPadding + 16.dp, start = 16.dp, end = 16.dp)
         ) {
-            // Header item (App Logo + Title + Version)
-            item(span = { GridItemSpan(2) }) {
-                val appIconPainter = painterResource(R.mipmap.ic_launcher)
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .graphicsLayer {
-                            alpha = headerAlpha
-                        }
-                        .padding(top = 16.dp, bottom = 8.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(72.dp)
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(
-                                if (isDarkTheme) Color.White.copy(alpha = 0.15f)
-                                else Color.White.copy(alpha = 0.35f)
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Image(
-                            painter = appIconPainter,
-                            contentDescription = "Logo",
-                            modifier = Modifier.size(56.dp)
-                        )
-                    }
-                    
-                    Spacer(modifier = Modifier.height(12.dp))
-                    
-                    Text(
-                        text = stringResource(R.string.app_name),
-                        fontSize = 24.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    )
-                    
-                    Spacer(modifier = Modifier.height(4.dp))
-                    
-                    Text(
-                        text = "v$currentVersion",
-                        fontSize = 14.sp,
-                        color = Color.White.copy(alpha = 0.8f)
-                    )
-                }
-            }
             
             items(
                 items = orderedCards,
@@ -1089,7 +962,6 @@ fun OverviewScreen(
                 )
             }
         }
-    }
     }
 }
 
