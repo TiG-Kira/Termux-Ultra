@@ -495,8 +495,8 @@
 
     <!-- Resource Center -->
     <string name="resources_center">Feature Center</string>
-    <string name="feature_center_desc">Tap to enter the Feature Center. Use as needed and stay safe.</string>
-    <string name="overview_feature_center_label">Termux Ultra Feature Center</string>
+    <string name="feature_center_desc">Explore Infinite Possibilities</string>
+    <string name="overview_feature_center_label">Feature Center</string>
     <string name="utility_center">Utility Center</string>
     <string name="third_party_center">Third-Party Center</string>
     <string name="utility_center_desc">Officially maintained tools: QEMU with VNC, Debian QEMU, Ubuntu container, tmux, QEMU installation, etc.</string>
@@ -827,7 +827,7 @@
     <string name="overview_card_sessions">Sessions</string>
     <string name="overview_card_cpu">Termux CPU Usage</string>
     <string name="overview_card_gpu">Termux GPU Usage</string>
-    <string name="overview_card_memory">Termux Memory Usage</string>
+    <string name="overview_card_memory">Memory Usage</string>
     <string name="overview_card_processes">Processes</string>
     <string name="overview_card_stop_all">Stop All</string>
     <string name="overview_running">Running</string>
@@ -863,6 +863,25 @@
     <string name="overview_already_added">Already added</string>
     <string name="overview_move_up">Move Up</string>
     <string name="overview_move_down">Move Down</string>
+
+    <!-- New overview card design strings -->
+    <string name="overview_load_low">Low</string>
+    <string name="overview_load_medium">Medium</string>
+    <string name="overview_load_high">High</string>
+    <string name="overview_load">Load</string>
+    <string name="overview_usage_rate">Usage: %1$.0f%%</string>
+    <string name="overview_gpu_peak_hint">Historical peak</string>
+    <string name="overview_processes">Processes</string>
+    <string name="overview_background">Background</string>
+    <string name="overview_sleeping">Sleeping</string>
+    <string name="overview_process_status">Status</string>
+    <string name="overview_stop_all_subtitle">%1$d active sessions</string>
+    <string name="overview_active">Active</string>
+    <string name="overview_chip_shortcuts">Utilities</string>
+    <string name="overview_chip_plugins">Third-Party</string>
+    <string name="overview_chip_themes">Plugin Center</string>
+    <string name="overview_resource_action_desc">%1$s</string>
+    <string name="overview_tap_to_select">Tap to select</string>
     <string name="overview_delete_card">Delete Card</string>
     <string name="overview_tips_agent_vertical_hint">This card only supports wide layout in vertical mode</string>
     <string name="overview_resource_action">Feature Shortcut</string>
@@ -873,6 +892,22 @@
     <string name="overview_third_party_center">Third-Party Center</string>
     <string name="overview_system_function">System Function</string>
     <string name="overview_can_add_multiple">Can add multiple</string>
+
+    <!-- Process List Detail -->
+    <string name="process_list_title">Process List</string>
+    <string name="process_cpu_usage">CPU Usage</string>
+    <string name="process_cpu_desc">All processes</string>
+    <string name="process_gpu_usage">GPU Usage</string>
+    <string name="process_gpu_desc">GPU load</string>
+    <string name="process_list_all">All Processes</string>
+    <string name="process_loading">Loading processes…</string>
+    <string name="process_no_processes">No active processes</string>
+    <string name="process_pid_label">PID</string>
+    <string name="process_user_label">User</string>
+    <string name="process_sleeping">Sleeping</string>
+    <string name="process_running">Running</string>
+    <string name="process_stopped">Stopped</string>
+    <string name="process_zombie">Zombie</string>
 
     <!-- Plugin System -->
     <string name="plugin_center">Plugin Center</string>
@@ -941,8 +976,8 @@
     <string name="storage_free_space">可用空间</string>
     <string name="storage_category_app_framework">应用框架</string>
     <string name="storage_category_app_framework_desc">Termux 运行时和依赖库</string>
-    <string name="storage_category_filesystem">Termux 文件系统</string>
-    <string name="storage_category_filesystem_desc">Home 目录、配置和数据文件</string>
+    <string name="storage_category_filesystem">Termux 应用容器</string>
+    <string name="storage_category_filesystem_desc">Termux prefix、系统包和配置文件</string>
     <string name="storage_category_user_docs">用户文档</string>
     <string name="storage_category_user_docs_desc">用户存储的文件和文档</string>
     <string name="storage_category_containers">容器</string>
@@ -1004,6 +1039,8 @@
     <string name="log_level_info">Info</string>
     <string name="log_level_warning">Warning</string>
     <string name="log_level_exception">Exception</string>
+    <string name="logs_cleared">Logs cleared</string>
+    <string name="no_logs_to_clear">No logs to clear</string>
 
     <!-- Crash Dialog -->
     <string name="crash_dialog_title">Application Error</string>
@@ -1014,5 +1051,8 @@
     <string name="view_logs">View Logs</string>
     <string name="use_fallback_mode">Use Fallback Mode</string>
     <string name="close_app">Close App</string>
+
+    <string name="overview_cpu_label">CPU</string>
+    <string name="overview_gpu_label">GPU</string>
 </resources>
 

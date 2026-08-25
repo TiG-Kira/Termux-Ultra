@@ -1,0 +1,167 @@
+﻿WARNING: We recommend using a newer Android Gradle plugin to use compile SDK version 37.0
+
+This Android Gradle plugin (9.1.0) was tested up to compile SDK version 36.1.
+
+You are strongly encouraged to update your project to use a newer
+Android Gradle plugin that has been tested with compile SDK version 37.0.
+
+If you are already using the latest version of the Android Gradle plugin,
+you may need to wait until a newer version with support for compile SDK version 37.0 is available.
+
+For more information refer to the compatibility table:
+https://d.android.com/r/tools/api-level-support
+
+To suppress this warning, add/update
+    android.suppressUnsupportedCompileSdk=37.0
+to this project's gradle.properties.
+> Task :app:preBuild UP-TO-DATE
+> Task :app:preReleaseBuild UP-TO-DATE
+> Task :app:dataBindingMergeDependencyArtifactsRelease UP-TO-DATE
+> Task :app:generateReleaseResources UP-TO-DATE
+> Task :terminal-emulator:preBuild UP-TO-DATE
+> Task :terminal-emulator:preReleaseBuild UP-TO-DATE
+> Task :terminal-emulator:generateReleaseResources UP-TO-DATE
+> Task :terminal-emulator:packageReleaseResources UP-TO-DATE
+> Task :terminal-view:preBuild UP-TO-DATE
+> Task :terminal-view:preReleaseBuild UP-TO-DATE
+> Task :terminal-view:generateReleaseResources UP-TO-DATE
+> Task :terminal-view:packageReleaseResources UP-TO-DATE
+> Task :termux-api:preBuild UP-TO-DATE
+> Task :termux-api:preReleaseBuild UP-TO-DATE
+> Task :termux-api:generateReleaseResources UP-TO-DATE
+> Task :termux-api:packageReleaseResources UP-TO-DATE
+> Task :termux-shared:preBuild UP-TO-DATE
+> Task :termux-shared:preReleaseBuild UP-TO-DATE
+> Task :termux-shared:generateReleaseResources UP-TO-DATE
+> Task :termux-shared:packageReleaseResources UP-TO-DATE
+> Task :termux-styling:preBuild UP-TO-DATE
+> Task :termux-styling:preReleaseBuild UP-TO-DATE
+> Task :termux-styling:generateReleaseResources UP-TO-DATE
+> Task :termux-styling:packageReleaseResources UP-TO-DATE
+> Task :termux-tasker:preBuild UP-TO-DATE
+> Task :termux-tasker:preReleaseBuild UP-TO-DATE
+> Task :termux-tasker:generateReleaseResources UP-TO-DATE
+> Task :termux-tasker:packageReleaseResources UP-TO-DATE
+> Task :termux-widget:preBuild UP-TO-DATE
+> Task :termux-widget:preReleaseBuild UP-TO-DATE
+> Task :termux-widget:generateReleaseResources UP-TO-DATE
+> Task :termux-widget:packageReleaseResources UP-TO-DATE
+> Task :app:mergeReleaseResources UP-TO-DATE
+> Task :app:packageReleaseResources UP-TO-DATE
+> Task :terminal-emulator:processReleaseNavigationResources UP-TO-DATE
+> Task :terminal-view:processReleaseNavigationResources UP-TO-DATE
+> Task :termux-api:processReleaseNavigationResources UP-TO-DATE
+> Task :termux-shared:processReleaseNavigationResources UP-TO-DATE
+> Task :termux-styling:processReleaseNavigationResources UP-TO-DATE
+> Task :termux-tasker:processReleaseNavigationResources UP-TO-DATE
+> Task :termux-widget:processReleaseNavigationResources UP-TO-DATE
+> Task :app:processReleaseNavigationResources UP-TO-DATE
+> Task :app:parseReleaseLocalResources UP-TO-DATE
+> Task :terminal-emulator:parseReleaseLocalResources UP-TO-DATE
+> Task :terminal-emulator:generateReleaseRFile UP-TO-DATE
+> Task :terminal-view:parseReleaseLocalResources UP-TO-DATE
+> Task :terminal-view:generateReleaseRFile UP-TO-DATE
+> Task :termux-api:parseReleaseLocalResources UP-TO-DATE
+> Task :termux-api:generateReleaseRFile UP-TO-DATE
+> Task :termux-shared:parseReleaseLocalResources UP-TO-DATE
+> Task :termux-shared:generateReleaseRFile UP-TO-DATE
+> Task :termux-styling:parseReleaseLocalResources UP-TO-DATE
+> Task :termux-styling:generateReleaseRFile UP-TO-DATE
+> Task :termux-tasker:parseReleaseLocalResources UP-TO-DATE
+> Task :termux-tasker:generateReleaseRFile UP-TO-DATE
+> Task :termux-widget:parseReleaseLocalResources UP-TO-DATE
+> Task :termux-widget:generateReleaseRFile UP-TO-DATE
+> Task :app:dataBindingGenBaseClassesRelease UP-TO-DATE
+> Task :app:dataBindingTriggerRelease UP-TO-DATE
+> Task :app:generateReleaseBuildConfig UP-TO-DATE
+> Task :app:generateReleaseRFile UP-TO-DATE
+> Task :terminal-emulator:compileReleaseKotlin NO-SOURCE
+> Task :terminal-emulator:javaPreCompileRelease UP-TO-DATE
+> Task :terminal-emulator:compileReleaseJavaWithJavac UP-TO-DATE
+> Task :terminal-emulator:bundleLibCompileToJarRelease UP-TO-DATE
+> Task :terminal-view:compileReleaseKotlin NO-SOURCE
+> Task :terminal-view:javaPreCompileRelease UP-TO-DATE
+> Task :terminal-view:compileReleaseJavaWithJavac UP-TO-DATE
+> Task :terminal-view:bundleLibCompileToJarRelease UP-TO-DATE
+> Task :termux-shared:compileReleaseKotlin NO-SOURCE
+> Task :termux-shared:javaPreCompileRelease UP-TO-DATE
+> Task :termux-shared:compileReleaseJavaWithJavac UP-TO-DATE
+> Task :termux-shared:bundleLibCompileToJarRelease UP-TO-DATE
+> Task :termux-api:compileReleaseKotlin NO-SOURCE
+> Task :termux-api:javaPreCompileRelease UP-TO-DATE
+> Task :termux-api:compileReleaseJavaWithJavac UP-TO-DATE
+> Task :termux-api:bundleLibCompileToJarRelease UP-TO-DATE
+> Task :termux-styling:compileReleaseKotlin UP-TO-DATE
+> Task :termux-styling:javaPreCompileRelease UP-TO-DATE
+> Task :termux-styling:compileReleaseJavaWithJavac NO-SOURCE
+> Task :termux-styling:bundleLibCompileToJarRelease UP-TO-DATE
+> Task :termux-tasker:compileReleaseKotlin NO-SOURCE
+> Task :termux-tasker:javaPreCompileRelease UP-TO-DATE
+> Task :termux-tasker:compileReleaseJavaWithJavac UP-TO-DATE
+> Task :termux-tasker:bundleLibCompileToJarRelease UP-TO-DATE
+> Task :termux-widget:compileReleaseKotlin NO-SOURCE
+> Task :termux-widget:javaPreCompileRelease UP-TO-DATE
+> Task :termux-widget:compileReleaseJavaWithJavac UP-TO-DATE
+> Task :termux-widget:bundleLibCompileToJarRelease UP-TO-DATE
+> Task :app:kspReleaseKotlin UP-TO-DATE
+
+> Task :app:compileReleaseKotlin FAILED
+.\gradlew.bat : e: file:///D:/KiTerminal-UX/app/src/main/java/com/termux/app/compose/OverviewScreen.kt:1582:12 This ann
+otation is not repeatable.
+At line:15 char:2542
++ ... erminal-UX; .\gradlew.bat :app:compileReleaseKotlin 2>&1 > err.txt; S ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (e: file:///D:/K...not repeatable.:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+
+e: file:///D:/KiTerminal-UX/app/src/main/java/com/termux/app/compose/OverviewScreen.kt:1633:12 Syntax error: Expecting 
+a top level declaration.
+[Incubating] Problems report is available at: file:///D:/KiTerminal-UX/build/reports/problems/problems-report.html
+e: file:///D:/KiTerminal-UX/app/src/main/java/com/termux/app/compose/OverviewScreen.kt:1633:15 Syntax error: Expecting 
+a top level declaration.
+e: file:///D:/KiTerminal-UX/app/src/main/java/com/termux/app/compose/OverviewScreen.kt:1633:16 Syntax error: Expecting 
+a top level declaration.
+e: file:///D:/KiTerminal-UX/app/src/main/java/com/termux/app/compose/OverviewScreen.kt:1633:26 Syntax error: Expecting 
+a top level declaration.
+e: file:///D:/KiTerminal-UX/app/src/main/java/com/termux/app/compose/OverviewScreen.kt:1633:28 Syntax error: Expecting 
+a top level declaration.
+e: file:///D:/KiTerminal-UX/app/src/main/java/com/termux/app/compose/OverviewScreen.kt:1633:28 Functions which invoke @
+Composable functions must be marked with the @Composable annotation
+e: file:///D:/KiTerminal-UX/app/src/main/java/com/termux/app/compose/OverviewScreen.kt:1633:28 Function declaration mus
+t have a name.
+e: file:///D:/KiTerminal-UX/app/src/main/java/com/termux/app/compose/OverviewScreen.kt:1634:16 @Composable invocations 
+can only happen from the context of a @Composable function
+e: file:///D:/KiTerminal-UX/app/src/main/java/com/termux/app/compose/OverviewScreen.kt:1635:30 Unresolved reference 'on
+EditClick'.
+e: file:///D:/KiTerminal-UX/app/src/main/java/com/termux/app/compose/OverviewScreen.kt:1637:25 Unresolved reference 'al
+ign'.
+e: file:///D:/KiTerminal-UX/app/src/main/java/com/termux/app/compose/OverviewScreen.kt:1649:8 Syntax error: Expecting a
+ top level declaration.
+e: file:///D:/KiTerminal-UX/app/src/main/java/com/termux/app/compose/OverviewScreen.kt:1650:4 Syntax error: Expecting a
+ top level declaration.
+e: file:///D:/KiTerminal-UX/app/src/main/java/com/termux/app/compose/OverviewScreen.kt:1650:6 Syntax error: Expecting a
+ top level declaration.
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':app:compileReleaseKotlin'.
+> A failure occurred while executing org.jetbrains.kotlin.compilerRunner.GradleCompilerRunnerWithWorkers$GradleKotlinCo
+mpilerWorkAction
+   > Compilation error. See log for more details
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to get full insights from a Build Scan (powered by Develocity).
+> Get more help at https://help.gradle.org.
+
+Deprecated Gradle features were used in this build, making it incompatible with Gradle 10.
+
+You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+
+For more on this, please refer to https://docs.gradle.org/9.3.1/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+
+BUILD FAILED in 3s
+68 actionable tasks: 1 executed, 67 up-to-date

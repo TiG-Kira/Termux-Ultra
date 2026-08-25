@@ -11,7 +11,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -19,8 +18,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.termux.R
 import com.termux.app.utils.LogManager
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import top.yukonga.miuix.kmp.basic.*
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
@@ -34,42 +35,61 @@ fun LogViewerScreen(
 ) {
     val scope = rememberCoroutineScope()
     val scrollBehavior = MiuixScrollBehavior()
+    val snackbarHostState = remember { SnackbarHostState() }
+    val logsClearedMessage = stringResource(R.string.logs_cleared)
+    val noLogsToClearMessage = stringResource(R.string.no_logs_to_clear)
 
     var selectedLevel by remember { mutableStateOf<Int?>(null) }
     var logs by remember { mutableStateOf<List<LogManager.LogEntry>>(emptyList()) }
     var showClearDialog by remember { mutableStateOf(false) }
+    var lastFileModTime by remember { mutableStateOf(0L) }
 
-    // 实时加载日志
-    val loadLogs = {
-        logs = if (selectedLevel == null) {
-            LogManager.getInstance().allLogs
-        } else {
-            LogManager.getInstance().getLogsByLevel(selectedLevel!!)
+    val logManager = remember { LogManager.getInstance() }
+
+    val loadLogs: suspend () -> Unit = {
+        val newLogs = withContext(Dispatchers.IO) {
+            if (selectedLevel == null) {
+                logManager.allLogs
+            } else {
+                logManager.getLogsByLevel(selectedLevel!!)
+            }
         }
+        logs = newLogs
     }
 
     LaunchedEffect(selectedLevel) {
         loadLogs()
     }
 
-    // 进入页面启动 logcat 实时收集，离开时停止
     DisposableEffect(Unit) {
-        LogManager.getInstance().startLogcatCollection()
+        logManager.startLogcatCollection()
         onDispose {
-            LogManager.getInstance().stopLogcatCollection()
+            logManager.stopLogcatCollection()
         }
     }
 
-    // 定时刷新（每 1 秒）
+    // 智能刷新：每 2 秒检查文件修改时间，仅当文件变更时才重新解析
     LaunchedEffect(Unit) {
         while (true) {
-            delay(1000)
-            loadLogs()
+            delay(2000)
+            val currentModTime = logManager.logFileLastModified
+            if (currentModTime != lastFileModTime) {
+                lastFileModTime = currentModTime
+                loadLogs()
+            }
         }
     }
 
     Scaffold(
         modifier = modifier,
+        snackbarHost = {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.BottomCenter
+            ) {
+                SnackbarHost(state = snackbarHostState)
+            }
+        },
         topBar = {
             TopAppBar(
                 title = stringResource(R.string.log_management),
@@ -104,13 +124,11 @@ fun LogViewerScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            // 过滤选项
             LogFilterBar(
                 selectedLevel = selectedLevel,
                 onLevelSelected = { selectedLevel = it }
             )
 
-            // 日志列表
             if (logs.isEmpty()) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
@@ -127,7 +145,10 @@ fun LogViewerScreen(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(vertical = 8.dp)
                 ) {
-                    items(logs) { logEntry ->
+                    items(
+                        items = logs,
+                        key = { entry -> "${entry.timestamp}_${entry.level}_${entry.tag}_${entry.message.hashCode()}" }
+                    ) { logEntry ->
                         LogItem(logEntry = logEntry)
                     }
                 }
@@ -135,7 +156,6 @@ fun LogViewerScreen(
         }
     }
 
-    // 清空确认对话框
     if (showClearDialog) {
         OverlayDialog(
             show = showClearDialog,
@@ -151,9 +171,23 @@ fun LogViewerScreen(
                     text = stringResource(R.string.confirm),
                     onClick = {
                         scope.launch {
-                            LogManager.getInstance().clearLogs()
-                            logs = emptyList()
+                            logManager.stopLogcatCollection()
+                            val cleared = logManager.clearLogs()
+                            if (cleared) {
+                                lastFileModTime = 0L
+                                logs = emptyList()
+                                snackbarHostState.showSnackbar(
+                                    message = logsClearedMessage,
+                                    duration = SnackbarDuration.Short
+                                )
+                            } else {
+                                snackbarHostState.showSnackbar(
+                                    message = noLogsToClearMessage,
+                                    duration = SnackbarDuration.Short
+                                )
+                            }
                             showClearDialog = false
+                            logManager.startLogcatCollection()
                         }
                     },
                     colors = ButtonDefaults.textButtonColorsPrimary()
@@ -250,7 +284,6 @@ private fun LogItem(
                 .fillMaxWidth()
                 .padding(12.dp)
         ) {
-            // 头部：时间和级别
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -285,7 +318,6 @@ private fun LogItem(
 
             Spacer(modifier = Modifier.height(4.dp))
 
-            // Tag
             Text(
                 text = logEntry.tag,
                 color = MiuixTheme.colorScheme.primary,
@@ -295,7 +327,6 @@ private fun LogItem(
 
             Spacer(modifier = Modifier.height(4.dp))
 
-            // 消息内容
             Text(
                 text = logEntry.message,
                 color = MiuixTheme.colorScheme.onSurface,

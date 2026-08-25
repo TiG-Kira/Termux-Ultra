@@ -1,0 +1,409 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>ADB 工具箱 - 设置</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+            padding: 16px;
+            color: #e0e0e0;
+        }
+        .container { max-width: 640px; margin: 0 auto; padding-bottom: 40px; }
+        .header { text-align: center; padding: 20px 0 24px; color: #fff; }
+        .header h1 { font-size: 24px; margin-bottom: 6px; }
+        .header p { font-size: 13px; opacity: 0.8; }
+        .nav { display: flex; gap: 8px; margin-bottom: 16px; overflow-x: auto; padding-bottom: 4px; }
+        .nav-btn {
+            flex-shrink: 0; padding: 8px 12px;
+            background: rgba(255,255,255,0.1); color: #e0e0e0;
+            border: 1px solid rgba(255,255,255,0.15); border-radius: 10px;
+            font-size: 12px; font-weight: 600; text-align: center; cursor: pointer;
+            transition: all 0.2s;
+        }
+        .nav-btn:active { transform: scale(0.96); }
+        .card {
+            background: rgba(255,255,255,0.06);
+            backdrop-filter: blur(10px);
+            border-radius: 16px;
+            padding: 18px;
+            margin-bottom: 14px;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        .card h2 {
+            font-size: 15px; margin-bottom: 14px; color: #fff;
+            display: flex; align-items: center; font-weight: 600;
+        }
+        .card h2::before {
+            content: ''; display: inline-block;
+            width: 4px; height: 16px; background: #3b82f6;
+            border-radius: 2px; margin-right: 10px;
+        }
+        .setting-row {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 14px 0; border-bottom: 1px solid rgba(255,255,255,0.08);
+        }
+        .setting-row:last-child { border-bottom: none; }
+        .setting-label { font-size: 14px; color: #e0e0e0; font-weight: 500; }
+        .setting-desc { font-size: 12px; color: #6b7280; margin-top: 4px; }
+        .switch {
+            position: relative; width: 48px; height: 28px;
+            background: rgba(255,255,255,0.15); border-radius: 14px;
+            transition: background 0.3s; cursor: pointer;
+        }
+        .switch.active { background: #3b82f6; }
+        .switch::after {
+            content: ''; position: absolute;
+            top: 2px; left: 2px; width: 24px; height: 24px;
+            background: #fff; border-radius: 50%;
+            transition: transform 0.3s;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        }
+        .switch.active::after { transform: translateX(20px); }
+        .input-group { display: flex; gap: 10px; margin-top: 10px; }
+        .input-group input {
+            flex: 1; padding: 12px 14px;
+            background: rgba(0,0,0,0.3); color: #e0e0e0;
+            border: 1px solid rgba(255,255,255,0.1); border-radius: 10px;
+            font-size: 14px; outline: none;
+        }
+        .input-group input:focus { border-color: #3b82f6; }
+        .input-group input::placeholder { color: #6b7280; }
+        .action-btn {
+            padding: 12px 20px; border: none; border-radius: 10px;
+            font-size: 14px; font-weight: 600; cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-primary { background: #3b82f6; color: #fff; }
+        .btn-primary:active { background: #2563eb; }
+        .btn-secondary { background: rgba(255,255,255,0.1); color: #e0e0e0; }
+        .btn-secondary:active { background: rgba(255,255,255,0.15); }
+        .btn-danger { background: rgba(239,68,68,0.8); color: #fff; }
+        .btn-danger:active { background: #dc2626; }
+        .btn-success { background: #10b981; color: #fff; }
+        .btn-success:active { background: #059669; }
+        .result-box {
+            background: rgba(0,0,0,0.4); border-radius: 10px;
+            padding: 12px; margin-top: 10px;
+            font-family: "SF Mono", "Monaco", "Consolas", monospace;
+            font-size: 12px; white-space: pre-wrap; word-break: break-all;
+            max-height: 150px; overflow-y: auto; color: #34d399;
+            border: 1px solid rgba(255,255,255,0.08);
+        }
+        .result-box .empty { color: #6b7280; font-style: italic; }
+        .section-title {
+            font-size: 13px; color: #9ca3af; margin: 10px 0 12px;
+            font-weight: 600; letter-spacing: 0.5px;
+        }
+        .toast {
+            position: fixed; top: 20px; left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.9); color: #fff;
+            padding: 10px 20px; border-radius: 20px;
+            font-size: 13px; z-index: 1000;
+            opacity: 0; transition: opacity 0.3s; pointer-events: none;
+        }
+        .toast.show { opacity: 1; }
+        .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .info-item {
+            background: rgba(0,0,0,0.2); border-radius: 10px; padding: 12px; text-align: center;
+        }
+        .info-item .label { font-size: 11px; color: #6b7280; margin-bottom: 4px; }
+        .info-item .value { font-size: 14px; font-weight: 600; color: #fff; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>⚙️ ADB 设置</h1>
+            <p>配置 ADB 工具箱行为</p>
+        </div>
+
+        <div class="nav">
+            <div class="nav-btn" onclick="navigateTo('index.html')">← 返回主页</div>
+            <div class="nav-btn" onclick="navigateTo('adb-remote.html')">🌐 远程ADB</div>
+            <div class="nav-btn" onclick="navigateTo('about.html')">ℹ️ 关于</div>
+        </div>
+
+        <div class="section-title">ADB 服务设置</div>
+        <div class="card">
+            <h2>服务配置</h2>
+            <div class="setting-row">
+                <div>
+                    <div class="setting-label">自动启动 ADB 服务</div>
+                    <div class="setting-desc">打开插件时自动检查并启动 ADB</div>
+                </div>
+                <div class="switch" id="autoStartSw" onclick="toggleSwitch('autoStartSw', 'autoStart')"></div>
+            </div>
+            <div class="setting-row">
+                <div>
+                    <div class="setting-label">远程连接自动重连</div>
+                    <div class="setting-desc">连接失败时自动重试</div>
+                </div>
+                <div class="switch" id="autoReconnectSw" onclick="toggleSwitch('autoReconnectSw', 'autoReconnect')"></div>
+            </div>
+            <div class="setting-row">
+                <div>
+                    <div class="setting-label">命令执行超时 (秒)</div>
+                    <div class="setting-desc">超过此时长的命令将被终止</div>
+                </div>
+                <input type="number" id="timeoutVal" value="30" style="width:80px;padding:8px 10px;background:rgba(0,0,0,0.3);color:#fff;border:1px solid rgba(255,255,255,0.1);border-radius:8px;font-size:14px;text-align:center;">
+            </div>
+        </div>
+
+        <div class="section-title">远程 ADB 设置</div>
+        <div class="card">
+            <h2>默认连接参数</h2>
+            <div class="input-group">
+                <input type="text" id="defaultIp" placeholder="默认 IP 地址" value="192.168.1.100">
+            </div>
+            <div class="input-group">
+                <input type="text" id="defaultPort" placeholder="默认端口" value="5555">
+            </div>
+            <div class="input-group">
+                <button class="action-btn btn-primary" onclick="saveRemoteConfig()">💾 保存设置</button>
+                <button class="action-btn btn-secondary" onclick="loadRemoteConfig()">📂 加载设置</button>
+            </div>
+        </div>
+
+        <div class="section-title">常用命令管理</div>
+        <div class="card">
+            <h2>自定义快捷命令</h2>
+            <div class="input-group">
+                <input type="text" id="cmdName" placeholder="命令名称" style="flex:1;">
+                <input type="text" id="cmdContent" placeholder="ADB 命令" style="flex:2;">
+            </div>
+            <div class="input-group">
+                <button class="action-btn btn-primary" style="flex:1;" onclick="addCustomCommand()">➕ 添加命令</button>
+                <button class="action-btn btn-secondary" style="flex:1;" onclick="clearCustomCommands()">🗑️ 清空列表</button>
+            </div>
+            <div id="customCmdList" style="margin-top:14px;"></div>
+        </div>
+
+        <div class="section-title">数据管理</div>
+        <div class="card">
+            <h2>数据操作</h2>
+            <div class="input-group">
+                <button class="action-btn btn-secondary" style="flex:1;" onclick="exportConfig()">📤 导出配置</button>
+                <button class="action-btn btn-secondary" style="flex:1;" onclick="importConfig()">📥 导入配置</button>
+            </div>
+            <div class="input-group">
+                <button class="action-btn btn-danger" style="flex:1;" onclick="resetAll()">⚠️ 重置所有设置</button>
+            </div>
+            <div id="configResult" class="result-box" style="display:none;">
+                <span class="empty">操作结果将显示在这里...</span>
+            </div>
+        </div>
+
+        <div class="section-title">插件信息</div>
+        <div class="card">
+            <h2>插件详情</h2>
+            <div class="info-grid">
+                <div class="info-item">
+                    <div class="label">插件 ID</div>
+                    <div class="value" id="pluginId">-</div>
+                </div>
+                <div class="info-item">
+                    <div class="label">版本</div>
+                    <div class="value" id="pluginVersion">-</div>
+                </div>
+                <div class="info-item">
+                    <div class="label">作者</div>
+                    <div class="value">Kira</div>
+                </div>
+                <div class="info-item">
+                    <div class="label">状态</div>
+                    <div class="value" id="pluginStatus">-</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <script>
+        var bridge = window.TermuxUltra;
+        var customCommands = [];
+
+        function showToast(msg) {
+            var toast = document.getElementById('toast');
+            toast.textContent = msg;
+            toast.classList.add('show');
+            setTimeout(function() { toast.classList.remove('show'); }, 2000);
+        }
+
+        function navigateTo(page) {
+            window.location.href = page;
+        }
+
+        function execCommand(cmd) {
+            if (!bridge || !bridge.exec) {
+                showToast('JS Bridge 不可用');
+                return null;
+            }
+            try {
+                var result = bridge.exec(cmd);
+                return JSON.parse(result);
+            } catch(e) {
+                return { success: false, output: '', error: e.message };
+            }
+        }
+
+        function toggleSwitch(switchId, configKey) {
+            var sw = document.getElementById(switchId);
+            var isActive = sw.classList.toggle('active');
+            if (bridge && bridge.setConfig) {
+                bridge.setConfig(configKey, isActive ? 'true' : 'false');
+            }
+            showToast((isActive ? '已开启' : '已关闭') + ': ' + configKey);
+        }
+
+        function loadInitialConfig() {
+            if (!bridge || !bridge.getConfig) return;
+            try {
+                var config = JSON.parse(bridge.getConfig());
+                if (config.autoStart === 'true') document.getElementById('autoStartSw').classList.add('active');
+                if (config.autoReconnect === 'true') document.getElementById('autoReconnectSw').classList.add('active');
+                if (config.timeout) document.getElementById('timeoutVal').value = config.timeout;
+                if (config.defaultIp) document.getElementById('defaultIp').value = config.defaultIp;
+                if (config.defaultPort) document.getElementById('defaultPort').value = config.defaultPort;
+                if (config.customCommands) {
+                    customCommands = JSON.parse(config.customCommands);
+                    renderCustomCommands();
+                }
+            } catch(e) {}
+        }
+
+        function saveRemoteConfig() {
+            if (!bridge || !bridge.setConfig) { showToast('JS Bridge 不可用'); return; }
+            var ok1 = bridge.setConfig('defaultIp', document.getElementById('defaultIp').value);
+            var ok2 = bridge.setConfig('defaultPort', document.getElementById('defaultPort').value);
+            var ok3 = bridge.setConfig('timeout', document.getElementById('timeoutVal').value);
+            showToast('✅ 设置已保存');
+        }
+
+        function loadRemoteConfig() {
+            loadInitialConfig();
+            showToast('已加载设置');
+        }
+
+        function addCustomCommand() {
+            var name = document.getElementById('cmdName').value.trim();
+            var cmd = document.getElementById('cmdContent').value.trim();
+            if (!name || !cmd) { showToast('请输入名称和命令'); return; }
+            
+            customCommands.push({ name: name, cmd: cmd });
+            if (bridge && bridge.setConfig) {
+                bridge.setConfig('customCommands', JSON.stringify(customCommands));
+            }
+            document.getElementById('cmdName').value = '';
+            document.getElementById('cmdContent').value = '';
+            renderCustomCommands();
+            showToast('✅ 命令已添加');
+        }
+
+        function removeCustomCommand(idx) {
+            customCommands.splice(idx, 1);
+            if (bridge && bridge.setConfig) {
+                bridge.setConfig('customCommands', JSON.stringify(customCommands));
+            }
+            renderCustomCommands();
+        }
+
+        function clearCustomCommands() {
+            if (!confirm('确定要清空所有自定义命令吗？')) return;
+            customCommands = [];
+            if (bridge && bridge.setConfig) {
+                bridge.setConfig('customCommands', '[]');
+            }
+            renderCustomCommands();
+            showToast('已清空');
+        }
+
+        function renderCustomCommands() {
+            var listEl = document.getElementById('customCmdList');
+            if (customCommands.length === 0) {
+                listEl.innerHTML = '<div style="text-align:center;padding:20px;color:#6b7280;font-size:13px;">暂无自定义命令</div>';
+                return;
+            }
+            
+            listEl.innerHTML = '';
+            customCommands.forEach(function(item, idx) {
+                var div = document.createElement('div');
+                div.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:rgba(0,0,0,0.2);border-radius:10px;margin-bottom:8px;border:1px solid rgba(255,255,255,0.05);';
+                div.innerHTML = 
+                    '<div style="flex:1;">' +
+                        '<div style="font-size:13px;font-weight:500;color:#fff;">' + item.name + '</div>' +
+                        '<div style="font-size:11px;color:#9ca3af;font-family:monospace;margin-top:4px;">' + item.cmd + '</div>' +
+                    '</div>' +
+                    '<button onclick="removeCustomCommand(' + idx + ')" style="padding:6px 12px;background:rgba(239,68,68,0.7);color:#fff;border:none;border-radius:8px;font-size:11px;cursor:pointer;">删除</button>';
+                listEl.appendChild(div);
+            });
+        }
+
+        function exportConfig() {
+            if (!bridge || !bridge.getConfig) { showToast('JS Bridge 不可用'); return; }
+            var config = JSON.parse(bridge.getConfig());
+            var resultEl = document.getElementById('configResult');
+            resultEl.style.display = 'block';
+            resultEl.textContent = JSON.stringify(config, null, 2);
+            showToast('配置已导出');
+        }
+
+        function importConfig() {
+            var resultEl = document.getElementById('configResult');
+            if (resultEl.style.display === 'none' || !resultEl.textContent) {
+                showToast('请先导出配置获取 JSON');
+                return;
+            }
+            try {
+                var config = JSON.parse(resultEl.textContent);
+                var keys = Object.keys(config);
+                var imported = 0;
+                keys.forEach(function(key) {
+                    if (key !== 'customCommands' && bridge && bridge.setConfig) {
+                        bridge.setConfig(key, config[key]);
+                        imported++;
+                    }
+                });
+                showToast('已导入 ' + imported + ' 项配置');
+            } catch(e) {
+                showToast('❌ 导入失败');
+            }
+        }
+
+        function resetAll() {
+            if (!confirm('确定要重置所有设置吗？此操作不可撤销！')) return;
+            if (bridge) {
+                bridge.setConfig('autoStart', 'false');
+                bridge.setConfig('autoReconnect', 'false');
+                bridge.setConfig('timeout', '30');
+                bridge.setConfig('defaultIp', '192.168.1.100');
+                bridge.setConfig('defaultPort', '5555');
+                bridge.setConfig('customCommands', '[]');
+            }
+            loadInitialConfig();
+            showToast('✅ 已重置');
+        }
+
+        function loadPluginInfo() {
+            if (bridge && bridge.getPluginInfo) {
+                try {
+                    var info = JSON.parse(bridge.getPluginInfo());
+                    document.getElementById('pluginId').textContent = info.id || '-';
+                    document.getElementById('pluginVersion').textContent = info.version || '-';
+                    document.getElementById('pluginStatus').textContent = info.enabled ? '✅ 已启用' : '❌ 已禁用';
+                } catch(e) {}
+            }
+        }
+
+        // 初始化
+        loadInitialConfig();
+        loadPluginInfo();
+    </script>
+</body>
+</html>

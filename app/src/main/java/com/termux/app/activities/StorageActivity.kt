@@ -106,6 +106,7 @@ private fun formatSize(context: android.content.Context, bytes: Long): String {
 
 private fun scanTermuxStorage(context: android.content.Context): List<CategoryStorage> {
     val termuxDir = File("/data/data/${context.packageName}/files/home")
+    val termuxFilesDir = File("/data/data/${context.packageName}/files")
     val externalDir = Environment.getExternalStorageDirectory()
     val appCacheDir = context.cacheDir
 
@@ -139,9 +140,16 @@ private fun scanTermuxStorage(context: android.content.Context): List<CategorySt
     val nativeLibDir = File(context.applicationInfo.nativeLibraryDir ?: "")
     addToCategory(StorageCategory.APP_FRAMEWORK, getDirSize(nativeLibDir))
 
-    // Termux 文件系统: home 目录 + 配置
-    val homeSize = getDirSize(termuxDir)
-    addToCategory(StorageCategory.TERMUX_FILESYSTEM, homeSize)
+    // Termux 应用容器: files 目录下除 home 目录外的所有内部文件（prefix、配置等）
+    val termuxFilesSize = if (termuxFilesDir.exists() && termuxFilesDir.isDirectory) {
+        runCatching {
+            termuxFilesDir.listFiles()?.sumOf { file ->
+                if (file.name == "home") 0L
+                else getDirSize(file)
+            } ?: 0L
+        }.getOrDefault(0L)
+    } else 0L
+    addToCategory(StorageCategory.TERMUX_FILESYSTEM, termuxFilesSize)
 
     // 用户文档: 外部存储中的 termux 相关
     val termuxExternal = File(externalDir, "Termux")

@@ -3,10 +3,12 @@ package com.termux.app.plugin
 import android.net.Uri
 import android.content.Intent
 import android.os.Bundle
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.view.WindowCompat
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -49,6 +51,7 @@ import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.window.WindowDialog
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import com.termux.R
+import com.termux.app.compose.KiTerminalTheme
 import com.termux.app.compose.NavigationHelper
 import com.termux.app.utils.SnackbarHelper
 import androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner
@@ -57,13 +60,17 @@ import com.google.android.material.snackbar.Snackbar
 class PluginCenterActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        window.clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_NAVIGATION)
+        WindowCompat.setDecorFitsSystemWindows(window, false)
         setContent {
             val navDispatcher = NavigationHelper.createDispatcher()
             val navDispatcherOwner = NavigationHelper.createOwner(navDispatcher)
             CompositionLocalProvider(
                 LocalNavigationEventDispatcherOwner provides navDispatcherOwner
             ) {
-                PluginCenterScreen()
+                KiTerminalTheme {
+                    PluginCenterScreen()
+                }
             }
         }
     }
@@ -330,7 +337,6 @@ private fun PluginItemCard(
     onOpenH5Home: () -> Unit
 ) {
     val isDark = androidx.compose.foundation.isSystemInDarkTheme()
-    val cardBg = if (isDark) Color(0xFF1A1A1A) else Color(0xFFFAFAFA)
     val onSurface = MiuixTheme.colorScheme.onSurface
     val hasH5Home = plugin.manifest.entryPoints?.h5Home?.enabled == true
     val stateColor = when (plugin.state) {
@@ -479,15 +485,9 @@ private fun PluginItemCard(
                         ) {
                             Icon(
                                 imageVector = Icons.Rounded.Home,
-                                contentDescription = null,
+                                contentDescription = "插件主页",
                                 modifier = Modifier.size(16.dp),
                                 tint = onSurface
-                            )
-                            Text(
-                                text = "插件主页",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = onSurface
                             )
                         }
                     }

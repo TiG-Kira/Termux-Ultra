@@ -882,27 +882,6 @@ fun AiTermuxEntryCard(modifier: Modifier = Modifier, horizontalMode: Boolean = f
                     .fillMaxSize()
                     .clip(RoundedCornerShape(16.dp))
                     .background(gradient)
-                    .drawWithCache {
-                        onDrawWithContent {
-                            drawCircle(
-                                color = Color.White.copy(alpha = 0.12f),
-                                radius = 55.dp.toPx(),
-                                center = androidx.compose.ui.geometry.Offset(
-                                    x = size.width - 15.dp.toPx(),
-                                    y = 5.dp.toPx()
-                                )
-                            )
-                            drawCircle(
-                                color = Color.White.copy(alpha = 0.08f),
-                                radius = 30.dp.toPx(),
-                                center = androidx.compose.ui.geometry.Offset(
-                                    x = 10.dp.toPx(),
-                                    y = size.height + 10.dp.toPx()
-                                )
-                            )
-                            drawContent()
-                        }
-                    }
                     .padding(16.dp)
             ) {
                 Row(

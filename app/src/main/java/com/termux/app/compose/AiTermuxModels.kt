@@ -32,6 +32,10 @@ data class ChatMessage(
     val isWarning: Boolean = false,
     val reasoningContent: String? = null,
     val reasoningDone: Boolean = false,
+    /** 本地模型准备中状态文案（非 null 时显示「正在准备调用」卡片，有回复/思考自动置 null 隐藏） */
+    val preparingStatus: String? = null,
+    /** 本地模型准备中的详细运行日志（点击卡片展开显示：命令行、环境变量、stderr 加载进度等） */
+    val preparingDetails: List<String> = emptyList(),
     val rawResponse: String? = null  // 原始 API 响应 JSON，用于调试
 )
 
@@ -839,6 +843,12 @@ object AiTermuxPrefs {
     private const val KEY_AUTO_EXEC_CONFIG = "ai_auto_exec_config"
     private const val KEY_UNLIMITED_MODE = "ai_unlimited_mode"
     private const val KEY_ROOT_AUTO_SHELL = "ai_root_auto_shell"
+    // 本地大模型备用在线配置
+    private const val KEY_FALLBACK_ONLINE_ENABLED = "fallback_online_enabled"
+    private const val KEY_FALLBACK_ONLINE_API_KEY = "fallback_online_api_key"
+    private const val KEY_FALLBACK_ONLINE_BASE_URL = "fallback_online_base_url"
+    private const val KEY_FALLBACK_ONLINE_MODEL = "fallback_online_model"
+    private const val KEY_FALLBACK_ONLINE_TEMPERATURE = "fallback_online_temperature"
 
     fun isDeveloperMode(context: Context): Boolean {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -1192,6 +1202,53 @@ object AiTermuxPrefs {
      */
     fun isUnlimitedModeActive(context: Context): Boolean {
         return isDeveloperMode(context) && isUnlimitedMode(context)
+    }
+
+    // ---------- 本地大模型备用在线配置 ----------
+
+    /** 是否开启「本地模式失败时自动回退到备用在线大模型」（仅 provider=local 时有效） */
+    fun isFallbackOnlineEnabled(context: Context): Boolean {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        return prefs.getBoolean(KEY_FALLBACK_ONLINE_ENABLED, false)
+    }
+
+    fun setFallbackOnlineEnabled(context: Context, enabled: Boolean) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit().putBoolean(KEY_FALLBACK_ONLINE_ENABLED, enabled).apply()
+    }
+
+    /** 获取备用在线模型的完整配置（不校验合法性，调用方自行检查 apiKey/model 等） */
+    fun getFallbackOnlineConfig(context: Context): AiProviderConfig {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        return AiProviderConfig(
+            provider = "custom",
+            apiKey = prefs.getString(KEY_FALLBACK_ONLINE_API_KEY, "") ?: "",
+            apiBaseUrl = (prefs.getString(KEY_FALLBACK_ONLINE_BASE_URL, "") ?: "").ifBlank { "https://api.openai.com/v1" },
+            model = (prefs.getString(KEY_FALLBACK_ONLINE_MODEL, "") ?: "").ifBlank { "gpt-4o-mini" },
+            temperature = prefs.getFloat(KEY_FALLBACK_ONLINE_TEMPERATURE, 0.7f)
+        )
+    }
+
+    fun saveFallbackOnlineConfig(
+        context: Context,
+        apiKey: String,
+        baseUrl: String,
+        model: String,
+        temperature: Float = 0.7f
+    ) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit()
+            .putString(KEY_FALLBACK_ONLINE_API_KEY, apiKey)
+            .putString(KEY_FALLBACK_ONLINE_BASE_URL, baseUrl)
+            .putString(KEY_FALLBACK_ONLINE_MODEL, model)
+            .putFloat(KEY_FALLBACK_ONLINE_TEMPERATURE, temperature)
+            .apply()
+    }
+
+    /** 判断备用在线配置是否「看起来」可用（至少 apiKey 或模型不为空） */
+    fun isFallbackOnlineConfigReady(context: Context): Boolean {
+        val cfg = getFallbackOnlineConfig(context)
+        return cfg.model.isNotBlank() && (cfg.apiKey.isNotBlank() || cfg.apiBaseUrl.contains("localhost", ignoreCase = true))
     }
 
     /**

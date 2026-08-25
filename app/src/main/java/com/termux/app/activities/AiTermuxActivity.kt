@@ -577,7 +577,7 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
             var streamError: String? = null
             var wasCancelled = false
 
-            AiApiClient.chatStream(config.providerConfig, apiMsgs, { cancelled }).collect { chunk ->
+            AiApiClient.chatStream(ctx, config.providerConfig, apiMsgs, { cancelled }).collect { chunk ->
                 when (chunk) {
                     is StreamChunk.Reasoning -> {
                         reasoningText += chunk.delta
@@ -586,7 +586,8 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
                             if (idx >= 0) {
                                 messages[idx] = messages[idx].copy(
                                     reasoningContent = reasoningText,
-                                    reasoningDone = false
+                                    reasoningDone = false,
+                                    preparingStatus = null
                                 )
                             }
                         }
@@ -598,7 +599,23 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
                             if (idx >= 0) {
                                 messages[idx] = messages[idx].copy(
                                     reasoningContent = reasoningText,
-                                    reasoningDone = true
+                                    reasoningDone = true,
+                                    preparingStatus = null
+                                )
+                            }
+                        }
+                    }
+                    is StreamChunk.Prepare -> {
+                        synchronized(messages) {
+                            val idx = messages.indexOfFirst { it.id == streamMsgId }
+                            if (idx >= 0) {
+                                val cur = messages[idx]
+                                val newDetails = if (!chunk.detailLine.isNullOrBlank()) {
+                                    cur.preparingDetails + chunk.detailLine!!.split("\\n").filter { it.isNotBlank() }
+                                } else cur.preparingDetails
+                                messages[idx] = cur.copy(
+                                    preparingStatus = chunk.status,
+                                    preparingDetails = newDetails
                                 )
                             }
                         }
@@ -611,7 +628,8 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
                                 // 流式显示时隐藏 [END_TURN] 标记
                                 val displayText = replyText.replace("[END_TURN]", "").trimEnd()
                                 messages[idx] = messages[idx].copy(
-                                    content = SkillExecutor.stripSkillBlocks(displayText).ifBlank { displayText }
+                                    content = SkillExecutor.stripSkillBlocks(displayText).ifBlank { displayText },
+                                    preparingStatus = null
                                 )
                             }
                         }
@@ -620,9 +638,21 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
                         replyText = chunk.fullText
                         rawResponseText = chunk.rawResponse
                         android.util.Log.d("AiTermux", "Done received, contentLen=${chunk.fullText.length}, reasoningLen=${chunk.fullReasoning.length}, rawLen=${chunk.rawResponse.length}")
+                        synchronized(messages) {
+                            val idx = messages.indexOfFirst { it.id == streamMsgId }
+                            if (idx >= 0) {
+                                messages[idx] = messages[idx].copy(preparingStatus = null, rawResponse = chunk.rawResponse)
+                            }
+                        }
                     }
                     is StreamChunk.Error -> {
                         streamError = chunk.message
+                        synchronized(messages) {
+                            val idx = messages.indexOfFirst { it.id == streamMsgId }
+                            if (idx >= 0) {
+                                messages[idx] = messages[idx].copy(preparingStatus = null)
+                            }
+                        }
                     }
                     is StreamChunk.Cancelled -> {
                         wasCancelled = true
@@ -1445,6 +1475,7 @@ private fun AiSetupScreen(vm: AiTermuxViewModel, onBack: () -> Unit) {
                             val cfg = AiProviderConfig(provider, apiKey, baseUrl, model, temperature)
                             vm.viewModelScope.launch {
                                 val resp = AiApiClient.chat(
+                                    ctx,
                                     cfg,
                                     listOf(
                                         OpenAiMessage("system", "你是测试机器人，只回复 'ok' 一个字，不要加其他任何文字。"),
@@ -2063,6 +2094,11 @@ private fun ChatBubble(msg: ChatMessage, vm: AiTermuxViewModel) {
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = if (isUser) Alignment.End else Alignment.Start
     ) {
+        // 本地模型准备中卡片（样式类似深度思考；一旦有思考或回复就自动隐藏）
+        if (!isUser && msg.preparingStatus != null) {
+            PreparingBlock(status = msg.preparingStatus!!, details = msg.preparingDetails, isDark = isDark)
+            Spacer(Modifier.height(6.dp))
+        }
         // 深度思考内容（可折叠）
         if (!isUser && !msg.reasoningContent.isNullOrBlank()) {
             ReasoningBlock(reasoning = msg.reasoningContent, isDone = msg.reasoningDone, isDark = isDark)
@@ -2216,6 +2252,142 @@ private fun ChatBubble(msg: ChatMessage, vm: AiTermuxViewModel) {
                 }
             }
         )
+    }
+}
+
+/** -------------------- 本地模型准备中卡片 -------------------- */
+
+@Composable
+private fun PreparingBlock(status: String, details: List<String>, isDark: Boolean) {
+    var expanded by remember { mutableStateOf(false) }
+    val bg = if (isDark) Color(0xFF1A1A2E) else Color(0xFFF0F0F8)
+    val textColor = if (isDark) Color(0xFFB0B0C8) else Color(0xFF555570)
+    val headerColor = if (isDark) Color(0xFF8888AA) else Color(0xFF7777A0)
+    val accent = Color(0xFF6366F1)
+    // 3 个圆点循环跳动指示器
+    var tick by remember { mutableStateOf(0) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            kotlinx.coroutines.delay(350)
+            tick = (tick + 1) % 3
+        }
+    }
+    Column(
+        modifier = Modifier
+            .padding(end = 40.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(bg)
+            .clickable { expanded = !expanded }
+            .padding(horizontal = 12.dp, vertical = 10.dp)
+    ) {
+        // ---------- 折叠态头部 ----------
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            // 3-dot loading indicator
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                for (i in 0..2) {
+                    val alpha = if (i == tick) 1f else 0.25f
+                    val size = if (i == tick) 8.dp else 6.dp
+                    Box(
+                        modifier = Modifier
+                            .size(size)
+                            .clip(CircleShape)
+                            .background(accent.copy(alpha = alpha))
+                    )
+                }
+            }
+            Text(
+                text = if (expanded) "▼" else "▶",
+                style = TextStyle(fontSize = 10.sp, color = headerColor)
+            )
+            Text(
+                text = "正在准备本地调用",
+                style = TextStyle(
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = headerColor
+                )
+            )
+            if (!expanded) {
+                Text(
+                    text = "（点击展开运行详情）",
+                    style = TextStyle(fontSize = 11.sp, color = headerColor.copy(alpha = 0.6f))
+                )
+            } else if (details.isNotEmpty()) {
+                Text(
+                    text = "（${details.size} 条日志）",
+                    style = TextStyle(fontSize = 11.sp, color = headerColor.copy(alpha = 0.75f))
+                )
+            }
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(
+            text = status,
+            style = TextStyle(
+                fontSize = 12.sp,
+                lineHeight = 18.sp,
+                color = textColor
+            )
+        )
+
+        // ---------- 展开态：详细运行日志 ----------
+        if (expanded) {
+            Spacer(Modifier.height(10.dp))
+            // 浅色分隔线（用 Box 代替 HorizontalDivider，避免 API 差异）
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(0.5.dp)
+                    .background(headerColor.copy(alpha = 0.2f))
+            )
+            Spacer(Modifier.height(8.dp))
+            if (details.isEmpty()) {
+                Text(
+                    text = "运行信息收集中…通常 3 秒内会出现命令行和加载进度日志",
+                    style = TextStyle(
+                        fontSize = 11.sp,
+                        color = textColor.copy(alpha = 0.6f),
+                        fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
+                    )
+                )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 220.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(if (isDark) Color(0xFF111122) else Color(0xFFE8E8F4))
+                        .padding(horizontal = 10.dp, vertical = 8.dp)
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        details.forEach { ln ->
+                            Text(
+                                text = ln,
+                                style = TextStyle(
+                                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                    fontSize = 10.5.sp,
+                                    lineHeight = 15.sp,
+                                    color = textColor.copy(alpha = 0.9f)
+                                ),
+                                softWrap = true
+                            )
+                        }
+                    }
+                }
+                if (details.size > 8) {
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = "↑ 可上下滑动查看更多日志",
+                        style = TextStyle(
+                            fontSize = 10.sp,
+                            color = headerColor.copy(alpha = 0.6f)
+                        )
+                    )
+                }
+            }
+        }
     }
 }
 

@@ -1,0 +1,99 @@
+﻿{
+  "id": "com.kira.adbtoolkit",
+  "name": "ADB 工具箱",
+  "version": "1.0.0",
+  "minHostVersion": "1.2.0",
+  "description": "Android ADB 工具箱，支持本地和远程ADB连接管理，快速执行常用ADB命令，查看设备信息等。",
+  "author": "Kira",
+  "icon": null,
+  "permissions": [
+    "H5_WEBVIEW",
+    "TERMUX_SESSION_ACCESS",
+    "FILE_SYSTEM_READ",
+    "INTERNET_ACCESS"
+  ],
+  "entryPoints": {
+    "h5Home": {
+      "enabled": true,
+      "entry": "web/index.html",
+      "title": "ADB 工具箱"
+    },
+    "pages": [
+      {
+        "id": "adb_remote",
+        "title": "远程ADB",
+        "type": "h5",
+        "entry": "web/adb-remote.html"
+      },
+      {
+        "id": "adb_settings",
+        "title": "ADB 设置",
+        "type": "h5",
+        "entry": "web/settings.html"
+      },
+      {
+        "id": "adb_about",
+        "title": "关于",
+        "type": "h5",
+        "entry": "web/about.html"
+      }
+    ],
+    "resourceCards": [
+      {
+        "id": "adb_check",
+        "title": "ADB 设备检测",
+        "description": "检测当前ADB连接的设备列表",
+        "action": {
+          "type": "SHELL_COMMAND",
+          "command": "adb devices 2>/dev/null || echo 'ADB not available'"
+        }
+      },
+      {
+        "id": "adb_kill_server",
+        "title": "ADB 重启服务",
+        "description": "重启ADB服务进程",
+        "action": {
+          "type": "SHELL_COMMAND",
+          "command": "adb kill-server 2>/dev/null && adb start-server 2>/dev/null && echo 'ADB service restarted'"
+        }
+      },
+      {
+        "id": "adb_version",
+        "title": "ADB 版本信息",
+        "description": "查看当前ADB版本",
+        "action": {
+          "type": "SHELL_COMMAND",
+          "command": "adb version 2>/dev/null || echo 'ADB not available'"
+        }
+      }
+    ],
+    "agentSkills": [
+      {
+        "id": "adb_exec",
+        "name": "执行ADB命令",
+        "description": "在ADB shell中执行指定命令",
+        "category": "ADB",
+        "handler": "adb shell {command}",
+        "requiresClick": false,
+        "hasOutput": true,
+        "riskLevel": "MEDIUM"
+      },
+      {
+        "id": "adb_list_devices",
+        "name": "列出ADB设备",
+        "description": "列出所有已连接的ADB设备",
+        "category": "ADB",
+        "handler": "adb devices -l",
+        "requiresClick": false,
+        "hasOutput": true,
+        "riskLevel": "LOW"
+      }
+    ]
+  },
+  "systemPrompt": {
+    "mode": "APPEND",
+    "content": "## ADB 工具箱插件附加指令\n你可以使用以下ADB相关功能：\n- 使用 adb_exec 技能执行ADB shell命令\n- 使用 adb_list_devices 技能列出已连接设备\n- 资源页的ADB卡片可以快速检测设备、重启服务\n- 插件主页提供完整的ADB命令工具箱\n- 支持远程ADB连接管理",
+    "cardFormat": null
+  }
+}
+

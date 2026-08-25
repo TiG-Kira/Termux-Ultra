@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>Termux Ultra Build Report</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f7; color: #1d1d1f; padding: 40px; }
+.container { max-width: 900px; margin: 0 auto; }
+.header { background: linear-gradient(135deg, #1c1c1e, #2c2c2e); color: white; padding: 30px; border-radius: 16px; margin-bottom: 24px; }
+.header h1 { font-size: 28px; font-weight: 700; margin-bottom: 8px; }
+.header .subtitle { opacity: 0.7; font-size: 14px; }
+.section { background: white; border-radius: 16px; padding: 24px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+.section h2 { font-size: 18px; font-weight: 600; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+.status-ok { color: #34c759; }
+.status-fail { color: #ff3b30; }
+.status-pending { color: #ff9500; }
+.fix-item { padding: 12px 16px; border-radius: 10px; margin-bottom: 8px; background: #f8f8fa; border-left: 3px solid #34c759; }
+.fix-item.issue { border-left-color: #ff3b30; }
+.fix-item.pending { border-left-color: #ff9500; }
+.fix-title { font-weight: 600; font-size: 14px; margin-bottom: 4px; }
+.fix-desc { font-size: 13px; color: #6e6e73; line-height: 1.5; }
+.apk-list { list-style: none; }
+.apk-list li { padding: 10px 14px; background: #f8f8fa; border-radius: 8px; margin-bottom: 6px; font-size: 13px; display: flex; justify-content: space-between; align-items: center; }
+.apk-size { color: #6e6e73; font-weight: 500; }
+.summary-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 16px; }
+.summary-card { background: #f8f8fa; padding: 16px; border-radius: 12px; text-align: center; }
+.summary-card .number { font-size: 28px; font-weight: 700; }
+.summary-card .label { font-size: 12px; color: #6e6e73; margin-top: 4px; }
+.tag { display: inline-block; padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: 600; }
+.tag-done { background: #e8f5e9; color: #2e7d32; }
+.tag-warn { background: #fff3e0; color: #e65100; }
+.info-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #f0f0f0; font-size: 13px; }
+.info-row:last-child { border-bottom: none; }
+.info-row .label { color: #6e6e73; }
+.info-row .value { font-weight: 500; }
+</style>
+</head>
+<body>
+<div class="container">
+
+<div class="header">
+<h1>🛠 Termux Ultra — 总览卡片重设计构建报告</h1>
+<div class="subtitle">生成时间: 2026-08-25 23:43 | 构建类型: Release</div>
+</div>
+
+<div class="summary-grid">
+<div class="summary-card"><div class="number status-ok">✅</div><div class="label">编译通过</div></div>
+<div class="summary-card"><div class="number">5</div><div class="label">修复项</div></div>
+<div class="summary-card"><div class="number">168MB</div><div class="label">APK 大小 (Universal)</div></div>
+</div>
+
+<div class="section">
+<h2>📋 修复清单</h2>
+
+<div class="fix-item">
+<div class="fix-title">✅ GPU 卡片重复"低"文案</div>
+<div class="fix-desc">左侧 Text 改为 "负载" (overview_load)，右侧保留 "低/中/高" (loadLabel)，消除重复</div>
+</div>
+
+<div class="fix-item">
+<div class="fix-title">✅ 内存卡片重复百分比</div>
+<div class="fix-desc">移除右侧重复百分比 Text，仅保留左侧 "已用：X%" (overview_memory_used) 和已用 GB 显示</div>
+</div>
+
+<div class="fix-item">
+<div class="fix-title">✅ 编译错误修复 — context 引用</div>
+<div class="fix-desc">将 val context = LocalContext.current 移至 LaunchedEffect 之前，解决前向引用问题</div>
+</div>
+
+<div class="fix-item">
+<div class="fix-title">✅ 编译错误修复 — containerColor 参数</div>
+<div class="fix-desc">移除 TopAppBar 中不支持的 containerColor 参数</div>
+</div>
+
+<div class="fix-item">
+<div class="fix-title">✅ 插件中心主题适配 (TipsAgentCard)</div>
+<div class="fix-desc">添加 Card 包装器 + 主题感知背景色 (surfaceColor)，暗色模式使用 #1C1C1E，亮色模式使用 #FAFAFA</div>
+</div>
+
+<div class="fix-item pending">
+<div class="fix-title">⚠️ 进程卡片宽版宽度</div>
+<div class="fix-desc">GridItemSpan(2) 逻辑已包含 PROCESS_LIST 类型。如需调整外观，请在设备上验证</div>
+</div>
+</div>
+
+<div class="section">
+<h2>📦 APK 产物</h2>
+<ul class="apk-list">
+<li><span>arm64-v8a</span><span class="apk-size">84.27 MB</span></li>
+<li><span>armeabi-v7a</span><span class="apk-size">81.31 MB</span></li>
+<li><span>x86</span><span class="apk-size">83.54 MB</span></li>
+<li><span>x86_64</span><span class="apk-size">84.24 MB</span></li>
+<li><span>universal</span><span class="apk-size">168.39 MB</span></li>
+</ul>
+</div>
+
+<div class="section">
+<h2>🔧 修改文件</h2>
+<div class="info-row"><span class="label">OverviewScreen.kt</span><span class="value">app/src/main/java/com/termux/app/compose/</span></div>
+<div class="info-row"><span class="label">strings.xml</span><span class="value">app/src/main/res/values/</span></div>
+<div class="info-row"><span class="label">strings.xml (zh-rCN)</span><span class="value">app/src/main/res/values-zh-rCN/</span></div>
+</div>
+
+<div class="section">
+<h2>⚠️ 待验证项</h2>
+
+<div class="fix-item pending">
+<div class="fix-title">状态栏在亮色模式下的可见性</div>
+<div class="fix-desc">状态栏颜色 #F2F2F7 + SYSTEM_UI_FLAG_LIGHT_STATUS_BAR (暗色图标)。如仍有问题，可能需要调整颜色值</div>
+</div>
+
+<div class="fix-item pending">
+<div class="fix-title">进程卡片宽版内容布局</div>
+<div class="fix-desc">GridItemSpan(2) 已使卡片占满两列，但内部内容宽度可能需要进一步调整</div>
+</div>
+</div>
+
+<div class="section">
+<h2>🏗 构建信息</h2>
+<div class="info-row"><span class="label">构建工具</span><span class="value">Gradle 9.3.1</span></div>
+<div class="info-row"><span class="label">构建耗时</span><span class="value">3分16秒</span></div>
+<div class="info-row"><span class="label">编译 Kotlin</span><span class="value">✅ 成功</span></div>
+<div class="info-row"><span class="label">打包 Release</span><span class="value">✅ 成功</span></div>
+</div>
+
+</div>
+</body>
+</html>

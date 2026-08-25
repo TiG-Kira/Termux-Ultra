@@ -11,23 +11,35 @@ import android.os.Process
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -51,6 +63,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material.icons.rounded.Close
@@ -84,9 +97,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -95,15 +110,18 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.Canvas
 import com.termux.R
+import com.termux.BuildConfig
 import com.termux.app.TermuxService
 import com.termux.shared.shell.TermuxSession
 import kotlinx.coroutines.Dispatchers
@@ -327,14 +345,20 @@ class OverviewCardManager(context: Context) {
                     type = type,
                     isVisible = prefs.getBoolean("${id}_visible", true),
                     size = CardSize.valueOf(
-                        prefs.getString("${id}_size", CardSize.SMALL.name) ?: CardSize.SMALL.name
+                        prefs.getString("${id}_size",
+                            if (type == OverviewCardType.PROCESS_LIST || type == OverviewCardType.TIPS_AGENT ||
+                                type == OverviewCardType.SESSIONS || type == OverviewCardType.FEATURE_CENTER)
+                            CardSize.WIDE.name else CardSize.SMALL.name
+                        ) ?: CardSize.SMALL.name
                     ),
                     position = index,
                     resourceActionId = prefs.getString("${id}_resource_action_id", null)
                 )
             }
             // Migration: add feature_center card for upgrading users
-            return ensureFeatureCenterCard(cards)
+            return ensureFeatureCenterCard(
+                migrateCardSizes(cards)
+            )
         }
         return getDefaultCards()
     }
@@ -364,6 +388,10 @@ class OverviewCardManager(context: Context) {
         prefs.edit().putBoolean(FEATURE_CENTER_MIGRATION_KEY, true).apply()
     }
     
+    private fun migrateCardSizes(cards: List<OverviewCardConfig>): List<OverviewCardConfig> {
+        return cards
+    }
+
     fun getDefaultCards(): List<OverviewCardConfig> {
         return listOf(
             OverviewCardConfig("tips_agent", OverviewCardType.TIPS_AGENT, isVisible = true, size = CardSize.WIDE, position = 0),
@@ -431,6 +459,24 @@ fun OverviewScreen(
     navBarBottomPadding: androidx.compose.ui.unit.Dp = 0.dp
 ) {
     val context = LocalContext.current
+    val isDarkTheme = isSystemInDarkTheme()
+    LaunchedEffect(isDarkTheme) {
+        val activity = context as? android.app.Activity
+        if (activity != null) {
+            @Suppress("DEPRECATION")
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                activity.window?.apply {
+                    statusBarColor = android.graphics.Color.parseColor(
+                        if (isDarkTheme) "#1C1C1E" else "#F2F2F7"
+                    )
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                        decorView.systemUiVisibility = 
+                            if (isDarkTheme) 0 else android.view.View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
+                    }
+                }
+            }
+        }
+    }
     val coroutineScope = rememberCoroutineScope()
     val cardManager = remember { OverviewCardManager.getInstance(context) }
     var isEditMode by remember { mutableStateOf(false) }
@@ -526,6 +572,19 @@ fun OverviewScreen(
     }
     
     val scrollBehavior = MiuixScrollBehavior()
+    val lazyGridState = rememberLazyGridState()
+    
+    // Animated gradient background (similar to FeatureCenterCard breathing effect)
+    val infiniteTransition = rememberInfiniteTransition(label = "overviewBg")
+    val gradientFraction by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(6500, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "overviewGradient"
+    )
     
     val filteredCards = cards.filter { it.isVisible }.sortedBy { it.position }
     
@@ -768,9 +827,10 @@ fun OverviewScreen(
                                             id = newId,
                                             type = type,
                                             isVisible = true,
-                                            size = if (type == OverviewCardType.SESSIONS || 
+                                            size = if (type == OverviewCardType.SESSIONS ||
                                                      type == OverviewCardType.PROCESS_LIST ||
-                                                     type == OverviewCardType.TIPS_AGENT) CardSize.WIDE 
+                                                     type == OverviewCardType.TIPS_AGENT ||
+                                                     type == OverviewCardType.FEATURE_CENTER) CardSize.WIDE
                                                    else CardSize.SMALL,
                                             position = maxPosition + 1
                                         )
@@ -827,48 +887,115 @@ fun OverviewScreen(
         )
     }
     
-    Scaffold(
-        modifier = Modifier.fillMaxSize(),
-        contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        topBar = {
-            TopAppBar(
-                title = stringResource(R.string.overview_title),
-                scrollBehavior = scrollBehavior,
-                actions = {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        IconButton(onClick = {
-                            showAddCardDialog = true
-                        }) {
-                            Icon(
-                                imageVector = Icons.Rounded.Add,
-                                contentDescription = null,
-                                modifier = Modifier.size(24.dp),
-                                tint = MiuixTheme.colorScheme.onSurface
-                            )
-                        }
-                        IconButton(onClick = {
-                            isEditMode = !isEditMode
-                        }) {
-                            Icon(
-                                imageVector = if (isEditMode) Icons.Rounded.Check else Icons.Rounded.Edit,
-                                contentDescription = null,
-                                modifier = Modifier.size(24.dp),
-                                tint = MiuixTheme.colorScheme.onSurface
-                            )
-                        }
-                    }
-                }
+    // Calculate scroll-based animation values
+    val headerHeightPx = with(LocalDensity.current) { 120.dp.toPx() }
+    val scrollProgress = (lazyGridState.firstVisibleItemIndex * 1000f + 
+        lazyGridState.firstVisibleItemScrollOffset.toFloat()) / headerHeightPx
+    val headerAlpha = (1f - scrollProgress.coerceIn(0f, 1f))
+    val topBarAlpha = scrollProgress.coerceIn(0f, 1f)
+    val backgroundAlpha = scrollProgress.coerceIn(0f, 1f)
+    
+    // Animate alpha values for TopAppBar and background
+    val topBarAlphaAnim by animateFloatAsState(
+        targetValue = topBarAlpha,
+        label = "topBarAlpha"
+    )
+    val backgroundAlphaAnim by animateFloatAsState(
+        targetValue = backgroundAlpha,
+        label = "bgAlpha"
+    )
+    // Compute animated colors
+    val topBarColorAnim = if (isDarkTheme) 
+        Color.Black.copy(alpha = topBarAlphaAnim) 
+    else 
+        Color.White.copy(alpha = topBarAlphaAnim)
+    val pageBackgroundColorAnim = if (isDarkTheme) 
+        Color(0xFF1C1C1E).copy(alpha = backgroundAlphaAnim) 
+    else 
+        Color(0xFFF2F2F7).copy(alpha = backgroundAlphaAnim)
+    
+    val currentVersion = remember { BuildConfig.VERSION_NAME }
+    
+    Box(modifier = Modifier.fillMaxSize()) {
+        // Animated gradient background (FeatureCenterCard style breathing)
+        val lightGradient = Brush.verticalGradient(
+            colors = listOf(
+                lerp(Color(0xFF2563EB), Color(0xFF38BDF8), gradientFraction),
+                lerp(Color(0xFF4F46E5), Color(0xFF818CF8), gradientFraction),
+                lerp(Color(0xFF7C3AED), Color(0xFFE879F9), gradientFraction)
             )
-        }
-    ) { padding ->
-        // Calculate waterfall layout: reorder cards for optimal placement
+        )
+        val darkGradient = Brush.verticalGradient(
+            colors = listOf(
+                lerp(Color(0xFF1E3A5F), Color(0xFF0F172A), gradientFraction),
+                lerp(Color(0xFF312E81), Color(0xFF1E1B4B), gradientFraction),
+                lerp(Color(0xFF4C1D95), Color(0xFF1A1A2E), gradientFraction)
+            )
+        )
+        
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(if (isDarkTheme) darkGradient else lightGradient)
+        )
+        
+        // Solid color overlay that appears on scroll
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(pageBackgroundColorAnim)
+        )
+        
+        Scaffold(
+            modifier = Modifier.fillMaxSize(),
+            containerColor = Color.Transparent,
+            contentWindowInsets = WindowInsets(0, 0, 0, 0),
+            topBar = {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(topBarColorAnim)
+                ) {
+                    TopAppBar(
+                        title = stringResource(R.string.overview_title),
+                        scrollBehavior = scrollBehavior,
+                        
+                        actions = {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                IconButton(onClick = {
+                                    showAddCardDialog = true
+                                }) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Add,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(24.dp),
+                                        tint = MiuixTheme.colorScheme.onSurface
+                                    )
+                                }
+                                IconButton(onClick = {
+                                    isEditMode = !isEditMode
+                                }) {
+                                    Icon(
+                                        imageVector = if (isEditMode) Icons.Rounded.Check else Icons.Rounded.Edit,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(24.dp),
+                                        tint = MiuixTheme.colorScheme.onSurface
+                                    )
+                                }
+                            }
+                        }
+                    )
+                }
+            }
+        ) { padding ->
         val orderedCards = remember(filteredCards) {
             calculateWaterfallOrder(filteredCards)
         }
         
         LazyVerticalGrid(
+            state = lazyGridState,
             columns = GridCells.Fixed(2),
             modifier = Modifier
                 .fillMaxSize()
@@ -878,6 +1005,54 @@ fun OverviewScreen(
             verticalArrangement = Arrangement.spacedBy(8.dp),
             contentPadding = PaddingValues(top = 8.dp, bottom = navBarBottomPadding + 16.dp, start = 16.dp, end = 16.dp)
         ) {
+            // Header item (App Logo + Title + Version)
+            item(span = { GridItemSpan(2) }) {
+                val appIconPainter = painterResource(R.mipmap.ic_launcher)
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .graphicsLayer {
+                            alpha = headerAlpha
+                        }
+                        .padding(top = 16.dp, bottom = 8.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(72.dp)
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(
+                                if (isDarkTheme) Color.White.copy(alpha = 0.15f)
+                                else Color.White.copy(alpha = 0.35f)
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Image(
+                            painter = appIconPainter,
+                            contentDescription = "Logo",
+                            modifier = Modifier.size(56.dp)
+                        )
+                    }
+                    
+                    Spacer(modifier = Modifier.height(12.dp))
+                    
+                    Text(
+                        text = stringResource(R.string.app_name),
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                    
+                    Spacer(modifier = Modifier.height(4.dp))
+                    
+                    Text(
+                        text = "v$currentVersion",
+                        fontSize = 14.sp,
+                        color = Color.White.copy(alpha = 0.8f)
+                    )
+                }
+            }
+            
             items(
                 items = orderedCards,
                 span = { card ->
@@ -915,6 +1090,7 @@ fun OverviewScreen(
             }
         }
     }
+    }
 }
 
 // ============================================================
@@ -931,6 +1107,7 @@ private fun TipsAgentCard(
 ) {
     val context = LocalContext.current
     val isDark = isSystemInDarkTheme()
+    val surfaceColor = if (isDark) Color(0xFF1C1C1E) else Color(0xFFFAFAFA)
     val aiTermuxEnabled = context.getSharedPreferences("app_settings", Context.MODE_PRIVATE)
         .getBoolean("ai_termux_enabled", true)
     val cardLayoutMode = context.getSharedPreferences("app_settings", Context.MODE_PRIVATE)
@@ -958,7 +1135,16 @@ private fun TipsAgentCard(
             (ApiCompat.isLowAndroid && (ApiCompat.hasAnyForceEnabled(context) || true))
     }
     
-    Column(modifier = Modifier.fillMaxWidth()) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp))
+    ) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(surfaceColor)
+    ) {
         // Title bar
         Row(
             modifier = Modifier
@@ -1023,6 +1209,7 @@ private fun TipsAgentCard(
             )
         }
     }
+}
 }
 
 @Composable
@@ -1373,31 +1560,6 @@ fun OverviewHorizontalTipCard(
                 .clip(RoundedCornerShape(20.dp))
                 .background(brush = gradient ?: Brush.verticalGradient(listOf(backgroundColor, backgroundColor)))
         ) {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .offset(x = 20.dp, y = (-32).dp)
-                    .size(104.dp)
-                    .clip(RoundedCornerShape(52.dp))
-                    .background(Color.White.copy(alpha = 0.08f))
-            )
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .offset(x = (-50).dp, y = 38.dp)
-                    .size(72.dp)
-                    .clip(RoundedCornerShape(36.dp))
-                    .background(Color.White.copy(alpha = 0.05f))
-            )
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .offset(x = (-64).dp, y = 14.dp)
-                    .size(36.dp)
-                    .clip(RoundedCornerShape(18.dp))
-                    .background(Color.White.copy(alpha = 0.06f))
-            )
-
             if (onClose != null) {
                 Box(
                     modifier = Modifier
@@ -1473,7 +1635,7 @@ fun OverviewHorizontalTipCard(
                             color = titleColor,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
-                        )
+                            )
                         if (statusBadgeText != null) {
                             Row(
                                 modifier = Modifier
@@ -1506,7 +1668,7 @@ fun OverviewHorizontalTipCard(
                         lineHeight = 19.sp,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis
-                    )
+                        )
                     if (actionButton != null) {
                         actionButton()
                     }
@@ -1539,9 +1701,131 @@ private fun determineServiceStatus(
 }
 
 // ============================================================
-// Sessions Card
+
+// ============================================================
+// Unified Card Container (Wide / Square)
 // ============================================================
 
+private val WIDE_CARD_HEIGHT = 200.dp
+
+@Composable
+private fun OverviewCardContainer(
+    card: OverviewCardConfig,
+    onEditClick: () -> Unit,
+    isEditMode: Boolean = false,
+    backgroundColor: Color? = null,
+    onClick: (() -> Unit)? = null,
+    clickEnabled: Boolean = true,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    val isDark = isSystemInDarkTheme()
+    val isWide = card.size == CardSize.WIDE
+    val surfaceColor = backgroundColor ?: if (isDark) Color(0xFF1C1C1E) else Color(0xFFFAFAFA)
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(if (isWide) Modifier.height(WIDE_CARD_HEIGHT) else Modifier.aspectRatio(1f))
+            .clip(RoundedCornerShape(20.dp))
+            .then(if (onClick != null && clickEnabled && !isEditMode) Modifier.clickable { onClick() } else Modifier)
+    ) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(surfaceColor)
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.SpaceBetween
+            ) {
+                content()
+            }
+            if (isEditMode) {
+                IconButton(
+                    onClick = onEditClick,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(4.dp)
+                        .size(32.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Edit,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                        tint = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CardIconBox(
+    icon: ImageVector,
+    tint: Color,
+    modifier: Modifier = Modifier,
+    iconSize: androidx.compose.ui.unit.Dp = 22.dp
+) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(14.dp))
+            .background(tint.copy(alpha = 0.12f)),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            modifier = Modifier.size(iconSize),
+            tint = tint
+        )
+    }
+}
+
+@Composable
+private fun CardStatusBadge(
+    text: String,
+    color: Color,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(50))
+            .background(color.copy(alpha = 0.12f))
+            .padding(horizontal = 8.dp, vertical = 3.dp)
+    ) {
+        Text(
+            text = text,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = color
+        )
+    }
+}
+
+@Composable
+private fun CardProgressBar(
+    progress: Float,
+    color: Color,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(50))
+            .background(color.copy(alpha = 0.12f))
+            .height(6.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxHeight()
+                .fillMaxWidth(progress.coerceIn(0f, 1f))
+                .clip(RoundedCornerShape(50))
+                .background(color)
+        )
+    }
+}
+
+// Sessions Card
+// ============================================================
 @Composable
 private fun SessionsCard(
     card: OverviewCardConfig,
@@ -1552,134 +1836,114 @@ private fun SessionsCard(
     isEditMode: Boolean,
     onEditClick: () -> Unit
 ) {
-    val isDark = isSystemInDarkTheme()
-    val config = LocalConfiguration.current
-    val cardHeight = ((config.screenWidthDp - 40) / 2).dp
-    val runningGradient = if (isDark) {
-        Brush.linearGradient(listOf(Color(0xFF1B3A1F), Color(0xFF2D4A32)))
-    } else {
-        Brush.linearGradient(listOf(Color(0xFFE8F5E9), Color(0xFFD4EDDA)))
-    }
-    val stoppedGradient = if (isDark) {
-        Brush.linearGradient(listOf(Color(0xFF3B1414), Color(0xFF4A1E1E)))
-    } else {
-        Brush.linearGradient(listOf(Color(0xFFFFEBEE), Color(0xFFFFCDD2)))
-    }
-
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(cardHeight)
-            .clip(RoundedCornerShape(20.dp))
+    val runningColor = Color(0xFF34C759)
+    val stoppedColor = Color(0xFFFF3B30)
+    OverviewCardContainer(
+        card = card,
+        onEditClick = onEditClick,
+        isEditMode = isEditMode
     ) {
-        PremiumCardBackground(
-            gradient = if (isDark) {
-                Brush.linearGradient(listOf(Color(0xFF1C1C1E), Color(0xFF2C2C2E)))
-            } else {
-                Brush.linearGradient(listOf(Color(0xFFFAFAFA), Color(0xFFF5F5F7)))
-            }
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp)
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top
             ) {
-                PremiumCardHeader(
-                    icon = Icons.Rounded.List,
-                    title = stringResource(R.string.overview_card_sessions),
-                    iconTint = Color(0xFF4CAF50),
-                    isEditMode = isEditMode,
-                    onEditClick = onEditClick
+                Column {
+                    Text(
+                        text = stringResource(R.string.overview_card_sessions).uppercase(),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        letterSpacing = 0.8.sp,
+                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "$runningCount ${stringResource(R.string.overview_running)}",
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MiuixTheme.colorScheme.onSurface
+                    )
+                }
+                CardIconBox(
+                    icon = Icons.Rounded.Memory,
+                    tint = runningColor,
+                    modifier = Modifier.size(40.dp),
+                    iconSize = 22.dp
                 )
+            }
 
-                Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.weight(1f))
 
-                Row(
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Box(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(runningColor.copy(alpha = 0.08f))
+                        .clickable(enabled = !isEditMode && sessions.isNotEmpty()) {
+                            val running = sessions.filter { it.getTerminalSession().isRunning }
+                            if (running.isNotEmpty()) onSessionClick(running.first())
+                        }
+                        .padding(10.dp),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxHeight()
-                            .weight(1f)
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(runningGradient)
-                            .clickable(enabled = !isEditMode && sessions.isNotEmpty()) {
-                                val running = sessions.filter { it.getTerminalSession().isRunning }
-                                if (running.isNotEmpty()) {
-                                    onSessionClick(running.first())
-                                }
-                            }
-                            .padding(12.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(
-                                imageVector = Icons.Rounded.PlayArrow,
-                                contentDescription = null,
-                                modifier = Modifier.size(24.dp),
-                                tint = Color(0xFF4CAF50)
-                            )
-                            Spacer(modifier = Modifier.height(6.dp))
-                            Text(
-                                text = runningCount.toString(),
-                                fontSize = 34.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFF4CAF50)
-                            )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = stringResource(R.string.overview_running),
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = Color(0xFF4CAF50).copy(alpha = 0.85f)
-                            )
-                        }
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = runningCount.toString(),
+                            fontSize = 22.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = runningColor
+                        )
+                        Text(
+                            text = stringResource(R.string.overview_running),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = runningColor.copy(alpha = 0.85f)
+                        )
                     }
-
-                    Box(
-                        modifier = Modifier
-                            .fillMaxHeight()
-                            .weight(1f)
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(stoppedGradient)
-                            .padding(12.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(
-                                imageVector = Icons.Rounded.Stop,
-                                contentDescription = null,
-                                modifier = Modifier.size(24.dp),
-                                tint = Color(0xFFE57373)
-                            )
-                            Spacer(modifier = Modifier.height(6.dp))
-                            Text(
-                                text = stoppedCount.toString(),
-                                fontSize = 34.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFFE57373)
-                            )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = stringResource(R.string.overview_stopped),
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = Color(0xFFE57373).copy(alpha = 0.85f)
-                            )
-                        }
+                }
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(stoppedColor.copy(alpha = 0.08f))
+                        .padding(10.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = stoppedCount.toString(),
+                            fontSize = 22.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = stoppedColor
+                        )
+                        Text(
+                            text = stringResource(R.string.overview_stopped),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = stoppedColor.copy(alpha = 0.85f)
+                        )
                     }
                 }
             }
         }
     }
 }
+
+
 // ============================================================
 // CPU Monitor Card
 // ============================================================
-
 @Composable
 private fun CpuMonitorCard(
     card: OverviewCardConfig,
@@ -1689,92 +1953,89 @@ private fun CpuMonitorCard(
     isEditMode: Boolean,
     onEditClick: () -> Unit
 ) {
-    val isDark = isSystemInDarkTheme()
     val cpuMaxCapacity = remember { getCpuMaxCapacity() }
-    val usageColor = getUsageColor(usage, cpuMaxCapacity)
-    val config = LocalConfiguration.current
-    val cardHeight = ((config.screenWidthDp - 40) / 2).dp
     val ratio = if (cpuMaxCapacity > 0f) usage / cpuMaxCapacity else usage / 100f
-    val iconTint = when {
-        ratio < 0.5f -> Color(0xFF4CAF50)
-        ratio < 0.8f -> Color(0xFFFF9800)
-        else -> Color(0xFFF44336)
-    }
-    val gradient = if (isDark) {
-        Brush.linearGradient(listOf(Color(0xFF1C1C1E), Color(0xFF2C2C2E)))
-    } else {
-        Brush.linearGradient(listOf(Color(0xFFFAFAFA), Color(0xFFF5F5F7)))
+    val color = getUsageColor(usage, cpuMaxCapacity)
+    val loadLabel = when {
+        ratio < 0.3f -> stringResource(R.string.overview_load_low)
+        ratio < 0.7f -> stringResource(R.string.overview_load_medium)
+        else -> stringResource(R.string.overview_load_high)
     }
 
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(cardHeight)
-            .clip(RoundedCornerShape(20.dp))
-    ) {
-        PremiumCardBackground(gradient = gradient) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp)
+    OverviewCardContainer(
+            card = card,
+            onEditClick = onEditClick,
+            isEditMode = isEditMode
+        ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top
             ) {
-                PremiumCardHeader(
-                    icon = Icons.Rounded.Memory,
-                    title = stringResource(R.string.overview_card_cpu),
-                    iconTint = iconTint,
-                    isEditMode = isEditMode,
-                    onEditClick = onEditClick
+                Column {
+                    Text(
+                        text = stringResource(R.string.overview_cpu_label),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        letterSpacing = 0.8.sp,
+                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "${usage.toInt()}%",
+                        fontSize = 26.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MiuixTheme.colorScheme.onSurface
+                    )
+                }
+                CardIconBox(
+                    icon = Icons.Rounded.Monitor,
+                    tint = color,
+                    modifier = Modifier.size(40.dp),
+                    iconSize = 22.dp
                 )
+            }
 
-                Spacer(modifier = Modifier.height(10.dp))
-
+            Column {
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f),
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text(
-                            text = "%",
-                            fontSize = 36.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = usageColor
-                        )
-                        if (temperature > 0f) {
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = stringResource(R.string.overview_cpu_temp, temperature),
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                            )
-                        }
-                    }
-                    Column(
-                        horizontalAlignment = Alignment.Start,
-                        modifier = Modifier.weight(2f)
-                    ) {
-                        UsageChart(
-                            data = history,
-                            color = usageColor,
-                            modifier = Modifier.fillMaxWidth().height(52.dp),
-                            maxValue = cpuMaxCapacity
-                        )
-                    }
+                    Text(
+                        text = stringResource(R.string.overview_load),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                    )
+                    Text(
+                        text = loadLabel,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                    )
                 }
+                Spacer(modifier = Modifier.height(6.dp))
+                CardProgressBar(
+                    progress = ratio,
+                    color = color,
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
         }
     }
 }
 
+
 // ============================================================
 // GPU Monitor Card
 // ============================================================
-
 @Composable
 private fun GpuMonitorCard(
     card: OverviewCardConfig,
@@ -1783,135 +2044,122 @@ private fun GpuMonitorCard(
     isEditMode: Boolean,
     onEditClick: () -> Unit
 ) {
-    val isDark = isSystemInDarkTheme()
     val isGpuAvailable = usage >= 0f
     val hasHistoricalData = MonitorHistory.hasGpuHistory()
     val peakUsage = MonitorHistory.getGpuPeak()
-    val validHistory = MonitorHistory.getValidGpuHistory()
-    val usageColor = if (isGpuAvailable) getUsageColor(usage) 
-                      else MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.6f)
-    val config = LocalConfiguration.current
-    val cardHeight = ((config.screenWidthDp - 40) / 2).dp
-    
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(cardHeight)
-    ) {
+    val color = if (isGpuAvailable) getUsageColor(usage)
+                  else MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.7f)
+    val gpuColor = Color(0xFFAF52DE)
+    val displayColor = if (isGpuAvailable) color else gpuColor
+    val ratio = if (isGpuAvailable) usage / 100f else 0f
+    val loadLabel = if (isGpuAvailable) {
+        when {
+            ratio < 0.3f -> stringResource(R.string.overview_load_low)
+            ratio < 0.7f -> stringResource(R.string.overview_load_medium)
+            else -> stringResource(R.string.overview_load_high)
+        }
+    } else null
+
+    OverviewCardContainer(
+            card = card,
+            onEditClick = onEditClick,
+            isEditMode = isEditMode
+        ) {
         Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp)
+                .fillMaxSize()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.SpaceBetween
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top
             ) {
-                Icon(
-                    imageVector = Icons.Rounded.Monitor,
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp),
-                    tint = if (isGpuAvailable) MiuixTheme.colorScheme.primary 
-                           else MiuixTheme.colorScheme.onSurfaceVariantSummary
+                Column {
+                    Text(
+                        text = stringResource(R.string.overview_gpu_label),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        letterSpacing = 0.8.sp,
+                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = if (isGpuAvailable) "${usage.toInt()}%"
+                               else if (hasHistoricalData) "${peakUsage.toInt()}%"
+                               else "N/A",
+                        fontSize = 26.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isGpuAvailable || hasHistoricalData)
+                                    MiuixTheme.colorScheme.onSurface
+                                else MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.6f)
+                    )
+                }
+                CardIconBox(
+                    icon = Icons.Rounded.Speed,
+                    tint = displayColor,
+                    modifier = Modifier.size(40.dp),
+                    iconSize = 22.dp
                 )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(
-                    text = stringResource(R.string.overview_card_gpu),
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = MiuixTheme.colorScheme.onSurface,
-                    modifier = Modifier.weight(1f)
-                )
-                if (isEditMode) {
-                    IconButton(onClick = onEditClick) {
-                        Icon(
-                            imageVector = Icons.Rounded.Edit,
-                            contentDescription = null,
-                            modifier = Modifier.size(14.dp),
-                            tint = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                        )
-                    }
-                }
             }
-            
-            Spacer(modifier = Modifier.height(6.dp))
-            
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.weight(1f)
-                ) {
-                    if (isGpuAvailable) {
+
+            Column {
+                if (isGpuAvailable) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Text(
-                            text = "${usage.toInt()}%",
-                            fontSize = 32.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = usageColor
-                        )
-                    } else if (hasHistoricalData) {
-                        Text(
-                            text = "${peakUsage.toInt()}%",
-                            fontSize = 28.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.6f)
+                            text = stringResource(R.string.overview_load),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary
                         )
                         Text(
-                            text = stringResource(R.string.overview_gpu_peak),
-                            fontSize = 10.sp,
-                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.5f)
-                        )
-                    } else {
-                        Text(
-                            text = "N/A",
-                            fontSize = 28.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.6f)
+                            text = loadLabel ?: "",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary
                         )
                     }
+                    Spacer(modifier = Modifier.height(6.dp))
+                    CardProgressBar(
+                        progress = ratio,
+                        color = displayColor,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                } else if (hasHistoricalData) {
+                    Text(
+                        text = stringResource(R.string.overview_gpu_peak_hint),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    CardProgressBar(
+                        progress = peakUsage / 100f,
+                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.5f),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                } else {
+                    Text(
+                        text = stringResource(R.string.overview_no_gpu_data),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.7f)
+                    )
                 }
-                Column(
-                    horizontalAlignment = Alignment.Start,
-                    modifier = Modifier.weight(2f)
-                ) {
-                    if (isGpuAvailable) {
-                        UsageChart(
-                            data = history,
-                            color = usageColor,
-                            modifier = Modifier.height(48.dp)
-                        )
-                    } else if (hasHistoricalData) {
-                        UsageChart(
-                            data = validHistory,
-                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.4f),
-                            modifier = Modifier.height(48.dp)
-                        )
-                    } else {
-                        Text(
-                            text = stringResource(R.string.overview_no_gpu_data),
-                            fontSize = 12.sp,
-                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.6f)
-                        )
-                    }
-                }
-            }
-            
-            Spacer(modifier = Modifier.height(4.dp))
-            if (!isGpuAvailable) {
-                Spacer(modifier = Modifier.height(16.dp))
             }
         }
     }
 }
 
+
 // ============================================================
 // Memory Monitor Card
 // ============================================================
-
 @Composable
 fun MemoryMonitorCard(
     card: OverviewCardConfig,
@@ -1921,85 +2169,76 @@ fun MemoryMonitorCard(
     isEditMode: Boolean,
     onEditClick: () -> Unit
 ) {
-    val usageColor = getUsageColor(usage)
-    val isDark = isSystemInDarkTheme()
-    val config = LocalConfiguration.current
-    val cardHeight = ((config.screenWidthDp - 40) / 2).dp
+    val color = getUsageColor(usage)
+    val ratio = usage / 100f
+    val totalGb = totalKb / (1024.0 * 1024.0)
+    val usedGb = totalGb * (usage / 100.0)
+    val memText = String.format("%.1f GB", usedGb)
 
-    val memFormatted = when {
-        totalKb >= 1024 * 1024 -> String.format("%.1f GB", totalKb / (1024.0 * 1024.0))
-        totalKb >= 1024 -> String.format("%.0f MB", totalKb / 1024.0)
-        else -> "${totalKb} KB"
-    }
-
-    val gradient = if (isDark) {
-        Brush.linearGradient(listOf(Color(0xFF1C1C1E), Color(0xFF2C2C2E)))
-    } else {
-        Brush.linearGradient(listOf(Color(0xFFFAFAFA), Color(0xFFF5F5F7)))
-    }
-
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(cardHeight)
-            .clip(RoundedCornerShape(20.dp))
-    ) {
-        PremiumCardBackground(gradient = gradient) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp)
+    OverviewCardContainer(
+            card = card,
+            onEditClick = onEditClick,
+            isEditMode = isEditMode
+        ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top
             ) {
-                PremiumCardHeader(
-                    icon = Icons.Rounded.Memory,
-                    title = stringResource(R.string.overview_card_memory),
-                    iconTint = usageColor,
-                    isEditMode = isEditMode,
-                    onEditClick = onEditClick
-                )
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    PremiumMetricBlock(
-                        value = "${usage.toInt()}%",
-                        label = stringResource(R.string.overview_memory_used, memFormatted),
-                        color = usageColor,
-                        modifier = Modifier.weight(1f)
+                Column {
+                    Text(
+                        text = stringResource(R.string.overview_card_memory).uppercase(),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        letterSpacing = 0.8.sp,
+                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary
                     )
-                    Box(
-                        modifier = Modifier
-                            .weight(1.6f)
-                            .height(52.dp)
-                    ) {
-                        UsageChart(
-                            data = history,
-                            color = usageColor,
-                            modifier = Modifier.fillMaxWidth().height(52.dp)
-                        )
-                    }
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = memText,
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MiuixTheme.colorScheme.onSurface
+                    )
                 }
+                CardIconBox(
+                    icon = Icons.Rounded.Memory,
+                    tint = color,
+                    modifier = Modifier.size(40.dp),
+                    iconSize = 22.dp
+                )
+            }
 
+            Column {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = stringResource(R.string.overview_memory_used, "${usage.toInt()}%"),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                    )
+                }
                 Spacer(modifier = Modifier.height(6.dp))
-
-                PremiumStatusBadge(
-                    text = when {
-                        usage >= 80f -> "高占用"
-                        usage >= 50f -> "中等占用"
-                        else -> "正常"
-                    },
-                    color = usageColor
+                CardProgressBar(
+                    progress = ratio,
+                    color = color,
+                    modifier = Modifier.fillMaxWidth()
                 )
             }
         }
     }
 }
+
 
 // ============================================================
 // Usage Chart Component
@@ -2100,7 +2339,6 @@ private const val MAX_CHART_POINTS = 30
 // ============================================================
 // Process List Card
 // ============================================================
-
 @Composable
 fun ProcessListCard(
     card: OverviewCardConfig,
@@ -2108,167 +2346,178 @@ fun ProcessListCard(
     isEditMode: Boolean,
     onEditClick: () -> Unit
 ) {
+    val context = LocalContext.current
     val frozenCount = processes.count { it.isFrozen }
     val runningCount = processes.count { it.isRunning }
     val backgroundCount = processes.count { it.isBackgroundRunning && !it.isFrozen }
     val sleepingCount = processes.count { it.isSleeping && !it.isBackgroundRunning && !it.isFrozen }
     val activeProcesses = processes.filter { !it.isFrozen }
     val frozenProcesses = processes.filter { it.isFrozen }
-    val isDark = isSystemInDarkTheme()
-    val config = LocalConfiguration.current
-    val cardHeight = ((config.screenWidthDp - 40) / 2).dp
+    val processColor = Color(0xFF5AC8FA)
 
-    val gradient = if (isDark) {
-        Brush.linearGradient(listOf(Color(0xFF1C1C1E), Color(0xFF2C2C2E)))
-    } else {
-        Brush.linearGradient(listOf(Color(0xFFFAFAFA), Color(0xFFF5F5F7)))
+    OverviewCardContainer(
+            card = card,
+            onEditClick = onEditClick,
+            isEditMode = isEditMode,
+            onClick = {
+                val intent = android.content.Intent(context, com.termux.app.activities.ProcessListActivity::class.java)
+                context.startActivity(intent)
+            }
+        ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top
+            ) {
+                Column {
+                    Text(
+                        text = stringResource(R.string.overview_card_processes).uppercase(),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        letterSpacing = 0.8.sp,
+                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "${processes.size} ${stringResource(R.string.overview_processes)}",
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MiuixTheme.colorScheme.onSurface
+                    )
+                }
+                CardIconBox(
+                    icon = Icons.Rounded.List,
+                    tint = processColor,
+                    modifier = Modifier.size(40.dp),
+                    iconSize = 22.dp
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                if (runningCount > 0) CardStatusBadge(text = "${stringResource(R.string.overview_running)} $runningCount", color = Color(0xFF34C759))
+                if (backgroundCount > 0) CardStatusBadge(text = "${stringResource(R.string.overview_background)} $backgroundCount", color = Color(0xFFFF9500))
+                if (sleepingCount > 0) CardStatusBadge(text = "${stringResource(R.string.overview_sleeping)} $sleepingCount", color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+                if (frozenCount > 0) CardStatusBadge(text = stringResource(R.string.overview_frozen_count, frozenCount), color = MiuixTheme.colorScheme.error)
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            ProcessListContent(
+                modifier = Modifier.weight(1f),
+                activeProcesses = activeProcesses,
+                frozenProcesses = frozenProcesses
+            )
+        }
     }
+}
 
-    Card(
-        modifier = Modifier
+@Composable
+private fun ProcessListContent(
+    modifier: Modifier = Modifier,
+    activeProcesses: List<ProcessInfo>,
+    frozenProcesses: List<ProcessInfo>,
+    compact: Boolean = false
+) {
+    Box(
+        modifier = modifier
             .fillMaxWidth()
-            .height(cardHeight)
-            .clip(RoundedCornerShape(20.dp))
+            .verticalScroll(rememberScrollState())
     ) {
-        PremiumCardBackground(gradient = gradient) {
-            Column(
+        if (activeProcesses.isEmpty() && frozenProcesses.isEmpty()) {
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(16.dp)
+                    .padding(vertical = 16.dp),
+                contentAlignment = Alignment.Center
             ) {
-                PremiumCardHeader(
-                    icon = Icons.Rounded.Speed,
-                    title = stringResource(R.string.overview_card_processes),
-                    iconTint = Color(0xFF2196F3),
-                    isEditMode = isEditMode,
-                    onEditClick = onEditClick
+                Text(
+                    text = stringResource(R.string.overview_no_processes),
+                    fontSize = 13.sp,
+                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary
                 )
+            }
+        } else {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(if (compact) 4.dp else 6.dp)
+            ) {
+                if (!compact) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = stringResource(R.string.overview_process_name),
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                            modifier = Modifier.weight(1f)
+                        )
 
-                Spacer(modifier = Modifier.height(10.dp))
+                        Text(
+                            text = stringResource(R.string.overview_process_cpu),
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                            modifier = Modifier.width(36.dp),
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Right
+                        )
+                        Text(
+                            text = stringResource(R.string.overview_process_mem),
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                            modifier = Modifier.width(48.dp),
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Right
+                        )
+                    }
+                    HorizontalDivider(
+                        modifier = Modifier.padding(vertical = 2.dp),
+                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.12f)
+                    )
+                }
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    if (runningCount > 0) {
-                        PremiumStatusBadge(
-                            text = "运行 $runningCount",
-                            color = Color(0xFF4CAF50)
+                activeProcesses.forEach { process ->
+                    ProcessItemRow(process = process, compact = compact)
+                }
+
+                if (!compact && frozenProcesses.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Pause,
+                            contentDescription = null,
+                            modifier = Modifier.size(12.dp),
+                            tint = MiuixTheme.colorScheme.error
                         )
-                    }
-                    if (backgroundCount > 0) {
-                        PremiumStatusBadge(
-                            text = "后台 $backgroundCount",
-                            color = Color(0xFFFF9800)
-                        )
-                    }
-                    if (sleepingCount > 0) {
-                        PremiumStatusBadge(
-                            text = "休眠 $sleepingCount",
-                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                        )
-                    }
-                    if (frozenCount > 0) {
-                        PremiumStatusBadge(
-                            text = stringResource(R.string.overview_frozen_count, frozenCount),
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = stringResource(R.string.overview_frozen_processes),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
                             color = MiuixTheme.colorScheme.error
                         )
                     }
-                }
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f)
-                        .verticalScroll(rememberScrollState())
-                ) {
-                    if (processes.isEmpty()) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 16.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = stringResource(R.string.overview_no_processes),
-                                fontSize = 13.sp,
-                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                            )
-                        }
-                    } else {
-                        Column(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text(
-                                    text = stringResource(R.string.overview_process_name),
-                                    fontSize = 11.sp,
-                                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                                )
-                                Row(
-                                    horizontalArrangement = Arrangement.spacedBy(16.dp)
-                                ) {
-                                    Text(
-                                        text = stringResource(R.string.overview_process_cpu),
-                                        fontSize = 11.sp,
-                                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                                    )
-                                    Text(
-                                        text = stringResource(R.string.overview_process_mem),
-                                        fontSize = 11.sp,
-                                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                                    )
-                                }
-                            }
-
-                            HorizontalDivider(
-                                modifier = Modifier.padding(vertical = 4.dp),
-                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.15f)
-                            )
-
-                            activeProcesses.forEach { process ->
-                                ProcessItemRow(process)
-                            }
-
-                            if (frozenProcesses.isNotEmpty()) {
-                                if (activeProcesses.isNotEmpty()) {
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                }
-
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Rounded.Pause,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(12.dp),
-                                        tint = MiuixTheme.colorScheme.error
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text(
-                                        text = stringResource(R.string.overview_frozen_processes),
-                                        fontSize = 11.sp,
-                                        color = MiuixTheme.colorScheme.error
-                                    )
-                                }
-
-                                HorizontalDivider(
-                                    modifier = Modifier.padding(vertical = 4.dp),
-                                    color = MiuixTheme.colorScheme.error.copy(alpha = 0.3f)
-                                )
-
-                                frozenProcesses.forEach { process ->
-                                    ProcessItemRow(process)
-                                }
-                            }
-                        }
+                    HorizontalDivider(
+                        modifier = Modifier.padding(vertical = 2.dp),
+                        color = MiuixTheme.colorScheme.error.copy(alpha = 0.25f)
+                    )
+                    frozenProcesses.forEach { process ->
+                        ProcessItemRow(process = process, compact = compact)
                     }
                 }
             }
@@ -2277,7 +2526,20 @@ fun ProcessListCard(
 }
 
 @Composable
-private fun ProcessItemRow(process: ProcessInfo) {
+private fun ProcessItemRow(process: ProcessInfo, compact: Boolean = false) {
+    val stateColor = when {
+        process.isFrozen -> MiuixTheme.colorScheme.error
+        process.isRunning -> Color(0xFF34C759)
+        process.isBackgroundRunning -> Color(0xFFFF9500)
+        process.isSleeping -> MiuixTheme.colorScheme.onSurfaceVariantSummary
+        else -> MiuixTheme.colorScheme.onSurfaceVariantSummary
+    }
+    val memFormatted = when {
+        process.memRssKb >= 1024 * 1024 -> String.format("%.1fG", process.memRssKb / (1024.0 * 1024.0))
+        process.memRssKb >= 1024 -> String.format("%.0fM", process.memRssKb / 1024.0)
+        else -> "${process.memRssKb}K"
+    }
+
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -2289,7 +2551,8 @@ private fun ProcessItemRow(process: ProcessInfo) {
         ) {
             Text(
                 text = process.name,
-                fontSize = 12.sp,
+                fontSize = if (compact) 11.sp else 12.sp,
+                fontWeight = FontWeight.Medium,
                 color = when {
                     process.isFrozen -> MiuixTheme.colorScheme.onSurfaceVariantSummary
                     process.isTermuxRelated -> MiuixTheme.colorScheme.primary
@@ -2297,104 +2560,181 @@ private fun ProcessItemRow(process: ProcessInfo) {
                 },
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f, fill = false)
             )
-            
             Spacer(modifier = Modifier.width(4.dp))
-            
-            val stateColor = when {
-                process.isFrozen -> MiuixTheme.colorScheme.error
-                process.isRunning -> Color(0xFF4CAF50)
-                process.isBackgroundRunning -> Color(0xFFFF9800)
-                process.isSleeping -> MiuixTheme.colorScheme.onSurfaceVariantSummary
-                else -> MiuixTheme.colorScheme.onSurfaceVariantSummary
-            }
             Box(
                 modifier = Modifier
-                    .background(
-                        color = stateColor.copy(alpha = 0.15f),
-                        shape = RoundedCornerShape(3.dp)
-                    )
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(stateColor.copy(alpha = 0.14f))
                     .padding(horizontal = 4.dp, vertical = 1.dp)
             ) {
                 Text(
                     text = process.stateLabel,
-                    fontSize = 9.sp,
+                    fontSize = if (compact) 8.sp else 9.sp,
+                    fontWeight = FontWeight.SemiBold,
                     color = stateColor
                 )
             }
-            
-            if (process.threadCount > 1) {
-                Spacer(modifier = Modifier.width(2.dp))
-                Box(
-                    modifier = Modifier
-                        .background(
-                            color = Color(0xFF2196F3).copy(alpha = 0.15f),
-                            shape = RoundedCornerShape(3.dp)
-                        )
-                        .padding(horizontal = 3.dp, vertical = 1.dp)
-                ) {
-                    Text(
-                        text = "${process.threadCount}T",
-                        fontSize = 9.sp,
-                        color = Color(0xFF2196F3)
-                    )
-                }
-            }
-            
-            if (process.isTermuxRelated && !process.isFrozen) {
-                Spacer(modifier = Modifier.width(3.dp))
-                Box(
-                    modifier = Modifier
-                        .background(
-                            color = MiuixTheme.colorScheme.primary.copy(alpha = 0.15f),
-                            shape = RoundedCornerShape(3.dp)
-                        )
-                        .padding(horizontal = 3.dp, vertical = 1.dp)
-                ) {
-                    Text(
-                        text = "T",
-                        fontSize = 9.sp,
-                        color = MiuixTheme.colorScheme.primary
-                    )
-                }
-            }
         }
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
+        if (compact) {
             Text(
                 text = if (process.isFrozen) "—" else "${process.cpuPercent.toInt()}%",
                 fontSize = 11.sp,
-                fontWeight = FontWeight.Medium,
-                color = if (process.isFrozen) 
-                    MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.5f)
-                else 
-                    getUsageColor(process.cpuPercent.coerceIn(0f, 100f))
-            )
-            val memFormatted = when {
-                process.memRssKb >= 1024 * 1024 -> String.format("%.1fG", process.memRssKb / (1024.0 * 1024.0))
-                process.memRssKb >= 1024 -> String.format("%.0fM", process.memRssKb / 1024.0)
-                else -> "${process.memRssKb}K"
-            }
-            Text(
-                text = if (process.isFrozen) "—" else memFormatted,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Medium,
+                fontWeight = FontWeight.SemiBold,
                 color = if (process.isFrozen)
                     MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.5f)
                 else
-                    getUsageColor(process.memPercent.coerceIn(0f, 100f))
+                    getUsageColor(process.cpuPercent.coerceIn(0f, 100f))
             )
+        } else {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = if (process.isFrozen) "—" else "${process.cpuPercent.toInt()}%",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = if (process.isFrozen)
+                        MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.5f)
+                    else
+                        getUsageColor(process.cpuPercent.coerceIn(0f, 100f)),
+                    modifier = Modifier.width(36.dp),
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Right
+                )
+                Text(
+                    text = if (process.isFrozen) "—" else memFormatted,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = if (process.isFrozen)
+                        MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.5f)
+                    else
+                        getUsageColor(process.memPercent.coerceIn(0f, 100f)),
+                    modifier = Modifier.width(48.dp),
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Right
+                )
+            }
         }
     }
 }
 
+
+
+@Composable
+private fun ProcessItemRow(process: ProcessInfo) {
+    val stateColor = when {
+        process.isFrozen -> MiuixTheme.colorScheme.error
+        process.isRunning -> Color(0xFF4CAF50)
+        process.isBackgroundRunning -> Color(0xFFFF9800)
+        process.isSleeping -> MiuixTheme.colorScheme.onSurfaceVariantSummary
+        else -> MiuixTheme.colorScheme.onSurfaceVariantSummary
+    }
+    val memFormatted = when {
+        process.memRssKb >= 1024 * 1024 -> String.format("%.1fG", process.memRssKb / (1024.0 * 1024.0))
+        process.memRssKb >= 1024 -> String.format("%.0fM", process.memRssKb / 1024.0)
+        else -> "${process.memRssKb}K"
+    }
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = process.name,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Medium,
+            color = when {
+                process.isFrozen -> MiuixTheme.colorScheme.onSurfaceVariantSummary
+                process.isTermuxRelated -> MiuixTheme.colorScheme.primary
+                else -> MiuixTheme.colorScheme.onSurface
+            },
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f)
+        )
+        Text(
+            text = process.stateLabel,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = stateColor,
+            modifier = Modifier
+                .width(48.dp)
+                .clip(RoundedCornerShape(50))
+                .background(stateColor.copy(alpha = 0.12f))
+                .padding(vertical = 2.dp),
+            textAlign = TextAlign.Center
+        )
+        Text(
+            text = if (process.isFrozen) "—" else "${process.cpuPercent.toInt()}%",
+            fontSize = 11.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = if (process.isFrozen) MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.5f)
+                    else getUsageColor(process.cpuPercent.coerceIn(0f, 100f)),
+            modifier = Modifier.width(36.dp),
+            textAlign = TextAlign.End
+        )
+        Text(
+            text = if (process.isFrozen) "—" else memFormatted,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Medium,
+            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+            modifier = Modifier.width(48.dp),
+            textAlign = TextAlign.End
+        )
+    }
+}
+
+@Composable
+private fun ProcessItemRowCompact(process: ProcessInfo) {
+    val stateColor = when {
+        process.isFrozen -> MiuixTheme.colorScheme.error
+        process.isRunning -> Color(0xFF4CAF50)
+        process.isBackgroundRunning -> Color(0xFFFF9800)
+        process.isSleeping -> MiuixTheme.colorScheme.onSurfaceVariantSummary
+        else -> MiuixTheme.colorScheme.onSurfaceVariantSummary
+    }
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = process.name,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Medium,
+            color = MiuixTheme.colorScheme.onSurface,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f)
+        )
+        Text(
+            text = process.stateLabel,
+            fontSize = 9.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = stateColor,
+            modifier = Modifier
+                .clip(RoundedCornerShape(50))
+                .background(stateColor.copy(alpha = 0.12f))
+                .padding(horizontal = 5.dp, vertical = 1.dp)
+        )
+        Text(
+            text = if (process.isFrozen) "—" else "${process.cpuPercent.toInt()}%",
+            fontSize = 11.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = if (process.isFrozen) MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.5f)
+                    else getUsageColor(process.cpuPercent.coerceIn(0f, 100f)),
+            modifier = Modifier.padding(start = 8.dp)
+        )
+    }
+}
+
+
 // ============================================================
 // Stop All Card
 // ============================================================
-
 @Composable
 fun StopAllCard(
     card: OverviewCardConfig,
@@ -2403,81 +2743,86 @@ fun StopAllCard(
     onStopAll: () -> Unit,
     onEditClick: () -> Unit
 ) {
-    val isDark = isSystemInDarkTheme()
     var showConfirmDialog by remember { mutableStateOf(false) }
-    val config = LocalConfiguration.current
-    val cardHeight = ((config.screenWidthDp - 40) / 2).dp
+    val accentColor = if (sessionCount > 0) Color(0xFFFF3B30) else MiuixTheme.colorScheme.onSurfaceVariantSummary
+    val isWide = card.size == CardSize.WIDE
 
-    val accentColor = if (sessionCount > 0) Color(0xFFE57373) else MiuixTheme.colorScheme.onSurfaceVariantSummary
-    val gradient = if (sessionCount > 0) {
-        if (isDark) {
-            Brush.linearGradient(listOf(Color(0xFF3B1414), Color(0xFF4A1E1E)))
-        } else {
-            Brush.linearGradient(listOf(Color(0xFFFFEBEE), Color(0xFFFFCDD2)))
-        }
-    } else {
-        if (isDark) {
-            Brush.linearGradient(listOf(Color(0xFF1C1C1E), Color(0xFF2C2C2E)))
-        } else {
-            Brush.linearGradient(listOf(Color(0xFFFAFAFA), Color(0xFFF5F5F7)))
-        }
-    }
-
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(cardHeight)
-            .clip(RoundedCornerShape(20.dp))
-            .clickable(enabled = !isEditMode && sessionCount > 0) {
-                showConfirmDialog = true
-            }
+    OverviewCardContainer(
+        card = card,
+        onEditClick = onEditClick,
+        isEditMode = isEditMode,
+        onClick = { if (sessionCount > 0) showConfirmDialog = true }
     ) {
-        PremiumCardBackground(gradient = gradient) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp)
+        if (isWide) {
+            Row(
+                modifier = Modifier.fillMaxSize(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-                PremiumCardHeader(
+                CardIconBox(
                     icon = Icons.Rounded.Stop,
-                    title = stringResource(R.string.overview_card_stop_all),
-                    iconTint = accentColor,
-                    isEditMode = isEditMode,
-                    onEditClick = onEditClick
+                    tint = accentColor,
+                    modifier = Modifier.size(48.dp),
+                    iconSize = 26.dp
                 )
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(68.dp)
-                            .clip(RoundedCornerShape(24.dp))
-                            .background(accentColor.copy(alpha = 0.16f)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.Delete,
-                            contentDescription = null,
-                            modifier = Modifier.size(30.dp),
-                            tint = accentColor
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(10.dp))
-
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = if (sessionCount > 0) "$sessionCount ${stringResource(R.string.overview_running)}"
-                            else stringResource(R.string.overview_no_sessions),
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = if (sessionCount > 0) accentColor else MiuixTheme.colorScheme.onSurfaceVariantSummary
+                        text = stringResource(R.string.overview_card_stop_all),
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MiuixTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = stringResource(R.string.overview_stop_all_subtitle, sessionCount),
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    CardStatusBadge(
+                        text = if (sessionCount > 0) "$sessionCount ${stringResource(R.string.overview_active)}" else stringResource(R.string.overview_no_sessions),
+                        color = accentColor
+                    )
+                }
+            }
+        } else {
+            Column(
+                modifier = Modifier.fillMaxSize(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                CardIconBox(
+                    icon = Icons.Rounded.Stop,
+                    tint = accentColor,
+                    modifier = Modifier.size(52.dp),
+                    iconSize = 28.dp
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+                Text(
+                    text = stringResource(R.string.overview_card_stop_all),
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MiuixTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                CardStatusBadge(
+                    text = if (sessionCount > 0) stringResource(R.string.overview_active) else stringResource(R.string.overview_no_sessions),
+                    color = accentColor
+                )
+                if (sessionCount > 0) {
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "×$sessionCount",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = accentColor.copy(alpha = 0.8f)
                     )
                 }
             }
@@ -2528,144 +2873,7 @@ fun StopAllCard(
 }
 
 
-// ============================================================
-// Premium Overview Card Design System
-// ============================================================
 
-@Composable
-private fun PremiumCardBackground(
-    modifier: Modifier = Modifier,
-    gradient: Brush,
-    content: @Composable () -> Unit
-) {
-    Box(modifier = modifier.fillMaxSize()) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(gradient)
-        )
-        Box(
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .offset(x = 24.dp, y = (-28).dp)
-                .size(96.dp)
-                .clip(RoundedCornerShape(48.dp))
-                .background(Color.White.copy(alpha = 0.08f))
-        )
-        Box(
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .offset(x = (-16).dp, y = 20.dp)
-                .size(56.dp)
-                .clip(RoundedCornerShape(28.dp))
-                .background(Color.White.copy(alpha = 0.05f))
-        )
-        content()
-    }
-}
-
-@Composable
-private fun PremiumCardHeader(
-    icon: ImageVector,
-    title: String,
-    iconTint: Color = MiuixTheme.colorScheme.primary,
-    isEditMode: Boolean = false,
-    onEditClick: () -> Unit = {}
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(
-            modifier = Modifier
-                .size(34.dp)
-                .clip(RoundedCornerShape(11.dp))
-                .background(iconTint.copy(alpha = 0.12f)),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                modifier = Modifier.size(19.dp),
-                tint = iconTint
-            )
-        }
-        Spacer(modifier = Modifier.width(10.dp))
-        Text(
-            text = title,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = MiuixTheme.colorScheme.onSurface,
-            modifier = Modifier.weight(1f)
-        )
-        if (isEditMode) {
-            IconButton(onClick = onEditClick) {
-                Icon(
-                    imageVector = Icons.Rounded.Edit,
-                    contentDescription = null,
-                    modifier = Modifier.size(16.dp),
-                    tint = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun PremiumMetricBlock(
-    value: String,
-    label: String,
-    color: Color,
-    modifier: Modifier = Modifier
-) {
-    Column(
-        modifier = modifier,
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text(
-            text = value,
-            fontSize = 32.sp,
-            fontWeight = FontWeight.Bold,
-            color = color
-        )
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(
-            text = label,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Medium,
-            color = color.copy(alpha = 0.85f)
-        )
-    }
-}
-
-@Composable
-private fun PremiumStatusBadge(
-    text: String,
-    color: Color,
-    modifier: Modifier = Modifier
-) {
-    Row(
-        modifier = modifier
-            .clip(RoundedCornerShape(50))
-            .background(color.copy(alpha = 0.14f))
-            .padding(horizontal = 8.dp, vertical = 3.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp)
-    ) {
-        Box(
-            modifier = Modifier
-                .size(5.dp)
-                .clip(RoundedCornerShape(50))
-                .background(color)
-        )
-        Text(
-            text = text,
-            fontSize = 10.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = color
-        )
-    }
-}
 
 // ============================================================
 // Helper Functions
@@ -3397,9 +3605,8 @@ private fun readMemoryUsage(sessionPids: Set<Int> = emptySet()): Pair<Float, Lon
 
 // ============================================================
 // ============================================================
-// Feature Center Card (HeroWelcomeCard style)
+// Feature Center Card (animated hero style)
 // ============================================================
-
 @Composable
 fun FeatureCenterCard(
     card: OverviewCardConfig,
@@ -3407,128 +3614,343 @@ fun FeatureCenterCard(
     onEditClick: () -> Unit
 ) {
     val context = LocalContext.current
-    val config = LocalConfiguration.current
-    val cardHeight = ((config.screenWidthDp - 40) / 2).dp
-    val gradient = Brush.linearGradient(
-        colors = listOf(
-            Color(0xFF2563EB),
-            Color(0xFF4F46E5),
-            Color(0xFF7C3AED)
-        )
-    )
     val isWide = card.size == CardSize.WIDE
 
-    Box(
+    val infiniteTransition = rememberInfiniteTransition(label = "featureCenterCard")
+    // 呼吸渐变：蓝→靛→紫 与 天蓝→亮靛→品红 之间缓慢过渡
+    val gradientFraction by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(6500, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "gradient"
+    )
+    // 漂浮泡泡
+    val bubbleFloat1 by infiniteTransition.animateFloat(
+        initialValue = -9f,
+        targetValue = 9f,
+        animationSpec = infiniteRepeatable(tween(3400, easing = LinearEasing), RepeatMode.Reverse),
+        label = "bubble1"
+    )
+    val bubbleFloat2 by infiniteTransition.animateFloat(
+        initialValue = 7f,
+        targetValue = -7f,
+        animationSpec = infiniteRepeatable(tween(4300, easing = LinearEasing), RepeatMode.Reverse),
+        label = "bubble2"
+    )
+    val bubbleFloat3 by infiniteTransition.animateFloat(
+        initialValue = -5f,
+        targetValue = 9f,
+        animationSpec = infiniteRepeatable(tween(5100, easing = LinearEasing), RepeatMode.Reverse),
+        label = "bubble3"
+    )
+    // 周期性扫过的流光
+    val shimmerX by infiniteTransition.animateFloat(
+        initialValue = -0.7f,
+        targetValue = 1.7f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2600, delayMillis = 1400, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "shimmer"
+    )
+    // 星星脉冲
+    val sparkleScale by infiniteTransition.animateFloat(
+        initialValue = 0.92f,
+        targetValue = 1.18f,
+        animationSpec = infiniteRepeatable(tween(1100, easing = LinearEasing), RepeatMode.Reverse),
+        label = "sparkle"
+    )
+    // 箭头轻推
+    val arrowNudge by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 3f,
+        animationSpec = infiniteRepeatable(tween(850, easing = LinearEasing), RepeatMode.Reverse),
+        label = "arrow"
+    )
+
+    val gradient = Brush.linearGradient(
+        listOf(
+            lerp(Color(0xFF2563EB), Color(0xFF38BDF8), gradientFraction),
+            lerp(Color(0xFF4F46E5), Color(0xFF818CF8), gradientFraction),
+            lerp(Color(0xFF7C3AED), Color(0xFFE879F9), gradientFraction)
+        )
+    )
+
+    Card(
         modifier = Modifier
             .fillMaxWidth()
-            .height(cardHeight)
+            .then(if (isWide) Modifier.height(WIDE_CARD_HEIGHT) else Modifier.aspectRatio(1f))
             .clip(RoundedCornerShape(20.dp))
-            .background(gradient)
             .clickable(enabled = !isEditMode) {
-                if (!isEditMode) {
-                    val intent = Intent(context, com.termux.app.activities.FeatureCenterActivity::class.java)
-                    context.startActivity(intent)
-                }
+                val intent = Intent(context, com.termux.app.activities.FeatureCenterActivity::class.java)
+                context.startActivity(intent)
             }
-            .padding(if (isWide) 20.dp else 16.dp)
     ) {
         Box(
             modifier = Modifier
-                .size(if (isWide) 120.dp else 96.dp)
-                .offset(x = 30.dp, y = (-40).dp)
-                .align(Alignment.TopEnd)
-                .alpha(0.12f)
-                .background(Color.White, RoundedCornerShape(60.dp))
-        )
-
-        Box(
-            modifier = Modifier
-                .size(if (isWide) 56.dp else 44.dp)
-                .offset(x = (-20).dp, y = 60.dp)
-                .align(Alignment.BottomEnd)
-                .alpha(0.08f)
-                .background(Color.White, RoundedCornerShape(28.dp))
-        )
-
-        Column {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+                .fillMaxSize()
+                .background(gradient),
+            contentAlignment = Alignment.Center
+        ) {
+            // 漂浮装饰泡泡
+            Box(
+                modifier = Modifier
+                    .size(120.dp)
+                    .align(Alignment.TopEnd)
+                    .offset(x = 30.dp, y = (-36).dp)
+                    .graphicsLayer { translationY = bubbleFloat1.dp.toPx() }
+                    .background(Color.White.copy(alpha = 0.12f), RoundedCornerShape(50))
+            )
+            Box(
+                modifier = Modifier
+                    .size(64.dp)
+                    .align(Alignment.BottomStart)
+                    .offset(x = (-18).dp, y = 20.dp)
+                    .graphicsLayer { translationY = bubbleFloat2.dp.toPx() }
+                    .background(Color.White.copy(alpha = 0.10f), RoundedCornerShape(50))
+            )
+            Box(
+                modifier = Modifier
+                    .size(34.dp)
+                    .align(Alignment.TopStart)
+                    .offset(x = 40.dp, y = 24.dp)
+                    .graphicsLayer { translationY = bubbleFloat3.dp.toPx() }
+                    .background(Color.White.copy(alpha = 0.08f), RoundedCornerShape(50))
+            )
+            // 漂浮圆环
+            Box(
+                modifier = Modifier
+                    .size(46.dp)
+                    .align(Alignment.BottomEnd)
+                    .offset(x = (-26).dp, y = (-16).dp)
+                    .graphicsLayer { translationY = bubbleFloat3.dp.toPx() }
+                    .border(2.dp, Color.White.copy(alpha = 0.22f), RoundedCornerShape(50))
+            )
+            // 周期性扫过的流光
+            BoxWithConstraints(
+                modifier = Modifier
+                    .matchParentSize()
+                    .clipToBounds()
+            ) {
+                val cardWidthPx = constraints.maxWidth.toFloat()
                 Box(
                     modifier = Modifier
-                        .size(if (isWide) 36.dp else 32.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(Color.White.copy(alpha = 0.18f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_resources),
-                        contentDescription = null,
-                        modifier = Modifier.size(if (isWide) 20.dp else 18.dp),
-                        tint = Color.White.copy(alpha = 0.95f)
-                    )
-                }
-                Spacer(modifier = Modifier.width(10.dp))
-                Text(
-                    text = stringResource(R.string.overview_feature_center_label),
-                    style = TextStyle(
-                        fontSize = if (isWide) 13.sp else 12.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = Color.White.copy(alpha = 0.9f)
-                    ),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f)
+                        .fillMaxHeight()
+                        .width(90.dp)
+                        .graphicsLayer {
+                            translationX = shimmerX * cardWidthPx
+                            rotationZ = 14f
+                        }
+                        .background(
+                            Brush.linearGradient(
+                                listOf(
+                                    Color.Transparent,
+                                    Color.White.copy(alpha = 0.16f),
+                                    Color.Transparent
+                                )
+                            )
+                        )
                 )
-                if (isEditMode) {
-                    Box(
-                        modifier = Modifier
-                            .size(32.dp)
-                            .clip(RoundedCornerShape(10.dp))
-                            .clickable { onEditClick() }
-                            .background(Color.White.copy(alpha = 0.12f)),
-                        contentAlignment = Alignment.Center
-                    ) {
+            }
+
+            if (isWide) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(18.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    Box {
+                        Box(
+                            modifier = Modifier
+                                .size(54.dp)
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(Color.White.copy(alpha = 0.22f))
+                                .border(1.dp, Color.White.copy(alpha = 0.35f), RoundedCornerShape(16.dp)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Monitor,
+                                contentDescription = null,
+                                modifier = Modifier.size(28.dp),
+                                tint = Color.White
+                            )
+                        }
                         Icon(
-                            imageVector = Icons.Rounded.Edit,
+                            imageVector = Icons.Rounded.AutoAwesome,
                             contentDescription = null,
-                            modifier = Modifier.size(16.dp),
-                            tint = Color.White.copy(alpha = 0.9f)
+                            modifier = Modifier
+                                .size(17.dp)
+                                .align(Alignment.TopEnd)
+                                .offset(x = 7.dp, y = (-5).dp)
+                                .graphicsLayer {
+                                    scaleX = sparkleScale
+                                    scaleY = sparkleScale
+                                },
+                            tint = Color.White
+                        )
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = stringResource(R.string.overview_feature_center_label),
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                        Spacer(modifier = Modifier.height(3.dp))
+                        Text(
+                            text = stringResource(R.string.feature_center_desc),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = Color.White.copy(alpha = 0.85f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Spacer(modifier = Modifier.height(9.dp))
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                listOf(
+                                    R.string.overview_chip_shortcuts,
+                                    R.string.overview_chip_plugins
+                                ).forEach { resId ->
+                                    FeatureCenterGlassChip(text = stringResource(resId))
+                                }
+                            }
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                FeatureCenterGlassChip(text = stringResource(R.string.overview_chip_themes))
+                            }
+                        }
+                    }
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(50))
+                            .background(Color.White.copy(alpha = 0.2f))
+                            .padding(start = 14.dp, end = 11.dp, top = 7.dp, bottom = 7.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(3.dp)
+                    ) {
+                        Text(
+                            text = stringResource(R.string.enter),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color.White
+                        )
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Rounded.ArrowForward,
+                            contentDescription = null,
+                            modifier = Modifier
+                                .size(15.dp)
+                                .graphicsLayer { translationX = arrowNudge.dp.toPx() },
+                            tint = Color.White
                         )
                     }
                 }
+            } else {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(14.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Box {
+                        Box(
+                            modifier = Modifier
+                                .size(52.dp)
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(Color.White.copy(alpha = 0.22f))
+                                .border(1.dp, Color.White.copy(alpha = 0.35f), RoundedCornerShape(16.dp)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Monitor,
+                                contentDescription = null,
+                                modifier = Modifier.size(26.dp),
+                                tint = Color.White
+                            )
+                        }
+                        Icon(
+                            imageVector = Icons.Rounded.AutoAwesome,
+                            contentDescription = null,
+                            modifier = Modifier
+                                .size(16.dp)
+                                .align(Alignment.TopEnd)
+                                .offset(x = 6.dp, y = (-4).dp)
+                                .graphicsLayer {
+                                    scaleX = sparkleScale
+                                    scaleY = sparkleScale
+                                },
+                            tint = Color.White
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(9.dp))
+                    Text(
+                        text = stringResource(R.string.overview_feature_center_label),
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                    Spacer(modifier = Modifier.height(3.dp))
+                    Text(
+                        text = stringResource(R.string.feature_center_desc),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = Color.White.copy(alpha = 0.85f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Spacer(modifier = Modifier.height(9.dp))
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            listOf(
+                                R.string.overview_chip_shortcuts,
+                                R.string.overview_chip_plugins
+                            ).forEach { resId ->
+                                FeatureCenterGlassChip(text = stringResource(resId))
+                            }
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            FeatureCenterGlassChip(text = stringResource(R.string.overview_chip_themes))
+                        }
+                    }
+                }
             }
-
-            Spacer(Modifier.height(if (isWide) 8.dp else 6.dp))
-
-            Text(
-                text = stringResource(R.string.resource_center_welcome_subtitle),
-                style = TextStyle(
-                    fontSize = if (isWide) 22.sp else 18.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White
-                )
-            )
-
-            Spacer(Modifier.height(if (isWide) 10.dp else 8.dp))
-
-            Text(
-                text = stringResource(R.string.feature_center_desc),
-                style = TextStyle(
-                    fontSize = if (isWide) 14.sp else 12.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = Color.White.copy(alpha = 0.9f),
-                    lineHeight = if (isWide) 22.sp else 18.sp
-                ),
-                maxLines = if (isWide) 3 else 2,
-                overflow = TextOverflow.Ellipsis
-            )
         }
     }
 }
 
+@Composable
+private fun FeatureCenterGlassChip(
+    text: String,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(50))
+            .background(Color.White.copy(alpha = 0.18f))
+            .padding(horizontal = 9.dp, vertical = 3.dp)
+    ) {
+        Text(
+            text = text,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = Color.White
+        )
+    }
+}
+
+
+
 // ============================================================
 // Resource Action Card
 // ============================================================
-
 @Composable
 fun ResourceActionCard(
     card: OverviewCardConfig,
@@ -3540,172 +3962,96 @@ fun ResourceActionCard(
 ) {
     val action = card.resourceActionId?.let { ResourceActions.getActionById(context, it) }
     var showSelectDialog by remember { mutableStateOf(false) }
-    val isDark = isSystemInDarkTheme()
-    val config = LocalConfiguration.current
-    val cardHeight = ((config.screenWidthDp - 40) / 2).dp
+    val accentColor = MiuixTheme.colorScheme.primary
+    val isWide = card.size == CardSize.WIDE
 
-    val gradient = if (isDark) {
-        Brush.linearGradient(listOf(Color(0xFF1C1C1E), Color(0xFF2C2C2E)))
-    } else {
-        Brush.linearGradient(listOf(Color(0xFFFAFAFA), Color(0xFFF5F5F7)))
-    }
-
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(cardHeight)
-            .clip(RoundedCornerShape(20.dp))
-            .clickable {
-                if (action != null) {
-                    if (!isEditMode) {
-                        onLaunchAction(action)
-                    }
-                } else {
-                    showSelectDialog = true
-                }
+    OverviewCardContainer(
+        card = card,
+        onEditClick = onEditClick,
+        isEditMode = isEditMode,
+        onClick = {
+            if (action != null) {
+                onLaunchAction(action)
+            } else {
+                showSelectDialog = true
             }
+        }
     ) {
-        PremiumCardBackground(gradient = gradient) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp)
+        if (isWide) {
+            Row(
+                modifier = Modifier.fillMaxSize(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(36.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(MiuixTheme.colorScheme.primary.copy(alpha = 0.12f)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.PlayArrow,
-                            contentDescription = null,
-                            modifier = Modifier.size(20.dp),
-                            tint = MiuixTheme.colorScheme.primary
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(10.dp))
+                CardIconBox(
+                    icon = if (action != null) Icons.Rounded.PlayArrow else Icons.Rounded.Add,
+                    tint = accentColor,
+                    modifier = Modifier.size(48.dp),
+                    iconSize = 26.dp
+                )
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = if (action != null) action.name else stringResource(R.string.overview_resource_action),
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.Bold,
                         color = MiuixTheme.colorScheme.onSurface,
-                        modifier = Modifier.weight(1f),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
-                    IconButton(onClick = {
-                        if (isEditMode) {
-                            onEditClick()
-                        } else {
-                            showSelectDialog = true
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = if (action != null && action.description.isNotEmpty()) action.description
+                               else stringResource(R.string.overview_resource_action_desc, stringResource(R.string.overview_select_action)),
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    if (action != null) {
+                        val categoryText = when (action.category) {
+                            ResourceActionCategory.UTILITY_CENTER -> stringResource(R.string.overview_utility_center)
+                            ResourceActionCategory.THIRD_PARTY_CENTER -> stringResource(R.string.overview_third_party_center)
+                            ResourceActionCategory.SYSTEM_FUNCTION -> stringResource(R.string.overview_system_function)
                         }
-                    }) {
-                        Icon(
-                            imageVector = Icons.Rounded.Edit,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp),
-                            tint = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                        )
+                        CardStatusBadge(text = categoryText, color = accentColor)
+                    } else {
+                        CardStatusBadge(text = stringResource(R.string.overview_tap_to_select), color = accentColor)
                     }
                 }
-
+            }
+        } else {
+            Column(
+                modifier = Modifier.fillMaxSize(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                CardIconBox(
+                    icon = if (action != null) Icons.Rounded.PlayArrow else Icons.Rounded.Add,
+                    tint = accentColor,
+                    modifier = Modifier.size(52.dp),
+                    iconSize = 28.dp
+                )
                 Spacer(modifier = Modifier.height(10.dp))
-
+                Text(
+                    text = if (action != null) action.name else stringResource(R.string.overview_resource_action),
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MiuixTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(modifier = Modifier.height(4.dp))
                 if (action != null) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(48.dp)
-                                .clip(RoundedCornerShape(14.dp))
-                                .background(MiuixTheme.colorScheme.primary.copy(alpha = 0.12f)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                painter = painterResource(id = action.iconRes),
-                                contentDescription = null,
-                                modifier = Modifier.size(26.dp),
-                                tint = MiuixTheme.colorScheme.primary
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column(
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            if (action.description.isNotEmpty()) {
-                                Text(
-                                    text = action.description,
-                                    fontSize = 12.sp,
-                                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                                    maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                                Spacer(modifier = Modifier.height(4.dp))
-                            }
-                            val categoryText = when (action.category) {
-                                ResourceActionCategory.UTILITY_CENTER -> stringResource(R.string.overview_utility_center)
-                                ResourceActionCategory.THIRD_PARTY_CENTER -> stringResource(R.string.overview_third_party_center)
-                                ResourceActionCategory.SYSTEM_FUNCTION -> stringResource(R.string.overview_system_function)
-                            }
-                            PremiumStatusBadge(
-                                text = categoryText,
-                                color = MiuixTheme.colorScheme.primary
-                            )
-                        }
-                        Box(
-                            modifier = Modifier
-                                .size(36.dp)
-                                .clip(RoundedCornerShape(18.dp))
-                                .background(MiuixTheme.colorScheme.primary.copy(alpha = 0.12f)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Rounded.PlayArrow,
-                                contentDescription = null,
-                                modifier = Modifier.size(20.dp),
-                                tint = MiuixTheme.colorScheme.primary
-                            )
-                        }
+                    val categoryText = when (action.category) {
+                        ResourceActionCategory.UTILITY_CENTER -> stringResource(R.string.overview_utility_center)
+                        ResourceActionCategory.THIRD_PARTY_CENTER -> stringResource(R.string.overview_third_party_center)
+                        ResourceActionCategory.SYSTEM_FUNCTION -> stringResource(R.string.overview_system_function)
                     }
+                    CardStatusBadge(text = categoryText, color = accentColor)
                 } else {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(56.dp)
-                                .clip(RoundedCornerShape(20.dp))
-                                .background(MiuixTheme.colorScheme.primary.copy(alpha = 0.1f)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Rounded.Add,
-                                contentDescription = null,
-                                modifier = Modifier.size(28.dp),
-                                tint = MiuixTheme.colorScheme.primary
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(10.dp))
-                        Text(
-                            text = stringResource(R.string.overview_select_action),
-                            fontSize = 13.sp,
-                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                        )
-                    }
+                    CardStatusBadge(text = stringResource(R.string.overview_tap_to_select), color = accentColor)
                 }
             }
         }
@@ -3722,6 +4068,8 @@ fun ResourceActionCard(
         onDismiss = { showSelectDialog = false }
     )
 }
+
+
 
 // ============================================================
 // Resource Action Selection Dialog
@@ -3847,7 +4195,7 @@ private fun ResourceActionSelectionDialog(
                                             color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
                                             maxLines = 2,
                                             overflow = TextOverflow.Ellipsis
-                                        )
+                                            )
                                     }
                                 }
                                 if (isSelected) {

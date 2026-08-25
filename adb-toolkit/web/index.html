@@ -1,0 +1,719 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>ADB 工具箱</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+            padding: 16px;
+            color: #e0e0e0;
+        }
+        .container { max-width: 640px; margin: 0 auto; padding-bottom: 40px; }
+        .header { text-align: center; padding: 16px 0 20px; color: #fff; }
+        .header h1 { font-size: 24px; margin-bottom: 4px; }
+        .header p { font-size: 13px; opacity: 0.8; }
+        .status-bar {
+            display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 16px;
+            background: rgba(255,255,255,0.05); border-radius: 12px; padding: 14px 12px;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        .status-item {
+            text-align: center; padding: 10px 6px; border-radius: 8px;
+            background: rgba(0,0,0,0.15);
+        }
+        .status-item .label { font-size: 11px; opacity: 0.7; margin-bottom: 6px; white-space: nowrap; }
+        .status-item .value { font-size: 17px; font-weight: 700; line-height: 1.2; }
+        .status-item .value.online { color: #4ade80; }
+        .status-item .value.offline { color: #f87171; }
+        .status-item .value.neutral { color: #60a5fa; }
+        .nav {
+            display: flex; gap: 8px; margin-bottom: 16px;
+            overflow-x: auto; padding-bottom: 4px;
+        }
+        .nav-btn {
+            flex-shrink: 0; padding: 8px 12px;
+            background: rgba(255,255,255,0.1); color: #e0e0e0;
+            border: 1px solid rgba(255,255,255,0.15); border-radius: 10px;
+            font-size: 12px; font-weight: 600; text-align: center; cursor: pointer;
+            transition: all 0.2s;
+        }
+        .nav-btn.active { background: #3b82f6; color: #fff; border-color: #3b82f6; }
+        .nav-btn:active { transform: scale(0.96); }
+        .card {
+            background: rgba(255,255,255,0.06);
+            backdrop-filter: blur(10px);
+            border-radius: 16px;
+            padding: 18px;
+            margin-bottom: 14px;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        .card h2 {
+            font-size: 15px; margin-bottom: 14px; color: #fff;
+            display: flex; align-items: center; font-weight: 600;
+        }
+        .card h2::before {
+            content: ''; display: inline-block;
+            width: 4px; height: 16px; background: #3b82f6;
+            border-radius: 2px; margin-right: 10px;
+        }
+        .device-list { display: flex; flex-direction: column; gap: 10px; }
+        .device-item {
+            background: rgba(255,255,255,0.05);
+            border-radius: 12px; padding: 14px;
+            border: 1px solid rgba(255,255,255,0.08);
+            cursor: pointer; transition: all 0.2s;
+        }
+        .device-item:active { background: rgba(59,130,246,0.2); border-color: #3b82f6; }
+        .device-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+        .device-name { font-size: 14px; font-weight: 600; color: #fff; }
+        .device-status { font-size: 11px; padding: 3px 8px; border-radius: 12px; font-weight: 600; }
+        .device-status.connected { background: rgba(74,222,128,0.2); color: #4ade80; }
+        .device-status.unauthorized { background: rgba(248,113,113,0.2); color: #f87171; }
+        .device-status.offline { background: rgba(156,163,175,0.2); color: #9ca3af; }
+        .device-info { font-size: 12px; color: #9ca3af; }
+        .quick-actions { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+        .action-btn {
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            padding: 14px 8px; background: rgba(59,130,246,0.1);
+            border: 1px solid rgba(59,130,246,0.3); border-radius: 12px;
+            color: #e0e0e0; cursor: pointer; transition: all 0.2s;
+        }
+        .action-btn:active { transform: scale(0.96); background: rgba(59,130,246,0.2); }
+        .action-btn .icon { font-size: 20px; margin-bottom: 6px; }
+        .action-btn .label { font-size: 12px; font-weight: 500; }
+        .action-btn.primary { background: #3b82f6; color: #fff; border-color: #3b82f6; }
+        .action-btn.danger { background: rgba(239,68,68,0.2); border-color: rgba(239,68,68,0.5); }
+        .section-title {
+            font-size: 13px; color: #9ca3af; margin: 16px 0 10px;
+            font-weight: 600; letter-spacing: 0.5px;
+        }
+        .cmd-group { display: flex; flex-direction: column; gap: 8px; }
+        .cmd-btn {
+            display: flex; justify-content: space-between; align-items: center;
+            width: 100%; padding: 12px 14px;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.08); border-radius: 10px;
+            color: #e0e0e0; cursor: pointer; transition: all 0.2s;
+            text-align: left;
+        }
+        .cmd-btn:active { background: rgba(255,255,255,0.1); }
+        .cmd-btn-info { display: flex; flex-direction: column; }
+        .cmd-btn-name { font-size: 13px; font-weight: 500; color: #fff; }
+        .cmd-btn-desc { font-size: 11px; color: #9ca3af; margin-top: 2px; }
+        .cmd-btn-arrow { font-size: 16px; color: #6b7280; }
+        .cmd-btn-run {
+            padding: 6px 12px; background: #3b82f6; color: #fff;
+            border: none; border-radius: 8px; font-size: 12px; font-weight: 600;
+            cursor: pointer; transition: all 0.2s;
+        }
+        .cmd-btn-run:active { background: #2563eb; }
+        .custom-cmd-section { margin-top: 14px; }
+        .input-area { display: flex; flex-direction: column; gap: 10px; }
+        .input-area textarea {
+            width: 100%; min-height: 80px; padding: 12px;
+            background: rgba(0,0,0,0.3); color: #e0e0e0;
+            border: 1px solid rgba(255,255,255,0.1); border-radius: 10px;
+            font-family: "SF Mono", "Monaco", "Consolas", monospace;
+            font-size: 13px; resize: vertical; outline: none;
+        }
+        .input-area textarea:focus { border-color: #3b82f6; }
+        .input-actions { display: flex; gap: 8px; }
+        .input-actions button {
+            flex: 1; padding: 12px; border: none; border-radius: 10px;
+            font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s;
+        }
+        .btn-exec { background: #3b82f6; color: #fff; }
+        .btn-exec:active { background: #2563eb; }
+        .btn-clear { background: rgba(255,255,255,0.1); color: #e0e0e0; }
+        .btn-clear:active { background: rgba(255,255,255,0.15); }
+        .result-box {
+            background: rgba(0,0,0,0.4); border-radius: 10px;
+            padding: 12px; margin-top: 10px;
+            font-family: "SF Mono", "Monaco", "Consolas", monospace;
+            font-size: 12px; white-space: pre-wrap; word-break: break-all;
+            max-height: 200px; overflow-y: auto; color: #a3e635;
+            border: 1px solid rgba(255,255,255,0.08);
+        }
+        .result-box .empty { color: #6b7280; font-style: italic; }
+        .quick-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+        .tag {
+            padding: 6px 10px; background: rgba(255,255,255,0.08);
+            border-radius: 16px; font-size: 11px; color: #d1d5db;
+            cursor: pointer; transition: all 0.2s;
+        }
+        .tag:active { background: rgba(59,130,246,0.3); color: #fff; }
+        .toast {
+            position: fixed; top: 20px; left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.9); color: #fff;
+            padding: 10px 20px; border-radius: 20px;
+            font-size: 13px; z-index: 1000;
+            opacity: 0; transition: opacity 0.3s; pointer-events: none;
+        }
+        .toast.show { opacity: 1; }
+        .empty-state {
+            text-align: center; padding: 30px 20px;
+            color: #6b7280; font-size: 13px;
+        }
+        .empty-state .icon { font-size: 40px; margin-bottom: 10px; }
+        .refresh-indicator {
+            display: inline-block; width: 14px; height: 14px;
+            border: 2px solid rgba(255,255,255,0.2);
+            border-top-color: #3b82f6;
+            border-radius: 50%; animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .loading { display: flex; align-items: center; gap: 8px; justify-content: center; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔧 ADB 工具箱</h1>
+            <p>Android 调试桥接工具集</p>
+        </div>
+
+        <div class="status-bar">
+            <div class="status-item" onclick="refreshDevices()">
+                <div class="label">ADB 状态</div>
+                <div class="value" id="adbStatus">检测中</div>
+            </div>
+            <div class="status-item" onclick="refreshDevices()">
+                <div class="label">已连接设备</div>
+                <div class="value neutral" id="deviceCount">0</div>
+            </div>
+            <div class="status-item" onclick="refreshDevices()">
+                <div class="label">ADB版本</div>
+                <div class="value neutral" id="adbVersion">-</div>
+            </div>
+        </div>
+
+        <div class="nav">
+            <div class="nav-btn active" onclick="switchTab('devices')">📱 设备</div>
+            <div class="nav-btn" onclick="switchTab('quick')">⚡ 快捷命令</div>
+            <div class="nav-btn" onclick="switchTab('custom')">💻 自定义</div>
+            <div class="nav-btn" onclick="navigateTo('adb-remote.html')">🌐 远程ADB</div>
+            <div class="nav-btn" onclick="navigateTo('settings.html')">⚙️ 设置</div>
+            <div class="nav-btn" onclick="navigateTo('about.html')">ℹ️ 关于</div>
+        </div>
+
+        <!-- 设备列表 -->
+        <div id="tab-devices">
+            <div class="card">
+                <h2>已连接设备</h2>
+                <div id="deviceList" class="device-list">
+                    <div class="loading"><div class="refresh-indicator"></div> 正在扫描设备...</div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>设备操作</h2>
+                <div class="quick-actions">
+                    <div class="action-btn primary" onclick="runAdbCommand('adb devices -l')">
+                        <div class="icon">🔍</div><div class="label">扫描设备</div>
+                    </div>
+                    <div class="action-btn" onclick="runAdbCommand('adb kill-server && adb start-server')">
+                        <div class="icon">🔄</div><div class="label">重启ADB</div>
+                    </div>
+                    <div class="action-btn" onclick="runAdbCommand('adb shell getprop ro.build.version.release')">
+                        <div class="icon">📱</div><div class="label">系统版本</div>
+                    </div>
+                    <div class="action-btn" onclick="runAdbCommand('adb shell getprop ro.product.model')">
+                        <div class="icon">🏷️</div><div class="label">设备型号</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>设备详情</h2>
+                <div id="deviceDetail" class="empty-state">
+                    <div class="icon">📋</div>
+                    <div>点击设备查看详情</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 快捷命令 -->
+        <div id="tab-quick" style="display:none;">
+            <div class="card">
+                <h2>常用 ADB 命令</h2>
+                <div class="cmd-group" id="quickCommands">
+                    <div class="loading"><div class="refresh-indicator"></div> 加载命令列表...</div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>应用管理</h2>
+                <div class="cmd-group">
+                    <div class="cmd-btn" onclick="runQuickCmd('adb shell pm list packages -3', '列出第三方应用')">
+                        <div class="cmd-btn-info">
+                            <div class="cmd-btn-name">列出第三方应用</div>
+                            <div class="cmd-btn-desc">获取设备上所有非系统应用包名</div>
+                        </div>
+                        <span class="cmd-btn-run">执行</span>
+                    </div>
+                    <div class="cmd-btn" onclick="runQuickCmd('adb shell pm list packages -s', '列出系统应用')">
+                        <div class="cmd-btn-info">
+                            <div class="cmd-btn-name">列出系统应用</div>
+                            <div class="cmd-btn-desc">获取设备上所有系统应用包名</div>
+                        </div>
+                        <span class="cmd-btn-run">执行</span>
+                    </div>
+                    <div class="cmd-btn" onclick="runQuickCmd('adb shell dumpsys package | head -100', '包信息摘要')">
+                        <div class="cmd-btn-info">
+                            <div class="cmd-btn-name">包信息摘要</div>
+                            <div class="cmd-btn-desc">显示已安装包的简要信息</div>
+                        </div>
+                        <span class="cmd-btn-run">执行</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>系统信息</h2>
+                <div class="cmd-group">
+                    <div class="cmd-btn" onclick="runQuickCmd('adb shell cat /proc/cpuinfo', 'CPU 信息')">
+                        <div class="cmd-btn-info">
+                            <div class="cmd-btn-name">CPU 信息</div>
+                            <div class="cmd-btn-desc">查看设备 CPU 详细规格</div>
+                        </div>
+                        <span class="cmd-btn-run">执行</span>
+                    </div>
+                    <div class="cmd-btn" onclick="runQuickCmd('adb shell cat /proc/meminfo | head -5', '内存信息')">
+                        <div class="cmd-btn-info">
+                            <div class="cmd-btn-name">内存信息</div>
+                            <div class="cmd-btn-desc">查看设备内存使用情况</div>
+                        </div>
+                        <span class="cmd-btn-run">执行</span>
+                    </div>
+                    <div class="cmd-btn" onclick="runQuickCmd('adb shell df /data', '存储空间')">
+                        <div class="cmd-btn-info">
+                            <div class="cmd-btn-name">存储空间</div>
+                            <div class="cmd-btn-desc">查看数据分区存储情况</div>
+                        </div>
+                        <span class="cmd-btn-run">执行</span>
+                    </div>
+                    <div class="cmd-btn" onclick="runQuickCmd('adb shell wm size', '屏幕分辨率')">
+                        <div class="cmd-btn-info">
+                            <div class="cmd-btn-name">屏幕分辨率</div>
+                            <div class="cmd-btn-desc">获取设备屏幕分辨率</div>
+                        </div>
+                        <span class="cmd-btn-run">执行</span>
+                    </div>
+                    <div class="cmd-btn" onclick="runQuickCmd('adb shell getprop', '全部属性')">
+                        <div class="cmd-btn-info">
+                            <div class="cmd-btn-name">全部属性</div>
+                            <div class="cmd-btn-desc">查看所有系统属性（输出较长）</div>
+                        </div>
+                        <span class="cmd-btn-run">执行</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>进程与日志</h2>
+                <div class="cmd-group">
+                    <div class="cmd-btn" onclick="runQuickCmd('adb shell ps -A | head -30', '进程列表')">
+                        <div class="cmd-btn-info">
+                            <div class="cmd-btn-name">进程列表</div>
+                            <div class="cmd-btn-desc">列出当前运行的进程</div>
+                        </div>
+                        <span class="cmd-btn-run">执行</span>
+                    </div>
+                    <div class="cmd-btn" onclick="runQuickCmd('adb logcat -d -t 50', '最近日志')">
+                        <div class="cmd-btn-info">
+                            <div class="cmd-btn-name">最近日志</div>
+                            <div class="cmd-btn-desc">查看最近50条系统日志</div>
+                        </div>
+                        <span class="cmd-btn-run">执行</span>
+                    </div>
+                    <div class="cmd-btn" onclick="runQuickCmd('adb shell dumpsys activity activities | head -50', 'Activity栈')">
+                        <div class="cmd-btn-info">
+                            <div class="cmd-btn-name">Activity 栈</div>
+                            <div class="cmd-btn-desc">查看当前Activity堆栈</div>
+                        </div>
+                        <span class="cmd-btn-run">执行</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 自定义命令 -->
+        <div id="tab-custom" style="display:none;">
+            <div class="card">
+                <h2>执行 ADB 命令</h2>
+                <div class="input-area">
+                    <textarea id="cmdInput" placeholder="输入 ADB 命令... 例如：adb shell ls /"></textarea>
+                    <div class="input-actions">
+                        <button class="btn-exec" onclick="executeCommand()">🚀 执行命令</button>
+                        <button class="btn-clear" onclick="clearCommand()">清空</button>
+                    </div>
+                </div>
+                <div class="quick-tags" onclick="insertTag('adb shell ')"><span class="tag">adb shell</span></div>
+                <div class="quick-tags">
+                    <span class="tag" onclick="insertTag('adb devices -l')">devices -l</span>
+                    <span class="tag" onclick="insertTag('adb shell pm list packages')">pm list</span>
+                    <span class="tag" onclick="insertTag('adb shell dumpsys activity top')">dumpsys top</span>
+                    <span class="tag" onclick="insertTag('adb shell input keyevent 3')">Home键</span>
+                    <span class="tag" onclick="insertTag('adb shell wm size')">wm size</span>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>命令结果</h2>
+                <div id="cmdResult" class="result-box">
+                    <span class="empty">等待执行命令...</span>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>历史命令</h2>
+                <div id="historyList" class="cmd-group">
+                    <div class="empty-state" style="padding: 20px;">
+                        <div class="icon">📜</div>
+                        <div>暂无历史记录</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <script>
+        var bridge = window.TermuxUltra;
+        var currentDevices = [];
+        var selectedDevice = null;
+        var commandHistory = [];
+
+        function showToast(msg) {
+            var toast = document.getElementById('toast');
+            toast.textContent = msg;
+            toast.classList.add('show');
+            setTimeout(function() { toast.classList.remove('show'); }, 2000);
+        }
+
+        function navigateTo(page) {
+            window.location.href = page;
+        }
+
+        function switchTab(tabName) {
+            var tabs = ['devices', 'quick', 'custom'];
+            tabs.forEach(function(t) {
+                document.getElementById('tab-' + t).style.display = t === tabName ? 'block' : 'none';
+            });
+            document.querySelectorAll('.nav-btn').forEach(function(btn) {
+                btn.classList.remove('active');
+            });
+            event.target.classList.add('active');
+            if (tabName === 'quick') loadQuickCommands();
+        }
+
+        function execCommand(cmd) {
+            if (!bridge || !bridge.exec) {
+                showToast('JS Bridge 不可用');
+                return null;
+            }
+            try {
+                var result = bridge.exec(cmd);
+                return JSON.parse(result);
+            } catch(e) {
+                return { success: false, output: '', error: e.message };
+            }
+        }
+
+        function updateStatusDisplay(result) {
+            var statusEl = document.getElementById('adbStatus');
+            var countEl = document.getElementById('deviceCount');
+            var versionEl = document.getElementById('adbVersion');
+
+            if (!result || !result.success) {
+                statusEl.textContent = '未连接';
+                statusEl.className = 'value offline';
+                countEl.textContent = '0';
+                countEl.className = 'value neutral';
+                return;
+            }
+
+            var output = result.output || '';
+            var lines = output.trim().split('\n').filter(function(l) { return l && l !== 'List of devices attached'; });
+            
+            if (lines.length === 0) {
+                statusEl.textContent = '就绪';
+                statusEl.className = 'value offline';
+                countEl.textContent = '0';
+                countEl.className = 'value neutral';
+            } else {
+                statusEl.textContent = '已连接';
+                statusEl.className = 'value online';
+                countEl.textContent = lines.length;
+                countEl.className = 'value online';
+            }
+        }
+
+        function parseDeviceLine(line) {
+            var parts = line.trim().split(/\s+/);
+            if (parts.length >= 2) {
+                return {
+                    id: parts[0],
+                    status: parts[1],
+                    info: parts.slice(2).join(' ') || ''
+                };
+            }
+            return null;
+        }
+
+        function getStatusClass(status) {
+            switch(status) {
+                case 'device': return 'connected';
+                case 'unauthorized': return 'unauthorized';
+                default: return 'offline';
+            }
+        }
+
+        function getStatusText(status) {
+            switch(status) {
+                case 'device': return '已连接';
+                case 'unauthorized': return '未授权';
+                default: return '离线';
+            }
+        }
+
+        function refreshDevices() {
+            showToast('正在扫描设备...');
+            var result = execCommand('adb devices -l');
+            if (!result) return;
+
+            updateStatusDisplay(result);
+
+            var output = result.output || '';
+            var lines = output.trim().split('\n').filter(function(l) { 
+                return l && l !== 'List of devices attached'; 
+            });
+
+            currentDevices = [];
+            lines.forEach(function(line) {
+                var device = parseDeviceLine(line);
+                if (device) currentDevices.push(device);
+            });
+
+            var listEl = document.getElementById('deviceList');
+            if (currentDevices.length === 0) {
+                listEl.innerHTML = '<div class="empty-state"><div class="icon">📭</div><div>未检测到 ADB 设备</div><div style="font-size:11px;margin-top:6px;">请连接设备或使用远程ADB</div></div>';
+                return;
+            }
+
+            listEl.innerHTML = '';
+            currentDevices.forEach(function(device, idx) {
+                var item = document.createElement('div');
+                item.className = 'device-item';
+                item.onclick = function() { selectDevice(idx); };
+                item.innerHTML = 
+                    '<div class="device-header">' +
+                        '<div class="device-name">' + device.id + '</div>' +
+                        '<div class="device-status ' + getStatusClass(device.status) + '">' + getStatusText(device.status) + '</div>' +
+                    '</div>' +
+                    '<div class="device-info">' + (device.info || '无额外信息') + '</div>';
+                listEl.appendChild(item);
+            });
+
+            showToast('发现 ' + currentDevices.length + ' 台设备');
+        }
+
+        function selectDevice(idx) {
+            selectedDevice = currentDevices[idx];
+            var detailEl = document.getElementById('deviceDetail');
+            
+            if (selectedDevice.status !== 'device') {
+                detailEl.innerHTML = '<div class="empty-state" style="color:#f87171;"><div class="icon">⚠️</div><div>设备状态异常</div><div style="font-size:11px;margin-top:6px;">状态：' + getStatusText(selectedDevice.status) + '</div></div>';
+                return;
+            }
+
+            showToast('正在获取设备信息...');
+            var infoCmds = [
+                'adb -s ' + selectedDevice.id + ' shell getprop ro.product.model',
+                'adb -s ' + selectedDevice.id + ' shell getprop ro.build.version.release',
+                'adb -s ' + selectedDevice.id + ' shell getprop ro.build.display.id',
+                'adb -s ' + selectedDevice.id + ' shell getprop ro.product.brand',
+                'adb -s ' + selectedDevice.id + ' shell getprop ro.product.device'
+            ];
+
+            var results = {};
+            infoCmds.forEach(function(cmd) {
+                var res = execCommand(cmd);
+                var key = cmd.split('ro.')[1] || cmd;
+                results[key] = res && res.success ? (res.output || '').trim() : '获取失败';
+            });
+
+            detailEl.innerHTML = 
+                '<div style="background:rgba(0,0,0,0.2);border-radius:10px;padding:12px;">' +
+                    '<div style="display:flex;justify-content:space-between;margin-bottom:10px;">' +
+                        '<span style="font-size:12px;color:#9ca3af;">设备ID</span>' +
+                        '<span style="font-size:12px;color:#4ade80;word-break:break-all;">' + selectedDevice.id + '</span>' +
+                    '</div>' +
+                    '<div style="display:flex;justify-content:space-between;margin-bottom:10px;">' +
+                        '<span style="font-size:12px;color:#9ca3af;">品牌</span>' +
+                        '<span style="font-size:12px;color:#fff;">' + (results['product.brand'] || '-') + '</span>' +
+                    '</div>' +
+                    '<div style="display:flex;justify-content:space-between;margin-bottom:10px;">' +
+                        '<span style="font-size:12px;color:#9ca3af;">型号</span>' +
+                        '<span style="font-size:12px;color:#fff;">' + (results['product.model'] || '-') + '</span>' +
+                    '</div>' +
+                    '<div style="display:flex;justify-content:space-between;margin-bottom:10px;">' +
+                        '<span style="font-size:12px;color:#9ca3af;">设备代号</span>' +
+                        '<span style="font-size:12px;color:#fff;">' + (results['product.device'] || '-') + '</span>' +
+                    '</div>' +
+                    '<div style="display:flex;justify-content:space-between;margin-bottom:10px;">' +
+                        '<span style="font-size:12px;color:#9ca3af;">系统版本</span>' +
+                        '<span style="font-size:12px;color:#fff;">' + (results['build.version.release'] || '-') + '</span>' +
+                    '</div>' +
+                    '<div style="display:flex;justify-content:space-between;margin-bottom:10px;">' +
+                        '<span style="font-size:12px;color:#9ca3af;">Build ID</span>' +
+                        '<span style="font-size:12px;color:#fff;font-size:11px;">' + (results['build.display.id'] || '-') + '</span>' +
+                    '</div>' +
+                '</div>' +
+                '<div style="display:flex;gap:8px;margin-top:12px;">' +
+                    '<button class="action-btn primary" style="flex:1;padding:10px 8px;" onclick="runDeviceAction(\'reboot\')">🔄 重启</button>' +
+                    '<button class="action-btn" style="flex:1;padding:10px 8px;" onclick="runDeviceAction(\'reboot recovery\')">💫 恢复模式</button>' +
+                    '<button class="action-btn" style="flex:1;padding:10px 8px;" onclick="runDeviceAction(\'reboot bootloader\')">⚡ Bootloader</button>' +
+                '</div>';
+        }
+
+        function runDeviceAction(action) {
+            if (!selectedDevice) return;
+            if (!confirm('确定要对设备 ' + selectedDevice.id + ' 执行 ' + action + ' 操作吗？')) return;
+            var result = execCommand('adb -s ' + selectedDevice.id + ' ' + action);
+            showToast(result && result.success ? '命令已发送' : '执行失败');
+        }
+
+        function runAdbCommand(cmd) {
+            showToast('执行中: ' + cmd);
+            var result = execCommand(cmd);
+            var display = result 
+                ? (result.success ? (result.output || '命令执行成功') : '错误: ' + (result.error || '未知错误'))
+                : '命令执行失败';
+            var resultBox = document.getElementById('cmdResult');
+            if (resultBox) {
+                resultBox.textContent = display;
+            }
+            return result;
+        }
+
+        function loadQuickCommands() {
+            var quickCmds = [
+                { cmd: 'adb shell settings get global adb_enabled', name: 'ADB 调试开关', desc: '检查 ADB 是否开启' },
+                { cmd: 'adb shell getprop persist.sys.usb.config', name: 'USB 配置', desc: '查看 USB 连接配置' },
+                { cmd: 'adb shell monkey -p $package -c android.intent.category.LAUNCHER 1', name: '启动应用', desc: '需在自定义命令中使用' },
+                { cmd: 'adb shell dumpsys window displays | grep mCurrentFocus', name: '当前焦点窗口', desc: '获取当前前台应用' },
+                { cmd: 'adb shell input keyevent 3', name: '模拟 Home 键', desc: '发送 Home 按键事件' },
+                { cmd: 'adb shell input keyevent 4', name: '模拟返回键', desc: '发送返回按键事件' },
+                { cmd: 'adb shell input swipe 500 1500 500 500', name: '模拟上滑', desc: '向上滑动屏幕' },
+                { cmd: 'adb shell screencap -p /sdcard/screen.png && adb pull /sdcard/screen.png /data/local/tmp/', name: '截屏', desc: '截图并保存到设备' },
+                { cmd: 'adb shell pm clear $package', name: '清除应用数据', desc: '需替换包名' },
+                { cmd: 'adb shell am force-stop $package', name: '强制停止应用', desc: '需替换包名' },
+                { cmd: 'adb shell cmd activity get-uid-state', name: '权限状态', desc: '查询应用权限状态' },
+                { cmd: 'adb shell dumpsys power | grep mWakefulness', name: '电源状态', desc: '检查屏幕唤醒状态' }
+            ];
+
+            var container = document.getElementById('quickCommands');
+            container.innerHTML = '';
+            quickCmds.forEach(function(item) {
+                var btn = document.createElement('div');
+                btn.className = 'cmd-btn';
+                btn.innerHTML = 
+                    '<div class="cmd-btn-info">' +
+                        '<div class="cmd-btn-name">' + item.name + '</div>' +
+                        '<div class="cmd-btn-desc">' + item.desc + '</div>' +
+                    '</div>' +
+                    '<span class="cmd-btn-run">执行</span>';
+                btn.onclick = function() { runQuickCmd(item.cmd, item.name); };
+                container.appendChild(btn);
+            });
+        }
+
+        function runQuickCmd(cmd, name) {
+            showToast('执行: ' + name);
+            var result = execCommand(cmd);
+            var display = result 
+                ? (result.success ? (result.output || '执行成功') : '错误: ' + (result.error || '未知'))
+                : '执行失败';
+            var resultBox = document.getElementById('cmdResult');
+            if (resultBox) {
+                resultBox.textContent = display;
+            }
+        }
+
+        function executeCommand() {
+            var cmd = document.getElementById('cmdInput').value.trim();
+            if (!cmd) { showToast('请输入命令'); return; }
+            showToast('执行中...');
+            var result = execCommand(cmd);
+            var display = result 
+                ? (result.success ? (result.output || '执行成功') : '错误: ' + (result.error || '未知'))
+                : '执行失败';
+            document.getElementById('cmdResult').textContent = display;
+
+            if (commandHistory.indexOf(cmd) === -1) {
+                commandHistory.unshift(cmd);
+                if (commandHistory.length > 20) commandHistory.pop();
+                updateHistoryList();
+            }
+        }
+
+        function clearCommand() {
+            document.getElementById('cmdInput').value = '';
+            document.getElementById('cmdResult').textContent = '等待执行命令...';
+        }
+
+        function insertTag(tag) {
+            document.getElementById('cmdInput').value += tag;
+        }
+
+        function updateHistoryList() {
+            var listEl = document.getElementById('historyList');
+            if (commandHistory.length === 0) {
+                listEl.innerHTML = '<div class="empty-state" style="padding: 20px;"><div class="icon">📜</div><div>暂无历史记录</div></div>';
+                return;
+            }
+            listEl.innerHTML = '';
+            commandHistory.forEach(function(cmd) {
+                var item = document.createElement('div');
+                item.className = 'cmd-btn';
+                item.innerHTML = 
+                    '<div class="cmd-btn-info">' +
+                        '<div class="cmd-btn-name" style="font-size:12px;">' + cmd + '</div>' +
+                    '</div>' +
+                    '<span class="cmd-btn-run">重跑</span>';
+                item.onclick = function() { 
+                    document.getElementById('cmdInput').value = cmd;
+                    executeCommand();
+                };
+                listEl.appendChild(item);
+            });
+        }
+
+        function loadADBVersion() {
+            var result = execCommand('adb version');
+            if (result && result.success) {
+                var version = (result.output || '').trim();
+                var match = version.match(/Android Debug Bridge version (\d+\.\d+\.\d+)/);
+                document.getElementById('adbVersion').textContent = match ? match[1] : 'OK';
+                document.getElementById('adbVersion').className = 'value neutral';
+            } else {
+                document.getElementById('adbVersion').textContent = '未安装';
+                document.getElementById('adbVersion').className = 'value offline';
+            }
+        }
+
+        // 初始化
+        loadADBVersion();
+        setTimeout(refreshDevices, 300);
+    </script>
+</body>
+</html>
+

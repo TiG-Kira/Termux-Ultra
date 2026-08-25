@@ -1,4 +1,4 @@
-﻿package com.termux.app.plugin
+package com.termux.app.plugin
 
 import android.annotation.SuppressLint
 import android.content.Context
@@ -14,6 +14,7 @@ import android.webkit.WebViewClient
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.CircleShape
@@ -21,17 +22,17 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material3.Icon
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.view.WindowCompat
 import com.google.gson.Gson
+import com.termux.app.compose.KiTerminalTheme
+import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
@@ -78,21 +79,25 @@ class PluginWebViewActivity : ComponentActivity() {
         pluginConfig = PluginManager.getPluginConfig(this, pluginId)
         val title = intent.getStringExtra(EXTRA_TITLE) ?: plugin.manifest.name
 
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+
         setContent {
-            PluginWebViewScreen(
-                title = title,
-                pluginId = pluginId,
-                onBack = {
-                    if (webView?.canGoBack() == true) {
-                        webView?.goBack()
-                    } else {
-                        finish()
+            KiTerminalTheme {
+                PluginWebViewScreen(
+                    title = title,
+                    pluginId = pluginId,
+                    onBack = {
+                        if (webView?.canGoBack() == true) {
+                            webView?.goBack()
+                        } else {
+                            finish()
+                        }
+                    },
+                    onWebViewReady = { webView ->
+                        this.webView = webView
                     }
-                },
-                onWebViewReady = { webView ->
-                    this.webView = webView
-                }
-            )
+                )
+            }
         }
     }
 
@@ -139,6 +144,7 @@ class PluginWebViewActivity : ComponentActivity() {
         val plugin = PluginManager.getPluginById(context, pluginId)
 
         Scaffold(
+            contentWindowInsets = WindowInsets(0, 0, 0, 0),
             topBar = {
                 TopAppBar(
                     title = title,
@@ -159,8 +165,7 @@ class PluginWebViewActivity : ComponentActivity() {
                         }
                     }
                 )
-            },
-            containerColor = Color.Transparent
+            }
         ) { padding ->
             Box(
                 modifier = Modifier

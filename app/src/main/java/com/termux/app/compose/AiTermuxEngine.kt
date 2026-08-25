@@ -1,4 +1,4 @@
-﻿package com.termux.app.compose
+package com.termux.app.compose
 
 import android.app.Activity
 import android.content.Context
@@ -2404,14 +2404,11 @@ object SkillExecutor {
 
 object AiApiClient {
 
-    suspend fun chat(
+    /** 内部：在线 HTTP 非流式调用（供 chat() 与 fallback 复用） */
+    private suspend fun callOnlineChat(
         config: AiProviderConfig,
         messages: List<OpenAiMessage>
     ): ChatCompletionResponse = withContext(Dispatchers.IO) {
-        // 本地大模型：走设备端 llama.cpp 推理
-        if (config.provider == "local") {
-            return@withContext AiLocalModel.completeLocal(config, messages)
-        }
         try {
             val baseUrl = config.apiBaseUrl.trimEnd('/')
             val url = URL("$baseUrl/chat/completions")
@@ -2456,21 +2453,12 @@ object AiApiClient {
         }
     }
 
-    /**
-     * 流式调用 AI，通过 Flow 逐块返回内容。
-     * 支持 OpenAI 兼容的 SSE 格式（data: {...}）。
-     * 发送方在外部通过 isCancelled 检查是否停止。
-     */
-    fun chatStream(
+    /** 内部：在线 SSE 流式调用（供 chatStream() 与 fallback 复用） */
+    private fun callOnlineChatStream(
         config: AiProviderConfig,
         messages: List<OpenAiMessage>,
         isCancelled: () -> Boolean
-    ): Flow<StreamChunk> {
-        // 本地大模型：走设备端 llama.cpp 流式推理
-        if (config.provider == "local") {
-            return AiLocalModel.chatStreamLocal(config, messages, isCancelled)
-        }
-        return flow {
+    ): Flow<StreamChunk> = flow {
         try {
             val baseUrl = config.apiBaseUrl.trimEnd('/')
             val url = URL("$baseUrl/chat/completions")
@@ -2508,12 +2496,11 @@ object AiApiClient {
             var line: String?
             var fullContent = StringBuilder()
             var fullReasoning = StringBuilder()
-            val rawResponse = StringBuilder()  // 收集原始 SSE 数据
+            val rawResponse = StringBuilder()
             var hasContent = false
-            var doneReceived = false
             var inThinkBlock = false
             var thinkTagBuffer = StringBuilder()
-            var hasSentReasoningDone = false  // 是否已发送 ReasoningDone 事件
+            var hasSentReasoningDone = false
 
             while (true) {
                 if (isCancelled()) {
@@ -2523,7 +2510,6 @@ object AiApiClient {
                 }
                 line = reader.readLine()
                 if (line == null) {
-                    // 连接关闭
                     android.util.Log.d("AiTermux", "Connection closed: contentLen=${fullContent.length}, reasoningLen=${fullReasoning.length}")
                     emit(StreamChunk.Done(
                         fullContent.toString(),
@@ -2536,13 +2522,10 @@ object AiApiClient {
                 if (trimmed.isEmpty()) continue
                 if (!trimmed.startsWith("data:")) continue
                 val dataStr = trimmed.removePrefix("data:").trim()
-
-                // 收集原始 SSE 数据
                 rawResponse.append(line).append("\n")
 
                 if (dataStr == "[DONE]") {
                     android.util.Log.d("AiTermux", "[DONE] -> Done (hasContent=$hasContent, reasoningLen=${fullReasoning.length})")
-                    // 如果有思考内容但未发送 ReasoningDone，先发送
                     if (fullReasoning.isNotEmpty() && !hasSentReasoningDone) {
                         emit(StreamChunk.ReasoningDone)
                         hasSentReasoningDone = true
@@ -2560,9 +2543,6 @@ object AiApiClient {
                     val choices = json.getAsJsonArray("choices")
                     if (choices != null && choices.size() > 0) {
                         val delta = choices.get(0).asJsonObject.getAsJsonObject("delta")
-
-                        // 优先处理 reasoning_content（如果 API 支持）
-                        // 注意：JSON null 需要特殊处理
                         val reasoningElement = delta?.get("reasoning_content")
                         val reasoningContent = if (reasoningElement != null && !reasoningElement.isJsonNull) {
                             reasoningElement.asString?.takeIf { it.isNotBlank() }
@@ -2573,24 +2553,20 @@ object AiApiClient {
                             emit(StreamChunk.Reasoning(reasoningContent))
                         }
 
-                        // 处理 content 字段
-                        val content = delta?.get("content")?.asString
-                        if (content != null && content.isNotBlank()) {
-                            android.util.Log.d("AiTermux", "content delta (len=${content.length}): ${content.take(80)}${if (content.length > 80) "..." else ""}")
+                        val contentPart = delta?.get("content")?.asString
+                        if (contentPart != null && contentPart.isNotBlank()) {
+                            android.util.Log.d("AiTermux", "content delta (len=${contentPart.length}): ${contentPart.take(80)}${if (contentPart.length > 80) "..." else ""}")
 
                             if (reasoningContent != null) {
-                                // API 已提供 reasoning_content，直接使用 content
-                                // 当开始接收实际内容时，标记思考完成
                                 if (fullReasoning.isNotEmpty() && !hasSentReasoningDone) {
                                     hasSentReasoningDone = true
                                     emit(StreamChunk.ReasoningDone)
                                 }
-                                fullContent.append(content)
+                                fullContent.append(contentPart)
                                 hasContent = true
-                                emit(StreamChunk.Content(content))
+                                emit(StreamChunk.Content(contentPart))
                             } else {
-                                // 从 content 中解析 <think> 标签（如果有的话）
-                                val processed = processContentDelta(content, inThinkBlock, thinkTagBuffer)
+                                val processed = processContentDelta(contentPart, inThinkBlock, thinkTagBuffer)
                                 inThinkBlock = processed.inThink
                                 if (processed.reasoning.isNotEmpty()) {
                                     fullReasoning.append(processed.reasoning)
@@ -2608,11 +2584,9 @@ object AiApiClient {
                             }
                         }
 
-                        // 检查 finish_reason
                         val finishReason = choices.get(0).asJsonObject.get("finish_reason")?.asString
                         if (finishReason != null && finishReason != "null") {
                             android.util.Log.d("AiTermux", "finish_reason=$finishReason, hasContent=$hasContent")
-                            // 如果有思考内容但未发送 ReasoningDone，先发送
                             if (fullReasoning.isNotEmpty() && !hasSentReasoningDone) {
                                 emit(StreamChunk.ReasoningDone)
                                 hasSentReasoningDone = true
@@ -2631,7 +2605,73 @@ object AiApiClient {
             emit(StreamChunk.Error("请求失败: ${e.message ?: "未知错误"}"))
         }
     }.flowOn(Dispatchers.IO)
-}
+
+    // ---------- 公开 API ----------
+
+    suspend fun chat(
+        context: android.content.Context,
+        config: AiProviderConfig,
+        messages: List<OpenAiMessage>
+    ): ChatCompletionResponse = withContext(Dispatchers.IO) {
+        if (config.provider == "local") {
+            val localResp = AiLocalModel.completeLocal(config, messages)
+            if (localResp.error == null) return@withContext localResp
+            val canFallback = AiTermuxPrefs.isFallbackOnlineEnabled(context)
+                && AiTermuxPrefs.isFallbackOnlineConfigReady(context)
+            if (!canFallback) return@withContext localResp
+            val fbCfg = AiTermuxPrefs.getFallbackOnlineConfig(context)
+            val onlineResp = callOnlineChat(fbCfg, messages)
+            if (onlineResp.error == null) {
+                val warnText = "⚠️ 本地模型调用失败：${localResp.error!!.message}。已自动切换到备用在线模型。\n\n"
+                val newChoices = onlineResp.choices.map { c ->
+                    c.copy(message = c.message?.copy(content = warnText + (c.message?.content ?: "")))
+                }
+                return@withContext onlineResp.copy(choices = newChoices)
+            } else {
+                val mergedErr = "本地失败：${localResp.error!!.message}；备用在线也失败：${onlineResp.error.message}"
+                return@withContext ChatCompletionResponse(error = ChatCompletionResponse.ApiError(mergedErr))
+            }
+        }
+        callOnlineChat(config, messages)
+    }
+
+    fun chatStream(
+        context: android.content.Context,
+        config: AiProviderConfig,
+        messages: List<OpenAiMessage>,
+        isCancelled: () -> Boolean
+    ): Flow<StreamChunk> {
+        if (config.provider == "local") {
+            return flow {
+                var localErrMsg: String? = null
+                var localFinishedOk = false
+                AiLocalModel.chatStreamLocal(config, messages, isCancelled).collect { chunk ->
+                    when (chunk) {
+                        is StreamChunk.Error -> localErrMsg = chunk.message
+                        is StreamChunk.Done -> {
+                            localFinishedOk = true
+                            emit(chunk)
+                        }
+                        else -> emit(chunk)
+                    }
+                }
+                if (localFinishedOk || localErrMsg == null) return@flow
+                val canFallback = AiTermuxPrefs.isFallbackOnlineEnabled(context)
+                    && AiTermuxPrefs.isFallbackOnlineConfigReady(context)
+                if (!canFallback) {
+                    emit(StreamChunk.Error(localErrMsg!!))
+                    return@flow
+                }
+                val fbCfg = AiTermuxPrefs.getFallbackOnlineConfig(context)
+                val warnText = "⚠️ 本地模型调用失败：${localErrMsg}。\n已自动切换到备用在线模型，请稍候...\n\n"
+                emit(StreamChunk.Content(warnText))
+                callOnlineChatStream(fbCfg, messages, isCancelled).collect { inner ->
+                    emit(inner)
+                }
+            }.flowOn(Dispatchers.IO)
+        }
+        return callOnlineChatStream(config, messages, isCancelled)
+    }
 }
 
 /**
@@ -2729,6 +2769,8 @@ sealed class StreamChunk {
     data class Content(val delta: String) : StreamChunk()
     data class Reasoning(val delta: String) : StreamChunk()
     data object ReasoningDone : StreamChunk()
+    /** 本地模型准备阶段（加载模型、启动进程等），一旦有 Reasoning 或 Content 到达就自动清除 UI */
+    data class Prepare(val status: String, val detailLine: String? = null) : StreamChunk()
     data class Done(val fullText: String, val fullReasoning: String = "", val rawResponse: String = "") : StreamChunk()
     data class Error(val message: String) : StreamChunk()
     object Cancelled : StreamChunk()

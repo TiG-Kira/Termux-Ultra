@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>总览卡片重设计预览</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    :root {
+      --bg-page:#f2f2f7; --bg-card:#ffffff; --text-primary:#1c1c1e; --text-secondary:#6c6c70; --text-tertiary:#9e9ea4;
+      --border:rgba(0,0,0,0.06); --shadow-card:0 1px 3px rgba(0,0,0,0.06),0 4px 12px rgba(0,0,0,0.05);
+    }
+    .dark { --bg-page:#000000; --bg-card:#1c1c1e; --text-primary:#ffffff; --text-secondary:#aeaeb2; --text-tertiary:#6c6c70; --border:rgba(255,255,255,0.08); --shadow-card:0 1px 3px rgba(0,0,0,0.3),0 4px 12px rgba(0,0,0,0.35); }
+    body { background-color:var(--bg-page); color:var(--text-primary); }
+    .card { background-color:var(--bg-card); border-radius:18px; box-shadow:var(--shadow-card); border:1px solid var(--border); transition:transform .12s ease,box-shadow .12s ease; }
+    .card:hover { transform:translateY(-2px); }
+    .chip { background:rgba(0,0,0,0.04); border-radius:999px; padding:2px 8px; font-size:12px; font-weight:500; color:var(--text-secondary); }
+    .dark .chip { background:rgba(255,255,255,0.08); }
+    .square-grid .card { min-height:180px; }
+    .square-grid .wide-only { display:none !important; }
+    .wide-grid .square-only { display:none !important; }
+    .status-normal { background:rgba(52,199,89,0.12); color:#34c759; }
+    .status-sleep { background:rgba(0,122,255,0.12); color:#007aff; }
+    .status-bg { background:rgba(175,82,222,0.12); color:#af52de; }
+    .status-frozen { background:rgba(142,142,147,0.12); color:#8e8e93; }
+    .dark .status-normal { background:rgba(52,199,89,0.18); }
+    .dark .status-sleep { background:rgba(0,122,255,0.18); }
+    .dark .status-bg { background:rgba(175,82,222,0.18); }
+    .dark .status-frozen { background:rgba(142,142,147,0.18); }
+  </style>
+</head>
+<body class="min-h-screen p-6 md:p-10">
+  <div class="max-w-6xl mx-auto">
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+      <div>
+        <h1 class="text-3xl font-semibold tracking-tight mb-1" style="color:var(--text-primary)">总览卡片重设计预览</h1>
+        <p class="text-base" style="color:var(--text-secondary)">简洁大气 · 内容优先 · 自适应宽版 / 正方形布局 · 保留智能缩放</p>
+      </div>
+      <div class="flex gap-2">
+        <button id="layoutToggle" class="px-4 py-2 rounded-full text-sm font-medium border" style="border-color:var(--border);color:var(--text-secondary);background:var(--bg-card)">切换正方形布局</button>
+        <button id="themeToggle" class="px-4 py-2 rounded-full text-sm font-medium border" style="border-color:var(--border);color:var(--text-secondary);background:var(--bg-card)">切换深色模式</button>
+      </div>
+    </div>
+
+    <div id="gridContainer" class="wide-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+
+      <!-- Sessions -->
+      <div class="card p-4 flex flex-col justify-between h-40 wide-only">
+        <div class="flex items-start justify-between">
+          <div><p class="text-xs font-semibold uppercase tracking-wide" style="color:var(--text-tertiary)">会话</p><p class="text-2xl font-bold mt-1" style="color:var(--text-primary)">3 个运行中</p></div>
+          <div class="w-10 h-10 rounded-xl flex items-center justify-center" style="background:rgba(52,199,89,0.12)"><svg class="w-5 h-5" fill="none" stroke="#34c759" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="18" rx="3"/><path d="M6 8h.01M6 12h.01M6 16h.01"/></svg></div>
+        </div>
+        <div class="flex gap-3 mt-4">
+          <div class="flex-1 rounded-xl p-2.5" style="background:rgba(52,199,89,0.08)"><p class="text-xl font-bold" style="color:#34c759">3</p><p class="text-xs font-medium" style="color:var(--text-secondary)">运行中</p></div>
+          <div class="flex-1 rounded-xl p-2.5" style="background:rgba(255,59,48,0.08)"><p class="text-xl font-bold" style="color:#ff3b30">1</p><p class="text-xs font-medium" style="color:var(--text-secondary)">已停止</p></div>
+        </div>
+      </div>
+      <div class="card p-4 flex flex-col items-center justify-center text-center square-only">
+        <div class="w-12 h-12 rounded-2xl flex items-center justify-center mb-3" style="background:rgba(52,199,89,0.12)"><svg class="w-6 h-6" fill="none" stroke="#34c759" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="18" rx="3"/><path d="M6 8h.01M6 12h.01M6 16h.01"/></svg></div>
+        <p class="text-xs font-semibold uppercase tracking-wide" style="color:var(--text-tertiary)">会话</p>
+        <p class="text-3xl font-bold mt-1" style="color:var(--text-primary)">3</p>
+        <div class="flex gap-3 mt-3">
+          <div class="rounded-xl px-3 py-1.5" style="background:rgba(52,199,89,0.08)"><p class="text-sm font-bold" style="color:#34c759">运行 3</p></div>
+          <div class="rounded-xl px-3 py-1.5" style="background:rgba(255,59,48,0.08)"><p class="text-sm font-bold" style="color:#ff3b30">停止 1</p></div>
+        </div>
+      </div>
+
+      <!-- CPU -->
+      <div class="card p-4 flex flex-col justify-between h-40 wide-only">
+        <div class="flex items-start justify-between">
+          <div><p class="text-xs font-semibold uppercase tracking-wide" style="color:var(--text-tertiary)">CPU</p><p class="text-2xl font-bold mt-1" style="color:var(--text-primary)">42%</p></div>
+          <div class="w-10 h-10 rounded-xl flex items-center justify-center" style="background:rgba(0,122,255,0.12)"><svg class="w-5 h-5" fill="none" stroke="#007aff" stroke-width="2" viewBox="0 0 24 24"><path d="M4 4h16v16H4z"/><path d="M9 9h6v6H9z"/></svg></div>
+        </div>
+        <div><div class="flex items-center justify-between text-xs font-medium mb-1.5" style="color:var(--text-secondary)"><span>负载</span><span>中等</span></div><div class="h-2 w-full rounded-full overflow-hidden" style="background:rgba(0,122,255,0.12)"><div class="h-full rounded-full" style="width:42%;background:#007aff"></div></div></div>
+      </div>
+      <div class="card p-4 flex flex-col items-center justify-center text-center square-only">
+        <div class="w-12 h-12 rounded-2xl flex items-center justify-center mb-3" style="background:rgba(0,122,255,0.12)"><svg class="w-6 h-6" fill="none" stroke="#007aff" stroke-width="2" viewBox="0 0 24 24"><path d="M4 4h16v16H4z"/><path d="M9 9h6v6H9z"/></svg></div>
+        <p class="text-xs font-semibold uppercase tracking-wide" style="color:var(--text-tertiary)">CPU</p>
+        <p class="text-3xl font-bold mt-1" style="color:var(--text-primary)">42%</p>
+        <div class="h-2 w-24 rounded-full overflow-hidden mt-3" style="background:rgba(0,122,255,0.12)"><div class="h-full rounded-full" style="width:42%;background:#007aff"></div></div>
+      </div>
+
+      <!-- GPU -->
+      <div class="card p-4 flex flex-col justify-between h-40 wide-only">
+        <div class="flex items-start justify-between">
+          <div><p class="text-xs font-semibold uppercase tracking-wide" style="color:var(--text-tertiary)">GPU</p><p class="text-2xl font-bold mt-1" style="color:var(--text-primary)">18%</p></div>
+          <div class="w-10 h-10 rounded-xl flex items-center justify-center" style="background:rgba(175,82,222,0.12)"><svg class="w-5 h-5" fill="none" stroke="#af52de" stroke-width="2" viewBox="0 0 24 24"><path d="M4 8V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-2"/><path d="M4 12h10"/><path d="M10 16l4-4-4-4"/></svg></div>
+        </div>
+        <div><div class="flex items-center justify-between text-xs font-medium mb-1.5" style="color:var(--text-secondary)"><span>使用率</span><span>低</span></div><div class="h-2 w-full rounded-full overflow-hidden" style="background:rgba(175,82,222,0.12)"><div class="h-full rounded-full" style="width:18%;background:#af52de"></div></div></div>
+      </div>
+      <div class="card p-4 flex flex-col items-center justify-center text-center square-only">
+        <div class="w-12 h-12 rounded-2xl flex items-center justify-center mb-3" style="background:rgba(175,82,222,0.12)"><svg class="w-6 h-6" fill="none" stroke="#af52de" stroke-width="2" viewBox="0 0 24 24"><path d="M4 8V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-2"/><path d="M4 12h10"/><path d="M10 16l4-4-4-4"/></svg></div>
+        <p class="text-xs font-semibold uppercase tracking-wide" style="color:var(--text-tertiary)">GPU</p>
+        <p class="text-3xl font-bold mt-1" style="color:var(--text-primary)">18%</p>
+        <div class="h-2 w-24 rounded-full overflow-hidden mt-3" style="background:rgba(175,82,222,0.12)"><div class="h-full rounded-full" style="width:18%;background:#af52de"></div></div>
+      </div>
+
+      <!-- Memory -->
+      <div class="card p-4 flex flex-col justify-between h-40 wide-only">
+        <div class="flex items-start justify-between">
+          <div><p class="text-xs font-semibold uppercase tracking-wide" style="color:var(--text-tertiary)">内存</p><p class="text-2xl font-bold mt-1" style="color:var(--text-primary)">4.2 / 8 GB</p></div>
+          <div class="w-10 h-10 rounded-xl flex items-center justify-center" style="background:rgba(255,149,0,0.12)"><svg class="w-5 h-5" fill="none" stroke="#ff9500" stroke-width="2" viewBox="0 0 24 24"><path d="M2 8h20v10H2z"/><path d="M6 8V5a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v3"/></svg></div>
+        </div>
+        <div><div class="flex items-center justify-between text-xs font-medium mb-1.5" style="color:var(--text-secondary)"><span>已用 53%</span></div><div class="h-2 w-full rounded-full overflow-hidden" style="background:rgba(255,149,0,0.12)"><div class="h-full rounded-full" style="width:53%;background:#ff9500"></div></div></div>
+      </div>
+      <div class="card p-4 flex flex-col items-center justify-center text-center square-only">
+        <div class="w-12 h-12 rounded-2xl flex items-center justify-center mb-3" style="background:rgba(255,149,0,0.12)"><svg class="w-6 h-6" fill="none" stroke="#ff9500" stroke-width="2" viewBox="0 0 24 24"><path d="M2 8h20v10H2z"/><path d="M6 8V5a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v3"/></svg></div>
+        <p class="text-xs font-semibold uppercase tracking-wide" style="color:var(--text-tertiary)">内存</p>
+        <p class="text-3xl font-bold mt-1" style="color:var(--text-primary)">53%</p>
+        <p class="text-sm font-medium mt-1" style="color:var(--text-secondary)">4.2 / 8 GB</p>
+      </div>
+
+      <!-- Process List (Redesigned) -->
+      <div class="card p-4 flex flex-col h-40 wide-only">
+        <div class="flex items-start justify-between mb-2">
+          <div><p class="text-xs font-semibold uppercase tracking-wide" style="color:var(--text-tertiary)">进程</p><p class="text-2xl font-bold mt-1" style="color:var(--text-primary)">12 个进程</p></div>
+          <div class="w-10 h-10 rounded-xl flex items-center justify-center" style="background:rgba(90,200,250,0.12)"><svg class="w-5 h-5" fill="none" stroke="#5ac8fa" stroke-width="2" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg></div>
+        </div>
+        <div class="flex text-[10px] font-semibold uppercase tracking-wider mb-1" style="color:var(--text-tertiary)">
+          <span class="flex-1">进程</span>
+          <span class="w-12 text-center">状态</span>
+          <span class="w-10 text-right">CPU</span>
+          <span class="w-14 text-right">内存</span>
+        </div>
+        <div class="space-y-1.5">
+          <div class="flex items-center text-xs">
+            <span class="flex-1 font-medium truncate pr-2" style="color:var(--text-primary)">top</span>
+            <span class="w-12 text-center px-1 py-0.5 rounded-full font-semibold status-normal">正常</span>
+            <span class="w-10 text-right font-semibold" style="color:var(--text-primary)">8%</span>
+            <span class="w-14 text-right font-medium" style="color:var(--text-secondary)">24 MB</span>
+          </div>
+          <div class="flex items-center text-xs">
+            <span class="flex-1 font-medium truncate pr-2" style="color:var(--text-primary)">sshd</span>
+            <span class="w-12 text-center px-1 py-0.5 rounded-full font-semibold status-bg">后台</span>
+            <span class="w-10 text-right font-semibold" style="color:var(--text-primary)">3%</span>
+            <span class="w-14 text-right font-medium" style="color:var(--text-secondary)">12 MB</span>
+          </div>
+        </div>
+      </div>
+      <div class="card p-4 flex flex-col items-center justify-center text-center square-only">
+        <div class="w-12 h-12 rounded-2xl flex items-center justify-center mb-2" style="background:rgba(90,200,250,0.12)"><svg class="w-6 h-6" fill="none" stroke="#5ac8fa" stroke-width="2" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg></div>
+        <p class="text-xs font-semibold uppercase tracking-wide" style="color:var(--text-tertiary)">进程</p>
+        <p class="text-3xl font-bold mt-1" style="color:var(--text-primary)">12</p>
+        <div class="w-full mt-3 space-y-1.5">
+          <div class="flex items-center justify-between text-xs">
+            <span class="font-medium truncate" style="color:var(--text-primary)">top</span>
+            <span class="px-1.5 py-0.5 rounded-full font-semibold status-normal">正常</span>
+            <span class="font-semibold" style="color:var(--text-primary)">8%</span>
+          </div>
+          <div class="flex items-center justify-between text-xs">
+            <span class="font-medium truncate" style="color:var(--text-primary)">sshd</span>
+            <span class="px-1.5 py-0.5 rounded-full font-semibold status-bg">后台</span>
+            <span class="font-semibold" style="color:var(--text-primary)">3%</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Stop All -->
+      <div class="card p-4 flex items-center h-40 wide-only">
+        <div class="w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 mr-4" style="background:rgba(255,59,48,0.12)"><svg class="w-6 h-6" fill="none" stroke="#ff3b30" stroke-width="2" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></svg></div>
+        <div class="min-w-0"><p class="text-lg font-bold" style="color:var(--text-primary)">全部停止</p><p class="text-sm font-medium truncate" style="color:var(--text-secondary)">一键结束所有运行中的会话</p><span class="inline-flex mt-2 px-2 py-0.5 rounded-full text-xs font-semibold" style="background:rgba(255,59,48,0.10);color:#ff3b30">3 个活跃</span></div>
+      </div>
+      <div class="card p-4 flex flex-col items-center justify-center text-center square-only">
+        <div class="w-14 h-14 rounded-2xl flex items-center justify-center mb-3" style="background:rgba(255,59,48,0.12)"><svg class="w-7 h-7" fill="none" stroke="#ff3b30" stroke-width="2" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></svg></div>
+        <p class="text-base font-bold" style="color:var(--text-primary)">全部停止</p>
+        <p class="text-xs font-medium" style="color:var(--text-secondary)">结束 3 个会话</p>
+      </div>
+
+      <!-- Resource Action -->
+      <div class="card p-4 flex items-center h-40 wide-only">
+        <div class="w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 mr-4" style="background:rgba(0,122,255,0.12)"><svg class="w-6 h-6" fill="none" stroke="#007aff" stroke-width="2" viewBox="0 0 24 24"><path d="M12 2v20M2 12h20"/></svg></div>
+        <div class="min-w-0"><p class="text-lg font-bold" style="color:var(--text-primary)">资源管理</p><p class="text-sm font-medium truncate" style="color:var(--text-secondary)">清理缓存、释放内存与快捷操作</p><span class="inline-flex mt-2 px-2 py-0.5 rounded-full text-xs font-semibold" style="background:rgba(0,122,255,0.10);color:#007aff">可释放 240 MB</span></div>
+      </div>
+      <div class="card p-4 flex flex-col items-center justify-center text-center square-only">
+        <div class="w-14 h-14 rounded-2xl flex items-center justify-center mb-3" style="background:rgba(0,122,255,0.12)"><svg class="w-7 h-7" fill="none" stroke="#007aff" stroke-width="2" viewBox="0 0 24 24"><path d="M12 2v20M2 12h20"/></svg></div>
+        <p class="text-base font-bold" style="color:var(--text-primary)">资源管理</p>
+        <p class="text-xs font-medium" style="color:var(--text-secondary)">可释放 240 MB</p>
+      </div>
+
+      <!-- Feature Center -->
+      <div class="card p-5 sm:col-span-2 lg:col-span-3 h-auto wide-only">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div class="flex items-start gap-4">
+            <div class="w-12 h-12 rounded-2xl flex items-center justify-center shrink-0" style="background:linear-gradient(135deg,#007aff,#5856d6)"><svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg></div>
+            <div><p class="text-lg font-bold" style="color:var(--text-primary)">功能中心</p><p class="text-sm font-medium" style="color:var(--text-secondary)">探索高级工具、插件与自定义选项</p></div>
+          </div>
+          <div class="flex gap-2 flex-wrap"><span class="chip">快捷指令</span><span class="chip">插件</span><span class="chip">主题</span></div>
+        </div>
+      </div>
+      <div class="card p-5 sm:col-span-2 lg:col-span-3 h-auto square-only">
+        <div class="flex flex-col items-center justify-center text-center gap-3 py-2">
+          <div class="w-14 h-14 rounded-2xl flex items-center justify-center" style="background:linear-gradient(135deg,#007aff,#5856d6)"><svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg></div>
+          <div><p class="text-lg font-bold" style="color:var(--text-primary)">功能中心</p><p class="text-sm font-medium" style="color:var(--text-secondary)">探索高级工具、插件与自定义选项</p></div>
+          <div class="flex gap-2 flex-wrap justify-center"><span class="chip">快捷指令</span><span class="chip">插件</span><span class="chip">主题</span></div>
+        </div>
+      </div>
+
+    </div>
+
+    <h2 class="text-xl font-semibold mt-10 mb-4" style="color:var(--text-primary)">横向提示卡片</h2>
+    <div class="card p-4 flex items-center max-w-2xl mb-4 wide-only">
+      <div class="w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 mr-4" style="background:rgba(0,122,255,0.12)"><svg class="w-6 h-6" fill="none" stroke="#007aff" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4m0 4h.01"/></svg></div>
+      <div class="min-w-0 flex-1"><p class="text-base font-bold" style="color:var(--text-primary)">提示标题</p><p class="text-sm font-medium" style="color:var(--text-secondary)">这里是一条简洁的提示内容，用于引导用户完成某个操作。</p></div>
+      <button class="ml-3 px-3 py-1.5 rounded-lg text-sm font-semibold" style="background:#007aff;color:#fff">查看</button>
+    </div>
+    <div class="card p-4 flex flex-col items-center text-center max-w-sm mb-4 square-only">
+      <div class="w-12 h-12 rounded-2xl flex items-center justify-center mb-3" style="background:rgba(0,122,255,0.12)"><svg class="w-6 h-6" fill="none" stroke="#007aff" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4m0 4h.01"/></svg></div>
+      <p class="text-base font-bold" style="color:var(--text-primary)">提示标题</p>
+      <p class="text-sm font-medium" style="color:var(--text-secondary)">简洁的提示内容，引导用户操作。</p>
+      <button class="mt-3 px-4 py-1.5 rounded-lg text-sm font-semibold" style="background:#007aff;color:#fff">查看</button>
+    </div>
+
+    <h2 class="text-xl font-semibold mt-10 mb-4" style="color:var(--text-primary)">Agent 入口卡片</h2>
+    <div class="card p-4 flex items-center max-w-2xl mb-4 wide-only">
+      <div class="w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 mr-4" style="background:rgba(175,82,222,0.12)"><svg class="w-6 h-6" fill="none" stroke="#af52de" stroke-width="2" viewBox="0 0 24 24"><path d="M12 2a7 7 0 0 1 7 7v3h2v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-9h2V9a7 7 0 0 1 7-7z"/></svg></div>
+      <div class="min-w-0 flex-1"><p class="text-base font-bold" style="color:var(--text-primary)">AI Terminal</p><p class="text-sm font-medium" style="color:var(--text-secondary)">智能命令建议、自然语言解释与故障排查</p></div>
+      <button class="ml-3 px-3 py-1.5 rounded-lg text-sm font-semibold" style="background:#af52de;color:#fff">启动</button>
+    </div>
+    <div class="card p-4 flex flex-col items-center text-center max-w-sm mb-10 square-only">
+      <div class="w-12 h-12 rounded-2xl flex items-center justify-center mb-3" style="background:rgba(175,82,222,0.12)"><svg class="w-6 h-6" fill="none" stroke="#af52de" stroke-width="2" viewBox="0 0 24 24"><path d="M12 2a7 7 0 0 1 7 7v3h2v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-9h2V9a7 7 0 0 1 7-7z"/></svg></div>
+      <p class="text-base font-bold" style="color:var(--text-primary)">AI Terminal</p>
+      <p class="text-sm font-medium" style="color:var(--text-secondary)">智能命令建议与自然语言解释</p>
+      <button class="mt-3 px-4 py-1.5 rounded-lg text-sm font-semibold" style="background:#af52de;color:#fff">启动</button>
+    </div>
+
+    <div class="text-sm font-medium" style="color:var(--text-tertiary)">提示：竖向模式提示卡片保持现有样式，本次不做调整。</div>
+  </div>
+  <script>
+    document.getElementById('layoutToggle').addEventListener('click',()=>{
+      const g=document.getElementById('gridContainer');
+      g.classList.toggle('wide-grid'); g.classList.toggle('square-grid');
+    });
+    document.getElementById('themeToggle').addEventListener('click',()=>document.documentElement.classList.toggle('dark'));
+  </script>
+</body>
+</html>

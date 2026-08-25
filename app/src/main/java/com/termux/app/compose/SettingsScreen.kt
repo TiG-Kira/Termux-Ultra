@@ -136,6 +136,15 @@ fun SettingsScreen(
     var useCustomSystemPrompt by remember { mutableStateOf(AiTermuxPrefs.isUsingCustomSystemPrompt(context)) }
     var unlimitedMode by remember { mutableStateOf(AiTermuxPrefs.isUnlimitedMode(context)) }
     var rootAutoShell by remember { mutableStateOf(AiTermuxPrefs.isRootAutoShell(context)) }
+    // 本地大模型备用在线配置（fallback online）
+    val aiProvider = AiTermuxPrefs.getConfig(context).providerConfig.provider
+    val isLocalMode = aiProvider == "local"
+    var fallbackEnabled by remember { mutableStateOf(AiTermuxPrefs.isFallbackOnlineEnabled(context)) }
+    var showFallbackEditor by remember { mutableStateOf(false) }
+    var fbKey by remember { mutableStateOf("") }
+    var fbUrl by remember { mutableStateOf("") }
+    var fbModel by remember { mutableStateOf("") }
+    var fbTemp by remember { mutableStateOf(0.7f) }
     var showUnlimitedModeConfirm by remember { mutableStateOf(false) }
 
     // 高风险命令二次确认
@@ -787,6 +796,59 @@ fun SettingsScreen(
                                     SettingIcon(R.drawable.ic_delete, contentDescription = "清空对话记录")
                                 }
                             )
+                            // 本地模式专属：备用在线大模型（fallback）
+                            if (isLocalMode) {
+                                HorizontalDivider(
+                                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f),
+                                    modifier = Modifier.padding(start = 72.dp, end = 16.dp)
+                                )
+                                SwitchPreference(
+                                    title = "备用在线大模型",
+                                    summary = if (fallbackEnabled) {
+                                        val ready = AiTermuxPrefs.isFallbackOnlineConfigReady(context)
+                                        if (ready) "已开启：本地推理失败时将自动切换到备用在线模型完成问答"
+                                        else "已开启：⚠️ 请先点击下方「配置备用在线参数」补全 API Key/URL/模型"
+                                    } else {
+                                        "关闭时仅使用本地大模型，出错时直接返回错误（不自动切换）"
+                                    },
+                                    checked = fallbackEnabled,
+                                    onCheckedChange = {
+                                        fallbackEnabled = it
+                                        AiTermuxPrefs.setFallbackOnlineEnabled(context, it)
+                                    },
+                                    startAction = {
+                                        SettingIcon(R.drawable.ic_refresh, contentDescription = "备用在线大模型")
+                                    }
+                                )
+                                if (fallbackEnabled) {
+                                    HorizontalDivider(
+                                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f),
+                                        modifier = Modifier.padding(start = 72.dp, end = 16.dp)
+                                    )
+                                    ArrowPreference(
+                                        title = "配置备用在线参数",
+                                        summary = run {
+                                            val c = AiTermuxPrefs.getFallbackOnlineConfig(context)
+                                            val urlShown = if (c.apiBaseUrl.isBlank()) "(未填写)" else c.apiBaseUrl
+                                            val modelShown = if (c.model.isBlank()) "(未填写)" else c.model
+                                            val keyShown = if (c.apiKey.isBlank()) "API Key 未填写" else "********"
+                                            "模型：$modelShown ｜ URL：$urlShown ｜ Key：$keyShown"
+                                        },
+                                        onClick = {
+                                            // 打开对话框前，载入当前保存的值
+                                            val cfg = AiTermuxPrefs.getFallbackOnlineConfig(context)
+                                            fbKey = cfg.apiKey
+                                            fbUrl = cfg.apiBaseUrl
+                                            fbModel = cfg.model
+                                            fbTemp = cfg.temperature
+                                            showFallbackEditor = true
+                                        },
+                                        startAction = {
+                                            SettingIcon(R.drawable.ic_edit, contentDescription = "配置备用在线参数")
+                                        }
+                                    )
+                                }
+                            }
                             HorizontalDivider(
                                 color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f),
                                 modifier = Modifier.padding(start = 72.dp, end = 16.dp)
@@ -1462,6 +1524,81 @@ fun SettingsScreen(
                     val cfg = AiTermuxPrefs.getConfig(context)
                     AiTermuxPrefs.saveConfig(context, cfg.copy(customSystemPrompt = systemPromptText))
                     showSystemPromptEditor = false
+                },
+                modifier = Modifier.weight(1f),
+                colors = ButtonDefaults.textButtonColorsPrimary()
+            )
+        }
+        }
+    )
+
+    // ---------- AI Termux：备用在线模型参数编辑 ----------
+    OverlayDialog(
+        title = "配置备用在线大模型",
+        summary = "当本地大模型调用失败或无响应时，若已开启开关，会先提示错误原因，然后自动切换到该在线模型完成问答。参数与标准 OpenAI 兼容接口一致。",
+        show = showFallbackEditor,
+        onDismissRequest = { showFallbackEditor = false },
+        content = {
+        Box(
+            modifier = Modifier
+                .heightIn(max = 480.dp)
+                .verticalScroll(rememberScrollState())
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                TextField(
+                    value = fbUrl,
+                    onValueChange = { v -> fbUrl = v },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = "API Base URL（例如 https://api.deepseek.com/v1）",
+                    useLabelAsPlaceholder = true
+                )
+                TextField(
+                    value = fbKey,
+                    onValueChange = { v -> fbKey = v },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = "API Key（以 sk- 开头的密钥）",
+                    useLabelAsPlaceholder = true
+                )
+                TextField(
+                    value = fbModel,
+                    onValueChange = { v -> fbModel = v },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = "模型名称（例如 deepseek-chat / gpt-4o-mini / qwen-plus）",
+                    useLabelAsPlaceholder = true
+                )
+                Text(
+                    text = "Temperature：当前值 %.2f  (0 偏严谨，1 偏创意)".format(fbTemp),
+                    fontSize = 12.sp,
+                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                )
+                androidx.compose.material3.Slider(
+                    value = fbTemp,
+                    onValueChange = { fbTemp = it },
+                    valueRange = 0f..2f,
+                    steps = 39,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+        Row(horizontalArrangement = Arrangement.SpaceBetween) {
+            TextButton(
+                text = "取消",
+                onClick = { showFallbackEditor = false },
+                modifier = Modifier.weight(1f)
+            )
+            Spacer(Modifier.width(16.dp))
+            TextButton(
+                text = "保存",
+                onClick = {
+                    AiTermuxPrefs.saveFallbackOnlineConfig(
+                        context,
+                        apiKey = fbKey,
+                        baseUrl = fbUrl,
+                        model = fbModel,
+                        temperature = fbTemp
+                    )
+                    showFallbackEditor = false
                 },
                 modifier = Modifier.weight(1f),
                 colors = ButtonDefaults.textButtonColorsPrimary()

@@ -99,6 +99,11 @@
             android:exported="false" />
 
         <activity
+            android:name=".app.activities.ProcessListActivity"
+            android:label="@string/process_list_title"
+            android:exported="false" />
+
+        <activity
             android:name=".app.TerminalDetailActivity"
             android:label="@string/application_name" />
 

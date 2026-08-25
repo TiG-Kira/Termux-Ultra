@@ -42,6 +42,11 @@ public class LogManager {
     private Thread logcatThread;
     private final AtomicBoolean logcatRunning = new AtomicBoolean(false);
 
+    // 日志缓存：避免高频重复解析同一文件
+    private List<LogEntry> cachedLogs;
+    private long cachedFileModTime;
+    private int cachedLevelFilter = -1;
+
     private LogManager(Context context) {
         this.appContext = context.getApplicationContext();
         File logDir = new File(appContext.getFilesDir(), LOG_DIR_NAME);
@@ -49,6 +54,8 @@ public class LogManager {
             logDir.mkdirs();
         }
         logFile = new File(logDir, LOG_FILE_NAME);
+        // 自动清理3天前的旧日志
+        cleanOldLogs(3);
     }
 
     public static synchronized void init(Context context) {
@@ -289,6 +296,17 @@ public class LogManager {
      * @param endTime 结束时间戳，-1 表示不过滤
      */
     public List<LogEntry> getLogs(Integer level, long startTime, long endTime) {
+        long currentModTime = logFile.exists() ? logFile.lastModified() : 0;
+        int levelKey = level != null ? level : -1;
+
+        // 命中缓存：文件未修改且过滤条件相同
+        if (cachedLogs != null
+                && currentModTime == cachedFileModTime
+                && levelKey == cachedLevelFilter
+                && startTime == -1 && endTime == -1) {
+            return new ArrayList<>(cachedLogs);
+        }
+
         List<LogEntry> entries = new ArrayList<>();
 
         if (!logFile.exists()) {
@@ -301,7 +319,6 @@ public class LogManager {
 
             while ((line = reader.readLine()) != null) {
                 if (line.startsWith("[")) {
-                    // 新的日志条目开始
                     if (currentEntry != null) {
                         LogEntry entry = parseLogEntry(currentEntry.toString());
                         if (entry != null && shouldInclude(entry, level, startTime, endTime)) {
@@ -310,12 +327,10 @@ public class LogManager {
                     }
                     currentEntry = new StringBuilder(line).append("\n");
                 } else if (currentEntry != null) {
-                    // 继续上一个日志条目（异常堆栈）
                     currentEntry.append(line).append("\n");
                 }
             }
 
-            // 处理最后一个条目
             if (currentEntry != null) {
                 LogEntry entry = parseLogEntry(currentEntry.toString());
                 if (entry != null && shouldInclude(entry, level, startTime, endTime)) {
@@ -326,8 +341,15 @@ public class LogManager {
             Log.e(TAG, "Failed to read logs", e);
         }
 
-        // 按时间倒序排列（最新的在前）
         Collections.reverse(entries);
+
+        // 仅缓存无时间过滤的全量结果
+        if (startTime == -1 && endTime == -1) {
+            cachedLogs = new ArrayList<>(entries);
+            cachedFileModTime = currentModTime;
+            cachedLevelFilter = levelKey;
+        }
+
         return entries;
     }
 
@@ -377,11 +399,73 @@ public class LogManager {
     }
 
     /**
-     * 清空所有日志
+     * 清空所有日志。
+     * 采用截断文件内容的方式而非删除文件，避免 logcat 实时收集线程在删除后立即重建文件。
+     * @return true 表示成功清除，false 表示没有日志可清除或清除失败
      */
-    public synchronized void clearLogs() {
-        if (logFile.exists()) {
-            logFile.delete();
+    public synchronized boolean clearLogs() {
+        if (!logFile.exists() || logFile.length() == 0) {
+            return false;
+        }
+        try (FileWriter writer = new FileWriter(logFile, false)) {
+            writer.write("");
+            // 清除缓存
+            cachedLogs = null;
+            cachedFileModTime = 0;
+            cachedLevelFilter = -1;
+            return true;
+        } catch (IOException e) {
+            Log.e(TAG, "Failed to clear logs", e);
+            return false;
+        }
+    }
+
+    /**
+     * 清理超过指定天数的旧日志，仅保留近期日志。
+     * @param days 保留最近 N 天的日志
+     */
+    public synchronized void cleanOldLogs(int days) {
+        if (!logFile.exists() || logFile.length() == 0) {
+            return;
+        }
+
+        long cutoffTime = System.currentTimeMillis() - (long) days * 24 * 60 * 60 * 1000;
+
+        try {
+            List<LogEntry> allEntries = getLogs(null, -1, -1);
+            if (allEntries.isEmpty()) {
+                return;
+            }
+
+            List<LogEntry> filteredEntries = new ArrayList<>();
+            for (LogEntry entry : allEntries) {
+                if (entry.timestamp >= cutoffTime) {
+                    filteredEntries.add(entry);
+                }
+            }
+
+            if (filteredEntries.size() == allEntries.size()) {
+                return;
+            }
+
+            // 将保留的日志重新写回文件
+            try (BufferedWriter writer = new BufferedWriter(new FileWriter(logFile, false))) {
+                for (LogEntry entry : filteredEntries) {
+                    StringBuilder logEntry = new StringBuilder();
+                    logEntry.append("[").append(dateFormat.format(new Date(entry.timestamp))).append("] ")
+                            .append("[").append(getLevelString(entry.level)).append("] ")
+                            .append("[").append(entry.tag).append("] ")
+                            .append(entry.message).append("\n");
+                    writer.write(logEntry.toString());
+                }
+            }
+
+            Log.i(TAG, "Cleaned old logs: kept " + filteredEntries.size() + " entries from " + allEntries.size());
+            // 文件已修改，清除缓存
+            cachedLogs = null;
+            cachedFileModTime = 0;
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to clean old logs", e);
         }
     }
 
@@ -390,6 +474,14 @@ public class LogManager {
      */
     public long getLogFileSize() {
         return logFile.exists() ? logFile.length() : 0;
+    }
+
+    /**
+     * 获取日志文件最后修改时间戳，用于快速判断日志是否有更新。
+     * @return 最后修改时间戳（毫秒），文件不存在返回 0
+     */
+    public long getLogFileLastModified() {
+        return logFile.exists() ? logFile.lastModified() : 0;
     }
 
     private String getLevelString(int level) {

@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Termux Ultra</string>
     <string name="application_name">Termux Ultra</string>
@@ -424,8 +424,8 @@
 
     <!-- 资源中心 -->
     <string name="resources_center">功能中心</string>
-    <string name="feature_center_desc">点击卡片进入功能中心，按需使用，注意使用安全。</string>
-    <string name="overview_feature_center_label">Termux Ultra 功能中心</string>
+    <string name="feature_center_desc">探索无限可能</string>
+    <string name="overview_feature_center_label">功能中心</string>
     <string name="utility_center">实用功能中心</string>
     <string name="third_party_center">第三方资源中心</string>
     <string name="utility_center_desc">官方维护的实用工具：QEMU with VNC、Debian QEMU、Ubuntu 容器、tmux、QEMU 安装等</string>
@@ -737,7 +737,7 @@
     <string name="overview_card_sessions">会话</string>
     <string name="overview_card_cpu">Termux CPU 占用</string>
     <string name="overview_card_gpu">Termux GPU 占用</string>
-    <string name="overview_card_memory">Termux 内存占用</string>
+    <string name="overview_card_memory">内存占用</string>
     <string name="overview_card_processes">进程</string>
     <string name="overview_card_stop_all">停止全部</string>
     <string name="overview_running">运行中</string>
@@ -783,6 +783,22 @@
     <string name="overview_third_party_center">第三方资源中心</string>
     <string name="overview_system_function">系统功能</string>
     <string name="overview_can_add_multiple">可添加多个</string>
+
+    <!-- Process List Detail -->
+    <string name="process_list_title">进程列表</string>
+    <string name="process_cpu_usage">CPU 占用</string>
+    <string name="process_cpu_desc">全部进程</string>
+    <string name="process_gpu_usage">GPU 占用</string>
+    <string name="process_gpu_desc">GPU 负载</string>
+    <string name="process_list_all">全部进程</string>
+    <string name="process_loading">正在加载进程…</string>
+    <string name="process_no_processes">暂无活跃进程</string>
+    <string name="process_pid_label">PID</string>
+    <string name="process_user_label">用户</string>
+    <string name="process_sleeping">休眠</string>
+    <string name="process_running">运行中</string>
+    <string name="process_stopped">已停止</string>
+    <string name="process_zombie">僵尸</string>
 
     <!-- Plugin System -->
     <string name="plugin_center">插件中心</string>
@@ -853,6 +869,8 @@
     <string name="log_level_info">信息</string>
     <string name="log_level_warning">警告</string>
     <string name="log_level_exception">异常</string>
+    <string name="logs_cleared">日志已清空</string>
+    <string name="no_logs_to_clear">没有可清空的日志</string>
 
     <!-- 崩溃对话框 -->
     <string name="crash_dialog_title">应用错误</string>
@@ -863,5 +881,25 @@
     <string name="view_logs">查看日志</string>
     <string name="use_fallback_mode">使用降级模式</string>
     <string name="close_app">关闭应用</string>
+<!-- Missing overview translations -->
+    <string name="overview_active">活跃</string>
+    <string name="overview_background">后台</string>
+    <string name="overview_chip_plugins">三方功能</string>
+    <string name="overview_chip_shortcuts">实用功能</string>
+    <string name="overview_chip_themes">插件中心</string>
+    <string name="overview_gpu_peak_hint">历史峰值</string>
+    <string name="overview_load">负载</string>
+    <string name="overview_load_high">高</string>
+    <string name="overview_load_low">低</string>
+    <string name="overview_load_medium">中</string>
+    <string name="overview_process_status">状态</string>
+    <string name="overview_processes">进程</string>
+    <string name="overview_resource_action_desc">%1$s</string>
+    <string name="overview_sleeping">休眠</string>
+    <string name="overview_stop_all_subtitle">%1$d 个活跃会话</string>
+    <string name="overview_tap_to_select">点击选择</string>
+    <string name="overview_usage_rate">使用率：%1$.0f%%</string>
+    <string name="overview_cpu_label">CPU</string>
+    <string name="overview_gpu_label">GPU</string>
 </resources>
 

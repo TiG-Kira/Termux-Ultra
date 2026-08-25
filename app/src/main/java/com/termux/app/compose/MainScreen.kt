@@ -1,4 +1,4 @@
-﻿package com.termux.app.compose
+package com.termux.app.compose
 
 import android.content.Context
 
@@ -262,14 +262,16 @@ fun MainScreen(
                                 onTabChange(actualTab)
                             }
                         }
-                    ) {
+                    ) { onPositioned ->
                         if (0 in availableTabs) {
                             LiquidGlassNavigationBarItem(
                                 icon = ImageVector.vectorResource(R.drawable.ic_overview),
                                 label = stringResource(R.string.overview),
                                 selected = selectedTab == 0,
                                 onClick = { previousTab = selectedTab; onTabChange(0) },
-                                dims = glassDims
+                                dims = glassDims,
+                                index = 0,
+                                onPositioned = onPositioned
                             )
                         }
                         if (1 in availableTabs) {
@@ -278,7 +280,9 @@ fun MainScreen(
                                 label = stringResource(R.string.terminal),
                                 selected = selectedTab == 1,
                                 onClick = { previousTab = selectedTab; onTabChange(1) },
-                                dims = glassDims
+                                dims = glassDims,
+                                index = 1,
+                                onPositioned = onPositioned
                             )
                         }
                         if (2 in availableTabs) {
@@ -287,7 +291,9 @@ fun MainScreen(
                                 label = stringResource(R.string.files),
                                 selected = selectedTab == 2,
                                 onClick = { previousTab = selectedTab; onTabChange(2) },
-                                dims = glassDims
+                                dims = glassDims,
+                                index = 2,
+                                onPositioned = onPositioned
                             )
                         }
                         if (3 in availableTabs) {
@@ -296,7 +302,9 @@ fun MainScreen(
                                 label = stringResource(R.string.remote),
                                 selected = selectedTab == 3,
                                 onClick = { previousTab = selectedTab; onTabChange(3) },
-                                dims = glassDims
+                                dims = glassDims,
+                                index = 3,
+                                onPositioned = onPositioned
                             )
                         }
                         if (4 in availableTabs) {
@@ -305,7 +313,9 @@ fun MainScreen(
                                 label = stringResource(R.string.settings),
                                 selected = selectedTab == 4,
                                 onClick = { previousTab = selectedTab; onTabChange(4) },
-                                dims = glassDims
+                                dims = glassDims,
+                                index = 4,
+                                onPositioned = onPositioned
                             )
                         }
                     }

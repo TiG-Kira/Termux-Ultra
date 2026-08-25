@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#f2f2f7">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="16dp">
+        <androidx.cardview.widget.CardView style="@style/OverviewCard">
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="16dp">
+                <TextView style="@style/OverviewLabel" android:text="会话"/>
+                <TextView style="@style/OverviewValue" android:text="3 个运行中"/>
+            </LinearLayout>
+        </androidx.cardview.widget.CardView>
+        <androidx.cardview.widget.CardView style="@style/OverviewCard">
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="16dp">
+                <TextView style="@style/OverviewLabel" android:text="CPU"/>
+                <TextView style="@style/OverviewValue" android:text="42%"/>
+                <ProgressBar style="@style/OverviewProgress" android:progress="42"/>
+            </LinearLayout>
+        </androidx.cardview.widget.CardView>
+        <androidx.cardview.widget.CardView style="@style/OverviewCard">
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="16dp">
+                <TextView style="@style/OverviewLabel" android:text="GPU"/>
+                <TextView style="@style/OverviewValue" android:text="18%"/>
+                <ProgressBar style="@style/OverviewProgress" android:progress="18"/>
+            </LinearLayout>
+        </androidx.cardview.widget.CardView>
+        <androidx.cardview.widget.CardView style="@style/OverviewCard">
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="16dp">
+                <TextView style="@style/OverviewLabel" android:text="内存"/>
+                <TextView style="@style/OverviewValue" android:text="4.2 / 8 GB"/>
+                <ProgressBar style="@style/OverviewProgress" android:progress="53"/>
+            </LinearLayout>
+        </androidx.cardview.widget.CardView>
+        <androidx.cardview.widget.CardView style="@style/OverviewCard">
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="16dp">
+                <TextView style="@style/OverviewLabel" android:text="进程"/>
+                <TextView style="@style/OverviewValue" android:text="12 个进程"/>
+            </LinearLayout>
+        </androidx.cardview.widget.CardView>
+        <androidx.cardview.widget.CardView style="@style/OverviewCard">
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:padding="16dp">
+                <View style="@style/OverviewIcon.Red"/>
+                <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
+                    <TextView style="@style/OverviewCardTitle" android:text="全部停止"/>
+                    <TextView style="@style/OverviewCardSubtitle" android:text="一键结束所有运行中的会话"/>
+                    <TextView style="@style/OverviewBadge.Red" android:text="3 个活跃"/>
+                </LinearLayout>
+            </LinearLayout>
+        </androidx.cardview.widget.CardView>
+        <androidx.cardview.widget.CardView style="@style/OverviewCard">
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:padding="16dp">
+                <View style="@style/OverviewIcon.Blue"/>
+                <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
+                    <TextView style="@style/OverviewCardTitle" android:text="资源管理"/>
+                    <TextView style="@style/OverviewCardSubtitle" android:text="清理缓存、释放内存与快捷操作"/>
+                    <TextView style="@style/OverviewBadge.Blue" android:text="可释放 240 MB"/>
+                </LinearLayout>
+            </LinearLayout>
+        </androidx.cardview.widget.CardView>
+        <androidx.cardview.widget.CardView style="@style/OverviewCard">
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:padding="16dp">
+                <View style="@style/OverviewIcon.Gradient"/>
+                <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
+                    <TextView style="@style/OverviewCardTitle" android:text="功能中心"/>
+                    <TextView style="@style/OverviewCardSubtitle" android:text="探索高级工具、插件与自定义选项"/>
+                </LinearLayout>
+            </LinearLayout>
+        </androidx.cardview.widget.CardView>
+    </LinearLayout>
+</ScrollView>

@@ -1,0 +1,724 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>远程 ADB 管理</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif;
+            background: linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%);
+            min-height: 100vh;
+            padding: 16px;
+            color: #e0e0e0;
+        }
+        .container { max-width: 640px; margin: 0 auto; padding-bottom: 40px; }
+        .header { text-align: center; padding: 20px 0 24px; color: #fff; }
+        .header h1 { font-size: 24px; margin-bottom: 6px; }
+        .header p { font-size: 13px; opacity: 0.8; }
+        .nav {
+            display: flex; gap: 8px; margin-bottom: 16px;
+            overflow-x: auto; padding-bottom: 4px;
+        }
+        .nav-btn {
+            flex-shrink: 0; padding: 8px 12px;
+            background: rgba(255,255,255,0.1); color: #e0e0e0;
+            border: 1px solid rgba(255,255,255,0.15); border-radius: 10px;
+            font-size: 12px; font-weight: 600; text-align: center; cursor: pointer;
+            transition: all 0.2s;
+        }
+        .nav-btn.active { background: #8b5cf6; color: #fff; border-color: #8b5cf6; }
+        .nav-btn:active { transform: scale(0.96); }
+        .card {
+            background: rgba(255,255,255,0.06);
+            backdrop-filter: blur(10px);
+            border-radius: 16px;
+            padding: 18px;
+            margin-bottom: 14px;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        .card h2 {
+            font-size: 15px; margin-bottom: 14px; color: #fff;
+            display: flex; align-items: center; font-weight: 600;
+        }
+        .card h2::before {
+            content: ''; display: inline-block;
+            width: 4px; height: 16px; background: #8b5cf6;
+            border-radius: 2px; margin-right: 10px;
+        }
+        .input-group { display: flex; gap: 10px; margin-bottom: 12px; }
+        .input-group input {
+            flex: 1; padding: 12px 14px;
+            background: rgba(0,0,0,0.3); color: #e0e0e0;
+            border: 1px solid rgba(255,255,255,0.1); border-radius: 10px;
+            font-size: 14px; outline: none;
+        }
+        .input-group input:focus { border-color: #8b5cf6; }
+        .input-group input::placeholder { color: #6b7280; }
+        .port-inputs { display: flex; gap: 8px; }
+        .port-inputs input { width: 100px; }
+        .action-btn {
+            padding: 12px 20px; border: none; border-radius: 10px;
+            font-size: 14px; font-weight: 600; cursor: pointer;
+            transition: all 0.2s; white-space: nowrap;
+        }
+        .btn-primary { background: #8b5cf6; color: #fff; }
+        .btn-primary:active { background: #7c3aed; }
+        .btn-secondary { background: rgba(255,255,255,0.1); color: #e0e0e0; }
+        .btn-secondary:active { background: rgba(255,255,255,0.15); }
+        .btn-danger { background: rgba(239,68,68,0.8); color: #fff; }
+        .btn-danger:active { background: #dc2626; }
+        .btn-success { background: #10b981; color: #fff; }
+        .btn-success:active { background: #059669; }
+        .remote-device {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 14px; background: rgba(0,0,0,0.2);
+            border-radius: 12px; margin-bottom: 10px;
+            border: 1px solid rgba(139,92,246,0.3);
+        }
+        .remote-device-info { flex: 1; }
+        .remote-device-name { font-size: 14px; font-weight: 600; color: #fff; margin-bottom: 4px; }
+        .remote-device-addr { font-size: 12px; color: #a78bfa; }
+        .remote-device-actions { display: flex; gap: 6px; }
+        .mini-btn {
+            padding: 6px 12px; border: none; border-radius: 8px;
+            font-size: 11px; font-weight: 600; cursor: pointer;
+            transition: all 0.2s;
+        }
+        .mini-btn-primary { background: #8b5cf6; color: #fff; }
+        .mini-btn-danger { background: rgba(239,68,68,0.7); color: #fff; }
+        .result-box {
+            background: rgba(0,0,0,0.4); border-radius: 10px;
+            padding: 12px; margin-top: 10px;
+            font-family: "SF Mono", "Monaco", "Consolas", monospace;
+            font-size: 12px; white-space: pre-wrap; word-break: break-all;
+            max-height: 200px; overflow-y: auto; color: #34d399;
+            border: 1px solid rgba(255,255,255,0.08);
+        }
+        .result-box .empty { color: #6b7280; font-style: italic; }
+        .steps { counter-reset: step; }
+        .step {
+            position: relative; padding-left: 36px; margin-bottom: 16px;
+            font-size: 13px; line-height: 1.6;
+        }
+        .step::before {
+            counter-increment: step;
+            content: counter(step);
+            position: absolute; left: 0; top: 0;
+            width: 26px; height: 26px;
+            background: #8b5cf6; color: #fff;
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 12px; font-weight: 700;
+        }
+        .step-title { font-weight: 600; color: #fff; margin-bottom: 4px; }
+        .step-desc { color: #9ca3af; }
+        .step code {
+            display: block; margin-top: 6px;
+            background: rgba(0,0,0,0.3); padding: 6px 10px;
+            border-radius: 6px; font-family: monospace;
+            font-size: 12px; color: #a78bfa;
+        }
+        .port-forward-item {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 12px; background: rgba(0,0,0,0.2);
+            border-radius: 10px; margin-bottom: 8px;
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+        .port-forward-info { font-size: 12px; color: #d1d5db; font-family: monospace; }
+        .port-forward-actions { display: flex; gap: 6px; }
+        .empty-state {
+            text-align: center; padding: 30px 20px;
+            color: #6b7280; font-size: 13px;
+        }
+        .empty-state .icon { font-size: 40px; margin-bottom: 10px; }
+        .status-badge {
+            display: inline-block; padding: 4px 10px;
+            border-radius: 12px; font-size: 11px; font-weight: 600;
+        }
+        .status-online { background: rgba(74,222,128,0.2); color: #4ade80; }
+        .status-offline { background: rgba(156,163,175,0.2); color: #9ca3af; }
+        .toast {
+            position: fixed; top: 20px; left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.9); color: #fff;
+            padding: 10px 20px; border-radius: 20px;
+            font-size: 13px; z-index: 1000;
+            opacity: 0; transition: opacity 0.3s; pointer-events: none;
+        }
+        .toast.show { opacity: 1; }
+        .preset-list { display: flex; flex-direction: column; gap: 8px; }
+        .preset-item {
+            display: flex; align-items: center; gap: 10px;
+            padding: 10px 14px;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 10px; cursor: pointer;
+            transition: all 0.2s;
+        }
+        .preset-item:active { background: rgba(139,92,246,0.2); border-color: #8b5cf6; }
+        .preset-icon { font-size: 18px; }
+        .preset-info { flex: 1; }
+        .preset-name { font-size: 13px; font-weight: 500; color: #fff; }
+        .preset-desc { font-size: 11px; color: #9ca3af; }
+        .checkbox-row {
+            display: flex; align-items: center; gap: 10px;
+            margin-bottom: 10px; font-size: 13px; color: #d1d5db;
+        }
+        .checkbox {
+            width: 18px; height: 18px;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-radius: 4px; cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            transition: all 0.2s;
+        }
+        .checkbox.checked { background: #8b5cf6; border-color: #8b5cf6; }
+        .checkbox.checked::after { content: '✓'; color: #fff; font-size: 12px; font-weight: 700; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🌐 远程 ADB 管理</h1>
+            <p>通过网络连接和管理远程设备</p>
+        </div>
+
+        <div class="nav">
+            <div class="nav-btn active" onclick="switchTab('connect')">🔗 连接</div>
+            <div class="nav-btn" onclick="switchTab('devices')">📱 已连接</div>
+            <div class="nav-btn" onclick="switchTab('forward')">🔀 端口转发</div>
+            <div class="nav-btn" onclick="switchTab('guide')">📖 使用指南</div>
+            <div class="nav-btn" onclick="navigateTo('index.html')">← 返回</div>
+        </div>
+
+        <!-- 连接标签 -->
+        <div id="tab-connect" class="tab-content active">
+            <div class="card">
+                <h2>连接远程设备</h2>
+                <div class="input-group">
+                    <input type="text" id="deviceIp" placeholder="设备 IP 地址" value="192.168.1.100">
+                </div>
+                <div class="input-group">
+                    <input type="number" id="devicePort" placeholder="端口" value="5555">
+                </div>
+                <div class="input-group">
+                    <button class="action-btn btn-primary" onclick="connectDevice()">🔗 连接设备</button>
+                    <button class="action-btn btn-secondary" onclick="disconnectDevice()">✂️ 断开连接</button>
+                </div>
+                <div class="checkbox-row">
+                    <div class="checkbox" id="reconnectChk" onclick="toggleCheckbox('reconnectChk')"></div>
+                    <span>自动重连（连接失败时重试3次）</span>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>常见端口预设</h2>
+                <div class="preset-list">
+                    <div class="preset-item" onclick="setPort(5555)">
+                        <div class="preset-icon">🔌</div>
+                        <div class="preset-info">
+                            <div class="preset-name">默认 ADB 端口</div>
+                            <div class="preset-desc">端口 5555（adb connect 默认端口）</div>
+                        </div>
+                    </div>
+                    <div class="preset-item" onclick="setPort(5554)">
+                        <div class="preset-icon">🔌</div>
+                        <div class="preset-info">
+                            <div class="preset-name">交替端口</div>
+                            <div class="preset-desc">端口 5554（备用端口）</div>
+                        </div>
+                    </div>
+                    <div class="preset-item" onclick="setPort(5037)">
+                        <div class="preset-icon">🔧</div>
+                        <div class="preset-info">
+                            <div class="preset-name">ADB 服务端口</div>
+                            <div class="preset-desc">端口 5037（本地 ADB 服务器）</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>连接结果</h2>
+                <div id="connectResult" class="result-box">
+                    <span class="empty">等待执行连接命令...</span>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>网络检测工具</h2>
+                <div class="input-group">
+                    <input type="text" id="pingIp" placeholder="输入要检测的 IP">
+                    <button class="action-btn btn-secondary" onclick="pingDevice()">📡 Ping</button>
+                </div>
+                <div class="input-group">
+                    <button class="action-btn btn-secondary" style="flex:1;" onclick="checkPort()">🔍 检测端口</button>
+                    <button class="action-btn btn-secondary" style="flex:1;" onclick="getWifiInfo()">📶 WiFi 信息</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 已连接设备标签 -->
+        <div id="tab-devices" class="tab-content">
+            <div class="card">
+                <h2>当前连接的远程设备</h2>
+                <div id="remoteDeviceList">
+                    <div class="empty-state">
+                        <div class="icon">📡</div>
+                        <div>正在加载设备列表...</div>
+                    </div>
+                </div>
+                <div class="input-group" style="margin-top:12px;">
+                    <button class="action-btn btn-secondary" style="flex:1;" onclick="refreshRemoteDevices()">🔄 刷新列表</button>
+                    <button class="action-btn btn-danger" style="flex:1;" onclick="disconnectAll()">✖ 全部断开</button>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>设备操作</h2>
+                <div class="input-group">
+                    <input type="text" id="deviceSelector" placeholder="设备 ID（可从上方复制）">
+                </div>
+                <div class="input-group">
+                    <button class="action-btn btn-primary" style="flex:1;" onclick="deviceAction('shell')">💻 Shell 命令</button>
+                    <button class="action-btn btn-secondary" style="flex:1;" onclick="deviceAction('reboot')">🔄 重启</button>
+                </div>
+                <div class="input-group">
+                    <button class="action-btn btn-secondary" style="flex:1;" onclick="deviceAction('getstate')">📊 获取状态</button>
+                    <button class="action-btn btn-secondary" style="flex:1;" onclick="deviceAction('logcat')">📝 查看日志</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 端口转发标签 -->
+        <div id="tab-forward" class="tab-content">
+            <div class="card">
+                <h2>添加端口转发</h2>
+                <div class="input-group">
+                    <input type="text" id="forwardDevice" placeholder="设备地址（留空=全部设备）">
+                </div>
+                <div class="port-inputs">
+                    <input type="number" id="forwardLocal" placeholder="本地端口" value="8080" style="flex:1;">
+                    <span style="align-self:center;color:#9ca3af;">→</span>
+                    <input type="number" id="forwardRemote" placeholder="远程端口" value="8080" style="flex:1;">
+                </div>
+                <div class="input-group" style="margin-top:12px;">
+                    <button class="action-btn btn-primary" style="flex:1;" onclick="addPortForward()">➕ 添加转发</button>
+                    <button class="action-btn btn-secondary" style="flex:1;" onclick="listPortForward()">📋 查看列表</button>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>端口转发规则</h2>
+                <div id="forwardList">
+                    <div class="empty-state">
+                        <div class="icon">🔀</div>
+                        <div>暂无端口转发规则</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>常用转发预设</h2>
+                <div class="preset-list">
+                    <div class="preset-item" onclick="presetForward(8080, 8080, '本地Web服务器')">
+                        <div class="preset-icon">🌐</div>
+                        <div class="preset-info">
+                            <div class="preset-name">Web 服务器 (8080)</div>
+                            <div class="preset-desc">本地 8080 → 远程 8080</div>
+                        </div>
+                    </div>
+                    <div class="preset-item" onclick="presetForward(3000, 3000, '开发服务器')">
+                        <div class="preset-icon">⚙️</div>
+                        <div class="preset-info">
+                            <div class="preset-name">开发服务器 (3000)</div>
+                            <div class="preset-desc">本地 3000 → 远程 3000</div>
+                        </div>
+                    </div>
+                    <div class="preset-item" onclick="presetForward(5555, 5555, 'ADB 调试')">
+                        <div class="preset-icon">🔌</div>
+                        <div class="preset-info">
+                            <div class="preset-name">ADB 调试 (5555)</div>
+                            <div class="preset-desc">本地 5555 → 远程 5555</div>
+                        </div>
+                    </div>
+                    <div class="preset-item" onclick="presetForward(9090, 9090, '代理服务')">
+                        <div class="preset-icon">🔄</div>
+                        <div class="preset-info">
+                            <div class="preset-name">代理服务 (9090)</div>
+                            <div class="preset-desc">本地 9090 → 远程 9090</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 使用指南标签 -->
+        <div id="tab-guide" class="tab-content">
+            <div class="card">
+                <h2>远程 ADB 连接步骤</h2>
+                <div class="steps">
+                    <div class="step">
+                        <div class="step-title">开启 ADB 无线调试</div>
+                        <div class="step-desc">在设备上进入「开发者选项」→ 打开「USB 调试」和「网络调试」（或「无线调试」）</div>
+                    </div>
+                    <div class="step">
+                        <div class="step-title">获取设备 IP 地址</div>
+                        <div class="step-desc">在设备的「设置 → WiFi」中查看连接的网络 IP 地址</div>
+                    </div>
+                    <div class="step">
+                        <div class="step-title">确认设备端口</div>
+                        <div class="step-desc">设备显示的端口号可能不是 5555，以设备实际显示的为准</div>
+                    </div>
+                    <div class="step">
+                        <div class="step-title">在本工具输入 IP 和端口</div>
+                        <div class="step-desc">在上方「连接」标签页输入设备的 IP 地址和端口号</div>
+                    </div>
+                    <div class="step">
+                        <div class="step-title">点击「连接设备」</div>
+                        <div class="step-desc">等待 ADB 建立连接，首次连接需要在设备上确认授权</div>
+                    </div>
+                    <div class="step">
+                        <div class="step-title">开始使用</div>
+                        <div class="step-desc">连接成功后，在主页和设备标签页查看设备详情，执行远程命令</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>注意事项</h2>
+                <div style="font-size:13px;color:#d1d5db;line-height:1.8;">
+                    <p style="margin-bottom:8px;">🔹 <strong>同一局域网</strong>：确保本设备和目标设备连接在同一 WiFi 网络</p>
+                    <p style="margin-bottom:8px;">🔹 <strong>防火墙</strong>：确保设备防火墙允许 ADB 调试端口的入站连接</p>
+                    <p style="margin-bottom:8px;">🔹 <strong>首次授权</strong>：首次连接时，目标设备会弹出授权对话框，需勾选「始终允许」</p>
+                    <p style="margin-bottom:8px;">🔹 <strong>安全风险</strong>：请勿在公共网络或不受信任的网络上开启无线调试</p>
+                    <p style="margin-bottom:8px;">🔹 <strong>端口冲突</strong>：如果 5555 端口被占用，可以尝试使用其他端口</p>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>故障排除</h2>
+                <div style="font-size:13px;color:#d1d5db;line-height:1.8;">
+                    <p style="margin-bottom:8px;"><strong>连接失败（Connection refused）</strong></p>
+                    <p style="margin-bottom:6px;color:#9ca3af;">→ 确认设备已开启无线调试功能，端口号正确</p>
+                    
+                    <p style="margin-bottom:8px;margin-top:12px;"><strong>设备显示 offline</strong></p>
+                    <p style="margin-bottom:6px;color:#9ca3af;">→ 执行「断开连接」后重新连接，或重启 ADB 服务</p>
+                    
+                    <p style="margin-bottom:8px;margin-top:12px;"><strong>连接超时</strong></p>
+                    <p style="margin-bottom:6px;color:#9ca3af;">→ 使用网络检测工具测试 IP 连通性，检查路由器隔离设置</p>
+                    
+                    <p style="margin-bottom:8px;margin-top:12px;"><strong>未授权（unauthorized）</strong></p>
+                    <p style="margin-bottom:6px;color:#9ca3af;">→ 在目标设备上查看是否有授权提示，点击「允许」</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <script>
+        var bridge = window.TermuxUltra;
+
+        function showToast(msg) {
+            var toast = document.getElementById('toast');
+            toast.textContent = msg;
+            toast.classList.add('show');
+            setTimeout(function() { toast.classList.remove('show'); }, 2000);
+        }
+
+        function navigateTo(page) {
+            window.location.href = page;
+        }
+
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab-content').forEach(function(t) {
+                t.classList.remove('active');
+            });
+            document.getElementById('tab-' + tabName).classList.add('active');
+            document.querySelectorAll('.nav-btn').forEach(function(btn) {
+                btn.classList.remove('active');
+            });
+            event.target.classList.add('active');
+            if (tabName === 'devices') refreshRemoteDevices();
+            if (tabName === 'forward') listPortForward();
+        }
+
+        function execCommand(cmd) {
+            if (!bridge || !bridge.exec) {
+                showToast('JS Bridge 不可用');
+                return null;
+            }
+            try {
+                var result = bridge.exec(cmd);
+                return JSON.parse(result);
+            } catch(e) {
+                return { success: false, output: '', error: e.message };
+            }
+        }
+
+        function connectDevice() {
+            var ip = document.getElementById('deviceIp').value.trim();
+            var port = document.getElementById('devicePort').value.trim();
+            if (!ip) { showToast('请输入设备 IP'); return; }
+            if (!port) { port = '5555'; }
+
+            var cmd = 'adb connect ' + ip + ':' + port;
+            showToast('正在连接 ' + ip + ':' + port + '...');
+            
+            var result = execCommand(cmd);
+            var display;
+            
+            if (result && result.success) {
+                display = result.output || '';
+                if (display.indexOf('connected') !== -1) {
+                    showToast('✅ 连接成功');
+                } else if (display.indexOf('already connected') !== -1) {
+                    showToast('⚠️ 设备已连接');
+                } else {
+                    showToast('连接完成');
+                }
+            } else {
+                display = '连接失败：' + (result ? result.error : '未知错误');
+                showToast('❌ 连接失败');
+            }
+            
+            document.getElementById('connectResult').textContent = display;
+        }
+
+        function disconnectDevice() {
+            var ip = document.getElementById('deviceIp').value.trim();
+            var port = document.getElementById('devicePort').value.trim();
+            if (!ip) { showToast('请输入设备 IP'); return; }
+            if (!port) { port = '5555'; }
+
+            var cmd = 'adb disconnect ' + ip + ':' + port;
+            showToast('正在断开...');
+            
+            var result = execCommand(cmd);
+            var display = result 
+                ? (result.success ? (result.output || '已断开') : '断开失败')
+                : '执行失败';
+            
+            document.getElementById('connectResult').textContent = display;
+            showToast('已断开连接');
+        }
+
+        function disconnectAll() {
+            if (!confirm('确定要断开所有远程设备吗？')) return;
+            var result = execCommand('adb disconnect');
+            var display = result 
+                ? (result.success ? (result.output || '已断开全部连接') : '操作失败')
+                : '执行失败';
+            document.getElementById('connectResult').textContent = display;
+            showToast('已断开所有连接');
+            refreshRemoteDevices();
+        }
+
+        function refreshRemoteDevices() {
+            var result = execCommand('adb devices');
+            if (!result) return;
+
+            var output = result.output || '';
+            var lines = output.trim().split('\n').filter(function(l) { 
+                return l && l !== 'List of devices attached' && l.indexOf('127.0.0.1') === -1;
+            });
+
+            var listEl = document.getElementById('remoteDeviceList');
+            
+            if (lines.length === 0) {
+                listEl.innerHTML = '<div class="empty-state"><div class="icon">📭</div><div>暂无远程连接设备</div></div>';
+                return;
+            }
+
+            listEl.innerHTML = '';
+            lines.forEach(function(line) {
+                var parts = line.trim().split(/\s+/);
+                if (parts.length >= 2) {
+                    var deviceId = parts[0];
+                    var deviceStatus = parts[1];
+                    
+                    var item = document.createElement('div');
+                    item.className = 'remote-device';
+                    item.innerHTML = 
+                        '<div class="remote-device-info">' +
+                            '<div class="remote-device-name">' + deviceId + '</div>' +
+                            '<div class="remote-device-addr">' + 
+                                (deviceStatus === 'device' 
+                                    ? '<span class="status-badge status-online">已连接</span>' 
+                                    : '<span class="status-badge status-offline">' + deviceStatus + '</span>') +
+                            '</div>' +
+                        '</div>' +
+                        '<div class="remote-device-actions">' +
+                            '<button class="mini-btn mini-btn-primary" onclick="selectDevice(\'' + deviceId + '\')">选择</button>' +
+                            '<button class="mini-btn mini-btn-danger" onclick="disconnectSingle(\'' + deviceId + '\')">断开</button>' +
+                        '</div>';
+                    listEl.appendChild(item);
+                }
+            });
+        }
+
+        function selectDevice(deviceId) {
+            document.getElementById('deviceSelector').value = deviceId;
+            showToast('已选择: ' + deviceId);
+        }
+
+        function disconnectSingle(deviceId) {
+            var cmd = 'adb disconnect ' + deviceId;
+            var result = execCommand(cmd);
+            showToast('已断开: ' + deviceId);
+            refreshRemoteDevices();
+        }
+
+        function deviceAction(action) {
+            var deviceId = document.getElementById('deviceSelector').value.trim();
+            if (!deviceId) { showToast('请先选择设备'); return; }
+
+            var cmd;
+            switch(action) {
+                case 'shell':
+                    cmd = 'adb -s ' + deviceId + ' shell';
+                    showToast('打开 Shell 需在终端中执行');
+                    break;
+                case 'reboot':
+                    if (!confirm('确定要重启设备 ' + deviceId + ' 吗？')) return;
+                    cmd = 'adb -s ' + deviceId + ' reboot';
+                    break;
+                case 'getstate':
+                    cmd = 'adb -s ' + deviceId + ' shell getprop ro.build.display.id';
+                    break;
+                case 'logcat':
+                    cmd = 'adb -s ' + deviceId + ' logcat -d -t 20';
+                    break;
+                default:
+                    return;
+            }
+
+            var result = execCommand(cmd);
+            var display = result 
+                ? (result.success ? (result.output || '命令已执行') : '错误: ' + (result.error || '未知'))
+                : '执行失败';
+            
+            document.getElementById('connectResult').textContent = display;
+        }
+
+        function addPortForward() {
+            var device = document.getElementById('forwardDevice').value.trim();
+            var localPort = document.getElementById('forwardLocal').value.trim();
+            var remotePort = document.getElementById('forwardRemote').value.trim();
+
+            if (!localPort || !remotePort) { showToast('请输入端口号'); return; }
+
+            var cmd = 'adb';
+            if (device) cmd += ' -s ' + device;
+            cmd += ' forward tcp:' + localPort + ' tcp:' + remotePort;
+
+            var result = execCommand(cmd);
+            if (result && result.success) {
+                showToast('✅ 端口转发已添加');
+            } else {
+                showToast('❌ 添加失败');
+            }
+            listPortForward();
+        }
+
+        function listPortForward() {
+            var result = execCommand('adb forward --list');
+            var listEl = document.getElementById('forwardList');
+
+            if (!result || !result.success || !result.output || result.output.trim() === '') {
+                listEl.innerHTML = '<div class="empty-state"><div class="icon">🔀</div><div>暂无端口转发规则</div></div>';
+                return;
+            }
+
+            var lines = result.output.trim().split('\n');
+            listEl.innerHTML = '';
+            lines.forEach(function(line) {
+                if (!line.trim()) return;
+                var item = document.createElement('div');
+                item.className = 'port-forward-item';
+                
+                var parts = line.trim().split(/\s+/);
+                var device = parts[0] || 'all';
+                var local = parts[1] || '';
+                var remote = parts[2] || '';
+                
+                item.innerHTML = 
+                    '<div class="port-forward-info">' +
+                        '<div>设备: ' + device + '</div>' +
+                        '<div>' + local + ' → ' + remote + '</div>' +
+                    '</div>' +
+                    '<div class="port-forward-actions">' +
+                        '<button class="mini-btn mini-btn-danger" onclick="removePortForward(\'' + device + '\',\'' + local + '\',\'' + remote + '\')">删除</button>' +
+                    '</div>';
+                listEl.appendChild(item);
+            });
+        }
+
+        function removePortForward(device, local, remote) {
+            var cmd = 'adb -s ' + device + ' forward --remove ' + local;
+            var result = execCommand(cmd);
+            showToast('已删除转发规则');
+            listPortForward();
+        }
+
+        function presetForward(local, remote, name) {
+            document.getElementById('forwardLocal').value = local;
+            document.getElementById('forwardRemote').value = remote;
+            showToast('已选择: ' + name);
+        }
+
+        function setPort(port) {
+            document.getElementById('devicePort').value = port;
+            showToast('端口已设为: ' + port);
+        }
+
+        function toggleCheckbox(id) {
+            var el = document.getElementById(id);
+            el.classList.toggle('checked');
+        }
+
+        function pingDevice() {
+            var ip = document.getElementById('pingIp').value.trim() || document.getElementById('deviceIp').value.trim();
+            if (!ip) { showToast('请输入 IP 地址'); return; }
+            
+            var result = execCommand('ping -c 3 ' + ip);
+            var display = result 
+                ? (result.success ? (result.output || '') : 'Ping 失败')
+                : '执行失败';
+            
+            document.getElementById('connectResult').textContent = display;
+        }
+
+        function checkPort() {
+            var ip = document.getElementById('pingIp').value.trim() || document.getElementById('deviceIp').value.trim();
+            var port = document.getElementById('devicePort').value.trim() || '5555';
+            if (!ip) { showToast('请输入 IP 地址'); return; }
+
+            var result = execCommand('nc -z -w3 ' + ip + ' ' + port);
+            var display = result 
+                ? (result.success ? '✅ 端口 ' + port + ' 可达' : '❌ 端口 ' + port + ' 不可达')
+                : '检测失败';
+            
+            document.getElementById('connectResult').textContent = display;
+        }
+
+        function getWifiInfo() {
+            var result = execCommand('ip addr show wlan0 2>/dev/null || ifconfig wlan0 2>/dev/null || echo "WiFi info not available"');
+            var display = result 
+                ? (result.success ? (result.output || '获取失败') : '错误: ' + (result.error || ''))
+                : '执行失败';
+            
+            document.getElementById('connectResult').textContent = display;
+        }
+
+        // 初始化
+        setTimeout(function() {
+            refreshRemoteDevices();
+        }, 300);
+    </script>
+</body>
+</html>

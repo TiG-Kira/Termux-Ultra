@@ -136,17 +136,18 @@ fun computeNavDimensions(
         NavStyle.FLOATING -> 6.dp
     }
 
-    val computedItemWidth = (availableWidth - gap * (itemCount - 1)) / itemCount
+    // SpaceEvenly 布局间距：两端和之间都有间距，共 itemCount + 1 个间距
+    val computedItemWidth = (availableWidth - gap * (itemCount + 1)) / itemCount
     val itemWidth = computedItemWidth.coerceIn(minItemWidth, maxItemWidth)
     val containerHeight = (itemWidth * 1.15f).coerceIn(42.dp, 64.dp)
     val iconSize = (itemWidth * 0.40f).coerceIn(minIconSize, maxIconSize)
     val labelSizeDp = (itemWidth * 0.18f).coerceIn(8.dp, 10.dp)
     val labelSize = with(density) { labelSizeDp.toSp() }
-    val indicatorWidth = itemWidth * 1.10f
-    val indicatorHeight = containerHeight * 0.85f
-    val indicatorExpandedWidth = itemWidth * 1.18f
-    val indicatorExpandedHeight = containerHeight * 0.90f
-    val indicatorCornerRadius = indicatorHeight * 0.75f
+    val indicatorWidth = itemWidth * 1.25f
+    val indicatorHeight = containerHeight * 0.92f
+    val indicatorExpandedWidth = itemWidth * 1.35f
+    val indicatorExpandedHeight = containerHeight * 0.97f
+    val indicatorCornerRadius = indicatorHeight * 0.68f
     val cornerRadius = containerHeight * 0.65f
     val horizontalPadding = when (style) {
         NavStyle.GLASS -> 6.dp
@@ -213,7 +214,9 @@ fun LiquidGlassNavigationBarItem(
     selected: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    dims: ResponsiveNavDimensions
+    dims: ResponsiveNavDimensions,
+    index: Int = -1,
+    onPositioned: ((Int, Float) -> Unit)? = null
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
@@ -247,6 +250,10 @@ fun LiquidGlassNavigationBarItem(
         modifier = modifier
             .width(dims.itemWidth)
             .fillMaxHeight()
+            .onGloballyPositioned { coordinates ->
+                // positionInParent() 返回相对于父级（Row）的位置
+                onPositioned?.invoke(index, coordinates.positionInParent().x + coordinates.size.width / 2f)
+            }
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
@@ -298,7 +305,8 @@ fun LiquidGlassNavigationBarWithIndicator(
     backdrop: Backdrop,
     onIndexChange: (Int) -> Unit,
     modifier: Modifier = Modifier,
-    content: @Composable () -> Unit
+    onItemPositioned: (Int, Float) -> Unit = { _, _ -> },
+    content: @Composable ((Int, Float) -> Unit) -> Unit
 ) {
     val dims = computeNavDimensions(itemCount, NavStyle.GLASS)
     val density = LocalDensity.current
@@ -313,6 +321,27 @@ fun LiquidGlassNavigationBarWithIndicator(
     // 按钮层 backdrop（用于指示器 rememberCombinedBackdrop）
     val tabsBackdrop = rememberLayerBackdrop()
 
+    // 存储实际测量的按钮中心位置
+    var measuredCenters by remember { mutableStateOf<List<Float>>(emptyList()) }
+
+    // 内部位置更新函数
+    val updatePosition: (Int, Float) -> Unit = { index, centerX ->
+        // centerX 是按钮相对于父级 Row 内容区（padding 后）的位置
+        // 但指示器的坐标原点是 BoxWithConstraints 的左边（包括 Row 的 padding）
+        // 所以需要加上 Row 的左侧 padding (4dp)
+        val adjustedCenterX = centerX + with(density) { 4.dp.toPx() }
+        measuredCenters = if (index in 0 until itemCount) {
+            val newList = measuredCenters.toMutableList()
+            while (newList.size <= index) newList.add(0f)
+            newList[index] = adjustedCenterX
+            newList
+        } else {
+            measuredCenters
+        }
+        // 同时调用外部回调
+        onItemPositioned(index, adjustedCenterX)
+    }
+
     BoxWithConstraints(
         modifier = modifier
             .padding(
@@ -323,8 +352,26 @@ fun LiquidGlassNavigationBarWithIndicator(
         contentAlignment = Alignment.CenterStart
     ) {
         val maxWidthPx = with(density) { maxWidth.toPx() }
-        val paddingPx = with(density) { 4.dp.toPx() }
-        val tabWidth = (maxWidthPx - paddingPx * 2) / itemCount
+        val indicatorWidthPx = with(density) { dims.indicatorWidth.toPx() }
+        val innerPaddingPx = with(density) { 4.dp.toPx() }
+        val contentWidthPx = maxWidthPx - innerPaddingPx * 2
+
+        // 根据实际测量的位置计算指示器位置
+        val itemCenters = if (measuredCenters.size == itemCount) {
+            measuredCenters
+        } else {
+            // 回退到计算值
+            val itemWidthPx = with(density) { dims.itemWidth.toPx() }
+            val evenlySpacing = (contentWidthPx - itemCount * itemWidthPx) / (itemCount + 1)
+            (0 until itemCount).map { i ->
+                innerPaddingPx + evenlySpacing * (i + 1) + itemWidthPx * i + itemWidthPx / 2
+            }
+        }
+
+        // 指示器居中偏移
+        val indicatorCenterOffset = -indicatorWidthPx / 2
+        // 指示器移动范围限制
+        val maxIndicatorTranslation = (maxWidthPx - indicatorWidthPx).coerceAtLeast(0f)
 
         // 指示器位置动画
         val indicatorAnim = remember { Animatable(0f) }
@@ -382,7 +429,7 @@ fun LiquidGlassNavigationBarWithIndicator(
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            content()
+            content(updatePosition)
         }
 
         // ====== 第2层：按钮层（不可见，通过 layerBackdrop 捕获按钮内容） ======
@@ -415,23 +462,37 @@ fun LiquidGlassNavigationBarWithIndicator(
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            content()
+            content(updatePosition)
         }
 
         // ====== 第3层：指示器（使用 rememberCombinedBackdrop 同时折射容器和按钮层） ======
         Box(
             Modifier
-                .padding(horizontal = 4f.dp)
                 .graphicsLayer {
-                    translationX = indicatorAnim.value * tabWidth
+                    // 根据当前动画索引获取对应的中心位置
+                    val index = indicatorAnim.value.coerceIn(0f, (itemCount - 1).toFloat())
+                    val centerX = if (index < itemCenters.size) {
+                        itemCenters[index.toInt().coerceIn(0, itemCenters.size - 1)]
+                    } else {
+                        itemCenters.lastOrNull() ?: 0f
+                    }
+                    // 小数部分用于平滑过渡
+                    val fractional = index - index.toInt()
+                    val centerXNext = if (index.toInt() + 1 < itemCenters.size) {
+                        itemCenters[index.toInt() + 1]
+                    } else {
+                        centerX
+                    }
+                    val smoothedCenterX = centerX + (centerXNext - centerX) * fractional
+                    translationX = (smoothedCenterX + indicatorCenterOffset).coerceIn(0f, maxIndicatorTranslation)
                 }
                 .drawBackdrop(
                     backdrop = rememberCombinedBackdrop(backdrop, tabsBackdrop),
                     shape = { Capsule() },
                     effects = {
                         lens(
-                            10f.dp.toPx(),
-                            14f.dp.toPx(),
+                            12f.dp.toPx(),
+                            18f.dp.toPx(),
                             chromaticAberration = true
                         )
                     },
@@ -449,8 +510,8 @@ fun LiquidGlassNavigationBarWithIndicator(
                     },
                     layerBlock = {
                         if (isDragging) {
-                            scaleX = 1.05f
-                            scaleY = 1.05f
+                            scaleX = 1.08f
+                            scaleY = 1.08f
                         }
                     },
                     onDrawSurface = {
@@ -462,8 +523,8 @@ fun LiquidGlassNavigationBarWithIndicator(
                         drawRect(Color.Black.copy(alpha = 0.02f))
                     }
                 )
-                .height(dims.containerHeight - 8.dp)
-                .fillMaxWidth(1f / itemCount)
+                .height(dims.indicatorHeight)
+                .width(dims.indicatorWidth)
         )
 
         // ====== 第4层：手势检测层（最上层） ======
@@ -471,12 +532,21 @@ fun LiquidGlassNavigationBarWithIndicator(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(dims.containerHeight)
-                .pointerInput(selectedIndex, itemCount, tabWidth) {
+                .pointerInput(selectedIndex, itemCount, itemCenters, contentWidthPx) {
                     detectTapGestures(
                         onTap = { offset ->
-                            val tappedIndex = (offset.x / tabWidth).toInt().coerceIn(0, itemCount - 1)
-                            if (tappedIndex != selectedIndex) {
-                                onIndexChange(tappedIndex)
+                            // 找到最近的按钮中心
+                            var closestIndex = 0
+                            var minDist = Float.MAX_VALUE
+                            for ((i, center) in itemCenters.withIndex()) {
+                                val dist = abs(offset.x - center)
+                                if (dist < minDist) {
+                                    minDist = dist
+                                    closestIndex = i
+                                }
+                            }
+                            if (closestIndex != selectedIndex) {
+                                onIndexChange(closestIndex)
                             }
                         }
                     )
@@ -485,7 +555,9 @@ fun LiquidGlassNavigationBarWithIndicator(
                         onDrag = { change, dragAmount ->
                             change.consume()
                             val currentIndex = indicatorAnim.value
-                            val newIndex = (currentIndex + dragAmount.x / tabWidth)
+                            // 使用按钮间距作为拖动比例
+                            val avgSpacing = contentWidthPx / itemCount
+                            val newIndex = (currentIndex + dragAmount.x / avgSpacing)
                                 .coerceIn(0f, (itemCount - 1).toFloat())
                             scope.launch {
                                 indicatorAnim.snapTo(newIndex)

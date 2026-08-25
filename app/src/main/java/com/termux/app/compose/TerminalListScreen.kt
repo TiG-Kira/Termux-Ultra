@@ -1713,34 +1713,6 @@ fun HorizontalTipCard(
                 .clip(RoundedCornerShape(16.dp))
                 .background(brush = gradient ?: Brush.verticalGradient(listOf(cardColor, cardColor)))
         ) {
-            // 装饰圆圈
-            if (showDecorationCircles) {
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .offset(x = 20.dp, y = (-32).dp)
-                        .size(104.dp)
-                        .clip(RoundedCornerShape(50))
-                        .background(Color.White.copy(alpha = 0.08f))
-                )
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .offset(x = (-50).dp, y = 38.dp)
-                        .size(72.dp)
-                        .clip(RoundedCornerShape(50))
-                        .background(Color.White.copy(alpha = 0.05f))
-                )
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .offset(x = (-64).dp, y = 14.dp)
-                        .size(36.dp)
-                        .clip(RoundedCornerShape(50))
-                        .background(Color.White.copy(alpha = 0.06f))
-                )
-            }
-
             // 关闭按钮
             if (onClose != null) {
                 Box(
