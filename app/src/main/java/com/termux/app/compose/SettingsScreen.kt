@@ -108,7 +108,6 @@ fun SettingsScreen(
     var restoreTotal by remember { mutableStateOf(100) }
     var restoreMessage by remember { mutableStateOf("") }
     var launchRestore by remember { mutableStateOf(false) }
-    var showAiReconfigConfirm by remember { mutableStateOf(false) }
     var showAiClearConfirm by remember { mutableStateOf(false) }
     var showWhitelistDialog by remember { mutableStateOf(false) }
     var tempWhitelistSkills by remember { mutableStateOf<Set<SkillType>>(emptySet()) }
@@ -801,7 +800,11 @@ fun SettingsScreen(
                             ArrowPreference(
                                 title = "重新配置 AI",
                                 summary = "返回配置页面修改 API Key、模型等参数",
-                                onClick = { showAiReconfigConfirm = true },
+                                onClick = {
+                                    val intent = Intent(context, com.termux.app.activities.AiTermuxActivity::class.java)
+                                    intent.putExtra("force_setup", true)
+                                    context.startActivity(intent)
+                                },
                                 startAction = {
                                     SettingIcon(R.drawable.ic_refresh, contentDescription = "重新配置 AI")
                                 }
@@ -1347,39 +1350,6 @@ fun SettingsScreen(
         )
         }
     )
-
-    // ---------- AI Termux：重新配置确认 ----------
-    if (showAiReconfigConfirm) {
-        OverlayDialog(
-            show = true,
-            title = "重新配置 AI？",
-            summary = "返回配置页面可以修改 API Key、模型等参数，历史对话会被保留。",
-            onDismissRequest = { showAiReconfigConfirm = false },
-            content = {
-            Row(
-                horizontalArrangement = Arrangement.SpaceBetween,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                TextButton(
-                    text = "取消",
-                    onClick = { showAiReconfigConfirm = false },
-                    modifier = Modifier.weight(1f)
-                )
-                Spacer(Modifier.width(20.dp))
-                TextButton(
-                    text = "重配置",
-                    onClick = {
-                        showAiReconfigConfirm = false
-                        // 写 needs_reconfig flag，下次 getConfig 会读到并强制返回 isConfigured=false
-                        context.getSharedPreferences("ai_termux_prefs", android.content.Context.MODE_PRIVATE)
-                            .edit().putBoolean("needs_reconfig", true).apply()
-                    },
-                    modifier = Modifier.weight(1f)
-                )
-            }
-        }
-        )
-    }
 
     // ---------- AI Termux：清空对话确认 ----------
     if (showAiClearConfirm) {

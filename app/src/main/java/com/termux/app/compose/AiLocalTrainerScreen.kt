@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -158,6 +159,7 @@ private fun TrainerBody(
     val currentTab = rememberSaveable { mutableStateOf(0) }
     val statusMsg = remember { mutableStateOf(session.value.status.ifBlank { "未开始" }) }
     val waitingRating = remember { mutableStateOf<LocalTrainerEvent.WaitingForUserRating?>(null) }
+    val refreshTeacherChat = remember { mutableStateOf(0) }
 
     var job by remember { mutableStateOf<Job?>(null) }
     val cancelled = remember { mutableStateOf(false) }
@@ -229,8 +231,13 @@ private fun TrainerBody(
         Spacer(Modifier.height(8.dp))
         ControlBar(
             session = session.value, jobActive = job?.isActive == true, onlineReady = onlineReady.value,
+            currentTab = currentTab.value,
             onStart = { startOrResume() }, onPause = { pause() }, onReset = { resetAll() },
-            onClearMemory = { AiTermuxPrefs.clearLearnedMemory(ctx) }
+            onClearMemory = { AiTermuxPrefs.clearLearnedMemory(ctx) },
+            onClearTeacherChat = { 
+                AiLocalTrainer.clearTeacherChatHistory(ctx)
+                refreshTeacherChat.value += 1
+            }
         )
         Spacer(Modifier.height(10.dp))
 
@@ -238,13 +245,27 @@ private fun TrainerBody(
             when (currentTab.value) {
                 0 -> StepsTab(steps)
                 1 -> ConversationTab(session)
-                else -> TeacherChatTab(ctx, onlineReady)
+                else -> TeacherChatTab(ctx, onlineReady, refreshTeacherChat.value)
             }
         }
     }
 
-    // ManualRatingDialog 已禁用 — miuix Dialog 体系内部依赖 NavigationEventDispatcher 会导致闪退
-    // 半自动模式改为启发式自动评分，用户可在"完整对话"Tab 中复盘查看每轮评分细节
+    ManualRatingDialog(
+        data = waitingRating.value ?: LocalTrainerEvent.WaitingForUserRating(0, "", "", 60, "", ""),
+        show = waitingRating.value != null,
+        setShow = { show -> if (!show) waitingRating.value = null },
+        onConfirm = { score, critique, patch ->
+            val data = waitingRating.value ?: return@ManualRatingDialog
+            AiLocalTrainer.provideUserRating(data.roundIndex, score, critique, patch)
+            waitingRating.value = null
+        },
+        onDismiss = {
+            // 用户选择跳过，用启发式建议继续
+            val data = waitingRating.value ?: return@ManualRatingDialog
+            AiLocalTrainer.provideUserRating(data.roundIndex, data.suggestedScore, data.suggestedCritique, data.suggestedMemoryPatch)
+            waitingRating.value = null
+        }
+    )
 }
 
 // ========== 事件处理 ==========
@@ -278,10 +299,11 @@ private fun handleTrainerEvent(
         is LocalTrainerEvent.ErrorOccurred -> { steps.add(evt.roundIndex to "❌ 错误（第${evt.roundIndex}轮）\n${evt.message}"); statusMsg.value = "错误：${evt.message}" }
         is LocalTrainerEvent.SessionSnapshot -> { session.value = evt.session; AiTermuxPrefs.saveLastTrainSession(ctx, evt.session) }
         is LocalTrainerEvent.WaitingForUserRating -> {
-            // 半自动模式：不再弹窗（miuix Dialog 体系有 NavigationEventDispatcher 问题会闪退）
-            // 训练引擎已自动使用 suggestRating 结果继续，这里仅记录提示
-            steps.add(evt.roundIndex to "📝 启发式自动评分 第${evt.roundIndex}轮 · 建议分=${evt.suggestedScore}/100\n${evt.suggestedCritique}")
+            steps.add(evt.roundIndex to "📝 等待用户评分 第${evt.roundIndex}轮 · 建议分=${evt.suggestedScore}/100\n${evt.suggestedCritique}")
+            waitingRating.value = evt
         }
+        is LocalTrainerEvent.TeacherFollowup -> steps.add(evt.roundIndex to "【老师追问 第${evt.roundIndex}轮】\n${evt.followupText}")
+        is LocalTrainerEvent.StudentFollowupAnswer -> steps.add(evt.roundIndex to "【学生回答追问 第${evt.roundIndex}轮】\n${evt.answerText}")
     }
 }
 
@@ -311,6 +333,20 @@ private fun TopInfoCard(
             InfoRow("状态：", statusMsg, true)
             InfoRow("预计剩余时间：", etaText, false)
             if (session.avgRoundMs > 0L) InfoRow("单轮平均：", "${session.avgRoundMs/1000}s", false)
+            val doneRoundsData = session.rounds.filter { it.status == "done" && it.score > 0 }
+            if (doneRoundsData.isNotEmpty()) {
+                val avg = doneRoundsData.map { it.score }.average().toInt()
+                InfoRow("当前平均分：", "$avg / 100", false)
+            }
+            if (session.status == "finished" && doneRoundsData.isNotEmpty()) {
+                Spacer(Modifier.height(6.dp))
+                val avgFinal = doneRoundsData.map { it.score }.average().toInt()
+                Text("🏁 训练完成 · 平均分 $avgFinal / 100", fontWeight = FontWeight.SemiBold, color = MiuixTheme.colorScheme.primary, fontSize = 13.sp)
+                if (session.finalSummary.isNotBlank()) {
+                    Spacer(Modifier.height(4.dp))
+                    Text(session.finalSummary, fontSize = 12.sp)
+                }
+            }
             Spacer(Modifier.height(8.dp))
             Text("训练老师（谁来出题+评分）：", fontSize = 12.sp)
             Spacer(Modifier.height(4.dp))
@@ -328,7 +364,10 @@ private fun TopInfoCard(
             Spacer(Modifier.height(8.dp))
             Text("总轮数：", fontSize = 12.sp)
             Spacer(Modifier.height(4.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.horizontalScroll(rememberScrollState())
+            ) {
                 (5..30 step 5).forEach { n ->
                     FilterChip2(
                         label = "$n 轮", selected = total == n,
@@ -353,7 +392,7 @@ private fun InfoRow(label: String, value: String, bold: Boolean) {
 @Composable
 private fun TabBar(currentTab: MutableState<Int>) {
     Row(
-        Modifier.fillMaxWidth().height(40.dp).clip(RoundedCornerShape(12.dp))
+        Modifier.fillMaxWidth().height(48.dp).clip(RoundedCornerShape(12.dp))
             .background(MiuixTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)).padding(2.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -377,35 +416,49 @@ private fun TabBar(currentTab: MutableState<Int>) {
 // ========== 控制按钮 ==========
 @Composable
 private fun ControlBar(
-    session: LocalTrainSession, jobActive: Boolean, onlineReady: Boolean,
-    onStart: () -> Unit, onPause: () -> Unit, onReset: () -> Unit, onClearMemory: () -> Unit
+    session: LocalTrainSession, jobActive: Boolean, onlineReady: Boolean, currentTab: Int,
+    onStart: () -> Unit, onPause: () -> Unit, onReset: () -> Unit, onClearMemory: () -> Unit,
+    onClearTeacherChat: () -> Unit
 ) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        if (!jobActive) {
+        if (currentTab == 2) {
+            // 老师对话 tab：隐藏继续/暂停/重开/清空教训，显示清空老师对话历史
+            Button(
+                onClick = onClearTeacherChat, modifier = Modifier.weight(1f).height(48.dp)
+            ) {
+                Text("清空老师对话历史")
+            }
+        } else if (!jobActive) {
             val disabled = session.teacher == "online_fallback" && !onlineReady
             val btnText = when {
                 session.rounds.isNotEmpty() && session.status != "finished" -> "继续训练 (${session.rounds.size}/${session.targetRounds})"
                 else -> "开始训练"
             }
             Button(
-                onClick = onStart, modifier = Modifier.weight(1f).height(40.dp),
+                onClick = onStart, modifier = Modifier.weight(1f).height(48.dp),
                 enabled = !disabled
             ) {
                 Text(btnText)
             }
+            Spacer(Modifier.width(8.dp))
+            TextButton(text = "重开", onClick = onReset, modifier = Modifier.height(48.dp))
+            Spacer(Modifier.width(2.dp))
+            TextButton(
+                text = "清空教训", onClick = onClearMemory, modifier = Modifier.height(48.dp)
+            )
         } else {
             Button(
-                onClick = onPause, modifier = Modifier.weight(1f).height(40.dp)
+                onClick = onPause, modifier = Modifier.weight(1f).height(48.dp)
             ) {
                 Text("暂停")
             }
+            Spacer(Modifier.width(8.dp))
+            TextButton(text = "重开", onClick = onReset, modifier = Modifier.height(48.dp))
+            Spacer(Modifier.width(2.dp))
+            TextButton(
+                text = "清空教训", onClick = onClearMemory, modifier = Modifier.height(48.dp)
+            )
         }
-        Spacer(Modifier.width(8.dp))
-        TextButton(text = "重开", onClick = onReset, modifier = Modifier.height(40.dp))
-        Spacer(Modifier.width(2.dp))
-        TextButton(
-            text = "清空教训", onClick = onClearMemory, modifier = Modifier.height(40.dp)
-        )
     }
 }
 
@@ -535,14 +588,14 @@ private fun Bubble(title: String, body: String, role: String) {
 
 // ========== 与在线老师对话 Tab ==========
 @Composable
-private fun TeacherChatTab(ctx: Context, onlineReady: MutableState<Boolean>) {
+private fun TeacherChatTab(ctx: Context, onlineReady: MutableState<Boolean>, refreshTrigger: Int) {
     val scope = rememberCoroutineScope()
     val messages = remember { mutableStateListOf<Pair<String, String>>() } // (role, content)
     val input = remember { mutableStateOf("") }
     val isLoading = remember { mutableStateOf(false) }
 
-    // 加载历史
-    LaunchedEffect(Unit) {
+    // 加载历史（同时监听清空触发）
+    LaunchedEffect(Unit, refreshTrigger) {
         val history = AiLocalTrainer.getTeacherChatHistory(ctx)
         messages.clear()
         history.forEach { messages.add(it.role to it.content) }
@@ -564,7 +617,7 @@ private fun TeacherChatTab(ctx: Context, onlineReady: MutableState<Boolean>) {
 
         if (messages.isEmpty()) {
             Column(
-                Modifier.fillMaxSize(),
+                Modifier.fillMaxWidth().weight(1f),
                 verticalArrangement = Arrangement.Center,
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
@@ -576,7 +629,7 @@ private fun TeacherChatTab(ctx: Context, onlineReady: MutableState<Boolean>) {
             }
         } else {
             LazyColumn(
-                Modifier.fillMaxSize().weight(1f),
+                Modifier.fillMaxWidth().weight(1f),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 8.dp)
             ) {
@@ -651,16 +704,6 @@ private fun TeacherChatTab(ctx: Context, onlineReady: MutableState<Boolean>) {
             }
         }
 
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-            TextButton(
-                text = "清空对话历史",
-                onClick = {
-                    AiLocalTrainer.clearTeacherChatHistory(ctx)
-                    messages.clear()
-                },
-                modifier = Modifier.height(32.dp)
-            )
-        }
     }
 }
 
@@ -724,12 +767,12 @@ private fun ManualRatingDialog(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     TextButton(
                         text = "使用建议值（跳过手动评分）", onClick = { setShow(false); onDismiss() },
-                        modifier = Modifier.weight(1f).height(40.dp)
+                        modifier = Modifier.weight(1f).height(48.dp)
                     )
                     Spacer(Modifier.width(8.dp))
                     Button(
                         onClick = { setShow(false); onConfirm(score.toInt(), critique, patch) },
-                        modifier = Modifier.weight(1f).height(40.dp)
+                        modifier = Modifier.weight(1f).height(48.dp)
                     ) {
                         Text("提交评分 · 进入下一轮")
                     }

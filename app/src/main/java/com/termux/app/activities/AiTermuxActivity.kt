@@ -81,6 +81,11 @@ class AiTermuxActivity : FragmentActivity() {
         WindowCompat.setDecorFitsSystemWindows(window, false)
         val vm: AiTermuxViewModel by viewModels()
         handlePendingAgentResult(vm)
+        // 如果是从设置页面"重新配置 AI"启动的，强制进入配置页面
+        if (intent?.getBooleanExtra("force_setup", false) == true) {
+            vm.forceShowSetup()
+            intent.removeExtra("force_setup")
+        }
         setContent {
             val navDispatcher = NavigationHelper.createDispatcher()
             val navDispatcherOwner = NavigationHelper.createOwner(navDispatcher)
@@ -140,6 +145,11 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
 
     var config by mutableStateOf(AiTermuxPrefs.getConfig(app))
         private set
+
+    /** 强制显示配置页面（用户从设置页"重新配置 AI"进入时调用） */
+    fun forceShowSetup() {
+        config = config.copy(isConfigured = false)
+    }
 
     var messages = mutableStateListOf<ChatMessage>()
         private set

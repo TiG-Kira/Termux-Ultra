@@ -8,8 +8,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /**
- * 版本号数据类，支持解析 `R?x.y.z.RB` 格式（如 `0.9.0.RB` 或 `R0.9.0.RB`）。
- * RB = ReBuild 分支缩写。
+ * 版本号数据类，支持解析 `R?x.y.z.RB` / `R?x.y.z.Rn` 格式。
+ * RB = ReBuild，R2/R3/... = 架构迭代版本。
  */
 data class AppVersion(
     val major: Int,
@@ -18,7 +18,7 @@ data class AppVersion(
 ) : Comparable<AppVersion> {
 
     companion object {
-        private val VERSION_REGEX = Regex("""^(R|r)?(\d+)\.(\d+)\.(\d+)\.RB$""")
+        private val VERSION_REGEX = Regex("""^(R|r)?(\d+)\.(\d+)\.(\d+)\.R(B|\d+)$""")
         private val PLAIN_REGEX = Regex("""^v?(R|r)?(\d+)\.(\d+)\.(\d+)$""")
 
         /**

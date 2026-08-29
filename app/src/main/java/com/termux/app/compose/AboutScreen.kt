@@ -160,8 +160,14 @@ fun AboutScreen(onBack: () -> Unit) {
 
     // 头部卡片淡出动画
     val headerAlphaAnim by animateFloatAsState(
-        targetValue = 1f - scrollFraction,
+        targetValue = 0.9f * (1f - scrollFraction),
         label = "headerAlpha"
+    )
+
+    // 其他卡片透明度: 初始85%不透明, 上滑到100%
+    val cardsAlphaAnim by animateFloatAsState(
+        targetValue = 0.85f + scrollFraction * 0.15f,
+        label = "cardsAlpha"
     )
 
 
@@ -273,7 +279,7 @@ fun AboutScreen(onBack: () -> Unit) {
 
                 item {
                     Card(
-                        modifier = Modifier
+                        modifier = Modifier.graphicsLayer { alpha = cardsAlphaAnim }
                             .fillMaxWidth()
                             .padding(horizontal = 16.dp)
                     ) {
@@ -299,7 +305,7 @@ fun AboutScreen(onBack: () -> Unit) {
 
                 item {
                     Card(
-                        modifier = Modifier
+                        modifier = Modifier.graphicsLayer { alpha = cardsAlphaAnim }
                             .fillMaxWidth()
                             .padding(16.dp)
                             .clip(RoundedCornerShape(20.dp))
@@ -367,7 +373,7 @@ fun AboutScreen(onBack: () -> Unit) {
 
                 item {
                     Card(
-                        modifier = Modifier
+                        modifier = Modifier.graphicsLayer { alpha = cardsAlphaAnim }
                             .fillMaxWidth()
                             .padding(horizontal = 16.dp)
                             .clip(RoundedCornerShape(20.dp))
@@ -436,7 +442,7 @@ fun AboutScreen(onBack: () -> Unit) {
 
                 item {
                     Card(
-                        modifier = Modifier
+                        modifier = Modifier.graphicsLayer { alpha = cardsAlphaAnim }
                             .fillMaxWidth()
                             .padding(horizontal = 16.dp)
                     ) {
@@ -463,7 +469,7 @@ fun AboutScreen(onBack: () -> Unit) {
 
                 item {
                     Card(
-                        modifier = Modifier
+                        modifier = Modifier.graphicsLayer { alpha = cardsAlphaAnim }
                             .fillMaxWidth()
                             .padding(horizontal = 16.dp)
                     ) {
@@ -509,7 +515,7 @@ fun AboutScreen(onBack: () -> Unit) {
 
                 item {
                     Card(
-                        modifier = Modifier
+                        modifier = Modifier.graphicsLayer { alpha = cardsAlphaAnim }
                             .fillMaxWidth()
                             .padding(horizontal = 16.dp)
                     ) {

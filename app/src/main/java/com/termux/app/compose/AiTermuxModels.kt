@@ -72,7 +72,11 @@ data class LocalTrainSession(
     /** 每轮平均耗时（滚动估算）毫秒 */
     var avgRoundMs: Long = 0L,
     /** 错误信息（如有） */
-    var lastError: String? = null
+    var lastError: String? = null,
+    /** 所有已完成轮次的平均分（0-100，训练结束后计算） */
+    val avgScore: Int = 0,
+    /** 训练完成后生成的总体建议 */
+    val finalSummary: String = ""
 )
 
 

@@ -148,6 +148,11 @@ object TermuxApiBroadcastFix {
     @JvmStatic
     fun removeAmWrapper() {
         try {
+            val prefix = File(TermuxConstants.TERMUX_PREFIX_DIR_PATH)
+            if (!prefix.isDirectory) {
+                Logger.logInfo(LOG_TAG, "Prefix not yet installed; nothing to remove")
+                return
+            }
             val sb = StringBuilder()
             // If we still have a backup, remove our wrapper and restore the original.
             sb.appendLine("if [ -f \"$AM_REAL\" ]; then")
@@ -281,8 +286,18 @@ object TermuxApiBroadcastFix {
      */
     private fun runShellScriptAndLog(script: String): Int {
         return try {
+            val homeDir = File(TermuxConstants.TERMUX_HOME_DIR_PATH)
             val pb = ProcessBuilder("/system/bin/sh", "-c", script)
-                .directory(File(TermuxConstants.TERMUX_HOME_DIR_PATH))
+                .apply {
+                    if (homeDir.isDirectory) {
+                        directory(homeDir)
+                    } else {
+                        // Home dir not ready yet (bootstrap not done); use a known-safe directory
+                        try {
+                            directory(File("/system/bin"))
+                        } catch (_: Throwable) {}
+                    }
+                }
                 .redirectErrorStream(true)
             val env = pb.environment()
             if (!env.containsKey("HOME")) env["HOME"] = TermuxConstants.TERMUX_HOME_DIR_PATH
