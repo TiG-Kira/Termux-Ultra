@@ -1207,14 +1207,13 @@ object RiskConfirmManager {
         session: com.termux.terminal.TerminalSession
     ): Boolean = detectEnvironment(context, session) == EnvironmentType.NATIVE
 
-    /** 显示"关闭二次确认"的警告弹窗（迁移到 WindowDialog，通过 AlertDialogActivity） */
+    /** 显示"关闭二次确认"的警告弹窗（使用主页授权遮罩覆盖方式） */
     fun showDisableWarning(context: Context, targetLevel: ProtectionLevel = ProtectionLevel.OFF) {
         _disableWarningState.value = DisableWarningState(show = true, targetLevel = targetLevel)
-        try {
-            com.termux.app.activities.AlertDialogActivity.startDisableWarning(context, targetLevel)
-        } catch (_: Exception) {
-            // Activity 启动失败时保留状态，走旧的 OverlayDialog 兜底
-        }
+        // 跳转到主页 Activity，主页的 DisableWarningMask 会显示遮罩弹窗
+        val intent = Intent(context, com.termux.app.MainActivity::class.java)
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        context.startActivity(intent)
     }
 
     /** 关闭"关闭二次确认"的警告弹窗（保留用于兼容） */

@@ -764,9 +764,15 @@ fun MainScreen(
 
         val riskDialogState by RiskConfirmManager.dialogState.collectAsState()
         val showAuthorizationMask = riskDialogState != null
+        val disableWarningState by RiskConfirmManager.disableWarningState.collectAsState()
+        val showDisableWarningMask = disableWarningState.show
 
         if (showAuthorizationMask) {
             AuthorizationMask()
+        }
+
+        if (showDisableWarningMask) {
+            DisableWarningMask()
         }
 
         // 风险命令确认弹窗（主页不显示风险 Snackbar，由终端页独占）

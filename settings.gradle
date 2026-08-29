@@ -1,14 +1,10 @@
-pluginManagement {
-    repositories {
-        google()
-        mavenCentral()
-        gradlePluginPortal()
-    }
-}
+rootProject.name = "KiTerminal-UX"
+include ':app'
+include ':terminal-emulator'
+include ':terminal-view'
+include ':termux-shared'
 
-include ':app', ':termux-shared', ':terminal-emulator', ':terminal-view'
-
-// Integrated Termux add-on tools (cloned under vendor/termux-addons)
+// Vendor add-ons (built as sub-projects from vendor/termux-addons)
 include ':termux-api'
 project(':termux-api').projectDir = new File(rootDir, 'vendor/termux-addons/termux-api/app')
 include ':termux-styling'

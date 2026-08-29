@@ -184,6 +184,9 @@ public final class TermuxActivity extends ComponentActivity implements ServiceCo
      *  processes are running, and then instruct TermuxService to force-stop sessions. */
     private boolean mPendingTriggerStopService = false;
 
+    /** True if activity was launched from Quick Settings Tile to create a new terminal session. */
+    private boolean mPendingNewTerminal = false;
+
 
     private static final int CONTEXT_MENU_SELECT_URL_ID = 0;
     private static final int CONTEXT_MENU_SHARE_TRANSCRIPT_ID = 1;
@@ -472,6 +475,16 @@ public final class TermuxActivity extends ComponentActivity implements ServiceCo
             }
         }
 
+        // 处理从 Quick Settings Tile 来的新建终端请求
+        if (intent != null && intent.getBooleanExtra(com.termux.app.NewTerminalTileService.EXTRA_NEW_TERMINAL, false)) {
+            intent.removeExtra(com.termux.app.NewTerminalTileService.EXTRA_NEW_TERMINAL);
+            if (mTermuxTerminalSessionClient != null) {
+                mTermuxTerminalSessionClient.addNewSession(false, null);
+            } else {
+                mPendingNewTerminal = true;
+            }
+        }
+
         // 处理风险确认结果（从主页返回时携带）
         handleRiskConfirmResult(intent);
     }
@@ -531,6 +544,15 @@ public final class TermuxActivity extends ComponentActivity implements ServiceCo
         handlePendingRiskConfirmFromPrefs();
 
         isOnResumeAfterOnCreate = false;
+    
+        // 处理待执行的新建终端请求
+        if (mPendingNewTerminal) {
+            mPendingNewTerminal = false;
+            if (mTermuxTerminalSessionClient != null) {
+                mTermuxTerminalSessionClient.addNewSession(false, null);
+            }
+        }
+
     }
 
     /**
@@ -641,6 +663,7 @@ public final class TermuxActivity extends ComponentActivity implements ServiceCo
         if (mTermuxService.getTermuxSessionsSize() == 0) {
             if (mIsVisible) {
                 Intent i = getIntent();
+                boolean tileRequest = i != null && i.getBooleanExtra(com.termux.app.NewTerminalTileService.EXTRA_NEW_TERMINAL, false);
                 if (i != null && Intent.ACTION_RUN.equals(i.getAction()) && !mActionRunHandled) {
                     mActionRunHandled = true;
                     TermuxInstaller.setupBootstrapIfNeeded(TermuxActivity.this, () -> {
@@ -651,6 +674,9 @@ public final class TermuxActivity extends ComponentActivity implements ServiceCo
                         } catch (WindowManager.BadTokenException e) {
                         }
                     });
+                } else if (tileRequest) {
+                    // Quick Settings Tile 请求：无条件创建首个 session
+                    mTermuxTerminalSessionClient.addNewSession(false, null);
                 } else if (mIsFallbackMode) {
                     // Fallback mode: auto-create a session so the terminal view isn't empty
                     mTermuxTerminalSessionClient.addNewSession(false, null);
@@ -658,7 +684,12 @@ public final class TermuxActivity extends ComponentActivity implements ServiceCo
                     finishActivityIfNotFinishing();
                 }
             } else if (!mIsFallbackMode) {
-                finishActivityIfNotFinishing();
+                // 即使不可见，如果是 Tile 请求也应该创建 session（让后台服务有活干）
+                Intent i = getIntent();
+                boolean tileRequest = i != null && i.getBooleanExtra(com.termux.app.NewTerminalTileService.EXTRA_NEW_TERMINAL, false);
+                if (!tileRequest) {
+                    finishActivityIfNotFinishing();
+                }
             }
         } else {
             Intent i = getIntent();

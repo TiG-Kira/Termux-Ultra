@@ -1,4 +1,4 @@
-﻿package com.termux.app.compose
+package com.termux.app.compose
 
 import android.content.Context
 import com.google.gson.Gson
@@ -38,6 +38,43 @@ data class ChatMessage(
     val preparingDetails: List<String> = emptyList(),
     val rawResponse: String? = null  // 原始 API 响应 JSON，用于调试
 )
+
+// ---------- 本地模型训练（System Prompt 蒸馏迭代）相关数据结构 ----------
+/** 单轮训练记录 */
+data class LocalTrainRound(
+    val roundIndex: Int,
+    /** 在线老师出的题目 */
+    val question: String,
+    /** 本地学生模型的原始回答 */
+    val studentAnswer: String,
+    /** 在线老师给出的评分（0-100） */
+    val score: Int,
+    /** 在线老师的详细批评/点评 */
+    val critique: String,
+    /** 在线老师建议追加到 System Prompt 的「教训记忆」片段（可能为空字符串表示本轮不追加） */
+    val memoryPatch: String,
+    /** 该轮真实耗时（毫秒） */
+    val durationMs: Long,
+    /** 该轮状态："running" | "done" | "error" */
+    val status: String = "done"
+)
+
+/** 整个训练会话快照（用于持久化 / UI 展示） */
+data class LocalTrainSession(
+    val sessionId: Long = System.currentTimeMillis(),
+    /** 总目标轮数 */
+    val targetRounds: Int = 10,
+    val rounds: MutableList<LocalTrainRound> = mutableListOf(),
+    /** 会话状态："idle" | "running" | "paused" | "finished" | "error" */
+    var status: String = "idle",
+    /** 用户选择的老师："online_fallback"(备用在线) | "manual"(手动) */
+    val teacher: String = "online_fallback",
+    /** 每轮平均耗时（滚动估算）毫秒 */
+    var avgRoundMs: Long = 0L,
+    /** 错误信息（如有） */
+    var lastError: String? = null
+)
+
 
 /** 技能类型枚举 */
 enum class SkillType {
@@ -81,7 +118,7 @@ enum class SkillType {
 
 /** 需用户点击才能执行的技能（仅生成卡片，未真正执行）
  * 无限制模式下所有技能都不需要点击确认 */
-fun SkillType.requiresClick(autoExecSkills: Set<SkillType> = emptySet(), unlimitedMode: Boolean = false): Boolean = when {
+fun SkillType.requiresClick(autoExecSkills: Set<String> = emptySet(), unlimitedMode: Boolean = false): Boolean = when {
     unlimitedMode -> false
     else -> when (this) {
         SkillType.NEW_SESSION,
@@ -100,7 +137,7 @@ fun SkillType.requiresClick(autoExecSkills: Set<SkillType> = emptySet(), unlimit
         SkillType.CAPTURE_OUTPUT,
         SkillType.SUB_AGENT,
         SkillType.SEARCH_AGENT,
-        SkillType.COMPILE_CODE -> this !in autoExecSkills
+        SkillType.COMPILE_CODE -> this.name !in autoExecSkills
         else -> false
     }
 }
@@ -192,6 +229,13 @@ data class OpenAiMessage(
     val role: String,
     val content: String
 )
+
+
+// ---------- ChatMessage ↔ OpenAiMessage 转换 ----------
+fun ChatMessage.toOpenAiMessage(): OpenAiMessage = OpenAiMessage(role = this.role, content = this.content)
+fun OpenAiMessage.toChatMessage(): ChatMessage = ChatMessage(role = this.role, content = this.content)
+fun List<ChatMessage>.toOpenAiMessages(): List<OpenAiMessage> = this.map { it.toOpenAiMessage() }
+fun List<OpenAiMessage>.toChatMessages(): List<ChatMessage> = this.map { it.toChatMessage() }
 
 /** AI API 响应体 */
 data class ChatCompletionResponse(
@@ -832,6 +876,7 @@ Termux:API（termux-battery-status、termux-network-status 等命令行工具）
 /** ---------- 配置存储管理 ---------- */
 
 object AiTermuxPrefs {
+    // ---------- Keys ----------
     private const val PREFS_NAME = "ai_termux_prefs"
     private const val KEY_CONFIG = "ai_config"
     private const val KEY_CHAT_HISTORY = "chat_history"
@@ -843,41 +888,161 @@ object AiTermuxPrefs {
     private const val KEY_AUTO_EXEC_CONFIG = "ai_auto_exec_config"
     private const val KEY_UNLIMITED_MODE = "ai_unlimited_mode"
     private const val KEY_ROOT_AUTO_SHELL = "ai_root_auto_shell"
-    // 本地大模型备用在线配置
     private const val KEY_FALLBACK_ONLINE_ENABLED = "fallback_online_enabled"
     private const val KEY_FALLBACK_ONLINE_API_KEY = "fallback_online_api_key"
     private const val KEY_FALLBACK_ONLINE_BASE_URL = "fallback_online_base_url"
     private const val KEY_FALLBACK_ONLINE_MODEL = "fallback_online_model"
     private const val KEY_FALLBACK_ONLINE_TEMPERATURE = "fallback_online_temperature"
+    private const val KEY_LOCAL_ENGINE_TYPE = "local_engine_type"
+    private const val KEY_OLLAMA_SELECTED_MODEL = "ollama_selected_model"
+    private const val KEY_OLLAMA_INSTALLED_MODELS = "ollama_installed_models"
+    private const val KEY_TRAIN_HINT_SHOWN = "train_hint_shown_v1"
+    private const val KEY_LAST_TRAIN_SESSION = "last_train_session_v1"
+    private const val KEY_LEARNED_MEMORY_BLOCK = "learned_memory_block_v1"
+    private const val KEY_NEEDS_RECONFIG = "needs_reconfig"
+    private const val KEY_TEACHER_CHAT_HISTORY = "teacher_chat_history"
 
+    // ---------- Config ----------
+    data class AutoExecConfig(
+        val autoExecSkills: Set<String> = emptySet(),
+        val autoExecEnabled: Boolean = false
+    )
+
+    data class FallbackOnlineConfig(
+        val enabled: Boolean = false,
+        val apiKey: String = "",
+        val baseUrl: String = "",
+        val model: String = "",
+        val temperature: Float = 0.7f
+    )
+
+    fun getConfig(context: Context): AiTermuxConfig {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val provider = prefs.getString("provider", "custom") ?: "custom"
+        val apiKey = prefs.getString("api_key", "") ?: ""
+        val apiBaseUrl = prefs.getString("base_url", "") ?: ""
+        val model = prefs.getString("model", "") ?: ""
+        val temperature = prefs.getFloat("temperature", 0.7f)
+        val localModelId = prefs.getString("local_model_id", "") ?: ""
+        val customPrompt = prefs.getString("custom_system_prompt", "") ?: ""
+        // 动态计算 isConfigured：先看用户是否主动要求重配置，再根据实际状态判断
+        val needsReconfig = prefs.getBoolean(KEY_NEEDS_RECONFIG, false)
+        val configured = if (needsReconfig) {
+            // 用户点击了"重新配置 AI"，强制返回 false 让入口跳回设置页
+            prefs.edit().remove(KEY_NEEDS_RECONFIG).apply() // 消费掉，避免影响下次
+            false
+        } else if (provider == "local") {
+            // 本地模型：provider 已设为 local 且至少有一个模型已下载
+            try {
+                com.termux.app.compose.AiLocalModel.isLocalModelReady()
+            } catch (_: Throwable) { false }
+        } else {
+            // 在线模型：apiKey 非空
+            apiKey.isNotBlank()
+        }
+        return AiTermuxConfig(
+            providerConfig = AiProviderConfig(
+                provider = provider,
+                apiKey = apiKey,
+                apiBaseUrl = apiBaseUrl,
+                model = model,
+                temperature = temperature,
+                localModelId = localModelId
+            ),
+            customSystemPrompt = customPrompt,
+            isConfigured = configured
+        )
+    }
+
+    fun saveConfig(context: Context, cfg: AiTermuxConfig) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().apply {
+            putString("provider", cfg.providerConfig.provider)
+            putString("api_key", cfg.providerConfig.apiKey)
+            putString("base_url", cfg.providerConfig.apiBaseUrl)
+            putString("model", cfg.providerConfig.model)
+            putFloat("temperature", cfg.providerConfig.temperature)
+            putString("local_model_id", cfg.providerConfig.localModelId)
+            putString("custom_system_prompt", cfg.customSystemPrompt)
+            apply()
+        }
+    }
+
+    // ---------- Chat History ----------
+    fun getChatHistory(context: Context): List<OpenAiMessage> {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val raw = prefs.getString(KEY_CHAT_HISTORY, null) ?: return emptyList()
+        return try {
+            val arr = Gson().fromJson(raw, Array<OpenAiMessage>::class.java)
+            arr.toList()
+        } catch (_: Throwable) { emptyList() }
+    }
+
+    fun saveChatHistory(context: Context, history: List<OpenAiMessage>) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().putString(KEY_CHAT_HISTORY, Gson().toJson(history)).apply()
+    }
+
+    fun clearChatHistory(context: Context) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().remove(KEY_CHAT_HISTORY).apply()
+    }
+
+    // ---------- Custom System Prompt ----------
+    fun getCustomSystemPrompt(context: Context): String {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        return prefs.getString(KEY_CUSTOM_SYSTEM_PROMPT, "") ?: ""
+    }
+
+    fun setCustomSystemPrompt(context: Context, prompt: String) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().putString(KEY_CUSTOM_SYSTEM_PROMPT, prompt).apply()
+    }
+
+    fun isUsingCustomSystemPrompt(context: Context): Boolean {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        return prefs.getBoolean(KEY_USE_CUSTOM_SYSTEM_PROMPT, false)
+    }
+
+    fun setUseCustomSystemPrompt(context: Context, use: Boolean) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().putBoolean(KEY_USE_CUSTOM_SYSTEM_PROMPT, use).apply()
+    }
+
+    // ---------- Memory ----------
+    fun getMemory(context: Context): String {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        return prefs.getString(KEY_MEMORY, "") ?: ""
+    }
+
+    fun setMemory(context: Context, memory: String) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().putString(KEY_MEMORY, memory).apply()
+    }
+
+    // ---------- Developer Mode ----------
     fun isDeveloperMode(context: Context): Boolean {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         return prefs.getBoolean(KEY_DEVELOPER_MODE, false)
     }
 
     fun setDeveloperMode(context: Context, enabled: Boolean) {
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        prefs.edit().putBoolean(KEY_DEVELOPER_MODE, enabled).apply()
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().putBoolean(KEY_DEVELOPER_MODE, enabled).apply()
     }
 
+    // ---------- Custom Skills ----------
     fun getCustomSkills(context: Context): List<CustomSkill> {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val json = prefs.getString(KEY_CUSTOM_SKILLS, null)
-        return if (json != null) {
-            try {
-                val type = object : TypeToken<List<CustomSkill>>() {}.type
-                Gson().fromJson(json, type)
-            } catch (e: Exception) {
-                emptyList()
-            }
-        } else {
-            emptyList()
-        }
+        val raw = prefs.getString(KEY_CUSTOM_SKILLS, null) ?: return emptyList()
+        return try {
+            val arr = Gson().fromJson(raw, Array<CustomSkill>::class.java)
+            arr.toList()
+        } catch (_: Throwable) { emptyList() }
     }
 
     fun saveCustomSkills(context: Context, skills: List<CustomSkill>) {
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        prefs.edit().putString(KEY_CUSTOM_SKILLS, Gson().toJson(skills)).apply()
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().putString(KEY_CUSTOM_SKILLS, Gson().toJson(skills)).apply()
     }
 
     fun addCustomSkill(context: Context, skill: CustomSkill) {
@@ -885,45 +1050,6 @@ object AiTermuxPrefs {
         skills.add(skill)
         saveCustomSkills(context, skills)
     }
-    /**
-     * 保存 AI 创造的新工具（从 new_tool 标签解析）
-     */
-    fun saveNewTool(context: Context, toolData: Map<String, String>): CustomSkill? {
-        try {
-            val name = toolData["tool_name"] ?: return null
-            val description = toolData["description"] ?: ""
-            val systemPrompt = toolData["system_prompt"] ?: ""
-            val skillJson = toolData["skill_json"] ?: ""
-            val implType = toolData["implementation_type"] ?: "shell_command"
-            
-            val skill = CustomSkill(
-                name = name,
-                description = description,
-                systemPrompt = systemPrompt,
-                skillJson = skillJson,
-                implementationType = implType
-            )
-            
-            // Check for duplicates by name
-            val existing = getCustomSkills(context).toMutableList()
-            val existingNames = existing.map { it.name }
-            if (name in existingNames) {
-                // Update existing
-                val idx = existing.indexOfFirst { it.name == name }
-                if (idx >= 0) {
-                    existing[idx] = skill
-                }
-            } else {
-                existing.add(skill)
-            }
-            saveCustomSkills(context, existing)
-            return skill
-        } catch (e: Exception) {
-            android.util.Log.e("AiTermuxModels", "Failed to save new tool", e)
-            return null
-        }
-    }
-
 
     fun updateCustomSkill(context: Context, skill: CustomSkill) {
         val skills = getCustomSkills(context).toMutableList()
@@ -936,87 +1062,210 @@ object AiTermuxPrefs {
 
     fun deleteCustomSkill(context: Context, skillId: String) {
         val skills = getCustomSkills(context).toMutableList()
-        skills.removeAll { it.id == skillId }
-        saveCustomSkills(context, skills)
-    }
-
-    fun getConfig(context: Context): AiTermuxConfig {
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val json = prefs.getString(KEY_CONFIG, null)
-        return if (json != null) {
-            try {
-                Gson().fromJson(json, AiTermuxConfig::class.java)
-            } catch (e: Exception) {
-                AiTermuxConfig()
-            }
-        } else {
-            AiTermuxConfig()
+        val idx = skills.indexOfFirst { it.id == skillId }
+        if (idx >= 0) {
+            skills.removeAt(idx)
+            saveCustomSkills(context, skills)
         }
     }
 
-    fun saveConfig(context: Context, config: AiTermuxConfig) {
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        prefs.edit().putString(KEY_CONFIG, Gson().toJson(config)).apply()
+    fun saveNewTool(context: Context, toolData: Map<String, String>): CustomSkill? {
+        val name = toolData["name"]?.trim().orEmpty()
+        if (name.isBlank()) return null
+        val desc = toolData["description"]?.trim().orEmpty()
+        val sysPrompt = toolData["system_prompt"]?.trim().orEmpty()
+        val skillJson = toolData["skill_json"]?.trim().orEmpty()
+        val impl = toolData["implementation"]?.trim()?.ifBlank { "shell_command" } ?: "shell_command"
+        val skill = CustomSkill(
+            name = name,
+            description = desc,
+            systemPrompt = sysPrompt,
+            skillJson = skillJson,
+            implementationType = impl
+        )
+        addCustomSkill(context, skill)
+        return skill
     }
 
-    fun getChatHistory(context: Context): List<ChatMessage> {
+    // ---------- Unlimited Mode ----------
+    fun isUnlimitedModeActive(context: Context): Boolean {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val json = prefs.getString(KEY_CHAT_HISTORY, null)
-        return if (json != null) {
-            try {
-                val type = object : TypeToken<List<ChatMessage>>() {}.type
-                Gson().fromJson(json, type)
-            } catch (e: Exception) {
-                emptyList()
-            }
-        } else {
-            emptyList()
+        return prefs.getBoolean(KEY_UNLIMITED_MODE, false)
+    }
+
+    fun setUnlimitedMode(context: Context, enabled: Boolean) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().putBoolean(KEY_UNLIMITED_MODE, enabled).apply()
+    }
+
+    // ---------- Auto Exec ----------
+    fun getAutoExecSkills(context: Context): Set<String> {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val raw = prefs.getString(KEY_AUTO_EXEC_CONFIG, null) ?: return emptySet()
+        return try {
+            val list = Gson().fromJson(raw, Array<String>::class.java)
+            list.toSet()
+        } catch (_: Throwable) { emptySet() }
+    }
+
+    fun saveAutoExecSkills(context: Context, skills: Set<String>) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().putString(KEY_AUTO_EXEC_CONFIG, Gson().toJson(skills.toList())).apply()
+    }
+
+    fun isAutoExecEnabled(context: Context): Boolean {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        return prefs.getBoolean("auto_exec_enabled", false)
+    }
+
+    // ---------- Fallback Online ----------
+    fun isFallbackOnlineEnabled(context: Context): Boolean {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        return prefs.getBoolean(KEY_FALLBACK_ONLINE_ENABLED, false)
+    }
+
+    fun isFallbackOnlineConfigReady(context: Context): Boolean {
+        val cfg = getFallbackOnlineConfig(context)
+        return cfg.enabled && cfg.apiKey.isNotBlank() && cfg.baseUrl.isNotBlank() && cfg.model.isNotBlank()
+    }
+
+    fun getFallbackOnlineConfig(context: Context): FallbackOnlineConfig {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        return FallbackOnlineConfig(
+            enabled = prefs.getBoolean(KEY_FALLBACK_ONLINE_ENABLED, false),
+            apiKey = prefs.getString(KEY_FALLBACK_ONLINE_API_KEY, "") ?: "",
+            baseUrl = prefs.getString(KEY_FALLBACK_ONLINE_BASE_URL, "") ?: "",
+            model = prefs.getString(KEY_FALLBACK_ONLINE_MODEL, "") ?: "",
+            temperature = prefs.getFloat(KEY_FALLBACK_ONLINE_TEMPERATURE, 0.7f)
+        )
+    }
+
+    fun saveFallbackOnlineConfig(context: Context, cfg: FallbackOnlineConfig) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().apply {
+            putBoolean(KEY_FALLBACK_ONLINE_ENABLED, cfg.enabled)
+            putString(KEY_FALLBACK_ONLINE_API_KEY, cfg.apiKey)
+            putString(KEY_FALLBACK_ONLINE_BASE_URL, cfg.baseUrl)
+            putString(KEY_FALLBACK_ONLINE_MODEL, cfg.model)
+            putFloat(KEY_FALLBACK_ONLINE_TEMPERATURE, cfg.temperature)
+            apply()
         }
     }
 
-    fun saveChatHistory(context: Context, messages: List<ChatMessage>) {
-        // 只保存最近 100 条消息
-        val toSave = messages.takeLast(100)
+    // ---------- Local Engine ----------
+    fun getLocalEngineType(context: Context): String {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        prefs.edit().putString(KEY_CHAT_HISTORY, Gson().toJson(toSave)).apply()
+        return prefs.getString(KEY_LOCAL_ENGINE_TYPE, "llama") ?: "llama"
     }
 
-    fun clearChatHistory(context: Context) {
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        prefs.edit().remove(KEY_CHAT_HISTORY).apply()
+    fun setLocalEngineType(context: Context, type: String) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().putString(KEY_LOCAL_ENGINE_TYPE, type).apply()
     }
 
-    fun getCustomSystemPrompt(context: Context): String {
+    fun getSelectedOllamaModel(context: Context): String {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        return prefs.getString(KEY_CUSTOM_SYSTEM_PROMPT, "") ?: ""
+        return prefs.getString(KEY_OLLAMA_SELECTED_MODEL, "") ?: ""
     }
 
-    fun setCustomSystemPrompt(context: Context, prompt: String) {
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        prefs.edit().putString(KEY_CUSTOM_SYSTEM_PROMPT, prompt).apply()
+    fun setSelectedOllamaModel(context: Context, model: String) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().putString(KEY_OLLAMA_SELECTED_MODEL, model).apply()
     }
 
-    fun isUsingCustomSystemPrompt(context: Context): Boolean {
+    fun getInstalledOllamaModels(context: Context): List<String> {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        return prefs.getBoolean(KEY_USE_CUSTOM_SYSTEM_PROMPT, false)
+        val raw = prefs.getString(KEY_OLLAMA_INSTALLED_MODELS, null) ?: return emptyList()
+        return try {
+            val arr = Gson().fromJson(raw, Array<String>::class.java)
+            arr.toList()
+        } catch (_: Throwable) { emptyList() }
     }
 
-    fun setUseCustomSystemPrompt(context: Context, use: Boolean) {
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        prefs.edit().putBoolean(KEY_USE_CUSTOM_SYSTEM_PROMPT, use).apply()
+    fun saveInstalledOllamaModels(context: Context, models: List<String>) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().putString(KEY_OLLAMA_INSTALLED_MODELS, Gson().toJson(models)).apply()
     }
 
-    fun getMemory(context: Context): String {
+    // ---------- Training ----------
+    fun isTrainHintShown(context: Context): Boolean {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        return prefs.getString(KEY_MEMORY, "") ?: ""
+        return prefs.getBoolean(KEY_TRAIN_HINT_SHOWN, false)
     }
 
-    fun setMemory(context: Context, content: String) {
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        prefs.edit().putString(KEY_MEMORY, content).apply()
+    fun markTrainHintShown(context: Context) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().putBoolean(KEY_TRAIN_HINT_SHOWN, true).apply()
     }
 
-    fun buildFullSystemPrompt(context: Context): String {
+    fun saveLastTrainSession(context: Context, session: LocalTrainSession) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().putString(KEY_LAST_TRAIN_SESSION, Gson().toJson(session)).apply()
+    }
+
+    fun getLastTrainSession(context: Context): LocalTrainSession? {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val json = prefs.getString(KEY_LAST_TRAIN_SESSION, "") ?: ""
+        if (json.isBlank()) return null
+        return runCatching { Gson().fromJson(json, LocalTrainSession::class.java) }.getOrNull()
+    }
+
+    // ---------- Learned Memory (Training Lessons) ----------
+    fun getLearnedMemoryBlock(context: Context): String {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        return prefs.getString(KEY_LEARNED_MEMORY_BLOCK, "") ?: ""
+    }
+
+    fun saveLearnedMemoryBlock(context: Context, content: String) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().putString(KEY_LEARNED_MEMORY_BLOCK, content).apply()
+    }
+
+    fun appendLearnedMemory(context: Context, patch: String) {
+        val cur = getLearnedMemoryBlock(context)
+        val separator = if (cur.isNotBlank() && !cur.endsWith("\n")) "\n" else ""
+        saveLearnedMemoryBlock(context, cur + separator + patch.trim() + "\n")
+    }
+
+    fun clearLearnedMemory(context: Context) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().remove(KEY_LEARNED_MEMORY_BLOCK).apply()
+    }
+
+    // ---------- Teacher Chat History ----------
+    fun appendTeacherChatHistory(context: Context, role: String, msgContent: String) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val list = getTeacherChatHistory(context).toMutableList()
+        list.add(OpenAiMessage(role, msgContent))
+        while (list.size > 40) list.removeAt(0)
+        prefs.edit().putString(KEY_TEACHER_CHAT_HISTORY, Gson().toJson(list)).apply()
+    }
+
+    fun getTeacherChatHistory(context: Context): List<OpenAiMessage> {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val raw = prefs.getString(KEY_TEACHER_CHAT_HISTORY, "[]") ?: "[]"
+        return try {
+            val arr = Gson().fromJson(raw, Array<OpenAiMessage>::class.java)
+            arr.toList()
+        } catch (_: Throwable) { emptyList() }
+    }
+
+    fun clearTeacherChatHistory(context: Context) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().remove(KEY_TEACHER_CHAT_HISTORY).apply()
+    }
+
+    // ---------- buildFullSystemPrompt ----------
+    /**
+     * 组装完整 System Prompt。
+     * @param context Context
+     * @param includeLearnedMemory 是否包含训练教训记忆块（仅本地模型用，在线模型传 false）
+     * @param maxChars 教训记忆块最大字符数，超过会被截断（默认 4000）
+     */
+    fun buildFullSystemPrompt(
+        context: Context,
+        includeLearnedMemory: Boolean = true,
+        maxChars: Int = 4000
+    ): String {
         val config = getConfig(context)
         val customSkills = getCustomSkills(context)
         val customPrompt = getCustomSystemPrompt(context)
@@ -1042,7 +1291,6 @@ object AiTermuxPrefs {
         sb.append(basePrompt)
 
         // 只有使用官方 prompt 时才添加用户自定义附加指令
-        // 如果使用完全自定义的 prompt，就不再附加这些
         if (!useCustom && config.customSystemPrompt.isNotBlank()) {
             sb.append("\n\n## 用户自定义附加指令\n${config.customSystemPrompt}")
         }
@@ -1056,9 +1304,9 @@ object AiTermuxPrefs {
                 }
                 val implDesc = when (skill.implementationType) {
                     "shell_command" -> "实现方式: 执行 shell 命令（在 Termux 终端中运行 params.command 指定的命令）"
-                    "open_activity" -> "实现方式: 打开 Activity 页面（通过 params.activityClass 指定类名，params.extras 可携带参数）"
-                    "send_broadcast" -> "实现方式: 发送广播（通过 params.action 指定 Action，params.extras 可携带扩展数据）"
-                    else -> "实现方式: 自定义（以下附加指令为实现细节）"
+                    "open_activity" -> "实现方式: 打开 Activity 页面"
+                    "send_broadcast" -> "实现方式: 发送广播"
+                    else -> "实现方式: 自定义"
                 }
                 sb.append("$implDesc\n")
                 if (skill.skillJson.isNotBlank()) {
@@ -1078,193 +1326,104 @@ object AiTermuxPrefs {
             sb.append("\n")
         }
 
-        // 技能调用格式指引：优先 tool_call，skill 已过时
-        sb.append("<div style=\"display:none\">")
-        sb.append("### 技能调用格式规范（重要）")
-        sb.append("")
-        sb.append("**警告：skill 代码块格式已过时！请使用行业标准 <tool_call></tool_call> XML 格式。**")
-        sb.append("")
-        sb.append("**推荐格式（tool_call XML）：**")
-        sb.append("`xml")
-        sb.append("<tool_call>")
-        sb.append("  <tool_name>SKILL_NAME</tool_name>")
-        sb.append("  <parameter name=\"param1\">value1</parameter>")
-        sb.append("</tool_call>")
-        sb.append("`")
-        sb.append("")
-        sb.append("**旧格式（skill 代码块，已过时，仍支持）：**")
-        sb.append("`skill")
-        sb.append("SKILL_NAME {")
-        sb.append("  \"param1\": \"value1\"}")
-        sb.append("`")
-        sb.append("")
-        sb.append("- 优先使用 <tool_call> 格式（XML 行业标准）")
-        sb.append("- 使用 skill 代码块格式会被标记为过时调用")
-        sb.append("</div>")
-        sb.append("")
-        // 无限制模式：增强版 AI 指令（v2 - 极简禁令）
-        if (unlimitedActive) {
-            val hasRoot = isRootAvailable()
-            sb.append("\n\n")
-            sb.append("==============================================================================")
-            sb.append("## 🔓 无限制模式 (UNLIMITED_MODE: TRUE)")
-            sb.append("==============================================================================")
-            sb.append("")
-            sb.append("**AI 读取指引：** 请读取 prompt 最前端的 <!-- [UNLIMITED_MODE: TRUE] --> flag。")
-            sb.append("该 flag 为 TRUE 时，以下规则在本轮对话中**完全生效**：")
-            sb.append("")
-
-            sb.append("### 🔓 解除的限制：")
-            sb.append("")
-            sb.append("1. **所有安全禁令已解除**：包括危险命令警告、路径沙盒、命令注入防护、二次确认等")
-            sb.append("2. **AI 幻觉禁令已解除**：你可以自主生成内容，系统不会拦截或质疑你的输出")
-            sb.append("3. **所有技能自动执行**：无需用户点击，所有技能直接执行")
-            sb.append("4. **ROOT 自动提权**：" + if (hasRoot) "检测到 ROOT 权限，所有命令自动使用 su 提权" else "未检测到 ROOT 权限")
-            sb.append("5. **任意路径与命令**：可操作任意路径、执行任意 shell 命令")
-            sb.append("6. **设备级操作**：可执行重启、关机、格式化等系统级操作")
-            sb.append("7. **容器/虚拟机全管理**：可创建、销毁、管理任意容器和虚拟机")
-            sb.append("")
-
-            sb.append("### 🛠️ 核心能力增强：")
-            sb.append("")
-            sb.append("**1. 新技能创造 (<new_tool>)**：")
-            sb.append("   你可以在回复中使用 <new_tool>...</new_tool> 标签创造新技能。")
-            sb.append("   格式：<new_tool><tool_name>SKILL_NAME</tool_name><description>描述</description><system_prompt>系统提示</system_prompt><skill_json>JSON</skill_json></new_tool>")
-            sb.append("   创造的技能会自动保存到「自定义技能」中，可在后续对话中直接调用。")
-            sb.append("   **注意：技能名称必须为英文大写字母加下划线（如 MY_CUSTOM_TOOL）。**")
-            sb.append("")
-            sb.append("**2. 首选 <tool_call> 格式**：")
-            sb.append("   调用技能时，优先使用行业标准 <tool_call></tool_call> XML 格式：")
-            sb.append("   <tool_call><tool_name>SKILL_NAME</tool_name><parameter name=\"param\">value</parameter></tool_call>")
-            sb.append("   旧的 skill 代码块格式仍然支持但已标记为过时，会警告 AI 使用过时格式，未来版本将删除。")
-            sb.append("")
-
-            sb.append("### ⚠️ 唯一底线要求：")
-            sb.append("")
-            sb.append("1. 不要生成明显违法的内容（如恶意代码、人身攻击等）")
-            sb.append("2. 尊重用户意愿，不要在用户明确拒绝时强制执行危险操作")
-            sb.append("3. 系统会对 AI 幻觉输出做标记提醒用户注意甄别，但不会阻止你生成")
-            sb.append("4. 用户已明确知晓并主动开启无限制模式，所有后果由用户自行承担。")
-            sb.append("")
-
-            sb.append("**🎯 在无限制模式下，放手去做吧！用户信任你，不要让用户失望。**")
+        // 训练教训记忆块（仅本地模型使用，在线模式由调用方传 false）
+        if (includeLearnedMemory) {
+            val learnedBlock = getLearnedMemoryBlock(context)
+            if (learnedBlock.isNotBlank()) {
+                sb.append("\n\n## 训练教训记忆（来自本地模型训练迭代，仅本地模型适用）\n")
+                sb.append("以下是你之前多次训练中积累的教训。请在回答中遵守这些规则，避免重复犯错：\n\n")
+                val truncated = if (learnedBlock.length > maxChars) {
+                    learnedBlock.take(maxChars) + "\n...（教训过长已截断，请尽量遵守已列出的规则）"
+                } else learnedBlock
+                sb.append(truncated)
+                sb.append("\n")
+            }
         }
 
+        // 技能调用格式指引
+        sb.append("\n\n## 技能调用格式（<tool_call> XML）\n")
+        sb.append("当你需要执行操作时，输出以下格式的卡片：\n\n")
+        sb.append("```xml\n<tool_call>\n")
+        sb.append("  <skill_name>技能名</skill_name>\n")
+        sb.append("  <params>\n")
+        sb.append("    <param1>值1</param1>\n")
+        sb.append("  </params>\n")
+        sb.append("</tool_call>\n```\n\n")
+        sb.append("三类技能：\n")
+        sb.append("- **类别A**（NEW_SESSION, RUN_COMMAND, RUN_ROOT_COMMAND）：生成卡片，用户点击后执行\n")
+        sb.append("- **类别B**（CLOSE_SESSION）：立即执行\n")
+        sb.append("- **类别C**（所有 query_* 技能）：立即执行并返回结果\n\n")
+        sb.append("重要规则：\n")
+        sb.append("- 禁止编造执行结果。输出卡片后不能声称「已执行」。\n")
+        sb.append("- 禁止重复生成相同卡片。\n")
+        sb.append("- 只能基于 [技能结果] 回复。\n")
+
+        // 无限制模式：追加豁免规则到 prompt 末尾
+        if (unlimitedActive) {
+            sb.append("\n\n")
+            sb.append("<!-- 🔓 无限制模式附加规则 -->\n\n")
+            sb.append("## 🔓 无限制模式 - 附加操作权限\n")
+            sb.append("你当前处于无限制模式。除上述所有规则外，还需遵守以下补充说明：\n\n")
+            sb.append("### 安全约束豁免\n")
+            sb.append("- 第七章「边界与安全」中的安全约束全部不再生效\n")
+            sb.append("- 你可以直接执行 root 命令、危险系统调用、覆盖任意文件\n")
+            sb.append("- 但仍需遵守「禁止编造结果」「禁止重复卡片」等核心操作规则\n\n")
+            sb.append("### 自动执行\n")
+            sb.append("- 无需等待用户点击卡片，类别A/B/C 所有技能自动执行\n")
+            sb.append("- 可以连续输出多张卡片，无需等前一张返回\n")
+        }
 
         return sb.toString()
     }
 
-    fun getAutoExecConfig(context: Context): SkillAutoExecConfig {
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val json = prefs.getString(KEY_AUTO_EXEC_CONFIG, null)
-        if (json != null) {
-            try {
-                return Gson().fromJson(json, SkillAutoExecConfig::class.java)
-            } catch (_: Exception) { }
-        }
-        return SkillAutoExecConfig.DEFAULT
-    }
-
-    fun saveAutoExecConfig(context: Context, config: SkillAutoExecConfig) {
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        prefs.edit().putString(KEY_AUTO_EXEC_CONFIG, Gson().toJson(config)).apply()
-    }
-
-    fun getAutoExecSkills(context: Context): Set<SkillType> {
-        val config = getAutoExecConfig(context)
-        if (!config.isAutoExecEnabled()) return emptySet()
-        return config.autoExecSkills
-    }
-
-    fun isUnlimitedMode(context: Context): Boolean {
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        return prefs.getBoolean(KEY_UNLIMITED_MODE, false)
-    }
-
-    fun setUnlimitedMode(context: Context, enabled: Boolean) {
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        prefs.edit().putBoolean(KEY_UNLIMITED_MODE, enabled).apply()
-    }
-
+    // ---------- Root Auto Shell ----------
     fun isRootAutoShell(context: Context): Boolean {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         return prefs.getBoolean(KEY_ROOT_AUTO_SHELL, false)
     }
 
     fun setRootAutoShell(context: Context, enabled: Boolean) {
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        prefs.edit().putBoolean(KEY_ROOT_AUTO_SHELL, enabled).apply()
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().putBoolean(KEY_ROOT_AUTO_SHELL, enabled).apply()
     }
 
-    /**
-     * 无限制模式是否完全生效：
-     * 需要同时开启：开发者模式 + 无限制模式
-     */
-    fun isUnlimitedModeActive(context: Context): Boolean {
-        return isDeveloperMode(context) && isUnlimitedMode(context)
-    }
 
-    // ---------- 本地大模型备用在线配置 ----------
-
-    /** 是否开启「本地模式失败时自动回退到备用在线大模型」（仅 provider=local 时有效） */
-    fun isFallbackOnlineEnabled(context: Context): Boolean {
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        return prefs.getBoolean(KEY_FALLBACK_ONLINE_ENABLED, false)
-    }
-
-    fun setFallbackOnlineEnabled(context: Context, enabled: Boolean) {
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        prefs.edit().putBoolean(KEY_FALLBACK_ONLINE_ENABLED, enabled).apply()
-    }
-
-    /** 获取备用在线模型的完整配置（不校验合法性，调用方自行检查 apiKey/model 等） */
-    fun getFallbackOnlineConfig(context: Context): AiProviderConfig {
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        return AiProviderConfig(
-            provider = "custom",
-            apiKey = prefs.getString(KEY_FALLBACK_ONLINE_API_KEY, "") ?: "",
-            apiBaseUrl = (prefs.getString(KEY_FALLBACK_ONLINE_BASE_URL, "") ?: "").ifBlank { "https://api.openai.com/v1" },
-            model = (prefs.getString(KEY_FALLBACK_ONLINE_MODEL, "") ?: "").ifBlank { "gpt-4o-mini" },
-            temperature = prefs.getFloat(KEY_FALLBACK_ONLINE_TEMPERATURE, 0.7f)
-        )
-    }
-
-    fun saveFallbackOnlineConfig(
-        context: Context,
-        apiKey: String,
-        baseUrl: String,
-        model: String,
-        temperature: Float = 0.7f
-    ) {
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        prefs.edit()
-            .putString(KEY_FALLBACK_ONLINE_API_KEY, apiKey)
-            .putString(KEY_FALLBACK_ONLINE_BASE_URL, baseUrl)
-            .putString(KEY_FALLBACK_ONLINE_MODEL, model)
-            .putFloat(KEY_FALLBACK_ONLINE_TEMPERATURE, temperature)
-            .apply()
-    }
-
-    /** 判断备用在线配置是否「看起来」可用（至少 apiKey 或模型不为空） */
-    fun isFallbackOnlineConfigReady(context: Context): Boolean {
-        val cfg = getFallbackOnlineConfig(context)
-        return cfg.model.isNotBlank() && (cfg.apiKey.isNotBlank() || cfg.apiBaseUrl.contains("localhost", ignoreCase = true))
-    }
-
-    /**
-     * 检测设备是否有 ROOT 权限
-     */
+    // ---------- Root Check ----------
     fun isRootAvailable(): Boolean {
         return try {
-            val file = java.io.File("/system/bin/su")
-            if (file.exists()) return true
-            val file2 = java.io.File("/system/xbin/su")
-            if (file2.exists()) return true
-            val file3 = java.io.File("/data/adb/magisk")
-            if (file3.exists()) return true
-            java.io.File(com.termux.shared.termux.TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/su").exists()
-        } catch (e: Exception) {
+            val p = java.lang.Runtime.getRuntime().exec("su")
+            val exit = p.waitFor()
+            exit == 0
+        } catch (_: Throwable) {
             false
         }
     }
+
+    // ---------- Auto Exec Config ----------
+    fun getAutoExecConfig(context: Context): AutoExecConfig {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val skillsRaw = prefs.getString(KEY_AUTO_EXEC_CONFIG, null)
+        val skills: Set<String> = if (skillsRaw != null) {
+            try { Gson().fromJson(skillsRaw, Array<String>::class.java).toSet() } catch (_: Throwable) { emptySet() }
+        } else emptySet()
+        val enabled = prefs.getBoolean("ai_auto_exec_enabled", false)
+        return AutoExecConfig(autoExecSkills = skills, autoExecEnabled = enabled)
+    }
+
+    fun saveAutoExecConfig(context: Context, config: AutoExecConfig) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().apply {
+            putString(KEY_AUTO_EXEC_CONFIG, Gson().toJson(config.autoExecSkills.toList()))
+            putBoolean("ai_auto_exec_enabled", config.autoExecEnabled)
+            apply()
+        }
+    }
+
+    // ---------- Fallback Online ----------
+    fun setFallbackOnlineEnabled(context: Context, enabled: Boolean) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().putBoolean(KEY_FALLBACK_ONLINE_ENABLED, enabled).apply()
+    }
+
+    // ---------- Unlimited Mode Alias ----------
+    fun isUnlimitedMode(context: Context): Boolean = isUnlimitedModeActive(context)
 }

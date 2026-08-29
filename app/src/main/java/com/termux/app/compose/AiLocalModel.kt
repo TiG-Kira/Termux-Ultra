@@ -62,6 +62,7 @@ object AiLocalModel {
     private var appContext: android.content.Context? = null
 
     /** 初始化应用context（在 ViewModel 或 Activity 中调用一次） */
+    @JvmStatic
     fun init(context: Context) {
         appContext = context.applicationContext
     }
@@ -107,8 +108,19 @@ object AiLocalModel {
         context()?.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             ?.getString(KEY_SELECTED_MODEL_ID, null) ?: ""
 
-    fun getSelectedModel(): LocalModelEntry? =
-        LOCAL_MODELS.firstOrNull { it.id == getSelectedModelId() }
+    fun getSelectedModel(): LocalModelEntry? {
+        val id = getSelectedModelId()
+        if (id.isNotEmpty()) {
+            LOCAL_MODELS.firstOrNull { it.id == id }?.let { return it }
+        }
+        // Fallback: 如果 prefs 里没存 selected_model_id，找第一个已安装的模型
+        // （用户可能直接清空了 prefs 或跨版本升级丢失了 key）
+        return LOCAL_MODELS.firstOrNull { isModelInstalled(it) }?.also {
+            // 找到后写回 prefs，下次就有了
+            setSelectedModelId(it.id)
+            android.util.Log.w("AiLocalModel", "getSelectedModel: prefs 为空，fallback 到已安装模型 ${it.id}")
+        }
+    }
 
     fun setSelectedModelId(id: String) {
         context()?.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -264,7 +276,12 @@ object AiLocalModel {
 
         if (existing != null && existing.modelId == entry.id && existing.port == llamaServerPort) {
             if (pingServerPort(existing.port)) {
-                return@withContext true
+                // 端口打开后，验证模型是否真正就绪
+                if (verifyModelReady()) {
+                    return@withContext true
+                }
+                // 模型未就绪，继续等待
+                android.util.Log.i("AiLocalModel", "Server port open but model not ready, waiting...")
             }
             clearServerMeta()
         }
@@ -284,7 +301,8 @@ object AiLocalModel {
         val logQ = "'" + logFile.absolutePath.replace("'", "'\\''") + "'"
         val pidQ = "'" + pidFile.absolutePath.replace("'", "'\\''") + "'"
 
-        val serverArgs = "$binQ --host 127.0.0.1 --port $llamaServerPort -m $modelQ -c ${entry.maxContext} -t 4 --no-mmap"
+        // 添加 --cont-batching 和 --metrics 参数以提高稳定性
+        val serverArgs = "$binQ --host 127.0.0.1 --port $llamaServerPort -m $modelQ -c ${entry.maxContext} -t 4 --cont-batching"
         val shellCmd = "nohup $serverArgs >> $logQ 2>&1 & echo \$! > $pidQ"
 
         try {
@@ -328,10 +346,19 @@ object AiLocalModel {
                 writeServerMeta(ServerMeta(entry.id, llamaServerPort, pid, System.currentTimeMillis()))
             }
 
-            // 等待端口就绪（最多 60 秒，模型加载较慢）
-            val deadline = System.currentTimeMillis() + 60_000L
+            // 等待端口就绪 + 模型加载完成（最多 120 秒）
+            val deadline = System.currentTimeMillis() + 120_000L
+            var portReady = false
             while (System.currentTimeMillis() < deadline) {
-                if (pingServerPort(llamaServerPort)) return@withContext true
+                if (!portReady && pingServerPort(llamaServerPort)) {
+                    portReady = true
+                    android.util.Log.i("AiLocalModel", "llama-server port opened, waiting for model load...")
+                }
+                // 端口就绪后，验证模型是否真正加载完成
+                if (portReady && verifyModelReady()) {
+                    android.util.Log.i("AiLocalModel", "llama-server ready with model loaded")
+                    return@withContext true
+                }
                 Thread.sleep(1000)
             }
             android.util.Log.w("AiLocalModel", "llama-server 启动超时, log=" + (runCatching { logFile.readText().take(1500) }.getOrNull() ?: "(empty)"))
@@ -342,6 +369,21 @@ object AiLocalModel {
             clearServerMeta()
             return@withContext false
         }
+    }
+
+    /** 验证模型是否已加载就绪（发送测试请求） */
+    private fun verifyModelReady(): Boolean {
+        return runCatching {
+            val url = java.net.URL("http://127.0.0.1:$llamaServerPort/v1/models")
+            val conn = (url.openConnection() as java.net.HttpURLConnection).apply {
+                requestMethod = "GET"
+                connectTimeout = 2000
+                readTimeout = 2000
+            }
+            val code = conn.responseCode
+            conn.disconnect()
+            code == 200
+        }.getOrDefault(false)
     }
 
     private fun chatStreamLocalViaServer(
@@ -410,7 +452,16 @@ object AiLocalModel {
             emit(StreamChunk.Done(fullText = fullText.toString()))
         } catch (e: Exception) {
             android.util.Log.e("AiLocalModel", "server 流式推理失败", e)
-            emit(StreamChunk.Error("本地推理服务失败: ${e.message ?: e.javaClass.simpleName}"))
+            val errorDetail = buildString {
+                append("本地推理服务失败")
+                append(": ${e.message ?: e.javaClass.simpleName}")
+                when {
+                    e is java.net.ConnectException -> append("\n服务未启动或端口错误")
+                    e is java.net.SocketTimeoutException -> append("\n请求超时，模型可能加载中")
+                    e is java.io.IOException -> append("\n网络IO错误: ${e.message}")
+                }
+            }
+            emit(StreamChunk.Error(errorDetail))
         } finally {
             runCatching { conn?.disconnect() }
         }
@@ -936,11 +987,12 @@ object AiLocalModel {
         args.addAll(listOf("--temp", temperature.toString()))
         args.addAll(listOf("-s", "1"))
         args.addAll(listOf("-f", promptFile.absolutePath))
-        args.add("--no-prompt")
+        // args.add("--no-prompt")  // Removed to allow proper ChatML output
         args.add("--no-color")
-        args.add("--silent-prompt")
+        // args.add("--silent-prompt")  // Removed: may suppress model output
         args.add("--log-disable")
         args.addAll(listOf("-t", "4"))
+        android.util.Log.i("AiLocalModel", "buildProcess: args=" + args.joinToString(" "))
         return ProcessBuilder(args)
     }
 
@@ -989,6 +1041,159 @@ object AiLocalModel {
     /** stdout 解析状态（供 llama-cli fallback 路径过滤 banner/prompt echo） */
     private enum class ParseState { BANNER, PROMPT_ECHO, RESPONSE, DONE }
 
+    /** 估算文本的 token 数量（仅用于日志参考，不用于截断判断） */
+    private fun estimateTokens(text: String): Int {
+        var chineseChars = 0
+        var otherChars = 0
+        for (c in text) {
+            if (c.code in 0x4E00..0x9FFF || c.code in 0x3400..0x4DBF) {
+                chineseChars++
+            } else {
+                otherChars++
+            }
+        }
+        return chineseChars + otherChars / 4
+    }
+
+    /** 裁剪单条消息内容到最大字符数 */
+    private fun trimMessageContent(msg: OpenAiMessage, maxChars: Int): OpenAiMessage {
+        if (msg.content.length <= maxChars) return msg
+        val trimmed = msg.content.take(maxChars) + "…"
+        android.util.Log.w("AiLocalModel", "trimMessageContent: 裁剪单条 ${msg.role} 消息 ${msg.content.length} -> ${trimmed.length} chars")
+        return msg.copy(content = trimmed)
+    }
+
+    /** 截断消息以适应上下文限制 - 强制保守截断（不依赖估算判断）
+     *  因为实际模型分词方式差异很大，估算偏差会导致判断「未超限」实际却超限。
+     *  策略：无论估算结果如何，都强制裁剪到保守的字符数。
+     */
+    private fun truncateMessages(messages: List<OpenAiMessage>, maxContext: Int): List<OpenAiMessage> {
+        android.util.Log.d("AiLocalModel", "truncateMessages: 入口 messages.size=${messages.size}, maxContext=$maxContext")
+
+        if (messages.isEmpty()) return messages
+
+        // 0. system prompt 预处理：暂不拆分（多条连续 system 可能破坏某些 chat template）
+        // 保留单条 system 消息，靠下方动态预算保证不截断
+        val processedMessages = messages
+        val sysCount = processedMessages.count { it.role == "system" }
+        android.util.Log.i("AiLocalModel", "truncateMessages: system 消息数=$sysCount, 总字符=${processedMessages.sumOf { it.content.length }}")
+
+        // 根据 maxContext 动态计算字符预算：中文约 1.5~2 字符/token
+        // 留 25% 给输出，输入可用 ~75%
+        val inputTokens = (maxContext * 0.75).toInt()
+        val TOTAL_MAX_CHARS = (inputTokens * 2).coerceAtLeast(2000)  // 至少 2000 字符
+        val SYSTEM_BUDGET_RATIO = 0.75  // 75% 给 system 消息组（放宽以容纳完整 System Prompt + 训练教训）
+        val MSG_MAX_CHARS = 800
+        val MAX_NON_SYSTEM_MESSAGES = 6  // 最多 3 轮对话
+
+        val SYSTEM_MAX_CHARS_PER_MSG = (TOTAL_MAX_CHARS * SYSTEM_BUDGET_RATIO).toInt()
+
+        // 1. 提取所有前导的 system 消息（支持多条 system prompt 分段）
+        val systemMessages = mutableListOf<OpenAiMessage>()
+        var nonSystemStart = 0
+        for ((idx, msg) in processedMessages.withIndex()) {
+            if (msg.role == "system") {
+                systemMessages.add(msg)
+                nonSystemStart = idx + 1
+            } else {
+                break
+            }
+        }
+
+        // 2. 裁剪所有 system 消息，保持多条但每条不超预算
+        val trimmedSystems = if (systemMessages.isNotEmpty()) {
+            systemMessages.map { trimMessageContent(it, SYSTEM_MAX_CHARS_PER_MSG) }
+        } else emptyList()
+
+        // 3. 非系统消息只取最后 MAX_NON_SYSTEM_MESSAGES 条
+        val nonSystemMessages = processedMessages.drop(nonSystemStart)
+        val recentMessages = nonSystemMessages.takeLast(MAX_NON_SYSTEM_MESSAGES)
+
+        android.util.Log.d("AiLocalModel", "truncateMessages: system=${systemMessages.size}, 非系统 ${nonSystemMessages.size} -> ${recentMessages.size} 条")
+
+        // 4. 对每条非 system 消息做单条裁剪
+        val trimmedRecent = recentMessages.map { msg -> trimMessageContent(msg, MSG_MAX_CHARS) }
+
+        // 5. 重建有序列表，总字符不超过 TOTAL_MAX_CHARS
+        val orderedResult = mutableListOf<OpenAiMessage>()
+        var charBudget = TOTAL_MAX_CHARS
+
+        // 先放所有 system 消息
+        for (sysMsg in trimmedSystems) {
+            if (sysMsg.content.length <= charBudget) {
+                orderedResult.add(sysMsg)
+                charBudget -= sysMsg.content.length
+            } else {
+                // 如果第一条 system 就超了，裁剪到预算内
+                orderedResult.add(trimMessageContent(sysMsg, charBudget))
+                charBudget = 0
+                break
+            }
+        }
+
+        // 再放非 system 消息
+        if (charBudget > 0) {
+            for (msg in trimmedRecent) {
+                if (charBudget - msg.content.length < 0) {
+                    if (charBudget >= 50) {
+                        orderedResult.add(trimMessageContent(msg, charBudget))
+                    }
+                    break
+                }
+                orderedResult.add(msg)
+                charBudget -= msg.content.length
+            }
+        }
+
+        val finalChars = orderedResult.sumOf { it.content.length }
+        val estTokens = orderedResult.sumOf { estimateTokens(it.content) + 10 }
+        android.util.Log.i("AiLocalModel", "truncateMessages: 完成 ${messages.size} -> ${orderedResult.size} 条 (system=${trimmedSystems.size}+nonSystem=${orderedResult.size-trimmedSystems.size}), chars=$finalChars/$TOTAL_MAX_CHARS, 估算tokens=$estTokens")
+
+        return orderedResult
+    }
+
+    /**
+     * 将超长 system prompt 按 ## 标题拆分成多条，使模型能记住更多指令。
+     * 按 section 拆分，每段保持完整语义，单段不超过 1000 字符。
+     */
+    private fun splitLongSystemIntoMultiple(systemPrompt: String): List<String> {
+        if (systemPrompt.length <= 1500) return listOf(systemPrompt)
+
+        val sections = mutableListOf<String>()
+        val current = StringBuilder()
+        val MAX_PER_SEGMENT = 1000
+
+        // 按 ## 或 ### 标题分割
+        val parts = systemPrompt.split(Regex("(?=^#{1,3}\\s)", RegexOption.MULTILINE))
+
+        for (part in parts) {
+            val trimmedPart = part.trim()
+            if (trimmedPart.isEmpty()) continue
+
+            if (current.length + trimmedPart.length + 2 > MAX_PER_SEGMENT && current.isNotEmpty()) {
+                sections.add(current.toString().trim())
+                current.clear()
+            }
+            if (current.isNotEmpty()) current.append("\n\n")
+            current.append(trimmedPart)
+        }
+        if (current.isNotEmpty()) sections.add(current.toString().trim())
+
+        // 如果还有单段超过 MAX_PER_SEGMENT，再按换行拆分
+        val final = mutableListOf<String>()
+        for (seg in sections) {
+            if (seg.length > MAX_PER_SEGMENT) {
+                val subParts = seg.chunked(MAX_PER_SEGMENT)
+                final.addAll(subParts)
+            } else {
+                final.add(seg)
+            }
+        }
+
+        android.util.Log.i("AiLocalModel", "splitLongSystemIntoMultiple: ${systemPrompt.length} chars -> ${final.size} segments")
+        return final
+    }
+
 
     /** 覆盖流式推理，逐片段 emit */
     /** 覆盖流式推理：优先 llama-server（避免重复加载），失败 fallback 到 llama-cli */
@@ -997,12 +1202,30 @@ object AiLocalModel {
         messages: List<OpenAiMessage>,
         isCancelled: () -> Boolean
     ): Flow<StreamChunk> = flow {
+        android.util.Log.i("AiLocalModel", "=== chatStreamLocal 入口 ===")
+        android.util.Log.i("AiLocalModel", "chatStreamLocal: 输入 messages.size=${messages.size}, 总字符=${messages.sumOf { it.content.length }}")
+        
         val notReady = requireReady()
         if (notReady != null) {
             emit(StreamChunk.Error(notReady))
             return@flow
         }
         val entry = getSelectedModel()!!
+        android.util.Log.i("AiLocalModel", "chatStreamLocal: 模型=${entry.displayName}, entry.maxContext=${entry.maxContext}")
+        
+        
+        // 截断消息以适应上下文限制（必须在最前面）
+        val truncatedMessages = truncateMessages(messages, entry.maxContext)
+        android.util.Log.i("AiLocalModel", "chatStreamLocal: 截断后 messages.size=${truncatedMessages.size}, 总字符=${truncatedMessages.sumOf { it.content.length }}")
+        // 详细打印每条消息结构，用于排查 system prompt 是否被正确传递
+        truncatedMessages.forEachIndexed { idx, m ->
+            val preview = m.content.take(100).replace("\n", " ")
+            android.util.Log.i("AiLocalModel", "  [msg $idx] role=${m.role}, len=${m.content.length}, preview=$preview...")
+        }
+            
+        if (truncatedMessages.size < messages.size) {
+            emit(StreamChunk.Prepare("历史消息过长，已自动精简", "仅保留最近对话"))
+        }
 
         val serverBin = findLlamaServerBinary()
         if (serverBin != null) {
@@ -1012,7 +1235,8 @@ object AiLocalModel {
                 emit(StreamChunk.Prepare("模型已就绪，正在推理…", "通过本地 HTTP 接口调用"))
                 var serverSucceeded = false
                 try {
-                    chatStreamLocalViaServer(entry, messages, config, isCancelled).collect { chunk ->
+                    android.util.Log.i("AiLocalModel", "chatStreamLocal: 调用 chatStreamLocalViaServer, 截断后 size=${truncatedMessages.size}")
+                    chatStreamLocalViaServer(entry, truncatedMessages, config, isCancelled).collect { chunk ->
                         when (chunk) {
                             is StreamChunk.Content -> {
                                 serverSucceeded = true
@@ -1044,7 +1268,9 @@ object AiLocalModel {
             }
         }
 
-        val promptText = buildChatPrompt(messages)
+        android.util.Log.i("AiLocalModel", "chatStreamLocal: fallback 到 llama-cli, 使用截断后 messages.size=${truncatedMessages.size}")
+        val promptText = buildChatPrompt(truncatedMessages)
+        android.util.Log.i("AiLocalModel", "chatStreamLocal: buildChatPrompt 后 prompt 长度=${promptText.length} chars")
         val promptFile = writePromptFile(promptText)
             ?: run { emit(StreamChunk.Error("无法写入提示词临时文件")); return@flow }
 
@@ -1062,6 +1288,10 @@ object AiLocalModel {
                 try {
                     proc?.errorStream?.bufferedReader(Charsets.UTF_8)?.forEachLine { line ->
                         stderrLines.add(line)
+                        // Log stderr for debugging
+                        if (stderrLines.size <= 20) {
+                            android.util.Log.d("AiLocalModel", "stderr: $line")
+                        }
                     }
                 } catch (_: Exception) {}
             }, "llama-stderr").apply { isDaemon = true; start() }
@@ -1071,6 +1301,7 @@ object AiLocalModel {
 
             var state = ParseState.BANNER
             var nonMatchingLines = 0
+            var isFirstContent = true
 
             val assistantMarker = "<|im_start|>assistant"
             val endMarker = "<|im_end|>"
@@ -1099,6 +1330,7 @@ object AiLocalModel {
                                     fullText.append(content).append('\n')
                                     emit(StreamChunk.Content(content + "\n"))
                                     state = ParseState.RESPONSE
+                                    isFirstContent = false
                                 }
                                 continue
                             }
@@ -1110,11 +1342,12 @@ object AiLocalModel {
                                 nonMatchingLines = 0
                             } else if (trimmed.isNotBlank()) {
                                 nonMatchingLines++
-                                if (nonMatchingLines >= 5) {
-                                    android.util.Log.w("AiLocalModel", "No ChatML markers detected, falling back to plain text capture")
+                                if (isFirstContent || nonMatchingLines >= 3) {
+                                    android.util.Log.w("AiLocalModel", "No ChatML markers detected, falling back to plain text capture (lines=$nonMatchingLines)")
                                     state = ParseState.RESPONSE
                                     fullText.append(trimmed).append('\n')
                                     emit(StreamChunk.Content(trimmed + "\n"))
+                                    isFirstContent = false
                                     nonMatchingLines = 0
                                     continue
                                 }
@@ -1132,16 +1365,18 @@ object AiLocalModel {
                                 fullText.append(content).append('\n')
                                 emit(StreamChunk.Content(content + "\n"))
                                 state = ParseState.RESPONSE
+                                isFirstContent = false
                             }
                             nonMatchingLines = 0
                             continue
                         }
                         nonMatchingLines++
-                        if (nonMatchingLines >= 10) {
+                        if (nonMatchingLines >= 5) {
                             android.util.Log.w("AiLocalModel", "Stuck in PROMPT_ECHO too long, falling back to plain text")
                             state = ParseState.RESPONSE
                             fullText.append(trimmed).append('\n')
                             emit(StreamChunk.Content(trimmed + "\n"))
+                            isFirstContent = false
                             nonMatchingLines = 0
                             continue
                         }
@@ -1180,10 +1415,31 @@ object AiLocalModel {
 
             val output = fullText.toString().trimEnd('\n').trim()
             android.util.Log.d("AiLocalModel", "CLI output length=${output.length}, first200=${output.take(200)}")
+            
+            // Validate output
+            if (output.isEmpty()) {
+                android.util.Log.e("AiLocalModel", "CLI returned empty output. Checking stderr...")
+                val stderrText = stderrLines.joinToString("\n")
+                if (stderrText.isNotEmpty()) {
+                    android.util.Log.e("AiLocalModel", "Stderr: $stderrText")
+                }
+                emit(StreamChunk.Error("本地模型未返回任何内容。可能原因：\n1. 模型文件格式不兼容\n2. 模型加载失败\n3. llama.cpp版本不匹配\n\n建议：检查日志获取详细错误信息"))
+                return@flow
+            }
+            
             emit(StreamChunk.Done(fullText = output))
         } catch (e: Exception) {
             android.util.Log.e("AiLocalModel", "Local inference (cli) failed", e)
-            emit(StreamChunk.Error("本地模型推理失败：${e.message ?: e.javaClass.simpleName}"))
+            val errorDetail = buildString {
+                append("本地模型推理失败")
+                append("：${e.message ?: e.javaClass.simpleName}")
+                when {
+                    e is java.io.IOException -> append("\n进程启动失败或IO错误")
+                    e is java.util.concurrent.TimeoutException -> append("\n推理超时")
+                    e.message?.contains("No such file") == true -> append("\nllama-cli未找到，请检查安装")
+                }
+            }
+            emit(StreamChunk.Error(errorDetail))
         } finally {
             try { proc?.destroy() } catch (_: Exception) {}
             try { promptFile.delete() } catch (_: Exception) {}
@@ -1195,6 +1451,7 @@ object AiLocalModel {
         config: AiProviderConfig,
         messages: List<OpenAiMessage>
     ): ChatCompletionResponse = withContext(Dispatchers.IO) {
+        android.util.Log.i("AiLocalModel", "completeLocal: 入口 messages.size=${messages.size}, 总字符=${messages.sumOf { it.content.length }}")
         val notReady = requireReady()
         if (notReady != null) {
             return@withContext ChatCompletionResponse(
@@ -1202,7 +1459,14 @@ object AiLocalModel {
             )
         }
         val entry = getSelectedModel()!!
-        val promptFile = writePromptFile(buildChatPrompt(messages))
+        // 截断消息以适应上下文限制（同流式路径一致）
+        val truncatedMessages = truncateMessages(messages, entry.maxContext)
+        android.util.Log.i("AiLocalModel", "completeLocal: 截断后 size=${truncatedMessages.size}, 总字符=${truncatedMessages.sumOf { it.content.length }}")
+        truncatedMessages.forEachIndexed { idx, m ->
+            val preview = m.content.take(100).replace("\n", " ")
+            android.util.Log.i("AiLocalModel", "  [msg $idx] role=${m.role}, len=${m.content.length}, preview=$preview...")
+        }
+        val promptFile = writePromptFile(buildChatPrompt(truncatedMessages))
             ?: return@withContext ChatCompletionResponse(
                 error = ChatCompletionResponse.ApiError("无法写入提示词临时文件")
             )
@@ -1214,7 +1478,7 @@ object AiLocalModel {
             proc.errorStream.bufferedReader().use { it.readText() }
             val text = proc.inputStream.bufferedReader().use { it.readText() }
             proc.waitFor()
-            val output = text.trim('\n')
+            val output = extractAssistantResponse(text.trim('\n'))
             if (output.isBlank()) {
                 ChatCompletionResponse(error = ChatCompletionResponse.ApiError("本地模型返回为空"))
             } else {
@@ -1232,6 +1496,238 @@ object AiLocalModel {
             )
         } finally {
             promptFile.delete()
+        }
+    }
+
+    /**
+     * 非流式本地调用（与聊天页 chatStreamLocal 同样的 llama-server 优先路径）。
+     * 仅供训练页使用：不走 AiApiClient.chat → AiTermuxEngine.chat 的备用在线兜底逻辑，
+     * 避免本地模型失败时被在线模型替代（否则就是"自己训练自己"）。
+     * 失败/返回空时直接返回 error，由调用方决定暂停训练。
+     */
+    suspend fun completeLocalViaServer(
+        config: AiProviderConfig,
+        messages: List<OpenAiMessage>
+    ): ChatCompletionResponse = withContext(Dispatchers.IO) {
+        android.util.Log.i("AiLocalModel", "completeLocalViaServer: 入口 messages.size=${messages.size}, 总字符=${messages.sumOf { it.content.length }}")
+        val notReady = requireReady()
+        if (notReady != null) {
+            return@withContext ChatCompletionResponse(
+                error = ChatCompletionResponse.ApiError(notReady)
+            )
+        }
+        val entry = getSelectedModel()!!
+        val truncatedMessages = truncateMessages(messages, entry.maxContext)
+        android.util.Log.i("AiLocalModel", "completeLocalViaServer: 截断后 size=${truncatedMessages.size}, 总字符=${truncatedMessages.sumOf { it.content.length }}")
+
+        // 优先 llama-server（与聊天页 chatStreamLocal 保持一致）
+        val serverBin = findLlamaServerBinary()
+        if (serverBin != null) {
+            val serverReady = ensureServerStarted(entry)
+            if (serverReady && pingServerPort(llamaServerPort)) {
+                android.util.Log.i("AiLocalModel", "completeLocalViaServer: 通过 llama-server 非流式调用")
+                val result = completeViaServerHttp(entry, truncatedMessages, config)
+                if (result.error == null) {
+                    val content = result.choices?.firstOrNull()?.message?.content?.trim().orEmpty()
+                    if (content.isNotBlank()) {
+                        return@withContext result
+                    }
+                    return@withContext ChatCompletionResponse(
+                        error = ChatCompletionResponse.ApiError("本地模型返回为空")
+                    )
+                }
+                android.util.Log.w("AiLocalModel", "completeLocalViaServer: server 调用失败: ${result.error?.message}, fallback to cli")
+            } else {
+                android.util.Log.w("AiLocalModel", "completeLocalViaServer: llama-server 启动失败, fallback to cli")
+            }
+        }
+
+        // Fallback: llama-cli 直接子进程（与 completeLocal 一致）
+        val promptFile = writePromptFile(buildChatPrompt(truncatedMessages))
+            ?: return@withContext ChatCompletionResponse(
+                error = ChatCompletionResponse.ApiError("无法写入提示词临时文件")
+            )
+        try {
+            val pb = buildProcess(entry, promptFile, config.temperature)
+            applyTermuxEnv(pb)
+            pb.redirectErrorStream(false)
+            val proc = pb.start()
+            proc.errorStream.bufferedReader().use { it.readText() }
+            val text = proc.inputStream.bufferedReader().use { it.readText() }
+            proc.waitFor()
+            val output = extractAssistantResponse(text.trim('\n'))
+            if (output.isBlank()) {
+                ChatCompletionResponse(error = ChatCompletionResponse.ApiError("本地模型返回为空"))
+            } else {
+                ChatCompletionResponse(
+                    choices = listOf(
+                        ChatCompletionResponse.Choice(
+                            message = OpenAiMessage("assistant", output)
+                        )
+                    )
+                )
+            }
+        } catch (e: Exception) {
+            ChatCompletionResponse(
+                error = ChatCompletionResponse.ApiError("本地模型推理失败：${e.message}")
+            )
+        } finally {
+            promptFile.delete()
+        }
+    }
+
+    /** 通过 llama-server HTTP 接口进行非流式推理（stream=false） */
+    private fun completeViaServerHttp(
+        entry: LocalModelEntry,
+        messages: List<OpenAiMessage>,
+        config: AiProviderConfig
+    ): ChatCompletionResponse {
+        var conn: java.net.HttpURLConnection? = null
+        return try {
+            val url = java.net.URL("http://127.0.0.1:$llamaServerPort/v1/chat/completions")
+            val reqBody = linkedMapOf(
+                "model" to entry.id,
+                "messages" to messages.map { m -> linkedMapOf("role" to m.role, "content" to m.content) },
+                "stream" to false,
+                "temperature" to config.temperature,
+                "max_tokens" to entry.maxTokens
+            )
+            val gson = com.google.gson.Gson()
+            val bodyJson = gson.toJson(reqBody)
+            val bodyBytes = bodyJson.toByteArray(Charsets.UTF_8)
+            android.util.Log.i("AiLocalModel", "completeViaServerHttp 请求体: $bodyJson")
+
+            conn = (url.openConnection() as java.net.HttpURLConnection).apply {
+                requestMethod = "POST"
+                connectTimeout = 10_000
+                readTimeout = 600_000
+                setRequestProperty("Content-Type", "application/json")
+                setRequestProperty("Content-Length", bodyBytes.size.toString())
+                doOutput = true
+                doInput = true
+            }
+            conn.outputStream.use { it.write(bodyBytes) }
+            val code = conn.responseCode
+            android.util.Log.i("AiLocalModel", "completeViaServerHttp HTTP 响应码: $code")
+            if (code != 200) {
+                val err = runCatching { conn.errorStream?.bufferedReader()?.readText() }.getOrNull() ?: "HTTP $code"
+                android.util.Log.e("AiLocalModel", "completeViaServerHttp HTTP 错误: $err")
+                return ChatCompletionResponse(error = ChatCompletionResponse.ApiError("本地推理服务异常: $err"))
+            }
+            val respText = conn.inputStream.bufferedReader().use { it.readText() }
+            android.util.Log.i("AiLocalModel", "completeViaServerHttp 响应长度=${respText.length}")
+            android.util.Log.i("AiLocalModel", "completeViaServerHttp 响应前800=${respText.take(800)}")
+
+            // 用 JsonParser 显式解析，避免 GSON raw LinkedHashMap 的类型推断问题
+            val rootObj = runCatching {
+                com.google.gson.JsonParser.parseString(respText).asJsonObject
+            }.getOrElse { e ->
+                android.util.Log.e("AiLocalModel", "completeViaServerHttp JSON 解析失败: ${e.message}, resp=${respText.take(500)}")
+                return ChatCompletionResponse(error = ChatCompletionResponse.ApiError("本地推理服务返回非 JSON: ${respText.take(200)}"))
+            }
+
+            // 检查是否有 error 字段
+            if (rootObj.has("error")) {
+                val errObj = rootObj.getAsJsonObject("error")
+                val errMsg = errObj?.get("message")?.asString ?: rootObj.get("error")?.toString() ?: "unknown error"
+                android.util.Log.e("AiLocalModel", "completeViaServerHttp 服务器返回 error: $errMsg")
+                return ChatCompletionResponse(error = ChatCompletionResponse.ApiError("本地推理服务返回错误: $errMsg"))
+            }
+
+            // 解析 choices 数组
+            if (!rootObj.has("choices")) {
+                android.util.Log.e("AiLocalModel", "completeViaServerHttp 响应无 choices 字段: ${respText.take(500)}")
+                return ChatCompletionResponse(error = ChatCompletionResponse.ApiError("本地推理服务返回无 choices 字段"))
+            }
+            val choicesArr = rootObj.getAsJsonArray("choices")
+            if (choicesArr == null || choicesArr.size() == 0) {
+                android.util.Log.e("AiLocalModel", "completeViaServerHttp choices 数组为空")
+                return ChatCompletionResponse(error = ChatCompletionResponse.ApiError("本地模型返回为空（choices 为空）"))
+            }
+
+            val firstChoice = choicesArr[0].asJsonObject
+            android.util.Log.d("AiLocalModel", "completeViaServerHttp firstChoice=${firstChoice}")
+
+            // 优先取 message.content（chat completions 格式）
+            var content = ""
+            if (firstChoice.has("message") && !firstChoice.get("message").isJsonNull) {
+                val msgObj = firstChoice.getAsJsonObject("message")
+                if (msgObj != null) {
+                    val contentElement = msgObj.get("content")
+                    android.util.Log.d("AiLocalModel", "completeViaServerHttp contentElement=${contentElement}, isNull=${contentElement?.isJsonNull}")
+                    if (contentElement != null && !contentElement.isJsonNull) {
+                        content = contentElement.asString.trim()
+                    }
+                }
+            }
+
+            // 兜底：取 text 字段（completions 格式）
+            if (content.isBlank() && firstChoice.has("text")) {
+                val textElement = firstChoice.get("text")
+                if (textElement != null && !textElement.isJsonNull) {
+                    content = textElement.asString.trim()
+                    android.util.Log.d("AiLocalModel", "completeViaServerHttp 从 text 字段获取 content: ${content.take(100)}")
+                }
+            }
+
+            // 检查 finish_reason
+            val finishReason = if (firstChoice.has("finish_reason")) firstChoice.get("finish_reason")?.asString else null
+            android.util.Log.i("AiLocalModel", "completeViaServerHttp content长度=${content.length}, finish_reason=$finishReason")
+
+            if (content.isBlank()) {
+                android.util.Log.e("AiLocalModel", "completeViaServerHttp 最终 content 为空! resp=${respText.take(500)}")
+                val reason = when (finishReason) {
+                    "length" -> "输出被 max_tokens 截断"
+                    "stop" -> "模型直接输出了结束符（未生成内容）"
+                    "content_filter" -> "内容被过滤"
+                    else -> "未知原因（finish_reason=$finishReason）"
+                }
+                ChatCompletionResponse(error = ChatCompletionResponse.ApiError("本地模型返回为空（$reason）"))
+            } else {
+                android.util.Log.i("AiLocalModel", "completeViaServerHttp 成功获取内容: ${content.take(200)}")
+                ChatCompletionResponse(
+                    choices = listOf(
+                        ChatCompletionResponse.Choice(
+                            message = OpenAiMessage("assistant", content)
+                        )
+                    )
+                )
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("AiLocalModel", "completeViaServerHttp 失败", e)
+            ChatCompletionResponse(
+                error = ChatCompletionResponse.ApiError("本地推理服务失败：${e.message ?: e.javaClass.simpleName}")
+            )
+        } finally {
+            runCatching { conn?.disconnect() }
+        }
+    }
+
+    /** 从llama-cli输出中提取assistant响应内容 */
+    private fun extractAssistantResponse(output: String): String {
+        if (output.isBlank()) return ""
+        val assistantStart = "<|im_start|>assistant"
+        val endMarker = "<|im_end|>"
+
+        val startIdx = output.indexOf(assistantStart)
+        if (startIdx < 0) {
+            val content = output.trim()
+            return if (content.isNotEmpty() && content != endMarker) content else ""
+        }
+
+        val afterStart = output.substring(startIdx + assistantStart.length)
+        val contentStart = afterStart.indexOf('>')
+        val responseStart = if (contentStart >= 0) {
+            afterStart.substring(contentStart + 1).trimStart(' ', '\n', '\t')
+        } else {
+            afterStart.trimStart(' ', '\n', '\t')
+        }
+
+        val endIdx = responseStart.indexOf(endMarker)
+        return if (endIdx >= 0) {
+            responseStart.substring(0, endIdx).trim()
+        } else {
+            responseStart.trim()
         }
     }
 }

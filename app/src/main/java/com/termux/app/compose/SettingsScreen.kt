@@ -772,6 +772,28 @@ fun SettingsScreen(
                                     SettingIcon(R.drawable.ic_shield, contentDescription = "信任白名单")
                                 }
                             )
+
+                            HorizontalDivider(color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f), modifier = Modifier.padding(start = 72.dp, end = 16.dp))
+                            ArrowPreference(
+                                title = "训练本地模型",
+                                summary = run {
+                                    val cfg = AiTermuxPrefs.getConfig(context)
+                                    val hasFallback = AiTermuxPrefs.isFallbackOnlineConfigReady(context)
+                                    if (cfg.providerConfig.provider != "local") "请先选择本地模型引擎（llama/Ollama）并配置一个模型"
+                                    else if (hasFallback) "在线全自动 · 配置了备用在线大模型：出题+批改+评分+自动把教训追加到 System Prompt（推荐）"
+                                    else "手动模式 · 用户手动评分，给出启发式参考评分+建议（无在线模型）"
+                                },
+                                enabled = run {
+                                    AiTermuxPrefs.getConfig(context).providerConfig.provider == "local"
+                                },
+                                onClick = {
+                                    context.startActivity(android.content.Intent(context, com.termux.app.activities.AiLocalTrainerActivity::class.java))
+                                },
+                                startAction = {
+                                    SettingIcon(R.drawable.ic_tools, contentDescription = "训练本地模型")
+                                }
+                            )
+
                             HorizontalDivider(
                                 color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f),
                                 modifier = Modifier.padding(start = 72.dp, end = 16.dp)
@@ -829,7 +851,7 @@ fun SettingsScreen(
                                         title = "配置备用在线参数",
                                         summary = run {
                                             val c = AiTermuxPrefs.getFallbackOnlineConfig(context)
-                                            val urlShown = if (c.apiBaseUrl.isBlank()) "(未填写)" else c.apiBaseUrl
+                                            val urlShown = if (c.baseUrl.isBlank()) "(未填写)" else c.baseUrl
                                             val modelShown = if (c.model.isBlank()) "(未填写)" else c.model
                                             val keyShown = if (c.apiKey.isBlank()) "API Key 未填写" else "********"
                                             "模型：$modelShown ｜ URL：$urlShown ｜ Key：$keyShown"
@@ -838,7 +860,7 @@ fun SettingsScreen(
                                             // 打开对话框前，载入当前保存的值
                                             val cfg = AiTermuxPrefs.getFallbackOnlineConfig(context)
                                             fbKey = cfg.apiKey
-                                            fbUrl = cfg.apiBaseUrl
+                                            fbUrl = cfg.baseUrl
                                             fbModel = cfg.model
                                             fbTemp = cfg.temperature
                                             showFallbackEditor = true
@@ -1348,15 +1370,9 @@ fun SettingsScreen(
                     text = "重配置",
                     onClick = {
                         showAiReconfigConfirm = false
-                        val cfg = AiTermuxPrefs.getConfig(context)
-                        AiTermuxPrefs.saveConfig(
-                            context,
-                            AiTermuxConfig(
-                                providerConfig = cfg.providerConfig.copy(apiKey = cfg.providerConfig.apiKey),
-                                customSystemPrompt = cfg.customSystemPrompt,
-                                isConfigured = false
-                            )
-                        )
+                        // 写 needs_reconfig flag，下次 getConfig 会读到并强制返回 isConfigured=false
+                        context.getSharedPreferences("ai_termux_prefs", android.content.Context.MODE_PRIVATE)
+                            .edit().putBoolean("needs_reconfig", true).apply()
                     },
                     modifier = Modifier.weight(1f)
                 )
@@ -1400,7 +1416,7 @@ fun SettingsScreen(
     if (showWhitelistDialog && aiTermuxEnabled) {
         // Initialize temp skills from current config when dialog opens
         LaunchedEffect(showWhitelistDialog) {
-            tempWhitelistSkills = autoExecConfig.autoExecSkills
+            tempWhitelistSkills = autoExecConfig.autoExecSkills.mapNotNull { runCatching { SkillType.valueOf(it) }.getOrNull() }.toSet()
         }
         OverlayDialog(
             show = showWhitelistDialog,
@@ -1462,8 +1478,8 @@ fun SettingsScreen(
                                 // If no skills selected, whitelist is disabled
                                 val enabled = tempWhitelistSkills.isNotEmpty()
                                 autoExecConfig = autoExecConfig.copy(
-                                    enabled = enabled,
-                                    autoExecSkills = tempWhitelistSkills
+                                    autoExecEnabled = enabled,
+                                    autoExecSkills = tempWhitelistSkills.map { it.name }.toSet()
                                 )
                                 AiTermuxPrefs.saveAutoExecConfig(context, autoExecConfig)
                                 showWhitelistDialog = false
@@ -1593,10 +1609,13 @@ fun SettingsScreen(
                 onClick = {
                     AiTermuxPrefs.saveFallbackOnlineConfig(
                         context,
-                        apiKey = fbKey,
-                        baseUrl = fbUrl,
-                        model = fbModel,
-                        temperature = fbTemp
+                        AiTermuxPrefs.FallbackOnlineConfig(
+                            enabled = true,
+                            apiKey = fbKey,
+                            baseUrl = fbUrl,
+                            model = fbModel,
+                            temperature = fbTemp
+                        )
                     )
                     showFallbackEditor = false
                 },
@@ -2054,9 +2073,10 @@ fun SettingsScreen(
                                 }
                             )
                             Spacer(Modifier.height(4.dp))
-                            if (msg.reasoningContent != null && msg.reasoningContent.isNotBlank()) {
+                            // reasoningContent 已移除
+                            if (false) {
                                 Text(
-                                    text = "💭 ${msg.reasoningContent.take(200)}${if (msg.reasoningContent.length > 200) "..." else ""}",
+                                    text = "",
                                     fontSize = 11.sp,
                                     color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
                                     lineHeight = 16.sp,

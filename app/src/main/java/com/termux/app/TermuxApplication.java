@@ -56,6 +56,15 @@ public class TermuxApplication extends Application {
         com.termux.app.utils.LogManager.init(this);
 
         TermuxCrashUtils.setCrashHandler(this);
+
+        // 初始化 AI 模块（本地大模型 + Ollama）
+        try {
+            com.termux.app.compose.AiLocalModel.init(this);
+            com.termux.app.compose.AiOllamaManager.init(this);
+            android.util.Log.i("TermuxApplication", "AI 模块初始化完成");
+        } catch (Throwable t) {
+            android.util.Log.e("TermuxApplication", "AI 模块初始化失败", t);
+        }
         setLogLevel();
 
         startTermuxApiListener(getApplicationContext());

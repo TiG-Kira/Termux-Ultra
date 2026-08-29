@@ -4,13 +4,14 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -43,6 +44,8 @@ fun LogViewerScreen(
     var logs by remember { mutableStateOf<List<LogManager.LogEntry>>(emptyList()) }
     var showClearDialog by remember { mutableStateOf(false) }
     var lastFileModTime by remember { mutableStateOf(0L) }
+    var searchQuery by remember { mutableStateOf("") }
+    var showSearchBar by remember { mutableStateOf(false) }
 
     val logManager = remember { LogManager.getInstance() }
 
@@ -55,6 +58,19 @@ fun LogViewerScreen(
             }
         }
         logs = newLogs
+    }
+
+    // 过滤后的日志列表（带索引用于生成唯一key）
+    val filteredLogs = remember(logs, searchQuery) {
+        val query = searchQuery.trim().lowercase()
+        if (query.isEmpty()) {
+            logs
+        } else {
+            logs.filter { entry ->
+                entry.message.lowercase().contains(query) ||
+                entry.tag.lowercase().contains(query)
+            }
+        }
     }
 
     LaunchedEffect(selectedLevel) {
@@ -91,32 +107,131 @@ fun LogViewerScreen(
             }
         },
         topBar = {
-            TopAppBar(
-                title = stringResource(R.string.log_management),
-                navigationIcon = {
-                    Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(CircleShape)
-                            .clickable { onBack() },
-                        contentAlignment = Alignment.Center
+            if (showSearchBar) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(MiuixTheme.colorScheme.surface)
+                        .padding(top = 48.dp, bottom = 8.dp, start = 8.dp, end = 8.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(
-                            imageVector = MiuixIcons.Back,
-                            contentDescription = stringResource(R.string.back),
-                            tint = MiuixTheme.colorScheme.onSurface,
-                            modifier = Modifier.size(24.dp)
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .clickable {
+                                    showSearchBar = false
+                                    searchQuery = ""
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = MiuixIcons.Back,
+                                contentDescription = stringResource(R.string.back),
+                                tint = MiuixTheme.colorScheme.onSurface,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                        Spacer(Modifier.width(8.dp))
+                        TextField(
+                            value = searchQuery,
+                            onValueChange = { searchQuery = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = "搜索日志内容或标签...",
+                            useLabelAsPlaceholder = true,
+                            singleLine = true
+                        )
+                        if (searchQuery.isNotEmpty()) {
+                            Spacer(Modifier.width(4.dp))
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clip(CircleShape)
+                                    .clickable { searchQuery = "" },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_clear),
+                                    contentDescription = "清除搜索",
+                                    tint = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+                    }
+                    if (searchQuery.isNotEmpty()) {
+                        Text(
+                            text = "找到 ${filteredLogs.size} 条结果",
+                            fontSize = 12.sp,
+                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                            modifier = Modifier.padding(start = 8.dp, top = 4.dp)
                         )
                     }
-                },
-                actions = {
-                    TextButton(
-                        text = stringResource(R.string.clear_logs),
-                        onClick = { showClearDialog = true }
-                    )
-                },
-                scrollBehavior = scrollBehavior
-            )
+                }
+            } else {
+                TopAppBar(
+                    title = stringResource(R.string.log_management),
+                    navigationIcon = {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .clickable { onBack() },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = MiuixIcons.Back,
+                                contentDescription = stringResource(R.string.back),
+                                tint = MiuixTheme.colorScheme.onSurface,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                    },
+                    actions = {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            // 搜索图标按钮
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(CircleShape)
+                                    .background(MiuixTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                                    .clickable { showSearchBar = true },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_search),
+                                    contentDescription = "搜索",
+                                    tint = MiuixTheme.colorScheme.onSurface,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            // 清除日志图标按钮
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(CircleShape)
+                                    .background(MiuixTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                                    .clickable { showClearDialog = true },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_delete),
+                                    contentDescription = stringResource(R.string.clear_logs),
+                                    tint = MiuixTheme.colorScheme.onSurface,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+                    },
+                    scrollBehavior = scrollBehavior
+                )
+            }
         }
     ) { paddingValues ->
         Box(
@@ -132,13 +247,13 @@ fun LogViewerScreen(
                     onLevelSelected = { selectedLevel = it }
                 )
 
-                if (logs.isEmpty()) {
+                if (filteredLogs.isEmpty()) {
                     Box(
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = stringResource(R.string.no_logs),
+                            text = if (logs.isEmpty()) stringResource(R.string.no_logs) else "没有匹配的日志",
                             color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
                             fontSize = 16.sp
                         )
@@ -148,10 +263,10 @@ fun LogViewerScreen(
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(vertical = 8.dp)
                     ) {
-                        items(
-                            items = logs,
-                            key = { entry -> "${entry.timestamp}_${entry.level}_${entry.tag}_${entry.message.hashCode()}" }
-                        ) { logEntry ->
+                        itemsIndexed(
+                            items = filteredLogs,
+                            key = { index, entry -> "log_${index}_${entry.timestamp}_${entry.message.hashCode()}" }
+                        ) { index, logEntry ->
                             LogItem(logEntry = logEntry)
                         }
                     }
@@ -240,7 +355,7 @@ private fun LogFilterBar(
 }
 
 @Composable
-private fun FilterChip(
+fun FilterChip(
     text: String,
     selected: Boolean,
     onClick: () -> Unit,

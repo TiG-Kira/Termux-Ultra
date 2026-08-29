@@ -1,4 +1,4 @@
-﻿package com.termux.app.compose
+package com.termux.app.compose
 
 import android.content.ClipData
 import android.content.ClipboardManager

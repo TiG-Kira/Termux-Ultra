@@ -2620,7 +2620,14 @@ object AiApiClient {
                 && AiTermuxPrefs.isFallbackOnlineConfigReady(context)
             if (!canFallback) return@withContext localResp
             val fbCfg = AiTermuxPrefs.getFallbackOnlineConfig(context)
-            val onlineResp = callOnlineChat(fbCfg, messages)
+            val fbProvider = AiProviderConfig(
+                provider = "custom",
+                apiKey = fbCfg.apiKey,
+                apiBaseUrl = fbCfg.baseUrl,
+                model = fbCfg.model,
+                temperature = fbCfg.temperature
+            )
+            val onlineResp = callOnlineChat(fbProvider, messages)
             if (onlineResp.error == null) {
                 val warnText = "⚠️ 本地模型调用失败：${localResp.error!!.message}。已自动切换到备用在线模型。\n\n"
                 val newChoices = onlineResp.choices.map { c ->
@@ -2639,37 +2646,82 @@ object AiApiClient {
         context: android.content.Context,
         config: AiProviderConfig,
         messages: List<OpenAiMessage>,
-        isCancelled: () -> Boolean
+        isCancelled: () -> Boolean,
+        forceLocal: Boolean = false,
+        forceOnline: Boolean = false
     ): Flow<StreamChunk> {
-        if (config.provider == "local") {
+        val useLocal = if (forceOnline) false else if (forceLocal) true else config.provider == "local"
+        if (useLocal) {
+            val engineType = AiTermuxPrefs.getLocalEngineType(context)
             return flow {
                 var localErrMsg: String? = null
                 var localFinishedOk = false
-                AiLocalModel.chatStreamLocal(config, messages, isCancelled).collect { chunk ->
+                var contentEmitted = false
+
+                // 根据引擎类型选择推理方式
+                val localFlow = if (engineType == "ollama") {
+                    val ollamaModel = AiTermuxPrefs.getSelectedOllamaModel(context)
+                    if (ollamaModel.isBlank()) {
+                        // 检查是否有已安装的模型
+                        val installedModels = AiTermuxPrefs.getInstalledOllamaModels(context)
+                        if (installedModels.isNotEmpty()) {
+                            // 自动选择第一个已安装的模型
+                            AiTermuxPrefs.setSelectedOllamaModel(context, installedModels.first())
+                            emit(StreamChunk.Prepare("已自动选择 ${installedModels.first()} 模型，正在推理…", null))
+                            AiOllamaManager.chatStreamOllama(installedModels.first(), messages, config.temperature, isCancelled)
+                        } else {
+                            emit(StreamChunk.Error("请先在设置页面安装并选择 Ollama 模型。进入「设置 → 本地大模型 → Ollama 模型」下载模型后重试。"))
+                            return@flow
+                        }
+                    } else {
+                        // 检查 Ollama 服务是否已安装
+                        if (!AiOllamaManager.isOllamaInstalled()) {
+                            emit(StreamChunk.Error("Ollama 尚未安装。请先进入「设置 → 本地大模型」安装 Ollama 后再试。"))
+                            return@flow
+                        }
+                        AiOllamaManager.chatStreamOllama(ollamaModel, messages, config.temperature, isCancelled)
+                    }
+                } else {
+                    AiLocalModel.chatStreamLocal(config, messages, isCancelled)
+                }
+
+                localFlow.collect { chunk ->
                     when (chunk) {
                         is StreamChunk.Error -> localErrMsg = chunk.message
                         is StreamChunk.Done -> {
                             localFinishedOk = true
                             emit(chunk)
                         }
+                        is StreamChunk.Content -> {
+                            contentEmitted = true
+                            emit(chunk)
+                        }
                         else -> emit(chunk)
                     }
                 }
-                if (localFinishedOk) return@flow  // Explicit Done received
-            if (localErrMsg == null) {
-                android.util.Log.w("AiTermuxEngine", "Local flow completed without Done or Error - may be abnormal")
-                return@flow
-            }
-                val canFallback = AiTermuxPrefs.isFallbackOnlineEnabled(context)
+                if (localFinishedOk) return@flow
+                if (!contentEmitted && localErrMsg == null) {
+                    android.util.Log.w("AiTermuxEngine", "Local flow completed without content or error - may be abnormal")
+                    localErrMsg = "本地模型未输出任何内容，可能是模型加载失败或推理异常"
+                }
+                if (localErrMsg == null) return@flow
+                val canFallback = !forceLocal && AiTermuxPrefs.isFallbackOnlineEnabled(context)
                     && AiTermuxPrefs.isFallbackOnlineConfigReady(context)
                 if (!canFallback) {
                     emit(StreamChunk.Error(localErrMsg!!))
                     return@flow
                 }
                 val fbCfg = AiTermuxPrefs.getFallbackOnlineConfig(context)
+            val fbProvider = AiProviderConfig(
+                provider = "custom",
+                apiKey = fbCfg.apiKey,
+                apiBaseUrl = fbCfg.baseUrl,
+                model = fbCfg.model,
+                temperature = fbCfg.temperature
+            )
                 val warnText = "⚠️ 本地模型调用失败：${localErrMsg}。\n已自动切换到备用在线模型，请稍候...\n\n"
                 emit(StreamChunk.Content(warnText))
-                callOnlineChatStream(fbCfg, messages, isCancelled).collect { inner ->
+                callOnlineChatStream(fbProvider, messages, isCancelled).collect { inner ->
                     emit(inner)
                 }
             }.flowOn(Dispatchers.IO)

@@ -33,7 +33,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Send
 import androidx.compose.runtime.*
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.MutableState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -109,7 +108,7 @@ class AiTermuxActivity : FragmentActivity() {
     override fun onPause() {
         super.onPause()
         val vm: AiTermuxViewModel by viewModels()
-        AiTermuxPrefs.saveChatHistory(this, vm.messages.toOpenAiMessages())
+        AiTermuxPrefs.saveChatHistory(this, vm.messages.toList())
     }
 
     /** 检查并处理从主页返回的 Agent 二次确认结果 */
@@ -172,7 +171,7 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
 
     private var cancelled = false
 
-    private val autoExecSkills: Set<String> by lazy {
+    private val autoExecSkills: Set<SkillType> by lazy {
         AiTermuxPrefs.getAutoExecSkills(getApplication())
     }
 
@@ -219,12 +218,12 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
                 ))
             }
         }
-        AiTermuxPrefs.saveChatHistory(ctx, messages.toOpenAiMessages())
+        AiTermuxPrefs.saveChatHistory(ctx, messages.toList())
     }
 
     init {
         val history = AiTermuxPrefs.getChatHistory(app)
-        messages.addAll(history.toChatMessages())
+        messages.addAll(history)
         val ctx = getApplication<android.app.Application>()
         val intent = Intent(ctx, TermuxService::class.java)
         ctx.bindService(intent, serviceConn, Context.BIND_AUTO_CREATE)
@@ -277,7 +276,7 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
                         errorMessage = "操作失败: ${e.message ?: "未知错误"}"
                     ))
                 }
-                AiTermuxPrefs.saveChatHistory(ctx, messages.toOpenAiMessages())
+                AiTermuxPrefs.saveChatHistory(ctx, messages.toList())
             }
         }
     }
@@ -287,7 +286,7 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
         if (text.isBlank()) return
         val userMsg = ChatMessage(role = "user", content = text)
         synchronized(messages) { messages.add(userMsg) }
-        AiTermuxPrefs.saveChatHistory(ctx, messages.toOpenAiMessages())
+        AiTermuxPrefs.saveChatHistory(ctx, messages.toList())
 
         runInScope {
             isLoading = true
@@ -295,7 +294,7 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
                 processUserMessage(ctx, text)
             } finally {
                 isLoading = false
-                AiTermuxPrefs.saveChatHistory(ctx, messages.toOpenAiMessages())
+                AiTermuxPrefs.saveChatHistory(ctx, messages.toList())
             }
         }
     }
@@ -315,7 +314,7 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
         }
         val userMsg = ChatMessage(role = "user", content = "[用户回答] ${card.askQuestion}\n回答：$answer")
         synchronized(messages) { messages.add(userMsg) }
-        AiTermuxPrefs.saveChatHistory(ctx, messages.toOpenAiMessages())
+        AiTermuxPrefs.saveChatHistory(ctx, messages.toList())
 
         runInScope {
             isLoading = true
@@ -323,7 +322,7 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
                 processAiTurn(ctx, "[用户回答] ${card.askQuestion}\n回答：$answer")
             } finally {
                 isLoading = false
-                AiTermuxPrefs.saveChatHistory(ctx, messages.toOpenAiMessages())
+                AiTermuxPrefs.saveChatHistory(ctx, messages.toList())
             }
         }
     }
@@ -386,7 +385,7 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
                 skillCard = card.copy(status = SkillStatus.RUNNING, title = "等待二次确认…")
             )
         }
-        AiTermuxPrefs.saveChatHistory(ctx, messages.toOpenAiMessages())
+        AiTermuxPrefs.saveChatHistory(ctx, messages.toList())
 
         // 跳转到主页进行二次确认
         val intent = Intent(ctx, com.termux.app.MainActivity::class.java)
@@ -413,7 +412,7 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
                 skillCard = card.copy(status = SkillStatus.RUNNING, title = "正在执行…")
             )
         }
-        AiTermuxPrefs.saveChatHistory(ctx, messages.toOpenAiMessages())
+        AiTermuxPrefs.saveChatHistory(ctx, messages.toList())
 
         runInScope {
             isLoading = true
@@ -439,13 +438,13 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
                         )
                     }
                 }
-                AiTermuxPrefs.saveChatHistory(ctx, messages.toOpenAiMessages())
+                AiTermuxPrefs.saveChatHistory(ctx, messages.toList())
                 continueAfterSkill(ctx, resultCard, result.message)
             } finally {
                 // 恢复风险确认标志
                 RiskConfirmManager.setSkipRiskCheck(false)
                 isLoading = false
-                AiTermuxPrefs.saveChatHistory(ctx, messages.toOpenAiMessages())
+                AiTermuxPrefs.saveChatHistory(ctx, messages.toList())
             }
         }
     }
@@ -469,7 +468,7 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
                 )
             )
         }
-        AiTermuxPrefs.saveChatHistory(ctx, messages.toOpenAiMessages())
+        AiTermuxPrefs.saveChatHistory(ctx, messages.toList())
 
         runInScope {
             isLoading = true
@@ -477,7 +476,7 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
                 processAiTurn(ctx, "[用户在二次确认中拒绝了危险操作] ${card.dangerousAction ?: card.title}，用户选择不执行。")
             } finally {
                 isLoading = false
-                AiTermuxPrefs.saveChatHistory(ctx, messages.toOpenAiMessages())
+                AiTermuxPrefs.saveChatHistory(ctx, messages.toList())
             }
         }
     }
@@ -500,7 +499,7 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
                 )
             )
         }
-        AiTermuxPrefs.saveChatHistory(ctx, messages.toOpenAiMessages())
+        AiTermuxPrefs.saveChatHistory(ctx, messages.toList())
 
         runInScope {
             isLoading = true
@@ -508,7 +507,7 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
                 processAiTurn(ctx, "[用户取消了危险操作] ${card.dangerousAction ?: card.title}，用户选择不执行。")
             } finally {
                 isLoading = false
-                AiTermuxPrefs.saveChatHistory(ctx, messages.toOpenAiMessages())
+                AiTermuxPrefs.saveChatHistory(ctx, messages.toList())
             }
         }
     }
@@ -552,8 +551,6 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
 
         // 构建一次 System Prompt，后续迭代复用
         val baseSystemPrompt = AiTermuxPrefs.buildFullSystemPrompt(ctx)
-        // 备用在线模式专用：不含训练教训记忆块
-        val baseSystemPromptNoLearned = AiTermuxPrefs.buildFullSystemPrompt(ctx, includeLearnedMemory = false, maxChars = 0)
         // 重试时使用的精简 System Prompt
         val retrySystemPrompt = """
 你刚才的回复违反了 Termux Agent 的输出规范。请重新输出，并遵守以下核心规则：
@@ -568,16 +565,8 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
         for (round in 1..20) {
             if (cancelled) break
 
-            // 根据用户选择决定使用本地还是在线模型（提前判断，用于选择是否包含教训）
-            val forceLocal = config.providerConfig.provider == "local" && useLocalModel
-            val forceOnline = config.providerConfig.provider == "local" && !useLocalModel
-
-            // 决定使用的 System Prompt：重试时用精简版；在线模式排除训练教训
-            val systemPrompt = when {
-                hallucinationRetryCount > 0 -> retrySystemPrompt
-                forceOnline -> baseSystemPromptNoLearned
-                else -> baseSystemPrompt
-            }
+            // 决定使用的 System Prompt：重试时用精简版
+            val systemPrompt = if (hallucinationRetryCount > 0) retrySystemPrompt else baseSystemPrompt
             val apiMsgs = mutableListOf<OpenAiMessage>()
             apiMsgs.add(OpenAiMessage("system", systemPrompt))
             synchronized(messages) {
@@ -608,18 +597,14 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
             var streamError: String? = null
             var wasCancelled = false
 
-            val providerConfig: AiProviderConfig = if (config.providerConfig.provider == "local" && !useLocalModel) {
-                val fb = AiTermuxPrefs.getFallbackOnlineConfig(ctx)
-                AiProviderConfig(
-                    provider = "custom",
-                    apiKey = fb.apiKey,
-                    apiBaseUrl = fb.baseUrl,
-                    model = fb.model,
-                    temperature = fb.temperature
-                )
+            // 根据用户选择决定使用本地还是在线模型
+            val providerConfig = if (config.providerConfig.provider == "local" && !useLocalModel) {
+                AiTermuxPrefs.getFallbackOnlineConfig(ctx)
             } else {
                 config.providerConfig
             }
+            val forceLocal = config.providerConfig.provider == "local" && useLocalModel
+            val forceOnline = config.providerConfig.provider == "local" && !useLocalModel
 
             AiApiClient.chatStream(ctx, providerConfig, apiMsgs, { cancelled }, 
                 forceLocal = forceLocal, forceOnline = forceOnline).collect { chunk ->
@@ -708,7 +693,7 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
 
 // 流结束后，处理消息
             if (wasCancelled) {
-                AiTermuxPrefs.saveChatHistory(ctx, messages.toOpenAiMessages())
+                AiTermuxPrefs.saveChatHistory(ctx, messages.toList())
                 return
             }
 
@@ -722,7 +707,7 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
                         )
                     }
                 }
-                AiTermuxPrefs.saveChatHistory(ctx, messages.toOpenAiMessages())
+                AiTermuxPrefs.saveChatHistory(ctx, messages.toList())
                 return
             }
 
@@ -740,7 +725,7 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
                         )
                     }
                 }
-                AiTermuxPrefs.saveChatHistory(ctx, messages.toOpenAiMessages())
+                AiTermuxPrefs.saveChatHistory(ctx, messages.toList())
                 return
             }
 
@@ -756,7 +741,7 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
                         )
                     }
                 }
-                AiTermuxPrefs.saveChatHistory(ctx, messages.toOpenAiMessages())
+                AiTermuxPrefs.saveChatHistory(ctx, messages.toList())
                 return
             }
 
@@ -797,7 +782,7 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
                             )
                         }
                     }
-                    AiTermuxPrefs.saveChatHistory(ctx, messages.toOpenAiMessages())
+                    AiTermuxPrefs.saveChatHistory(ctx, messages.toList())
                     // 继续执行下面的技能解析和执行逻辑，跳过幻觉检测
                     // 不设置 continue，让代码走到下面的正常流程
                 } else {
@@ -818,7 +803,7 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
                             )
                         }
                     }
-                    AiTermuxPrefs.saveChatHistory(ctx, messages.toOpenAiMessages())
+                    AiTermuxPrefs.saveChatHistory(ctx, messages.toList())
 
                     val shortReason = finalViolations.firstOrNull() ?: "违反输出规范"
                     currentUserText = buildString {
@@ -914,7 +899,7 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
                         )
                     }
                 }
-                AiTermuxPrefs.saveChatHistory(ctx, messages.toOpenAiMessages())
+                AiTermuxPrefs.saveChatHistory(ctx, messages.toList())
                 // 用简短消息告诉 AI 不要再重复
                 currentUserText = "[系统] 你连续多次输出了相同的技能，请直接回答用户的问题，不要重复执行已完成的操作。"
                 // 重置连续计数，防止立即再次触发
@@ -962,7 +947,7 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
                         )
                     }
                 }
-                AiTermuxPrefs.saveChatHistory(ctx, messages.toOpenAiMessages())
+                AiTermuxPrefs.saveChatHistory(ctx, messages.toList())
             }
 
             // 更新消息文本
@@ -976,7 +961,7 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
                     }
                 }
             }
-            AiTermuxPrefs.saveChatHistory(ctx, messages.toOpenAiMessages())
+            AiTermuxPrefs.saveChatHistory(ctx, messages.toList())
 
             // 清理被拦截的技能集合
             hallucinatedSkillKeys = emptySet()
@@ -1012,7 +997,7 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
                             )
                         }
                     }
-                    AiTermuxPrefs.saveChatHistory(ctx, messages.toOpenAiMessages())
+                    AiTermuxPrefs.saveChatHistory(ctx, messages.toList())
                     return
                 }
             }
@@ -1067,7 +1052,7 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
                             )
                         )
                     }
-                    AiTermuxPrefs.saveChatHistory(ctx, messages.toOpenAiMessages())
+                    AiTermuxPrefs.saveChatHistory(ctx, messages.toList())
                     needsUserInput = true
                     break
                 }
@@ -1124,14 +1109,14 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
 
                         if (resultCard.skillType == SkillType.ASK_USER) {
                             needsUserInput = true
-                            AiTermuxPrefs.saveChatHistory(ctx, messages.toOpenAiMessages())
+                            AiTermuxPrefs.saveChatHistory(ctx, messages.toList())
                             break
                         }
 
                         lastResultText = buildSkillResultText(resultCard, result.message)
                     }
                 }
-                AiTermuxPrefs.saveChatHistory(ctx, messages.toOpenAiMessages())
+                AiTermuxPrefs.saveChatHistory(ctx, messages.toList())
                 withContext(Dispatchers.IO) { kotlinx.coroutines.delay(150) }
             }
 
@@ -1249,7 +1234,7 @@ private fun AiSetupScreen(vm: AiTermuxViewModel, onBack: () -> Unit) {
     
     // ---- 本地引擎状态 ----
     val settingsScope = rememberCoroutineScope()
-    val localEngineType: MutableState<String> = remember { mutableStateOf(AiTermuxPrefs.getLocalEngineType(ctx)) }
+    val localEngineType = remember { mutableStateOf(AiTermuxPrefs.getLocalEngineType(ctx)) }
     
     // ---- Ollama 状态 ----
     val ollamaInstalled = remember { mutableStateOf(AiOllamaManager.isOllamaInstalled()) }
@@ -1257,8 +1242,8 @@ private fun AiSetupScreen(vm: AiTermuxViewModel, onBack: () -> Unit) {
     val ollamaInstalling = remember { mutableStateOf(false) }
     val ollamaProgress = remember { mutableStateOf(0f) }
     val ollamaProgressMsg = remember { mutableStateOf("") }
-    val ollamaModelsList: MutableState<List<String>> = remember { mutableStateOf<List<String>>(AiTermuxPrefs.getInstalledOllamaModels(ctx)) }
-    val selectedOllamaModel: MutableState<String> = remember { mutableStateOf(AiTermuxPrefs.getSelectedOllamaModel(ctx)) }
+    val ollamaModelsList = remember { mutableStateOf<List<String>>(AiTermuxPrefs.getInstalledOllamaModels(ctx)) }
+    val selectedOllamaModel = remember { mutableStateOf(AiTermuxPrefs.getSelectedOllamaModel(ctx)) }
     val ollamaPulling = remember { mutableStateOf(false) }
     val ollamaPullProgress = remember { mutableStateOf(0f) }
     val ollamaPullMsg = remember { mutableStateOf("") }
@@ -1385,8 +1370,6 @@ private fun AiSetupScreen(vm: AiTermuxViewModel, onBack: () -> Unit) {
                     }
                 }
 
-                                // Llama.cpp 模型列表（仅当选择 llama 引擎时显示）
-                if (localEngineType.value == "llama") {
                 LOCAL_MODELS.forEach { entry ->
                     item {
                         val scope = rememberCoroutineScope()
@@ -1424,8 +1407,6 @@ private fun AiSetupScreen(vm: AiTermuxViewModel, onBack: () -> Unit) {
                                                 if (ok) {
                                                     localProgress = 1f
                                                     localProgressMsg = "模型下载完成，已自动配置"
-                                                    // 关键：持久化选中的模型 ID，否则 getSelectedModel() 返回 null → isLocalModelReady()=false → 入口跳回设置页
-                                                    AiLocalModel.setSelectedModelId(entry.id)
                                                     val cfg = AiTermuxConfig(
                                                         providerConfig = AiProviderConfig(
                                                             provider = "local", apiKey = "", apiBaseUrl = "",
@@ -1455,7 +1436,6 @@ private fun AiSetupScreen(vm: AiTermuxViewModel, onBack: () -> Unit) {
                         }
                     }
                 }
-                }
 
                 // 本地推理引擎选择
                 item { SectionTitle("本地推理引擎") }
@@ -1466,33 +1446,25 @@ private fun AiSetupScreen(vm: AiTermuxViewModel, onBack: () -> Unit) {
                         Column(modifier = Modifier.padding(16.dp)) {
                             Text("选择本地推理引擎", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = MiuixTheme.colorScheme.onSurface)
                             Spacer(Modifier.height(8.dp))
+                            val currentEngine = remember { mutableStateOf(AiTermuxPrefs.getLocalEngineType(ctx)) }
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 FilterChip(
                                     text = "Llama.cpp",
-                                    selected = localEngineType.value == "llama",
+                                    selected = currentEngine.value == "llama",
                                     onClick = {
-                                        localEngineType.value = "llama"
+                                        currentEngine.value = "llama"
                                         AiTermuxPrefs.setLocalEngineType(ctx, "llama")
                                     }
                                 )
                                 FilterChip(
                                     text = "Ollama",
-                                    selected = localEngineType.value == "ollama",
+                                    selected = currentEngine.value == "ollama",
                                     onClick = {
-                                        localEngineType.value = "ollama"
+                                        currentEngine.value = "ollama"
                                         AiTermuxPrefs.setLocalEngineType(ctx, "ollama")
-                                        // 切换到 Ollama 时，自动选择已安装的第一个模型
-                                        // 如果没有已选择的模型，尝试从已安装列表中选择
-                                        if (selectedOllamaModel.value.isBlank()) {
-                                            val installedModels = AiTermuxPrefs.getInstalledOllamaModels(ctx)
-                                            if (installedModels.isNotEmpty()) {
-                                                selectedOllamaModel.value = installedModels.first()
-                                                AiTermuxPrefs.setSelectedOllamaModel(ctx, installedModels.first())
-                                            }
-                                        }
                                     }
                                 )
                             }
@@ -1610,49 +1582,7 @@ private fun AiSetupScreen(vm: AiTermuxViewModel, onBack: () -> Unit) {
                     }
                     
                     // Ollama 模型列表
-                    if (!ollamaInstalled.value) {
-                        item {
-                            Card(
-                                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)
-                            ) {
-                                Column(modifier = Modifier.padding(16.dp)) {
-                                    Text("Ollama 尚未安装", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = MiuixTheme.colorScheme.onSurface)
-                                    Spacer(Modifier.height(6.dp))
-                                    Text(
-                                        text = "Ollama 是一个轻量级本地大模型运行器。请先安装 Ollama，然后下载所需模型。",
-                                        fontSize = 12.sp,
-                                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                                    )
-                                    Spacer(Modifier.height(10.dp))
-                                    Button(
-                                        onClick = {
-                                            settingsScope.launch {
-                                                ollamaInstalling.value = true
-                                                ollamaProgress.value = 0f
-                                                ollamaProgressMsg.value = "正在准备 Ollama 安装…"
-                                                val ok = AiOllamaManager.installOllama { p, msg ->
-                                                    ollamaProgress.value = p
-                                                    ollamaProgressMsg.value = msg
-                                                }
-                                                ollamaInstalling.value = false
-                                                ollamaInstalled.value = AiOllamaManager.isOllamaInstalled()
-                                                if (ok) {
-                                                    SnackbarHelper.show(ctx, "Ollama 安装成功", Snackbar.LENGTH_SHORT, null)
-                                                } else {
-                                                    SnackbarHelper.show(ctx, "Ollama 安装失败", Snackbar.LENGTH_LONG, null)
-                                                }
-                                            }
-                                        },
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        Text("安装 Ollama")
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    
-                    if (ollamaInstalled.value || true) {  // Always show models list
+                    if (ollamaInstalled.value) {
                         // 使用顶层定义的 ollama 状态变量
                         
                         OLLAMA_MODELS.forEach { ollamaEntry ->
@@ -1701,8 +1631,7 @@ private fun AiSetupScreen(vm: AiTermuxViewModel, onBack: () -> Unit) {
                                             }
                                         }
                                         
-                                        val installedList = ollamaModelsList.value
-                                        val isInstalled = installedList.contains(ollamaEntry.ollamaModelName)
+                                        val isInstalled = ollamaModelsList.value.contains(ollamaEntry.ollamaModelName)
                                         
                                         if (ollamaPulling.value && selectedOllamaModel.value == ollamaEntry.ollamaModelName) {
                                             Spacer(Modifier.height(10.dp))
@@ -2020,40 +1949,6 @@ private fun AiChatScreen(vm: AiTermuxViewModel, onBack: () -> Unit) {
         }
     }
 
-    // -------- 首次进入对话页：提示训练本地模型 --------
-    var showFirstTrainHint by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) {
-        val cfg = AiTermuxPrefs.getConfig(ctx)
-        if (cfg.providerConfig.provider == "local" && !AiTermuxPrefs.isTrainHintShown(ctx)) {
-            showFirstTrainHint = true
-        }
-    }
-    top.yukonga.miuix.kmp.overlay.OverlayDialog(
-        title = "让本地模型越用越懂 Termux 操作",
-        summary = "检测到您现在使用的是本地模型。可前往设置页 → Termux Agent → 「训练本地模型」进行 System Prompt 蒸馏训练：\n\n• 如果配置了备用在线大模型，将由在线老师全自动出题、批改、评分，并自动把每轮的教训追加到 System Prompt 末尾。\n• 如果没有备用在线大模型，您可以手动打分并给出改进建议，系统还会提供启发式参考评分。",
-        show = showFirstTrainHint,
-        onDismissRequest = { showFirstTrainHint = false; AiTermuxPrefs.markTrainHintShown(ctx) },
-        content = {
-            androidx.compose.foundation.layout.Column {
-                top.yukonga.miuix.kmp.basic.TextButton(
-                    text = "现在去训练（推荐）",
-                    onClick = {
-                        showFirstTrainHint = false
-                        AiTermuxPrefs.markTrainHintShown(ctx)
-                        val it = android.content.Intent(ctx, com.termux.app.activities.AiLocalTrainerActivity::class.java)
-                        ctx.startActivity(it)
-                    },
-                    modifier = androidx.compose.ui.Modifier.fillMaxWidth()
-                )
-                androidx.compose.foundation.layout.Spacer(androidx.compose.ui.Modifier.height(6.dp))
-                top.yukonga.miuix.kmp.basic.TextButton(
-                    text = "稍后再说",
-                    onClick = { showFirstTrainHint = false; AiTermuxPrefs.markTrainHintShown(ctx) },
-                    modifier = androidx.compose.ui.Modifier.fillMaxWidth()
-                )
-            }
-        }
-    )
     LaunchedEffect(vm.messages.size, vm.isLoading) {
         if (vm.messages.isNotEmpty()) listState.animateScrollToItem(vm.messages.size - 1)
     }
