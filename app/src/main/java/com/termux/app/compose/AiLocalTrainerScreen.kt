@@ -219,8 +219,6 @@ private fun TrainerBody(
     Column(
         modifier
             .padding(horizontal = 16.dp)
-            .navigationBarsPadding()
-            .imePadding()
             .verticalScroll(rememberScrollState())
     ) {
         Spacer(Modifier.height(8.dp))
@@ -680,7 +678,10 @@ private fun TeacherChatTab(ctx: Context, onlineReady: MutableState<Boolean>, ref
 
         // 输入区
         Row(
-            Modifier.fillMaxWidth().padding(vertical = 8.dp),
+            Modifier.fillMaxWidth()
+                .navigationBarsPadding()
+                .imePadding()
+                .padding(vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             TextField(
