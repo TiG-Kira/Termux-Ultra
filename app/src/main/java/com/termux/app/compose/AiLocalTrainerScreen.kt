@@ -218,38 +218,34 @@ private fun TrainerBody(
 
     Column(
         modifier
+            .fillMaxSize()
             .padding(horizontal = 16.dp)
-            .verticalScroll(rememberScrollState())
     ) {
         Spacer(Modifier.height(8.dp))
-        TopInfoCard(
-            session = session.value, statusMsg = statusMsg.value, etaText = etaText.value,
-            onlineReady = onlineReady.value,
-            onTargetRoundsChange = { n ->
-                session.value = session.value.copy(targetRounds = n)
-                AiTermuxPrefs.saveLastTrainSession(ctx, session.value)
-            },
-            onTeacherToggle = { t -> session.value = session.value.copy(teacher = t) }
-        )
-
-        Spacer(Modifier.height(10.dp))
         TabBar(currentTab)
         Spacer(Modifier.height(8.dp))
-        ControlBar(
-            session = session.value, jobActive = job?.isActive == true, onlineReady = onlineReady.value,
-            currentTab = currentTab.value,
-            onStart = { startOrResume() }, onPause = { pause() }, onReset = { resetAll() },
-            onClearMemory = { AiTermuxPrefs.clearLearnedMemory(ctx) },
-            onClearTeacherChat = { 
-                AiLocalTrainer.clearTeacherChatHistory(ctx)
-                refreshTeacherChat.value += 1
-            }
-        )
-        Spacer(Modifier.height(10.dp))
 
-        Box {
+        Box(Modifier.weight(1f)) {
             when (currentTab.value) {
-                0 -> StepsTab(steps)
+                0 -> StepsTab(
+                    steps = steps,
+                    session = session.value,
+                    jobActive = job?.isActive == true,
+                    statusMsg = statusMsg.value,
+                    etaText = etaText.value,
+                    onlineReady = onlineReady.value,
+                    onTargetRoundsChange = { n ->
+                        session.value = session.value.copy(targetRounds = n)
+                        AiTermuxPrefs.saveLastTrainSession(ctx, session.value)
+                    },
+                    onTeacherToggle = { t -> session.value = session.value.copy(teacher = t) },
+                    onStart = { startOrResume() }, onPause = { pause() }, onReset = { resetAll() },
+                    onClearMemory = { AiTermuxPrefs.clearLearnedMemory(ctx) },
+                    onClearTeacherChat = { 
+                        AiLocalTrainer.clearTeacherChatHistory(ctx)
+                        refreshTeacherChat.value += 1
+                    }
+                )
                 1 -> ConversationTab(session)
                 else -> TeacherChatTab(ctx, onlineReady, refreshTeacherChat.value)
             }
@@ -470,22 +466,58 @@ private fun ControlBar(
 
 // ========== 流程 Tab ==========
 @Composable
-private fun StepsTab(steps: androidx.compose.runtime.snapshots.SnapshotStateList<Pair<Int, String>>) {
-    if (steps.isEmpty()) {
-        Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("训练还没有开始。")
-            Spacer(Modifier.height(6.dp))
-            Text("选择总轮数和老师类型，点击「开始训练」。", fontSize = 12.sp,
-                 color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
-        }
-        return
-    }
-    Column(
+private fun StepsTab(
+    steps: androidx.compose.runtime.snapshots.SnapshotStateList<Pair<Int, String>>,
+    session: LocalTrainSession,
+    jobActive: Boolean,
+    statusMsg: String,
+    etaText: String,
+    onlineReady: Boolean,
+    onTargetRoundsChange: (Int) -> Unit,
+    onTeacherToggle: (String) -> Unit,
+    onStart: () -> Unit,
+    onPause: () -> Unit,
+    onReset: () -> Unit,
+    onClearMemory: () -> Unit,
+    onClearTeacherChat: () -> Unit
+) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(6.dp),
-        modifier = Modifier.padding(bottom = 80.dp)
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 8.dp)
     ) {
-        steps.forEachIndexed { idx, (roundIdx, text) ->
-            StepCard(roundIdx, text)
+        item(key = "top_info") {
+            TopInfoCard(
+                session = session, statusMsg = statusMsg, etaText = etaText,
+                onlineReady = onlineReady,
+                onTargetRoundsChange = onTargetRoundsChange,
+                onTeacherToggle = onTeacherToggle
+            )
+        }
+        item(key = "control_bar") {
+            ControlBar(
+                session = session, jobActive = jobActive, onlineReady = onlineReady, currentTab = 0,
+                onStart = onStart, onPause = onPause, onReset = onReset,
+                onClearMemory = onClearMemory, onClearTeacherChat = onClearTeacherChat
+            )
+        }
+        if (steps.isEmpty()) {
+            item(key = "empty") {
+                Column(
+                    Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.Center,
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text("训练还没有开始。")
+                    Spacer(Modifier.height(6.dp))
+                    Text("选择总轮数和老师类型，点击「开始训练」。", fontSize = 12.sp,
+                         color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+                }
+            }
+        } else {
+            itemsIndexed(steps, key = { i, _ -> "step_${i}_${steps[i].first}" }) { _, (roundIdx, text) ->
+                StepCard(roundIdx, text)
+            }
         }
     }
 }
@@ -518,18 +550,25 @@ private fun StepCard(roundIdx: Int, text: String) {
 @Composable
 private fun ConversationTab(session: MutableState<LocalTrainSession>) {
     val rounds = session.value.rounds
-    if (rounds.isEmpty()) {
-        Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("暂无对话记录。")
-        }
-        return
-    }
-    Column(
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(8.dp),
-        modifier = Modifier.padding(bottom = 80.dp)
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 8.dp)
     ) {
-        rounds.forEach { round ->
-            RoundConversationCard(round, session.value.teacher)
+        if (rounds.isEmpty()) {
+            item(key = "empty") {
+                Column(
+                    Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.Center,
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text("暂无对话记录。")
+                }
+            }
+        } else {
+            itemsIndexed(rounds, key = { _, r -> "round_${r.roundIndex}" }) { _, round ->
+                RoundConversationCard(round, session.value.teacher)
+            }
         }
     }
 }
@@ -607,7 +646,11 @@ private fun TeacherChatTab(ctx: Context, onlineReady: MutableState<Boolean>, ref
         history.forEach { messages.add(it.role to it.content) }
     }
 
-    Column(Modifier.fillMaxSize()) {
+    Column(
+        Modifier.fillMaxSize()
+            .navigationBarsPadding()
+            .imePadding()
+    ) {
         if (!onlineReady.value) {
             Column(
                 Modifier.fillMaxSize(),
@@ -678,10 +721,7 @@ private fun TeacherChatTab(ctx: Context, onlineReady: MutableState<Boolean>, ref
 
         // 输入区
         Row(
-            Modifier.fillMaxWidth()
-                .navigationBarsPadding()
-                .imePadding()
-                .padding(vertical = 8.dp),
+            Modifier.fillMaxWidth().padding(vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             TextField(
