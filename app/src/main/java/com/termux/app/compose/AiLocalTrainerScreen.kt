@@ -16,6 +16,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -214,7 +216,13 @@ private fun TrainerBody(
         onDispose { lifecycleOwner.lifecycle.removeObserver(obs) }
     }
 
-    Column(modifier.padding(horizontal = 16.dp)) {
+    Column(
+        modifier
+            .padding(horizontal = 16.dp)
+            .navigationBarsPadding()
+            .imePadding()
+            .verticalScroll(rememberScrollState())
+    ) {
         Spacer(Modifier.height(8.dp))
         TopInfoCard(
             session = session.value, statusMsg = statusMsg.value, etaText = etaText.value,
@@ -241,7 +249,7 @@ private fun TrainerBody(
         )
         Spacer(Modifier.height(10.dp))
 
-        Box(Modifier.fillMaxSize()) {
+        Box {
             when (currentTab.value) {
                 0 -> StepsTab(steps)
                 1 -> ConversationTab(session)
@@ -474,11 +482,11 @@ private fun StepsTab(steps: androidx.compose.runtime.snapshots.SnapshotStateList
         }
         return
     }
-    LazyColumn(
+    Column(
         verticalArrangement = Arrangement.spacedBy(6.dp),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 80.dp)
+        modifier = Modifier.padding(bottom = 80.dp)
     ) {
-        itemsIndexed(steps, key = { i, _ -> "step_${i}_${steps[i].first}" }) { _, (roundIdx, text) ->
+        steps.forEachIndexed { idx, (roundIdx, text) ->
             StepCard(roundIdx, text)
         }
     }
@@ -518,11 +526,11 @@ private fun ConversationTab(session: MutableState<LocalTrainSession>) {
         }
         return
     }
-    LazyColumn(
+    Column(
         verticalArrangement = Arrangement.spacedBy(8.dp),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 80.dp)
+        modifier = Modifier.padding(bottom = 80.dp)
     ) {
-        itemsIndexed(rounds, key = { _, r -> "round_${r.roundIndex}" }) { _, round ->
+        rounds.forEach { round ->
             RoundConversationCard(round, session.value.teacher)
         }
     }
