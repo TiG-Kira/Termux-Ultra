@@ -131,6 +131,7 @@ fun SettingsScreen(
     var vncEnabled by remember { mutableStateOf(prefs.getBoolean("vnc_enabled", false)) }
     var aiTermuxEnabled by remember { mutableStateOf(prefs.getBoolean("ai_termux_enabled", true)) }
     var aiDeveloperMode by remember { mutableStateOf(AiTermuxPrefs.isDeveloperMode(context)) }
+    var localGpuAccel by remember { mutableStateOf(AiTermuxPrefs.isLocalGpuAccelEnabled(context)) }
     var autoExecConfig by remember { mutableStateOf(AiTermuxPrefs.getAutoExecConfig(context)) }
     var useCustomSystemPrompt by remember { mutableStateOf(AiTermuxPrefs.isUsingCustomSystemPrompt(context)) }
     var unlimitedMode by remember { mutableStateOf(AiTermuxPrefs.isUnlimitedMode(context)) }
@@ -936,6 +937,37 @@ fun SettingsScreen(
                                         onClick = { showFullHistoryViewer = true },
                                         startAction = {
                                             SettingIcon(R.drawable.ic_files, contentDescription = "完整对话记录")
+                                        }
+                                    )
+                                    HorizontalDivider(
+                                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f),
+                                        modifier = Modifier.padding(start = 72.dp, end = 16.dp)
+                                    )
+                                    SwitchPreference(
+                                        title = "本地模型使用 GPU 加速",
+                                        summary = if (localGpuAccel) {
+                                            run {
+                                                val info = AiLocalModel.detectGpuInfo(context)
+                                                if (info.supported) {
+                                                    "已开启 · 检测到 ${info.vendor} ${info.model}，后端 ${info.backend}，推荐 offload ${info.recommendedNgl} 层（${info.vendor} ${info.model}，后端 ${info.backend}，推荐 offload ${info.recommendedNgl} 层）"
+                                                } else {
+                                                    "已开启 · 但 Termux 内 llama.cpp 未编译 GPU 后端，参数将被忽略（Termux 默认包不带 GPU 支持）"
+                                                }
+                                            }
+                                        } else {
+                                            "实验性功能，可能不稳定。开启后自动识别 GPU 类型并注入对应的 GPU offload 参数"
+                                        },
+                                        checked = localGpuAccel,
+                                        onCheckedChange = { newValue ->
+                                            localGpuAccel = newValue
+                                            AiTermuxPrefs.setLocalGpuAccelEnabled(context, newValue)
+                                            // 重启 llama-server 以应用新参数
+                                            if (newValue || true) {
+                                                AiLocalModel.stopServer()
+                                            }
+                                        },
+                                        startAction = {
+                                            SettingIcon(R.drawable.ic_refresh, contentDescription = "本地模型 GPU 加速")
                                         }
                                     )
                                     HorizontalDivider(

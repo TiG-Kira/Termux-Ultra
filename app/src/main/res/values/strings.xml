@@ -1043,6 +1043,8 @@
     <string name="no_logs_to_clear">No logs to clear</string>
 
     <!-- Crash Dialog -->
+    <string name="crash_post_title">侦测到已发生错误</string>
+    <string name="crash_post_message">侦测到上次运行时发生了错误并崩溃，以下是崩溃详情。</string>
     <string name="crash_dialog_title">Application Error</string>
     <string name="crash_dialog_message">An error occurred. The application will attempt to recover.\n\nError details:\n%1$s</string>
     <string name="crash_dialog_severe_title">Critical Error</string>

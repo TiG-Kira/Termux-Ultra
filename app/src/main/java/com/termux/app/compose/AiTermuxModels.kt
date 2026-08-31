@@ -47,14 +47,16 @@ data class LocalTrainRound(
     val question: String,
     /** 本地学生模型的原始回答 */
     val studentAnswer: String,
-    /** 在线老师给出的评分（0-100） */
-    val score: Int,
+    /** 本轮满分分数（权重），所有轮次累加 = 100，必须 > 0 */
+    val maxScore: Double = 10.0,
+    /** 本轮实际得分（0.0 ~ maxScore，允许小数） */
+    val score: Double = 0.0,
     /** 在线老师的详细批评/点评 */
-    val critique: String,
+    val critique: String = "",
     /** 在线老师建议追加到 System Prompt 的「教训记忆」片段（可能为空字符串表示本轮不追加） */
-    val memoryPatch: String,
+    val memoryPatch: String = "",
     /** 该轮真实耗时（毫秒） */
-    val durationMs: Long,
+    val durationMs: Long = 0L,
     /** 该轮状态："running" | "done" | "error" */
     val status: String = "done"
 )
@@ -73,10 +75,17 @@ data class LocalTrainSession(
     var avgRoundMs: Long = 0L,
     /** 错误信息（如有） */
     var lastError: String? = null,
-    /** 所有已完成轮次的平均分（0-100，训练结束后计算） */
-    val avgScore: Int = 0,
-    /** 训练完成后生成的总体建议 */
+    /** 所有已完成轮次的实际得分累加（满分100） */
+    val totalScore: Double = 0.0,
+    /** 训练结束后生成的总体建议 */
     val finalSummary: String = ""
+)
+/** 单条经验教训（结构化存储，支持 CRUD） */
+data class Lesson(
+    val id: Long = System.currentTimeMillis(),
+    val content: String,        // 教训内容，格式如 "• 关于 xxx：xxx"
+    val source: String = "auto", // "auto"(训练自动) | "manual"(用户手动) | "teacher"(老师对话归纳)
+    val timestamp: Long = System.currentTimeMillis()
 )
 
 
@@ -903,8 +912,10 @@ object AiTermuxPrefs {
     private const val KEY_TRAIN_HINT_SHOWN = "train_hint_shown_v1"
     private const val KEY_LAST_TRAIN_SESSION = "last_train_session_v1"
     private const val KEY_LEARNED_MEMORY_BLOCK = "learned_memory_block_v1"
+    private const val KEY_LESSONS = "ai_lessons"
     private const val KEY_NEEDS_RECONFIG = "needs_reconfig"
     private const val KEY_TEACHER_CHAT_HISTORY = "teacher_chat_history"
+    private const val KEY_LOCAL_GPU_ACCEL = "local_gpu_accel"
 
     // ---------- Config ----------
     data class AutoExecConfig(
@@ -1231,9 +1242,100 @@ object AiTermuxPrefs {
     }
 
     fun clearLearnedMemory(context: Context) {
-        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .edit().remove(KEY_LEARNED_MEMORY_BLOCK).apply()
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit().remove(KEY_LEARNED_MEMORY_BLOCK).remove(KEY_LESSONS).apply()
     }
+
+    // ---------- Lessons CRUD ----------
+    /** 获取所有经验教训（按时间升序） */
+    fun getLessons(context: Context): List<Lesson> {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val raw = prefs.getString(KEY_LESSONS, "[]") ?: "[]"
+        return try {
+            val arr = Gson().fromJson(raw, Array<Lesson>::class.java)
+            arr.toList().sortedBy { it.timestamp }
+        } catch (_: Throwable) { emptyList() }
+    }
+
+    /** 保存所有经验教训列表（替换式） */
+    fun saveLessons(context: Context, lessons: List<Lesson>) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit().putString(KEY_LESSONS, Gson().toJson(lessons)).apply()
+    }
+
+    /** 添加单条教训 */
+    fun addLesson(context: Context, content: String, source: String = "auto") {
+        val trimmed = content.trim()
+        if (trimmed.isBlank()) return
+        val lessons = getLessons(context).toMutableList()
+        val lesson = Lesson(
+            content = if (trimmed.startsWith("•")) trimmed else "• " + trimmed.removePrefix("•").trimStart(),
+            source = source
+        )
+        lessons.add(lesson)
+        saveLessons(context, lessons)
+        // 同步更新到大字符串（用于向后兼容 System Prompt）
+        rebuildLearnedMemoryFromLessons(context)
+    }
+
+    /** 更新单条教训 */
+    fun updateLesson(context: Context, lessonId: Long, newContent: String) {
+        val lessons = getLessons(context).toMutableList()
+        val idx = lessons.indexOfFirst { it.id == lessonId }
+        if (idx >= 0) {
+            val trimmed = newContent.trim()
+            lessons[idx] = lessons[idx].copy(
+                content = if (trimmed.startsWith("•")) trimmed else "• " + trimmed.removePrefix("•").trimStart()
+            )
+            saveLessons(context, lessons)
+            rebuildLearnedMemoryFromLessons(context)
+        }
+    }
+
+    /** 删除单条教训 */
+    fun deleteLesson(context: Context, lessonId: Long) {
+        val lessons = getLessons(context).toMutableList()
+        val removed = lessons.removeAll { it.id == lessonId }
+        if (removed) {
+            saveLessons(context, lessons)
+            rebuildLearnedMemoryFromLessons(context)
+        }
+    }
+
+    /** 从 Lessons 列表重建大字符串记忆块（保持 Lessons 和 getLearnedMemoryBlock 同步） */
+    fun rebuildLearnedMemoryFromLessons(context: Context) {
+        val lessons = getLessons(context)
+        if (lessons.isEmpty()) {
+            saveLearnedMemoryBlock(context, "")
+        } else {
+            val sb = StringBuilder()
+            for (l in lessons) {
+                sb.append(l.content.trimEnd()).append("\n")
+            }
+            saveLearnedMemoryBlock(context, sb.toString())
+        }
+    }
+
+    /** 从大字符串解析已有教训并导入为结构化 Lessons（升级时用） */
+    fun migrateMemoryBlockToLessons(context: Context) {
+        val existing = getLessons(context)
+        if (existing.isNotEmpty()) return // 已有结构化数据，跳过迁移
+        val block = getLearnedMemoryBlock(context).trim()
+        if (block.isBlank()) return
+        val lessons = mutableListOf<Lesson>()
+        for (line in block.split("\n".toRegex())) {
+            val trimmed = line.trim()
+            if (trimmed.isNotBlank() && trimmed.startsWith("•")) {
+                lessons.add(Lesson(content = trimmed, source = "migrated"))
+            } else if (trimmed.isNotBlank()) {
+                lessons.add(Lesson(content = "• $trimmed", source = "migrated"))
+            }
+        }
+        if (lessons.isNotEmpty()) {
+            saveLessons(context, lessons)
+        }
+    }
+
 
     // ---------- Teacher Chat History ----------
     fun appendTeacherChatHistory(context: Context, role: String, msgContent: String) {
@@ -1389,6 +1491,17 @@ object AiTermuxPrefs {
     fun setRootAutoShell(context: Context, enabled: Boolean) {
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .edit().putBoolean(KEY_ROOT_AUTO_SHELL, enabled).apply()
+    }
+
+    // ---------- Local GPU Acceleration ----------
+    fun isLocalGpuAccelEnabled(context: Context): Boolean {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        return prefs.getBoolean(KEY_LOCAL_GPU_ACCEL, false)
+    }
+
+    fun setLocalGpuAccelEnabled(context: Context, enabled: Boolean) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().putBoolean(KEY_LOCAL_GPU_ACCEL, enabled).apply()
     }
 
 

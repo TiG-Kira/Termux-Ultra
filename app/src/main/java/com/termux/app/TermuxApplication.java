@@ -1,6 +1,8 @@
 package com.termux.app;
 
 import android.app.Application;
+import android.app.Application.ActivityLifecycleCallbacks;
+import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.net.LocalServerSocket;
@@ -48,9 +50,31 @@ public class TermuxApplication extends Application {
         super.attachBaseContext(LocaleHelper.attachBaseContext(base));
     }
 
+    // 防止重复弹窗的标记：一旦某个 Activity 已经弹出过崩溃提示，后续 Activity 不再弹
+    private static volatile boolean sCrashDialogShown = false;
+
     @Override
     public void onCreate() {
         super.onCreate();
+
+        // 注册 ActivityLifecycleCallbacks：每个 Activity 进入前台时检测是否有待处理的崩溃
+        registerActivityLifecycleCallbacks(new ActivityLifecycleCallbacks() {
+            @Override public void onActivityCreated(Activity activity, android.os.Bundle savedInstanceState) {}
+            @Override public void onActivityStarted(Activity activity) {}
+            @Override public void onActivityResumed(Activity activity) {
+                // 每个 Activity 进入前台时检测一次崩溃（只弹一次）
+                if (!sCrashDialogShown) {
+                    try {
+                        com.termux.app.utils.CrashUtils.notifyAppCrashOnLastRun(activity, "TermuxApplication");
+                        sCrashDialogShown = true; // 标记已触发，避免重复（即使没弹成功也不再触发）
+                    } catch (Throwable ignored) {}
+                }
+            }
+            @Override public void onActivityPaused(Activity activity) {}
+            @Override public void onActivityStopped(Activity activity) {}
+            @Override public void onActivitySaveInstanceState(Activity activity, android.os.Bundle outState) {}
+            @Override public void onActivityDestroyed(Activity activity) {}
+        });
 
         // Initialize LogManager first
         com.termux.app.utils.LogManager.init(this);

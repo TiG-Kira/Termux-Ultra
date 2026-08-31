@@ -4,6 +4,7 @@ import android.app.Notification;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.content.Context;
+import android.content.Intent;
 import android.os.Build;
 import android.os.Environment;
 
@@ -13,6 +14,7 @@ import com.termux.R;
 import com.termux.shared.activities.ReportActivity;
 import com.termux.shared.models.errors.Error;
 import com.termux.shared.notification.NotificationUtils;
+import com.termux.app.activities.AlertDialogActivity;
 import com.termux.shared.file.FileUtils;
 import com.termux.shared.models.ReportInfo;
 import com.termux.app.models.UserAction;
@@ -26,6 +28,7 @@ import com.termux.shared.termux.TermuxUtils;
 
 import com.termux.shared.termux.TermuxConstants;
 
+import java.io.File;
 import java.nio.charset.Charset;
 
 public class CrashUtils {
@@ -47,15 +50,17 @@ public class CrashUtils {
      * @param context The {@link Context} for operations.
      * @param logTagParam The log tag to use for logging.
      */
+    public static boolean hasPendingCrash(final Context context) {
+        if (context == null) return false;
+        File crashFile = new File(TermuxConstants.TERMUX_CRASH_LOG_FILE_PATH);
+        return crashFile.exists() && crashFile.length() > 0;
+    }
+
     public static void notifyAppCrashOnLastRun(final Context context, final String logTagParam) {
         if (context == null) return;
 
         TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(context);
         if (preferences == null) return;
-
-        // If user has disabled notifications for crashes
-        if (!preferences.areCrashReportNotificationsEnabled())
-            return;
 
         new Thread() {
             @Override
@@ -75,7 +80,7 @@ public class CrashUtils {
                     return;
                 }
 
-                // Move crash log file to backup location if it exists
+                // Move crash log file to backup location if it exists (防止重复弹窗)
                 error = FileUtils.moveRegularFile("crash log", TermuxConstants.TERMUX_CRASH_LOG_FILE_PATH, TermuxConstants.TERMUX_CRASH_LOG_BACKUP_FILE_PATH, true);
                 if (error != null) {
                     Logger.logErrorExtended(logTag, error.toString());
@@ -86,9 +91,26 @@ public class CrashUtils {
                 if (reportString.isEmpty())
                     return;
 
-                Logger.logDebug(logTag, "A crash log file found at \"" + TermuxConstants.TERMUX_CRASH_LOG_FILE_PATH +  "\".");
+                Logger.logDebug(logTag, "A crash log file found at crash_log.md. Showing post-crash dialog.");
 
-                sendCrashReportNotification(context, logTag, reportString, false, false);
+                // 启动事后崩溃弹窗（主线程安全，Activity 会被正常启动）
+                String errorMsg = reportString.length() > 500
+                    ? reportString.substring(0, 500) + "..."
+                    : reportString;
+                final String finalErrorMsg = errorMsg;
+                new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> {
+                    try {
+                        android.content.Intent intent = new android.content.Intent(context, AlertDialogActivity.class);
+                        intent.putExtra(AlertDialogActivity.EXTRA_DIALOG_TYPE, AlertDialogActivity.TYPE_CRASH_POST);
+                        intent.putExtra(AlertDialogActivity.EXTRA_ERROR_MESSAGE, finalErrorMsg);
+                        intent.putExtra("extra_crash_report_full", reportString);
+                        intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
+                        context.startActivity(intent);
+                    } catch (Throwable t) {
+                        Logger.logError(logTag, "Failed to show post-crash dialog: " + t.getMessage());
+                    }
+                });
+
             }
         }.start();
     }

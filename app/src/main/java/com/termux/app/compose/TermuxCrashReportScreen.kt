@@ -126,7 +126,10 @@ fun TermuxCrashReportScreen(
                             title = stringResource(R.string.copy_report),
                             summary = stringResource(R.string.copy_report_summary),
                             onClick = {
-                                copyToClipboard(context, reportText)
+                                android.content.Context.CLIPBOARD_SERVICE.let {
+                                    val cm = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                                    cm.setPrimaryClip(android.content.ClipData.newPlainText("Crash Report", reportText))
+                                }
                                 scope.launch {
                                     snackbarHostState.showSnackbar(
                                         message = context.getString(R.string.report_copied),
@@ -181,12 +184,6 @@ private fun generateCrashReportText(context: Context): String {
         appendLine("Thread: ${thread.name}")
         appendLine("Priority: ${thread.priority}")
     }
-}
-
-private fun copyToClipboard(context: Context, text: String) {
-    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-    val clip = android.content.ClipData.newPlainText("Crash Report", text)
-    clipboard.setPrimaryClip(clip)
 }
 
 @Composable

@@ -247,24 +247,26 @@ private fun TrainerBody(
                     }
                 )
                 1 -> ConversationTab(session)
+                2 -> TeacherChatTab(ctx, onlineReady, refreshTeacherChat.value)
+                3 -> LessonsTab(ctx, refreshTeacherChat.value)
                 else -> TeacherChatTab(ctx, onlineReady, refreshTeacherChat.value)
             }
         }
     }
 
     ManualRatingDialog(
-        data = waitingRating.value ?: LocalTrainerEvent.WaitingForUserRating(0, "", "", 60, "", ""),
+        data = waitingRating.value ?: LocalTrainerEvent.WaitingForUserRating(0, "", "", 10.0, 60.0, "", ""),
         show = waitingRating.value != null,
         setShow = { show -> if (!show) waitingRating.value = null },
         onConfirm = { score, critique, patch ->
             val data = waitingRating.value ?: return@ManualRatingDialog
-            AiLocalTrainer.provideUserRating(data.roundIndex, score, critique, patch)
+            AiLocalTrainer.provideUserRating(data.roundIndex, data.suggestedMaxScore, score, critique, patch)
             waitingRating.value = null
         },
         onDismiss = {
             // 用户选择跳过，用启发式建议继续
             val data = waitingRating.value ?: return@ManualRatingDialog
-            AiLocalTrainer.provideUserRating(data.roundIndex, data.suggestedScore, data.suggestedCritique, data.suggestedMemoryPatch)
+            AiLocalTrainer.provideUserRating(data.roundIndex, data.suggestedMaxScore, data.suggestedScore, data.suggestedCritique, data.suggestedMemoryPatch)
             waitingRating.value = null
         }
     )
@@ -290,7 +292,9 @@ private fun handleTrainerEvent(
         is LocalTrainerEvent.TeacherQuestion -> steps.add(evt.roundIndex to "【老师出题 - 第${evt.roundIndex}轮】\n${evt.text}")
         is LocalTrainerEvent.StudentAnswer -> steps.add(evt.roundIndex to "【学生回答 第${evt.roundIndex}轮 · ${evt.durationMs/1000}s】\n${evt.text}")
         is LocalTrainerEvent.TeacherCritique -> {
-            val header = if (session.value.teacher == "online_fallback") "【在线老师评分 第${evt.roundIndex}轮 · ${evt.score}/100】" else "【用户评分 第${evt.roundIndex}轮 · ${evt.score}/100】"
+            val scoreStr = "%.1f".format(evt.score)
+            val maxStr = "%.1f".format(evt.maxScore)
+            val header = if (session.value.teacher == "online_fallback") "【在线老师评分 第${evt.roundIndex}轮 · $scoreStr/$maxStr】" else "【用户评分 第${evt.roundIndex}轮 · $scoreStr/$maxStr】"
             val bodySb = StringBuilder()
             bodySb.appendLine(evt.critique)
             if (evt.memoryPatch.isNotBlank()) { bodySb.appendLine(); bodySb.appendLine("→ System Prompt 记忆块追加："); bodySb.append(evt.memoryPatch) }
@@ -301,7 +305,9 @@ private fun handleTrainerEvent(
         is LocalTrainerEvent.ErrorOccurred -> { steps.add(evt.roundIndex to "❌ 错误（第${evt.roundIndex}轮）\n${evt.message}"); statusMsg.value = "错误：${evt.message}" }
         is LocalTrainerEvent.SessionSnapshot -> { session.value = evt.session; AiTermuxPrefs.saveLastTrainSession(ctx, evt.session) }
         is LocalTrainerEvent.WaitingForUserRating -> {
-            steps.add(evt.roundIndex to "📝 等待用户评分 第${evt.roundIndex}轮 · 建议分=${evt.suggestedScore}/100\n${evt.suggestedCritique}")
+            val ss = "%.1f".format(evt.suggestedScore)
+            val sm = "%.1f".format(evt.suggestedMaxScore)
+            steps.add(evt.roundIndex to "📝 等待用户评分 第${evt.roundIndex}轮 · 建议分=$ss/$sm\n${evt.suggestedCritique}")
             waitingRating.value = evt
         }
         is LocalTrainerEvent.TeacherFollowup -> steps.add(evt.roundIndex to "【老师追问 第${evt.roundIndex}轮】\n${evt.followupText}")
@@ -335,15 +341,20 @@ private fun TopInfoCard(
             InfoRow("状态：", statusMsg, true)
             InfoRow("预计剩余时间：", etaText, false)
             if (session.avgRoundMs > 0L) InfoRow("单轮平均：", "${session.avgRoundMs/1000}s", false)
-            val doneRoundsData = session.rounds.filter { it.status == "done" && it.score > 0 }
+            val doneRoundsData = session.rounds.filter { it.status == "done" }
             if (doneRoundsData.isNotEmpty()) {
-                val avg = doneRoundsData.map { it.score }.average().toInt()
-                InfoRow("当前平均分：", "$avg / 100", false)
+                val sc = session.totalScore
+                InfoRow("当前总分：", "${"%.2f".format(sc)} / 100", false)
+                val maxW = doneRoundsData.sumOf { it.maxScore }
+                if (maxW > 0.0) {
+                    val pct = (sc / maxW * 100.0)
+                    InfoRow("标准化得分：", "${"%.1f".format(pct)}%", false)
+                }
             }
             if (session.status == "finished" && doneRoundsData.isNotEmpty()) {
                 Spacer(Modifier.height(6.dp))
-                val avgFinal = doneRoundsData.map { it.score }.average().toInt()
-                Text("🏁 训练完成 · 平均分 $avgFinal / 100", fontWeight = FontWeight.SemiBold, color = MiuixTheme.colorScheme.primary, fontSize = 13.sp)
+                val totalFinal = session.totalScore
+                Text("🏁 训练完成 · 总分 ${"%.2f".format(totalFinal)} / 100", fontWeight = FontWeight.SemiBold, color = MiuixTheme.colorScheme.primary, fontSize = 13.sp)
                 if (session.finalSummary.isNotBlank()) {
                     Spacer(Modifier.height(4.dp))
                     Text(session.finalSummary, fontSize = 12.sp)
@@ -398,7 +409,7 @@ private fun TabBar(currentTab: MutableState<Int>) {
             .background(MiuixTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)).padding(2.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        listOf("训练流程" to 0, "完整对话" to 1, "与老师对话" to 2).forEach { (t, i) ->
+        listOf("训练流程" to 0, "完整对话" to 1, "与老师对话" to 2, "经验教训" to 3).forEach { (t, i) ->
             val selected = currentTab.value == i
             Box(
                 Modifier.weight(1f).fillMaxSize().clip(RoundedCornerShape(10.dp))
@@ -593,7 +604,7 @@ private fun RoundConversationCard(round: LocalTrainRound, teacher: String) {
                         .background(scoreColor.copy(alpha = 0.2f))
                         .padding(horizontal = 8.dp, vertical = 2.dp)
                 ) {
-                    Text("评分 ${round.score}/100", fontSize = 12.sp, color = scoreColor, fontWeight = FontWeight.SemiBold)
+                    Text("评分 ${"%.1f".format(round.score)}/${"%.1f".format(round.maxScore)}", fontSize = 12.sp, color = scoreColor, fontWeight = FontWeight.SemiBold)
                 }
                 Spacer(Modifier.width(8.dp))
                 Text("用时 ${round.durationMs/1000}s", fontSize = 11.sp)
@@ -684,21 +695,28 @@ private fun TeacherChatTab(ctx: Context, onlineReady: MutableState<Boolean>, ref
             ) {
                 itemsIndexed(messages) { idx, (role, content) ->
                     val isUser = role == "user"
+                    val bg = if (isUser) MiuixTheme.colorScheme.primary else MiuixTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+                    val textColor = if (isUser) Color.White else MiuixTheme.colorScheme.onSurface
+                    val corners = if (isUser) {
+                        RoundedCornerShape(14.dp, 14.dp, 2.dp, 14.dp)
+                    } else {
+                        RoundedCornerShape(14.dp, 14.dp, 14.dp, 2.dp)
+                    }
                     Row(
                         Modifier.fillMaxWidth(),
                         horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start
                     ) {
-                        Card(
+                        Box(
                             modifier = Modifier
-                                .weight(1f, fill = false)
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(if (isUser) MiuixTheme.colorScheme.primaryContainer else MiuixTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
+                                .then(if (isUser) Modifier.padding(start = 40.dp) else Modifier.padding(end = 40.dp))
+                                .clip(corners)
+                                .background(bg)
                         ) {
                             Text(
                                 text = content,
-                                modifier = Modifier.padding(12.dp),
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
                                 fontSize = 13.sp,
-                                color = if (isUser) MiuixTheme.colorScheme.onPrimaryContainer else MiuixTheme.colorScheme.onSurface
+                                color = textColor
                             )
                         }
                     }
@@ -756,18 +774,174 @@ private fun TeacherChatTab(ctx: Context, onlineReady: MutableState<Boolean>, ref
     }
 }
 
+
+// ========== 经验教训 Tab ==========
+@Composable
+private fun LessonsTab(ctx: Context, refreshKey: Int) {
+    val lessons = remember(refreshKey) { mutableStateOf(AiTermuxPrefs.getLessons(ctx)) }
+
+    // 每次显示时重新加载
+    LaunchedEffect(refreshKey) {
+        lessons.value = AiTermuxPrefs.getLessons(ctx)
+    }
+
+    fun refresh() {
+        lessons.value = AiTermuxPrefs.getLessons(ctx)
+    }
+
+    // 编辑对话框状态
+    var editingLesson by remember { mutableStateOf<Lesson?>(null) }
+    var editingText by remember { mutableStateOf("") }
+
+    Column(Modifier.fillMaxSize()) {
+        if (lessons.value.isEmpty()) {
+            Box(
+                Modifier.fillMaxSize().padding(32.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("暂无经验教训", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                    Spacer(Modifier.height(6.dp))
+                    Text("开始训练后，老师会自动生成教训条目；\n也可以在与老师对话中说「归纳教训」来手动整理。",
+                         fontSize = 12.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+                }
+            }
+        } else {
+            Row(
+                Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("共 ${lessons.value.size} 条教训", fontSize = 12.sp)
+                Spacer(Modifier.weight(1f))
+                TextButton(
+                    text = "全部清空",
+                    onClick = {
+                        AiTermuxPrefs.clearLearnedMemory(ctx)
+                        refresh()
+                    }
+                )
+            }
+
+            LazyColumn(
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 24.dp)
+            ) {
+                itemsIndexed(lessons.value) { index, lesson ->
+                    val sourceLabel = when (lesson.source) {
+                        "auto" -> "训练自动"
+                        "teacher" -> "老师归纳"
+                        "manual" -> "手动添加"
+                        "migrated" -> "历史迁移"
+                        else -> lesson.source
+                    }
+                    val sourceColor = when (lesson.source) {
+                        "auto" -> Color(0xFF16A34A)
+                        "teacher" -> Color(0xFF2563EB)
+                        "manual" -> Color(0xFF9333EA)
+                        else -> MiuixTheme.colorScheme.onSurfaceVariantSummary
+                    }
+
+                    Card(
+                        modifier = Modifier.fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                    ) {
+                        Column(Modifier.padding(12.dp)) {
+                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                Text("#${index + 1}", fontSize = 11.sp,
+                                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                    fontWeight = FontWeight.SemiBold)
+                                Spacer(Modifier.width(6.dp))
+                                Box(
+                                    Modifier.clip(RoundedCornerShape(4.dp))
+                                        .background(sourceColor.copy(alpha = 0.15f))
+                                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                                ) {
+                                    Text(sourceLabel, fontSize = 10.sp, color = sourceColor)
+                                }
+                                Spacer(Modifier.weight(1f))
+                                TextButton(
+                                    text = "编辑",
+                                    onClick = {
+                                        editingLesson = lesson
+                                        editingText = lesson.content
+                                    }
+                                )
+                                Spacer(Modifier.width(4.dp))
+                                TextButton(
+                                    text = "删除",
+                                    onClick = {
+                                        AiTermuxPrefs.deleteLesson(ctx, lesson.id)
+                                        refresh()
+                                    }
+                                )
+                            }
+                            Spacer(Modifier.height(6.dp))
+                            Text(lesson.content, fontSize = 13.sp,
+                                color = MiuixTheme.colorScheme.onSurface)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // 编辑对话框
+    if (editingLesson != null) {
+        WindowDialog(
+            show = true,
+            onDismissRequest = { editingLesson = null },
+            title = "编辑教训",
+            summary = "修改后的教训会同步更新到训练记忆块和 Agent 的 System Prompt。",
+            content = {
+                Column(Modifier.verticalScroll(rememberScrollState()).padding(vertical = 4.dp)) {
+                    TextField(
+                        value = editingText,
+                        onValueChange = { editingText = it },
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 120.dp),
+                        label = "教训内容（以 • 开头）"
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        TextButton(
+                            text = "取消",
+                            onClick = { editingLesson = null },
+                            modifier = Modifier.height(40.dp)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Button(
+                            onClick = {
+                                val id = editingLesson?.id ?: return@Button
+                                AiTermuxPrefs.updateLesson(ctx, id, editingText)
+                                editingLesson = null
+                                refresh()
+                            },
+                            modifier = Modifier.height(40.dp)
+                        ) {
+                            Text("保存")
+                        }
+                    }
+                }
+            }
+        )
+    }
+}
+
 // ========== 手动评分 Dialog ==========
 @Composable
 private fun ManualRatingDialog(
     data: LocalTrainerEvent.WaitingForUserRating,
     show: Boolean,
     setShow: (Boolean) -> Unit,
-    onConfirm: (score: Int, critique: String, patch: String) -> Unit,
+    onConfirm: (score: Double, critique: String, patch: String) -> Unit,
     onDismiss: () -> Unit
 ) {
     var score by remember(show) { mutableStateOf(data.suggestedScore.toFloat()) }
     var critique by remember(show) { mutableStateOf(data.suggestedCritique) }
     var patch by remember(show) { mutableStateOf(data.suggestedMemoryPatch) }
+    val maxScoreValue = data.suggestedMaxScore.toFloat()
 
     WindowDialog(
         show = show,
@@ -790,10 +964,11 @@ private fun ManualRatingDialog(
 
                 Spacer(Modifier.height(10.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("评分：${score.toInt()}  ", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                    Text("评分：${"%.1f".format(score.toDouble())} / ${"%.1f".format(data.suggestedMaxScore)}  ", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                     Slider(
                         value = score, onValueChange = { score = it },
-                        valueRange = 0f..100f, steps = 99, modifier = Modifier.weight(1f)
+                        valueRange = 0f..maxScoreValue, steps = ((maxScoreValue * 10) - 1).toInt().coerceAtLeast(0),
+                        modifier = Modifier.weight(1f)
                     )
                 }
                 Spacer(Modifier.height(4.dp))
@@ -820,7 +995,7 @@ private fun ManualRatingDialog(
                     )
                     Spacer(Modifier.width(8.dp))
                     Button(
-                        onClick = { setShow(false); onConfirm(score.toInt(), critique, patch) },
+                        onClick = { setShow(false); onConfirm(score.toDouble(), critique, patch) },
                         modifier = Modifier.weight(1f).height(48.dp)
                     ) {
                         Text("提交评分 · 进入下一轮")

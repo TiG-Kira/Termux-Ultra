@@ -9,8 +9,11 @@ import com.termux.shared.termux.TermuxConstants
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.channels.Channel
 import java.io.BufferedReader
 import java.io.File
 import java.io.InputStreamReader
@@ -36,7 +39,8 @@ data class LocalModelEntry(
     val sizeBytes: Long,
     val maxTokens: Int,
     val recommendedRamMB: Int,
-    val maxContext: Int = 4096
+    val maxContext: Int = 4096,
+    val warning: String? = null
 )
 
 /** 内置可选本地模型目录（当前提供适合 Android 设备的轻量模型） */
@@ -44,12 +48,47 @@ val LOCAL_MODELS: List<LocalModelEntry> = listOf(
     LocalModelEntry(
         id = "qwen2.5-1.5b-q4km",
         displayName = "Qwen2.5-1.5B-Instruct",
-        description = "面向 Android 设备的对话模型（Q4_K_M 量化，约 950MB）",
+        description = "阿里通义轻量对话模型（Q4_K_M 量化，约 950MB）",
         fileName = "qwen2.5-1.5b-instruct-q4_k_m.gguf",
         downloadUrl = "https://hf-mirror.com/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf",
         sizeBytes = 990_000_000L,
         maxTokens = 512,
-        recommendedRamMB = 2048
+        recommendedRamMB = 2048,
+        maxContext = 32768
+    ),
+    LocalModelEntry(
+        id = "deepseek-r1-qwen-1.5b-q4km",
+        displayName = "DeepSeek-R1-Distill-Qwen-1.5B",
+        description = "深度求索蒸馏推理模型（Q4_K_M 量化，约 1.1GB）",
+        fileName = "DeepSeek-R1-Distill-Qwen-1.5B-Q4_K_M.gguf",
+        downloadUrl = "https://hf-mirror.com/unsloth/DeepSeek-R1-Distill-Qwen-1.5B-GGUF/resolve/main/DeepSeek-R1-Distill-Qwen-1.5B-Q4_K_M.gguf",
+        sizeBytes = 1_117_321_312L,
+        maxTokens = 512,
+        recommendedRamMB = 2048,
+        maxContext = 32768
+    ),
+    LocalModelEntry(
+        id = "mimo-7b-rl-q4km",
+        displayName = "MiMo-7B-RL",
+        description = "小米开源推理模型（Q4_K_M 量化，约 4.4GB），需较大内存",
+        fileName = "MiMo-7B-RL-Q4_K_M.gguf",
+        downloadUrl = "https://hf-mirror.com/jedisct1/MiMo-7B-RL-GGUF/resolve/main/MiMo-7B-RL-Q4_K_M.gguf",
+        sizeBytes = 4_684_339_808L,
+        maxTokens = 512,
+        recommendedRamMB = 6144,
+        maxContext = 32768
+    ),
+    LocalModelEntry(
+        id = "seed-oss-36b-q4km",
+        displayName = "Seed-OSS-36B-Instruct",
+        description = "字节跳动豆包开源旗舰模型（Q4_K_M 量化，约 20GB），512K 超长上下文",
+        fileName = "Seed-OSS-36B-Instruct-Q4_K_M.gguf",
+        downloadUrl = "https://hf-mirror.com/unsloth/Seed-OSS-36B-Instruct-GGUF/resolve/main/Seed-OSS-36B-Instruct-Q4_K_M.gguf",
+        sizeBytes = 21_762_149_536L,
+        maxTokens = 512,
+        recommendedRamMB = 24576,
+        maxContext = 524288,
+        warning = "体积超过 20GB，需 24GB+ 空闲内存，绝大多数 Android 设备无法正常运行，仅供高端设备或 Termux 桌面环境使用"
     )
 )
 
@@ -270,7 +309,7 @@ object AiLocalModel {
         clearServerMeta()
     }
 
-    private suspend fun ensureServerStarted(entry: LocalModelEntry): Boolean = withContext(Dispatchers.IO) {
+    private suspend fun ensureServerStarted(entry: LocalModelEntry, onLog: ((String) -> Unit)? = null): Boolean = withContext(Dispatchers.IO) {
         val serverBin = findLlamaServerBinary() ?: return@withContext false
         val existing = readServerMeta()
 
@@ -302,7 +341,16 @@ object AiLocalModel {
         val pidQ = "'" + pidFile.absolutePath.replace("'", "'\\''") + "'"
 
         // 添加 --cont-batching 和 --metrics 参数以提高稳定性
-        val serverArgs = "$binQ --host 127.0.0.1 --port $llamaServerPort -m $modelQ -c ${entry.maxContext} -t 4 --cont-batching"
+        // GPU 加速：根据偏好设置和检测结果动态追加 -ngl 参数
+        val gpuArgs = buildGpuLaunchArgs(appContext)
+        val serverArgs = buildString {
+            append(binQ)
+            append(" --host 127.0.0.1 --port ").append(llamaServerPort)
+            append(" -m ").append(modelQ)
+            append(" -c ").append(entry.maxContext)
+            append(" -t 4 --cont-batching")
+            if (gpuArgs.isNotBlank()) append(" ").append(gpuArgs)
+        }
         val shellCmd = "nohup $serverArgs >> $logQ 2>&1 & echo \$! > $pidQ"
 
         try {
@@ -349,14 +397,32 @@ object AiLocalModel {
             // 等待端口就绪 + 模型加载完成（最多 120 秒）
             val deadline = System.currentTimeMillis() + 120_000L
             var portReady = false
+            var lastLogSize = 0L
             while (System.currentTimeMillis() < deadline) {
+                // 增量读取 server 日志并推送
+                runCatching {
+                    val curSize = logFile.length()
+                    if (curSize > lastLogSize) {
+                        val appended = logFile.readText().substring(lastLogSize.toInt())
+                        appended.split('\n').forEach { line ->
+                            val trimmed = line.trim()
+                            if (trimmed.isNotEmpty()) {
+                                onLog?.invoke(trimmed)
+                                android.util.Log.d("AiLocalModel", "llama-server: $trimmed")
+                            }
+                        }
+                        lastLogSize = curSize
+                    }
+                }
                 if (!portReady && pingServerPort(llamaServerPort)) {
                     portReady = true
                     android.util.Log.i("AiLocalModel", "llama-server port opened, waiting for model load...")
+                    onLog?.invoke("✅ 端口已打开，等待模型加载完成…")
                 }
                 // 端口就绪后，验证模型是否真正加载完成
                 if (portReady && verifyModelReady()) {
                     android.util.Log.i("AiLocalModel", "llama-server ready with model loaded")
+                    onLog?.invoke("✅ 模型加载完成，推理就绪")
                     return@withContext true
                 }
                 Thread.sleep(1000)
@@ -992,6 +1058,11 @@ object AiLocalModel {
         // args.add("--silent-prompt")  // Removed: may suppress model output
         args.add("--log-disable")
         args.addAll(listOf("-t", "4"))
+        // GPU 加速：根据偏好设置追加 -ngl 参数
+        val gpuArgs = buildGpuLaunchArgs(appContext)
+        if (gpuArgs.isNotBlank()) {
+            args.addAll(gpuArgs.split(" "))
+        }
         android.util.Log.i("AiLocalModel", "buildProcess: args=" + args.joinToString(" "))
         return ProcessBuilder(args)
     }
@@ -1201,14 +1272,14 @@ object AiLocalModel {
         config: AiProviderConfig,
         messages: List<OpenAiMessage>,
         isCancelled: () -> Boolean
-    ): Flow<StreamChunk> = flow {
+    ): Flow<StreamChunk> = flow@channelFlow {
         android.util.Log.i("AiLocalModel", "=== chatStreamLocal 入口 ===")
         android.util.Log.i("AiLocalModel", "chatStreamLocal: 输入 messages.size=${messages.size}, 总字符=${messages.sumOf { it.content.length }}")
         
         val notReady = requireReady()
         if (notReady != null) {
-            emit(StreamChunk.Error(notReady))
-            return@flow
+            send(StreamChunk.Error(notReady))
+            return@channelFlow
         }
         val entry = getSelectedModel()!!
         android.util.Log.i("AiLocalModel", "chatStreamLocal: 模型=${entry.displayName}, entry.maxContext=${entry.maxContext}")
@@ -1224,15 +1295,25 @@ object AiLocalModel {
         }
             
         if (truncatedMessages.size < messages.size) {
-            emit(StreamChunk.Prepare("历史消息过长，已自动精简", "仅保留最近对话"))
+            send(StreamChunk.Prepare("历史消息过长，已自动精简", "仅保留最近对话"))
         }
 
         val serverBin = findLlamaServerBinary()
         if (serverBin != null) {
-            emit(StreamChunk.Prepare("正在启动本地推理服务…", "使用 llama-server 常驻模式以加速后续对话"))
-            val serverReady = ensureServerStarted(entry)
+            send(StreamChunk.Prepare("正在启动本地推理服务…", "使用 llama-server 常驻模式以加速后续对话"))
+            val logChannel = Channel<String>(Channel.UNLIMITED)
+            val logJob = launch {
+                for (line in logChannel) {
+                    send(StreamChunk.Prepare("正在启动本地推理服务…", "⚙ $line"))
+                }
+            }
+            val serverReady = ensureServerStarted(entry) { logLine ->
+                logChannel.trySend(logLine)
+            }
+            logChannel.close()
+            logJob.join()
             if (serverReady && pingServerPort(llamaServerPort)) {
-                emit(StreamChunk.Prepare("模型已就绪，正在推理…", "通过本地 HTTP 接口调用"))
+                send(StreamChunk.Prepare("模型已就绪，正在推理…", "通过本地 HTTP 接口调用"))
                 var serverSucceeded = false
                 try {
                     android.util.Log.i("AiLocalModel", "chatStreamLocal: 调用 chatStreamLocalViaServer, 截断后 size=${truncatedMessages.size}")
@@ -1240,31 +1321,31 @@ object AiLocalModel {
                         when (chunk) {
                             is StreamChunk.Content -> {
                                 serverSucceeded = true
-                                emit(chunk)
+                                send(chunk)
                             }
                             is StreamChunk.Done -> {
                                 serverSucceeded = true
-                                emit(chunk)
+                                send(chunk)
                             }
                             is StreamChunk.Error -> {
                                 android.util.Log.w("AiLocalModel", "server 推理出错，回退到 cli: ${chunk.message}")
                                 throw java.util.concurrent.CancellationException("server-fallback")
                             }
                             is StreamChunk.Cancelled -> {
-                                emit(chunk)
+                                send(chunk)
                                 return@collect
                             }
-                            else -> emit(chunk)
+                            else -> send(chunk)
                         }
                     }
-                    if (serverSucceeded) return@flow
+                    if (serverSucceeded) return@channelFlow
                 } catch (cancel: java.util.concurrent.CancellationException) {
                     if (cancel.message != "server-fallback") {
-                        return@flow
+                        return@channelFlow
                     }
                 } catch (_: Exception) {}
             } else {
-                emit(StreamChunk.Prepare("常驻模式启动失败，切换到直接调用模式…", "fallback to llama-cli"))
+                send(StreamChunk.Prepare("常驻模式启动失败，切换到直接调用模式…", "fallback to llama-cli"))
             }
         }
 
@@ -1272,9 +1353,9 @@ object AiLocalModel {
         val promptText = buildChatPrompt(truncatedMessages)
         android.util.Log.i("AiLocalModel", "chatStreamLocal: buildChatPrompt 后 prompt 长度=${promptText.length} chars")
         val promptFile = writePromptFile(promptText)
-            ?: run { emit(StreamChunk.Error("无法写入提示词临时文件")); return@flow }
+            ?: run { send(StreamChunk.Error("无法写入提示词临时文件")); return@channelFlow }
 
-        emit(StreamChunk.Prepare("正在加载模型并推理…", "直接调用 llama-cli 子进程"))
+        send(StreamChunk.Prepare("正在加载模型并推理…", "直接调用 llama-cli 子进程"))
 
         var proc: Process? = null
         try {
@@ -1296,6 +1377,11 @@ object AiLocalModel {
                 } catch (_: Exception) {}
             }, "llama-stderr").apply { isDaemon = true; start() }
 
+            // 定时推送 stderr 到 UI（每次最多追加 3 行，避免刷屏）
+            var lastStderrEmit = 0
+            var lastStderrFlush = 0L
+            val stderrFlushInterval = 800L
+
             val reader = BufferedReader(InputStreamReader(proc.inputStream, Charsets.UTF_8))
             val fullText = StringBuilder()
 
@@ -1308,10 +1394,27 @@ object AiLocalModel {
 
             var line: String?
             while (true) {
+                // 定时推送 stderr 增量到 Prepare 事件
+                val now = System.currentTimeMillis()
+                if (now - lastStderrFlush >= stderrFlushInterval) {
+                    val curSize = stderrLines.size
+                    if (curSize > lastStderrEmit) {
+                        val toEmit = stderrLines.subList(lastStderrEmit, curSize)
+                            .filter { it.isNotBlank() }
+                            .takeLast(3)  // 最多显示最近 3 行，避免卡片过长
+                        val detailText = toEmit.joinToString("\n") { "⚙ $it" }
+                        if (detailText.isNotBlank()) {
+                            send(StreamChunk.Prepare("加载/推理中…", detailText))
+                        }
+                        lastStderrEmit = curSize
+                    }
+                    lastStderrFlush = now
+                }
+
                 if (isCancelled()) {
                     proc.destroy()
                     proc.waitFor(3, java.util.concurrent.TimeUnit.SECONDS)
-                    emit(StreamChunk.Cancelled)
+                    send(StreamChunk.Cancelled)
                     break
                 }
                 line = reader.readLine() ?: break
@@ -1328,7 +1431,7 @@ object AiLocalModel {
                                 val content = after.removePrefix(">").trimStart(' ', '\n', '	')
                                 if (content.isNotEmpty() && content != endMarker) {
                                     fullText.append(content).append('\n')
-                                    emit(StreamChunk.Content(content + "\n"))
+                                    send(StreamChunk.Content(content + "\n"))
                                     state = ParseState.RESPONSE
                                     isFirstContent = false
                                 }
@@ -1338,7 +1441,7 @@ object AiLocalModel {
                             val t = trimmed.trimStart { it <= ' ' || it == '█' || it == '=' || it == '-' || it == '>' || it == '<' }
                             if (t.startsWith("Loading model") || t.startsWith("build") || t.startsWith("model ") || t.startsWith("llama_model_loader")) {
                                 val first80 = if (trimmed.length > 80) trimmed.take(80) else trimmed
-                                emit(StreamChunk.Prepare("加载模型中…", first80))
+                                send(StreamChunk.Prepare("加载模型中…", first80))
                                 nonMatchingLines = 0
                             } else if (trimmed.isNotBlank()) {
                                 nonMatchingLines++
@@ -1346,7 +1449,7 @@ object AiLocalModel {
                                     android.util.Log.w("AiLocalModel", "No ChatML markers detected, falling back to plain text capture (lines=$nonMatchingLines)")
                                     state = ParseState.RESPONSE
                                     fullText.append(trimmed).append('\n')
-                                    emit(StreamChunk.Content(trimmed + "\n"))
+                                    send(StreamChunk.Content(trimmed + "\n"))
                                     isFirstContent = false
                                     nonMatchingLines = 0
                                     continue
@@ -1363,7 +1466,7 @@ object AiLocalModel {
                             val content = after.removePrefix(">").trimStart(' ', '\n', '	')
                             if (content.isNotEmpty() && content != endMarker) {
                                 fullText.append(content).append('\n')
-                                emit(StreamChunk.Content(content + "\n"))
+                                send(StreamChunk.Content(content + "\n"))
                                 state = ParseState.RESPONSE
                                 isFirstContent = false
                             }
@@ -1375,7 +1478,7 @@ object AiLocalModel {
                             android.util.Log.w("AiLocalModel", "Stuck in PROMPT_ECHO too long, falling back to plain text")
                             state = ParseState.RESPONSE
                             fullText.append(trimmed).append('\n')
-                            emit(StreamChunk.Content(trimmed + "\n"))
+                            send(StreamChunk.Content(trimmed + "\n"))
                             isFirstContent = false
                             nonMatchingLines = 0
                             continue
@@ -1396,14 +1499,14 @@ object AiLocalModel {
                         if (trimmed.isEmpty()) {
                             if (fullText.isNotEmpty() && !fullText.endsWith("\n")) {
                                 fullText.append('\n')
-                                emit(StreamChunk.Content("\n"))
+                                send(StreamChunk.Content("\n"))
                             }
                             continue
                         }
                         val content = if (trimmed.startsWith("> ")) trimmed.removePrefix("> ") else trimmed
                         if (content.isEmpty()) continue
                         fullText.append(content).append('\n')
-                        emit(StreamChunk.Content(content + "\n"))
+                        send(StreamChunk.Content(content + "\n"))
                     }
 
                     ParseState.DONE -> break
@@ -1423,11 +1526,11 @@ object AiLocalModel {
                 if (stderrText.isNotEmpty()) {
                     android.util.Log.e("AiLocalModel", "Stderr: $stderrText")
                 }
-                emit(StreamChunk.Error("本地模型未返回任何内容。可能原因：\n1. 模型文件格式不兼容\n2. 模型加载失败\n3. llama.cpp版本不匹配\n\n建议：检查日志获取详细错误信息"))
-                return@flow
+                send(StreamChunk.Error("本地模型未返回任何内容。可能原因：\n1. 模型文件格式不兼容\n2. 模型加载失败\n3. llama.cpp版本不匹配\n\n建议：检查日志获取详细错误信息"))
+                return@channelFlow
             }
             
-            emit(StreamChunk.Done(fullText = output))
+            send(StreamChunk.Done(fullText = output))
         } catch (e: Exception) {
             android.util.Log.e("AiLocalModel", "Local inference (cli) failed", e)
             val errorDetail = buildString {
@@ -1439,7 +1542,7 @@ object AiLocalModel {
                     e.message?.contains("No such file") == true -> append("\nllama-cli未找到，请检查安装")
                 }
             }
-            emit(StreamChunk.Error(errorDetail))
+            send(StreamChunk.Error(errorDetail))
         } finally {
             try { proc?.destroy() } catch (_: Exception) {}
             try { promptFile.delete() } catch (_: Exception) {}
@@ -1523,7 +1626,9 @@ object AiLocalModel {
         // 优先 llama-server（与聊天页 chatStreamLocal 保持一致）
         val serverBin = findLlamaServerBinary()
         if (serverBin != null) {
-            val serverReady = ensureServerStarted(entry)
+            val serverReady = ensureServerStarted(entry) { logLine ->
+                android.util.Log.d("AiLocalModel", "completeLocalViaServer llama-server: $logLine")
+            }
             if (serverReady && pingServerPort(llamaServerPort)) {
                 android.util.Log.i("AiLocalModel", "completeLocalViaServer: 通过 llama-server 非流式调用")
                 val result = completeViaServerHttp(entry, truncatedMessages, config)
@@ -1730,4 +1835,175 @@ object AiLocalModel {
             responseStart.trim()
         }
     }
+
+    // ---------- GPU 加速支持（Termux 方案） ----------
+
+    /** GPU 厂商识别结果 */
+    data class GpuInfo(
+        val vendor: String,
+        val model: String,
+        val llamaHasGpuBackend: Boolean,
+        val recommendedNgl: Int,
+        val supported: Boolean,
+        val backend: String
+    )
+
+    /** 检测 Android 设备 GPU 厂商和型号 */
+    private fun detectAndroidGpu(): Pair<String, String> {
+        val sysPaths = listOf(
+            "/sys/class/kgsl/kgsl-3d0/gpu_busy_percentage",
+            "/sys/class/devfreq/qcom,gpucc.0/cur_freq",
+            "/proc/mali0/properties",
+            "/sys/class/devfreq/",
+        )
+        for (p in sysPaths) {
+            runCatching {
+                val dir = java.io.File(p)
+                if (dir.exists() && dir.isDirectory) {
+                    val files = dir.listFiles()?.map { it.name }?.joinToString(",") ?: ""
+                    if ("kgsl" in p || "qcom" in p.lowercase() || "adreno" in p.lowercase()) {
+                        return "Adreno" to "Qualcomm Adreno GPU"
+                    }
+                    if ("mali" in files.lowercase() || "mali" in p.lowercase()) {
+                        return "Mali" to "ARM Mali GPU"
+                    }
+                }
+            }
+        }
+
+        runCatching {
+            val devfreqDir = java.io.File("/sys/class/devfreq")
+            if (devfreqDir.exists()) {
+                val dirNames = devfreqDir.listFiles()?.map { it.name } ?: emptyList()
+                for (name in dirNames) {
+                    val lower = name.lowercase()
+                    if ("adreno" in lower || "kgsl" in lower) return "Adreno" to "Qualcomm Adreno GPU ($name)"
+                    if ("mali" in lower) return "Mali" to "ARM Mali GPU ($name)"
+                    if ("powervr" in lower || "img" in lower) return "PowerVR" to "Imagination PowerVR GPU ($name)"
+                }
+            }
+        }
+
+        runCatching {
+            val pb = ProcessBuilder("getprop", "ro.hardware.vulkan")
+            pb.redirectErrorStream(true)
+            val p = pb.start()
+            val out = p.inputStream.bufferedReader().readText().trim()
+            p.waitFor(2, java.util.concurrent.TimeUnit.SECONDS)
+            if (out.isNotBlank()) {
+                val lower = out.lowercase()
+                if ("adreno" in lower) return "Adreno" to out
+                if ("mali" in lower) return "Mali" to out
+                if ("powervr" in lower || "img" in lower) return "PowerVR" to out
+            }
+        }
+
+        runCatching {
+            val pb = ProcessBuilder("getprop", "ro.hardware.egl")
+            pb.redirectErrorStream(true)
+            val p = pb.start()
+            val out = p.inputStream.bufferedReader().readText().trim()
+            p.waitFor(2, java.util.concurrent.TimeUnit.SECONDS)
+            if (out.isNotBlank()) {
+                val lower = out.lowercase()
+                if ("adreno" in lower) return "Adreno" to out
+                if ("mali" in lower) return "Mali" to out
+                if ("powervr" in lower || "img" in lower) return "PowerVR" to out
+            }
+        }
+
+        runCatching {
+            val pb = ProcessBuilder("cat", "/proc/cpuinfo")
+            pb.redirectErrorStream(true)
+            val p = pb.start()
+            val out = p.inputStream.bufferedReader().readText().lowercase()
+            p.waitFor(2, java.util.concurrent.TimeUnit.SECONDS)
+            if ("qualcomm" in out || "adreno" in out) return "Adreno" to "Qualcomm Adreno GPU (via cpuinfo)"
+            if ("mediatek" in out || "mtk" in out) return "Mali" to "Mediatek Mali GPU (via cpuinfo)"
+        }
+
+        return "Unknown" to "未识别的 GPU 型号"
+    }
+
+    /** 检测 Termux 内 llama.cpp 是否编译了 GPU 后端 */
+    private fun detectLlamaGpuBackend(): Boolean {
+        val cliBin = findLlamaBinary() ?: return false
+        return runCatching {
+            val pb = ProcessBuilder(cliBin.absolutePath, "--help")
+            applyTermuxEnv(pb)
+            pb.redirectErrorStream(true)
+            val p = pb.start()
+            val out = p.inputStream.bufferedReader().use { it.readText() }
+            p.waitFor(5, java.util.concurrent.TimeUnit.SECONDS)
+            out.contains("-ngl") || out.contains("--gpu-layers") ||
+                out.contains("vulkan") || out.contains("opencl") ||
+                out.contains("cuda") || out.contains("metal")
+        }.getOrDefault(false)
+    }
+
+    /** 综合检测 GPU 信息和 Termux llama.cpp GPU 支持能力 */
+    fun detectGpuInfo(context: Context? = null): GpuInfo {
+        val (vendor, model) = detectAndroidGpu()
+        val llamaHasGpu = detectLlamaGpuBackend()
+
+        if (!llamaHasGpu) {
+            return GpuInfo(
+                vendor = vendor,
+                model = model,
+                llamaHasGpuBackend = false,
+                recommendedNgl = 0,
+                supported = false,
+                backend = "Termux llama.cpp 未编译 GPU 后端"
+            )
+        }
+
+        val recommendedNgl = when (vendor) {
+            "Adreno" -> 20
+            "Mali" -> 15
+            "PowerVR" -> 12
+            else -> 10
+        }
+
+        val backend = runCatching {
+            val cliBin = findLlamaBinary() ?: return@runCatching "Vulkan"
+            val pb = ProcessBuilder(cliBin.absolutePath, "--help")
+            applyTermuxEnv(pb)
+            pb.redirectErrorStream(true)
+            val p = pb.start()
+            val help = p.inputStream.bufferedReader().use { it.readText() }.lowercase()
+            p.waitFor(5, java.util.concurrent.TimeUnit.SECONDS)
+            when {
+                "vulkan" in help -> "Vulkan"
+                "opencl" in help -> "OpenCL"
+                "cuda" in help -> "CUDA"
+                "metal" in help -> "Metal"
+                else -> "Vulkan"
+            }
+        }.getOrDefault("Vulkan")
+
+        return GpuInfo(
+            vendor = vendor,
+            model = model,
+            llamaHasGpuBackend = true,
+            recommendedNgl = recommendedNgl,
+            supported = true,
+            backend = backend
+        )
+    }
+
+    /** 根据 GPU 检测结果构建 -ngl 参数 */
+    private fun buildGpuLaunchArgs(context: Context?): String {
+        if (context == null) return ""
+        if (!AiTermuxPrefs.isLocalGpuAccelEnabled(context)) return ""
+
+        val info = detectGpuInfo(context)
+        if (!info.supported) {
+            android.util.Log.w("AiLocalModel", "GPU 加速已开但 Termux llama.cpp 不支持 GPU 后端，忽略 GPU 参数")
+            return ""
+        }
+        val args = "-ngl ${info.recommendedNgl}"
+        android.util.Log.i("AiLocalModel", "GPU offload: vendor=${info.vendor}, backend=${info.backend}, ngl=${info.recommendedNgl}")
+        return args
+    }
+
 }

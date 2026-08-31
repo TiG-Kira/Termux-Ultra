@@ -18,12 +18,14 @@ import androidx.fragment.app.FragmentActivity
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -292,9 +294,20 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
         }
     }
 
+    /** 会话压缩阈值：超过此数量自动触发压缩 */
+    private val COMPRESS_THRESHOLD = 40
+    /** 压缩后保留的最近消息数量 */
+    private val COMPRESS_KEEP_RECENT = 12
+
     fun sendUserMessage(text: String) {
         val ctx = getApplication<android.app.Application>()
         if (text.isBlank()) return
+
+        // ===== 自动会话压缩 =====
+        runInScope {
+            checkAndCompressMessages(ctx)
+        }
+
         val userMsg = ChatMessage(role = "user", content = text)
         synchronized(messages) { messages.add(userMsg) }
         AiTermuxPrefs.saveChatHistory(ctx, messages.toOpenAiMessages())
@@ -309,6 +322,100 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
             }
         }
     }
+
+    /** 检查并压缩会话历史（如果消息太多） */
+    private suspend fun checkAndCompressMessages(ctx: Context) {
+        synchronized(messages) {
+            if (messages.size <= COMPRESS_THRESHOLD) return
+        }
+        try {
+            val result = compressMessages(ctx)
+            if (result != null) {
+                android.util.Log.i("AiTermux", "会话压缩完成: ${result.keptRecent} 条保留，摘要长度 ${result.summary.length}")
+                // 压缩后重新保存
+                AiTermuxPrefs.saveChatHistory(ctx, messages.toOpenAiMessages())
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("AiTermux", "会话压缩失败（忽略，继续正常流程）", e)
+        }
+    }
+
+    /** 压缩会话历史：调用在线模型生成摘要，用摘要替换旧消息 */
+    private suspend fun compressMessages(ctx: Context): CompressResult? {
+        val msgSnapshot = synchronized(messages) { messages.toList() }
+        if (msgSnapshot.size <= COMPRESS_THRESHOLD) return null
+
+        // 将旧消息（排除最近的 COMPRESS_KEEP_RECENT 条）转为对话格式
+        val keepFrom = msgSnapshot.size - COMPRESS_KEEP_RECENT
+        if (keepFrom <= 0) return null
+        val oldMsgs = msgSnapshot.subList(0, keepFrom)
+
+        // 构建在线模型请求
+        val cfg = AiTermuxPrefs.getFallbackOnlineConfig(ctx)
+        if (cfg.apiKey.isBlank() || cfg.baseUrl.isBlank()) {
+            // 没有在线配置，直接截断（保留最近的消息）
+            synchronized(messages) {
+                val toRemove = messages.size - COMPRESS_KEEP_RECENT
+                if (toRemove > 0) {
+                    repeat(toRemove) { messages.removeAt(0) }
+                    messages.add(0, ChatMessage(
+                        role = "assistant",
+                        content = "📎 历史会话已自动压缩（无在线模型可用，直接截断到最近 $COMPRESS_KEEP_RECENT 条）"
+                    ))
+                }
+            }
+            return CompressResult(summary = "（无在线模型，直接截断）", keptRecent = COMPRESS_KEEP_RECENT)
+        }
+
+        val providerCfg = AiProviderConfig(
+            provider = "custom",
+            apiKey = cfg.apiKey,
+            apiBaseUrl = cfg.baseUrl,
+            model = cfg.model,
+            temperature = cfg.temperature
+        )
+
+        val systemPrompt = """你是一个 AI 对话历史压缩助手。请将以下 AI 与用户的对话历史压缩成一段简洁的摘要。
+
+要求：
+1. 保留所有关键任务、决定、重要信息和技能执行结果
+2. 去除对话过程中的寒暄、重复、无关内容
+3. 保持时间顺序
+4. 用中文输出
+5. 摘要控制在 500-1000 字以内"""
+
+        val historyText = oldMsgs.mapIndexed { i, m ->
+            val roleLabel = when (m.role) { "user" -> "用户"; "assistant" -> "AI"; else -> m.role }
+            "[$i] **$roleLabel**: ${m.content.take(500)}"
+        }.joinToString("\n\n")
+
+        val compressMsgs = listOf(
+            OpenAiMessage("system", systemPrompt),
+            OpenAiMessage("user", "请压缩以下对话历史：\n\n$historyText")
+        )
+
+        val resp = runCatching { AiApiClient.chat(ctx, providerCfg, compressMsgs) }.getOrNull()
+        val summary = resp?.choices?.firstOrNull()?.message?.content?.trim().orEmpty()
+
+        if (summary.isBlank()) return null
+
+        // 执行压缩：移除旧消息，在开头插入摘要
+        synchronized(messages) {
+            val toRemove = messages.size - COMPRESS_KEEP_RECENT
+            if (toRemove > 0) {
+                repeat(toRemove) { messages.removeAt(0) }
+                messages.add(0, ChatMessage(
+                    role = "assistant",
+                    content = "📎 历史会话自动压缩摘要：\\n\\n$summary\\n\\n（以上是之前的对话摘要，以下是最近的对话）"
+                ))
+            }
+        }
+
+        return CompressResult(summary = summary, keptRecent = COMPRESS_KEEP_RECENT)
+    }
+
+    /** 压缩结果数据类 */
+    data class CompressResult(val summary: String, val keptRecent: Int)
 
     /** 提交对 ASK_USER 卡片的回答 */
     fun submitAnswer(messageId: String, answer: String) {
@@ -1251,7 +1358,7 @@ private fun AiSetupScreen(vm: AiTermuxViewModel, onBack: () -> Unit) {
     var testResult by remember { mutableStateOf<String?>(null) }
 
     // ---- 本地大模型状态 ----
-    var localDownloading by remember { mutableStateOf(false) }
+    var downloadingModelId by remember { mutableStateOf<String?>(null) }
     var localProgress by remember { mutableStateOf(0f) }
     var localProgressMsg by remember { mutableStateOf("") }
     var localRefresh by remember { mutableStateOf(0) }
@@ -1387,7 +1494,7 @@ private fun AiSetupScreen(vm: AiTermuxViewModel, onBack: () -> Unit) {
                             }
                             Spacer(Modifier.height(6.dp))
                             Text(
-                                text = "本地大模型在设备端运行，会占用较多内存与电量，推理速度有限。建议在具备充足存储、内存（≥ 2GB 空闲）与散热的设备上使用，下载约需 950MB 空间。",
+                                text = "本地大模型在设备端运行，会占用较多内存与电量，推理速度有限。建议在具备充足存储、内存（≥ 2GB 空闲）与散热的设备上使用，下载需数百 MB 至数十 GB 不等。",
                                 fontSize = 12.sp,
                                 color = MiuixTheme.colorScheme.onSurfaceVariantSummary
                             )
@@ -1407,8 +1514,23 @@ private fun AiSetupScreen(vm: AiTermuxViewModel, onBack: () -> Unit) {
                             Column(modifier = Modifier.padding(16.dp)) {
                                 Text(entry.displayName, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = MiuixTheme.colorScheme.onSurface)
                                 Text(entry.description, fontSize = 12.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+                                entry.warning?.let { warn ->
+                                    Spacer(Modifier.height(6.dp))
+                                    Box(
+                                        modifier = Modifier.fillMaxWidth()
+                                            .background(MiuixTheme.colorScheme.error.copy(alpha = 0.08f), RoundedCornerShape(6.dp))
+                                            .padding(horizontal = 10.dp, vertical = 8.dp)
+                                    ) {
+                                        Text(
+                                            text = "⚠ " + warn,
+                                            fontSize = 11.sp,
+                                            color = MiuixTheme.colorScheme.error,
+                                            lineHeight = 14.sp
+                                        )
+                                    }
+                                }
                                 Spacer(Modifier.height(10.dp))
-                                if (localDownloading) {
+                                if (downloadingModelId == entry.id) {
                                     if (localProgress in 0f..1f) {
                                         LinearProgressIndicator(progress = localProgress, modifier = Modifier.fillMaxWidth())
                                     }
@@ -1424,7 +1546,7 @@ private fun AiSetupScreen(vm: AiTermuxViewModel, onBack: () -> Unit) {
                                     Button(
                                         onClick = {
                                             scope.launch {
-                                                localDownloading = true
+                                                downloadingModelId = entry.id
                                                 localProgress = 0f
                                                 localProgressMsg = "正在准备下载…"
                                                 val ok = AiLocalModel.downloadModel(entry) { p, msg ->
@@ -1448,7 +1570,7 @@ private fun AiSetupScreen(vm: AiTermuxViewModel, onBack: () -> Unit) {
                                                 } else {
                                                     SnackbarHelper.show(ctx, "下载失败：" + localProgressMsg, Snackbar.LENGTH_LONG, null)
                                                 }
-                                                localDownloading = false
+                                                downloadingModelId = null
                                                 localRefresh++
                                             }
                                         },
@@ -1456,7 +1578,15 @@ private fun AiSetupScreen(vm: AiTermuxViewModel, onBack: () -> Unit) {
                                         colors = ButtonDefaults.buttonColors(color = MiuixTheme.colorScheme.primary)
                                     ) {
                                         Text(
-                                            text = "下载并配置（约 950MB）",
+                                            text = run {
+                                                val sizeB = entry.sizeBytes
+                                                val sizeStr = when {
+                                                    sizeB >= 1024L * 1024L * 1024L -> "%.1f GB".format(sizeB.toFloat() / (1024L * 1024L * 1024L))
+                                                    sizeB >= 1024L * 1024L -> "%.1f MB".format(sizeB.toFloat() / (1024L * 1024L))
+                                                    else -> "${sizeB / 1024} KB"
+                                                }
+                                                "下载并配置（约 $sizeStr）"
+                                            },
                                             fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color.White
                                         )
                                     }
@@ -2834,7 +2964,7 @@ private fun PreparingBlock(status: String, details: List<String>, isDark: Boolea
                         .background(if (isDark) Color(0xFF111122) else Color(0xFFE8E8F4))
                         .padding(horizontal = 10.dp, vertical = 8.dp)
                 ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Column(modifier = Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         details.forEach { ln ->
                             Text(
                                 text = ln,

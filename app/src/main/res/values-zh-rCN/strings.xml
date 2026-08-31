@@ -873,6 +873,8 @@
     <string name="no_logs_to_clear">没有可清空的日志</string>
 
     <!-- 崩溃对话框 -->
+    <string name="crash_post_title">侦测到已发生错误</string>
+    <string name="crash_post_message">侦测到上次运行时发生了错误和崩溃，以下是崩溃详情。</string>
     <string name="crash_dialog_title">应用错误</string>
     <string name="crash_dialog_message">发生错误，应用将尝试恢复。</string>
     <string name="crash_dialog_severe_title">严重错误</string>

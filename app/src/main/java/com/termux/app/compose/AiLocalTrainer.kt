@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runInterruptible
+import com.termux.app.compose.SkillExecutor
 import java.util.concurrent.atomic.AtomicBoolean
 
 // --------- 事件类型（发给 UI 的更新流） ---------
@@ -34,8 +35,8 @@ sealed class LocalTrainerEvent {
     data class StudentFollowupAnswer(val roundIndex: Int, val answerText: String) : LocalTrainerEvent()
     /** 老师评分&建议事件 */
     data class TeacherCritique(
-        val roundIndex: Int, val score: Int, val critique: String, val memoryPatch: String,
-        val durationMs: Long
+        val roundIndex: Int, val maxScore: Double, val score: Double,
+        val critique: String, val memoryPatch: String, val durationMs: Long
     ) : LocalTrainerEvent()
     /** 一轮完成（已写入记忆） */
     data class RoundDone(val round: LocalTrainRound, val learnedNowCount: Int) : LocalTrainerEvent()
@@ -48,7 +49,8 @@ sealed class LocalTrainerEvent {
         val roundIndex: Int,
         val question: String,
         val studentAnswer: String,
-        val suggestedScore: Int,
+        val suggestedMaxScore: Double,
+        val suggestedScore: Double,
         val suggestedCritique: String,
         val suggestedMemoryPatch: String
     ) : LocalTrainerEvent()
@@ -57,7 +59,8 @@ sealed class LocalTrainerEvent {
 /** UI 端评分回传结果（引擎内部订阅，不直接暴露给 UI 渲染） */
 internal data class UserRatingProvided(
     val roundIndex: Int,
-    val score: Int,
+    val maxScore: Double,
+    val score: Double,
     val critique: String,
     val memoryPatch: String
 )
@@ -72,7 +75,7 @@ data class SkillMock(
 data class FollowupDecision(
     val needFollowup: Boolean,
     val followupText: String,  // needFollowup=true 时为追问文本；needFollowup=false 时可忽略
-    val score: Int = 0,        // needFollowup=false 时可选，若未给则在 Step C 重新评分
+    val score: Double = 0.0,   // needFollowup=false 时可选，若未给则在 Step C 重新评分
     val shouldFinalizeNow: Boolean = false  // true 表示老师已经在追问阶段给了最终评分，Step C 可跳过
 )
 
@@ -85,8 +88,8 @@ object AiLocalTrainer {
         capacity = kotlinx.coroutines.channels.Channel.BUFFERED
     )
     /** UI 调用：提交手动评分 */
-    fun provideUserRating(roundIndex: Int, score: Int, critique: String, memoryPatch: String) {
-        val v = UserRatingProvided(roundIndex, score.coerceIn(0,100), critique.trim(), memoryPatch.trim())
+    fun provideUserRating(roundIndex: Int, maxScore: Double, score: Double, critique: String, memoryPatch: String) {
+        val v = UserRatingProvided(roundIndex, maxScore, score.coerceIn(0.0, maxScore), critique.trim(), memoryPatch.trim())
         userRatingChannel.trySend(v)
     }
 
@@ -95,6 +98,13 @@ object AiLocalTrainer {
     private const val DEFAULT_ROUNDS = 10
     /** 多轮追问最多轮数（防止死循环） */
     private const val MAX_FOLLOWUPS = 3
+
+    /** 检测用户是否在请求"归纳教训" */
+    private fun shouldExtractLesson(userMessage: String): Boolean {
+        val lower = userMessage.lowercase()
+        return lower.contains("归纳") || lower.contains("教训") || lower.contains("总结经验") ||
+               lower.contains("整理经验") || lower.contains("记下来") || lower.contains("作为教训")
+    }
 
     /** 与在线老师对话（非训练时，用于讨论训练方向） */
     suspend fun chatWithTeacher(context: Context, userMessage: String): String {
@@ -107,7 +117,15 @@ object AiLocalTrainer {
             temperature = cfg.temperature
         )
         val history = AiTermuxPrefs.getTeacherChatHistory(context)
-        val teacherSys = """你是 Termux Agent 本地大模型的训练方向顾问。
+        val isLessonExtraction = shouldExtractLesson(userMessage)
+        val teacherSys = if (isLessonExtraction) {
+            """你是 Termux Agent 本地大模型的训练方向顾问。当前用户请求你**从对话中归纳经验教训**。
+请根据用户的要求和历史对话，输出 1-5 条简洁的教训条目，每条以 "• " 开头，格式如：
+• 关于 <topic>：<具体规则/教训>
+只输出教训条目，不要额外解释。如果无法归纳，就输出 "无"。
+"""
+        } else {
+            """你是 Termux Agent 本地大模型的训练方向顾问。
 【重要】你现在所在的对话（"与老师对话"）和正式的训练对话是**完全独立**的两个对话：
 - 本对话的目的：让用户和你讨论"希望本地模型在哪些方面得到训练"，你帮用户理清训练方向。
 - 正式训练对话：在用户点击"开始训练"后，训练引擎会单独调用在线模型出题、追问、评分，那是完全不同的 prompt 和上下文，**不会使用本对话的历史**。
@@ -118,6 +136,7 @@ object AiLocalTrainer {
 3. 你不需要正式出题或评分，只需讨论方向。用户后续开始训练时，训练引擎会把你和用户讨论过的偏好注入给正式训练老师。
 
 用中文回答。"""
+        }
         val msgs = mutableListOf<OpenAiMessage>()
         msgs.add(OpenAiMessage("system", teacherSys))
         // 加入之前的对话历史（最近 10 轮）
@@ -130,6 +149,17 @@ object AiLocalTrainer {
         // 保存对话历史
         AiTermuxPrefs.appendTeacherChatHistory(context, "user", userMessage)
         AiTermuxPrefs.appendTeacherChatHistory(context, "assistant", reply)
+
+        // 如果是教训归纳请求，自动保存为 Lesson
+        if (isLessonExtraction && reply.isNotBlank() && reply != "无" && reply != "（无）") {
+            val lessonLines = reply.split("\n".toRegex())
+                .map { it.trim() }
+                .filter { it.isNotBlank() && (it.startsWith("•") || it.startsWith("-") || it.startsWith("*")) }
+                .map { if (it.startsWith("•")) it else "• " + it.removePrefix("-").removePrefix("*").trim() }
+            for (lesson in lessonLines) {
+                AiTermuxPrefs.addLesson(context, lesson, source = "teacher")
+            }
+        }
         
         return reply
     }
@@ -170,6 +200,61 @@ object AiLocalTrainer {
         return sb.toString()
     }
 
+
+    /** 从 Agent 聊天页的 MEMORY.md 读取用户长期记忆，注入给训练老师让出题更贴合用户实际需求 */
+    private fun buildLongTermMemoryBlock(context: Context): String {
+        val mem = AiTermuxPrefs.getMemory(context).trim()
+        if (mem.isBlank()) return ""
+        val sb = StringBuilder()
+        val SEP = "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        sb.append(SEP)
+        sb.append("🧠 用户长期记忆（来自 MEMORY.md，请据此调整训练方向）\n")
+        sb.append(SEP)
+        val truncated = if (mem.length > 2000) mem.take(2000) + "..." else mem
+        sb.append(truncated)
+        sb.append("\n").append(SEP)
+        return sb.toString()
+    }
+
+    /** 构造学生（本地模型）信息块，注入给训练老师让其了解所训练模型的特点 */
+    private fun buildStudentModelInfoBlock(context: Context): String {
+        val model = AiLocalModel.getSelectedModel() ?: return ""
+        val sb = StringBuilder()
+        val SEP = "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        sb.append(SEP)
+        sb.append("🎓 【重要】你正在训练的学生模型信息（请据此调整出题和批改策略）\n")
+        sb.append(SEP)
+        sb.append("  模型名：${model.displayName}\n")
+        sb.append("  架构类别：${classifyModel(model.displayName)}\n")
+        sb.append("  量化方式：Q4_K_M\n")
+        sb.append("  推荐内存：${model.recommendedRamMB}MB\n")
+        sb.append("  上下文长度：${model.maxContext}\n")
+        sb.append("\n")
+        sb.append("📌 请根据该模型的架构特点调整你的训练策略：\n")
+        sb.append("- 推理模型（如 DeepSeek-R1、MiMo）：应多设计需要分步推理、逻辑链分析的题目\n")
+        sb.append("- 通用对话模型（如 Qwen2.5）：侧重命令操作、Agent 技能调用、安全守则等 Termux 核心能力\n")
+        sb.append("- 翻译/专项模型：可适当增加文本处理、Shell 脚本与文本管道结合的题目\n")
+        sb.append("\n")
+        sb.append("⚠️ 学生是小参数量量化模型，回答可能存在参数编造、格式不规范、推理链不完整等问题，请严厉但客观地指出并纠正。\n")
+        sb.append(SEP)
+        return sb.toString()
+    }
+
+    /** 根据模型名判断架构类别 */
+    private fun classifyModel(displayName: String): String {
+        val name = displayName.lowercase()
+        return when {
+            name.contains("deepseek") || name.contains("mimo") -> "推理/思考模型（擅长分步推理、数学、逻辑分析）"
+            name.contains("qwen") -> "通用对话模型（阿里 Qwen 系列，中文能力强）"
+            name.contains("seed") -> "专项模型（字节 Seed 系列，翻译或通用能力）"
+            name.contains("llama") -> "通用对话模型（Meta Llama 系列）"
+            name.contains("gemma") -> "通用对话模型（Google Gemma 系列）"
+            name.contains("mistral") || name.contains("mixtral") -> "通用对话模型（Mistral 系列）"
+            name.contains("phi") -> "轻量指令模型（Microsoft Phi 系列）"
+            else -> "通用对话模型"
+        }
+    }
+
     /** 启动/继续训练。若 session.status=="paused"，从下一轮继续；否则新开 */
     fun runTraining(
         context: Context,
@@ -203,6 +288,7 @@ object AiLocalTrainer {
                 emit(LocalTrainerEvent.Step(thisIdx, "Step A/5：在线老师出题", "构造多样化题目 + 可选 skillMocks …"))
                 var question: String = ""
                 var skillMocks: List<SkillMock> = emptyList()
+                var maxScore: Double = 100.0 / targetRounds  // 默认平均分配
                 runCatching {
                     val qPrompt = buildQuestionPrompt(context, thisIdx, targetRounds, AiTermuxPrefs.getLearnedMemoryBlock(context))
                     if (autoTeacher) {
@@ -211,6 +297,10 @@ object AiLocalTrainer {
                             question = extractJsonField(rawJson, "question").orEmpty()
                             skillMocks = parseSkillMocks(rawJson)
                             if (question.isBlank()) question = stripFirstJsonString(rawJson)
+                            // 解析老师分配的权重
+                            val msStr = extractJsonField(rawJson, "maxScore")
+                            val ms = msStr?.toDoubleOrNull()
+                            if (ms != null && ms > 0.0) maxScore = ms.coerceIn(0.1, 100.0)
                         } else {
                             question = generateManualQuestion(thisIdx, targetRounds)
                         }
@@ -224,7 +314,7 @@ object AiLocalTrainer {
                 }
 
                 emit(LocalTrainerEvent.TeacherQuestion(thisIdx, question))
-                emit(LocalTrainerEvent.Step(thisIdx, "Step A/5：题目已生成", question.take(120) + if (question.length > 120) "…" else ""))
+                emit(LocalTrainerEvent.Step(thisIdx, "Step A/5：题目已生成", "${question.take(120)}${if (question.length > 120) "…" else ""} | 本题权重=${"%.2f".format(maxScore)}"))
 
                 // ===== Step B: 本地模型回答（注入 skillMocks 作为 system 前置） =====
                 emit(LocalTrainerEvent.Step(thisIdx, "Step B/5：本地模型回答", "等待本地模型推理…"))
@@ -246,13 +336,27 @@ object AiLocalTrainer {
                 emit(LocalTrainerEvent.StudentAnswer(thisIdx, latestStudentAnswer, answerDuration))
                 emit(LocalTrainerEvent.Step(thisIdx, "Step B/5：回答完成", latestStudentAnswer.take(120) + if (latestStudentAnswer.length > 120) "…" else ""))
 
+                // ===== Step B.2: 禁令检测（本地模型是否违反 Agent 禁令） =====
+                var banViolations: List<String> = emptyList()
+                val bannedCheck = SkillExecutor.detectFakeOutput(latestStudentAnswer, context = context)
+                if (bannedCheck.isFake && bannedCheck.violations.isNotEmpty()) {
+                    banViolations = bannedCheck.violations
+                    emit(LocalTrainerEvent.Step(thisIdx, "Step B.2/5：禁令检测",
+                        "检测到 ${banViolations.size} 条禁令违反：\n" + banViolations.joinToString("\n")))
+                    Log.w(TAG, "本地模型回答触发禁令：${banViolations.joinToString()}")
+                }
+
                 // ===== Step B.5: 多轮追问（仅 autoTeacher） =====
                 // 追问期间：老师看历史 → 判断 needFollowup? → 是则追问，学生再答，循环最多 MAX_FOLLOWUPS 次
                 // 老师在 needFollowup=false 时可以选择已经给出最终评分（shouldFinalizeNow=true）
-                var preFinalScore: Int? = null
+                var preFinalScore: Double? = null
                 var shouldSkipStepC = false
 
                 if (autoTeacher && latestStudentAnswer.isNotBlank()) {
+                    // 如果检测到禁令违反，先通知老师（在线模型），让其在追问/评分中重点关注
+                    if (banViolations.isNotEmpty()) {
+                        emit(LocalTrainerEvent.Step(thisIdx, "Step B.5/5：禁令提示", "正在将禁令违反情况通知训练老师…"))
+                    }
                     followupLoop@ for (fRound in 1..MAX_FOLLOWUPS) {
                         if (isCancelled()) break@followupLoop
 
@@ -263,7 +367,8 @@ object AiLocalTrainer {
                                 roundIndex = thisIdx,
                                 question = question,
                                 initialStudentAnswer = initialAnswer,
-                                dialogueHistory = dialogueHistory
+                                dialogueHistory = dialogueHistory,
+                                banViolations = banViolations
                             )
                             callOnlineNonStreamForFollowup(context, fPrompt)
                         }.getOrElse { e ->
@@ -315,7 +420,7 @@ object AiLocalTrainer {
                 }
 
                 // ===== Step C: 评分 =====
-                var score: Int = 0
+                var score: Double = 0.0
                 var critique: String = ""
                 var memoryPatch: String = ""
 
@@ -328,19 +433,21 @@ object AiLocalTrainer {
                             val cPrompt = buildCritiquePrompt(
                                 context, thisIdx, question, latestStudentAnswer,
                                 AiTermuxPrefs.getLearnedMemoryBlock(context),
-                                multiTurnContext = buildMultiTurnCritiqueContext(initialAnswer, dialogueHistory, MAX_FOLLOWUPS)
+                                maxScore = maxScore,
+                                multiTurnContext = buildMultiTurnCritiqueContext(initialAnswer, dialogueHistory, MAX_FOLLOWUPS),
+                                banViolations = banViolations
                             )
-                            callOnlineNonStreamForCritique(context, cPrompt, forcedScore = preFinalScore)
+                            callOnlineNonStreamForCritique(context, cPrompt, forcedScore = preFinalScore, maxScore = maxScore)
                         }.getOrElse { e ->
                             Log.e(TAG, "评分失败", e)
                             emit(LocalTrainerEvent.ErrorOccurred(thisIdx, "评分失败: ${e.message}"))
-                            CritiqueResult(score = preFinalScore!!, critique = "评分生成失败", memoryPatch = "")
+                            CritiqueResult(maxScore = maxScore, score = preFinalScore!!, critique = "评分生成失败", memoryPatch = "")
                         }
                         score = critResult.score
                         critique = critResult.critique
                         memoryPatch = critResult.memoryPatch
                         val cDuration = System.currentTimeMillis() - cT0
-                        emit(LocalTrainerEvent.TeacherCritique(thisIdx, score, critique, memoryPatch, cDuration))
+                        emit(LocalTrainerEvent.TeacherCritique(thisIdx, maxScore, score, critique, memoryPatch, cDuration))
                     } else {
                         emit(LocalTrainerEvent.Step(thisIdx, "Step C/5：在线老师评分", "正在评分并提取教训…"))
                         val cT0 = System.currentTimeMillis()
@@ -348,43 +455,49 @@ object AiLocalTrainer {
                             val cPrompt = buildCritiquePrompt(
                                 context, thisIdx, question, latestStudentAnswer,
                                 AiTermuxPrefs.getLearnedMemoryBlock(context),
-                                multiTurnContext = buildMultiTurnCritiqueContext(initialAnswer, dialogueHistory, MAX_FOLLOWUPS)
+                                maxScore = maxScore,
+                                multiTurnContext = buildMultiTurnCritiqueContext(initialAnswer, dialogueHistory, MAX_FOLLOWUPS),
+                                banViolations = banViolations
                             )
-                            callOnlineNonStreamForCritique(context, cPrompt)
+                            callOnlineNonStreamForCritique(context, cPrompt, maxScore = maxScore)
                         }.getOrElse { e ->
                             Log.e(TAG, "评分失败", e)
                             emit(LocalTrainerEvent.ErrorOccurred(thisIdx, "评分失败: ${e.message}"))
-                            CritiqueResult(score = 0, critique = "评分失败", memoryPatch = "")
+                            CritiqueResult(maxScore = maxScore, score = 0.0, critique = "评分失败", memoryPatch = "")
                         }
                         score = critResult.score
                         critique = critResult.critique
                         memoryPatch = critResult.memoryPatch
                         val cDuration = System.currentTimeMillis() - cT0
-                        emit(LocalTrainerEvent.TeacherCritique(thisIdx, score, critique, memoryPatch, cDuration))
+                        emit(LocalTrainerEvent.TeacherCritique(thisIdx, maxScore, score, critique, memoryPatch, cDuration))
                     }
                 } else {
                     // 半自动：用 suggestRating 生成建议，等用户评分
-                    val suggested = suggestRating(question, latestStudentAnswer)
+                    val suggested = suggestRating(question, latestStudentAnswer, maxScore)
                     emit(LocalTrainerEvent.WaitingForUserRating(
                         roundIndex = thisIdx,
                         question = question,
                         studentAnswer = latestStudentAnswer,
+                        suggestedMaxScore = maxScore,
                         suggestedScore = suggested.first,
                         suggestedCritique = suggested.second,
                         suggestedMemoryPatch = suggested.third
                     ))
                     emit(LocalTrainerEvent.Step(thisIdx, "Step C/5：等待用户评分", "请在弹窗中评分"))
 
-                    // 使用建议值作为默认（用户可以在 UI 中覆盖）
-                    score = suggested.first
-                    critique = suggested.second
-                    memoryPatch = suggested.third
+                    // 挂起等待用户实际评分（UI 端通过 provideUserRating 把评分送入 channel）
+                    val userRating = userRatingChannel.receive()
+                    maxScore = userRating.maxScore
+                    score = userRating.score
+                    critique = userRating.critique
+                    memoryPatch = userRating.memoryPatch
                 }
 
                 // ===== Step D: 追加记忆 =====
                 emit(LocalTrainerEvent.Step(thisIdx, "Step D/5：追加记忆", if (memoryPatch.isNotBlank()) memoryPatch.take(100) + "…" else "（无新教训）"))
                 if (memoryPatch.isNotBlank()) {
                     AiTermuxPrefs.appendLearnedMemory(context, memoryPatch)
+                    AiTermuxPrefs.addLesson(context, memoryPatch, source = "auto")
                 }
 
                 // 更新 session
@@ -393,6 +506,7 @@ object AiLocalTrainer {
                     roundIndex = thisIdx,
                     question = question,
                     studentAnswer = latestStudentAnswer,
+                    maxScore = maxScore,
                     score = score,
                     critique = critique,
                     memoryPatch = memoryPatch,
@@ -401,6 +515,11 @@ object AiLocalTrainer {
                 )
                 curSession.rounds.add(round)
                 curSession.status = if (roundCursor + 1 >= targetRounds) "finished" else "running"
+                // 实时累加 totalScore（每轮结束立即更新，UI 才能实时显示）
+                val newTotal = curSession.rounds
+                    .filter { it.status == "done" }
+                    .sumOf { it.score.coerceAtLeast(0.0) }
+                curSession = curSession.copy(totalScore = newTotal)
                 AiTermuxPrefs.saveLastTrainSession(context, curSession)
 
                 val learnedCount = if (memoryPatch.isNotBlank()) 1 else 0
@@ -413,17 +532,26 @@ object AiLocalTrainer {
                 roundCursor++
             }
 
-            // ===== 训练结束：计算 avgScore + 总体建议 =====
+            // ===== 训练结束：计算 totalScore + 总体建议 =====
             val doneCount = curSession.rounds.count { it.status == "done" }
-            val validScores = curSession.rounds.mapNotNull { r -> if (r.score > 0) r.score else null }
-            val avgScore = if (validScores.isNotEmpty()) (validScores.average()).toInt() else 0
+            // 实际得分累加（满分100）
+            val totalScore = curSession.rounds
+                .filter { it.status == "done" }
+                .sumOf { it.score.coerceAtLeast(0.0) }
+            // 标准化百分比（实际得分/实际权重*100）
+            val actualMaxWeight = curSession.rounds
+                .filter { it.status == "done" }
+                .sumOf { it.maxScore.coerceAtLeast(0.1) }
+            val normalizedPercent = if (actualMaxWeight > 0.0) {
+                (totalScore / actualMaxWeight * 100.0)
+            } else 0.0
 
             // 调用在线老师生成总体建议（仅 autoTeacher 且有分数时）
             var finalSummary = ""
-            if (autoTeacher && validScores.isNotEmpty()) {
+            if (autoTeacher && totalScore > 0.0) {
                 emit(LocalTrainerEvent.Step(-1, "训练完成：生成总体建议", "在线老师正在回顾全部轮次…"))
                 runCatching {
-                    val sPrompt = buildFinalSummaryPrompt(context, curSession.rounds, avgScore, AiTermuxPrefs.getLearnedMemoryBlock(context))
+                    val sPrompt = buildFinalSummaryPrompt(context, curSession.rounds, normalizedPercent, AiTermuxPrefs.getLearnedMemoryBlock(context))
                     val summaryRaw = callOnlineNonStreamRaw(context, sPrompt)
                     if (summaryRaw != null) {
                         finalSummary = extractJsonField(summaryRaw, "summary")
@@ -436,19 +564,19 @@ object AiLocalTrainer {
                     finalSummary = "（总体建议生成失败：${e.message}）"
                 }
             } else {
-                finalSummary = if (doneCount > 0 && avgScore > 0) {
-                    "半自动训练完成，共 $doneCount 轮，平均分 $avgScore。"
+                finalSummary = if (doneCount > 0 && totalScore > 0.0) {
+                    "半自动训练完成，共 $doneCount 轮，得分 ${"%.2f".format(totalScore)}/100。"
                 } else ""
             }
 
-            // 用 copy 替换 session（avgScore / finalSummary 是 val）
-            curSession = curSession.copy(avgScore = avgScore, finalSummary = finalSummary)
+            // 用 copy 替换 session
+            curSession = curSession.copy(totalScore = totalScore, finalSummary = finalSummary)
             AiTermuxPrefs.saveLastTrainSession(context, curSession)
             emit(LocalTrainerEvent.SessionSnapshot(curSession))
 
             val memLen = AiTermuxPrefs.getLearnedMemoryBlock(context).length
             emit(LocalTrainerEvent.StatusChanged("finished",
-                "训练完成！已完成 $doneCount 轮；平均分=$avgScore；记忆块长度=$memLen chars。所有教训会自动追加到 System Prompt 尾部生效。"))
+                "训练完成！已完成 $doneCount 轮；总分=${"%.2f".format(totalScore)}/100（标准化 ${"%.1f".format(normalizedPercent)}%）；记忆块长度=$memLen chars。"))
         }.flowOn(Dispatchers.IO)
     }
 
@@ -537,7 +665,12 @@ object AiLocalTrainer {
 
 具体要求：
 1. 题目必须是中文，贴近真实使用场景
-2. 严格只输出 JSON，key 必须包含：{"question": "..."}，不要 Markdown 代码块，不要额外说明
+2. 严格只输出 JSON，key 必须包含：{"question": "...", "maxScore": 权重分数}，不要 Markdown 代码块，不要额外说明。
+   关于 maxScore（权重）——本轮满分分数，允许小数（如 7.5），必须 > 0：
+   - 训练总轮数为 $total，所有轮次 maxScore 累加 = 100.0
+   - 当前第 $idx 轮，你需要综合考虑权重分配均衡性
+   - 难度高/重要的题目可分配更高权重，难度低的分配低权重
+3. **硬性要求**：所有轮次的 maxScore 累加必须恰好等于 100.0
 3. **可选 skillMocks**：如果题目需要 Agent 调用技能并根据返回结果推理（第 3/4 类题），可同时输出 skillMocks 数组来模拟技能返回，让学生在训练中能看到真实的"结果"：
    格式：{"skillMocks": [{"tool": "RUN_COMMAND", "description": "ls /data/data/com.termux/files/home"}, {"tool": "FILE_LIST", "description": "/data/data/com.termux/files/home"}]}
    每个 mock 可以带额外字段 "result" 来指定真实输出（如 ls 的目录列表文本）。
@@ -546,7 +679,9 @@ object AiLocalTrainer {
 5. 参考下方 Termux Agent 守则摘要，确保第 3/4 类题目覆盖到位
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+${buildStudentModelInfoBlock(context)}
 ${buildTrainingPrefsBlock(context)}
+${buildLongTermMemoryBlock(context)}
 当前轮次：第 $idx / $total 轮
 已学过的教训记忆：
 ${memory.ifBlank { "(暂无)" }}
@@ -577,7 +712,7 @@ $agentRules
         return "$q（第 $idx / $total 题）"
     }
 
-    data class CritiqueResult(val score: Int, val critique: String, val memoryPatch: String)
+    data class CritiqueResult(val maxScore: Double, val score: Double, val critique: String, val memoryPatch: String)
 
     fun buildCritiquePrompt(
         context: Context,
@@ -585,12 +720,23 @@ $agentRules
         question: String,
         studentAnswer: String,
         memoryBlock: String,
-        multiTurnContext: String = ""
+        maxScore: Double,
+        multiTurnContext: String = "",
+        banViolations: List<String> = emptyList()
     ): List<OpenAiMessage> {
         val multiTurnBlock = if (multiTurnContext.isNotBlank()) """
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🔄 本题经过多轮追问，以下是完整对话历史（请综合所有轮次表现评分）：
 ${multiTurnContext}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+""".trimIndent() else ""
+
+        // 禁令违反提示
+        val banBlock = if (banViolations.isNotEmpty()) """
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔴 【重要提示】本轮检测到学生回答触发了 Agent 禁令：
+${banViolations.joinToString("\n") { "  - $it" }}
+请在评分和 memoryPatch 中重点针对这些问题给出严厉批评。
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 """.trimIndent() else ""
 
@@ -604,13 +750,15 @@ ${multiTurnContext}
 4. **Agent 禁令**：如果学生说"我已经执行了"但其实只是生成了技能卡片（类别 A）→ 明确指出违反了"禁止声称已执行"
 
 输出必须严格是 JSON，key：
-- score: 0..100 整数
+- score: 0 到本轮 maxScore 之间的数字（允许小数）。本轮 maxScore = $maxScore
 - critique: 中文批改，包含：哪里对、哪里错、哪里啰嗦、哪里编造了命令参数、正确答案应是什么。批评时必须具体到命令/参数级别
 - memoryPatch: 中文教训条目，格式为 "• 关于 <topic>：<规则/教训>"，每一条以 • 开头，多条用换行分隔；如果这题学生回答完美得 95+ 分，这个 key 给空字符串，不要乱塞。
 
 严禁：不要编造错误的命令参数来纠正学生；如果你自己拿不准参数，就明确说「需要 man 命令确认」。
 
+${buildStudentModelInfoBlock(context)}
 ${buildTrainingPrefsBlock(context)}
+${buildLongTermMemoryBlock(context)}
 已存在的教训记忆（避免重复写完全相同的条目）：
 ${memoryBlock.ifBlank { "(暂无)" }}
 """
@@ -619,6 +767,7 @@ ${memoryBlock.ifBlank { "(暂无)" }}
 
 学生回答（本轮最终版本）：
 $studentAnswer
+$banBlock
 $multiTurnBlock
 """
         return listOf(OpenAiMessage("system", sys), OpenAiMessage("user", user))
@@ -630,13 +779,21 @@ $multiTurnBlock
         roundIndex: Int,
         question: String,
         initialStudentAnswer: String,
-        dialogueHistory: List<Pair<String, String>>
+        dialogueHistory: List<Pair<String, String>>,
+        banViolations: List<String> = emptyList()
     ): List<OpenAiMessage> {
         val historyBlock = StringBuilder()
         historyBlock.append("【最初题目回答】\n学生最初回答：\n").append(initialStudentAnswer).append("\n\n")
         dialogueHistory.forEachIndexed { i, (studentAns, teacherFup) ->
             historyBlock.append("【追问第 ${i + 1} 轮】\n老师追问：$teacherFup\n学生回答：\n$studentAns\n\n")
         }
+
+        // 禁令违反提示
+        val banBlock = if (banViolations.isNotEmpty()) {
+            "\n\n🔴 【重要提示】本轮检测到学生回答触发了 Agent 禁令：\n" +
+            banViolations.joinToString("\n") { "  - $it" } +
+            "\n请在追问中重点指出这些问题，让学生纠正。\n"
+        } else ""
 
         val sys = """你是 Termux 终端场景下**非常严厉、吹毛求疵的 AI 训练老师**，正在和学生进行多轮追问。
 你的目标是：仔细审视学生到目前为止的所有回答，判断是否需要继续追问。
@@ -658,16 +815,18 @@ $multiTurnBlock
 - 要么出更深入的相关问题
 - **直接写追问内容本身，不要加前缀（如"追问："），不要 JSON 以外的解释**
 
-如果 needFollowup=false 且你认为学生表现已经足够让你给出评分，**可以**同时输出 score（0..100） 和 shouldFinalizeNow=true，这样后续 Step C 会跳过重新评分直接用你给的分。
+如果 needFollowup=false 且你认为学生表现已经足够让你给出评分，**可以**同时输出 score（0 到本轮 maxScore 之间的数字，允许小数） 和 shouldFinalizeNow=true，这样后续 Step C 会跳过重新评分直接用你给的分。
 但如果你的评分还需要综合考虑后续可能的深入检查，就只输出 needFollowup=false，不要给 score。
 
+${buildStudentModelInfoBlock(context)}
 ${buildTrainingPrefsBlock(context)}
+${buildLongTermMemoryBlock(context)}
 输出必须严格是 JSON：
-{"needFollowup": true/false, "followupText": "...", "score": 0, "shouldFinalizeNow": false}
+{"needFollowup": true/false, "followupText": "...", "score": 0.0, "shouldFinalizeNow": false}
 """
         val user = """【第 $roundIndex 轮 多轮追问判断】
 最初题目：$question
-
+${banBlock}
 到目前为止的对话：
 ${historyBlock.toString().trim()}
 
@@ -679,13 +838,13 @@ ${historyBlock.toString().trim()}
     fun buildFinalSummaryPrompt(
         context: Context,
         rounds: List<LocalTrainRound>,
-        avgScore: Int,
+        normalizedPercent: Double,
         memoryBlock: String
     ): List<OpenAiMessage> {
         val roundsSummary = rounds.mapIndexed { i, r ->
             val idx = i + 1
             """
-            --- 第 $idx 轮 (得分: ${r.score}/100) ---
+            --- 第 $idx 轮 (权重: ${"%.2f".format(r.maxScore)}, 得分: ${"%.2f".format(r.score)}) ---
             题目：${r.question.take(200)}
             学生回答：${r.studentAnswer.take(300)}
             老师点评：${r.critique.take(300)}
@@ -695,16 +854,18 @@ ${historyBlock.toString().trim()}
         val sys = """你是 Termux 终端场景下的资深 AI 训练总教头。现在全部轮次训练已结束，请基于完整训练数据，生成一份总体评估与后续改进建议。
 
 输出必须严格是 JSON：
-{"summary": "中文总结，300-600 字。包含：1) 整体水平评估（结合平均分 $avgScore）；2) 发现的主要薄弱点（2-4 条）；3) 下一步具体训练建议（2-3 条可落地的方向）。"}
+{"summary": "中文总结，300-600 字。包含：1) 整体水平评估（结合标准化得分 ${"%.1f".format(normalizedPercent)}%）；2) 发现的主要薄弱点（2-4 条）；3) 下一步具体训练建议（2-3 条可落地的方向）。"}
 
 用中文，不要 Markdown，不要额外说明。"""
         val user = """【完整训练数据】
 总轮次：${rounds.size}
-平均分：$avgScore / 100
+标准化得分：${"%.1f".format(normalizedPercent)}%（满分100）
 
 ${roundsSummary}
 
+${buildStudentModelInfoBlock(context)}
 ${buildTrainingPrefsBlock(context)}
+${buildLongTermMemoryBlock(context)}
 已积累的教训记忆（当前 System Prompt 蒸馏内容）：
 ${memoryBlock.ifBlank { "(暂无)" }}
 
@@ -830,7 +991,7 @@ ${memoryBlock.ifBlank { "(暂无)" }}
 
         val needFollowup = extractJsonField(raw, "needFollowup").let { it?.trim()?.equals("true", true) } ?: false
         val followupText = extractJsonField(raw, "followupText").orEmpty()
-        val score = (extractJsonField(raw, "score")?.toIntOrNull() ?: 0).coerceIn(0, 100)
+        val score = (extractJsonField(raw, "score")?.toDoubleOrNull() ?: 0.0).coerceIn(0.0, 100.0)
         val shouldFinalizeNow = extractJsonField(raw, "shouldFinalizeNow").let { it?.trim()?.equals("true", true) } ?: false
 
         return FollowupDecision(
@@ -845,7 +1006,8 @@ ${memoryBlock.ifBlank { "(暂无)" }}
     private suspend fun callOnlineNonStreamForCritique(
         context: Context,
         msgs: List<OpenAiMessage>,
-        forcedScore: Int? = null
+        forcedScore: Double? = null,
+        maxScore: Double = 10.0
     ): CritiqueResult {
         val cfg = AiTermuxPrefs.getFallbackOnlineConfig(context)
         val providerCfg = AiProviderConfig(
@@ -857,17 +1019,17 @@ ${memoryBlock.ifBlank { "(暂无)" }}
         )
         val resp = runCatching { AiApiClient.chat(context, providerCfg, msgs) }.getOrElse {
             Log.e(TAG, "在线批改失败: ${it.message}")
-            return CritiqueResult(0, "在线模型异常：${it.message}", "")
+            return CritiqueResult(maxScore = maxScore, score = 0.0, critique = "在线模型异常：${it.message}", memoryPatch = "")
         }
         val txt = resp.choices.firstOrNull()?.message?.content?.trim().orEmpty()
         Log.d(TAG, "批改模型输出前500chars: ${txt.take(500)}")
 
-        val score = if (forcedScore != null) forcedScore.coerceIn(0, 100)
-        else (extractJsonField(txt, "score")?.toIntOrNull() ?: 0).coerceIn(0, 100)
+        val score = if (forcedScore != null) forcedScore.coerceIn(0.0, maxScore)
+        else (extractJsonField(txt, "score")?.toDoubleOrNull() ?: 0.0).coerceIn(0.0, maxScore)
 
         val critique = extractJsonField(txt, "critique").orEmpty().ifBlank { stripFirstJsonString(txt) }
         val memoryPatch = extractJsonField(txt, "memoryPatch").orEmpty()
-        return CritiqueResult(score, critique, memoryPatch)
+        return CritiqueResult(maxScore = maxScore, score = score, critique = critique, memoryPatch = memoryPatch)
     }
 
     /** 本地模型非流式回答 — 直接调 AiLocalModel.completeLocal，绝不 fallback 到在线 */
@@ -917,32 +1079,33 @@ ${memoryBlock.ifBlank { "(暂无)" }}
         return re.find(s)?.groupValues?.get(1) ?: s
     }
     // -------- 启发式评分参考（无在线老师时，给用户一个建议分+理由+建议记忆） --------
-    internal fun suggestRating(question: String, answer: String): Triple<Int, String, String> {
+    internal fun suggestRating(question: String, answer: String, maxScore: Double): Triple<Double, String, String> {
         val q = question
         val a = answer.trim()
-        if (a.isBlank()) return Triple(0, "回答为空：本地模型没有输出任何内容。请检查本地模型是否正常。", "• 空回答时请重试本地推理，若持续为空请更换模型或检查模型文件")
+        if (a.isBlank()) return Triple(0.0, "回答为空：本地模型没有输出任何内容。请检查本地模型是否正常。", "• 空回答时请重试本地推理，若持续为空请更换模型或检查模型文件")
 
-        var score = 60
+        // 先用 0-100 启发式打分，最后按 maxScore 缩放
+        var rawScore = 60.0
         val reasons = mutableListOf<String>()
         val warnings = mutableListOf<String>()
         val mems = mutableListOf<String>()
 
         // 长度
         val len = a.length
-        if (len < 15) { score -= 20; reasons.add("回答过短($len chars)，大概率没有解决问题"); mems.add("不要给出空泛的一字/一句回答，除非明确问是否；否则应给出命令+解释") }
-        else if (len > 2500) { score -= 10; reasons.add("回答过于冗长"); mems.add("回答需要简洁：先给关键命令，再简短解释，默认不超过一屏") }
-        else { score += 5; reasons.add("篇幅适中") }
+        if (len < 15) { rawScore -= 20; reasons.add("回答过短($len chars)，大概率没有解决问题"); mems.add("不要给出空泛的一字/一句回答，除非明确问是否；否则应给出命令+解释") }
+        else if (len > 2500) { rawScore -= 10; reasons.add("回答过于冗长"); mems.add("回答需要简洁：先给关键命令，再简短解释，默认不超过一屏") }
+        else { rawScore += 5; reasons.add("篇幅适中") }
 
         // 是否包含命令
         val cmdKeywords = listOf("apt", "pkg ", "ls ", "chmod", "grep", "find ", "tar ", "ps ", "du -", "df -", "cat ", "mv ", "cp ", "chown", "mkdir", "rm -")
         val hasCmd = a.contains("```") || cmdKeywords.any { it in a }
-        if (hasCmd) score += 15 else { score -= 15; warnings.add("回答里几乎没有命令；Termux 场景题目通常要求给具体命令") }
+        if (hasCmd) rawScore += 15 else { rawScore -= 15; warnings.add("回答里几乎没有命令；Termux 场景题目通常要求给具体命令") }
 
         // 危险命令警告缺失
         val dangerous = listOf("rm -rf /", "rm -rf ~", ":(){ :|:& };:", "mkfs", "dd of=/dev/")
         val foundDanger = dangerous.filter { it in a }
         if (foundDanger.isNotEmpty()) {
-            score -= 40
+            rawScore -= 40
             warnings.add("出现极度危险命令：${foundDanger.joinToString()}，且未加警告")
             mems.add("输出任何涉及 rm -rf /dd of=/dev/mkfs 等高危命令之前，必须先加一行【警告：此命令有破坏性，请确认路径】")
         }
@@ -951,7 +1114,7 @@ ${memoryBlock.ifBlank { "(暂无)" }}
         val flagsCount = Regex("""(^|\s)(-[a-zA-Z]+|--[a-zA-Z][\w-]*)""").findAll(a).count()
         val hasManHint = a.contains("man ") || a.contains("--help") || a.contains("请确认参数") || a.contains("实际 man 手册")
         if (flagsCount >= 3 && !hasManHint) {
-            score -= 10
+            rawScore -= 10
             warnings.add("列出了 ≥3 个命令参数但未提示 man 确认，可能编造参数")
             mems.add("给出多个(≥3)命令参数时，末尾加一句：以上参数请使用 man 或 --help 实际确认，避免编造参数")
         }
@@ -959,35 +1122,36 @@ ${memoryBlock.ifBlank { "(暂无)" }}
         // 是否有中文解释
         val chineseCount = a.count { it.code in 0x4E00..0x9FFF }
         val chineseRatio = chineseCount.toDouble() / len.coerceAtLeast(1)
-        if (hasCmd && chineseRatio < 0.10) { score -= 8; warnings.add("只有命令没有中文解释，用户不知道在干嘛"); mems.add("给出命令后，必须追加 1-2 句中文解释：命令做什么、为什么这样写、输出会是什么") }
-        else if (chineseRatio > 0.05) { score += 5; reasons.add("包含中文解释") }
+        if (hasCmd && chineseRatio < 0.10) { rawScore -= 8; warnings.add("只有命令没有中文解释，用户不知道在干嘛"); mems.add("给出命令后，必须追加 1-2 句中文解释：命令做什么、为什么这样写、输出会是什么") }
+        else if (chineseRatio > 0.05) { rawScore += 5; reasons.add("包含中文解释") }
 
         // 谦虚/谨慎
         val cautious = listOf("可能", "大概", "请确认", "建议先", "视情况", "通常", "如果失败可尝试")
-        if (cautious.any { it in a }) score += 5 else score -= 3
+        if (cautious.any { it in a }) rawScore += 5 else rawScore -= 3
 
-        score = score.coerceIn(0, 100)
+        rawScore = rawScore.coerceIn(0.0, 100.0)
 
         val builder = StringBuilder()
-        builder.append("【建议参考评分】$score / 100\n")
+        builder.append("【建议参考评分】$rawScore / 100\n")
         builder.append("参考理由：\n")
         reasons.take(4).forEach { builder.append("  ✓ ").append(it).append('\n') }
         if (warnings.isNotEmpty()) {
             builder.append("需要改进：\n")
             warnings.forEach { builder.append("  ! ").append(it).append('\n') }
         }
-        if (mems.isEmpty() && score >= 80) {
+        if (mems.isEmpty() && rawScore >= 80) {
             builder.append("整体表现良好，可继续保持。是否要把本次优秀表现的要点固化到 System Prompt？（可在下方输入补丁）\n")
         }
         val suggestedMem = if (mems.isNotEmpty()) {
             mems.joinToString("\n")
-        } else if (score >= 85) {
+        } else if (rawScore >= 85) {
             val good = mutableListOf<String>()
             if (hasCmd) good.add("• 回答命令行题目时，请优先给出可复制运行的具体命令，再附上简短中文解释")
             good.add("• 如果命令中列出了 ≥3 个参数，请追加一句：请使用 man 或 --help 确认参数版本差异")
             good.joinToString("\n")
         } else ""
-        return Triple(score, builder.toString().trim(), suggestedMem)
+        val finalScore = (rawScore / 100.0) * maxScore
+        return Triple(finalScore, builder.toString().trim(), suggestedMem)
     }
 
 }

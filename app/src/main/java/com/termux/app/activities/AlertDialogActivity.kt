@@ -134,6 +134,23 @@ class AlertDialogActivity : FragmentActivity() {
                 }
             }
 
+            TYPE_CRASH_POST -> {
+                val errorMessage = intent.getStringExtra(EXTRA_ERROR_MESSAGE) ?: ""
+                val fullReport = intent.getStringExtra("extra_crash_report_full") ?: ""
+
+                setContent {
+                    ProvideNavDispatcher {
+                        KiTerminalTheme {
+                            CrashPostDialogContent(
+                                errorMessage = errorMessage,
+                                fullCrashReport = fullReport,
+                                onDismiss = { finish() }
+                            )
+                        }
+                    }
+                }
+            }
+
             else -> finish()
         }
     }
@@ -150,6 +167,7 @@ class AlertDialogActivity : FragmentActivity() {
         const val TYPE_STOP_CONFIRM = "stop_confirm"
         const val TYPE_DISABLE_WARNING = "disable_warning"
         const val TYPE_CRASH_ERROR = "crash_error"
+        const val TYPE_CRASH_POST = "crash_post"
 
         fun startStopConfirm(
             context: Context,
@@ -188,6 +206,18 @@ class AlertDialogActivity : FragmentActivity() {
                 putExtra(EXTRA_DIALOG_TYPE, TYPE_CRASH_ERROR)
                 putExtra(EXTRA_ERROR_MESSAGE, errorMessage)
                 putExtra(EXTRA_CAN_RECOVER, canRecover)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(intent)
+        }
+
+        fun startCrashPost(
+            context: Context,
+            errorMessage: String
+        ) {
+            val intent = Intent(context, AlertDialogActivity::class.java).apply {
+                putExtra(EXTRA_DIALOG_TYPE, TYPE_CRASH_POST)
+                putExtra(EXTRA_ERROR_MESSAGE, errorMessage)
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             context.startActivity(intent)
@@ -549,3 +579,89 @@ private fun CrashErrorDialogContent(
         }
     )
 }
+
+
+@Composable
+private fun CrashPostDialogContent(
+    errorMessage: String,
+    fullCrashReport: String,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+    val thirdPartyBlocked = rememberThirdPartyBlocked(context)
+    var showDialog by remember { mutableStateOf(true) }
+
+    WindowDialog(
+        show = showDialog,
+        onDismissRequest = {
+            showDialog = false
+            onDismiss()
+        },
+        title = stringResource(R.string.crash_post_title),
+        summary = buildString {
+            append(stringResource(R.string.crash_post_message))
+            if (errorMessage.isNotBlank()) {
+                append("\n\n")
+                append(errorMessage)
+            }
+        },
+        content = {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .physicalTouchDetector()
+                    .accessibilityGuard(thirdPartyBlocked),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                TextButton(
+                    text = stringResource(R.string.view_crash_report),
+                    onClick = guardedOnClick(context, thirdPartyBlocked) {
+                        // 用原生 ReportActivity.newInstance 传真实崩溃数据
+                        try {
+                            val userActionName = com.termux.app.models.UserAction.CRASH_REPORT.getName()
+                            val reportInfo = com.termux.shared.models.ReportInfo(
+                                userActionName,                                                          // userAction
+                                "CrashPostDialog",                                                       // sender
+                                context.getString(R.string.title_crash_report),                           // reportTitle
+                                null,                                                                     // reportStringPrefix
+                                if (fullCrashReport.isNotBlank()) fullCrashReport else errorMessage,     // reportString (完整崩溃日志)
+                                "\n\n" + com.termux.shared.termux.TermuxUtils.getReportIssueMarkdownString(context), // reportStringSuffix
+                                true,                                                                     // addReportInfoHeaderToMarkdown
+                                null,                                                                     // reportSaveFileLabel
+                                null                                                                      // reportSaveFilePath
+                            )
+                            val result = com.termux.shared.activities.ReportActivity.newInstance(context, reportInfo)
+                            if (result.contentIntent != null) {
+                                context.startActivity(result.contentIntent)
+                            }
+                        } catch (_: Throwable) {}
+                        showDialog = false
+                        onDismiss()
+                    },
+                    modifier = Modifier.weight(1f)
+                )
+                TextButton(
+                    text = stringResource(R.string.view_logs),
+                    onClick = guardedOnClick(context, thirdPartyBlocked) {
+                        val intent = Intent(context, LogViewerActivity::class.java)
+                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        context.startActivity(intent)
+                        showDialog = false
+                        onDismiss()
+                    },
+                    modifier = Modifier.weight(1f)
+                )
+                TextButton(
+                    text = stringResource(R.string.confirm),
+                    onClick = guardedOnClick(context, thirdPartyBlocked) {
+                        showDialog = false
+                        onDismiss()
+                    },
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.textButtonColorsPrimary()
+                )
+            }
+        }
+    )
+}
+
