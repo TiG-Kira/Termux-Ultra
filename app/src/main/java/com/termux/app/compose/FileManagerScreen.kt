@@ -925,7 +925,7 @@ fun FileManagerScreen(
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(8.dp))
                             .clickable {
-                                onOpenFile(file.absolutePath, "cat \"${file.absolutePath}\"")
+                                onOpenFile(file.absolutePath, "cat \"${file.absolutePath}\"; echo; read -p \"按回车继续...\"")
                                 showOpenWithDialog = false
                                 fileToOpen = null
                             }
@@ -1428,7 +1428,7 @@ fun FileManagerScreen(
             scriptFilePath = scriptDetectionFilePath,
             onViewScript = {
                 // 查看脚本内容 - 用 cat 打开
-                onOpenFile(scriptDetectionFilePath, "cat \"${scriptDetectionFilePath}\"")
+                onOpenFile(scriptDetectionFilePath, "cat \"${scriptDetectionFilePath}\"; echo; read -p \"按回车继续...\"")
                 showScriptDetectionDialog = false
             },
             onEditScript = {

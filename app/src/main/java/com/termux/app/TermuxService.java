@@ -30,6 +30,7 @@ import android.provider.Settings;
 import android.widget.ArrayAdapter;
 import android.widget.Toast;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.R;
@@ -84,6 +85,9 @@ import java.util.List;
 public final class TermuxService extends Service implements TermuxTask.TermuxTaskClient, TermuxSession.TermuxSessionClient {
 
     private static int EXECUTION_ID = 1000;
+
+    /** Service process start time (elapsedRealtime ms) for uptime display. */
+    public static long serviceStartTimeMs = 0;
 
     /** This service is only bound from inside the same process and never uses IPC. */
     public class LocalBinder extends Binder {
@@ -180,6 +184,7 @@ public final class TermuxService extends Service implements TermuxTask.TermuxTas
     @Override
     public void onCreate() {
         Logger.logVerbose(LOG_TAG, "onCreate");
+        serviceStartTimeMs = android.os.SystemClock.elapsedRealtime();
         Process.setThreadPriority(Process.THREAD_PRIORITY_FOREGROUND);
         runStartForeground();
         registerMemoryBroadcastReceiver();
@@ -843,7 +848,37 @@ public final class TermuxService extends Service implements TermuxTask.TermuxTas
     }
 
     /** Remove a TermuxSession. */
-    public synchronized int removeTermuxSession(TerminalSession sessionToRemove) {
+    
+    /**
+     * 注册一个插件创建的 TermuxSession 到服务管理。
+     *
+     * 插件持久化会话也需要进入 mTermuxSessions，这样终端页面能看到并管理它，
+     * 通知栏计数也能正确包含。commandLabel 前缀为 "PluginSession:" 供 UI 区分。
+     */
+    public synchronized void registerPluginSession(@NonNull final TermuxSession session) {
+        if (session == null) return;
+        if (!session.getExecutionCommand().commandLabel.startsWith("PluginSession:")) {
+            Logger.logWarn(LOG_TAG, "registerPluginSession 收到的会话 commandLabel 不以 PluginSession: 开头，可能不是插件会话");
+        }
+        session.setSource(TermuxSession.SessionSource.PLUGIN);
+        mTermuxSessions.add(session);
+        Logger.logDebug(LOG_TAG, "registerPluginSession: 已添加插件会话 " + session.getTerminalSession().mSessionName + " (total=" + mTermuxSessions.size() + ")");
+
+        // 通知 UI
+        if (mTermuxTerminalSessionClient != null)
+            mTermuxTerminalSessionClient.termuxSessionListNotifyUpdated();
+
+        // 插件持久化会话是一个普通 shell（login shell），设置 emulator 尺寸
+        TerminalSession terminal = session.getTerminalSession();
+        if (terminal.getEmulator() == null && terminal.getShellPid() > 0) {
+            terminal.updateSize(80, 24, 0, 0);
+        }
+
+        updateNotification();
+        TermuxActivity.updateTermuxActivityStyling(this);
+    }
+
+public synchronized int removeTermuxSession(TerminalSession sessionToRemove) {
         int index = getIndexOfSession(sessionToRemove);
 
         if (index >= 0) {

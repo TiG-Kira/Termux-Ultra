@@ -118,16 +118,16 @@ fun AboutScreen(onBack: () -> Unit) {
     // 呼吸渐变颜色 (FeatureCenterCard 风格)
     val lightGradient = Brush.verticalGradient(
         colors = listOf(
-            lerp(Color(0xFF60A5FA), Color(0xFF93C5FD), gradientFraction),
-            lerp(Color(0xFF818CF8), Color(0xFFC4B5FD), gradientFraction),
-            lerp(Color(0xFFA78BFA), Color(0xFFF0ABFC), gradientFraction)
+            lerp(Color(0xFFFFE5EF), Color(0xFFF9DBE5), gradientFraction),
+            lerp(Color(0xFFF7BAD1), Color(0xFFBCC1FF), gradientFraction),
+            lerp(Color(0xFFA3A5F9), Color(0xFF8EAFFF), gradientFraction)
         )
     )
     val darkGradient = Brush.verticalGradient(
         colors = listOf(
-            lerp(Color(0xFF1E3A5F), Color(0xFF0F172A), gradientFraction),
-            lerp(Color(0xFF312E81), Color(0xFF1E1B4B), gradientFraction),
-            lerp(Color(0xFF4C1D95), Color(0xFF1A1A2E), gradientFraction)
+            lerp(Color(0xFF330FE0), Color(0xFF934CBC), gradientFraction),
+            lerp(Color(0xFF4C238C), Color(0xFF9E35AA), gradientFraction),
+            lerp(Color(0xFF1C28D3), Color(0xFF0033C6), gradientFraction)
         )
     )
     // 滚动状态跟踪

@@ -51,6 +51,9 @@ import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.basic.SnackbarHost
 import top.yukonga.miuix.kmp.basic.SnackbarHostState
 import top.yukonga.miuix.kmp.basic.SnackbarDuration
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.material3.CircularProgressIndicator
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.preference.SwitchPreference
 import top.yukonga.miuix.kmp.preference.CheckboxPreference
@@ -132,13 +135,18 @@ fun SettingsScreen(
     var aiTermuxEnabled by remember { mutableStateOf(prefs.getBoolean("ai_termux_enabled", true)) }
     var aiDeveloperMode by remember { mutableStateOf(AiTermuxPrefs.isDeveloperMode(context)) }
     var localGpuAccel by remember { mutableStateOf(AiTermuxPrefs.isLocalGpuAccelEnabled(context)) }
+    var showGpuConfigDialog by remember { mutableStateOf(false) }
+    var gpuConfigStep by remember { mutableStateOf<AiLocalModel.GpuConfigStep?>(null) }
+    val gpuInfoCache = remember { AiLocalModel.detectGpuInfo(context) }
+
     var autoExecConfig by remember { mutableStateOf(AiTermuxPrefs.getAutoExecConfig(context)) }
     var useCustomSystemPrompt by remember { mutableStateOf(AiTermuxPrefs.isUsingCustomSystemPrompt(context)) }
     var unlimitedMode by remember { mutableStateOf(AiTermuxPrefs.isUnlimitedMode(context)) }
     var rootAutoShell by remember { mutableStateOf(AiTermuxPrefs.isRootAutoShell(context)) }
     // 本地大模型备用在线配置（fallback online）
-    val aiProvider = AiTermuxPrefs.getConfig(context).providerConfig.provider
-    val isLocalMode = aiProvider == "local"
+    val aiProvider = remember { AiTermuxPrefs.getConfig(context).providerConfig.provider }
+    val isLocalMode = remember { aiProvider == "local" }
+    val hasFallbackCached = remember { AiTermuxPrefs.isFallbackOnlineConfigReady(context) }
     var fallbackEnabled by remember { mutableStateOf(AiTermuxPrefs.isFallbackOnlineEnabled(context)) }
     var showFallbackEditor by remember { mutableStateOf(false) }
     var fbKey by remember { mutableStateOf("") }
@@ -513,8 +521,8 @@ fun SettingsScreen(
             contentPadding = PaddingValues(bottom = navBarBottomPadding + 16.dp)
         ) {
             // ---------- Appearance ----------
-            item { SmallTitle(text = context.getString(R.string.appearance)) }
-            item {
+            item(key = "section_appearance") { SmallTitle(text = context.getString(R.string.appearance)) }
+            item(key = "card_appearance") {
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -592,8 +600,8 @@ fun SettingsScreen(
             }
 
             // ---------- Remote ----------
-            item { SmallTitle(text = context.getString(R.string.remote)) }
-            item {
+            item(key = "section_remote") { SmallTitle(text = context.getString(R.string.remote)) }
+            item(key = "card_remote") {
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -632,12 +640,12 @@ fun SettingsScreen(
             }
 
             // ---------- Data Backup ----------
-            item { SmallTitle(text = context.getString(R.string.backup_category)) }
-            item { SettingsGroupCard(items = dataSettings) }
+            item(key = "section_backup") { SmallTitle(text = context.getString(R.string.backup_category)) }
+            item(key = "card_data_group") { SettingsGroupCard(items = dataSettings) }
 
             // ---------- Integrated Tools ----------
-            item { SmallTitle(text = context.getString(R.string.integrated_tools_category)) }
-            item {
+            item(key = "section_tools") { SmallTitle(text = context.getString(R.string.integrated_tools_category)) }
+            item(key = "card_integrated_tools") {
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -731,8 +739,8 @@ fun SettingsScreen(
             }
 
             // ---------- AI Termux ----------
-            item { SmallTitle(text = "Termux Agent") }
-            item {
+            item(key = "section_ai") { SmallTitle(text = "Termux Agent") }
+            item(key = "card_ai") {
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -773,26 +781,23 @@ fun SettingsScreen(
                                 }
                             )
 
-                            HorizontalDivider(color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f), modifier = Modifier.padding(start = 72.dp, end = 16.dp))
-                            ArrowPreference(
-                                title = "训练本地模型",
-                                summary = run {
-                                    val cfg = AiTermuxPrefs.getConfig(context)
-                                    val hasFallback = AiTermuxPrefs.isFallbackOnlineConfigReady(context)
-                                    if (cfg.providerConfig.provider != "local") "请先选择本地模型引擎（llama/Ollama）并配置一个模型"
-                                    else if (hasFallback) "在线全自动 · 配置了备用在线大模型：出题+批改+评分+自动把教训追加到 System Prompt（推荐）"
-                                    else "手动模式 · 用户手动评分，给出启发式参考评分+建议（无在线模型）"
-                                },
-                                enabled = run {
-                                    AiTermuxPrefs.getConfig(context).providerConfig.provider == "local"
-                                },
-                                onClick = {
-                                    context.startActivity(android.content.Intent(context, com.termux.app.activities.AiLocalTrainerActivity::class.java))
-                                },
-                                startAction = {
-                                    SettingIcon(R.drawable.ic_tools, contentDescription = "训练本地模型")
-                                }
-                            )
+                            if (aiProvider == "local") {
+                                HorizontalDivider(color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f), modifier = Modifier.padding(start = 72.dp, end = 16.dp))
+                                ArrowPreference(
+                                    title = "训练本地模型",
+                                    summary = if (hasFallbackCached) {
+                                            "在线全自动 · 配置了备用在线大模型：出题+批改+评分+自动把教训追加到 System Prompt（推荐）"
+                                        } else {
+                                            "手动模式 · 用户手动评分，给出启发式参考评分+建议（无在线模型）"
+                                        },
+                                    onClick = {
+                                        context.startActivity(android.content.Intent(context, com.termux.app.activities.AiLocalTrainerActivity::class.java))
+                                    },
+                                    startAction = {
+                                        SettingIcon(R.drawable.ic_tools, contentDescription = "训练本地模型")
+                                    }
+                                )
+                            }
 
                             HorizontalDivider(
                                 color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f),
@@ -939,30 +944,64 @@ fun SettingsScreen(
                                             SettingIcon(R.drawable.ic_files, contentDescription = "完整对话记录")
                                         }
                                     )
-                                    HorizontalDivider(
-                                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f),
-                                        modifier = Modifier.padding(start = 72.dp, end = 16.dp)
-                                    )
-                                    SwitchPreference(
-                                        title = "本地模型使用 GPU 加速",
+                                    if (aiProvider == "local") {
+                                        HorizontalDivider(
+                                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f),
+                                            modifier = Modifier.padding(start = 72.dp, end = 16.dp)
+                                        )
+                                        SwitchPreference(
+                                            title = "本地模型 GPU 加速 (Termux Vulkan)",
                                         summary = if (localGpuAccel) {
                                             run {
                                                 val info = AiLocalModel.detectGpuInfo(context)
                                                 if (info.supported) {
-                                                    "已开启 · 检测到 ${info.vendor} ${info.model}，后端 ${info.backend}，推荐 offload ${info.recommendedNgl} 层（${info.vendor} ${info.model}，后端 ${info.backend}，推荐 offload ${info.recommendedNgl} 层）"
+                                                    "已开启 · GPU 版 llama 就绪 · ${info.vendor} ${info.model} · 后端 ${info.backend} · 推荐 offload ${info.recommendedNgl} 层"
                                                 } else {
-                                                    "已开启 · 但 Termux 内 llama.cpp 未编译 GPU 后端，参数将被忽略（Termux 默认包不带 GPU 支持）"
+                                                    "已开启 · 但 GPU 版 llama / 转接层未就绪，开关会自动重新配置"
                                                 }
                                             }
                                         } else {
-                                            "实验性功能，可能不稳定。开启后自动识别 GPU 类型并注入对应的 GPU offload 参数"
+                                            "实验性功能 · 关闭时强制 CPU-only；每次打开都会检查 Termux llama-cpp-backend-vulkan 包是否已安装，缺失则自动安装配置"
                                         },
                                         checked = localGpuAccel,
                                         onCheckedChange = { newValue ->
-                                            localGpuAccel = newValue
-                                            AiTermuxPrefs.setLocalGpuAccelEnabled(context, newValue)
-                                            // 重启 llama-server 以应用新参数
-                                            if (newValue || true) {
+                                            if (newValue) {
+                                                // 每次打开都走 configureGpuSupport：
+                                                // 内部 pkg install -y 对已装包是幂等的，缺失则自动安装。
+                                                // 这样无论依赖是否安装过都能正确处理，逻辑统一可靠。
+                                                showGpuConfigDialog = true
+                                                gpuConfigStep = null
+                                                scope.launch {
+                                                    val tag = "GpuConfig"
+                                                    try {
+                                                        android.util.Log.i(tag, "configureGpuSupport START (switch ON)")
+                                                        val ok = AiLocalModel.configureGpuSupport(context) { step ->
+                                                            gpuConfigStep = step
+                                                        }
+                                                        android.util.Log.i(tag, "configureGpuSupport END ok=" + ok)
+                                                        if (ok) {
+                                                            localGpuAccel = true
+                                                            AiTermuxPrefs.setLocalGpuAccelEnabled(context, true)
+                                                            AiLocalModel.stopServer()
+                                                        } else {
+                                                            localGpuAccel = false
+                                                            AiTermuxPrefs.setLocalGpuAccelEnabled(context, false)
+                                                        }
+                                                    } catch (e: Throwable) {
+                                                        android.util.Log.e(tag, "configureGpuSupport EXCEPTION", e)
+                                                        gpuConfigStep = AiLocalModel.GpuConfigStep(
+                                                            1, 4,
+                                                            "配置失败",
+                                                            e.javaClass.simpleName + ": " + (e.message ?: "unknown"),
+                                                            false, false
+                                                        )
+                                                        localGpuAccel = false
+                                                        AiTermuxPrefs.setLocalGpuAccelEnabled(context, false)
+                                                    }
+                                                }
+                                            } else {
+                                                localGpuAccel = false
+                                                AiTermuxPrefs.setLocalGpuAccelEnabled(context, false)
                                                 AiLocalModel.stopServer()
                                             }
                                         },
@@ -970,10 +1009,11 @@ fun SettingsScreen(
                                             SettingIcon(R.drawable.ic_refresh, contentDescription = "本地模型 GPU 加速")
                                         }
                                     )
-                                    HorizontalDivider(
-                                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f),
-                                        modifier = Modifier.padding(start = 72.dp, end = 16.dp)
-                                    )
+                                        HorizontalDivider(
+                                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f),
+                                            modifier = Modifier.padding(start = 72.dp, end = 16.dp)
+                                        )
+                                    }
                                     SwitchPreference(
                                         title = "无限制模式",
                                         summary = if (unlimitedMode) {
@@ -1000,7 +1040,7 @@ fun SettingsScreen(
                                             modifier = Modifier.padding(start = 72.dp, end = 16.dp)
                                         )
                                         SwitchPreference(
-                                            title = "ROOT 自动 Shell",
+                                            title = "使用 Root 权限执行 Agent 功能",
                                             summary = "检测到 ROOT 时，Agent 自动使用 su 执行命令，无需手动确认",
                                             checked = rootAutoShell,
                                             onCheckedChange = {
@@ -1008,7 +1048,7 @@ fun SettingsScreen(
                                                 AiTermuxPrefs.setRootAutoShell(context, it)
                                             },
                                             startAction = {
-                                                SettingIcon(R.drawable.ic_key, contentDescription = "ROOT 自动 Shell")
+                                                SettingIcon(R.drawable.ic_root_skull, contentDescription = "使用 Root 权限执行 Agent 功能")
                                             }
                                         )
                                     }
@@ -1020,13 +1060,13 @@ fun SettingsScreen(
 
             // ---------- Tool Configuration (conditional, only for enabled tools) ----------
             if (toolConfigItems.isNotEmpty()) {
-                item { SmallTitle(text = context.getString(R.string.tool_config_category)) }
-                item { SettingsGroupCard(items = toolConfigItems) }
+                item(key = "section_tool_config") { SmallTitle(text = context.getString(R.string.tool_config_category)) }
+                item(key = "card_tool_config") { SettingsGroupCard(items = toolConfigItems) }
             }
 
             // ---------- Security Settings ----------
-            item { SmallTitle(text = "安全设置") }
-            item {
+            item(key = "section_security") { SmallTitle(text = "安全设置") }
+            item(key = "card_security") {
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1114,11 +1154,11 @@ fun SettingsScreen(
             }
 
             // ---------- System ----------
-            item { SmallTitle(text = context.getString(R.string.system_category)) }
-            item { SettingsGroupCard(items = systemSettings) }
+            item(key = "section_system") { SmallTitle(text = context.getString(R.string.system_category)) }
+            item(key = "card_system") { SettingsGroupCard(items = systemSettings) }
 
             // Extra bottom spacing for comfortable scroll
-            item { Spacer(Modifier.height(16.dp)) }
+            item(key = "spacer_bottom") { Spacer(Modifier.height(16.dp)) }
         }
     }
 
@@ -1149,6 +1189,64 @@ fun SettingsScreen(
             onClick = { showNavRestartPrompt = false },
             modifier = Modifier.fillMaxWidth()
         )
+        }
+    )
+
+    // ---------- GPU 配置进度 Dialog ----------
+    OverlayDialog(
+        title = run {
+            val step = gpuConfigStep
+            when (step?.success) {
+                true -> "✅ GPU 加速配置完成"
+                false -> "❌ GPU 加速配置失败"
+                null -> "⏳ 配置 GPU 加速中..."
+            }
+        },
+        summary = run {
+            val step = gpuConfigStep
+            if (step != null) {
+                "(${step.step}/${step.total}) ${step.title}"
+            } else {
+                "准备中..."
+            }
+        },
+        show = showGpuConfigDialog,
+        onDismissRequest = {
+            if (gpuConfigStep?.success != null) showGpuConfigDialog = false
+        },
+        content = {
+            val step = gpuConfigStep
+            val isDone = step?.success != null
+
+            if (step != null) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 280.dp)
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    Text(
+                        text = step.detail,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                Spacer(Modifier.height(12.dp))
+            }
+
+            if (isDone) {
+                TextButton(
+                    text = if (step?.success == true) "完成" else "知道了",
+                    onClick = { showGpuConfigDialog = false },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            } else {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    CircularProgressIndicator()
+                }
+            }
         }
     )
 

@@ -10,6 +10,9 @@ import com.termux.shared.shell.TermuxShellEnvironmentClient
 import com.termux.shared.termux.TermuxConstants
 import com.termux.shared.logger.Logger
 import java.io.File
+import java.util.concurrent.ConcurrentHashMap
+import com.termux.app.TermuxService
+import android.content.ComponentName
 
 object PluginManager {
 
@@ -251,6 +254,107 @@ object PluginManager {
         config[key] = value
         savePluginConfig(context, pluginId, config)
     }
+
+// ============================================================
+    // 插件持久化会话管理
+    // ============================================================
+
+    /** 插件持久化会话注册表：sessionId → PluginPersistentSession */
+    private val persistentSessionRegistry = ConcurrentHashMap<String, PluginPersistentSession>()
+
+    /**
+     * 打开一个插件持久化会话。
+     * 返回的 sessionId 用于后续所有操作。
+     */
+    fun openPersistentSession(
+        context: Context,
+        pluginId: String,
+        sessionName: String = "Plugin $pluginId",
+    ): PluginPersistentSession? {
+        if (!hasPermission(context, pluginId, PluginPermission.TERMUX_SESSION_ACCESS)) {
+            Logger.logError("PluginManager", "Plugin '$pluginId' 没有 TERMUX_SESSION_ACCESS 权限，无法打开持久化会话")
+            return null
+        }
+
+        val session = PluginPersistentSession.create(context, pluginId, sessionName) ?: run {
+            Logger.logError("PluginManager", "PluginPersistentSession.create() 失败 for plugin='$pluginId'")
+            return null
+        }
+
+        // 注册进本地注册表
+        persistentSessionRegistry[session.sessionId] = session
+
+        // 注册到查找表，让 TermuxSessionClient 退出时能清理
+        PluginPersistentSessionRegistry.register(session)
+
+        // 注册进 TermuxService 让终端页面也能管理
+        registerWithService(context, session)
+
+        // 等待一次 PS1 提示出现（可选，让插件有东西可以立即 readNew）
+        Thread.sleep(400)
+        session.resetReadCursor()
+
+        return session
+    }
+
+    /** 注册到 TermuxService.mTermuxSessions，让终端页面也能管理这个会话。 */
+    private fun registerWithService(context: Context, session: PluginPersistentSession) {
+        try {
+            val intent = Intent(context, TermuxService::class.java)
+            context.bindService(intent, object : android.content.ServiceConnection {
+                override fun onServiceConnected(name: ComponentName, binder: android.os.IBinder) {
+                    val service = (binder as TermuxService.LocalBinder).service
+                    service.registerPluginSession(session.termuxSession)
+                    unbindFromService(context, this)
+                }
+                override fun onServiceDisconnected(name: ComponentName) {}
+            }, Context.BIND_AUTO_CREATE)
+        } catch (e: Exception) {
+            Logger.logStackTraceWithMessage("PluginManager", "registerWithService failed for ${session.sessionId}", e)
+        }
+    }
+
+    private fun unbindFromService(context: Context, conn: android.content.ServiceConnection) {
+        try { context.unbindService(conn) } catch (_: Exception) {}
+    }
+
+    /** 根据 sessionId 获取持久化会话（插件自身或同权限可访问）。 */
+    fun getPersistentSession(sessionId: String, pluginId: String): PluginPersistentSession? {
+        val s = persistentSessionRegistry[sessionId] ?: return null
+        if (s.pluginId != pluginId) {
+            Logger.logWarn("PluginManager", "Plugin '$pluginId' 尝试访问不属于它的 session '$sessionId'")
+            return null
+        }
+        return s
+    }
+
+    /** 列出指定插件拥有的所有持久化会话。 */
+    fun listPersistentSessions(pluginId: String): List<PluginPersistentSession> {
+        return persistentSessionRegistry.values.filter { it.pluginId == pluginId }
+    }
+
+    /** 关闭并移除一个持久化会话。 */
+    fun closePersistentSession(sessionId: String, pluginId: String) {
+        val session = getPersistentSession(sessionId, pluginId) ?: return
+        PluginPersistentSessionRegistry.unregister(session)
+        session.close()
+        persistentSessionRegistry.remove(sessionId)
+    }
+
+    /** 从注册表移除（在 TermuxService.onTermuxSessionExited 中回调使用）。 */
+    internal fun unregisterSession(sessionId: String) {
+        persistentSessionRegistry.remove(sessionId)
+    }
+
+    /** 清理一个已过期的注册表项（会话进程已退出）。 */
+    internal fun cleanupDeadSessions() {
+        val dead = persistentSessionRegistry.entries.filter { !it.value.isRunning }
+        dead.forEach { (_, s) ->
+            PluginPersistentSessionRegistry.unregister(s)
+            persistentSessionRegistry.remove(s.sessionId)
+        }
+    }
+
 }
 
 data class PluginH5HomeInfo(

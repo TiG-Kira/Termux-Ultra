@@ -118,16 +118,16 @@ fun OobeScreen(
 
     val lightGradient = Brush.verticalGradient(
         colors = listOf(
-            androidx.compose.ui.graphics.lerp(Color(0xFF60A5FA), Color(0xFF93C5FD), gradientFraction),
-            androidx.compose.ui.graphics.lerp(Color(0xFF818CF8), Color(0xFFC4B5FD), gradientFraction),
-            androidx.compose.ui.graphics.lerp(Color(0xFFA78BFA), Color(0xFFF0ABFC), gradientFraction)
+            androidx.compose.ui.graphics.lerp(Color(0xFFF52828), Color(0xFFFF7878), gradientFraction),
+            androidx.compose.ui.graphics.lerp(Color(0xFF9AA8F5), Color(0xFFC5CCFC), gradientFraction),
+            androidx.compose.ui.graphics.lerp(Color(0xFF4D49D6), Color(0xFF8A87E6), gradientFraction)
         )
     )
     val darkGradient = Brush.verticalGradient(
         colors = listOf(
-            androidx.compose.ui.graphics.lerp(Color(0xFF1E3A5F), Color(0xFF0F172A), gradientFraction),
-            androidx.compose.ui.graphics.lerp(Color(0xFF312E81), Color(0xFF1E1B4B), gradientFraction),
-            androidx.compose.ui.graphics.lerp(Color(0xFF4C1D95), Color(0xFF1A1A2E), gradientFraction)
+            androidx.compose.ui.graphics.lerp(Color(0xFF8B1A1A), Color(0xFFF52828), gradientFraction),
+            androidx.compose.ui.graphics.lerp(Color(0xFF3A4273), Color(0xFF9AA8F5), gradientFraction),
+            androidx.compose.ui.graphics.lerp(Color(0xFF1E1C63), Color(0xFF4D49D6), gradientFraction)
         )
     )
 

@@ -273,10 +273,10 @@ object SkillExecutor {
 
         // 2. 移除所有 <tool_call> 行业标准格式块
         val toolCallStrip = Regex(
-            """""<tool_call>([\s\S]*?)</tool_call>""""",
+            """<tool_call>([\s\S]*?)</tool_call>""",
             RegexOption.DOT_MATCHES_ALL
         )
-        result = toolCallStrip.replace(result, """""").trim()
+        result = toolCallStrip.replace(result, "").trim()
 
         // 3. 移除直接内联的 JSON 技能对象
         val jsonPattern = Regex("""\{[^{}]*"skillType"[^{}]*\}""", RegexOption.DOT_MATCHES_ALL)

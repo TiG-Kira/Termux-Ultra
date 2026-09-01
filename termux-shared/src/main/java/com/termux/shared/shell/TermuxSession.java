@@ -26,6 +26,17 @@ public class TermuxSession {
     private final ExecutionCommand mExecutionCommand;
     private final TermuxSessionClient mTermuxSessionClient;
     private final boolean mSetStdoutOnExit;
+    private SessionSource mSource = SessionSource.USER;
+
+    /** 会话来源枚举。*/
+    public enum SessionSource {
+        /** 用户在终端页面手动点击"新建会话"创建。*/
+        USER,
+        /** 插件通过 PluginManager.openPersistentSession 创建。*/
+        PLUGIN,
+        /** 从功能入口（VNC/SSH/QEMU/第三方资源中心等）创建。*/
+        FEATURE
+    }
 
     private static final String LOG_TAG = "TermuxSession";
 
@@ -251,6 +262,16 @@ public class TermuxSession {
 
     public ExecutionCommand getExecutionCommand() {
         return mExecutionCommand;
+    }
+
+    /** 获取会话来源。*/
+    public SessionSource getSource() {
+        return mSource;
+    }
+
+    /** 设置会话来源。默认 USER；插件会话在 {@link TermuxService#registerPluginSession} 中设为 PLUGIN。*/
+    public void setSource(@NonNull SessionSource source) {
+        this.mSource = source;
     }
 
 

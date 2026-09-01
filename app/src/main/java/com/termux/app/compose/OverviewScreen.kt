@@ -79,6 +79,10 @@ import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material.icons.rounded.CheckCircleOutline
 import androidx.compose.material.icons.rounded.ErrorOutline
+import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.Archive
+import androidx.compose.material.icons.rounded.Palette
+import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.automirrored.rounded.ArrowForward
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -975,6 +979,7 @@ private fun TipsAgentCard(
     isEditMode: Boolean,
     isWakeLockEnabled: Boolean,
     runningSessionsCount: Int,
+    onExecuteScript: (String, String) -> Unit,
     onEditClick: () -> Unit
 ) {
     val context = LocalContext.current
@@ -985,16 +990,30 @@ private fun TipsAgentCard(
     val cardLayoutMode = context.getSharedPreferences("app_settings", Context.MODE_PRIVATE)
         .getInt("KEY_CARD_LAYOUT_MODE", 0)
     val useHorizontalLayout = cardLayoutMode == 1
+    val prefs = context.getSharedPreferences("termux_prefs", Context.MODE_PRIVATE)
     var showWelcomeCard by remember { mutableStateOf(false) }
     var showKeepAliveWarning by remember { mutableStateOf(false) }
     var showLowCard by remember { mutableStateOf(false) }
-    
+    var isCollapsed by remember { mutableStateOf(
+        prefs.getBoolean("tips_agent_collapsed", false)
+    ) }
+
     val serviceStatus = remember(isWakeLockEnabled, runningSessionsCount) {
         determineServiceStatus(context, isWakeLockEnabled, runningSessionsCount)
     }
-    
+
+    var uptimeSeconds by remember { mutableLongStateOf(0L) }
     LaunchedEffect(Unit) {
-        val prefs = context.getSharedPreferences("termux_prefs", Context.MODE_PRIVATE)
+        while (true) {
+            val startTime = com.termux.app.TermuxService.serviceStartTimeMs
+            uptimeSeconds = if (startTime > 0) {
+                (android.os.SystemClock.elapsedRealtime() - startTime) / 1000L
+            } else 0L
+            delay(1000)
+        }
+    }
+
+    LaunchedEffect(Unit) {
         if (!prefs.getBoolean("terminal_welcome_shown", false)) {
             showWelcomeCard = true
         }
@@ -1006,82 +1025,249 @@ private fun TipsAgentCard(
         showLowCard = ApiCompat.hasAnyRuntimeDisabled() ||
             (ApiCompat.isLowAndroid && (ApiCompat.hasAnyForceEnabled(context) || true))
     }
-    
+
+    fun toggleCollapse() {
+        isCollapsed = !isCollapsed
+        prefs.edit().putBoolean("tips_agent_collapsed", isCollapsed).apply()
+    }
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(20.dp))
     ) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(surfaceColor)
-    ) {
-        // Title bar
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .background(surfaceColor)
         ) {
-            Text(
-                text = stringResource(R.string.overview_card_tips),
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold,
-                color = MiuixTheme.colorScheme.onSurface,
-                modifier = Modifier.weight(1f)
-            )
-            if (isEditMode) {
-                IconButton(onClick = onEditClick) {
+            // ===== Top row: pill + uptime =====
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // 药丸样式：展开时灰色+上箭头+"收起"；收缩时按状态着色
+                val (pillColor, pillIcon, pillText) = if (!isCollapsed) {
+                    Triple(
+                        MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                        Icons.Rounded.KeyboardArrowUp,
+                        "收起"
+                    )
+                } else when {
+                    serviceStatus == ServiceStatus.WAKE_LOCK_ACTIVE -> Triple(
+                        Color(0xFF36D167), Icons.Rounded.Lock, "唤醒锁开启"
+                    )
+                    serviceStatus == ServiceStatus.SERVICE_STOPPED -> Triple(
+                        Color(0xFFFF5252), Icons.Rounded.ErrorOutline, "未运行"
+                    )
+                    serviceStatus == ServiceStatus.NORMAL || runningSessionsCount > 0 -> Triple(
+                        Color(0xFF36D167), Icons.Rounded.CheckCircleOutline, "运行中"
+                    )
+                    else -> Triple(
+                        Color(0xFFF59E0B), Icons.Rounded.Warning, "待启动"
+                    )
+                }
+
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(50))
+                        .background(pillColor.copy(alpha = 0.14f))
+                        .clickable { toggleCollapse() }
+                        .padding(horizontal = 10.dp, vertical = 5.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                ) {
                     Icon(
-                        imageVector = Icons.Rounded.Edit,
+                        imageVector = pillIcon,
                         contentDescription = null,
-                        modifier = Modifier.size(18.dp),
-                        tint = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                        tint = pillColor,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Text(
+                        text = pillText,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = pillColor
+                    )
+                }
+
+                val uptimeText = formatUptime(uptimeSeconds)
+                Text(
+                    text = uptimeText,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                    modifier = Modifier.weight(1f),
+                    textAlign = TextAlign.End
+                )
+            }
+
+            // ===== Tips & Agent 主体（可整体收缩，但快捷入口始终保留）=====
+            if (!isCollapsed) {
+                // 标题栏
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = stringResource(R.string.overview_card_tips),
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MiuixTheme.colorScheme.onSurface,
+                        modifier = Modifier.weight(1f)
+                    )
+                    if (isEditMode) {
+                        IconButton(onClick = onEditClick) {
+                            Icon(
+                                imageVector = Icons.Rounded.Edit,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp),
+                                tint = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                            )
+                        }
+                    }
+                }
+
+                // 提示卡片区域（恢复横/竖版布局切换）
+                if (useHorizontalLayout) {
+                    HorizontalTipsContent(
+                        aiTermuxEnabled = aiTermuxEnabled,
+                        showWelcomeCard = showWelcomeCard,
+                        showKeepAliveWarning = showKeepAliveWarning,
+                        showLowCard = showLowCard,
+                        serviceStatus = serviceStatus,
+                        onWelcomeClose = {
+                            showWelcomeCard = false
+                            prefs.edit().putBoolean("terminal_welcome_shown", true).apply()
+                        },
+                        onKeepAliveClose = {
+                            showKeepAliveWarning = false
+                            prefs.edit().putBoolean("keep_alive_warning_dismissed", true).apply()
+                        }
+                    )
+                } else {
+                    VerticalTipsContent(
+                        aiTermuxEnabled = aiTermuxEnabled,
+                        showWelcomeCard = showWelcomeCard,
+                        showKeepAliveWarning = showKeepAliveWarning,
+                        showLowCard = showLowCard,
+                        serviceStatus = serviceStatus,
+                        onWelcomeClose = {
+                            showWelcomeCard = false
+                            prefs.edit().putBoolean("terminal_welcome_shown", true).apply()
+                        },
+                        onKeepAliveClose = {
+                            showKeepAliveWarning = false
+                            prefs.edit().putBoolean("keep_alive_warning_dismissed", true).apply()
+                        }
                     )
                 }
             }
-        }
-        
-        if (useHorizontalLayout) {
-            HorizontalTipsContent(
-                aiTermuxEnabled = aiTermuxEnabled,
-                showWelcomeCard = showWelcomeCard,
-                showKeepAliveWarning = showKeepAliveWarning,
-                showLowCard = showLowCard,
-                serviceStatus = serviceStatus,
-                onWelcomeClose = {
-                    showWelcomeCard = false
-                    context.getSharedPreferences("termux_prefs", Context.MODE_PRIVATE)
-                        .edit().putBoolean("terminal_welcome_shown", true).apply()
-                },
-                onKeepAliveClose = {
-                    showKeepAliveWarning = false
-                    context.getSharedPreferences("termux_prefs", Context.MODE_PRIVATE)
-                        .edit().putBoolean("keep_alive_warning_dismissed", true).apply()
-                }
+
+            // ===== 快捷入口（始终显示，不受收缩影响）=====
+            Spacer(Modifier.height(12.dp))
+            Text(
+                text = "快捷入口",
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = MiuixTheme.colorScheme.onSurface,
+                modifier = Modifier.padding(horizontal = 16.dp)
             )
-        } else {
-            VerticalTipsContent(
-                aiTermuxEnabled = aiTermuxEnabled,
-                showWelcomeCard = showWelcomeCard,
-                showKeepAliveWarning = showKeepAliveWarning,
-                showLowCard = showLowCard,
-                serviceStatus = serviceStatus,
-                onWelcomeClose = {
-                    showWelcomeCard = false
-                    context.getSharedPreferences("termux_prefs", Context.MODE_PRIVATE)
-                        .edit().putBoolean("terminal_welcome_shown", true).apply()
-                },
-                onKeepAliveClose = {
-                    showKeepAliveWarning = false
-                    context.getSharedPreferences("termux_prefs", Context.MODE_PRIVATE)
-                        .edit().putBoolean("keep_alive_warning_dismissed", true).apply()
-                }
-            )
+            Spacer(Modifier.height(8.dp))
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                QuickEntryButton(
+                    modifier = Modifier.weight(1f),
+                    icon = Icons.Rounded.Archive,
+                    iconColor = Color(0xFF2563EB),
+                    iconBgColor = Color(0xFF2563EB).copy(alpha = 0.12f),
+                    label = "包管理",
+                    onClick = { onExecuteScript("包管理", "(command -v aptitude >/dev/null || pkg install -y aptitude) && aptitude") }
+                )
+                QuickEntryButton(
+                    modifier = Modifier.weight(1f),
+                    icon = Icons.Rounded.Palette,
+                    iconColor = Color(0xFFEC4899),
+                    iconBgColor = Color(0xFFEC4899).copy(alpha = 0.12f),
+                    label = "主题外观",
+                    onClick = {
+                        try {
+                            val intent = Intent().apply {
+                                setClassName(context.packageName, "com.termux.styling.TermuxStyleActivity")
+                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            }
+                            context.startActivity(intent)
+                        } catch (_: Exception) {}
+                    }
+                )
+                QuickEntryButton(
+                    modifier = Modifier.weight(1f),
+                    icon = Icons.Rounded.Edit,
+                    iconColor = Color(0xFF0EA5E9),
+                    iconBgColor = Color(0xFF0EA5E9).copy(alpha = 0.12f),
+                    label = "新建文本",
+                    onClick = { onExecuteScript("新建文本", "(command -v vim >/dev/null || pkg install -y vim) && vim") }
+                )
+            }
+            Spacer(Modifier.height(16.dp))
         }
     }
 }
+
+@Composable
+private fun QuickEntryButton(
+    modifier: Modifier = Modifier,
+    icon: ImageVector,
+    iconColor: Color,
+    iconBgColor: Color,
+    label: String,
+    onClick: () -> Unit
+) {
+    Column(
+        modifier = modifier
+            .clickable(onClick = onClick)
+            .padding(vertical = 6.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(44.dp)
+                .clip(RoundedCornerShape(14.dp))
+                .background(iconBgColor),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = iconColor,
+                modifier = Modifier.size(22.dp)
+            )
+        }
+        Text(
+            text = label,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Medium,
+            color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+        )
+    }
+}
+
+private fun formatUptime(seconds: Long): String {
+    if (seconds <= 0) return "已运行 0m"
+    val h = seconds / 3600
+    val m = (seconds % 3600) / 60
+    return if (h > 0) "已运行 ${h}h ${m}m" else "已运行 ${m}m"
 }
 
 @Composable
@@ -4323,6 +4509,7 @@ private fun CardItem(
                 isEditMode = isEditMode,
                 isWakeLockEnabled = isWakeLockEnabled,
                 runningSessionsCount = runningSessions.size,
+                onExecuteScript = onExecuteScript,
                 onEditClick = {
                     onCardSelected(card.id)
                     onShowCardSettings()

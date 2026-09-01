@@ -24,6 +24,10 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.foundation.border
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
@@ -2219,6 +2223,13 @@ private fun AiChatScreen(vm: AiTermuxViewModel, onBack: () -> Unit) {
             topBar = {
                 TopAppBar(
                     title = "Termux Agent",
+                    subtitle = run {
+                        val isLocal = vm.useLocalModel
+                        val cfg = vm.config.providerConfig
+                        val modelName = if (isLocal) cfg.localModelId.ifBlank { "本地模型" } else cfg.model.ifBlank { "在线模型" }
+                        val providerLabel = if (isLocal) "本地模型" else "在线模型"
+                        "$providerLabel · $modelName"
+                    },
                     scrollBehavior = scrollBehavior,
                     navigationIcon = {
                         Box(
@@ -2295,23 +2306,29 @@ private fun AiChatScreen(vm: AiTermuxViewModel, onBack: () -> Unit) {
                             sizeB >= 1024 -> "%.1f KB".format(sizeB.toFloat() / 1024)
                             else -> "$sizeB B"
                         }
+                        val attachCardBg = if (isDark) Color(0xFF1C1C1E) else Color(0xFFFFFFFF)
+                        val attachBorder = if (isDark) Color(0xFF2C2C2E) else Color(0xFFE8E8E8)
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 16.dp)
-                                .padding(top = 10.dp, bottom = 2.dp),
+                                .padding(horizontal = 12.dp)
+                                .padding(top = 6.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(attachCardBg)
+                                .then(Modifier.border(0.5.dp, attachBorder, RoundedCornerShape(12.dp)))
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Icon(
                                 painter = painterResource(R.drawable.ic_upload),
                                 contentDescription = null,
-                                modifier = Modifier.size(16.dp),
+                                modifier = Modifier.size(18.dp),
                                 tint = MiuixTheme.colorScheme.primary
                             )
                             Text(
                                 text = fileName,
-                                style = TextStyle(fontSize = 12.sp, color = MiuixTheme.colorScheme.onSurface),
+                                style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = MiuixTheme.colorScheme.onSurface),
                                 modifier = Modifier.weight(1f),
                                 maxLines = 1,
                                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
@@ -2320,11 +2337,17 @@ private fun AiChatScreen(vm: AiTermuxViewModel, onBack: () -> Unit) {
                                 text = sizeStr,
                                 style = TextStyle(fontSize = 11.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
                             )
-                            IconButton(onClick = { pendingAttachment = null }, modifier = Modifier.size(24.dp)) {
+                            Box(
+                                modifier = Modifier
+                                    .size(24.dp)
+                                    .clip(CircleShape)
+                                    .clickable { pendingAttachment = null },
+                                contentAlignment = Alignment.Center
+                            ) {
                                 Icon(
                                     painter = painterResource(R.drawable.ic_close),
                                     contentDescription = "移除附件",
-                                    modifier = Modifier.size(16.dp),
+                                    modifier = Modifier.size(14.dp),
                                     tint = MiuixTheme.colorScheme.onSurfaceVariantSummary
                                 )
                             }
@@ -2339,18 +2362,20 @@ private fun AiChatScreen(vm: AiTermuxViewModel, onBack: () -> Unit) {
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         // 上传按钮
-                        IconButton(
-                            onClick = { filePickerLauncher.launch(arrayOf("*/*")) },
+                        Box(
                             modifier = Modifier
-                                .size(44.dp)
+                                .size(42.dp)
                                 .clip(CircleShape)
-                                .background(if (isDark) Color(0xFF2A2A2A) else Color(0xFFF0F0F0))
+                                .background(if (isDark) Color(0xFF242424) else Color(0xFFFFFFFF))
+                                .then(Modifier.border(0.5.dp, if (isDark) Color(0xFF3A3A3A) else Color(0xFFE8E8E8), CircleShape))
+                                .clickable { filePickerLauncher.launch(arrayOf("*/*")) },
+                            contentAlignment = Alignment.Center
                         ) {
                             Icon(
                                 painter = painterResource(R.drawable.ic_upload),
                                 contentDescription = "上传文件/图片",
-                                modifier = Modifier.size(22.dp),
-                                tint = MiuixTheme.colorScheme.onSurface
+                                modifier = Modifier.size(20.dp),
+                                tint = MiuixTheme.colorScheme.onSurfaceVariantSummary
                             )
                         }
                         TextField(
@@ -2364,42 +2389,61 @@ private fun AiChatScreen(vm: AiTermuxViewModel, onBack: () -> Unit) {
                             singleLine = false,
                             maxLines = 4
                         )
-                        IconButton(
-                            onClick = {
-                                val text = inputText.trim()
-                                if ((text.isNotBlank() || pendingAttachment != null) && !vm.isLoading) {
-                                    val finalMsg = buildString {
-                                        pendingAttachment?.let { (fname, fpath, sz) ->
-                                            val sizeStr = when {
-                                                sz >= 1024 * 1024 -> "%.1fMB".format(sz.toFloat() / (1024 * 1024))
-                                                sz >= 1024 -> "%.1fKB".format(sz.toFloat() / 1024)
-                                                else -> "${sz}B"
-                                            }
-                                            append("📎 附件：$fname（$sizeStr，路径：$fpath）\n")
-                                        }
-                                        if (text.isNotBlank()) append(text)
-                                    }
-                                    vm.sendUserMessage(finalMsg)
-                                    inputText = ""
-                                    pendingAttachment = null
-                                }
-                            },
-                            enabled = (inputText.isNotBlank() || pendingAttachment != null) && !vm.isLoading,
+                        val canSend = (inputText.isNotBlank() || pendingAttachment != null) && !vm.isLoading
+                        val sendBtnBg = when {
+                            vm.isStreaming -> Color(0xFFDC2626)
+                            canSend -> MiuixTheme.colorScheme.primary
+                            isDark -> Color(0xFF333333)
+                            else -> Color(0xFFE0E0E0)
+                        }
+                        val sendBtnIconTint = when {
+                            canSend || vm.isStreaming -> Color.White
+                            else -> Color.Gray
+                        }
+                        Box(
                             modifier = Modifier
                                 .size(48.dp)
                                 .clip(CircleShape)
-                                .background(
-                                    if ((inputText.isNotBlank() || pendingAttachment != null) && !vm.isLoading) MiuixTheme.colorScheme.primary
-                                    else if (isDark) Color(0xFF333) else Color(0xFFE0E0E0)
-                                )
+                                .background(sendBtnBg)
+                                .clickable(enabled = canSend || vm.isStreaming) {
+                                    if (vm.isStreaming) {
+                                        vm.cancelGeneration()
+                                    } else {
+                                        val text = inputText.trim()
+                                        if ((text.isNotBlank() || pendingAttachment != null)) {
+                                            val finalMsg = buildString {
+                                                pendingAttachment?.let { (fname, fpath, sz) ->
+                                                    val sizeStr = when {
+                                                        sz >= 1024 * 1024 -> "%.1fMB".format(sz.toFloat() / (1024 * 1024))
+                                                        sz >= 1024 -> "%.1fKB".format(sz.toFloat() / 1024)
+                                                        else -> "${sz}B"
+                                                    }
+                                                    append("📎 附件：$fname（$sizeStr，路径：$fpath）\n")
+                                                }
+                                                if (text.isNotBlank()) append(text)
+                                            }
+                                            vm.sendUserMessage(finalMsg)
+                                            inputText = ""
+                                            pendingAttachment = null
+                                        }
+                                    }
+                                },
+                            contentAlignment = Alignment.Center
                         ) {
-                            if (vm.isLoading) {
-                                androidx.compose.material3.CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                            if (vm.isLoading && !vm.isStreaming) {
+                                androidx.compose.material3.CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = Color.White)
+                            } else if (vm.isStreaming) {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_close),
+                                    contentDescription = "停止生成",
+                                    modifier = Modifier.size(20.dp),
+                                    tint = Color.White
+                                )
                             } else {
                                 Icon(
                                     imageVector = Icons.AutoMirrored.Rounded.Send,
                                     contentDescription = "发送",
-                                    tint = if ((inputText.isNotBlank() || pendingAttachment != null)) Color.White else Color.Gray,
+                                    tint = sendBtnIconTint,
                                     modifier = Modifier.size(22.dp)
                                 )
                             }
@@ -2471,62 +2515,107 @@ private fun AiDisclaimerCard(isDark: Boolean) {
 @Composable
 private fun WelcomeChatCard(isDark: Boolean) {
     val gradient = Brush.linearGradient(
-        colors = listOf(Color(0xFF6366F1), Color(0xFF8B5CF6), Color(0xFFEC4899))
+        colors = listOf(Color(0xFF7C3AED), Color(0xFFEC4899))
     )
-    Box(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(18.dp))
+            .clip(RoundedCornerShape(20.dp))
             .background(gradient)
-            .padding(18.dp)
+            .padding(16.dp)
     ) {
-        Column {
-            Text("👋 欢迎使用 Termux Agent", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-            Spacer(Modifier.height(6.dp))
-            Text(
-                "我可以帮你管理 Termux。试试说：\n" +
-                        "• 新建一个终端会话\n" +
-                        "• 帮我安装 git 和 vim\n" +
-                        "• 列出家目录文件\n" +
-                        "• 运行我的 QEMU 虚拟机\n" +
-                        "• 用 VNC 连接 192.168.1.10:5901",
-                color = Color.White.copy(alpha = 0.92f),
-                fontSize = 13.sp,
-                lineHeight = 20.sp
+        Box(
+            modifier = Modifier
+                .size(38.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(Color.White.copy(alpha = 0.22f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                painter = painterResource(R.drawable.ic_auto_awesome),
+                contentDescription = null,
+                modifier = Modifier.size(20.dp),
+                tint = Color.White
             )
+        }
+        Spacer(Modifier.height(10.dp))
+        Text(
+            "你好，我是 Termux Agent",
+            color = Color.White,
+            fontWeight = FontWeight.Bold,
+            fontSize = 16.sp
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            "用自然语言管理你的终端 —— 执行命令、管理文件、连接 VNC/SSH、启动 QEMU 虚拟机。",
+            color = Color.White.copy(alpha = 0.92f),
+            fontSize = 12.5.sp,
+            lineHeight = 20.sp
+        )
+        Spacer(Modifier.height(13.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            val examples = listOf("🔧 执行命令", "📦 安装软件包", "🖥️ VNC/SSH", "💻 QEMU 虚拟机")
+            for (ex in examples) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(Color.White.copy(alpha = 0.18f))
+                        .padding(horizontal = 10.dp, vertical = 5.dp)
+                ) {
+                    Text(
+                        ex,
+                        color = Color.White,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            }
         }
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun QuickChips(vm: AiTermuxViewModel, inputText: String, setInput: (String) -> Unit) {
     val suggestions = listOf(
-        "新建一个终端会话",
-        "帮我列出当前会话",
-        "安装 git 和 vim",
-        "列出家目录文件",
-        "读取 ~/.bashrc",
-        "用 VNC 连接 127.0.0.1:5900"
+        "查看当前目录",
+        "安装 Python 包",
+        "新建 SSH 会话",
+        "启动 QEMU 虚拟机",
+        "清理缓存文件"
     )
     val isDark = isSystemInDarkTheme()
-    FlowRow(
+    val chipBg = if (isDark) Color(0xFF242424) else Color(0xFFFFFFFF)
+    val chipBorder = if (isDark) Color(0xFF3A3A3A) else Color(0xFFE8E8E8)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(vertical = 2.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-        modifier = Modifier.fillMaxWidth()
+        verticalAlignment = Alignment.CenterVertically
     ) {
         suggestions.forEach { s ->
             Box(
                 modifier = Modifier
                     .height(34.dp)
                     .clip(RoundedCornerShape(999.dp))
-                    .background(if (isDark) Color(0xFF242424) else Color(0xFFF3F3F3))
+                    .background(chipBg)
+                    .then(Modifier.border(0.5.dp, chipBorder, RoundedCornerShape(999.dp)))
                     .clickable {
                         if (!vm.isLoading) vm.sendUserMessage(s)
                     }
             ) {
-                Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(horizontal = 12.dp)) {
-                    Text(s, fontSize = 12.sp, color = MiuixTheme.colorScheme.onSurface)
+                Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(horizontal = 13.dp)) {
+                    Text(
+                        s,
+                        fontSize = 12.5.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = MiuixTheme.colorScheme.onSurface
+                    )
                 }
             }
         }
@@ -2538,27 +2627,30 @@ private fun TypingIndicator(isDark: Boolean) {
     Row(
         modifier = Modifier
             .padding(end = 60.dp)
-            .clip(RoundedCornerShape(14.dp, 14.dp, 14.dp, 2.dp))
+            .clip(RoundedCornerShape(18.dp, 18.dp, 18.dp, 6.dp))
             .background(if (isDark) Color(0xFF242424) else Color(0xFFF3F3F3))
-            .padding(horizontal = 14.dp, vertical = 12.dp)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(5.dp)
     ) {
         val dotColor = if (isDark) Color(0xFFAAA) else Color(0xFF888)
         repeat(3) { i ->
-            var alpha by remember { mutableStateOf(0.3f) }
+            var offsetY by remember { mutableStateOf(0f) }
             LaunchedEffect(i) {
                 while (true) {
-                    kotlinx.coroutines.delay((i * 200).toLong())
-                    alpha = 1f
-                    kotlinx.coroutines.delay(400)
-                    alpha = 0.3f
+                    kotlinx.coroutines.delay((i * 150).toLong())
+                    offsetY = -3f
+                    kotlinx.coroutines.delay(300)
+                    offsetY = 0f
+                    kotlinx.coroutines.delay(600)
                 }
             }
             Box(
                 Modifier
-                    .padding(horizontal = 3.dp)
-                    .size(8.dp)
+                    .size(7.dp)
+                    .graphicsLayer { translationY = offsetY }
                     .clip(CircleShape)
-                    .background(dotColor.copy(alpha = alpha))
+                    .background(dotColor)
             )
         }
     }
@@ -2721,9 +2813,9 @@ private fun ChatBubble(msg: ChatMessage, vm: AiTermuxViewModel) {
                 else -> MiuixTheme.colorScheme.onSurface
             }
             val corners = if (isUser) {
-                RoundedCornerShape(14.dp, 14.dp, 2.dp, 14.dp)
+                RoundedCornerShape(18.dp, 6.dp, 18.dp, 18.dp)
             } else {
-                RoundedCornerShape(14.dp, 14.dp, 14.dp, 2.dp)
+                RoundedCornerShape(6.dp, 18.dp, 18.dp, 18.dp)
             }
             val ctx = LocalContext.current
             Box(
@@ -2888,7 +2980,6 @@ private fun PreparingBlock(status: String, details: List<String>, isDark: Boolea
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // 3-dot loading indicator
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 for (i in 0..2) {
                     val alpha = if (i == tick) 1f else 0.25f
@@ -2902,28 +2993,33 @@ private fun PreparingBlock(status: String, details: List<String>, isDark: Boolea
                 }
             }
             Text(
-                text = if (expanded) "▼" else "▶",
-                style = TextStyle(fontSize = 10.sp, color = headerColor)
-            )
-            Text(
                 text = "正在准备本地调用",
                 style = TextStyle(
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
                     color = headerColor
                 )
             )
-            if (!expanded) {
+            Spacer(Modifier.weight(1f))
+            if (expanded && details.isNotEmpty()) {
                 Text(
-                    text = "（点击展开运行详情）",
-                    style = TextStyle(fontSize = 11.sp, color = headerColor.copy(alpha = 0.6f))
-                )
-            } else if (details.isNotEmpty()) {
-                Text(
-                    text = "（${details.size} 条日志）",
+                    text = "${details.size} 条日志",
                     style = TextStyle(fontSize = 11.sp, color = headerColor.copy(alpha = 0.75f))
                 )
+            } else if (!expanded) {
+                Text(
+                    text = "点击展开",
+                    style = TextStyle(fontSize = 11.sp, color = headerColor.copy(alpha = 0.6f))
+                )
             }
+            Icon(
+                imageVector = Icons.Default.ArrowDropDown,
+                contentDescription = null,
+                modifier = Modifier.size(16.dp).then(
+                    if (expanded) Modifier.graphicsLayer { rotationZ = 180f } else Modifier
+                ),
+                tint = headerColor
+            )
         }
         Spacer(Modifier.height(6.dp))
         Text(
@@ -3002,54 +3098,64 @@ private fun ReasoningBlock(reasoning: String, isDone: Boolean, isDark: Boolean) 
     val bg = if (isDark) Color(0xFF1A1A2E) else Color(0xFFF0F0F8)
     val textColor = if (isDark) Color(0xFFB0B0C8) else Color(0xFF555570)
     val headerColor = if (isDark) Color(0xFF8888AA) else Color(0xFF7777A0)
-    val statusColor = if (isDone) Color(0xFF16A34A) else Color(0xFF6366F1)
+    val accent = Color(0xFF6366F1)
 
     Column(
         modifier = Modifier
             .then(Modifier.padding(end = 40.dp))
-            .clip(RoundedCornerShape(10.dp))
+            .clip(RoundedCornerShape(14.dp))
             .background(bg)
+            .then(
+                Modifier.border(
+                    0.5.dp,
+                    if (isDark) Color(0xFF2C2C3E) else Color(0xFFE0E0EC),
+                    RoundedCornerShape(14.dp)
+                )
+            )
             .clickable { expanded = !expanded }
-            .padding(horizontal = 12.dp, vertical = 8.dp)
+            .padding(horizontal = 12.dp, vertical = 10.dp)
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Text(
-                text = if (expanded) "▼" else "▶",
-                style = TextStyle(fontSize = 10.sp, color = headerColor)
+            Icon(
+                painter = painterResource(R.drawable.ic_auto_awesome),
+                contentDescription = null,
+                modifier = Modifier.size(16.dp),
+                tint = accent
             )
             Text(
                 text = "深度思考",
                 style = TextStyle(
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
                     color = headerColor
                 )
             )
-            // 思考状态指示
-            Text(
-                text = if (isDone) "✓ 已完成" else "⋯ 进行中",
-                style = TextStyle(
-                    fontSize = 11.sp,
-                    color = statusColor
-                )
-            )
+            Spacer(Modifier.weight(1f))
             if (!expanded) {
                 Text(
-                    text = "（点击展开）",
-                    style = TextStyle(fontSize = 11.sp, color = headerColor.copy(alpha = 0.6f))
+                    text = if (isDone) "已完成" else "进行中",
+                    style = TextStyle(fontSize = 11.sp, color = headerColor)
                 )
             }
+            Icon(
+                imageVector = Icons.Default.ArrowDropDown,
+                contentDescription = null,
+                modifier = Modifier.size(16.dp).then(
+                    if (expanded) Modifier.graphicsLayer { rotationZ = 180f } else Modifier
+                ),
+                tint = headerColor
+            )
         }
         if (expanded) {
             Spacer(Modifier.height(6.dp))
             Text(
                 text = reasoning.trim(),
                 style = TextStyle(
-                    fontSize = 12.sp,
-                    lineHeight = 18.sp,
+                    fontSize = 12.5.sp,
+                    lineHeight = 19.sp,
                     color = textColor
                 )
             )
