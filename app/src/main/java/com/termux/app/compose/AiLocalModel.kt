@@ -359,12 +359,14 @@ object AiLocalModel {
             append(" -t 4 --cont-batching")
             if (gpuArgs.isNotBlank()) append(" ").append(gpuArgs)
         }
+        android.util.Log.i("AiLocalModel", "Launching llama-server: $serverArgs")
+        android.util.Log.i("AiLocalModel", "gpuEnabled=${gpuArgs.isNotBlank()}, gpuArgs=$gpuArgs")
         val shellCmd = "nohup $serverArgs >> $logQ 2>&1 & echo \$! > $pidQ"
 
         try {
             val shell = resolveTermuxShell() ?: "/system/bin/sh"
             val pb = ProcessBuilder(shell, "-c", shellCmd)
-            applyTermuxEnv(pb)
+            applyTermuxEnv(pb, gpuEnabled = gpuArgs.isNotBlank())
             pb.redirectErrorStream(true)
             val proc = pb.start()
             proc.inputStream.bufferedReader().use { it.readText() }
@@ -402,10 +404,14 @@ object AiLocalModel {
                 writeServerMeta(ServerMeta(entry.id, llamaServerPort, pid, System.currentTimeMillis()))
             }
 
-            // 等待端口就绪 + 模型加载完成（最多 120 秒）
-            val deadline = System.currentTimeMillis() + 120_000L
+            // 等待端口就绪 + 模型加载完成
+            // GPU 模式下模型加载更慢 + 可能有显存压力，给 180 秒
+            val isGpu = gpuArgs.isNotBlank()
+            val waitSeconds = if (isGpu) 180_000L else 120_000L
+            val deadline = System.currentTimeMillis() + waitSeconds
             var portReady = false
             var lastLogSize = 0L
+            var lastCheckPidTime = 0L
             while (System.currentTimeMillis() < deadline) {
                 // 增量读取 server 日志并推送
                 runCatching {
@@ -420,6 +426,19 @@ object AiLocalModel {
                             }
                         }
                         lastLogSize = curSize
+                    }
+                }
+                // 每 10 秒检查一次：pid 是否还活着（crash 检测）
+                if (System.currentTimeMillis() - lastCheckPidTime > 10_000L && pid > 0L) {
+                    lastCheckPidTime = System.currentTimeMillis()
+                    val alive = isProcessAlive(pid)
+                    if (!alive) {
+                        val errLog = runCatching { logFile.readText().take(1000) }.getOrNull() ?: ""
+                        android.util.Log.e("AiLocalModel", "llama-server process DIED (pid=$pid)! last log: $errLog")
+                        onLog?.invoke("❌ llama-server 进程异常退出 (pid=$pid)")
+                        onLog?.invoke("日志: ${errLog.take(300)}")
+                        clearServerMeta()
+                        return@withContext false
                     }
                 }
                 if (!portReady && pingServerPort(llamaServerPort)) {
@@ -1079,17 +1098,31 @@ object AiLocalModel {
     /**
      * 构造 llama 推理进程时注入完整环境变量，避免 .so 加载失败。
      */
-    private fun applyTermuxEnv(pb: ProcessBuilder) {
+    private fun applyTermuxEnv(pb: ProcessBuilder, gpuEnabled: Boolean = false) {
+        val prefix = prefixDir()
         val env = pb.environment()
-        env["PATH"] = prefixDir() + "/bin:" + prefixDir() + "/bin/applets:" + (env["PATH"] ?: "")
-        env["LD_LIBRARY_PATH"] = "/system/lib64:/system/lib:" + prefixDir() + "/lib"
-        env["PREFIX"] = prefixDir()
+        env["PATH"] = "$prefix/bin:$prefix/bin/applets:" + (env["PATH"] ?: "")
+        env["LD_LIBRARY_PATH"] = "/system/lib64:/system/lib:$prefix/lib"
+        env["PREFIX"] = prefix
         env["HOME"] = homeDir().absolutePath
-        env["TMPDIR"] = prefixDir() + "/tmp"
+        env["TMPDIR"] = "$prefix/tmp"
         env["TERM"] = "xterm-256color"
         env["ANDROID_DATA"] = "/data"
         env["ANDROID_ROOT"] = "/system"
         env["EXTERNAL_STORAGE"] = "/sdcard"
+        // GPU 运行时环境变量（Termux llama.cpp GGML_BACKEND_DL=ON 必需）
+        env["EXECUTABLE_DISABLE_MTE"] = "1"
+        env["KMP_AFFINITY"] = "disabled"
+        if (gpuEnabled) {
+            val icdDir = java.io.File(prefix, "share/vulkan/icd.d")
+            val icdFile = icdDir.listFiles()?.firstOrNull { it.name.endsWith("_icd.aarch64.json") }
+            if (icdFile != null) {
+                env["VK_ICD_FILENAMES"] = icdFile.absolutePath
+                android.util.Log.d("AiLocalModel", "applyTermuxEnv: VK_ICD_FILENAMES=${icdFile.absolutePath}")
+            } else {
+                android.util.Log.w("AiLocalModel", "applyTermuxEnv: GPU enabled but no ICD json found in ${icdDir.absolutePath}")
+            }
+        }
         pb.directory(homeDir())
     }
 
@@ -1857,12 +1890,9 @@ object AiLocalModel {
         val backend: String
     )
 
-    /** 检测 Android 设备 GPU 厂商和型号 */
-
     /** GPU 模式下的 context size 上限（KV cache 在 GPU VRAM 中，太大 = OOM） */
     private val GPU_CTX_CAP = 4096
 
-    /** 根据 GPU 状态返回有效的 maxContext（GPU 模式下会做 cap） */
     private fun effectiveContext(maxContext: Int, gpuEnabled: Boolean): Int {
         if (!gpuEnabled) return maxContext
         return if (maxContext > GPU_CTX_CAP) {
