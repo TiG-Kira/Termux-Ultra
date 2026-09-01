@@ -355,7 +355,7 @@ object AiLocalModel {
             append(binQ)
             append(" --host 127.0.0.1 --port ").append(llamaServerPort)
             append(" -m ").append(modelQ)
-            append(" -c ").append(entry.maxContext)
+            append(" -c ").append(effectiveContext(entry.maxContext, gpuArgs.isNotBlank()))
             append(" -t 4 --cont-batching")
             if (gpuArgs.isNotBlank()) append(" ").append(gpuArgs)
         }
@@ -1056,7 +1056,8 @@ object AiLocalModel {
         val args = mutableListOf<String>()
         args.add(cliPath)
         args.addAll(listOf("-m", modelFile(entry).absolutePath))
-        args.addAll(listOf("-c", entry.maxContext.toString()))
+        val gpuEnabled = appContext?.let { AiTermuxPrefs.isLocalGpuAccelEnabled(it) } ?: false
+        args.addAll(listOf("-c", effectiveContext(entry.maxContext, gpuEnabled).toString()))
         args.addAll(listOf("-n", entry.maxTokens.toString()))
         args.addAll(listOf("--temp", temperature.toString()))
         args.addAll(listOf("-s", "1"))
@@ -1857,6 +1858,22 @@ object AiLocalModel {
     )
 
     /** 检测 Android 设备 GPU 厂商和型号 */
+
+    /** GPU 模式下的 context size 上限（KV cache 在 GPU VRAM 中，太大 = OOM） */
+    private val GPU_CTX_CAP = 4096
+
+    /** 根据 GPU 状态返回有效的 maxContext（GPU 模式下会做 cap） */
+    private fun effectiveContext(maxContext: Int, gpuEnabled: Boolean): Int {
+        if (!gpuEnabled) return maxContext
+        return if (maxContext > GPU_CTX_CAP) {
+            android.util.Log.w("AiLocalModel",
+                "GPU 模式限制 ctx ${GPU_CTX_CAP}（原 $maxContext），防止显存溢出")
+            GPU_CTX_CAP
+        } else {
+            maxContext
+        }
+    }
+
     private fun detectAndroidGpu(): Pair<String, String> {
         val sysPaths = listOf(
             "/sys/class/kgsl/kgsl-3d0/gpu_busy_percentage",
@@ -2124,14 +2141,7 @@ object AiLocalModel {
             // Flash Attention：减少显存带宽压力
             append(" -fa on")
 
-            // 限制 ctx size：防止 KV cache 过大（如果用户设了超大 context）
-            // GPU 模式下强制把 ctx 限制在 4096 以内，大 context + GPU = OOM
-            val entry = getSelectedModel()
-            if (entry != null && entry.maxContext > 4096) {
-                append(" -c 4096")
-                android.util.Log.w("AiLocalModel",
-                    "GPU 模式限制 ctx 4096（原 ${entry.maxContext}），防止显存溢出")
-            }
+            // ctx 限制已移至 server/cli 启动源头统一处理，这里不再重复加 -c
         }
 
         android.util.Log.i("AiLocalModel",
