@@ -568,7 +568,7 @@ object AiLocalModel {
             // 注入 Termux 必要的环境变量，避免 so 加载失败
             val env = pb.environment()
             env["PATH"] = prefixDir() + "/bin:" + prefixDir() + "/bin/applets:" + (env["PATH"] ?: "")
-            env["LD_LIBRARY_PATH"] = "/system/lib64:/system/lib:" + prefixDir() + "/lib"
+            env["LD_LIBRARY_PATH"] = prefixDir() + "/lib"
             env["PREFIX"] = prefixDir()
             env["HOME"] = homeDir().absolutePath
             env["TMPDIR"] = prefixDir() + "/tmp"
@@ -1101,26 +1101,32 @@ object AiLocalModel {
     private fun applyTermuxEnv(pb: ProcessBuilder, gpuEnabled: Boolean = false) {
         val prefix = prefixDir()
         val env = pb.environment()
-        env["PATH"] = "$prefix/bin:$prefix/bin/applets:" + (env["PATH"] ?: "")
-        env["LD_LIBRARY_PATH"] = "/system/lib64:/system/lib:$prefix/lib"
+        env["PATH"] = prefix + "/bin:" + prefix + "/bin/applets:" + (env["PATH"] ?: "")
+        // $PREFIX/lib MUST come first! Termux binaries link against Termux's own libc.so,
+        // not /system/lib64. Putting system paths first breaks EVERY Termux binary.
+        env["LD_LIBRARY_PATH"] = if (gpuEnabled) {
+            prefix + "/lib:/system/lib64:/system/lib"
+        } else {
+            prefix + "/lib"
+        }
         env["PREFIX"] = prefix
         env["HOME"] = homeDir().absolutePath
-        env["TMPDIR"] = "$prefix/tmp"
+        env["TMPDIR"] = prefix + "/tmp"
         env["TERM"] = "xterm-256color"
         env["ANDROID_DATA"] = "/data"
         env["ANDROID_ROOT"] = "/system"
         env["EXTERNAL_STORAGE"] = "/sdcard"
-        // GPU 运行时环境变量（Termux llama.cpp GGML_BACKEND_DL=ON 必需）
-        env["EXECUTABLE_DISABLE_MTE"] = "1"
-        env["KMP_AFFINITY"] = "disabled"
         if (gpuEnabled) {
+            // GPU-only vars — do NOT inject for CPU mode, they interfere with normal Termux processes
+            env["EXECUTABLE_DISABLE_MTE"] = "1"
+            env["KMP_AFFINITY"] = "disabled"
             val icdDir = java.io.File(prefix, "share/vulkan/icd.d")
             val icdFile = icdDir.listFiles()?.firstOrNull { it.name.endsWith("_icd.aarch64.json") }
             if (icdFile != null) {
                 env["VK_ICD_FILENAMES"] = icdFile.absolutePath
-                android.util.Log.d("AiLocalModel", "applyTermuxEnv: VK_ICD_FILENAMES=${icdFile.absolutePath}")
+                android.util.Log.d("AiLocalModel", "applyTermuxEnv gpu: VK_ICD_FILENAMES=${icdFile.absolutePath}")
             } else {
-                android.util.Log.w("AiLocalModel", "applyTermuxEnv: GPU enabled but no ICD json found in ${icdDir.absolutePath}")
+                android.util.Log.w("AiLocalModel", "applyTermuxEnv gpu: no ICD json in ${icdDir.absolutePath}")
             }
         }
         pb.directory(homeDir())
