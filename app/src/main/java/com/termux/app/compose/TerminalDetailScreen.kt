@@ -579,16 +579,11 @@ fun TerminalDetailScreen(
     }
 
     fun showStylingDialog() {
-        if (!IntegratedTools.isEnabled(context, IntegratedTools.Tool.TERMUX_STYLING)) {
-            IntegratedTools.showEnablePrompt(context, IntegratedTools.Tool.TERMUX_STYLING)
-            return
-        }
         val stylingIntent = Intent()
-        stylingIntent.setClassName(context.packageName, "com.termux.styling.TermuxStyleActivity")
+        stylingIntent.setClassName(context.packageName, "com.termux.app.activities.TermuxStylingActivity")
         try {
             context.startActivity(stylingIntent)
         } catch (_: Exception) {
-            IntegratedTools.showEnablePrompt(context, IntegratedTools.Tool.TERMUX_STYLING)
         }
         showContextMenu = false
     }

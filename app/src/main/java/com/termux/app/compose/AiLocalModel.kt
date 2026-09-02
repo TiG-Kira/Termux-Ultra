@@ -190,14 +190,18 @@ object AiLocalModel {
     }
 
     /**
+     * 检测 Termux 核心 .so 是否齐全。
+     * 如果被误删（比如之前 rm -f *.so 自杀代码），从 bootstrap zip 恢复 lib 目录。
+     * 
+     * @return true 如果健康 / 已恢复成功，false 恢复失败
+     */
+
+    /**
      * 查找 llama 相关可执行文件是否存在（按优先级列表）。
      * 相比原实现，我们兼容更多可能的二进制名。
      */
     private fun findLlamaBinary(): File? {
-        if (AiTermuxPrefs.isLocalGpuAccelEnabled(appContext!!)) {
-            val gpu = findGpuLlamaBinary()
-            if (gpu != null) return gpu
-        }
+        // Always use llama-cli for CLI inference (supports -f prompt file).
         for (candidate in llamaCliCandidates()) {
             val f = File(candidate)
             if (f.exists() && f.canExecute()) return f
@@ -212,7 +216,6 @@ object AiLocalModel {
         }
         return null
     }
-
 
     // ============================================================
     // llama-server 常驻管理（避免每次对话重新加载模型）
@@ -230,10 +233,7 @@ object AiLocalModel {
     private fun serverMetaFile(): File = File(runtimeDir(), "llama-server-meta.json")
 
     private fun findLlamaServerBinary(): File? {
-        if (AiTermuxPrefs.isLocalGpuAccelEnabled(appContext!!)) {
-            val gpu = findGpuLlamaBinary()
-            if (gpu != null) return gpu
-        }
+        // Always use llama-server for HTTP API mode.
         val binDir = prefixDir() + "/bin"
         val candidates = listOf(
             "$binDir/llama-server",
@@ -316,7 +316,6 @@ object AiLocalModel {
         }
         clearServerMeta()
     }
-
     private suspend fun ensureServerStarted(entry: LocalModelEntry, onLog: ((String) -> Unit)? = null): Boolean = withContext(Dispatchers.IO) {
         val serverBin = findLlamaServerBinary() ?: return@withContext false
         val existing = readServerMeta()
@@ -349,28 +348,28 @@ object AiLocalModel {
         val pidQ = "'" + pidFile.absolutePath.replace("'", "'\\''") + "'"
 
         // 添加 --cont-batching 和 --metrics 参数以提高稳定性
-        // GPU 加速：根据偏好设置和检测结果动态追加 -ngl 参数
-        val gpuArgs = buildGpuLaunchArgs(appContext)
         val serverArgs = buildString {
             append(binQ)
             append(" --host 127.0.0.1 --port ").append(llamaServerPort)
             append(" -m ").append(modelQ)
-            append(" -c ").append(effectiveContext(entry.maxContext, gpuArgs.isNotBlank()))
+            append(" -c ").append(entry.maxContext)
             append(" -t 4 --cont-batching")
-            if (gpuArgs.isNotBlank()) append(" ").append(gpuArgs)
         }
         android.util.Log.i("AiLocalModel", "Launching llama-server: $serverArgs")
-        android.util.Log.i("AiLocalModel", "gpuEnabled=${gpuArgs.isNotBlank()}, gpuArgs=$gpuArgs")
+
         val shellCmd = "nohup $serverArgs >> $logQ 2>&1 & echo \$! > $pidQ"
 
         try {
             val shell = resolveTermuxShell() ?: "/system/bin/sh"
             val pb = ProcessBuilder(shell, "-c", shellCmd)
-            applyTermuxEnv(pb, gpuEnabled = gpuArgs.isNotBlank())
+            applyTermuxEnv(pb)
             pb.redirectErrorStream(true)
             val proc = pb.start()
             proc.inputStream.bufferedReader().use { it.readText() }
             proc.waitFor(10, java.util.concurrent.TimeUnit.SECONDS)
+            // 立即读取 log file 开头，看 server 有没有 crash
+            val earlyLog = runCatching { logFile.readText().take(800) }.getOrNull() ?: "(no log yet)"
+            android.util.Log.i("AiLocalModel", "llama-server early log (first 800): $earlyLog")
 
             // 读取 PID 文件
             var pid: Long = 0
@@ -395,7 +394,7 @@ object AiLocalModel {
                     val out = p.inputStream.bufferedReader().readText().trim()
                     p.waitFor(5, java.util.concurrent.TimeUnit.SECONDS)
                     if (out.isNotEmpty()) {
-                        pid = out.lineSequence().firstOrNull()?.toLongOrNull() ?: 0L
+                        pid = out.split("\n").asSequence().firstOrNull()?.toLongOrNull() ?: 0L
                     }
                 }
             }
@@ -405,9 +404,7 @@ object AiLocalModel {
             }
 
             // 等待端口就绪 + 模型加载完成
-            // GPU 模式下模型加载更慢 + 可能有显存压力，给 180 秒
-            val isGpu = gpuArgs.isNotBlank()
-            val waitSeconds = if (isGpu) 180_000L else 120_000L
+            val waitSeconds = 120_000L
             val deadline = System.currentTimeMillis() + waitSeconds
             var portReady = false
             var lastLogSize = 0L
@@ -1075,40 +1072,28 @@ object AiLocalModel {
         val args = mutableListOf<String>()
         args.add(cliPath)
         args.addAll(listOf("-m", modelFile(entry).absolutePath))
-        val gpuEnabled = appContext?.let { AiTermuxPrefs.isLocalGpuAccelEnabled(it) } ?: false
-        args.addAll(listOf("-c", effectiveContext(entry.maxContext, gpuEnabled).toString()))
+        args.addAll(listOf("-c", entry.maxContext.toString()))
         args.addAll(listOf("-n", entry.maxTokens.toString()))
         args.addAll(listOf("--temp", temperature.toString()))
         args.addAll(listOf("-s", "1"))
         args.addAll(listOf("-f", promptFile.absolutePath))
-        // args.add("--no-prompt")  // Removed to allow proper ChatML output
-        args.add("--no-color")
-        // args.add("--silent-prompt")  // Removed: may suppress model output
-        args.add("--log-disable")
         args.addAll(listOf("-t", "4"))
-        // GPU 加速：根据偏好设置追加 -ngl 参数
-        val gpuArgs = buildGpuLaunchArgs(appContext)
-        if (gpuArgs.isNotBlank()) {
-            args.addAll(gpuArgs.split(" "))
-        }
         android.util.Log.i("AiLocalModel", "buildProcess: args=" + args.joinToString(" "))
-        return ProcessBuilder(args)
+        val pb = ProcessBuilder(args)
+        applyTermuxEnv(pb)
+        return pb
     }
-
     /**
      * 构造 llama 推理进程时注入完整环境变量，避免 .so 加载失败。
      */
-    private fun applyTermuxEnv(pb: ProcessBuilder, gpuEnabled: Boolean = false) {
+    private fun applyTermuxEnv(pb: ProcessBuilder) {
         val prefix = prefixDir()
         val env = pb.environment()
         env["PATH"] = prefix + "/bin:" + prefix + "/bin/applets:" + (env["PATH"] ?: "")
         // $PREFIX/lib MUST come first! Termux binaries link against Termux's own libc.so,
         // not /system/lib64. Putting system paths first breaks EVERY Termux binary.
-        env["LD_LIBRARY_PATH"] = if (gpuEnabled) {
-            prefix + "/lib:/system/lib64:/system/lib"
-        } else {
-            prefix + "/lib"
-        }
+                env["LD_LIBRARY_PATH"] = prefix + "/lib"
+
         env["PREFIX"] = prefix
         env["HOME"] = homeDir().absolutePath
         env["TMPDIR"] = prefix + "/tmp"
@@ -1116,19 +1101,6 @@ object AiLocalModel {
         env["ANDROID_DATA"] = "/data"
         env["ANDROID_ROOT"] = "/system"
         env["EXTERNAL_STORAGE"] = "/sdcard"
-        if (gpuEnabled) {
-            // GPU-only vars — do NOT inject for CPU mode, they interfere with normal Termux processes
-            env["EXECUTABLE_DISABLE_MTE"] = "1"
-            env["KMP_AFFINITY"] = "disabled"
-            val icdDir = java.io.File(prefix, "share/vulkan/icd.d")
-            val icdFile = icdDir.listFiles()?.firstOrNull { it.name.endsWith("_icd.aarch64.json") }
-            if (icdFile != null) {
-                env["VK_ICD_FILENAMES"] = icdFile.absolutePath
-                android.util.Log.d("AiLocalModel", "applyTermuxEnv gpu: VK_ICD_FILENAMES=${icdFile.absolutePath}")
-            } else {
-                android.util.Log.w("AiLocalModel", "applyTermuxEnv gpu: no ICD json in ${icdDir.absolutePath}")
-            }
-        }
         pb.directory(homeDir())
     }
 
@@ -1313,7 +1285,6 @@ object AiLocalModel {
         return final
     }
 
-
     /** 覆盖流式推理，逐片段 emit */
     /** 覆盖流式推理：优先 llama-server（避免重复加载），失败 fallback 到 llama-cli */
     fun chatStreamLocal(
@@ -1408,7 +1379,6 @@ object AiLocalModel {
         var proc: Process? = null
         try {
             val pb = buildProcess(entry, promptFile, config.temperature)
-            applyTermuxEnv(pb)
             pb.redirectErrorStream(false)
             proc = pb.start()
 
@@ -1623,7 +1593,6 @@ object AiLocalModel {
             )
         try {
             val pb = buildProcess(entry, promptFile, config.temperature)
-            applyTermuxEnv(pb)
             pb.redirectErrorStream(false)
             val proc = pb.start()
             proc.errorStream.bufferedReader().use { it.readText() }
@@ -1702,7 +1671,6 @@ object AiLocalModel {
             )
         try {
             val pb = buildProcess(entry, promptFile, config.temperature)
-            applyTermuxEnv(pb)
             pb.redirectErrorStream(false)
             val proc = pb.start()
             proc.errorStream.bufferedReader().use { it.readText() }
@@ -1883,507 +1851,4 @@ object AiLocalModel {
             responseStart.trim()
         }
     }
-
-    // ---------- GPU 加速支持（Termux 方案） ----------
-
-    /** GPU 厂商识别结果 */
-    data class GpuInfo(
-        val vendor: String,
-        val model: String,
-        val llamaHasGpuBackend: Boolean,
-        val recommendedNgl: Int,
-        val supported: Boolean,
-        val backend: String
-    )
-
-    /** GPU 模式下的 context size 上限（KV cache 在 GPU VRAM 中，太大 = OOM） */
-    private val GPU_CTX_CAP = 4096
-
-    private fun effectiveContext(maxContext: Int, gpuEnabled: Boolean): Int {
-        if (!gpuEnabled) return maxContext
-        return if (maxContext > GPU_CTX_CAP) {
-            android.util.Log.w("AiLocalModel",
-                "GPU 模式限制 ctx ${GPU_CTX_CAP}（原 $maxContext），防止显存溢出")
-            GPU_CTX_CAP
-        } else {
-            maxContext
-        }
-    }
-
-    private fun detectAndroidGpu(): Pair<String, String> {
-        val sysPaths = listOf(
-            "/sys/class/kgsl/kgsl-3d0/gpu_busy_percentage",
-            "/sys/class/devfreq/qcom,gpucc.0/cur_freq",
-            "/proc/mali0/properties",
-            "/sys/class/devfreq/",
-        )
-        for (p in sysPaths) {
-            runCatching {
-                val dir = java.io.File(p)
-                if (dir.exists() && dir.isDirectory) {
-                    val files = dir.listFiles()?.map { it.name }?.joinToString(",") ?: ""
-                    if ("kgsl" in p || "qcom" in p.lowercase() || "adreno" in p.lowercase()) {
-                        return "Adreno" to "Qualcomm Adreno GPU"
-                    }
-                    if ("mali" in files.lowercase() || "mali" in p.lowercase()) {
-                        return "Mali" to "ARM Mali GPU"
-                    }
-                }
-            }
-        }
-
-        runCatching {
-            val devfreqDir = java.io.File("/sys/class/devfreq")
-            if (devfreqDir.exists()) {
-                val dirNames = devfreqDir.listFiles()?.map { it.name } ?: emptyList()
-                for (name in dirNames) {
-                    val lower = name.lowercase()
-                    if ("adreno" in lower || "kgsl" in lower) return "Adreno" to "Qualcomm Adreno GPU ($name)"
-                    if ("mali" in lower) return "Mali" to "ARM Mali GPU ($name)"
-                    if ("powervr" in lower || "img" in lower) return "PowerVR" to "Imagination PowerVR GPU ($name)"
-                }
-            }
-        }
-
-        runCatching {
-            val pb = ProcessBuilder("getprop", "ro.hardware.vulkan")
-            pb.redirectErrorStream(true)
-            val p = pb.start()
-            val out = p.inputStream.bufferedReader().readText().trim()
-            p.waitFor(2, java.util.concurrent.TimeUnit.SECONDS)
-            if (out.isNotBlank()) {
-                val lower = out.lowercase()
-                if ("adreno" in lower) return "Adreno" to out
-                if ("mali" in lower) return "Mali" to out
-                if ("powervr" in lower || "img" in lower) return "PowerVR" to out
-            }
-        }
-
-        runCatching {
-            val pb = ProcessBuilder("getprop", "ro.hardware.egl")
-            pb.redirectErrorStream(true)
-            val p = pb.start()
-            val out = p.inputStream.bufferedReader().readText().trim()
-            p.waitFor(2, java.util.concurrent.TimeUnit.SECONDS)
-            if (out.isNotBlank()) {
-                val lower = out.lowercase()
-                if ("adreno" in lower) return "Adreno" to out
-                if ("mali" in lower) return "Mali" to out
-                if ("powervr" in lower || "img" in lower) return "PowerVR" to out
-            }
-        }
-
-        runCatching {
-            val pb = ProcessBuilder("cat", "/proc/cpuinfo")
-            pb.redirectErrorStream(true)
-            val p = pb.start()
-            val out = p.inputStream.bufferedReader().readText().lowercase()
-            p.waitFor(2, java.util.concurrent.TimeUnit.SECONDS)
-            if ("qualcomm" in out || "adreno" in out) return "Adreno" to "Qualcomm Adreno GPU (via cpuinfo)"
-            if ("mediatek" in out || "mtk" in out) return "Mali" to "Mediatek Mali GPU (via cpuinfo)"
-        }
-
-        return "Unknown" to "未识别的 GPU 型号"
-    }
-
-    /** 检测 Termux 包的 llama 是否有 GPU 后端（Vulkan ICD + libggml-vulkan.so） */
-    /** Check GPU bridge symlink points to system hardware driver */
-    fun isGpuBridgeReady(): Boolean {
-        val prefix = prefixDir()
-        val libVulkan = java.io.File(prefix, "lib/libvulkan.so")
-        if (!libVulkan.exists()) return false
-        val realPath = runCatching { libVulkan.canonicalPath }.getOrDefault("")
-        return realPath.startsWith("/system/")
-    }
-
-        /**
-     * Find llama binary from Termux package installation.
-     * Termux packages install to $PREFIX/bin/.
-     */
-    fun findGpuLlamaBinary(): java.io.File? {
-        val prefix = prefixDir()
-        val candidates = listOf(
-            java.io.File(prefix, "bin/llama-server"),
-            java.io.File(prefix, "bin/llama-cli"),
-        )
-        for (c in candidates) {
-            if (c.exists() && c.canExecute()) return c
-        }
-        // Legacy: custom build location
-        val leg = java.io.File(prefix, "opt/llama-gpu/bin/llama-server")
-        if (leg.exists() && leg.canExecute()) return leg
-        return null
-    }
-
-    private fun detectLlamaGpuBackend(): Boolean {
-        val tag = "GpuDetect"
-        val bridgeOk = isGpuBridgeReady()
-        android.util.Log.i(tag, "isGpuBridgeReady()=$bridgeOk")
-        if (!bridgeOk) {
-            android.util.Log.i(tag, "-> Vulkan backend 未就绪，返回 false")
-            return false
-        }
-        val cliBin = findGpuLlamaBinary()
-        android.util.Log.i(tag, "findGpuLlamaBinary()=$cliBin")
-        if (cliBin == null) {
-            android.util.Log.i(tag, "-> GPU 版 binary 不存在，返回 false")
-            return false
-        }
-        val result = runCatching {
-            val pb = ProcessBuilder(cliBin.absolutePath, "--help")
-            applyTermuxEnv(pb)
-            pb.redirectErrorStream(true)
-            val p = pb.start()
-            val out = p.inputStream.bufferedReader().use { it.readText() }
-            p.waitFor(5, java.util.concurrent.TimeUnit.SECONDS)
-            out.contains("-ngl") || out.contains("--gpu-layers") ||
-                out.contains("vulkan") || out.contains("opencl") ||
-                out.contains("cuda") || out.contains("metal")
-        }.getOrDefault(false)
-        android.util.Log.i(tag, "help output check -> $result")
-        return result
-    }
-
-
-    /** 获取系统总 RAM (GB)，用于智能限制 GPU 显存分配 */
-    private fun getSystemTotalRamGb(): Int {
-        return runCatching {
-            // 读取 /proc/meminfo 的 MemTotal
-            val lines = java.io.File("/proc/meminfo").readLines()
-            val memTotalKb = lines.firstOrNull { it.startsWith("MemTotal:") }
-                ?.replace(Regex("""[^0-9]"""), "")
-                ?.toLongOrNull() ?: return@runCatching 6
-            val gb = memTotalKb / (1024.0 * 1024.0)  // KB -> GB
-            gb.toInt().coerceIn(2, 24)  // 限制在 2-24GB 合理范围
-        }.getOrDefault(6)
-    }
-
-    /** 综合检测 GPU 信息和 Termux llama.cpp GPU 支持能力 */
-    fun detectGpuInfo(context: Context? = null): GpuInfo {
-        val tag = "GpuDetect"
-        val (vendor, model) = detectAndroidGpu()
-        android.util.Log.i(tag, "detectAndroidGpu -> vendor=$vendor model=$model")
-        val llamaHasGpu = detectLlamaGpuBackend()
-        android.util.Log.i(tag, "llamaHasGpuBackend=$llamaHasGpu")
-
-        if (!llamaHasGpu) {
-            return GpuInfo(
-                vendor = vendor,
-                model = model,
-                llamaHasGpuBackend = false,
-                recommendedNgl = 0,
-                supported = false,
-                backend = "llama-cpp-backend-vulkan 未安装"
-            )
-        }
-
-        // 动态推荐 -ngl：考虑 GPU 型号、系统 RAM、模型大小
-        val totalRamGb = getSystemTotalRamGb()
-        val modelSizeMb = context?.let { getSelectedModel()?.let { m -> modelFile(m).length() / (1024 * 1024) } } ?: 0
-        val modelSizeGb = modelSizeMb / 1024.0
-
-        android.util.Log.i(tag, "RAM=${totalRamGb}GB model=${modelSizeGb}GB")
-
-        // 基础值：按 GPU 型号给一个保守起点
-        val baseByGpu = when {
-            vendor == "Adreno" -> when {
-                model.contains("7", true) -> 25  // Adreno 7xx (8 Gen 2/3)
-                model.contains("6", true) -> 20  // Adreno 6xx (8 Gen 1)
-                else -> 15
-            }
-            vendor == "Mali" -> when {
-                model.contains("G715", true) || model.contains("G720", true) -> 25
-                model.contains("G710", true) -> 20
-                model.contains("G5", true) -> 12   // 低阶
-                else -> 15
-            }
-            vendor == "PowerVR" -> 12
-            else -> 10
-        }
-
-        // 按系统 RAM 限制（Android 统一内存，GPU 和 CPU 共享）
-        val ramCap = when {
-            totalRamGb >= 12 -> 30    // 12GB+ 可以多 offload
-            totalRamGb >= 8 -> 22
-            totalRamGb >= 6 -> 16
-            totalRamGb >= 4 -> 10
-            else -> 5                  // 4GB 以下极度保守
-        }
-
-        // 按模型大小限制：模型越大，能 offload 的层数越少（因为权重本身就占很多内存）
-        // 假设模型有 ~32-52 层，offload 一层大约 = 模型总大小 / 层数
-        val layerCap = if (modelSizeGb > 0) {
-            // 大模型 offload 少，小模型可以多 offload
-            when {
-                modelSizeGb >= 14 -> 8     // 13B+ 模型：极度保守
-                modelSizeGb >= 7 -> 15    // 7B 模型
-                modelSizeGb >= 3 -> 22    // 3B 模型
-                else -> baseByGpu          // 小模型不受限
-            }
-        } else {
-            baseByGpu  // 不知道模型大小就用基础值
-        }
-
-        // 最终值：取三者最小 + 安全上限 30（防止挤爆 GPU）
-        val recommendedNgl = maxOf(4, minOf(baseByGpu, ramCap, layerCap, 30))
-
-        android.util.Log.i(tag, "recommendedNgl=$recommendedNgl (base=$baseByGpu ramCap=$ramCap layerCap=$layerCap)")
-
-        val backend = runCatching {
-            val cliBin = findLlamaBinary() ?: return@runCatching "Vulkan"
-            val pb = ProcessBuilder(cliBin.absolutePath, "--help")
-            applyTermuxEnv(pb)
-            pb.redirectErrorStream(true)
-            val p = pb.start()
-            val help = p.inputStream.bufferedReader().use { it.readText() }.lowercase()
-            p.waitFor(5, java.util.concurrent.TimeUnit.SECONDS)
-            when {
-                "vulkan" in help -> "Vulkan"
-                "opencl" in help -> "OpenCL"
-                "cuda" in help -> "CUDA"
-                "metal" in help -> "Metal"
-                else -> "Vulkan"
-            }
-        }.getOrDefault("Vulkan")
-
-        return GpuInfo(
-            vendor = vendor,
-            model = model,
-            llamaHasGpuBackend = true,
-            recommendedNgl = recommendedNgl,
-            supported = true,
-            backend = backend
-        )
-    }
-
-    /** 根据 GPU 检测结果构建 -ngl 参数 + 内存限制参数，防止 OOM/花屏 */
-    private fun buildGpuLaunchArgs(context: Context?): String {
-        if (context == null) return ""
-        if (!AiTermuxPrefs.isLocalGpuAccelEnabled(context)) return ""
-
-        val info = detectGpuInfo(context)
-        if (!info.supported) {
-            android.util.Log.w("AiLocalModel", "GPU 加速已开但 Termux llama.cpp 不支持 GPU 后端，忽略 GPU 参数")
-            return ""
-        }
-
-        val args = buildString {
-            // GPU offload 层数（已根据 RAM + 模型大小做了智能限制）
-            append("-ngl ").append(info.recommendedNgl)
-
-            // KV cache 量化：Q4 比 f16 省 75% 显存/内存，质量损失极小
-            append(" -ctk q4_0 -ctv q4_0")
-
-            // Flash Attention：减少显存带宽压力
-            append(" -fa on")
-
-            // ctx 限制已移至 server/cli 启动源头统一处理，这里不再重复加 -c
-        }
-
-        android.util.Log.i("AiLocalModel",
-            "GPU offload: vendor=${info.vendor}, backend=${info.backend}, args=$args")
-        return args.toString()
-    }
-
-    // ============================================================
-    // GPU 配置流程：Termux 官方预编译包安装 + Mesa Vulkan ICD 驱动
-    // ============================================================
-
-    data class GpuConfigStep(
-        val step: Int,
-        val total: Int,
-        val title: String,
-        val detail: String,
-        val running: Boolean = true,
-        val success: Boolean? = null,
-    )
-
-
-
-    /**
-     * Configure GPU support using Termux official pre-built packages.
-     *
-     * Flow:
-     *  1. Install Termux packages: llama-cpp + llama-cpp-backend-vulkan
-     *     + vulkan-loader-generic + vulkan-tools + mesa-vulkan-icd-*
-     *  2. Detect GPU vendor, install matching Mesa Vulkan ICD driver
-     *  3. Verify vulkaninfo shows real hardware GPU (not llvmpipe)
-     *  4. Verify llama-server has -ngl (GPU offload) support
-     */
-    suspend fun configureGpuSupport(
-        context: Context,
-        onProgress: (GpuConfigStep) -> Unit
-    ): Boolean {
-        return withContext(Dispatchers.IO) {
-            val total = 4
-            val prefix = prefixDir()
-
-            fun step(idx: Int, title: String, detail: String, running: Boolean = true, success: Boolean? = null) {
-                onProgress(GpuConfigStep(idx, total, title, detail, running, success))
-            }
-
-            // ============ Step 1: Install Termux packages ============
-            step(1, "安装依赖包", "pkg update + install llama-cpp + vulkan packages ...")
-
-            val updateResult = runTermuxShell(context, "pkg update 2>&1", 120)
-            if (!updateResult.success) {
-                step(1, "安装依赖包",
-                    "pkg update 失败: ${updateResult.stderr.take(200)}\n请检查网络连接",
-                    false, false)
-                return@withContext false
-            }
-
-            val pkgCmd = "pkg install -y llama-cpp llama-cpp-backend-vulkan vulkan-loader-generic vulkan-tools shaderc vulkan-headers 2>&1"
-            val installResult = runTermuxShell(context, pkgCmd, 600)
-            if (!installResult.success) {
-                step(1, "安装依赖包",
-                    "pkg install 失败: ${installResult.stderr.take(300)}",
-                    false, false)
-                return@withContext false
-            }
-            step(1, "安装依赖包",
-                "llama-cpp + llama-cpp-backend-vulkan + vulkan 工具链安装完成 ✅",
-                false, true)
-
-            // ============ Step 2: Detect GPU + install Mesa ICD ============
-            step(2, "检测 GPU 驱动", "正在读取 GPU 信息 ...")
-
-            val (gpuVendor, gpuModel) = detectAndroidGpu()
-            android.util.Log.i("GpuConfig", "Detected GPU: vendor=$gpuVendor, model=$gpuModel")
-
-            val icdPackages = mutableListOf<String>()
-            val vendorLower = gpuVendor.lowercase()
-            val modelLower = gpuModel.lowercase()
-
-            when {
-                "qualcomm" in vendorLower || "adreno" in modelLower -> {
-                    icdPackages.add("mesa-vulkan-icd-freedreno")
-                }
-                "mediatek" in vendorLower || "mali" in modelLower || "arm" in vendorLower -> {
-                    icdPackages.add("mesa-vulkan-icd-panfrost")
-                    icdPackages.add("mesa-vulkan-icd-lima")
-                }
-                "broadcom" in vendorLower || "videocore" in modelLower -> {
-                    icdPackages.add("mesa-vulkan-icd-v3d")
-                }
-            }
-            icdPackages.add("mesa-vulkan-icd")
-            val uniqueIcd = icdPackages.distinct()
-
-            step(2, "检测 GPU 驱动",
-                "GPU: $gpuVendor $gpuModel\n正在安装 ICD 驱动: ${uniqueIcd.joinToString(", ")} ...")
-
-            val icdCmd = "pkg install -y ${uniqueIcd.joinToString(" ")} 2>&1"
-            val icdResult = runTermuxShell(context, icdCmd, 300)
-            val icdDetail = if (icdResult.success) {
-                "ICD 驱动安装完成 ✅"
-            } else {
-                "ICD 驱动安装有警告: ${icdResult.stderr.take(200)}\n（某些包可能不存在，不影响）"
-            }
-            step(2, "检测 GPU 驱动",
-                "GPU: $gpuVendor $gpuModel\n$icdDetail",
-                false, icdResult.success)
-
-            // ============ Step 3: Verify Vulkan sees real hardware GPU ============
-            step(3, "验证 Vulkan GPU", "运行 vulkaninfo --summary 检查硬件驱动 ...")
-
-            val icdFindCmd = "find $prefix/share/vulkan/icd.d -name '*.json' 2>/dev/null | head -5"
-            val icdFind = runTermuxShell(context, icdFindCmd, 10)
-            val icdPath = icdFind.stdout.trim().lines().firstOrNull { it.isNotBlank() }
-
-            val vkCmd = buildString {
-                append("cd $prefix && ")
-                append("EXECUTABLE_DISABLE_MTE=1 KMP_AFFINITY=disabled ")
-                if (icdPath != null) {
-                    append("VK_ICD_FILENAMES=$icdPath ")
-                }
-                append("vulkaninfo --summary 2>&1 | head -40")
-            }
-            val vkResult = runTermuxShell(context, vkCmd, 30)
-
-            val vkSummary = (vkResult.stdout + vkResult.stderr).lowercase()
-            val hasRealGpu = (vkResult.success && !vkSummary.contains("llvmpipe")
-                    && !vkSummary.contains("lavapipe") && !vkSummary.contains("swiftshader"))
-                    || vkSummary.contains("adreno") || vkSummary.contains("mali")
-                    || vkSummary.contains("turnip") || vkSummary.contains("panfrost")
-
-            if (!vkResult.success) {
-                step(3, "验证 Vulkan GPU",
-                    "vulkaninfo 执行失败: ${vkResult.stderr.take(300)}",
-                    false, false)
-                return@withContext false
-            }
-
-            val vkDetail = if (hasRealGpu) {
-                val realName = run {
-                    val match = Regex("""deviceName\s*=\s*(.+)""").find(vkResult.stdout)
-                    match?.groupValues?.get(1)?.trim() ?: "真实硬件 GPU"
-                }
-                "✅ Vulkan 已识别硬件 GPU\n  deviceName = $realName"
-            } else {
-                "⚠️ vulkaninfo 可能显示软件渲染 (llvmpipe/lavapipe)\n" +
-                        "这意味着系统 Vulkan loader 没找到硬件驱动\n" +
-                        "输出预览: ${vkResult.stdout.take(300)}"
-            }
-            step(3, "验证 Vulkan GPU", vkDetail, false, hasRealGpu)
-
-            // ============ Step 4: Verify llama-server has GPU support ============
-            step(4, "验证 llama GPU 后端", "检查 llama-server --help 是否有 -ngl ...")
-
-            var llamaBin = java.io.File(prefix, "bin/llama-server")
-            if (!llamaBin.exists()) {
-                val cliBin = java.io.File(prefix, "bin/llama-cli")
-                if (cliBin.exists()) {
-                    llamaBin = cliBin
-                }
-            }
-
-            if (!llamaBin.exists()) {
-                step(4, "验证 llama GPU 后端",
-                    "未找到 llama-server/llama-cli，pkg install 可能有问题",
-                    false, false)
-                return@withContext false
-            }
-
-            // 关键：注入 GPU 运行时环境变量让 GGML_BACKEND_DL 成功加载 libggml-vulkan.so
-            val icdEnvPrefix = if (icdPath != null) "VK_ICD_FILENAMES=$icdPath " else ""
-            val envPrefix = "EXECUTABLE_DISABLE_MTE=1 KMP_AFFINITY=disabled $icdEnvPrefix"
-
-            val helpCmd = "cd $prefix && $envPrefix ${llamaBin.absolutePath} --help 2>&1 | head -80"
-            val helpResult = runTermuxShell(context, helpCmd, 30)
-            val helpLower = (helpResult.stdout + helpResult.stderr).lowercase()
-            val hasNgl = "-ngl" in helpLower || "--gpu-layers" in helpLower
-
-            // 也试 --list-devices 辅助验证 Vulkan 后端
-            val listCmd = "cd $prefix && $envPrefix ${llamaBin.absolutePath} --list-devices 2>&1 | head -30"
-            val listResult = runTermuxShell(context, listCmd, 15)
-            val listLower = (listResult.stdout + listResult.stderr).lowercase()
-            val hasVulkanDevice = "vulkan" in listLower || "vulkan0" in listLower || "ggml_vulkan" in listLower
-
-            val hasVulkanBackend = java.io.File(prefix, "lib/libggml-vulkan.so").exists()
-
-            val detail = buildString {
-                if ((hasNgl || hasVulkanDevice) && hasVulkanBackend) {
-                    append("✅ GPU 加速配置完成！\n")
-                    append("  硬件: $gpuVendor $gpuModel\n")
-                    append("  二进制: ${llamaBin.absolutePath}\n")
-                    append("  后端: libggml-vulkan.so\n")
-                    if (icdPath != null) append("  ICD: $icdPath\n")
-                    append("  后端加载测试: ${if (hasVulkanDevice) "--list-devices 显示 Vulkan0" else "--help 显示 -ngl"}")
-                } else {
-                    append("⚠️ 配置完成但 GPU 后端可能未就绪\n")
-                    append("  libggml-vulkan.so 存在: $hasVulkanBackend\n")
-                    append("  --help 有 -ngl: $hasNgl\n")
-                    append("  --list-devices 有 Vulkan: $hasVulkanDevice\n")
-                    append("  --help 预览: ${helpResult.stdout.take(300)}\n")
-                    append("  --list-devices 预览: ${listResult.stdout.take(200)}")
-                }
-            }
-            val success = (hasNgl || hasVulkanDevice) && hasVulkanBackend
-            step(4, "验证 llama GPU 后端", detail, false, success)
-
-            return@withContext success
-        }
-    }
-
-    }
+}

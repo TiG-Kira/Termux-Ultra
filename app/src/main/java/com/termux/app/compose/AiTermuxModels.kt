@@ -1173,7 +1173,6 @@ object AiTermuxPrefs {
     private const val KEY_LESSONS = "ai_lessons"
     private const val KEY_NEEDS_RECONFIG = "needs_reconfig"
     private const val KEY_TEACHER_CHAT_HISTORY = "teacher_chat_history"
-    private const val KEY_LOCAL_GPU_ACCEL = "local_gpu_accel"
 
     // ---------- Config ----------
     data class AutoExecConfig(
@@ -1749,16 +1748,6 @@ object AiTermuxPrefs {
             .edit().putBoolean(KEY_ROOT_AUTO_SHELL, enabled).apply()
     }
 
-    // ---------- Local GPU Acceleration ----------
-    fun isLocalGpuAccelEnabled(context: Context): Boolean {
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        return prefs.getBoolean(KEY_LOCAL_GPU_ACCEL, false)
-    }
-
-    fun setLocalGpuAccelEnabled(context: Context, enabled: Boolean) {
-        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .edit().putBoolean(KEY_LOCAL_GPU_ACCEL, enabled).apply()
-    }
 
 
     // ---------- Root Check ----------

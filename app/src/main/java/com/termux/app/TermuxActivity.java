@@ -1187,16 +1187,11 @@ public final class TermuxActivity extends ComponentActivity implements ServiceCo
     }
 
     private void showStylingDialog() {
-        if (!IntegratedTools.isEnabled(this, IntegratedTools.Tool.TERMUX_STYLING)) {
-            IntegratedTools.showEnablePrompt(this, IntegratedTools.Tool.TERMUX_STYLING);
-            return;
-        }
         Intent stylingIntent = new Intent();
-        stylingIntent.setClassName(getPackageName(), "com.termux.styling.TermuxStyleActivity");
+        stylingIntent.setClassName(getPackageName(), "com.termux.app.activities.TermuxStylingActivity");
         try {
             startActivity(stylingIntent);
         } catch (ActivityNotFoundException | IllegalArgumentException e) {
-            IntegratedTools.showEnablePrompt(this, IntegratedTools.Tool.TERMUX_STYLING);
         }
     }
     private void toggleKeepScreenOn() {

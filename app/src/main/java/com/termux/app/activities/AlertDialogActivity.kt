@@ -42,6 +42,7 @@ import com.termux.app.compose.guardedOnClick
 import com.termux.app.compose.physicalTouchDetector
 import com.termux.app.compose.rememberThirdPartyBlocked
 import com.termux.app.compose.KiTerminalTheme
+import com.termux.shared.file.FileUtils
 import com.termux.shared.termux.TermuxConstants
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
@@ -120,6 +121,7 @@ class AlertDialogActivity : FragmentActivity() {
             TYPE_CRASH_ERROR -> {
                 val errorMessage = intent.getStringExtra(EXTRA_ERROR_MESSAGE) ?: "Unknown error"
                 val canRecover = intent.getBooleanExtra(EXTRA_CAN_RECOVER, true)
+                val mainThreadCrashed = intent.getBooleanExtra(EXTRA_MAIN_THREAD_CRASHED, false)
 
                 setContent {
                     ProvideNavDispatcher {
@@ -127,6 +129,7 @@ class AlertDialogActivity : FragmentActivity() {
                             CrashErrorDialogContent(
                                 errorMessage = errorMessage,
                                 canRecover = canRecover,
+                                mainThreadCrashed = mainThreadCrashed,
                                 onDismiss = { finish() }
                             )
                         }
@@ -163,6 +166,7 @@ class AlertDialogActivity : FragmentActivity() {
         const val EXTRA_TARGET_LEVEL = "extra_target_level"
         const val EXTRA_ERROR_MESSAGE = "extra_error_message"
         const val EXTRA_CAN_RECOVER = "extra_can_recover"
+        const val EXTRA_MAIN_THREAD_CRASHED = "extra_main_thread_crashed"
 
         const val TYPE_STOP_CONFIRM = "stop_confirm"
         const val TYPE_DISABLE_WARNING = "disable_warning"
@@ -200,12 +204,14 @@ class AlertDialogActivity : FragmentActivity() {
         fun startCrashError(
             context: Context,
             errorMessage: String,
-            canRecover: Boolean
+            canRecover: Boolean,
+            mainThreadCrashed: Boolean = false
         ) {
             val intent = Intent(context, AlertDialogActivity::class.java).apply {
                 putExtra(EXTRA_DIALOG_TYPE, TYPE_CRASH_ERROR)
                 putExtra(EXTRA_ERROR_MESSAGE, errorMessage)
                 putExtra(EXTRA_CAN_RECOVER, canRecover)
+                putExtra(EXTRA_MAIN_THREAD_CRASHED, mainThreadCrashed)
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             context.startActivity(intent)
@@ -463,6 +469,7 @@ private fun launchBiometricAuth(
 private fun CrashErrorDialogContent(
     errorMessage: String,
     canRecover: Boolean,
+    mainThreadCrashed: Boolean,
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
@@ -472,10 +479,26 @@ private fun CrashErrorDialogContent(
     val titleRes = if (canRecover) R.string.crash_dialog_title else R.string.crash_dialog_severe_title
     val messageRes = if (canRecover) R.string.crash_dialog_message else R.string.crash_dialog_severe_message
 
+    /** Delete crash_log.md — called right before every user action so md doesn't linger. */
+    fun deleteCrashLog() {
+        try {
+            val f = java.io.File(TermuxConstants.TERMUX_CRASH_LOG_FILE_PATH)
+            if (f.exists()) f.delete()
+        } catch (_: Throwable) {}
+    }
+
+    /** Terminate the process — "raise(sig) 让系统直接杀死" 的 Java 等价。 */
+    fun killProcess() {
+        android.os.Process.killProcess(android.os.Process.myPid())
+        kotlin.system.exitProcess(1)
+    }
+
     WindowDialog(
         show = showDialog,
         onDismissRequest = {
             showDialog = false
+            // 用户点关闭弹窗（没选任何选项）——不可恢复时强制杀进程
+            if (!canRecover) killProcess()
             onDismiss()
         },
         title = stringResource(titleRes),
@@ -490,90 +513,100 @@ private fun CrashErrorDialogContent(
                     .fillMaxWidth()
                     .physicalTouchDetector()
                     .accessibilityGuard(thirdPartyBlocked)
-                    .padding(top = 4.dp)
+                    .padding(top = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 if (canRecover) {
-                    // 可恢复：查看崩溃报告 / 查看日志 / 确认
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .physicalTouchDetector()
-                            .accessibilityGuard(thirdPartyBlocked),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        TextButton(
-                            text = stringResource(R.string.view_crash_report),
-                            onClick = guardedOnClick(context, thirdPartyBlocked) {
-                                val intent = Intent(context, TermuxCrashReportActivity::class.java)
-                                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                context.startActivity(intent)
-                                showDialog = false
-                                onDismiss()
-                            },
-                            modifier = Modifier.weight(1f)
-                        )
-                        TextButton(
-                            text = stringResource(R.string.view_logs),
-                            onClick = guardedOnClick(context, thirdPartyBlocked) {
-                                val intent = Intent(context, LogViewerActivity::class.java)
-                                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                context.startActivity(intent)
-                                showDialog = false
-                                onDismiss()
-                            },
-                            modifier = Modifier.weight(1f)
-                        )
-                        TextButton(
-                            text = stringResource(R.string.confirm),
-                            onClick = guardedOnClick(context, thirdPartyBlocked) {
-                                showDialog = false
-                                onDismiss()
-                            },
-                            modifier = Modifier.weight(1f),
-                            colors = ButtonDefaults.textButtonColorsPrimary()
-                        )
-                    }
+                    // === 可恢复（非主线程 Exception）===
+                    // 每个操作：删 md → 执行操作 → 进程继续跑
+                    TextButton(
+                        text = stringResource(R.string.view_crash_report),
+                        onClick = guardedOnClick(context, thirdPartyBlocked) {
+                            deleteCrashLog()
+                            val intent = Intent(context, TermuxCrashReportActivity::class.java)
+                            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            context.startActivity(intent)
+                            showDialog = false
+                            onDismiss()
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    TextButton(
+                        text = stringResource(R.string.view_logs),
+                        onClick = guardedOnClick(context, thirdPartyBlocked) {
+                            deleteCrashLog()
+                            val intent = Intent(context, LogViewerActivity::class.java)
+                            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            context.startActivity(intent)
+                            showDialog = false
+                            onDismiss()
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    TextButton(
+                        text = stringResource(R.string.confirm),
+                        onClick = guardedOnClick(context, thirdPartyBlocked) {
+                            deleteCrashLog()
+                            showDialog = false
+                            onDismiss()
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.textButtonColorsPrimary()
+                    )
+                } else if (mainThreadCrashed) {
+                    // === 不可恢复 + 主线程崩溃 ===
+                    // 主线程挂了 → 查看崩溃报告 / 降级模式 不能选（崩溃就发生在主线程）
+                    // 只有"关闭应用"可选
+                    TextButton(
+                        text = stringResource(R.string.close_app),
+                        onClick = guardedOnClick(context, thirdPartyBlocked) {
+                            deleteCrashLog()
+                            showDialog = false
+                            onDismiss()
+                            killProcess()
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.textButtonColorsPrimary()
+                    )
                 } else {
-                    // 不可恢复：查看崩溃报告 / 使用降级模式 / 关闭应用
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .physicalTouchDetector()
-                            .accessibilityGuard(thirdPartyBlocked),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        TextButton(
-                            text = stringResource(R.string.view_crash_report),
-                            onClick = guardedOnClick(context, thirdPartyBlocked) {
-                                val intent = Intent(context, TermuxCrashReportActivity::class.java)
-                                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                context.startActivity(intent)
-                                showDialog = false
-                                onDismiss()
-                            },
-                            modifier = Modifier.weight(1f)
-                        )
-                        TextButton(
-                            text = stringResource(R.string.use_fallback_mode),
-                            onClick = guardedOnClick(context, thirdPartyBlocked) {
-                                FallbackHelper.enableFallbackMode(context)
-                                showDialog = false
-                                onDismiss()
-                            },
-                            modifier = Modifier.weight(1f)
-                        )
-                        TextButton(
-                            text = stringResource(R.string.close_app),
-                            onClick = guardedOnClick(context, thirdPartyBlocked) {
-                                showDialog = false
-                                onDismiss()
-                                android.os.Process.killProcess(android.os.Process.myPid())
-                                kotlin.system.exitProcess(1)
-                            },
-                            modifier = Modifier.weight(1f),
-                            colors = ButtonDefaults.textButtonColorsPrimary()
-                        )
-                    }
+                    // === 不可恢复 + 非主线程崩溃 或 native SIGSEGV ===
+                    // 三个按钮都可用，每个操作：删 md → 执行操作 → 杀进程
+                    TextButton(
+                        text = stringResource(R.string.view_crash_report),
+                        onClick = guardedOnClick(context, thirdPartyBlocked) {
+                            deleteCrashLog()
+                            val intent = Intent(context, TermuxCrashReportActivity::class.java)
+                            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            context.startActivity(intent)
+                            showDialog = false
+                            onDismiss()
+                            killProcess()
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    TextButton(
+                        text = stringResource(R.string.use_fallback_mode),
+                        onClick = guardedOnClick(context, thirdPartyBlocked) {
+                            // 写入一次性降级 flag → 下次启动自动消费并进入降级模式
+                            FallbackHelper.setOneShotFallbackFlag(context)
+                            deleteCrashLog()
+                            showDialog = false
+                            onDismiss()
+                            killProcess()
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    TextButton(
+                        text = stringResource(R.string.close_app),
+                        onClick = guardedOnClick(context, thirdPartyBlocked) {
+                            deleteCrashLog()
+                            showDialog = false
+                            onDismiss()
+                            killProcess()
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.textButtonColorsPrimary()
+                    )
                 }
             }
         }
@@ -606,12 +639,12 @@ private fun CrashPostDialogContent(
             }
         },
         content = {
-            Row(
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .physicalTouchDetector()
                     .accessibilityGuard(thirdPartyBlocked),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 TextButton(
                     text = stringResource(R.string.view_crash_report),
@@ -638,7 +671,7 @@ private fun CrashPostDialogContent(
                         showDialog = false
                         onDismiss()
                     },
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.fillMaxWidth()
                 )
                 TextButton(
                     text = stringResource(R.string.view_logs),
@@ -649,7 +682,7 @@ private fun CrashPostDialogContent(
                         showDialog = false
                         onDismiss()
                     },
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.fillMaxWidth()
                 )
                 TextButton(
                     text = stringResource(R.string.confirm),
@@ -657,7 +690,7 @@ private fun CrashPostDialogContent(
                         showDialog = false
                         onDismiss()
                     },
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.textButtonColorsPrimary()
                 )
             }

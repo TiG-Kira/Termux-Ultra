@@ -186,7 +186,52 @@ private fun scanTermuxStorage(context: android.content.Context): List<CategorySt
     // 本地大模型: 设备端 AI 模型占用
     addToCategory(StorageCategory.LOCAL_MODEL, AiLocalModel.getInstalledModelSize())
 
-    // 其它: 缓存
+    // === 计算 home 目录下已归类子目录的大小，用于后续扣除 ===
+    val alreadyClassifiedHomeSubDirs = listOfNotNull(
+        File(termuxDir, ".local/share/containers").takeIf { it.exists() }?.let { getDirSize(it) },
+        File(termuxDir, "containers").takeIf { it.exists() }?.let { getDirSize(it) },
+        File(termuxDir, ".docker").takeIf { it.exists() }?.let { getDirSize(it) },
+        File(termuxDir, "vm").takeIf { it.exists() }?.let { getDirSize(it) },
+        File(termuxDir, "qemu").takeIf { it.exists() }?.let { getDirSize(it) },
+        File(termuxDir, ".termux/logs").takeIf { it.exists() }?.let { getDirSize(it) },
+        File(termuxDir, ".thumbnails").takeIf { it.exists() }?.let { getDirSize(it) }
+    ).sum()
+
+    // home 目录下的常规用户文件（总大小 - 已归类子目录）
+    val homeTotalSize = getDirSize(termuxDir)
+    val homeRegularSize = (homeTotalSize - alreadyClassifiedHomeSubDirs).coerceAtLeast(0L)
+    if (homeRegularSize > 0) {
+        addToCategory(StorageCategory.USER_DOCS, homeRegularSize)
+    }
+
+    // === Android 标准目录（shared_prefs、databases、codeCache）归入 OTHER ===
+    val sharedPrefsDir = File("/data/data/${context.packageName}/shared_prefs")
+    val sharedPrefsSize = getDirSize(sharedPrefsDir)
+    if (sharedPrefsSize > 0) {
+        addToCategory(StorageCategory.OTHER, sharedPrefsSize)
+    }
+
+    val databasesDir = File("/data/data/${context.packageName}/databases")
+    val databasesSize = getDirSize(databasesDir)
+    if (databasesSize > 0) {
+        addToCategory(StorageCategory.OTHER, databasesSize)
+    }
+
+    val codeCacheDir = context.codeCacheDir
+    val codeCacheSize = getDirSize(codeCacheDir)
+    if (codeCacheSize > 0) {
+        addToCategory(StorageCategory.OTHER, codeCacheSize)
+    }
+
+    // 外部缓存目录也计入
+    context.externalCacheDir?.let { externalCache ->
+        val externalCacheSize = getDirSize(externalCache)
+        if (externalCacheSize > 0) {
+            addToCategory(StorageCategory.OTHER, externalCacheSize)
+        }
+    }
+
+    // 其它: 内部缓存
     val cacheSize = getDirSize(appCacheDir)
     addToCategory(StorageCategory.OTHER, cacheSize)
     if (appCacheDir.exists() && cacheSize > 0) {

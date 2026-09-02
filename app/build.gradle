@@ -19,8 +19,8 @@ android {
         applicationId "com.termux"
         minSdkVersion project.properties.minSdkVersion.toInteger()
         targetSdkVersion project.properties.targetSdkVersion.toInteger()
-        versionCode 1087
-        versionName "1.5.1.R2"
+        versionCode 1088
+        versionName "1.5.2.R2"
 
         // Termux 核心版本号（基于的上游 Termux 版本）
         // 注意：termux_core_version 字符串已在 strings.xml 中定义
@@ -192,6 +192,9 @@ dependencies {
     implementation "org.connectbot:sshlib:2.2.36"
 
     implementation "com.squareup.okhttp3:okhttp:4.12.0"
+
+    // Baseline Profile 运行时安装器：在应用启动时确保 baseline.prof 文件被安装到设备
+    implementation "androidx.profileinstaller:profileinstaller:1.3.1"
 }
 
 tasks.whenTaskAdded { task ->

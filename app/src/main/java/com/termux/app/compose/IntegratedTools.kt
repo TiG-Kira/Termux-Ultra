@@ -64,7 +64,7 @@ object IntegratedTools {
             "com.termux.api.SchedulerJobService",
             "com.termux.api.KeepAliveService"
         )
-        Tool.TERMUX_STYLING -> listOf("com.termux.styling.TermuxStyleActivity")
+        Tool.TERMUX_STYLING -> listOf("com.termux.app.activities.TermuxStylingActivity")
         Tool.TERMUX_TASKER -> listOf(
             "com.termux.tasker.EditConfigurationActivity",
             "com.termux.tasker.FireReceiver",

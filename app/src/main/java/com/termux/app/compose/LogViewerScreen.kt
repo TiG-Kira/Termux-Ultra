@@ -46,6 +46,8 @@ fun LogViewerScreen(
     var lastFileModTime by remember { mutableStateOf(0L) }
     var searchQuery by remember { mutableStateOf("") }
     var showSearchBar by remember { mutableStateOf(false) }
+    // 防抖后的搜索词（用户停止输入 300ms 后才更新）
+    var debouncedSearchQuery by remember { mutableStateOf("") }
 
     val logManager = remember { LogManager.getInstance() }
 
@@ -60,15 +62,27 @@ fun LogViewerScreen(
         logs = newLogs
     }
 
-    // 过滤后的日志列表（带索引用于生成唯一key）
-    val filteredLogs = remember(logs, searchQuery) {
-        val query = searchQuery.trim().lowercase()
-        if (query.isEmpty()) {
-            logs
+    // 防抖：searchQuery 停止变化 300ms 后才更新 debouncedSearchQuery
+    LaunchedEffect(searchQuery) {
+        if (searchQuery.isEmpty()) {
+            debouncedSearchQuery = ""
         } else {
-            logs.filter { entry ->
-                entry.message.lowercase().contains(query) ||
-                entry.tag.lowercase().contains(query)
+            delay(300)
+            debouncedSearchQuery = searchQuery
+        }
+    }
+
+    // 使用 derivedStateOf 包装过滤，让 Compose 仅在真正影响结果的状态变化时才重算
+    val filteredLogs by remember {
+        derivedStateOf {
+            val query = debouncedSearchQuery.trim().lowercase()
+            if (query.isEmpty()) {
+                logs
+            } else {
+                logs.filter { entry ->
+                    entry.message.contains(query, ignoreCase = true) ||
+                    entry.tag.contains(query, ignoreCase = true)
+                }
             }
         }
     }

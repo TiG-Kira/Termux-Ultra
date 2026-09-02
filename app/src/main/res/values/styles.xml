@@ -49,6 +49,14 @@
         <item name="android:colorAccent">#212121</item>
     </style>
 
+    <!-- 冷启动专用主题。继承 framework 原生主题（非 AppCompat），避免 SplashActivity 触发 AppCompat 初始化。
+         windowBackground 设为纯黑色，确保启动瞬间无白屏闪烁。 -->
+    <style name="Theme.Termux.Splash" parent="@android:style/Theme.Black.NoTitleBar.Fullscreen">
+        <item name="android:windowBackground">@android:color/black</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowFullscreen">true</item>
+    </style>
+
     <style name="Theme.Termux.Transparent" parent="@style/Theme.AppCompat.DayNight.NoActionBar">
         <item name="android:windowBackground">@android:color/transparent</item>
         <item name="android:windowContentOverlay">@null</item>

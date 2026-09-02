@@ -72,7 +72,6 @@ import com.termux.app.utils.SnackbarHelper
 import com.google.android.material.snackbar.Snackbar
 import java.io.File
 
-
 data class SettingItem(
     val title: String,
     val description: String,
@@ -134,10 +133,6 @@ fun SettingsScreen(
     var vncEnabled by remember { mutableStateOf(prefs.getBoolean("vnc_enabled", false)) }
     var aiTermuxEnabled by remember { mutableStateOf(prefs.getBoolean("ai_termux_enabled", true)) }
     var aiDeveloperMode by remember { mutableStateOf(AiTermuxPrefs.isDeveloperMode(context)) }
-    var localGpuAccel by remember { mutableStateOf(AiTermuxPrefs.isLocalGpuAccelEnabled(context)) }
-    var showGpuConfigDialog by remember { mutableStateOf(false) }
-    var gpuConfigStep by remember { mutableStateOf<AiLocalModel.GpuConfigStep?>(null) }
-    val gpuInfoCache = remember { AiLocalModel.detectGpuInfo(context) }
 
     var autoExecConfig by remember { mutableStateOf(AiTermuxPrefs.getAutoExecConfig(context)) }
     var useCustomSystemPrompt by remember { mutableStateOf(AiTermuxPrefs.isUsingCustomSystemPrompt(context)) }
@@ -944,76 +939,6 @@ fun SettingsScreen(
                                             SettingIcon(R.drawable.ic_files, contentDescription = "完整对话记录")
                                         }
                                     )
-                                    if (aiProvider == "local") {
-                                        HorizontalDivider(
-                                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f),
-                                            modifier = Modifier.padding(start = 72.dp, end = 16.dp)
-                                        )
-                                        SwitchPreference(
-                                            title = "本地模型 GPU 加速 (Termux Vulkan)",
-                                        summary = if (localGpuAccel) {
-                                            run {
-                                                val info = AiLocalModel.detectGpuInfo(context)
-                                                if (info.supported) {
-                                                    "已开启 · GPU 版 llama 就绪 · ${info.vendor} ${info.model} · 后端 ${info.backend} · 推荐 offload ${info.recommendedNgl} 层"
-                                                } else {
-                                                    "已开启 · 但 GPU 版 llama / 转接层未就绪，开关会自动重新配置"
-                                                }
-                                            }
-                                        } else {
-                                            "实验性功能 · 关闭时强制 CPU-only；每次打开都会检查 Termux llama-cpp-backend-vulkan 包是否已安装，缺失则自动安装配置"
-                                        },
-                                        checked = localGpuAccel,
-                                        onCheckedChange = { newValue ->
-                                            if (newValue) {
-                                                // 每次打开都走 configureGpuSupport：
-                                                // 内部 pkg install -y 对已装包是幂等的，缺失则自动安装。
-                                                // 这样无论依赖是否安装过都能正确处理，逻辑统一可靠。
-                                                showGpuConfigDialog = true
-                                                gpuConfigStep = null
-                                                scope.launch {
-                                                    val tag = "GpuConfig"
-                                                    try {
-                                                        android.util.Log.i(tag, "configureGpuSupport START (switch ON)")
-                                                        val ok = AiLocalModel.configureGpuSupport(context) { step ->
-                                                            gpuConfigStep = step
-                                                        }
-                                                        android.util.Log.i(tag, "configureGpuSupport END ok=" + ok)
-                                                        if (ok) {
-                                                            localGpuAccel = true
-                                                            AiTermuxPrefs.setLocalGpuAccelEnabled(context, true)
-                                                            AiLocalModel.stopServer()
-                                                        } else {
-                                                            localGpuAccel = false
-                                                            AiTermuxPrefs.setLocalGpuAccelEnabled(context, false)
-                                                        }
-                                                    } catch (e: Throwable) {
-                                                        android.util.Log.e(tag, "configureGpuSupport EXCEPTION", e)
-                                                        gpuConfigStep = AiLocalModel.GpuConfigStep(
-                                                            1, 4,
-                                                            "配置失败",
-                                                            e.javaClass.simpleName + ": " + (e.message ?: "unknown"),
-                                                            false, false
-                                                        )
-                                                        localGpuAccel = false
-                                                        AiTermuxPrefs.setLocalGpuAccelEnabled(context, false)
-                                                    }
-                                                }
-                                            } else {
-                                                localGpuAccel = false
-                                                AiTermuxPrefs.setLocalGpuAccelEnabled(context, false)
-                                                AiLocalModel.stopServer()
-                                            }
-                                        },
-                                        startAction = {
-                                            SettingIcon(R.drawable.ic_refresh, contentDescription = "本地模型 GPU 加速")
-                                        }
-                                    )
-                                        HorizontalDivider(
-                                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f),
-                                            modifier = Modifier.padding(start = 72.dp, end = 16.dp)
-                                        )
-                                    }
                                     SwitchPreference(
                                         title = "无限制模式",
                                         summary = if (unlimitedMode) {
@@ -1189,64 +1114,6 @@ fun SettingsScreen(
             onClick = { showNavRestartPrompt = false },
             modifier = Modifier.fillMaxWidth()
         )
-        }
-    )
-
-    // ---------- GPU 配置进度 Dialog ----------
-    OverlayDialog(
-        title = run {
-            val step = gpuConfigStep
-            when (step?.success) {
-                true -> "✅ GPU 加速配置完成"
-                false -> "❌ GPU 加速配置失败"
-                null -> "⏳ 配置 GPU 加速中..."
-            }
-        },
-        summary = run {
-            val step = gpuConfigStep
-            if (step != null) {
-                "(${step.step}/${step.total}) ${step.title}"
-            } else {
-                "准备中..."
-            }
-        },
-        show = showGpuConfigDialog,
-        onDismissRequest = {
-            if (gpuConfigStep?.success != null) showGpuConfigDialog = false
-        },
-        content = {
-            val step = gpuConfigStep
-            val isDone = step?.success != null
-
-            if (step != null) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 280.dp)
-                        .verticalScroll(rememberScrollState())
-                ) {
-                    Text(
-                        text = step.detail,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-                Spacer(Modifier.height(12.dp))
-            }
-
-            if (isDone) {
-                TextButton(
-                    text = if (step?.success == true) "完成" else "知道了",
-                    onClick = { showGpuConfigDialog = false },
-                    modifier = Modifier.fillMaxWidth()
-                )
-            } else {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.Center
-                ) {
-                    CircularProgressIndicator()
-                }
-            }
         }
     )
 

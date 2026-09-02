@@ -74,8 +74,9 @@ public class LogManager {
             logDir.mkdirs();
         }
         logFile = new File(logDir, LOG_FILE_NAME);
-        // 自动清理3天前的旧日志
-        cleanOldLogs(3);
+        // cleanOldLogs 涉及读+重写整个日志文件（磁盘 I/O），放到后台线程异步执行，
+        // 避免在 Application.onCreate() 主线程阻塞冷启动。
+        new Thread(() -> cleanOldLogs(3), "LogManager-Cleanup").start();
     }
 
     public static synchronized void init(Context context) {
@@ -134,6 +135,9 @@ public class LogManager {
         // 写入文件
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(logFile, true))) {
             writer.write(logEntry.toString());
+            // 写后立即使缓存失效，避免 UI 读到过期数据
+            cachedLogs = null;
+            cachedFileModTime = 0;
         } catch (IOException e) {
             Log.e(TAG, "Failed to write log", e);
         }
@@ -249,6 +253,9 @@ public class LogManager {
 
             try (BufferedWriter writer = new BufferedWriter(new FileWriter(logFile, true))) {
                 writer.write(logEntry.toString());
+                // 写后立即使缓存失效，避免 UI 读到过期数据
+                cachedLogs = null;
+                cachedFileModTime = 0;
             }
         } catch (Exception e) {
             // 不记录完整异常栈，避免 logcat 收集形成循环
@@ -350,7 +357,7 @@ public class LogManager {
      * @param startTime 开始时间戳，-1 表示不过滤
      * @param endTime 结束时间戳，-1 表示不过滤
      */
-    public List<LogEntry> getLogs(Integer level, long startTime, long endTime) {
+    public synchronized List<LogEntry> getLogs(Integer level, long startTime, long endTime) {
         long currentModTime = logFile.exists() ? logFile.lastModified() : 0;
         int levelKey = level != null ? level : -1;
 

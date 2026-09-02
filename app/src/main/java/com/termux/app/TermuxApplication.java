@@ -13,6 +13,7 @@ import com.termux.api.util.TermuxApiLogger;
 import com.termux.shared.crash.TermuxCrashUtils;
 import com.termux.shared.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.logger.Logger;
+import com.termux.terminal.JNI;
 
 import java.io.BufferedWriter;
 import java.io.DataInputStream;
@@ -79,32 +80,59 @@ public class TermuxApplication extends Application {
         // Initialize LogManager first
         com.termux.app.utils.LogManager.init(this);
 
-        TermuxCrashUtils.setCrashHandler(this);
-
-        // 初始化 AI 模块（本地大模型 + Ollama）
+        // Check one-shot fallback flag: if user chose Fallback in last crash dialog,
+        // enter terminal-lock mode on next launch and consume the flag.
+        // 必须在主线程执行，因为决定了是否设置 crash recovery 标记
         try {
-            com.termux.app.compose.AiLocalModel.init(this);
-            com.termux.app.compose.AiOllamaManager.init(this);
-            android.util.Log.i("TermuxApplication", "AI 模块初始化完成");
-        } catch (Throwable t) {
-            android.util.Log.e("TermuxApplication", "AI 模块初始化失败", t);
-        }
-        setLogLevel();
-
-        startTermuxApiListener(getApplicationContext());
-
-        // Keep the am-wrapper hook in sync with the Termux:API switch state, even if the user has
-        // never toggled the preference in this app process (e.g. pkg upgrade erased the hook, or
-        // the user upgraded the app without re-opening settings).
-        try {
-            if (com.termux.app.compose.IntegratedTools.INSTANCE.isEnabled(getApplicationContext(), com.termux.app.compose.IntegratedTools.Tool.TERMUX_API)) {
-                com.termux.app.compose.TermuxApiBroadcastFix.applyAmWrapper(getApplicationContext());
-            } else {
-                com.termux.app.compose.TermuxApiBroadcastFix.removeAmWrapper();
+            if (com.termux.app.FallbackHelper.INSTANCE.consumeOneShotFallbackFlag(this)) {
+                android.util.Log.i("TermuxApplication", "One-shot fallback flag consumed — entering terminal-lock mode");
+                com.termux.app.compose.ApiCompat.INSTANCE.markMiuixUiFailed();
             }
         } catch (Throwable t) {
-            android.util.Log.e(LOG_TAG, "Failed to sync Termux:API am wrapper", t);
+            android.util.Log.w("TermuxApplication", "One-shot fallback check failed", t);
         }
+
+        // 以下所有可能涉及 native 加载、磁盘 I/O、shell 命令的操作全部放后台线程，
+        // 保证 Application.onCreate() 在几毫秒内返回，不阻塞主线程冷启动。
+        new Thread(() -> {
+            // Install native signal handlers for SIGSEGV/SIGABRT/etc. BEFORE the Java
+            // UncaughtExceptionHandler, so both layers work together. The libtermux
+            // library (containing nativeSetupCrashHandler) is loaded lazily on first
+            // JNI access — calling it here ensures registration happens early.
+            // libtermux .so首次加载在低端机可耗时1-2秒
+            try {
+                JNI.nativeSetupCrashHandler();
+                android.util.Log.i("TermuxApplication", "Native crash handler registered (bg)");
+            } catch (Throwable t) {
+                android.util.Log.w("TermuxApplication", "Native crash handler registration failed", t);
+            }
+
+            // Java 层 crash handler — 放在 native handler 之后
+            TermuxCrashUtils.setCrashHandler(TermuxApplication.this);
+
+            // 初始化 AI 模块（本地大模型 + Ollama）——仅存 context，极轻量
+            try {
+                com.termux.app.compose.AiLocalModel.init(TermuxApplication.this);
+                com.termux.app.compose.AiOllamaManager.init(TermuxApplication.this);
+                android.util.Log.i("TermuxApplication", "AI 模块初始化完成 (bg)");
+            } catch (Throwable t) {
+                android.util.Log.e("TermuxApplication", "AI 模块初始化失败", t);
+            }
+            setLogLevel();
+
+            startTermuxApiListener(getApplicationContext());
+
+            // am-wrapper 同步（可能跑 shell 命令）
+            try {
+                if (com.termux.app.compose.IntegratedTools.INSTANCE.isEnabled(getApplicationContext(), com.termux.app.compose.IntegratedTools.Tool.TERMUX_API)) {
+                    com.termux.app.compose.TermuxApiBroadcastFix.applyAmWrapper(getApplicationContext());
+                } else {
+                    com.termux.app.compose.TermuxApiBroadcastFix.removeAmWrapper();
+                }
+            } catch (Throwable t) {
+                android.util.Log.e(LOG_TAG, "Failed to sync Termux:API am wrapper", t);
+            }
+        }, "Termux-BgInit").start();
     }
 
     private static void startTermuxApiListener(final Context context) {

@@ -314,7 +314,8 @@ $QEMU_BIN \\
     -drive file="\$VARS_FD_C",format=raw,if=pflash \\
     -drive file="\$IMG_C",format=qcow2 \\
     -drive file="\$SEED_C",media=cdrom,format=raw \\
-    -nic user,model=virtio-net-pci,hostfwd=tcp::2222-:22 \\
+    -netdev user,id=net0,hostfwd=tcp::2222-:22 \\
+    -device virtio-net-pci,netdev=net0,romfile= \\
     -serial mon:stdio \\
     -nographic
 VMEOF
@@ -392,7 +393,8 @@ $QEMU_BIN \\
     -drive file="$VARS_FD",format=raw,if=pflash \\
     -drive file="$IMG",format=qcow2 \\
     -drive file="$VM_DIR/seed.iso",media=cdrom,format=raw \\
-    -nic user,model=virtio-net-pci,hostfwd=tcp::2222-:22 \\
+    -netdev user,id=net0,hostfwd=tcp::2222-:22 \\
+    -device virtio-net-pci,netdev=net0,romfile= \\
     -serial mon:stdio \\
     -nographic
 EOF

@@ -1,0 +1,49 @@
+# Baseline Profile - 冷启动关键路径预编译
+# 这些规则会在 APK 安装时被系统读取，AOT 编译指定的类和方法，
+# 使冷启动时直接执行原生代码而非 JIT 解释执行，显著降低首帧时间。
+
+# ===== Application 启动 =====
+Lcom/termux/app/TermuxApplication;->onCreate()V
+Lcom/termux/app/TermuxApplication;->attachBaseContext(Landroid/content/Context;)Landroid/content/Context;
+
+# ===== SplashActivity 冷启动分发 =====
+Lcom/termux/app/SplashActivity;->onCreate(Landroid/os/Bundle;)V
+Lcom/termux/app/SplashActivity;->applySavedLanguage(Landroid/content/Context;)V
+
+# ===== MainActivity 主页入口 =====
+Lcom/termux/app/MainActivity;->onCreate(Landroid/os/Bundle;)V
+Lcom/termux/app/MainActivity;->attachBaseContext(Landroid/content/Context;)Landroid/content/Context;
+Lcom/termux/app/MainActivity;->onStart()V
+Lcom/termux/app/MainActivity;->onResume()V
+
+# ===== OOBE（首次安装/升级）=====
+Lcom/termux/app/OobeActivity;->onCreate(Landroid/os/Bundle;)V
+
+# ===== Compose 启动 UI =====
+Lcom/termux/app/compose/MainScreenKt;->MainScreen(ILkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function1;Ljava/util/List;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function2;Lkotlin/jvm/functions/Function2;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function0;ZLkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function0;)V
+Lcom/termux/app/compose/KiTerminalThemeKt;->KiTerminalTheme(Lkotlin/jvm/functions/Function0;)V
+
+# ===== Compose 导航/页面 =====
+Lcom/termux/app/compose/OverviewScreenKt;->OverviewScreen(Ljava/util/List;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function0;D;)V
+Lcom/termux/app/compose/TerminalListScreenKt;->TerminalListScreen(Ljava/util/List;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function0;D;)V
+Lcom/termux/app/compose/SettingsScreenKt;->SettingsScreen(Lkotlin/jvm/functions/Function0;D;)V
+Lcom/termux/app/remote/RemoteScreenKt;->RemoteScreen(ZI[Lkotlin/jvm/functions/Function1;D;)V
+Lcom/termux/app/compose/FileManagerScreenKt;->FileManagerScreen(Lkotlin/jvm/functions/Function1;D;)V
+
+# ===== LocaleHelper =====
+Lcom/termux/app/LocaleHelper;->attachBaseContext(Landroid/content/Context;)Landroid/content/Context;
+
+# ===== FallbackHelper =====
+Lcom/termux/app/FallbackHelper;->consumeOneShotFallbackFlag(Landroid/content/Context;)Z
+
+# ===== LogManager =====
+Lcom/termux/app/utils/LogManager;->init(Landroid/content/Context;)V
+Lcom/termux/app/utils/LogManager;-><init>(Landroid/content/Context;)V
+
+# ===== Crash =====
+Lcom/termux/shared/crash/TermuxCrashUtils;->setCrashHandler(Landroid/content/Context;)V
+Lcom/termux/app/utils/CrashUtils;->notifyAppCrashOnLastRun(Landroid/app/Activity;Ljava/lang/String;)V
+
+# ===== TermuxService（后台线程启动，预热即可）=====
+Lcom/termux/app/TermuxService;->onCreate()V
+Lcom/termux/app/TermuxService;->onStartCommand(Landroid/content/Intent;II)I

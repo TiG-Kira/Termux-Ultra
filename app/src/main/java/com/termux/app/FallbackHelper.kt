@@ -28,6 +28,11 @@ object FallbackHelper {
     private const val CHANNEL_ID = "low_android_fallback"
     private const val NOTIFICATION_ID = 9991
 
+    /** SharedPreferences 文件（与 AlertDialogActivity / CrashUtils 保持一致） */
+    private const val PREFS_NAME = "app_settings"
+    /** 一次性降级 flag：崩溃对话框选择降级模式时写入 → 下次启动消费并进入降级 → 立即清除 */
+    private const val KEY_ONE_SHOT_FALLBACK = "one_shot_fallback"
+
     // 用于避免 OOBE 失败 → 跳 MainActivity 又失败 → 再跳 OOBE（死循环）
     @Volatile
     private var sSkipOobeAttempted: Boolean = false
@@ -167,6 +172,33 @@ object FallbackHelper {
         if (context is Activity) {
             enterTerminalOnlyMode(context, showNotify = false)
         }
+    }
+
+    // ─── 一次性降级 flag（崩溃对话框降级模式 → 下次启动进入降级） ──
+
+    /**
+     * 写入一次性降级 flag。崩溃对话框用户选择"降级模式"后调用，
+     * 杀进程后下次启动 TermuxApplication / MainActivity 会消费此 flag
+     * 自动进入终端锁定降级模式，然后立即清除，不再触发。
+     */
+    fun setOneShotFallbackFlag(context: Context) {
+        try {
+            context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                .edit().putBoolean(KEY_ONE_SHOT_FALLBACK, true).apply()
+        } catch (ignored: Throwable) {}
+    }
+
+    /**
+     * 检测并清除一次性降级 flag。TermuxApplication.onCreate 中调用。
+     * 返回 true 表示用户上次崩溃对话框选了降级模式，应立即进入终端锁定模式。
+     */
+    fun consumeOneShotFallbackFlag(context: Context): Boolean {
+        return try {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val v = prefs.getBoolean(KEY_ONE_SHOT_FALLBACK, false)
+            if (v) prefs.edit().remove(KEY_ONE_SHOT_FALLBACK).apply()
+            v
+        } catch (_: Throwable) { false }
     }
 
     /**

@@ -1466,7 +1466,13 @@ private fun AiSetupScreen(vm: AiTermuxViewModel, onBack: () -> Unit) {
 
             item { SectionTitle("1. 选择提供商") }
             item {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     ProviderChip("OpenAI 兼容", "custom", provider, isDark) { provider = it }
                     ProviderChip("直接 OpenAI", "openai", provider, isDark) { provider = it }
                     ProviderChip("本地大模型", "local", provider, isDark) { provider = it }
@@ -1611,8 +1617,11 @@ private fun AiSetupScreen(vm: AiTermuxViewModel, onBack: () -> Unit) {
                             Text("选择本地推理引擎", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = MiuixTheme.colorScheme.onSurface)
                             Spacer(Modifier.height(8.dp))
                             Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
                                 FilterChip(
                                     text = "Llama.cpp",
@@ -2226,7 +2235,14 @@ private fun AiChatScreen(vm: AiTermuxViewModel, onBack: () -> Unit) {
                     subtitle = run {
                         val isLocal = vm.useLocalModel
                         val cfg = vm.config.providerConfig
-                        val modelName = if (isLocal) cfg.localModelId.ifBlank { "本地模型" } else cfg.model.ifBlank { "在线模型" }
+                        val modelName = if (isLocal) {
+                            cfg.localModelId.ifBlank { "本地模型" }
+                        } else if (cfg.provider == "local") {
+                            // provider 为 local 时切到在线 = 使用备用在线模型，显示其真实名称
+                            AiTermuxPrefs.getFallbackOnlineConfig(ctx).model.ifBlank { "在线模型" }
+                        } else {
+                            cfg.model.ifBlank { "在线模型" }
+                        }
                         val providerLabel = if (isLocal) "本地模型" else "在线模型"
                         "$providerLabel · $modelName"
                     },
@@ -2247,25 +2263,6 @@ private fun AiChatScreen(vm: AiTermuxViewModel, onBack: () -> Unit) {
                             )
                         }
                     },
-                    actions = {
-                        if (vm.isStreaming) {
-                            Box(
-                                modifier = Modifier
-                                    .size(40.dp)
-                                    .clip(CircleShape)
-                                    .clickable { vm.cancelGeneration() }
-                                    .background(Color(0xFFDC2626)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    painter = painterResource(R.drawable.ic_close),
-                                    contentDescription = "停止生成",
-                                    modifier = Modifier.size(18.dp),
-                                    tint = Color.White
-                                )
-                            }
-                        }
-                    }
                 )
             },
             bottomBar = {
@@ -2466,10 +2463,8 @@ private fun AiChatScreen(vm: AiTermuxViewModel, onBack: () -> Unit) {
                     AiDisclaimerCard(isDark)
                 }
 
-                if (vm.messages.isEmpty()) {
-                    item { WelcomeChatCard(isDark) }
-                    item { QuickChips(vm, inputText = "") { inputText = it } }
-                }
+                item { WelcomeChatCard(isDark) }
+                item { QuickChips(vm, inputText = "") { inputText = it } }
 
                 items(vm.messages, key = { it.id }) { msg ->
                     ChatBubble(msg = msg, vm = vm)
@@ -2554,7 +2549,9 @@ private fun WelcomeChatCard(isDark: Boolean) {
         )
         Spacer(Modifier.height(13.dp))
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {

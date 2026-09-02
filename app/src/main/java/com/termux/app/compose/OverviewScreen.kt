@@ -160,8 +160,7 @@ enum class OverviewCardType {
     MEMORY_MONITOR,
     PROCESS_LIST,
     STOP_ALL,
-    RESOURCE_ACTION,
-    FEATURE_CENTER
+    RESOURCE_ACTION
 }
 
 enum class CardSize {
@@ -323,9 +322,6 @@ class OverviewCardManager(context: Context) {
     
     companion object {
         private var instance: OverviewCardManager? = null
-        private const val FEATURE_CENTER_CARD_ID = "feature_center"
-        private const val FEATURE_CENTER_MIGRATION_KEY = "feature_center_migration_done"
-        
         fun getInstance(context: Context): OverviewCardManager {
             if (instance == null) {
                 instance = OverviewCardManager(context.applicationContext)
@@ -337,10 +333,11 @@ class OverviewCardManager(context: Context) {
     fun getCards(): List<OverviewCardConfig> {
         val cardOrder = prefs.getString("card_order", null)
         if (cardOrder != null) {
-            val cards = cardOrder.split(",").mapIndexed { index, id ->
-                val type = OverviewCardType.valueOf(
-                    prefs.getString("${id}_type", OverviewCardType.TIPS_AGENT.name) ?: OverviewCardType.TIPS_AGENT.name
-                )
+            val validTypes = OverviewCardType.values().map { it.name }.toSet()
+            val cards = cardOrder.split(",").mapIndexedNotNull { index, id ->
+                val typeName = prefs.getString("${id}_type", OverviewCardType.TIPS_AGENT.name) ?: OverviewCardType.TIPS_AGENT.name
+                if (typeName !in validTypes) return@mapIndexedNotNull null
+                val type = OverviewCardType.valueOf(typeName)
                 OverviewCardConfig(
                     id = id,
                     type = type,
@@ -348,45 +345,18 @@ class OverviewCardManager(context: Context) {
                     size = CardSize.valueOf(
                         prefs.getString("${id}_size",
                             if (type == OverviewCardType.PROCESS_LIST || type == OverviewCardType.TIPS_AGENT ||
-                                type == OverviewCardType.SESSIONS || type == OverviewCardType.FEATURE_CENTER)
+                                type == OverviewCardType.SESSIONS)
                             CardSize.WIDE.name else CardSize.SMALL.name
                         ) ?: CardSize.SMALL.name
                     ),
                     position = index,
                     resourceActionId = prefs.getString("${id}_resource_action_id", null)
                 )
-            }
-            // Migration: add feature_center card for upgrading users
-            return ensureFeatureCenterCard(
-                migrateCardSizes(cards)
-            )
+            }.mapIndexed { index, card -> card.copy(position = index) }
+            saveCards(cards)
+            return migrateCardSizes(cards)
         }
         return getDefaultCards()
-    }
-    
-    private fun ensureFeatureCenterCard(cards: List<OverviewCardConfig>): List<OverviewCardConfig> {
-        val hasFeatureCenter = cards.any { it.type == OverviewCardType.FEATURE_CENTER }
-        if (hasFeatureCenter) return cards
-        
-        val migrationDone = prefs.getBoolean(FEATURE_CENTER_MIGRATION_KEY, false)
-        if (migrationDone) return cards  // User already had the option to add/remove; don't force-add
-        
-        // First migration: add the feature center card
-        val newCard = OverviewCardConfig(
-            id = FEATURE_CENTER_CARD_ID,
-            type = OverviewCardType.FEATURE_CENTER,
-            isVisible = true,
-            size = CardSize.WIDE,
-            position = cards.size
-        )
-        val updatedCards = (cards + newCard).mapIndexed { index, c -> c.copy(position = index) }
-        prefs.edit().putBoolean(FEATURE_CENTER_MIGRATION_KEY, true).apply()
-        saveCards(updatedCards)
-        return updatedCards
-    }
-    
-    fun markFeatureCenterDeleted() {
-        prefs.edit().putBoolean(FEATURE_CENTER_MIGRATION_KEY, true).apply()
     }
     
     private fun migrateCardSizes(cards: List<OverviewCardConfig>): List<OverviewCardConfig> {
@@ -402,7 +372,6 @@ class OverviewCardManager(context: Context) {
             OverviewCardConfig("memory", OverviewCardType.MEMORY_MONITOR, isVisible = true, size = CardSize.SMALL, position = 4),
             OverviewCardConfig("processes", OverviewCardType.PROCESS_LIST, isVisible = true, size = CardSize.WIDE, position = 5),
             OverviewCardConfig("stop_all", OverviewCardType.STOP_ALL, isVisible = true, size = CardSize.SMALL, position = 6),
-            OverviewCardConfig(FEATURE_CENTER_CARD_ID, OverviewCardType.FEATURE_CENTER, isVisible = true, size = CardSize.WIDE, position = 7)
         )
     }
     
@@ -769,10 +738,6 @@ fun OverviewScreen(
                                 text = stringResource(R.string.overview_delete_card),
                                 onClick = {
                                     cards = cards.filter { it.id != card.id }
-                                    // If deleting FEATURE_CENTER card, mark migration as done so it won't be auto-added again
-                                    if (card.type == OverviewCardType.FEATURE_CENTER) {
-                                        OverviewCardManager.getInstance(context).markFeatureCenterDeleted()
-                                    }
                                     showCardSettings = false
                                 },
                                 colors = top.yukonga.miuix.kmp.basic.ButtonDefaults.textButtonColors()
@@ -819,8 +784,7 @@ fun OverviewScreen(
                                             isVisible = true,
                                             size = if (type == OverviewCardType.SESSIONS ||
                                                      type == OverviewCardType.PROCESS_LIST ||
-                                                     type == OverviewCardType.TIPS_AGENT ||
-                                                     type == OverviewCardType.FEATURE_CENTER) CardSize.WIDE
+                                                     type == OverviewCardType.TIPS_AGENT) CardSize.WIDE
                                                    else CardSize.SMALL,
                                             position = maxPosition + 1
                                         )
@@ -1217,6 +1181,17 @@ private fun TipsAgentCard(
                     iconBgColor = Color(0xFF0EA5E9).copy(alpha = 0.12f),
                     label = "新建文本",
                     onClick = { onExecuteScript("新建文本", "(command -v vim >/dev/null || pkg install -y vim) && vim") }
+                )
+                QuickEntryButton(
+                    modifier = Modifier.weight(1f),
+                    icon = Icons.Rounded.AutoAwesome,
+                    iconColor = Color(0xFF7C3AED),
+                    iconBgColor = Color(0xFF7C3AED).copy(alpha = 0.12f),
+                    label = "功能中心",
+                    onClick = {
+                        val intent = Intent(context, com.termux.app.activities.FeatureCenterActivity::class.java)
+                        context.startActivity(intent)
+                    }
                 )
             }
             Spacer(Modifier.height(16.dp))
@@ -2960,7 +2935,6 @@ fun getCardTypeName(type: OverviewCardType): String {
         OverviewCardType.PROCESS_LIST -> "Process List"
         OverviewCardType.STOP_ALL -> "Stop All"
         OverviewCardType.RESOURCE_ACTION -> "Resource Action"
-        OverviewCardType.FEATURE_CENTER -> "Feature Center"
     }
 }
 
@@ -2974,7 +2948,6 @@ fun getCardIcon(type: OverviewCardType): ImageVector {
         OverviewCardType.PROCESS_LIST -> Icons.Rounded.List
         OverviewCardType.STOP_ALL -> Icons.Rounded.Stop
         OverviewCardType.RESOURCE_ACTION -> Icons.Rounded.PlayArrow
-        OverviewCardType.FEATURE_CENTER -> Icons.Rounded.Monitor
     }
 }
 
@@ -3661,352 +3634,7 @@ private fun readMemoryUsage(sessionPids: Set<Int> = emptySet()): Pair<Float, Lon
     }
 }
 
-// ============================================================
-// ============================================================
-// Feature Center Card (animated hero style)
-// ============================================================
-@Composable
-fun FeatureCenterCard(
-    card: OverviewCardConfig,
-    isEditMode: Boolean,
-    onEditClick: () -> Unit
-) {
-    val context = LocalContext.current
-    val isWide = card.size == CardSize.WIDE
-
-    val infiniteTransition = rememberInfiniteTransition(label = "featureCenterCard")
-    // 呼吸渐变：蓝→靛→紫 与 天蓝→亮靛→品红 之间缓慢过渡
-    val gradientFraction by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(6500, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "gradient"
-    )
-    // 漂浮泡泡
-    val bubbleFloat1 by infiniteTransition.animateFloat(
-        initialValue = -9f,
-        targetValue = 9f,
-        animationSpec = infiniteRepeatable(tween(3400, easing = LinearEasing), RepeatMode.Reverse),
-        label = "bubble1"
-    )
-    val bubbleFloat2 by infiniteTransition.animateFloat(
-        initialValue = 7f,
-        targetValue = -7f,
-        animationSpec = infiniteRepeatable(tween(4300, easing = LinearEasing), RepeatMode.Reverse),
-        label = "bubble2"
-    )
-    val bubbleFloat3 by infiniteTransition.animateFloat(
-        initialValue = -5f,
-        targetValue = 9f,
-        animationSpec = infiniteRepeatable(tween(5100, easing = LinearEasing), RepeatMode.Reverse),
-        label = "bubble3"
-    )
-    // 周期性扫过的流光
-    val shimmerX by infiniteTransition.animateFloat(
-        initialValue = -0.7f,
-        targetValue = 1.7f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(2600, delayMillis = 1400, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "shimmer"
-    )
-    // 星星脉冲
-    val sparkleScale by infiniteTransition.animateFloat(
-        initialValue = 0.92f,
-        targetValue = 1.18f,
-        animationSpec = infiniteRepeatable(tween(1100, easing = LinearEasing), RepeatMode.Reverse),
-        label = "sparkle"
-    )
-    // 箭头轻推
-    val arrowNudge by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 3f,
-        animationSpec = infiniteRepeatable(tween(850, easing = LinearEasing), RepeatMode.Reverse),
-        label = "arrow"
-    )
-
-    val gradient = Brush.linearGradient(
-        listOf(
-            lerp(Color(0xFF2563EB), Color(0xFF38BDF8), gradientFraction),
-            lerp(Color(0xFF4F46E5), Color(0xFF818CF8), gradientFraction),
-            lerp(Color(0xFF7C3AED), Color(0xFFE879F9), gradientFraction)
-        )
-    )
-
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .then(if (isWide) Modifier.height(WIDE_CARD_HEIGHT) else Modifier.aspectRatio(1f))
-            .clip(RoundedCornerShape(20.dp))
-            .clickable(enabled = !isEditMode) {
-                val intent = Intent(context, com.termux.app.activities.FeatureCenterActivity::class.java)
-                context.startActivity(intent)
-            }
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(gradient),
-            contentAlignment = Alignment.Center
-        ) {
-            // 漂浮装饰泡泡
-            Box(
-                modifier = Modifier
-                    .size(120.dp)
-                    .align(Alignment.TopEnd)
-                    .offset(x = 30.dp, y = (-36).dp)
-                    .graphicsLayer { translationY = bubbleFloat1.dp.toPx() }
-                    .background(Color.White.copy(alpha = 0.12f), RoundedCornerShape(50))
-            )
-            Box(
-                modifier = Modifier
-                    .size(64.dp)
-                    .align(Alignment.BottomStart)
-                    .offset(x = (-18).dp, y = 20.dp)
-                    .graphicsLayer { translationY = bubbleFloat2.dp.toPx() }
-                    .background(Color.White.copy(alpha = 0.10f), RoundedCornerShape(50))
-            )
-            Box(
-                modifier = Modifier
-                    .size(34.dp)
-                    .align(Alignment.TopStart)
-                    .offset(x = 40.dp, y = 24.dp)
-                    .graphicsLayer { translationY = bubbleFloat3.dp.toPx() }
-                    .background(Color.White.copy(alpha = 0.08f), RoundedCornerShape(50))
-            )
-            // 漂浮圆环
-            Box(
-                modifier = Modifier
-                    .size(46.dp)
-                    .align(Alignment.BottomEnd)
-                    .offset(x = (-26).dp, y = (-16).dp)
-                    .graphicsLayer { translationY = bubbleFloat3.dp.toPx() }
-                    .border(2.dp, Color.White.copy(alpha = 0.22f), RoundedCornerShape(50))
-            )
-            // 周期性扫过的流光
-            BoxWithConstraints(
-                modifier = Modifier
-                    .matchParentSize()
-                    .clipToBounds()
-            ) {
-                val cardWidthPx = constraints.maxWidth.toFloat()
-                Box(
-                    modifier = Modifier
-                        .fillMaxHeight()
-                        .width(90.dp)
-                        .graphicsLayer {
-                            translationX = shimmerX * cardWidthPx
-                            rotationZ = 14f
-                        }
-                        .background(
-                            Brush.linearGradient(
-                                listOf(
-                                    Color.Transparent,
-                                    Color.White.copy(alpha = 0.16f),
-                                    Color.Transparent
-                                )
-                            )
-                        )
-                )
-            }
-
-            if (isWide) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(18.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(14.dp)
-                ) {
-                    Box {
-                        Box(
-                            modifier = Modifier
-                                .size(54.dp)
-                                .clip(RoundedCornerShape(16.dp))
-                                .background(Color.White.copy(alpha = 0.22f))
-                                .border(1.dp, Color.White.copy(alpha = 0.35f), RoundedCornerShape(16.dp)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Rounded.Monitor,
-                                contentDescription = null,
-                                modifier = Modifier.size(28.dp),
-                                tint = Color.White
-                            )
-                        }
-                        Icon(
-                            imageVector = Icons.Rounded.AutoAwesome,
-                            contentDescription = null,
-                            modifier = Modifier
-                                .size(17.dp)
-                                .align(Alignment.TopEnd)
-                                .offset(x = 7.dp, y = (-5).dp)
-                                .graphicsLayer {
-                                    scaleX = sparkleScale
-                                    scaleY = sparkleScale
-                                },
-                            tint = Color.White
-                        )
-                    }
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = stringResource(R.string.overview_feature_center_label),
-                            fontSize = 17.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
-                        )
-                        Spacer(modifier = Modifier.height(3.dp))
-                        Text(
-                            text = stringResource(R.string.feature_center_desc),
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = Color.White.copy(alpha = 0.85f),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Spacer(modifier = Modifier.height(9.dp))
-                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                listOf(
-                                    R.string.overview_chip_shortcuts,
-                                    R.string.overview_chip_plugins
-                                ).forEach { resId ->
-                                    FeatureCenterGlassChip(text = stringResource(resId))
-                                }
-                            }
-                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                FeatureCenterGlassChip(text = stringResource(R.string.overview_chip_themes))
-                            }
-                        }
-                    }
-                    Row(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(50))
-                            .background(Color.White.copy(alpha = 0.2f))
-                            .padding(start = 14.dp, end = 11.dp, top = 7.dp, bottom = 7.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(3.dp)
-                    ) {
-                        Text(
-                            text = stringResource(R.string.enter),
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = Color.White
-                        )
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Rounded.ArrowForward,
-                            contentDescription = null,
-                            modifier = Modifier
-                                .size(15.dp)
-                                .graphicsLayer { translationX = arrowNudge.dp.toPx() },
-                            tint = Color.White
-                        )
-                    }
-                }
-            } else {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(14.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
-                ) {
-                    Box {
-                        Box(
-                            modifier = Modifier
-                                .size(52.dp)
-                                .clip(RoundedCornerShape(16.dp))
-                                .background(Color.White.copy(alpha = 0.22f))
-                                .border(1.dp, Color.White.copy(alpha = 0.35f), RoundedCornerShape(16.dp)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Rounded.Monitor,
-                                contentDescription = null,
-                                modifier = Modifier.size(26.dp),
-                                tint = Color.White
-                            )
-                        }
-                        Icon(
-                            imageVector = Icons.Rounded.AutoAwesome,
-                            contentDescription = null,
-                            modifier = Modifier
-                                .size(16.dp)
-                                .align(Alignment.TopEnd)
-                                .offset(x = 6.dp, y = (-4).dp)
-                                .graphicsLayer {
-                                    scaleX = sparkleScale
-                                    scaleY = sparkleScale
-                                },
-                            tint = Color.White
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(9.dp))
-                    Text(
-                        text = stringResource(R.string.overview_feature_center_label),
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    )
-                    Spacer(modifier = Modifier.height(3.dp))
-                    Text(
-                        text = stringResource(R.string.feature_center_desc),
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = Color.White.copy(alpha = 0.85f),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Spacer(modifier = Modifier.height(9.dp))
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            listOf(
-                                R.string.overview_chip_shortcuts,
-                                R.string.overview_chip_plugins
-                            ).forEach { resId ->
-                                FeatureCenterGlassChip(text = stringResource(resId))
-                            }
-                        }
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            FeatureCenterGlassChip(text = stringResource(R.string.overview_chip_themes))
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun FeatureCenterGlassChip(
-    text: String,
-    modifier: Modifier = Modifier
-) {
-    Box(
-        modifier = modifier
-            .clip(RoundedCornerShape(50))
-            .background(Color.White.copy(alpha = 0.18f))
-            .padding(horizontal = 9.dp, vertical = 3.dp)
-    ) {
-        Text(
-            text = text,
-            fontSize = 10.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = Color.White
-        )
-    }
-}
-
-
-
-// ============================================================
+// ============================================================// ============================================================
 // Resource Action Card
 // ============================================================
 @Composable
@@ -4605,16 +4233,6 @@ private fun CardItem(
                 onLaunchAction = { action: ResourceAction ->
                     launchResourceAction(context, action, onExecuteScript)
                 },
-                onEditClick = {
-                    onCardSelected(card.id)
-                    onShowCardSettings()
-                }
-            )
-        }
-        OverviewCardType.FEATURE_CENTER -> {
-            FeatureCenterCard(
-                card = card,
-                isEditMode = isEditMode,
                 onEditClick = {
                     onCardSelected(card.id)
                     onShowCardSettings()

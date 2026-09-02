@@ -2,27 +2,34 @@ package com.termux.app.compose
 
 import android.content.Context
 import android.content.Intent
+import android.graphics.Typeface
 import android.util.AtomicFile
 import android.util.Log
-import com.google.android.material.snackbar.Snackbar
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.google.android.material.snackbar.Snackbar
 import com.termux.R
 import com.termux.app.utils.SnackbarHelper
-import com.termux.shared.termux.TermuxConstants
 import top.yukonga.miuix.kmp.basic.*
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
@@ -31,8 +38,96 @@ import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import java.io.File
 import java.nio.charset.StandardCharsets
+import java.util.Properties
 
 private const val DEFAULT_FILENAME = "Default"
+
+private val DEFAULT_TERMINAL_COLORS = TerminalColors(
+    foreground = Color(0xFFFFFFFF),
+    background = Color(0xFF000000),
+    cursor = Color(0xFFFFFFFF),
+    colors = listOf(
+        Color(0xFF000000), // color0 black
+        Color(0xFFCD0000), // color1 red
+        Color(0xFF00CD00), // color2 green
+        Color(0xFFCDCD00), // color3 yellow
+        Color(0xFF6495ED), // color4 blue
+        Color(0xFFCD00CD), // color5 magenta
+        Color(0xFF00CDCD), // color6 cyan
+        Color(0xFFE5E5E5), // color7 white
+        Color(0xFF7F7F7F), // color8 bright black
+        Color(0xFFFF0000), // color9 bright red
+        Color(0xFF00FF00), // color10 bright green
+        Color(0xFFFFFF00), // color11 bright yellow
+        Color(0xFF5C5CFF), // color12 bright blue
+        Color(0xFFFF00FF), // color13 bright magenta
+        Color(0xFF00FFFF), // color14 bright cyan
+        Color(0xFFFFFFFF)  // color15 bright white
+    )
+)
+
+private data class TerminalColors(
+    val foreground: Color,
+    val background: Color,
+    val cursor: Color,
+    val colors: List<Color> // color0-color15
+)
+
+private fun parseHexColor(value: String): Color {
+    return try {
+        val clean = value.trim().removePrefix("#")
+        val fullHex = if (clean.length == 6) "FF$clean" else clean
+        Color(android.graphics.Color.parseColor("#$fullHex"))
+    } catch (_: Exception) {
+        Color.White
+    }
+}
+
+private fun loadColorScheme(context: Context, fileName: String?): TerminalColors {
+    if (fileName == null || fileName == DEFAULT_FILENAME) return DEFAULT_TERMINAL_COLORS
+    return try {
+        val props = Properties()
+        context.assets.open("colors/$fileName").use { props.load(it) }
+
+        val foreground = parseHexColor(props.getProperty("foreground", "#FFFFFF"))
+        val backgroundArgb = android.graphics.Color.parseColor(
+            props.getProperty("background", "#000000").let {
+                if (it.startsWith("#") && it.length == 7) "#FF${it.removePrefix("#")}" else it
+            }
+        )
+        val background = Color(backgroundArgb)
+        val cursor = if (props.containsKey("cursor")) {
+            parseHexColor(props.getProperty("cursor")!!)
+        } else {
+            // Derive cursor from background luminance
+            val lum = android.graphics.Color.luminance(backgroundArgb)
+            if (lum < 0.5f) Color.White else Color.Black
+        }
+        val colors = (0..15).map { index ->
+            val key = "color$index"
+            val value = props.getProperty(key)
+            if (value != null) parseHexColor(value)
+            else DEFAULT_TERMINAL_COLORS.colors[index]
+        }
+        TerminalColors(foreground, background, cursor, colors)
+    } catch (_: Exception) {
+        DEFAULT_TERMINAL_COLORS
+    }
+}
+
+private fun loadFontTypeface(context: Context, fileName: String?): Typeface? {
+    if (fileName == null || fileName == DEFAULT_FILENAME) return null
+    return try {
+        context.assets.open("fonts/$fileName").use { input ->
+            val file = File.createTempFile("font_", ".ttf", context.cacheDir)
+            file.deleteOnExit()
+            file.outputStream().use { input.copyTo(it) }
+            Typeface.createFromFile(file)
+        }
+    } catch (_: Exception) {
+        null
+    }
+}
 
 private fun capitalize(str: String): String {
     var lastWhitespace = true
@@ -76,6 +171,34 @@ fun TermuxStylingScreen(
     var currentColor by remember { mutableStateOf(getCurrentStyle(context, "colors.properties", "color")) }
     var currentFont by remember { mutableStateOf(getCurrentStyle(context, "font.ttf", "font")) }
 
+    // Preview state: default to current saved style
+    val currentColorItem = remember {
+        val prefs = context.getSharedPreferences("termux_styling", Context.MODE_PRIVATE)
+        val saved = prefs.getString("selected_color_file", null)
+        colorItems.firstOrNull { it.fileName == saved } ?: colorItems.first()
+    }
+    val currentFontItem = remember {
+        val prefs = context.getSharedPreferences("termux_styling", Context.MODE_PRIVATE)
+        val saved = prefs.getString("selected_font_file", null)
+        fontItems.firstOrNull { it.fileName == saved } ?: fontItems.first()
+    }
+
+    // Colors and font for preview (reactive to selection)
+    var previewColors by remember { mutableStateOf(loadColorScheme(context, currentColorItem.fileName.takeIf { it != DEFAULT_FILENAME })) }
+    var previewTypeface by remember { mutableStateOf(loadFontTypeface(context, currentFontItem.fileName.takeIf { it != DEFAULT_FILENAME })) }
+
+    fun selectColor(item: StyleItem) {
+        previewColors = loadColorScheme(context, item.fileName.takeIf { it != DEFAULT_FILENAME })
+        copyStyleFile(context, item, true)
+        currentColor = item.displayName
+    }
+
+    fun selectFont(item: StyleItem) {
+        previewTypeface = loadFontTypeface(context, item.fileName.takeIf { it != DEFAULT_FILENAME })
+        copyStyleFile(context, item, false)
+        currentFont = item.displayName
+    }
+
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
@@ -113,6 +236,17 @@ fun TermuxStylingScreen(
                 contentPadding = PaddingValues(bottom = 16.dp)
             ) {
                 item { SmallTitle(text = stringResource(R.string.styling_header)) }
+
+                // Terminal preview card
+                item {
+                    Spacer(Modifier.height(8.dp))
+                    TerminalPreviewCard(
+                        colors = previewColors,
+                        typeface = previewTypeface
+                    )
+                    Spacer(Modifier.height(12.dp))
+                }
+
                 item {
                     SettingCard {
                         ArrowPreference(
@@ -150,8 +284,7 @@ fun TermuxStylingScreen(
                         items = colorItems,
                         currentItem = currentColor,
                         onSelect = { item ->
-                            copyStyleFile(context, item, true)
-                            currentColor = item.displayName
+                            selectColor(item)
                             showColorDialog = false
                         },
                         onLongPress = { item ->
@@ -170,8 +303,7 @@ fun TermuxStylingScreen(
                         items = fontItems,
                         currentItem = currentFont,
                         onSelect = { item ->
-                            copyStyleFile(context, item, false)
-                            currentFont = item.displayName
+                            selectFont(item)
                             showFontDialog = false
                         },
                         onLongPress = { item ->
@@ -207,6 +339,161 @@ fun TermuxStylingScreen(
                         )
                     }
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun TerminalPreviewCard(
+    colors: TerminalColors,
+    typeface: Typeface?
+) {
+    val fontFamily = typeface?.let { FontFamily(it) }
+
+    Card(
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = colors.background),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            // Title bar dots (macOS-style window)
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(10.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFFFF5F57))
+                )
+                Box(
+                    modifier = Modifier
+                        .size(10.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFFFEBC2E))
+                )
+                Box(
+                    modifier = Modifier
+                        .size(10.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFF28C840))
+                )
+            }
+
+            Spacer(Modifier.height(12.dp))
+
+            // Sample terminal text
+            val baseTextStyle = TextStyle(
+                fontFamily = fontFamily,
+                fontSize = 13.sp,
+                lineHeight = 17.sp
+            )
+
+            // Line 1: prompt + path (normal text)
+            Text(
+                text = "~ \$ ",
+                color = colors.colors[4], // blue prompt
+                style = baseTextStyle
+            )
+
+            // Line 2: echo with ANSI-like colored words
+            Row {
+                Text(
+                    text = "echo ",
+                    color = colors.colors[2], // green command
+                    style = baseTextStyle
+                )
+                Text(
+                    text = "\"",
+                    color = colors.foreground,
+                    style = baseTextStyle
+                )
+                Text(
+                    text = "Hello",
+                    color = colors.colors[1], // red for word
+                    style = baseTextStyle
+                )
+                Text(
+                    text = ", ",
+                    color = colors.colors[6], // cyan
+                    style = baseTextStyle
+                )
+                Text(
+                    text = "Termux",
+                    color = colors.colors[3], // yellow
+                    style = baseTextStyle
+                )
+                Text(
+                    text = "\"",
+                    color = colors.foreground,
+                    style = baseTextStyle
+                )
+            }
+
+            // Line 3: command output
+            Text(
+                text = "Hello, Termux",
+                color = colors.foreground,
+                style = baseTextStyle
+            )
+
+            Spacer(Modifier.height(4.dp))
+
+            // Line 4: secondary command
+            Row {
+                Text(
+                    text = "~ \$ ",
+                    color = colors.colors[4],
+                    style = baseTextStyle
+                )
+                Text(
+                    text = "ls -la",
+                    color = colors.colors[2],
+                    style = baseTextStyle
+                )
+            }
+
+            // Line 5: ls output
+            Text(
+                text = "drwxr-xr-x 2 u0_a155 u0_a155 4096 .termux",
+                color = colors.foreground.copy(alpha = 0.85f),
+                style = baseTextStyle
+            )
+
+            Spacer(Modifier.height(14.dp))
+
+            // Color swatches row: 16 colors in 2 rows of 8
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                colors.colors.take(8).forEach { color ->
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(18.dp)
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(color)
+                    )
+                }
+            }
+            Spacer(Modifier.height(4.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                colors.colors.drop(8).forEach { color ->
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(18.dp)
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(color)
+                    )
+                }
             }
         }
     }
@@ -275,6 +562,7 @@ private fun copyStyleFile(context: Context, item: StyleItem, isColors: Boolean) 
         context.getSharedPreferences("termux_styling", Context.MODE_PRIVATE)
             .edit()
             .putString("selected_${styleType}_name", displayName)
+            .putString("selected_${styleType}_file", if (isDefault) null else item.fileName)
             .apply()
 
         val actionReload = "com.termux.app.reload_style"

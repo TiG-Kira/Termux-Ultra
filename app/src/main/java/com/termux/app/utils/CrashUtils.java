@@ -15,6 +15,7 @@ import com.termux.shared.activities.ReportActivity;
 import com.termux.shared.models.errors.Error;
 import com.termux.shared.notification.NotificationUtils;
 import com.termux.app.activities.AlertDialogActivity;
+import com.termux.shared.crash.CrashHandler;
 import com.termux.shared.file.FileUtils;
 import com.termux.shared.models.ReportInfo;
 import com.termux.app.models.UserAction;
@@ -90,6 +91,15 @@ public class CrashUtils {
 
                 if (reportString.isEmpty())
                     return;
+
+                // If we already showed a TYPE_CRASH_ERROR dialog in-process (Java exception
+                // case), the user has already seen the crash info. Skip the TYPE_CRASH_POST
+                // dialog on next launch and clean up the crash_log.md that's now redundant.
+                boolean dialogShownBefore = CrashHandler.consumeDialogShownFlag(context);
+                if (dialogShownBefore) {
+                    Logger.logDebug(logTag, "Crash dialog already shown in-process — skipping TYPE_CRASH_POST");
+                    return;
+                }
 
                 Logger.logDebug(logTag, "A crash log file found at crash_log.md. Showing post-crash dialog.");
 

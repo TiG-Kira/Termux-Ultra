@@ -55,6 +55,7 @@
         <activity
             android:name=".app.SplashActivity"
             android:label="@string/application_name"
+            android:theme="@style/Theme.Termux.Splash"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
