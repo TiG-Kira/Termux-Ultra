@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.CircularProgressIndicator
@@ -116,7 +117,11 @@ data class PackageInfo(
     val description: String = "",
     val isInstalled: Boolean = false,
     val homepage: String = "",
-    val depends: List<String> = emptyList()
+    val depends: List<String> = emptyList(),
+    val maintainer: String = "",
+    val conflicts: List<String> = emptyList(),
+    val license: String = "",
+    val size: String = ""
 )
 
 object PkgRepo {
@@ -145,10 +150,14 @@ object PkgRepo {
         val installedNames = getInstalledNames(context)
         val result = mutableListOf<PackageInfo>()
         val seen = mutableSetOf<String>()
+        val pkgNameRegex = Regex("^[a-z0-9][a-z0-9+._-]*$")
         for (line in output.lines()) {
             val trimmed = line.trim()
             if (trimmed.isEmpty() || trimmed.startsWith("Last")) continue
             if (trimmed.startsWith("Installed package ")) continue
+            // Skip repository URL lines and apt repo markers
+            if (trimmed.contains("://")) continue
+            if (trimmed.startsWith("[") && "]" in trimmed) continue
             val slashIdx = trimmed.indexOf('/')
             if (slashIdx > 0) {
                 val beforeSlash = trimmed.substring(0, slashIdx).trim()
@@ -158,7 +167,8 @@ object PkgRepo {
                     beforeSlash
                 }
                 val versionPart = trimmed.substring(slashIdx + 1).substringBefore(' ').trim()
-                if (actualName.isNotBlank() && actualName !in seen && actualName !in installedNames) {
+                if (actualName.isNotBlank() && actualName !in seen && actualName !in installedNames
+                    && pkgNameRegex.matches(actualName)) {
                     seen.add(actualName)
                     result.add(PackageInfo(actualName, versionPart, isInstalled = false))
                 }
@@ -174,9 +184,13 @@ object PkgRepo {
         val result = mutableListOf<PackageInfo>()
         val installedNames = getInstalledNames(context)
         val seen = mutableSetOf<String>()
+        val pkgNameRegex = Regex("^[a-z0-9][a-z0-9+._-]*$")
         for (line in output.lines()) {
             val trimmed = line.trim()
             if (trimmed.isEmpty()) continue
+            // Skip repository URL lines and apt repo markers
+            if (trimmed.contains("://")) continue
+            if (trimmed.startsWith("[") && "]" in trimmed) continue
             val slashIdx = trimmed.indexOf('/')
             if (slashIdx > 0) {
                 val beforeSlash = trimmed.substring(0, slashIdx).trim()
@@ -186,7 +200,7 @@ object PkgRepo {
                     beforeSlash
                 }
                 val versionPart = trimmed.substring(slashIdx + 1).substringBefore(' ').trim()
-                if (actualName.isNotBlank() && actualName !in seen) {
+                if (actualName.isNotBlank() && actualName !in seen && pkgNameRegex.matches(actualName)) {
                     seen.add(actualName)
                     result.add(
                         PackageInfo(
@@ -222,6 +236,7 @@ object PkgRepo {
         }
 
         val depends = (fields["Depends"] ?: "").split(',').map { it.trim() }.filter { it.isNotBlank() }
+        val conflicts = (fields["Conflicts"] ?: "").split(',').map { it.trim() }.filter { it.isNotBlank() }
 
         return PackageInfo(
             name = fields["Package"] ?: name,
@@ -229,7 +244,11 @@ object PkgRepo {
             description = fields["Description"] ?: "",
             homepage = fields["Homepage"] ?: "",
             depends = depends,
-            isInstalled = installed.contains(name)
+            isInstalled = installed.contains(name),
+            maintainer = fields["Maintainer"] ?: "",
+            conflicts = conflicts,
+            license = fields["License"] ?: "",
+            size = fields["Size"] ?: ""
         )
     }
 
@@ -259,7 +278,8 @@ object PkgRepo {
             "$prefix/var/lib/apt/lists/lock",
             "$prefix/var/lib/dpkg/lock-frontend",
             "$prefix/var/lib/dpkg/lock",
-            "$prefix/var/cache/apt/archives/lock"
+            "$prefix/var/cache/apt/archives/lock",
+            "$prefix/cache/apt/archives/lock"
         )
         val cmd = "rm -f ${locks.joinToString(" ")} 2>&1"
         val (_, out) = AppShell.exec(context, cmd)
@@ -396,7 +416,7 @@ fun PackageManagerScreen(
                     val list = if (selectedTab == 0) installedList else availableList
                     LazyColumn(
                         state = listState,
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier.fillMaxSize().nestedScroll(scrollBehavior.nestedScrollConnection),
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                         contentPadding = androidx.compose.foundation.layout.PaddingValues(
                             start = 16.dp, end = 16.dp,

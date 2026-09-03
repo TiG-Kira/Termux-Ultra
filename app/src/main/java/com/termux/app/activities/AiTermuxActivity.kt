@@ -243,6 +243,8 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
         val history = AiTermuxPrefs.getChatHistory(app)
         messages.addAll(history.toChatMessages())
         val ctx = getApplication<android.app.Application>()
+        // 根据实际配置初始化 useLocalModel：只有 provider 为 local 时才可能使用本地模型
+        useLocalModel = config.providerConfig.provider == "local"
         val intent = Intent(ctx, TermuxService::class.java)
         ctx.bindService(intent, serviceConn, Context.BIND_AUTO_CREATE)
 
@@ -1175,10 +1177,8 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
             // 有技能要执行，重置容错计数
             missingEndTurnRounds = 0
 
-            missingEndTurnRounds = 0
-
             var needsUserInput = false
-            var lastResultText: String? = null
+            val allResultTexts = mutableListOf<String>()
             var executedSkillTypes = mutableListOf<SkillType>()
 
             for ((skillTypeStr, params) in skillsToExecute) {
@@ -1266,7 +1266,7 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
                             break
                         }
 
-                        lastResultText = buildSkillResultText(resultCard, result.message)
+                        allResultTexts.add(buildSkillResultText(resultCard, result.message))
                     }
                 }
                 AiTermuxPrefs.saveChatHistory(ctx, messages.toOpenAiMessages())
@@ -1285,15 +1285,12 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
                 return
             }
 
-            // 执行完技能后，如果没有需要回传的结果则直接终止
-            if (executedSkillTypes.isNotEmpty() &&
-                executedSkillTypes.all { it.requiresClick(autoExecSkills, unlimitedModeActive) }) {
-                return
-            }
-
             val missingEndTurnWarning = ""  // 已移除 END_TURN 依赖，保留空字符串供兼容
+            val allResultsText = allResultTexts.joinToString("\n")
             currentUserText = if (hasDuplicateViolation) {
-                "\n\n"
+                "[技能执行完成，请根据以下执行结果继续回复用户：]\n$allResultsText\n\n[系统警告] 你违反了输出规范禁令第四条：禁止重复执行已执行过的技能。请直接回答用户的问题，不要再重复执行已完成的操作。"
+            } else if (allResultsText.isNotBlank()) {
+                "[技能执行完成，请根据以下执行结果继续回复用户：]\n$allResultsText"
             } else {
                 ""
             }
@@ -2161,7 +2158,7 @@ private fun ProviderChip(label: String, value: String, selected: String, isDark:
             .background(if (sel) MiuixTheme.colorScheme.primary else if (isDark) Color(0xFF2A2A2A) else Color(0xFFF0F0F0))
             .clickable { onClick(value) }
     ) {
-        Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(horizontal = 14.dp)) {
+        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxHeight().padding(horizontal = 14.dp)) {
             Text(label, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = if (sel) Color.White else MiuixTheme.colorScheme.onSurface)
         }
     }
@@ -2734,7 +2731,7 @@ private fun QuickChips(vm: AiTermuxViewModel, inputText: String, setInput: (Stri
                         if (!vm.isLoading) vm.sendUserMessage(s)
                     }
             ) {
-                Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(horizontal = 13.dp)) {
+                Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxHeight().padding(horizontal = 13.dp)) {
                     Text(
                         s,
                         fontSize = 12.5.sp,
