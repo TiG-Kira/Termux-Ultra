@@ -107,6 +107,11 @@
             android:exported="false" />
 
         <activity
+            android:name=".app.activities.PackageManagerActivity"
+            android:label="包管理"
+            android:exported="false" />
+
+        <activity
             android:name=".app.TerminalDetailActivity"
             android:label="@string/application_name" />
 

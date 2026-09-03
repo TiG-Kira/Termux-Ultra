@@ -56,6 +56,14 @@ data class FakeOutputCheck(
 )
 
 object SkillExecutor {
+    // ---- Todo 任务管理 ----
+    private val taskLock = Any()
+    val taskList = mutableListOf<TaskItem>()
+    private val _tasksFlow = kotlinx.coroutines.flow.MutableStateFlow<List<TaskItem>>(emptyList())
+    val tasksFlow: kotlinx.coroutines.flow.StateFlow<List<TaskItem>> = _tasksFlow
+    fun getTasks(): List<TaskItem> = synchronized(taskLock) { taskList.toList() }
+    private fun emitTaskUpdate() { _tasksFlow.value = getTasks() }
+
 
     private const val TERMUX_ROOT = "/data/data/com.termux"
     private val HOME_DIR = "$TERMUX_ROOT/files/home"
@@ -603,6 +611,9 @@ object SkillExecutor {
             SkillType.SCHEDULE_TASK -> execScheduleTask(context, params)
             SkillType.GET_DEVICE_STATUS -> execGetDeviceStatus(context, termuxService, params)
             SkillType.GET_CURRENT_SESSION -> execGetCurrentSession(context, termuxService)
+            SkillType.TASK_ADD -> execTaskAdd(context, params)
+            SkillType.TASK_UPDATE -> execTaskUpdate(context, params)
+            SkillType.TASK_LIST -> execTaskList(context)
             SkillType.CLIPBOARD_READ -> execClipboardRead(context)
             SkillType.CLIPBOARD_WRITE -> execClipboardWrite(context, params)
             SkillType.CUSTOM_COMMAND -> {
@@ -649,7 +660,82 @@ object SkillExecutor {
         )
     }
 
-    // ---- 会话管理（全部需要 Main 线程 —— TermuxService/TerminalSession 内部使用 Handler）----
+    
+    private fun execTaskAdd(context: Context, params: JsonObject): SkillExecutionResult {
+        val rawTitle = if (params.has("title")) params.get("title").asString.trim() else ""
+        if (rawTitle.isBlank()) return SkillExecutionResult(false, "TASK_ADD 需要 title 参数")
+        val requestedStatus = if (params.has("status")) params.get("status").asString else "pending"
+        val titles = rawTitle.split("\n").map { it.trim() }.filter { it.isNotBlank() }
+        synchronized(taskLock) {
+            for (t in titles) {
+                taskList.add(TaskItem(
+                    id = "task_${System.currentTimeMillis()}_${java.util.UUID.randomUUID().toString().take(8)}",
+                    title = t,
+                    status = requestedStatus
+                ))
+            }
+        }
+        emitTaskUpdate()
+        val cnt = synchronized(taskLock) { taskList.size }
+        val summary = if (titles.size > 1) {
+            "已批量添加 ${titles.size} 个任务，当前共 $cnt 个"
+        } else {
+            "已添加任务「${titles.first()}」，当前共 $cnt 个"
+        }
+        return SkillExecutionResult(true, summary,
+            SkillCardData(skillType = SkillType.TASK_ADD,
+                title = if (titles.size > 1) "批量添加 ${titles.size} 个任务" else "添加任务",
+                description = rawTitle, status = SkillStatus.COMPLETED, output = summary))
+    }
+
+    private fun execTaskUpdate(context: Context, params: JsonObject): SkillExecutionResult {
+        val taskId = if (params.has("taskId")) params.get("taskId").asString else ""
+        val ns = if (params.has("status")) params.get("status").asString else null
+        val nc = if (params.has("comment")) params.get("comment").asString else null
+        if (taskId.isBlank() && ns == null && nc == null)
+            return SkillExecutionResult(false, "TASK_UPDATE 需要 taskId 或 status/comment")
+        var targetTitle: String? = null
+        synchronized(taskLock) {
+            val idx = if (taskId.isNotBlank())
+                taskList.indexOfFirst { it.id == taskId }
+            else
+                taskList.indexOfLast { it.status == "pending" || it.status == "in_progress" }
+            if (idx < 0) return SkillExecutionResult(false, "未找到目标任务")
+            val old = taskList[idx]
+            taskList[idx] = old.copy(
+                status = ns ?: old.status,
+                comment = nc ?: old.comment,
+                completedAt = if (ns == "done") System.currentTimeMillis() else old.completedAt
+            )
+            targetTitle = old.title
+        }
+        emitTaskUpdate()
+        return SkillExecutionResult(true, "任务「$targetTitle」已更新",
+            SkillCardData(skillType = SkillType.TASK_UPDATE, title = "更新任务",
+                description = targetTitle ?: taskId.ifBlank { "最近任务" }, status = SkillStatus.COMPLETED))
+    }
+
+    private fun execTaskList(context: Context): SkillExecutionResult {
+        val tasks = synchronized(taskLock) { taskList.toList() }
+        if (tasks.isEmpty())
+            return SkillExecutionResult(true, "当前无任务",
+                SkillCardData(skillType = SkillType.TASK_LIST, title = "任务列表",
+                    description = "空", status = SkillStatus.COMPLETED, output = "当前无任务"))
+        val sb = StringBuilder()
+        for (t in tasks) {
+            val icon = when (t.status) { "done" -> "[OK]"; "in_progress" -> "[...]"; "cancelled" -> "[X]" else -> "[ ]" }
+            sb.append("$icon ${t.title}")
+            if (!t.comment.isNullOrBlank()) sb.append(" - ${t.comment}")
+            sb.append("\n")
+        }
+        val out = sb.toString().trimEnd()
+        emitTaskUpdate()
+        return SkillExecutionResult(true, "共 ${tasks.size} 个任务",
+            SkillCardData(skillType = SkillType.TASK_LIST, title = "任务列表",
+                description = "共 ${tasks.size} 个任务", status = SkillStatus.COMPLETED, output = out))
+    }
+
+// ---- 会话管理（全部需要 Main 线程 —— TermuxService/TerminalSession 内部使用 Handler）----
 
     private suspend fun execNewSession(
         context: Context,
@@ -2594,7 +2680,8 @@ object AiApiClient {
                             emit(StreamChunk.Done(
                                 fullContent.toString(),
                                 fullReasoning.toString(),
-                                rawResponse.toString()
+                                rawResponse.toString(),
+                                finishReason
                             ))
                             break
                         }
@@ -2827,7 +2914,7 @@ sealed class StreamChunk {
     data object ReasoningDone : StreamChunk()
     /** 本地模型准备阶段（加载模型、启动进程等），一旦有 Reasoning 或 Content 到达就自动清除 UI */
     data class Prepare(val status: String, val detailLine: String? = null) : StreamChunk()
-    data class Done(val fullText: String, val fullReasoning: String = "", val rawResponse: String = "") : StreamChunk()
+    data class Done(val fullText: String, val fullReasoning: String = "", val rawResponse: String = "", val finishReason: String? = null) : StreamChunk()
     data class Error(val message: String) : StreamChunk()
     object Cancelled : StreamChunk()
 }

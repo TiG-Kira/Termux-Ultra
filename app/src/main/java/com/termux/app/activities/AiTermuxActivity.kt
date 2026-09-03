@@ -55,6 +55,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
@@ -677,13 +678,14 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
         val baseSystemPromptNoLearned = AiTermuxPrefs.buildFullSystemPrompt(ctx, includeLearnedMemory = false, maxChars = 0)
         // 重试时使用的精简 System Prompt
         val retrySystemPrompt = """
-你刚才的回复违反了 Termux Agent 的输出规范。请重新输出，并遵守以下核心规则：
-1. 仅输出技能卡片（```skill 代码块）+ 一句自然语言说明
-2. 不要编造执行结果、不要声称操作已完成
-3. 不要添加技能结果、执行结果等伪造段落
-4. 如果之前被拦截过相同的技能卡片，不要重复输出
-5. 类别A技能（NEW_SESSION/RUN_COMMAND/CAPTURE_OUTPUT等）仅生成卡片，告知用户点击即可
-6. 每轮回复结尾必须输出 [END_TURN] 表示完成
+你刚才的回复存在不规范之处。请不要全部推翻重写，而是：
+1. 仔细阅读 [检测到不规范输出] 消息中的问题描述
+2. 只纠正有问题的部分，保持之前正确的回复和技能卡片
+3. 在纠正位置继续输出剩余内容，不要从头开始
+4. 遵守输出规范：仅输出技能卡片（```skill 代码块）+ 一句自然语言说明
+5. 不要编造执行结果、不要声称操作已完成
+6. 不要添加技能结果、执行结果等伪造段落
+7. 如果之前被拦截过相同的技能卡片，不要重复输出
 """.trimIndent()
 
         for (round in 1..20) {
@@ -803,7 +805,11 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
                     is StreamChunk.Done -> {
                         replyText = chunk.fullText
                         rawResponseText = chunk.rawResponse
-                        android.util.Log.d("AiTermux", "Done received, contentLen=${chunk.fullText.length}, reasoningLen=${chunk.fullReasoning.length}, rawLen=${chunk.rawResponse.length}")
+                        val finishReason = chunk.finishReason
+                        android.util.Log.d("AiTermux", "Done received, contentLen=${chunk.fullText.length}, reasoningLen=${chunk.fullReasoning.length}, rawLen=${chunk.rawResponse.length}, finishReason=$finishReason")
+                        if (finishReason == "length") {
+                            android.util.Log.w("AiTermux", "AI output truncated due to max_tokens (finish_reason=length)")
+                        }
                         synchronized(messages) {
                             val idx = messages.indexOfFirst { it.id == streamMsgId }
                             if (idx >= 0) {
@@ -942,13 +948,24 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
                     AiTermuxPrefs.saveChatHistory(ctx, messages.toOpenAiMessages())
 
                     val shortReason = finalViolations.firstOrNull() ?: "违反输出规范"
+                    val originalReplyPreview = replyText.take(300) + if (replyText.length > 300) "..." else ""
                     currentUserText = buildString {
-                        appendLine("[拦截] $shortReason")
-                        appendLine("重新输出：仅需输出 skill 代码块 + 简短说明，停止。")
+                        appendLine("[检测到不规范输出] $shortReason")
+                        appendLine()
+                        appendLine("以下是你刚才的回复片段：")
+                        appendLine("```")
+                        appendLine(originalReplyPreview)
+                        appendLine("```")
+                        appendLine()
+                        appendLine("请针对以上问题进行纠正：")
+                        appendLine("1. 仔细阅读禁令内容，理解哪里违反了规范")
+                        appendLine("2. 只纠正有问题的部分，不要推翻全部内容")
+                        appendLine("3. 保持之前正确的回复和技能卡片")
+                        appendLine("4. 在纠正位置继续输出剩余内容")
                         if (hallucinatedSkillKeys.isNotEmpty()) {
-                            appendLine("跳过之前已拦截的 ${hallucinatedTotalCount} 个相同卡片。")
+                            appendLine()
+                            appendLine("注意：之前检测到 ${hallucinatedTotalCount} 个有问题的技能卡片，不要重复输出它们。")
                         }
-                        appendLine("原请求：$userText")
                     }
                     continue
                 }
@@ -2477,10 +2494,121 @@ private fun AiChatScreen(vm: AiTermuxViewModel, onBack: () -> Unit) {
                 item { Spacer(Modifier.height(10.dp)) }
             }
         }
+
+        // Overlay: TaskBar 放在 TopAppBar 下方
+        val tasks by SkillExecutor.tasksFlow.collectAsState()
+        var showTaskBar by remember { mutableStateOf(true) }
+        LaunchedEffect(tasks) {
+            val hasPending = tasks.any { it.status != "done" && it.status != "cancelled" }
+            if (hasPending) showTaskBar = true
+        }
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(top = 64.dp, start = 14.dp, end = 14.dp)
+        ) {
+            TaskBar(tasks, showTaskBar, isDark) { showTaskBar = false }
+        }
     }
 
     // 风险命令确认弹窗
     com.termux.app.compose.RiskConfirmDialogHost()
+}
+
+@Composable
+fun TaskBar(
+    tasks: List<TaskItem>,
+    visible: Boolean,
+    isDark: Boolean,
+    onClose: () -> Unit
+) {
+    if (!visible) return
+    val activeTasks = tasks.filter { it.status != "done" && it.status != "cancelled" }
+    if (activeTasks.isEmpty()) return
+
+    val doneCount = tasks.count { it.status == "done" }
+    val totalCount = tasks.size
+    val progress = if (totalCount > 0) doneCount.toFloat() / totalCount else 0f
+
+    val cardBg = if (isDark) Color(0xFF1C1C1E) else Color(0xFFFFFFFF)
+    val border = if (isDark) Color(0xFF2C2C2E) else Color(0xFFE0E0E0)
+    val primary = if (isDark) Color(0xFF818CF8) else Color(0xFF6366F1)
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(cardBg)
+            .then(Modifier.border(0.5.dp, border, RoundedCornerShape(16.dp)))
+            .padding(horizontal = 14.dp, vertical = 12.dp)
+            .clickable(enabled = false) {}
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                painter = painterResource(R.drawable.ic_service_notification),
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+                tint = primary
+            )
+            Spacer(Modifier.width(6.dp))
+            Text(
+                text = "任务进度 $doneCount/$totalCount",
+                style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = MiuixTheme.colorScheme.onSurface)
+            )
+            Spacer(Modifier.weight(1f))
+            Icon(
+                painter = painterResource(R.drawable.ic_close),
+                contentDescription = "隐藏任务栏",
+                modifier = Modifier
+                    .size(20.dp)
+                    .clickable { onClose() },
+                tint = MiuixTheme.colorScheme.onSurfaceVariantSummary
+            )
+        }
+        Spacer(Modifier.height(8.dp))
+        LinearProgressIndicator(
+            progress = progress,
+            modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp))
+        )
+        Spacer(Modifier.height(10.dp))
+        activeTasks.take(3).forEach { t ->
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                val statusIcon = when (t.status) {
+                    "in_progress" -> "\uD83D\uDD04"
+                    else -> "\u23F3"
+                }
+                val statusColor = when (t.status) {
+                    "in_progress" -> Color(0xFFF59E0B)
+                    else -> Color(0xFF94A3B8)
+                }
+                Text(
+                    text = statusIcon,
+                    style = TextStyle(fontSize = 11.sp)
+                )
+                Spacer(Modifier.width(4.dp))
+                Text(
+                    text = t.title,
+                    style = TextStyle(fontSize = 12.sp, color = MiuixTheme.colorScheme.onSurface),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+        if (activeTasks.size > 3) {
+            Text(
+                text = "+${activeTasks.size - 3} 更多...",
+                style = TextStyle(fontSize = 11.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary),
+                modifier = Modifier.padding(top = 2.dp)
+            )
+        }
+    }
 }
 
 @Composable
@@ -3209,6 +3337,7 @@ private fun SkillCard(msgId: String, card: SkillCardData, errorMsg: String?, isD
         SkillType.SUB_AGENT -> R.drawable.ic_code
         SkillType.SEARCH_AGENT -> R.drawable.ic_search
         SkillType.WEB_SEARCH -> R.drawable.ic_web
+        SkillType.TASK_ADD, SkillType.TASK_UPDATE, SkillType.TASK_LIST -> R.drawable.ic_service_notification
     }
 
     val cardBg = if (isDark) Color(0xFF1A1A1A) else Color(0xFFFAFAFA)

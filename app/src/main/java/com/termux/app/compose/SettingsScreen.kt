@@ -580,7 +580,7 @@ fun SettingsScreen(
                         )
                         SwitchPreference(
                             title = "提示卡片横向布局",
-                            summary = "开启后主页的提示/状态卡片以横向滑动形式展示（终端卡片始终保持竖向排列）",
+                            summary = "开启后总览页的提示/状态卡片以横向滑动形式展示",
                             checked = cardLayoutMode == 1,
                             onCheckedChange = { enabled ->
                                 cardLayoutMode = if (enabled) 1 else 0

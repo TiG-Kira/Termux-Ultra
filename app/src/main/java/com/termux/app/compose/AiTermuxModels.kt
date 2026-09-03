@@ -126,7 +126,10 @@ enum class SkillType {
     SCHEDULE_TASK,        // 定时任务/提醒
     GET_DEVICE_STATUS,    // 查询设备状态（Termux:API）
     CLIPBOARD_READ,       // 读取剪贴板
-    CLIPBOARD_WRITE       // 写入剪贴板
+    CLIPBOARD_WRITE,      // 写入剪贴板
+    TASK_ADD,             // 添加待办任务（支持 title 中 \n 分隔的多任务批量添加）
+    TASK_UPDATE,          // 更新任务状态（done / in_progress / pending / cancelled）
+    TASK_LIST             // 查看当前任务列表
 }
 
 /** 需用户点击才能执行的技能（仅生成卡片，未真正执行）
@@ -219,6 +222,16 @@ enum class SkillStatus {
     RUNNING, COMPLETED, FAILED
 }
 
+/** 待办任务项（Agent 工作记忆） */
+data class TaskItem(
+    val id: String,
+    val title: String,
+    val status: String = "pending",
+    val comment: String? = null,
+    val createdAt: Long = System.currentTimeMillis(),
+    val completedAt: Long? = null
+)
+
 /** 用户自定义技能（开发者模式） */
 data class CustomSkill(
     val id: String = System.currentTimeMillis().toString() + "_${java.lang.Long.toHexString((Math.random() * 1e9).toLong())}",
@@ -235,7 +248,8 @@ data class ChatCompletionRequest(
     val model: String,
     val messages: List<OpenAiMessage>,
     val temperature: Float = 0.7f,
-    val stream: Boolean = false
+    val stream: Boolean = false,
+    val max_tokens: Int = 8192
 )
 
 data class OpenAiMessage(
@@ -306,7 +320,8 @@ val DEFAULT_SYSTEM_PROMPT = """
 ## 类别 A：需点击执行（生成卡片后输出 [END_TURN]，告知用户点击即可）
 技能：NEW_SESSION、RUN_COMMAND、CUSTOM_COMMAND、PACKAGE_INSTALL、PACKAGE_UNINSTALL、APP_INSTALL、
       APP_UNINSTALL、WEB_SEARCH、
-      CONNECT_SSH、CONNECT_VNC、CONNECT_REMOTE_CONNECTION、VM_LIST、SCHEDULE_TASK
+      CONNECT_SSH、CONNECT_VNC、CONNECT_REMOTE_CONNECTION、VM_LIST、SCHEDULE_TASK、
+      TASK_ADD、TASK_UPDATE
 
 特点：仅生成卡片，**不会真正执行**。需要用户点击卡片后才触发操作。
 系统回传内容：「卡片已生成」+ 卡片信息（不是操作结果）
@@ -332,7 +347,7 @@ val DEFAULT_SYSTEM_PROMPT = """
 
 ## 类别 C：有真实返回值（读取输出后推进）
 技能：FILE_LIST、FILE_READ、FILE_MODIFY、GET_SESSION_INFO、GET_CURRENT_SESSION、ASK_USER、
-      GET_DEVICE_STATUS、CLIPBOARD_READ、LIST_REMOTE_CONNECTIONS、
+      GET_DEVICE_STATUS、CLIPBOARD_READ、LIST_REMOTE_CONNECTIONS、TASK_LIST、
       CAPTURE_OUTPUT（在白名单中时）、COMPILE_CODE（在白名单中时）、
       SUB_AGENT（在白名单中时）、SEARCH_AGENT（在白名单中时）
 
@@ -340,6 +355,19 @@ val DEFAULT_SYSTEM_PROMPT = """
 系统回传内容：真实文本数据。
 
 **你必须：基于真实数据推进下一步。不要编造数据。**
+
+## 📋 任务管理（TASK_ADD / TASK_UPDATE / TASK_LIST）
+- **TASK_ADD**：添加待办任务。title 中用 `
+` 分隔可一次添加多个任务。
+  ```skill
+  { "type": "TASK_ADD", "params": { "title": "任务1\n任务2\n任务3" } }
+  ```
+  规则：一次只输出 **一个** TASK_ADD 卡片，把所有任务放在一个 title 里即可，不要连续输出多张 TASK_ADD 卡片。
+- **TASK_UPDATE**：更新任务状态。用 `taskId` 指定具体任务，或省略时默认更新最近一个 pending/in_progress 任务。
+  ```skill
+  { "type": "TASK_UPDATE", "params": { "taskId": "...", "status": "in_progress" } }
+  ```
+- **TASK_LIST**：查看当前所有任务，系统会把列表文本回传给你。
 
 # 三、绝对禁令（违反即严重错误）
 

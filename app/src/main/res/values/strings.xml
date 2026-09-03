@@ -44,7 +44,7 @@
     <string name="result">Result</string>
     <string name="language">Language</string>
     <string name="english">English</string>
-    <string name="chinese">娑擃厽鏋</string>
+    <string name="chinese">Chinese (Simplified)</string>
 
     <string name="device_model">Device Model</string>
     <string name="android_version">Android Version</string>

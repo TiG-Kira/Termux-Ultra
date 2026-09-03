@@ -1156,7 +1156,10 @@ private fun TipsAgentCard(
                     iconColor = Color(0xFF2563EB),
                     iconBgColor = Color(0xFF2563EB).copy(alpha = 0.12f),
                     label = "包管理",
-                    onClick = { onExecuteScript("包管理", "(command -v aptitude >/dev/null || pkg install -y aptitude) && aptitude") }
+                    onClick = {
+                        val intent = Intent(context, com.termux.app.activities.PackageManagerActivity::class.java)
+                        context.startActivity(intent)
+                    }
                 )
                 QuickEntryButton(
                     modifier = Modifier.weight(1f),

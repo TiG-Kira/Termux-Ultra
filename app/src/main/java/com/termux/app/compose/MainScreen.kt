@@ -667,16 +667,50 @@ fun MainScreen(
                     )
                 }
         ) {
-            // During swipe, AnimatedContent renders the target page underneath
-            // The current page is shown as an overlay on top
-            val animatedTargetState = if (isSwipingInProgress && swipeTargetTab != null) swipeTargetTab!! else selectedTab
+            // 底层：swipe 过程中的目标页面（独立渲染，不影响 AnimatedContent 中当前页面的状态）
+            if (isSwipingInProgress && swipeTargetTab != null) {
+                PageContentForTab(
+                    tab = swipeTargetTab!!,
+                    sessions = sessions,
+                    onSessionClick = onSessionClick,
+                    onNewTerminal = onNewTerminal,
+                    onStopTerminal = onStopTerminal,
+                    onRenameTerminal = onRenameTerminal,
+                    onExecuteScript = onExecuteScript,
+                    onAboutClick = onAboutClick,
+                    showVnc = showVnc,
+                    isWakeLockEnabled = isWakeLockEnabled,
+                    onToggleWakeLock = onToggleWakeLock,
+                    onRefreshSessions = onRefreshSessions,
+                    onOverviewEditModeChanged = { isOverviewEditMode = it },
+                    onRemoteSubTabChange = { remoteSubTab = it },
+                    onGoToFiles = {
+                        previousTab = swipeTargetTab!!
+                        onTabChange(2)
+                    },
+                    onGoToSettings = {
+                        previousTab = swipeTargetTab!!
+                        onTabChange(4)
+                    },
+                    navBarBottomPadding = totalNavHeight
+                )
+            }
 
+            // 顶层：当前页面的 AnimatedContent，targetState 始终为 selectedTab
+            // swipe 时通过 graphicsLayer 跟随手指平移和淡出，不改变 targetState，页面状态不会被销毁重建
             AnimatedContent(
-                targetState = animatedTargetState,
+                targetState = selectedTab,
                 label = "MainScreenTransition",
+                modifier = if (isSwipingInProgress && swipeTargetTab != null) {
+                    Modifier.graphicsLayer {
+                        translationX = rawDragOffset
+                        alpha = currentPageAlphaState
+                    }
+                } else {
+                    Modifier
+                },
                 transitionSpec = {
-                    // Skip transition during swipe or when skipNextTransition is set
-                    if (targetState != initialState && (isSwipingInProgress || kotlin.math.abs(dragOffset) > 0f || skipNextTransition)) {
+                    if (skipNextTransition) {
                         EnterTransition.None togetherWith ExitTransition.None
                     } else {
                         fadeIn(
@@ -712,44 +746,6 @@ fun MainScreen(
                     },
                     navBarBottomPadding = totalNavHeight
                 )
-            }
-
-            // Current page overlay on top (fades out as user swipes)
-            if (isSwipingInProgress && swipeTargetTab != null && swipeTargetTab != selectedTab) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .graphicsLayer {
-                            translationX = rawDragOffset
-                            alpha = currentPageAlphaState
-                        }
-                ) {
-                    PageContentForTab(
-                        tab = selectedTab,
-                        sessions = sessions,
-                        onSessionClick = onSessionClick,
-                        onNewTerminal = onNewTerminal,
-                        onStopTerminal = onStopTerminal,
-                        onRenameTerminal = onRenameTerminal,
-                        onExecuteScript = onExecuteScript,
-                        onAboutClick = onAboutClick,
-                        showVnc = showVnc,
-                        isWakeLockEnabled = isWakeLockEnabled,
-                        onToggleWakeLock = onToggleWakeLock,
-                        onRefreshSessions = onRefreshSessions,
-                        onOverviewEditModeChanged = { isOverviewEditMode = it },
-                        onRemoteSubTabChange = { remoteSubTab = it },
-                        onGoToFiles = {
-                            previousTab = selectedTab
-                            onTabChange(2)
-                        },
-                        onGoToSettings = {
-                            previousTab = selectedTab
-                            onTabChange(4)
-                        },
-                        navBarBottomPadding = totalNavHeight
-                    )
-                }
             }
         }
 
