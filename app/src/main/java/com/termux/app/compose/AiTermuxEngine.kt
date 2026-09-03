@@ -63,6 +63,10 @@ object SkillExecutor {
     val tasksFlow: kotlinx.coroutines.flow.StateFlow<List<TaskItem>> = _tasksFlow
     fun getTasks(): List<TaskItem> = synchronized(taskLock) { taskList.toList() }
     private fun emitTaskUpdate() { _tasksFlow.value = getTasks() }
+    fun clearTasks() {
+        synchronized(taskLock) { taskList.clear() }
+        emitTaskUpdate()
+    }
 
 
     private const val TERMUX_ROOT = "/data/data/com.termux"
@@ -613,6 +617,7 @@ object SkillExecutor {
             SkillType.GET_CURRENT_SESSION -> execGetCurrentSession(context, termuxService)
             SkillType.TASK_ADD -> execTaskAdd(context, params)
             SkillType.TASK_UPDATE -> execTaskUpdate(context, params)
+            SkillType.TASK_DELETE -> execTaskDelete(context, params)
             SkillType.TASK_LIST -> execTaskList(context)
             SkillType.CLIPBOARD_READ -> execClipboardRead(context)
             SkillType.CLIPBOARD_WRITE -> execClipboardWrite(context, params)
@@ -733,6 +738,30 @@ object SkillExecutor {
         return SkillExecutionResult(true, "共 ${tasks.size} 个任务",
             SkillCardData(skillType = SkillType.TASK_LIST, title = "任务列表",
                 description = "共 ${tasks.size} 个任务", status = SkillStatus.COMPLETED, output = out))
+    }
+
+    private fun execTaskDelete(context: Context, params: JsonObject): SkillExecutionResult {
+        val taskId = if (params.has("taskId")) params.get("taskId").asString else ""
+        val title = if (params.has("title")) params.get("title").asString else ""
+        var removedTitle: String? = null
+        synchronized(taskLock) {
+            val idx = when {
+                taskId.isNotBlank() -> taskList.indexOfFirst { it.id == taskId }
+                title.isNotBlank() -> taskList.indexOfFirst { it.title.contains(title, ignoreCase = true) }
+                else -> taskList.indexOfLast { it.status == "done" || it.status == "cancelled" }
+            }
+            if (idx < 0) {
+                return SkillExecutionResult(false, "未找到要删除的任务",
+                    SkillCardData(skillType = SkillType.TASK_DELETE, title = "删除任务",
+                        description = "未找到匹配的任务", status = SkillStatus.FAILED))
+            }
+            removedTitle = taskList[idx].title
+            taskList.removeAt(idx)
+        }
+        emitTaskUpdate()
+        return SkillExecutionResult(true, "已删除任务「$removedTitle」",
+            SkillCardData(skillType = SkillType.TASK_DELETE, title = "删除任务",
+                description = removedTitle ?: taskId.ifBlank { "最近已完成任务" }, status = SkillStatus.COMPLETED))
     }
 
 // ---- 会话管理（全部需要 Main 线程 —— TermuxService/TerminalSession 内部使用 Handler）----

@@ -129,6 +129,7 @@ enum class SkillType {
     CLIPBOARD_WRITE,      // 写入剪贴板
     TASK_ADD,             // 添加待办任务（支持 title 中 \n 分隔的多任务批量添加）
     TASK_UPDATE,          // 更新任务状态（done / in_progress / pending / cancelled）
+    TASK_DELETE,          // 删除任务（通过 taskId 或 title 匹配删除）
     TASK_LIST             // 查看当前任务列表
 }
 
@@ -320,8 +321,7 @@ val DEFAULT_SYSTEM_PROMPT = """
 ## 类别 A：需点击执行（生成卡片后输出 [END_TURN]，告知用户点击即可）
 技能：NEW_SESSION、RUN_COMMAND、CUSTOM_COMMAND、PACKAGE_INSTALL、PACKAGE_UNINSTALL、APP_INSTALL、
       APP_UNINSTALL、WEB_SEARCH、
-      CONNECT_SSH、CONNECT_VNC、CONNECT_REMOTE_CONNECTION、VM_LIST、SCHEDULE_TASK、
-      TASK_ADD、TASK_UPDATE
+      CONNECT_SSH、CONNECT_VNC、CONNECT_REMOTE_CONNECTION、VM_LIST、SCHEDULE_TASK
 
 特点：仅生成卡片，**不会真正执行**。需要用户点击卡片后才触发操作。
 系统回传内容：「卡片已生成」+ 卡片信息（不是操作结果）
@@ -338,7 +338,8 @@ val DEFAULT_SYSTEM_PROMPT = """
 
 ## 类别 B：立即执行（操作即刻完成，有/无返回值）
 技能：CLOSE_SESSION、CLOSE_ALL_SESSIONS、FILE_WRITE、FILE_DELETE、FILE_GENERATE、
-      EXIT_TERMUX、RUN_VM_QEMU、CREATE_VM_QEMU、CLIPBOARD_WRITE
+      EXIT_TERMUX、RUN_VM_QEMU、CREATE_VM_QEMU、CLIPBOARD_WRITE、
+      TASK_ADD、TASK_UPDATE、TASK_DELETE
 
 特点：操作立即完成。CLOSE/WRITE/DELETE/CLIPBOARD_WRITE 有成功/失败回传，VM 类跳转页面。
 系统回传内容：成功/失败状态。
@@ -356,7 +357,8 @@ val DEFAULT_SYSTEM_PROMPT = """
 
 **你必须：基于真实数据推进下一步。不要编造数据。**
 
-## 📋 任务管理（TASK_ADD / TASK_UPDATE / TASK_LIST）
+## 📋 任务管理（TASK_ADD / TASK_UPDATE / TASK_DELETE / TASK_LIST）
+⚠️ **重要**：每次执行完一个步骤后，**必须立即**调用 TASK_UPDATE 更新对应任务的状态（pending → in_progress → done），不要等所有任务都完成后才一次性更新！用户需要实时看到进度变化。
 - **TASK_ADD**：添加待办任务。title 中用 `
 ` 分隔可一次添加多个任务。
   ```skill
@@ -364,8 +366,17 @@ val DEFAULT_SYSTEM_PROMPT = """
   ```
   规则：一次只输出 **一个** TASK_ADD 卡片，把所有任务放在一个 title 里即可，不要连续输出多张 TASK_ADD 卡片。
 - **TASK_UPDATE**：更新任务状态。用 `taskId` 指定具体任务，或省略时默认更新最近一个 pending/in_progress 任务。
+  status 可选：`pending`（待办）、`in_progress`（进行中）、`done`（已完成）、`cancelled`（已取消）。
   ```skill
   { "type": "TASK_UPDATE", "params": { "taskId": "...", "status": "in_progress" } }
+  { "type": "TASK_UPDATE", "params": { "taskId": "...", "status": "done", "comment": "步骤完成" } }
+  ```
+  ⚠️ **必须实时更新**：每完成一个子步骤就立即更新状态，让用户随时看到进度。绝对不要攒一批任务到最后才一起标记 done！
+- **TASK_DELETE**：删除指定任务。用 `taskId` 指定，或用 `title` 模糊匹配删除。
+  省略参数时默认删除最近一个 done/cancelled 任务。
+  ```skill
+  { "type": "TASK_DELETE", "params": { "taskId": "..." } }
+  { "type": "TASK_DELETE", "params": { "title": "临时任务" } }
   ```
 - **TASK_LIST**：查看当前所有任务，系统会把列表文本回传给你。
 

@@ -732,6 +732,7 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
             var rawResponseText = ""
             var streamError: String? = null
             var wasCancelled = false
+            var streamFinishReason: String? = null
 
             val providerConfig: AiProviderConfig = if (config.providerConfig.provider == "local" && !useLocalModel) {
                 val fb = AiTermuxPrefs.getFallbackOnlineConfig(ctx)
@@ -808,6 +809,7 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
                         replyText = chunk.fullText
                         rawResponseText = chunk.rawResponse
                         val finishReason = chunk.finishReason
+                        streamFinishReason = finishReason
                         android.util.Log.d("AiTermux", "Done received, contentLen=${chunk.fullText.length}, reasoningLen=${chunk.fullReasoning.length}, rawLen=${chunk.rawResponse.length}, finishReason=$finishReason")
                         if (finishReason == "length") {
                             android.util.Log.w("AiTermux", "AI output truncated due to max_tokens (finish_reason=length)")
@@ -855,7 +857,27 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
                 return
             }
 
-            // 如果只有思考内容没有回复文本，中断并保存原始响应用于调试
+            // 如果 finish_reason=length 且只有思考内容被截断，自动续生让 AI 跳过思考直接输出
+            if (streamFinishReason == "length" && replyText.isBlank() && reasoningText.isNotBlank()) {
+                android.util.Log.w("AiTermux", "AI 思考被截断（finish_reason=length），自动要求跳过思考直接输出")
+                synchronized(messages) {
+                    val idx = messages.indexOfFirst { it.id == streamMsgId }
+                    if (idx >= 0) {
+                        messages[idx] = messages[idx].copy(
+                            reasoningContent = reasoningText,
+                            reasoningDone = true,
+                            rawResponse = rawResponseText
+                        )
+                    }
+                }
+                AiTermuxPrefs.saveChatHistory(ctx, messages.toOpenAiMessages())
+                // 自动续生：告诉 AI 跳过思考直接输出
+                currentUserText = "[你的深度思考因 token 限制被截断了。请跳过思考过程，直接输出最终回复（包括需要的技能卡片）。]"
+                streamFinishReason = null
+                continue
+            }
+
+            // 如果只有思考内容没有回复文本（非截断原因），中断并保存原始响应用于调试
             if (replyText.isBlank() && reasoningText.isNotBlank()) {
                 android.util.Log.e("AiTermux", "AI 思考完成但未输出文本，保存原始响应用于调试")
                 synchronized(messages) {
@@ -871,6 +893,29 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
                 }
                 AiTermuxPrefs.saveChatHistory(ctx, messages.toOpenAiMessages())
                 return
+            }
+
+            // 如果 finish_reason=length 且有部分内容但被截断，也自动续生
+            if (streamFinishReason == "length" && replyText.isNotBlank()) {
+                android.util.Log.w("AiTermux", "AI 输出被截断（finish_reason=length, contentLen=${replyText.length}），自动续生")
+                // 保存当前已生成的内容到消息
+                synchronized(messages) {
+                    val idx = messages.indexOfFirst { it.id == streamMsgId }
+                    if (idx >= 0) {
+                        val cleaned = replyText.replace("[END_TURN]", "").trimEnd()
+                        val hasSkills = SkillExecutor.parseSkillBlocks(cleaned).isNotEmpty()
+                        messages[idx] = messages[idx].copy(
+                            content = if (hasSkills) SkillExecutor.stripSkillBlocks(cleaned).ifBlank { cleaned } else cleaned,
+                            reasoningContent = reasoningText,
+                            reasoningDone = reasoningText.isNotBlank(),
+                            rawResponse = rawResponseText
+                        )
+                    }
+                }
+                AiTermuxPrefs.saveChatHistory(ctx, messages.toOpenAiMessages())
+                currentUserText = "[你的回复因 token 限制被截断了。请从截断处继续完成剩余内容。]"
+                streamFinishReason = null
+                continue
             }
 
             // 如果流式返回的是空内容（无思考也无回复），显示诊断信息而非静默删除
@@ -1343,6 +1388,7 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
     fun clearHistory() {
         val ctx = getApplication<android.app.Application>()
         synchronized(messages) { messages.clear() }
+        SkillExecutor.clearTasks()
         AiTermuxPrefs.clearChatHistory(ctx)
     }
 }
@@ -2504,7 +2550,7 @@ private fun AiChatScreen(vm: AiTermuxViewModel, onBack: () -> Unit) {
                 .fillMaxSize()
                 .padding(top = 64.dp, start = 14.dp, end = 14.dp)
         ) {
-            TaskBar(tasks, showTaskBar, isDark) { showTaskBar = false }
+            TaskBar(tasks, showTaskBar, isDark, onClose = { showTaskBar = false }, onClear = { SkillExecutor.clearTasks() })
         }
     }
 
@@ -2517,11 +2563,13 @@ fun TaskBar(
     tasks: List<TaskItem>,
     visible: Boolean,
     isDark: Boolean,
-    onClose: () -> Unit
+    onClose: () -> Unit,
+    onClear: () -> Unit = {}
 ) {
     if (!visible) return
+    if (tasks.isEmpty()) return
     val activeTasks = tasks.filter { it.status != "done" && it.status != "cancelled" }
-    if (activeTasks.isEmpty()) return
+    val allDone = activeTasks.isEmpty()
 
     val doneCount = tasks.count { it.status == "done" }
     val totalCount = tasks.size
@@ -2561,7 +2609,10 @@ fun TaskBar(
                 contentDescription = "隐藏任务栏",
                 modifier = Modifier
                     .size(20.dp)
-                    .clickable { onClose() },
+                    .clickable {
+                        if (allDone) onClear()
+                        onClose()
+                    },
                 tint = MiuixTheme.colorScheme.onSurfaceVariantSummary
             )
         }
@@ -2571,6 +2622,17 @@ fun TaskBar(
             modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp))
         )
         Spacer(Modifier.height(10.dp))
+        if (allDone) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "✅ 所有任务已完成",
+                    style = TextStyle(fontSize = 13.sp, color = Color(0xFF10B981), fontWeight = FontWeight.Medium)
+                )
+            }
+        } else {
         activeTasks.take(3).forEach { t ->
             Row(
                 modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
@@ -2604,6 +2666,7 @@ fun TaskBar(
                 style = TextStyle(fontSize = 11.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary),
                 modifier = Modifier.padding(top = 2.dp)
             )
+        }
         }
     }
 }
@@ -3334,7 +3397,7 @@ private fun SkillCard(msgId: String, card: SkillCardData, errorMsg: String?, isD
         SkillType.SUB_AGENT -> R.drawable.ic_code
         SkillType.SEARCH_AGENT -> R.drawable.ic_search
         SkillType.WEB_SEARCH -> R.drawable.ic_web
-        SkillType.TASK_ADD, SkillType.TASK_UPDATE, SkillType.TASK_LIST -> R.drawable.ic_service_notification
+        SkillType.TASK_ADD, SkillType.TASK_UPDATE, SkillType.TASK_DELETE, SkillType.TASK_LIST -> R.drawable.ic_service_notification
     }
 
     val cardBg = if (isDark) Color(0xFF1A1A1A) else Color(0xFFFAFAFA)
