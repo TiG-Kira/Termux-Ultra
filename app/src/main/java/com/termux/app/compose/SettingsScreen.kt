@@ -1269,7 +1269,6 @@ fun SettingsScreen(
             // Extra bottom spacing for comfortable scroll
             item(key = "spacer_bottom") { Spacer(Modifier.height(16.dp)) }
         }
-    }
 
     // ---------- Language restart prompt ----------
     OverlayDialog(
@@ -2451,6 +2450,7 @@ fun SettingsScreen(
             }
         }
     )
+    }
 }
 
 @Composable
