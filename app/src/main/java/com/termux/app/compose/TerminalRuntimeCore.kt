@@ -24,9 +24,15 @@ object TerminalRuntimeCore {
     val isComposeSupported: Boolean
         get() = Build.VERSION.SDK_INT >= MIN_SDK_FOR_COMPOSE
 
-    enum class Core(val value: String, val displayName: String) {
-        JAVA_NDK("java_ndk", "Java + NDK"),
-        KOTLIN_COMPOSE("kotlin_compose", "Kotlin + Compose");
+    enum class Core(val value: String) {
+        JAVA_NDK("java_ndk"),
+        KOTLIN_COMPOSE("kotlin_compose");
+
+        /** 显示名称：中文 经典/新星，英文 Classic/Nova（跟随应用语言） */
+        fun displayName(context: Context): String = when (this) {
+            JAVA_NDK -> context.getString(com.termux.R.string.core_name_classic)
+            KOTLIN_COMPOSE -> context.getString(com.termux.R.string.core_name_nova)
+        }
 
         companion object {
             fun fromValue(v: String): Core = entries.firstOrNull { it.value == v } ?: JAVA_NDK

@@ -1439,8 +1439,17 @@ public synchronized int removeTermuxSession(TerminalSession sessionToRemove) {
      */
     public synchronized TermuxSession getLastEnteredTermuxSession() {
         TerminalSession terminalSession = null;
-        if (mTermuxTerminalSessionClient != null)
-            terminalSession = mTermuxTerminalSessionClient.getCurrentStoredSessionOrLast();
+        // 直接读取持久化的当前会话句柄：终端控制台（TermuxActivity）返回主页后其会话客户端
+        // 已被 unset（mTermuxTerminalSessionClient == null），不能依赖客户端实例，
+        // 否则返回主页后高亮会丢失。语义与 getCurrentStoredSessionOrLast() 一致。
+        TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(this);
+        if (preferences != null) {
+            String storedHandle = preferences.getCurrentSession();
+            if (storedHandle != null)
+                terminalSession = getTerminalSessionForHandle(storedHandle);
+        }
+        if (terminalSession == null && !mTermuxSessions.isEmpty())
+            terminalSession = mTermuxSessions.get(mTermuxSessions.size() - 1).getTerminalSession();
         if (terminalSession == null) return null;
         for (TermuxSession session : mTermuxSessions) {
             if (session.getTerminalSession() == terminalSession)

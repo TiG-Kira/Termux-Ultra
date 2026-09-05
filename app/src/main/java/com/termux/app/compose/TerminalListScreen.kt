@@ -110,6 +110,10 @@ fun TerminalListScreen(
     var deadSessions by remember { mutableStateOf<List<TermuxService.DeadSessionInfo>>(termuxService?.deadSessionInfos ?: emptyList()) }
     // 上一次进入的会话（当前会话）：用于卡片高亮显示
     var currentEnteredSession by remember { mutableStateOf<TermuxSession?>(null) }
+    // 会话名称版本号：重命名只修改会话对象内部字段，列表引用不变，结构相等判断不触发重组；
+    // 用名称签名检测变化并递增版本，配合 items key 强制重组卡片，让新名称立刻显示
+    var sessionNamesVersion by remember { mutableIntStateOf(0) }
+    var lastSessionNames by remember { mutableStateOf<List<String>>(emptyList()) }
     val useHorizontalLayout = cardLayoutMode == 1
     // 已结束会话卡片过滤（按搜索条件）
     val filteredDeadSessions = deadSessions.filter {
@@ -122,6 +126,11 @@ fun TerminalListScreen(
             termuxService?.let { svc ->
                 val fresh = svc.termuxSessions.toList()
                 if (fresh != localSessions) localSessions = fresh
+                val freshNames = fresh.map { it.getTerminalSession().mSessionName ?: "" }
+                if (freshNames != lastSessionNames) {
+                    lastSessionNames = freshNames
+                    sessionNamesVersion++
+                }
                 val freshDead = svc.deadSessionInfos
                 if (freshDead != deadSessions) deadSessions = freshDead
                 val freshCurrent = svc.lastEnteredTermuxSession
@@ -136,6 +145,11 @@ fun TerminalListScreen(
         termuxService?.let { svc ->
             localSessions = svc.termuxSessions.toList()
             deadSessions = svc.deadSessionInfos
+            val freshNames = localSessions.map { it.getTerminalSession().mSessionName ?: "" }
+            if (freshNames != lastSessionNames) {
+                lastSessionNames = freshNames
+                sessionNamesVersion++
+            }
             currentEnteredSession = svc.lastEnteredTermuxSession
         }
     }
@@ -419,7 +433,7 @@ fun TerminalListScreen(
                             }
                         }
                     } else {
-                        items(localSessions) { session ->
+                        items(localSessions, key = { "${it.getTerminalSession().mHandle}-$sessionNamesVersion" }) { session ->
                             TerminalCard(
                                 session = session,
                                 isCurrent = session == currentEnteredSession,
@@ -485,7 +499,7 @@ fun TerminalListScreen(
                     }
                 }
             } else {
-                items(localSessions) { session ->
+                items(localSessions, key = { "${it.getTerminalSession().mHandle}-$sessionNamesVersion" }) { session ->
                     TerminalCard(
                         session = session,
                         isCurrent = session == currentEnteredSession,

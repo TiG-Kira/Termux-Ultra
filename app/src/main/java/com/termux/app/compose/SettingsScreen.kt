@@ -189,8 +189,6 @@ fun SettingsScreen(
 
     // Terminal runtime core
     var runtimeCore by remember { mutableStateOf(TerminalRuntimeCore.getCurrent(context)) }
-    var pendingRuntimeCore by remember { mutableStateOf(TerminalRuntimeCore.Core.JAVA_NDK) }
-    var showKillSessionsDialog by remember { mutableStateOf(false) }
 
     // Terminal settings - Java+NDK mode
     val terminalPrefs = remember { TermuxAppSharedPreferences.build(context) }
@@ -653,7 +651,7 @@ fun SettingsScreen(
             item(key = "card_terminal_runtime") {
                 val isComposeMode = runtimeCore == TerminalRuntimeCore.Core.KOTLIN_COMPOSE
                 val composeSupported = TerminalRuntimeCore.isComposeSupported
-                val runtimeCoreItems = TerminalRuntimeCore.Core.entries.map { it.displayName }
+                val runtimeCoreItems = TerminalRuntimeCore.Core.entries.map { it.displayName(context) }
                 val currentCoreIndex = TerminalRuntimeCore.Core.entries.indexOf(runtimeCore)
                 Card(
                     modifier = Modifier
@@ -681,7 +679,7 @@ fun SettingsScreen(
                                     termuxStylingEnabled = IntegratedTools.isEnabled(context, IntegratedTools.Tool.TERMUX_STYLING)
                                     termuxTaskerEnabled = IntegratedTools.isEnabled(context, IntegratedTools.Tool.TERMUX_TASKER)
                                     termuxWidgetEnabled = IntegratedTools.isEnabled(context, IntegratedTools.Tool.TERMUX_WIDGET)
-                                    showSnackbar(context.getString(R.string.switched_core_selected, selected.displayName))
+                                    showSnackbar(context.getString(R.string.switched_core_selected, selected.displayName(context)))
                                 }
                             },
                             startAction = {
@@ -1954,58 +1952,6 @@ fun SettingsScreen(
                     }
                 }
                 
-            // Kill sessions before switching core
-            OverlayDialog(
-                show = showKillSessionsDialog,
-                onDismissRequest = { showKillSessionsDialog = false },
-                content = {
-                    Column(modifier = Modifier.fillMaxWidth().padding(24.dp)) {
-                        Text(
-                            text = context.getString(R.string.switch_runtime_core),
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MiuixTheme.colorScheme.onSurface
-                        )
-                        Spacer(Modifier.height(12.dp))
-                        Text(
-                            text = context.getString(R.string.core_switch_unreversible),
-                            fontSize = 14.sp,
-                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                            lineHeight = 20.sp
-                        )
-                        Spacer(Modifier.height(20.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            TextButton(
-                                text = context.getString(R.string.cancel),
-                                onClick = { showKillSessionsDialog = false },
-                                modifier = Modifier.weight(1f)
-                            )
-                            Button(
-                                onClick = {
-                                    TerminalRuntimeCore.killAllSessions(context)
-                                    TerminalRuntimeCore.applyPluginState(context, pendingRuntimeCore)
-                                    TerminalRuntimeCore.setCurrent(context, pendingRuntimeCore)
-                                    runtimeCore = pendingRuntimeCore
-                                    termuxApiEnabled = IntegratedTools.isEnabled(context, IntegratedTools.Tool.TERMUX_API)
-                                    termuxBootEnabled = IntegratedTools.isEnabled(context, IntegratedTools.Tool.TERMUX_BOOT)
-                                    termuxStylingEnabled = IntegratedTools.isEnabled(context, IntegratedTools.Tool.TERMUX_STYLING)
-                                    termuxTaskerEnabled = IntegratedTools.isEnabled(context, IntegratedTools.Tool.TERMUX_TASKER)
-                                    termuxWidgetEnabled = IntegratedTools.isEnabled(context, IntegratedTools.Tool.TERMUX_WIDGET)
-                                    showKillSessionsDialog = false
-                                    showSnackbar(context.getString(R.string.switched_core_pending, pendingRuntimeCore.displayName))
-                                },
-                                modifier = Modifier.weight(1f),
-                                colors = ButtonDefaults.buttonColors(color = Color(0xFFDC2626))
-                            ) {
-                                Text(context.getString(R.string.confirm_switch), color = Color.White, fontWeight = FontWeight.Medium)
-                            }
-                        }
-                    }
-                }
-            )
 }
             }
         }
