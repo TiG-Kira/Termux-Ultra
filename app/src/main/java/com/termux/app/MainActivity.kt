@@ -76,6 +76,14 @@ class MainActivity : FragmentActivity() {
      *  immediately or defer it to onStart(). */
     private var isVisible = false
 
+    companion object {
+        /** Intent extra：跳转到主页时直接打开设置 tab。 */
+        const val EXTRA_OPEN_SETTINGS_TAB = "open_settings_tab"
+
+        /** 主页底部导航的设置 tab index（总览/终端/文件/远程/设置）。 */
+        const val SETTINGS_TAB_INDEX = 4
+    }
+
     /**
      * 会话列表 & 服务状态的后台轮询周期（毫秒）。
      *
@@ -153,6 +161,12 @@ class MainActivity : FragmentActivity() {
                 selectedTab = 1
             }
 
+            // 外部页面（如 Compose 终端页"应用设置"）请求直接打开主页设置 tab
+            if (i != null && i.getBooleanExtra(EXTRA_OPEN_SETTINGS_TAB, false)) {
+                i.removeExtra(EXTRA_OPEN_SETTINGS_TAB)
+                selectedTab = SETTINGS_TAB_INDEX
+            }
+
             appViewModel = ViewModelProvider(this)[AppViewModel::class.java]
             appViewModel.updateShowVnc(initialShowVnc)
 
@@ -183,15 +197,32 @@ class MainActivity : FragmentActivity() {
                                 startActivity(intent)
                             },
                             onNewTerminal = {
-                                val sessionCount = sessions.size
-                                val sessionName = if (LocaleHelper.isChinese(this)) {
-                                    "会话 ${sessionCount + 1}"
+                                // Compose 模式：走 ComposeSessionManager 创建未初始化会话。
+                                // 不依赖 TermuxService 连接状态（服务绑定异步，未连接时
+                                // termuxService?.createTermuxSession 会静默失败导致无法拉起新会话）；
+                                // 且效仿 Java 版策略：只创建未初始化的终端条目，不跳转。
+                                if (com.termux.app.compose.TerminalRuntimeCore.isComposeMode(this)) {
+                                    val composeSessionManager =
+                                        com.termux.app.compose.terminal.ComposeSessionManager.getInstance(this)
+                                    val sessionName = if (LocaleHelper.isChinese(this)) {
+                                        "会话 ${composeSessionManager.sessions.value.size + 1}"
+                                    } else {
+                                        "Session ${composeSessionManager.sessions.value.size + 1}"
+                                    }
+                                    composeSessionManager
+                                        .createDefaultSession(startImmediately = false)
+                                        .sessionName.value = sessionName
                                 } else {
-                                    "Session ${sessionCount + 1}"
+                                    val sessionCount = sessions.size
+                                    val sessionName = if (LocaleHelper.isChinese(this)) {
+                                        "会话 ${sessionCount + 1}"
+                                    } else {
+                                        "Session ${sessionCount + 1}"
+                                    }
+                                    termuxService?.createTermuxSession(null, null, null, null, false, sessionName)
+                                    updateSessions()
+                                    handler.postDelayed({ updateSessions() }, 500)
                                 }
-                                termuxService?.createTermuxSession(null, null, null, null, false, sessionName)
-                                updateSessions()
-                                handler.postDelayed({ updateSessions() }, 500)
                             },
                             onStopTerminal = { session ->
                                 termuxService?.removeTermuxSession(session.getTerminalSession())
@@ -309,6 +340,12 @@ class MainActivity : FragmentActivity() {
         // 防止外部/系统重新派发的 ACTION_SERVICE_EXECUTE 等 intent 被错误地当成新会话请求
         setIntent(intent)
 
+        // 外部页面（如 Compose 终端页"应用设置"）请求直接打开主页设置 tab
+        if (intent.getBooleanExtra(EXTRA_OPEN_SETTINGS_TAB, false)) {
+            intent.removeExtra(EXTRA_OPEN_SETTINGS_TAB)
+            selectedTab = SETTINGS_TAB_INDEX
+        }
+
         // Activity is already running (single-top / reorder-to-front), and the user
         // tapped a notification action again.
         if (intent.getBooleanExtra(TermuxConstants.TERMUX_APP.TERMUX_ACTIVITY.EXTRA_TRIGGER_STOP_SERVICE, false)) {
@@ -346,9 +383,10 @@ class MainActivity : FragmentActivity() {
     }
 
     private fun toggleWakeLock() {
-        val service = termuxService ?: return
+        // 服务未绑定时回退用 UI 状态判断方向，保证 Compose 模式下服务绑定滞后时开关依然生效
+        val held = termuxService?.isWakeLockHeld() ?: isWakeLockEnabled
         val intent = Intent(this, TermuxService::class.java)
-        intent.action = if (service.isWakeLockHeld()) {
+        intent.action = if (held) {
             TermuxConstants.TERMUX_APP.TERMUX_SERVICE.ACTION_WAKE_UNLOCK
         } else {
             TermuxConstants.TERMUX_APP.TERMUX_SERVICE.ACTION_WAKE_LOCK

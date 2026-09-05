@@ -68,6 +68,51 @@ public final class TerminalSession extends TerminalOutput {
         sInputInterceptor = interceptor;
     }
 
+    /**
+     * 写转发接口：当会话未附着到 PTY（Compose 模式下的镜像会话）时，
+     * 把针对该会话的写入转发到真正持有进程的 Compose 会话。
+     */
+    public interface WriteForwarder {
+        /** 转发一段写入数据。 */
+        void forwardWrite(byte[] data, int offset, int count);
+
+        /** 目标进程是否仍在运行。 */
+        default boolean isAlive() {
+            return false;
+        }
+
+        /** 结束目标进程。 */
+        default void kill() {
+        }
+    }
+
+    /**
+     * 运行核心设置项（Kotlin+Compose 模式）是否开启的状态镜像。
+     *
+     * 只有设置项为 Kotlin+Compose 时才允许把镜像会话的写入转发到 Compose 核心；
+     * 切回 Java+NDK 模式后清空该标记，转发立即失效。
+     */
+    private static volatile boolean sComposeForwardingEnabled = false;
+
+    public static void setComposeForwardingEnabled(boolean enabled) {
+        sComposeForwardingEnabled = enabled;
+    }
+
+    public static boolean isComposeForwardingEnabled() {
+        return sComposeForwardingEnabled;
+    }
+
+    private volatile WriteForwarder mWriteForwarder;
+
+    /** 设置写转发器（仅 Compose 模式的镜像会话使用，Java 模式保持 null）。 */
+    public void setWriteForwarder(WriteForwarder forwarder) {
+        mWriteForwarder = forwarder;
+    }
+
+    public WriteForwarder getWriteForwarder() {
+        return mWriteForwarder;
+    }
+
     /** 命令输入缓冲区，用于检测回车时的完整命令 */
     private final StringBuilder mCommandBuffer = new StringBuilder();
 
@@ -230,7 +275,17 @@ public final class TerminalSession extends TerminalOutput {
     /** Write data to the shell process. */
     @Override
     public void write(byte[] data, int offset, int count) {
-        if (mShellPid <= 0) return;
+        if (mShellPid <= 0) {
+            // 会话进程未附着到 PTY（Compose 模式镜像会话等）：
+            // 仅当运行核心设置项为 Kotlin+Compose 时，才把写入转发到真正的 Compose 会话
+            if (sComposeForwardingEnabled) {
+                WriteForwarder forwarder = mWriteForwarder;
+                if (forwarder != null && count > 0) {
+                    forwarder.forwardWrite(data, offset, count);
+                }
+            }
+            return;
+        }
 
         InputInterceptor interceptor = sInputInterceptor;
         if (interceptor == null || count <= 0) {
@@ -404,6 +459,14 @@ public final class TerminalSession extends TerminalOutput {
             } catch (ErrnoException e) {
                 Logger.logWarn(mClient, LOG_TAG, "Failed sending SIGKILL: " + e.getMessage());
             }
+            return;
+        }
+        // 镜像会话：运行核心为 Kotlin+Compose 时结束其对应的 Compose 会话进程
+        if (sComposeForwardingEnabled) {
+            WriteForwarder forwarder = mWriteForwarder;
+            if (forwarder != null) {
+                forwarder.kill();
+            }
         }
     }
 
@@ -429,6 +492,11 @@ public final class TerminalSession extends TerminalOutput {
     }
 
     public synchronized boolean isRunning() {
+        // 镜像会话（未附着到 PTY）：运行核心为 Kotlin+Compose 时，以 Compose 会话实际状态为准；
+        // 切回 Java+NDK 后镜像不再转发，视为已结束。
+        if (mShellPid == 0 && sComposeForwardingEnabled && mWriteForwarder != null) {
+            return mWriteForwarder.isAlive();
+        }
         return mShellPid != -1;
     }
 

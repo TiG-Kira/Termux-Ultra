@@ -51,9 +51,13 @@ object TerminalRuntimeCore {
             .edit()
             .putString(KEY_RUNTIME_CORE, core.value)
             .apply()
+        // 同步镜像(Java 接口)写转发状态：仅当设置项为 Kotlin+Compose 时，
+        // TerminalSession 才允许把写入转发到 Compose 核心
+        com.termux.terminal.TerminalSession.setComposeForwardingEnabled(core == Core.KOTLIN_COMPOSE)
     }
 
     /** 是否使用 Compose 核心（Java+NDK=false, Kotlin+Compose=true）。 */
+    @JvmStatic
     fun isComposeMode(context: Context): Boolean {
         if (!isComposeSupported) return false
         return getCurrent(context) == Core.KOTLIN_COMPOSE
@@ -76,8 +80,23 @@ object TerminalRuntimeCore {
         }
     }
 
-    /** 杀掉所有正在运行的会话/任务（切换核心前调用）。 */
+    /**
+     * 切换核心时结束所有 Termux 内进程、结束所有会话并清空两侧会话列表。
+     * Java ↔ Compose 双向切换均调用此方法：
+     * - Compose 侧：结束所有 Compose 会话进程并清空会话列表
+     * - 镜像注册表：清空 Java 句柄 ↔ Compose 会话映射
+     * - Java 侧：结束所有会话/任务进程并清空会话列表（含 Compose 镜像会话，
+     *   否则 Compose 切回 Java 后会残留无效的第三方资源会话卡片，进入黑屏）
+     */
     fun killAllSessions(context: Context) {
+        // Compose 侧清理
+        try {
+            com.termux.app.compose.terminal.ComposeSessionManager.getInstance(context).killAllSessions()
+        } catch (_: Exception) {}
+        try {
+            com.termux.app.compose.ComposeSessionBridge.clearAll()
+        } catch (_: Exception) {}
+        // Java 侧清理
         try {
             val intent = Intent(context, Class.forName("com.termux.app.TermuxService"))
             intent.action = TermuxConstants.TERMUX_APP.TERMUX_SERVICE.ACTION_KILL_SESSIONS

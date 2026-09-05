@@ -192,6 +192,21 @@ public final class TermuxService extends Service implements TermuxTask.TermuxTas
         // 预加载增强防护缓存，避免首次命令读取 SharedPreferences 造成延迟
         com.termux.app.compose.RiskConfirmManager.INSTANCE.preloadCache(this);
 
+        // 按运行核心设置项同步镜像写转发状态（Kotlin+Compose 时启用，Java+NDK 时禁用）
+        com.termux.terminal.TerminalSession.setComposeForwardingEnabled(
+            com.termux.app.compose.TerminalRuntimeCore.isComposeMode(this));
+
+        // Compose 会话创建/关闭时刷新前台通知，保证 LiveUpdate 通知中的会话数量
+        // 对 Compose 直建的会话（主页/终端页新建）也保持准确
+        com.termux.app.compose.terminal.ComposeSessionManager.setOnSessionsChanged(() -> {
+            try {
+                updateNotification();
+            } catch (Throwable t) {
+                Logger.logDebug(LOG_TAG, "Failed to update notification on Compose session change: " + t.getMessage());
+            }
+            return kotlin.Unit.INSTANCE;
+        });
+
         // 注册终端输入拦截器，用于检测高危命令
         com.termux.terminal.TerminalSession.setInputInterceptor(new com.termux.terminal.TerminalSession.InputInterceptor() {
             @Override
@@ -260,6 +275,9 @@ public final class TermuxService extends Service implements TermuxTask.TermuxTas
                 case TERMUX_SERVICE.ACTION_KILL_SESSIONS:
                     Logger.logDebug(LOG_TAG, "ACTION_KILL_SESSIONS intent received (switching runtime core)");
                     killAllTermuxExecutionCommands();
+                    // 切换运行核心：显式清空所有会话（含 Compose 镜像会话——无真实进程，
+                    // 结束后不会触发 onSessionFinished 回调，需手动移除并刷新会话列表）
+                    removeAllTermuxSessions();
                     runStopForeground();
                     updateNotification();
                     break;
@@ -812,6 +830,39 @@ public final class TermuxService extends Service implements TermuxTask.TermuxTas
         if (Logger.getLogLevel() >= Logger.LOG_LEVEL_VERBOSE)
             Logger.logVerboseExtended(LOG_TAG, executionCommand.toString());
 
+        // Compose 模式：会话由 ComposeSessionManager 管理。这里通过镜像句柄保持 Java 接口
+        // 完全兼容——第三方页面（资源中心/工具中心等）无需改动即可直接调用创建/写入/切换。
+        if (com.termux.app.compose.TerminalRuntimeCore.isComposeMode(this)) {
+            TermuxSession composeMirror = com.termux.app.compose.ComposeSessionBridge.INSTANCE
+                .createComposeMirrorSession(this, executionCommand, sessionName);
+            if (composeMirror == null) {
+                Logger.logError(LOG_TAG, "Failed to create Compose mirror TermuxSession for:\n" + executionCommand.getCommandIdAndLabelLogString());
+                return null;
+            }
+            mTermuxSessions.add(composeMirror);
+
+            // Remove the execution command from the pending plugin execution commands list since it has
+            // now been processed
+            if (executionCommand.isPluginExecutionCommand)
+                mPendingPluginExecutionCommands.remove(executionCommand);
+
+            mAllSessionsCleared = false;
+
+            // Notify UI that sessions list has been updated
+            if (mTermuxTerminalSessionClient != null)
+                mTermuxTerminalSessionClient.termuxSessionListNotifyUpdated();
+
+            // Auto acquire WakeLock if session is running a server/listening program (VNC, SSH, etc.)
+            if (isServerProgram(executionCommand)) {
+                actionAcquireWakeLock();
+            }
+
+            updateNotification();
+            TermuxActivity.updateTermuxActivityStyling(this);
+
+            return composeMirror;
+        }
+
         // If the execution command was started for a plugin, only then will the stdout be set
         // Otherwise if command was manually started by the user like by adding a new terminal session,
         // then no need to set stdout
@@ -888,6 +939,8 @@ public synchronized int removeTermuxSession(TerminalSession sessionToRemove) {
         int index = getIndexOfSession(sessionToRemove);
 
         if (index >= 0) {
+            // Compose 模式镜像：同时结束并注销对应的 Compose 会话
+            com.termux.app.compose.ComposeSessionBridge.INSTANCE.removeByJavaMirror(sessionToRemove);
             mTermuxSessions.get(index).getTerminalSession().finishIfRunning();
             mTermuxSessions.remove(index);
             // 清理环境缓存
@@ -915,6 +968,8 @@ public synchronized int removeTermuxSession(TerminalSession sessionToRemove) {
             if (sessionName == null || sessionName.isEmpty()) {
                 sessionName = getString(R.string.terminal);
             }
+            // Compose 模式镜像：同时结束并注销对应的 Compose 会话
+            com.termux.app.compose.ComposeSessionBridge.INSTANCE.removeByJavaMirror(session.getTerminalSession());
             session.getTerminalSession().finishIfRunning();
             mTermuxSessions.remove(index);
             // 清理环境缓存
@@ -1117,6 +1172,17 @@ public synchronized int removeTermuxSession(TerminalSession sessionToRemove) {
 
         // Set notification text
         int sessionCount = getTermuxSessionsSize();
+        // Compose 模式：mTermuxSessions 只含第三方路径的镜像会话，Compose 直建的会话
+        // （主页/终端页"新建会话"）不在其中。以 ComposeSessionManager 的实际会话数为准，
+        // 避免 LiveUpdate 通知的会话数量计算错误。
+        if (com.termux.app.compose.TerminalRuntimeCore.isComposeMode(this)) {
+            try {
+                sessionCount = com.termux.app.compose.terminal.ComposeSessionManager
+                    .getInstance(this).getSessions().getValue().size();
+            } catch (Throwable t) {
+                Logger.logDebug(LOG_TAG, "Failed to count Compose sessions: " + t.getMessage());
+            }
+        }
         int taskCount = mTermuxTasks.size();
         String notificationText;
 
@@ -1296,6 +1362,26 @@ public synchronized int removeTermuxSession(TerminalSession sessionToRemove) {
     public synchronized void updateSessionList(List<TermuxSession> newSessions) {
         mTermuxSessions.clear();
         mTermuxSessions.addAll(newSessions);
+        if (mTermuxTerminalSessionClient != null)
+            mTermuxTerminalSessionClient.termuxSessionListNotifyUpdated();
+        updateNotification();
+    }
+
+    /**
+     * 清空所有会话与任务并刷新会话列表（切换运行核心时使用）。
+     * 含 Compose 镜像会话——无真实进程，结束后不会触发 onSessionFinished 回调，
+     * 必须手动从列表移除，否则切换回 Java 核心后会残留无效的会话卡片。
+     */
+    public synchronized void removeAllTermuxSessions() {
+        for (TermuxSession session : new ArrayList<>(mTermuxSessions)) {
+            try {
+                session.getTerminalSession().finishIfRunning();
+            } catch (Exception e) {
+                Logger.logStackTraceWithMessage(LOG_TAG, "Failed to finish session while clearing all sessions", e);
+            }
+        }
+        mTermuxSessions.clear();
+        mTermuxTasks.clear();
         if (mTermuxTerminalSessionClient != null)
             mTermuxTerminalSessionClient.termuxSessionListNotifyUpdated();
         updateNotification();

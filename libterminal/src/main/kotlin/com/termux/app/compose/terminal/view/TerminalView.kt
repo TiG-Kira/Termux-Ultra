@@ -93,6 +93,22 @@ class TerminalView(
             invalidate()
         }
 
+    /**
+     * 自定义终端配色方案。
+     *
+     * 若设置非 null，[applyColorScheme] 优先使用此值；
+     * 否则退回 [useLightTheme] 决定的默认 dark/light 基底。
+     * 可运行时修改，已绑定会话会立即重建配色并重绘。
+     */
+    var customColorScheme: TerminalColorScheme? = null
+        set(value) {
+            if (value == field) return
+            field = value
+            val session = currentSession ?: return
+            applyColorScheme(session)
+            invalidate()
+        }
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     // 会话事件订阅绑定器：管理屏幕刷新与剪贴板事件流的订阅生命周期
@@ -175,7 +191,8 @@ class TerminalView(
      * [TerminalPaletteResolver] 的覆盖板盖在主题之上，仍保持生效。
      */
     private fun applyColorScheme(session: TerminalSession) {
-        val scheme = if (useLightTheme) TerminalColorScheme.light() else TerminalColorScheme.dark()
+        val scheme = customColorScheme
+            ?: if (useLightTheme) TerminalColorScheme.light() else TerminalColorScheme.dark()
         session.emulator.colorScheme = scheme
         currentPalette = TerminalPaletteResolver(scheme, session.emulator.mPalette)
     }
@@ -198,6 +215,7 @@ class TerminalView(
 
     var typeface: Typeface = Typeface.MONOSPACE
         set(value) {
+            if (value == field) return
             field = value
             mRenderer = TerminalRenderer(textSize.dp, field)
             updateSize()
@@ -469,6 +487,9 @@ class TerminalView(
 
     init {
         isVerticalScrollBarEnabled = true
+        isFocusable = true
+        isFocusableInTouchMode = true
+        defaultFocusHighlightEnabled = false
     }
 
     private val Int.dp: Int

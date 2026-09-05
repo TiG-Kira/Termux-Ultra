@@ -1,17 +1,13 @@
 package com.termux.app.compose
 
 import android.app.Activity
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner
 import com.termux.app.TermuxActivity
 import com.termux.app.compose.terminal.ComposeSessionManager
+import com.termux.app.compose.terminal.ComposeTerminalSettings
 import com.termux.app.compose.terminal.engine.TerminalSession as LibTerminalSession
-import com.termux.shared.shell.TermuxShellEnvironmentClient
-import com.termux.shared.shell.TermuxShellUtils
-import com.termux.view.TerminalView
-import java.io.File
 
 /**
  * Bridge helpers used by [TermuxActivity] (Java) to invoke Compose-only
@@ -23,17 +19,21 @@ object TermuxActivityBridge {
     /**
      * Replace the current Activity window content with the Compose-based
      * TerminalDetailScreen, wrapped by KiTerminalTheme (Miuix theme).
+     *
+     * Compose 模式下，会话由 ComposeSessionManager 单例持久管理：
+     * - 首次调用：创建新 shell 会话
+     * - 后续调用（已有会话）：直接显示当前会话，不新建
+     * - onBack 只退出 Activity，不 kill 会话（保持后台运行）
      */
     @JvmStatic
     fun setTerminalDetailContent(
         activity: TermuxActivity,
-        terminalView: TerminalView,
+        terminalView: com.termux.view.TerminalView,
         onBack: Runnable,
     ) {
         val isComposeMode = TerminalRuntimeCore.isComposeMode(activity)
 
         if (isComposeMode) {
-            // Compose 模式：创建 libterminal TerminalSession
             startComposeModeTerminal(activity, onBack)
         } else {
             // Java+NDK 模式（默认）
@@ -63,54 +63,24 @@ object TermuxActivityBridge {
         activity: TermuxActivity,
         onBack: Runnable
     ) {
-        val envClient = TermuxShellEnvironmentClient()
-
-        // 工作目录
-        val prefs = activity.getSharedPreferences("termux_preferences", Activity.MODE_PRIVATE)
-        val workingDir = prefs.getString("current_session_dir", null)
-            ?: envClient.getDefaultWorkingDirectoryPath()
-
-        // Shell 环境（完整 Termux 环境）
-        val env = TermuxShellUtils.buildEnvironment(activity, false, workingDir)
-
-        // 选择 shell
-        val defaultBinPath = envClient.getDefaultBinPath().ifEmpty { "/system/bin" }
-        var shellPath: String? = null
-        var isLoginShell = false
-
-        for (shellBinary in arrayOf("login", "bash", "zsh")) {
-            val shellFile = File(defaultBinPath, shellBinary)
-            if (shellFile.canExecute()) {
-                shellPath = shellFile.absolutePath
-                isLoginShell = true
-                break
-            }
-        }
-
-        if (shellPath == null) {
-            shellPath = "/system/bin/sh"
-        }
-
-        // 处理 arguments：login shell 的 argv[0] 加 "-" 前缀
-        val processArgs = envClient.setupProcessArgs(shellPath, emptyArray())
-        val executable = processArgs[0]
-        val shellBasename = executable.substringAfterLast('/')
-        val argv0 = if (isLoginShell) "-$shellBasename" else shellBasename
-        val args = arrayOf(argv0) + processArgs.drop(1)
-
-        // 创建 Compose 模式会话
         val sessionManager = ComposeSessionManager.getInstance(activity)
-        val composePrefs = activity.getSharedPreferences("compose_terminal", Activity.MODE_PRIVATE)
-        val textSize = composePrefs.getInt("font_size", 14)
-        val cursorBlink = composePrefs.getBoolean("cursor_blink", true)
 
-        val session = sessionManager.createSession(
-            shellPath = executable,
-            cwd = workingDir,
-            args = args,
-            env = env,
-            sessionName = "Compose $shellBasename"
-        )
+        // 每次进入 Compose 终端都重新从 ~/.termux/colors.properties 与 font.ttf 读取 Styling，
+        // 保证与 Java 模式的主题/字体始终保持同步（即使此前在设置页改过主题）
+        ComposeTerminalSettings.init(activity)
+        ComposeTerminalSettings.reloadFromStylingDisk()
+
+        // 优先处理 Java 接口传入的镜像句柄（第三方页面"新会话/tmux 执行"等），
+        // 使 Compose 终端直接展示对应的 Compose 会话；无句柄时维持原有行为。
+        val targetSession = resolveSessionFromIntent(activity, sessionManager)
+
+        // 效仿 Java 版策略：未初始化的会话（新建后未进入过，pid=0）在用户手动点击进入
+        // 终端控制台的那一刻才真正初始化（拉起进程）
+        if (targetSession.pid == 0) {
+            targetSession.execute()
+        }
+
+        sessionManager.switchTo(targetSession.id)
 
         activity.setContent {
             val navDispatcher = NavigationHelper.createDispatcher()
@@ -122,12 +92,10 @@ object TermuxActivityBridge {
                     manageSystemBars = false,
                     content = {
                         TerminalDetailScreenCompose(
-                            session = session,
-                            textSize = textSize,
-                            cursorBlink = cursorBlink,
+                            sessionManager = sessionManager,
+                            session = targetSession,
                             onBack = {
-                                session.finishIfRunning()
-                                sessionManager.killSession(session.id)
+                                // 修复：返回 Activity 不 kill 会话！
                                 onBack.run()
                             }
                         )
@@ -135,5 +103,25 @@ object TermuxActivityBridge {
                 )
             }
         }
+    }
+
+    /**
+     * 根据 Activity Intent 中携带的 "sessionHandle"（Compose 镜像句柄）解析目标 Compose 会话；
+     * 无句柄/解析失败时退回：当前会话 → 第一个会话 → 新建默认 shell。
+     */
+    private fun resolveSessionFromIntent(
+        activity: TermuxActivity,
+        sessionManager: ComposeSessionManager
+    ): com.termux.app.compose.terminal.engine.TerminalSession {
+        val handle = try { activity.intent.getStringExtra("sessionHandle") } catch (_: Throwable) { null }
+        val sessionId = ComposeSessionBridge.resolveComposeSessionId(handle)
+        if (sessionId != null) {
+            sessionManager.sessions.value.firstOrNull { it.session.id == sessionId }?.session?.let {
+                return it
+            }
+        }
+        return sessionManager.currentSession
+            ?: sessionManager.sessions.value.firstOrNull()?.session
+            ?: sessionManager.createDefaultSession()
     }
 }

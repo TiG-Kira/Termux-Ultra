@@ -484,6 +484,15 @@ public final class TermuxActivity extends ComponentActivity implements ServiceCo
             }
         }
 
+        // Compose 模式：第三方页面通过 Java 接口创建新会话时，正在运行中的 Compose 终端
+        // 需同步切换到该会话（ComposeSessionManager.switchTo 由桥接层在主线程执行）。
+        if (com.termux.app.compose.TerminalRuntimeCore.isComposeMode(this)) {
+            String composeHandle = intent != null ? intent.getStringExtra("sessionHandle") : null;
+            if (composeHandle != null) {
+                com.termux.app.compose.ComposeSessionBridge.INSTANCE.switchToSessionByHandle(this, composeHandle);
+            }
+        }
+
         // 处理风险确认结果（从主页返回时携带）
         handleRiskConfirmResult(intent);
     }
@@ -660,7 +669,18 @@ public final class TermuxActivity extends ComponentActivity implements ServiceCo
         setTermuxSessionsListView();
 
         if (mTermuxService.getTermuxSessionsSize() == 0) {
-            if (mIsVisible) {
+            if (com.termux.app.compose.TerminalRuntimeCore.isComposeMode(this)) {
+                // Compose 模式：会话由 ComposeSessionManager 管理，Java 侧会话列表为空属正常。
+                // 不能走 Java 版的 finishActivityIfNotFinishing()（否则 Compose 终端页刚进入
+                // 就被关闭，导致无法进入终端）。
+                // 效仿 Java 版空会话自动 addNewSession 开启服务的策略：
+                // Compose 侧无任何会话时新建默认会话并立即启动，服务随前台通知保活。
+                if (com.termux.app.compose.terminal.ComposeSessionManager.getInstance(this)
+                        .getSessions().getValue().isEmpty()) {
+                    com.termux.app.compose.terminal.ComposeSessionManager.getInstance(this)
+                        .createDefaultSession(true, false);
+                }
+            } else if (mIsVisible) {
                 Intent i = getIntent();
                 boolean tileRequest = i != null && i.getBooleanExtra(com.termux.app.NewTerminalTileService.EXTRA_NEW_TERMINAL, false);
                 if (i != null && Intent.ACTION_RUN.equals(i.getAction()) && !mActionRunHandled) {
@@ -1404,6 +1424,13 @@ public final class TermuxActivity extends ComponentActivity implements ServiceCo
     }
 
     private void reloadActivityStyling() {
+        // Compose 模式：Styling 页/termux-reload 写盘后，Compose 终端直接从
+        // ~/.termux/colors.properties 与 font.ttf 重新加载（与 Java 模式共用主题，双向同步）
+        if (com.termux.app.compose.TerminalRuntimeCore.isComposeMode(this)) {
+            com.termux.app.compose.terminal.ComposeTerminalSettings.INSTANCE.init(this);
+            com.termux.app.compose.terminal.ComposeTerminalSettings.INSTANCE.reloadFromStylingDisk();
+        }
+
         if (mProperties!= null) {
             mProperties.loadTermuxPropertiesFromDisk();
 

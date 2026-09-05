@@ -270,6 +270,12 @@ public class TermuxTerminalSessionClient extends TermuxTerminalSessionClientBase
     public void setCurrentSession(TerminalSession session) {
         if (session == null) return;
 
+        // Compose 模式下的镜像句柄会话由 ComposeSessionManager 管理，绝不附加到 Java
+        // TerminalView（否则会重复拉起一个真实进程）。真正切换由桥接层/Compose 层完成。
+        if (com.termux.app.compose.ComposeSessionBridge.INSTANCE.isMirrorSession(session.mHandle)) {
+            return;
+        }
+
         if (mActivity.getTerminalView().attachSession(session)) {
             // notify about switched session if not already displaying the session
             notifyOfSessionChange();

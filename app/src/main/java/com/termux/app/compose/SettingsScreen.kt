@@ -64,7 +64,6 @@ import top.yukonga.miuix.kmp.basic.DropdownItem
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import com.termux.R
 import com.termux.app.LocaleHelper
-import com.termux.app.activities.SettingsActivity
 import com.termux.app.compose.AiTermuxPrefs
 import com.termux.app.compose.AiTermuxConfig
 import com.termux.app.compose.SkillType
@@ -203,6 +202,7 @@ fun SettingsScreen(
 
     // Terminal settings - Kotlin+Compose mode
     val composePrefs = remember { context.getSharedPreferences("compose_terminal", Context.MODE_PRIVATE) }
+    com.termux.app.compose.terminal.ComposeTerminalSettings.init(context)
     var composeFontSize by remember { mutableIntStateOf(composePrefs.getInt("font_size", 14)) }
     var composeCursorBlink by remember { mutableStateOf(composePrefs.getBoolean("cursor_blink", true)) }
     var composeScrollbackLines by remember { mutableIntStateOf(composePrefs.getInt("scrollback_lines", 5000)) }
@@ -412,17 +412,6 @@ fun SettingsScreen(
 
     val systemSettings = remember {
         buildList {
-            add(
-                SettingItem(
-                    title = context.getString(R.string.termux_settings),
-                    description = context.getString(R.string.termux_settings_description),
-                    iconRes = R.drawable.ic_settings,
-                    action = {
-                        val intent = Intent(context, SettingsActivity::class.java)
-                        context.startActivity(intent)
-                    }
-                )
-            )
             add(
                 SettingItem(
                     title = context.getString(R.string.log_management),
@@ -675,16 +664,24 @@ fun SettingsScreen(
                     Column {
                         OverlayDropdownPreference(
                             title = "终端运行核心",
-                            summary = runtimeCore.displayName,
+                            summary = "切换终端后端，Compose 模式可能会有部分插件不再可用，执行切换操作会立刻关闭所有运行会话，请提前保存工作。",
                             items = runtimeCoreItems,
                             selectedIndex = currentCoreIndex,
                             onSelectedIndexChange = { idx ->
                                 val selected = TerminalRuntimeCore.Core.entries[idx]
                                 // SDK < 28 时禁止选 Kotlin+Compose
                                 if (selected == TerminalRuntimeCore.Core.KOTLIN_COMPOSE && !composeSupported) return@OverlayDropdownPreference
-                                pendingRuntimeCore = selected
                                 if (selected != runtimeCore) {
-                                    showKillSessionsDialog = true
+                                    TerminalRuntimeCore.killAllSessions(context)
+                                    TerminalRuntimeCore.applyPluginState(context, selected)
+                                    TerminalRuntimeCore.setCurrent(context, selected)
+                                    runtimeCore = selected
+                                    termuxApiEnabled = IntegratedTools.isEnabled(context, IntegratedTools.Tool.TERMUX_API)
+                                    termuxBootEnabled = IntegratedTools.isEnabled(context, IntegratedTools.Tool.TERMUX_BOOT)
+                                    termuxStylingEnabled = IntegratedTools.isEnabled(context, IntegratedTools.Tool.TERMUX_STYLING)
+                                    termuxTaskerEnabled = IntegratedTools.isEnabled(context, IntegratedTools.Tool.TERMUX_TASKER)
+                                    termuxWidgetEnabled = IntegratedTools.isEnabled(context, IntegratedTools.Tool.TERMUX_WIDGET)
+                                    showSnackbar("已切换到 ${selected.displayName}，所有会话已关闭")
                                 }
                             },
                             startAction = {
@@ -734,7 +731,7 @@ fun SettingsScreen(
                                     terminalMarginAdjustment = it
                                     terminalPrefs?.setTerminalMarginAdjustment(it)
                                 },
-                                startAction = { SettingIcon(R.drawable.ic_screen_rotation) }
+                                startAction = { SettingIcon(R.drawable.ic_terminal) }
                             )
                             HorizontalDivider(
                                 color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f),
@@ -775,12 +772,12 @@ fun SettingsScreen(
                             )
                             OverlayDropdownPreference(
                                 title = "字体大小",
-                                summary = "${composeFontSize}sp",
+                                summary = "更改终端控制台字体大小",
                                 items = listOf("10sp", "12sp", "14sp", "16sp", "18sp", "20sp", "24sp"),
-                                selectedIndex = listOf(10, 12, 14, 16, 18, 20, 24).indexOf(composeFontSize).coerceAtLeast(2),
+                                selectedIndex = listOf(10, 12, 14, 16, 18, 20, 24).indexOf(composeFontSize).coerceAtLeast(0),
                                 onSelectedIndexChange = { idx ->
                                     composeFontSize = listOf(10, 12, 14, 16, 18, 20, 24)[idx]
-                                    composePrefs.edit().putInt("font_size", composeFontSize).apply()
+                                    com.termux.app.compose.terminal.ComposeTerminalSettings.setFontSize(composeFontSize)
                                 },
                                 startAction = { SettingIcon(R.drawable.ic_text_size) }
                             )
@@ -794,7 +791,7 @@ fun SettingsScreen(
                                 checked = composeCursorBlink,
                                 onCheckedChange = {
                                     composeCursorBlink = it
-                                    composePrefs.edit().putBoolean("cursor_blink", it).apply()
+                                    com.termux.app.compose.terminal.ComposeTerminalSettings.setCursorBlink(it)
                                 },
                                 startAction = { SettingIcon(R.drawable.ic_terminal) }
                             )
@@ -804,12 +801,12 @@ fun SettingsScreen(
                             )
                             OverlayDropdownPreference(
                                 title = "滚动缓冲区",
-                                summary = "${composeScrollbackLines} 行",
+                                summary = "更改缓冲区行数大小",
                                 items = listOf("1000 行", "5000 行", "10000 行", "50000 行"),
-                                selectedIndex = listOf(1000, 5000, 10000, 50000).indexOf(composeScrollbackLines).coerceAtLeast(1),
+                                selectedIndex = listOf(1000, 5000, 10000, 50000).indexOf(composeScrollbackLines).coerceAtLeast(0),
                                 onSelectedIndexChange = { idx ->
                                     composeScrollbackLines = listOf(1000, 5000, 10000, 50000)[idx]
-                                    composePrefs.edit().putInt("scrollback_lines", composeScrollbackLines).apply()
+                                    com.termux.app.compose.terminal.ComposeTerminalSettings.setScrollbackLines(composeScrollbackLines)
                                 },
                                 startAction = { SettingIcon(R.drawable.ic_screen_rotation) }
                             )

@@ -673,6 +673,7 @@ fun MainScreen(
             // 底层：swipe 过程中的目标页面（独立渲染，不影响 AnimatedContent 中当前页面的状态）
             if (isSwipingInProgress && swipeTargetTab != null) {
                 PageContentForTab(
+                    context = context,
                     tab = swipeTargetTab!!,
                     sessions = sessions,
                     onSessionClick = onSessionClick,
@@ -725,6 +726,7 @@ fun MainScreen(
                 }
             ) { tab ->
                 PageContentForTab(
+                    context = context,
                     tab = tab,
                     sessions = sessions,
                     onSessionClick = onSessionClick,
@@ -781,6 +783,7 @@ fun MainScreen(
 
 @Composable
 private fun PageContentForTab(
+    context: android.content.Context,
     tab: Int,
     sessions: List<TermuxSession>,
     onSessionClick: (TermuxSession) -> Unit,
@@ -816,17 +819,30 @@ private fun PageContentForTab(
             onEditModeChanged = onOverviewEditModeChanged,
             navBarBottomPadding = navBarBottomPadding
         )
-        1 -> TerminalListScreen(
-            sessions = sessions,
-            onSessionClick = onSessionClick,
-            onNewTerminal = onNewTerminal,
-            onStopTerminal = onStopTerminal,
-            onRenameTerminal = onRenameTerminal,
-            isWakeLockEnabled = isWakeLockEnabled,
-            onToggleWakeLock = onToggleWakeLock,
-            onRefresh = onRefreshSessions,
-            navBarBottomPadding = navBarBottomPadding
-        )
+        1 -> {
+            val runtimeCore = TerminalRuntimeCore.getCurrent(context)
+            if (runtimeCore == TerminalRuntimeCore.Core.KOTLIN_COMPOSE) {
+                ComposeTerminalListScreen(
+                    context = context,
+                    onNewTerminal = onNewTerminal,
+                    isWakeLockEnabled = isWakeLockEnabled,
+                    onToggleWakeLock = onToggleWakeLock,
+                    navBarBottomPadding = navBarBottomPadding
+                )
+            } else {
+                TerminalListScreen(
+                    sessions = sessions,
+                    onSessionClick = onSessionClick,
+                    onNewTerminal = onNewTerminal,
+                    onStopTerminal = onStopTerminal,
+                    onRenameTerminal = onRenameTerminal,
+                    isWakeLockEnabled = isWakeLockEnabled,
+                    onToggleWakeLock = onToggleWakeLock,
+                    onRefresh = onRefreshSessions,
+                    navBarBottomPadding = navBarBottomPadding
+                )
+            }
+        }
         2 -> FileManagerScreen(
             onOpenFile = onExecuteScript,
             navBarBottomPadding = navBarBottomPadding

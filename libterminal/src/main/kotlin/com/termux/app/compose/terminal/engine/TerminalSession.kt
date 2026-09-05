@@ -10,6 +10,8 @@ import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -44,11 +46,24 @@ class TerminalSession(
         }
     }
 
+    /**
+     * 进程 pid。
+     * 语义与 Java 版 TerminalSession.mShellPid 保持一致：
+     * 0=未初始化（尚未调用 [execute]），>0=运行中，-1=已结束。
+     */
     @Volatile
-    var pid: Int = -1
+    var pid: Int = 0
 
     val isRunning: Boolean
         get() = pid > 0
+
+    /**
+     * 进程退出事件流（[handleProcessExit] 时置 true）。
+     * pid 是普通字段不会触发 Compose 重组，UI 层收集此流即可在会话结束的
+     * 瞬间感知并立刻显示"会话已结束"（对齐 Java 版 onSessionFinished 回调行为）。
+     */
+    private val _sessionExited = MutableStateFlow(false)
+    val sessionExited: StateFlow<Boolean> = _sessionExited.asStateFlow()
 
     /** 进程退出状态，仅在 [isRunning] 为 false 时有效。 */
     /** Shell 进程的退出码，仅在进程结束后有效。 */
@@ -173,6 +188,8 @@ class TerminalSession(
     private inline fun handleProcessExit(exitCode: Int) {
         exitStatus = exitCode
         pid = -1
+        // 通知 UI 层会话已结束（立刻显示"会话已结束"，无需等待其它状态触发重组）
+        _sessionExited.value = true
 
         synchronized(emulator) {
             while (true) {
