@@ -28,6 +28,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.google.android.material.snackbar.Snackbar
+import com.termux.app.compose.terminal.color.TerminalColorScheme
+import com.termux.app.compose.terminal.color.TerminalThemes
 import com.termux.R
 import com.termux.app.utils.SnackbarHelper
 import top.yukonga.miuix.kmp.basic.*
@@ -42,29 +44,15 @@ import java.util.Properties
 
 private const val DEFAULT_FILENAME = "Default"
 
-private val DEFAULT_TERMINAL_COLORS = TerminalColors(
-    foreground = Color(0xFFFFFFFF),
-    background = Color(0xFF000000),
-    cursor = Color(0xFFFFFFFF),
-    colors = listOf(
-        Color(0xFF000000), // color0 black
-        Color(0xFFCD0000), // color1 red
-        Color(0xFF00CD00), // color2 green
-        Color(0xFFCDCD00), // color3 yellow
-        Color(0xFF6495ED), // color4 blue
-        Color(0xFFCD00CD), // color5 magenta
-        Color(0xFF00CDCD), // color6 cyan
-        Color(0xFFE5E5E5), // color7 white
-        Color(0xFF7F7F7F), // color8 bright black
-        Color(0xFFFF0000), // color9 bright red
-        Color(0xFF00FF00), // color10 bright green
-        Color(0xFFFFFF00), // color11 bright yellow
-        Color(0xFF5C5CFF), // color12 bright blue
-        Color(0xFFFF00FF), // color13 bright magenta
-        Color(0xFF00FFFF), // color14 bright cyan
-        Color(0xFFFFFFFF)  // color15 bright white
+private val DEFAULT_TERMINAL_COLORS = run {
+    val scheme = TerminalColorScheme.dark()
+    TerminalColors(
+        foreground = Color(scheme.foreground),
+        background = Color(scheme.background),
+        cursor = Color(scheme.cursor),
+        colors = scheme.palette16().map { Color(it) }
     )
-)
+}
 
 private data class TerminalColors(
     val foreground: Color,

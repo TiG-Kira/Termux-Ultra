@@ -69,6 +69,8 @@ import com.termux.app.compose.AiTermuxPrefs
 import com.termux.app.compose.AiTermuxConfig
 import com.termux.app.compose.SkillType
 import com.termux.app.utils.SnackbarHelper
+import com.termux.shared.settings.preferences.TermuxAppSharedPreferences
+import com.termux.shared.logger.Logger
 import com.google.android.material.snackbar.Snackbar
 import java.io.File
 
@@ -185,6 +187,25 @@ fun SettingsScreen(
     var termuxStylingEnabled by remember { mutableStateOf(IntegratedTools.isEnabled(context, IntegratedTools.Tool.TERMUX_STYLING)) }
     var termuxTaskerEnabled by remember { mutableStateOf(IntegratedTools.isEnabled(context, IntegratedTools.Tool.TERMUX_TASKER)) }
     var termuxWidgetEnabled by remember { mutableStateOf(IntegratedTools.isEnabled(context, IntegratedTools.Tool.TERMUX_WIDGET)) }
+
+    // Terminal runtime core
+    var runtimeCore by remember { mutableStateOf(TerminalRuntimeCore.getCurrent(context)) }
+    var pendingRuntimeCore by remember { mutableStateOf(TerminalRuntimeCore.Core.JAVA_NDK) }
+    var showKillSessionsDialog by remember { mutableStateOf(false) }
+
+    // Terminal settings - Java+NDK mode
+    val terminalPrefs = remember { TermuxAppSharedPreferences.build(context) }
+    var softKeyboardEnabled by remember { mutableStateOf(terminalPrefs?.isSoftKeyboardEnabled() ?: false) }
+    var softKeyboardOnlyIfNoHardware by remember { mutableStateOf(terminalPrefs?.isSoftKeyboardEnabledOnlyIfNoHardware() ?: false) }
+    var terminalMarginAdjustment by remember { mutableStateOf(terminalPrefs?.isTerminalMarginAdjustmentEnabled() ?: false) }
+    var keyLoggingEnabled by remember { mutableStateOf(terminalPrefs?.isTerminalViewKeyLoggingEnabled() ?: false) }
+    var logLevel by remember { mutableStateOf(terminalPrefs?.logLevel ?: Logger.DEFAULT_LOG_LEVEL) }
+
+    // Terminal settings - Kotlin+Compose mode
+    val composePrefs = remember { context.getSharedPreferences("compose_terminal", Context.MODE_PRIVATE) }
+    var composeFontSize by remember { mutableIntStateOf(composePrefs.getInt("font_size", 14)) }
+    var composeCursorBlink by remember { mutableStateOf(composePrefs.getBoolean("cursor_blink", true)) }
+    var composeScrollbackLines by remember { mutableIntStateOf(composePrefs.getInt("scrollback_lines", 5000)) }
 
     // Official standalone APK detection. Keys match the add-on app package names; when a standalone
     // APK is installed, the integrated toggle is forced OFF and disabled, with the row shows
@@ -638,9 +659,13 @@ fun SettingsScreen(
             item(key = "section_backup") { SmallTitle(text = context.getString(R.string.backup_category)) }
             item(key = "card_data_group") { SettingsGroupCard(items = dataSettings) }
 
-            // ---------- Integrated Tools ----------
-            item(key = "section_tools") { SmallTitle(text = context.getString(R.string.integrated_tools_category)) }
-            item(key = "card_integrated_tools") {
+            // ---------- 终端 ----------
+            item(key = "section_terminal") { SmallTitle(text = "终端") }
+            item(key = "card_terminal_runtime") {
+                val isComposeMode = runtimeCore == TerminalRuntimeCore.Core.KOTLIN_COMPOSE
+                val composeSupported = TerminalRuntimeCore.isComposeSupported
+                val runtimeCoreItems = TerminalRuntimeCore.Core.entries.map { it.displayName }
+                val currentCoreIndex = TerminalRuntimeCore.Core.entries.indexOf(runtimeCore)
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -648,6 +673,163 @@ fun SettingsScreen(
                         .clip(RoundedCornerShape(16.dp))
                 ) {
                     Column {
+                        OverlayDropdownPreference(
+                            title = "终端运行核心",
+                            summary = runtimeCore.displayName,
+                            items = runtimeCoreItems,
+                            selectedIndex = currentCoreIndex,
+                            onSelectedIndexChange = { idx ->
+                                val selected = TerminalRuntimeCore.Core.entries[idx]
+                                // SDK < 28 时禁止选 Kotlin+Compose
+                                if (selected == TerminalRuntimeCore.Core.KOTLIN_COMPOSE && !composeSupported) return@OverlayDropdownPreference
+                                pendingRuntimeCore = selected
+                                if (selected != runtimeCore) {
+                                    showKillSessionsDialog = true
+                                }
+                            },
+                            startAction = {
+                                SettingIcon(R.drawable.ic_terminal)
+                            }
+                        )
+
+                        // ===== Java+NDK 模式设置 =====
+                        if (!isComposeMode) {
+                            HorizontalDivider(
+                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f),
+                                modifier = Modifier.padding(start = 72.dp, end = 16.dp)
+                            )
+                            SwitchPreference(
+                                title = "启用软键盘",
+                                summary = if (softKeyboardEnabled) "已启用" else "未启用",
+                                checked = softKeyboardEnabled,
+                                onCheckedChange = {
+                                    softKeyboardEnabled = it
+                                    terminalPrefs?.setSoftKeyboardEnabled(it)
+                                },
+                                startAction = { SettingIcon(R.drawable.ic_keyboard) }
+                            )
+                            HorizontalDivider(
+                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f),
+                                modifier = Modifier.padding(start = 72.dp, end = 16.dp)
+                            )
+                            SwitchPreference(
+                                title = "仅无硬件键盘时启用软键盘",
+                                summary = if (softKeyboardOnlyIfNoHardware) "已启用" else "未启用",
+                                checked = softKeyboardOnlyIfNoHardware,
+                                onCheckedChange = {
+                                    softKeyboardOnlyIfNoHardware = it
+                                    terminalPrefs?.setSoftKeyboardEnabledOnlyIfNoHardware(it)
+                                },
+                                startAction = { SettingIcon(R.drawable.ic_keyboard) }
+                            )
+                            HorizontalDivider(
+                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f),
+                                modifier = Modifier.padding(start = 72.dp, end = 16.dp)
+                            )
+                            SwitchPreference(
+                                title = "终端边距调整",
+                                summary = if (terminalMarginAdjustment) "已启用" else "未启用",
+                                checked = terminalMarginAdjustment,
+                                onCheckedChange = {
+                                    terminalMarginAdjustment = it
+                                    terminalPrefs?.setTerminalMarginAdjustment(it)
+                                },
+                                startAction = { SettingIcon(R.drawable.ic_screen_rotation) }
+                            )
+                            HorizontalDivider(
+                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f),
+                                modifier = Modifier.padding(start = 72.dp, end = 16.dp)
+                            )
+                            OverlayDropdownPreference(
+                                title = "日志级别",
+                                summary = listOf("关闭", "普通", "调试", "详细")[logLevel.coerceIn(0, 3)],
+                                items = listOf("关闭", "普通", "调试", "详细"),
+                                selectedIndex = logLevel.coerceIn(0, 3),
+                                onSelectedIndexChange = { idx ->
+                                    logLevel = idx
+                                    terminalPrefs?.setLogLevel(context, idx)
+                                },
+                                startAction = { SettingIcon(R.drawable.ic_bug) }
+                            )
+                            HorizontalDivider(
+                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f),
+                                modifier = Modifier.padding(start = 72.dp, end = 16.dp)
+                            )
+                            SwitchPreference(
+                                title = "终端按键日志",
+                                summary = if (keyLoggingEnabled) "已启用" else "未启用",
+                                checked = keyLoggingEnabled,
+                                onCheckedChange = {
+                                    keyLoggingEnabled = it
+                                    terminalPrefs?.setTerminalViewKeyLoggingEnabled(it)
+                                },
+                                startAction = { SettingIcon(R.drawable.ic_bug) }
+                            )
+                        }
+
+                        // ===== Kotlin+Compose 模式设置 =====
+                        if (isComposeMode) {
+                            HorizontalDivider(
+                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f),
+                                modifier = Modifier.padding(start = 72.dp, end = 16.dp)
+                            )
+                            OverlayDropdownPreference(
+                                title = "字体大小",
+                                summary = "${composeFontSize}sp",
+                                items = listOf("10sp", "12sp", "14sp", "16sp", "18sp", "20sp", "24sp"),
+                                selectedIndex = listOf(10, 12, 14, 16, 18, 20, 24).indexOf(composeFontSize).coerceAtLeast(2),
+                                onSelectedIndexChange = { idx ->
+                                    composeFontSize = listOf(10, 12, 14, 16, 18, 20, 24)[idx]
+                                    composePrefs.edit().putInt("font_size", composeFontSize).apply()
+                                },
+                                startAction = { SettingIcon(R.drawable.ic_text_size) }
+                            )
+                            HorizontalDivider(
+                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f),
+                                modifier = Modifier.padding(start = 72.dp, end = 16.dp)
+                            )
+                            SwitchPreference(
+                                title = "光标闪烁",
+                                summary = if (composeCursorBlink) "已启用" else "未启用",
+                                checked = composeCursorBlink,
+                                onCheckedChange = {
+                                    composeCursorBlink = it
+                                    composePrefs.edit().putBoolean("cursor_blink", it).apply()
+                                },
+                                startAction = { SettingIcon(R.drawable.ic_terminal) }
+                            )
+                            HorizontalDivider(
+                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f),
+                                modifier = Modifier.padding(start = 72.dp, end = 16.dp)
+                            )
+                            OverlayDropdownPreference(
+                                title = "滚动缓冲区",
+                                summary = "${composeScrollbackLines} 行",
+                                items = listOf("1000 行", "5000 行", "10000 行", "50000 行"),
+                                selectedIndex = listOf(1000, 5000, 10000, 50000).indexOf(composeScrollbackLines).coerceAtLeast(1),
+                                onSelectedIndexChange = { idx ->
+                                    composeScrollbackLines = listOf(1000, 5000, 10000, 50000)[idx]
+                                    composePrefs.edit().putInt("scrollback_lines", composeScrollbackLines).apply()
+                                },
+                                startAction = { SettingIcon(R.drawable.ic_screen_rotation) }
+                            )
+                        }
+                    }
+                }
+            }
+
+                        // ---------- Integrated Tools ----------
+            item(key = "section_tools") { SmallTitle(text = context.getString(R.string.integrated_tools_category)) }
+            item(key = "card_integrated_tools") {
+                val isComposeMode = runtimeCore == TerminalRuntimeCore.Core.KOTLIN_COMPOSE
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                ) {
+                    Column {
+                        if (!isComposeMode) {
                         IntegratedToolSwitch(
                             title = context.getString(R.string.termux_api_tool),
                             summary = if (apiStandaloneInstalled) replacedSummary
@@ -673,28 +855,11 @@ fun SettingsScreen(
                             onCheckedChange = {
                                 termuxBootEnabled = it
                                 IntegratedTools.setEnabled(context, IntegratedTools.Tool.TERMUX_BOOT, it)
-                                // Enable/disable the boot receiver component to match the toggle.
                                 IntegratedTools.applyComponentState(context, IntegratedTools.Tool.TERMUX_BOOT, it)
                             },
                             enabled = !bootStandaloneInstalled,
                             onDisabledClick = {
                                 IntegratedTools.showStandaloneConflictPrompt(context, IntegratedTools.Tool.TERMUX_BOOT)
-                            }
-                        )
-                        IntegratedToolSwitch(
-                            title = context.getString(R.string.termux_styling_tool),
-                            summary = if (stylingStandaloneInstalled) replacedSummary
-                                      else context.getString(R.string.termux_styling_tool_summary),
-                            iconRes = R.drawable.ic_palette,
-                            checked = termuxStylingEnabled,
-                            onCheckedChange = {
-                                termuxStylingEnabled = it
-                                IntegratedTools.setEnabled(context, IntegratedTools.Tool.TERMUX_STYLING, it)
-                                IntegratedTools.applyComponentState(context, IntegratedTools.Tool.TERMUX_STYLING, it)
-                            },
-                            enabled = !stylingStandaloneInstalled,
-                            onDisabledClick = {
-                                IntegratedTools.showStandaloneConflictPrompt(context, IntegratedTools.Tool.TERMUX_STYLING)
                             }
                         )
                         IntegratedToolSwitch(
@@ -729,11 +894,30 @@ fun SettingsScreen(
                                 IntegratedTools.showStandaloneConflictPrompt(context, IntegratedTools.Tool.TERMUX_WIDGET)
                             }
                         )
+                        }
+
+                        // Styling always available regardless of runtime core
+                        IntegratedToolSwitch(
+                            title = context.getString(R.string.termux_styling_tool),
+                            summary = if (stylingStandaloneInstalled) replacedSummary
+                                      else context.getString(R.string.termux_styling_tool_summary),
+                            iconRes = R.drawable.ic_palette,
+                            checked = termuxStylingEnabled,
+                            onCheckedChange = {
+                                termuxStylingEnabled = it
+                                IntegratedTools.setEnabled(context, IntegratedTools.Tool.TERMUX_STYLING, it)
+                                IntegratedTools.applyComponentState(context, IntegratedTools.Tool.TERMUX_STYLING, it)
+                            },
+                            enabled = !stylingStandaloneInstalled,
+                            onDisabledClick = {
+                                IntegratedTools.showStandaloneConflictPrompt(context, IntegratedTools.Tool.TERMUX_STYLING)
+                            }
+                        )
                     }
                 }
             }
 
-            // ---------- AI Termux ----------
+// ---------- AI Termux ----------
             item(key = "section_ai") { SmallTitle(text = "Termux Agent") }
             item(key = "card_ai") {
                 Card(
@@ -1769,7 +1953,60 @@ fun SettingsScreen(
                         }
                     }
                 }
+                
+            // Kill sessions before switching core
+            OverlayDialog(
+                show = showKillSessionsDialog,
+                onDismissRequest = { showKillSessionsDialog = false },
+                content = {
+                    Column(modifier = Modifier.fillMaxWidth().padding(24.dp)) {
+                        Text(
+                            text = "切换运行核心",
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MiuixTheme.colorScheme.onSurface
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        Text(
+                            text = "切换运行核心需要关闭所有正在运行的会话和任务。此操作不可撤销。",
+                            fontSize = 14.sp,
+                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                            lineHeight = 20.sp
+                        )
+                        Spacer(Modifier.height(20.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            TextButton(
+                                text = "取消",
+                                onClick = { showKillSessionsDialog = false },
+                                modifier = Modifier.weight(1f)
+                            )
+                            Button(
+                                onClick = {
+                                    TerminalRuntimeCore.killAllSessions(context)
+                                    TerminalRuntimeCore.applyPluginState(context, pendingRuntimeCore)
+                                    TerminalRuntimeCore.setCurrent(context, pendingRuntimeCore)
+                                    runtimeCore = pendingRuntimeCore
+                                    termuxApiEnabled = IntegratedTools.isEnabled(context, IntegratedTools.Tool.TERMUX_API)
+                                    termuxBootEnabled = IntegratedTools.isEnabled(context, IntegratedTools.Tool.TERMUX_BOOT)
+                                    termuxStylingEnabled = IntegratedTools.isEnabled(context, IntegratedTools.Tool.TERMUX_STYLING)
+                                    termuxTaskerEnabled = IntegratedTools.isEnabled(context, IntegratedTools.Tool.TERMUX_TASKER)
+                                    termuxWidgetEnabled = IntegratedTools.isEnabled(context, IntegratedTools.Tool.TERMUX_WIDGET)
+                                    showKillSessionsDialog = false
+                                    showSnackbar("已切换到 ${pendingRuntimeCore.displayName}，所有会话已关闭")
+                                },
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.buttonColors(color = Color(0xFFDC2626))
+                            ) {
+                                Text("确认切换", color = Color.White, fontWeight = FontWeight.Medium)
+                            }
+                        }
+                    }
                 }
+            )
+}
             }
         }
         Spacer(Modifier.height(12.dp))

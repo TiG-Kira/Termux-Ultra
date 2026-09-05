@@ -266,7 +266,6 @@ public final class TermuxActivity extends ComponentActivity implements ServiceCo
             getDrawer().setDrawerLockMode(DrawerLayout.LOCK_MODE_LOCKED_CLOSED, Gravity.LEFT);
             setTermuxTerminalViewAndClients();
             setTerminalToolbarView(savedInstanceState);
-            setSettingsButtonView();
             setNewSessionButtonView();
             setToggleKeyboardView();
             setTerminalToolbar();
@@ -857,13 +856,6 @@ public final class TermuxActivity extends ComponentActivity implements ServiceCo
 
 
 
-    private void setSettingsButtonView() {
-        ImageButton settingsButton = findViewById(R.id.settings_button);
-        settingsButton.setOnClickListener(v -> {
-            startActivity(new Intent(this, SettingsActivity.class));
-        });
-    }
-
     private void setNewSessionButtonView() {
         View newSessionButton = findViewById(R.id.new_session_button);
         newSessionButton.setOnClickListener(v -> mTermuxTerminalSessionClient.addNewSession(false, null));
@@ -1143,9 +1135,6 @@ public final class TermuxActivity extends ComponentActivity implements ServiceCo
                 return true;
             case CONTEXT_MENU_HELP_ID:
                 startActivity(new Intent(this, HelpActivity.class));
-                return true;
-            case CONTEXT_MENU_SETTINGS_ID:
-                startActivity(new Intent(this, SettingsActivity.class));
                 return true;
             case CONTEXT_MENU_REPORT_ID:
                 mTermuxTerminalViewClient.reportIssueFromTranscript();

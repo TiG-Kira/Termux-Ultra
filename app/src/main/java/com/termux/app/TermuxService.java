@@ -257,6 +257,12 @@ public final class TermuxService extends Service implements TermuxTask.TermuxTas
                     Logger.logDebug(LOG_TAG, "ACTION_QUIT_APP_FORCE intent received (skip data-loss checks, already confirmed by user)");
                     actionQuitAppForce();
                     break;
+                case TERMUX_SERVICE.ACTION_KILL_SESSIONS:
+                    Logger.logDebug(LOG_TAG, "ACTION_KILL_SESSIONS intent received (switching runtime core)");
+                    killAllTermuxExecutionCommands();
+                    runStopForeground();
+                    updateNotification();
+                    break;
                 case TERMUX_SERVICE.ACTION_WAKE_LOCK:
                     Logger.logDebug(LOG_TAG, "ACTION_WAKE_LOCK intent received");
                     actionAcquireWakeLock();

@@ -894,6 +894,10 @@ public final class TermuxConstants {
              *  (used after user has already confirmed data-loss warning) */
             public static final String ACTION_QUIT_APP_FORCE = TERMUX_PACKAGE_NAME + ".service_quit_app_force"; // Default: "com.termux.service_quit_app_force"
 
+            /** Intent action to kill all running sessions and tasks WITHOUT stopping the service.
+             *  Used when switching runtime cores (Java+NDK ↔ Kotlin+Compose). */
+            public static final String ACTION_KILL_SESSIONS = TERMUX_PACKAGE_NAME + ".service_kill_sessions"; // Default: "com.termux.service_kill_sessions"
+
             /** Intent action to make TERMUX_SERVICE acquire a wakelock */
             public static final String ACTION_WAKE_LOCK = TERMUX_PACKAGE_NAME + ".service_wake_lock"; // Default: "com.termux.service_wake_lock"
 
