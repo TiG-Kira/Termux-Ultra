@@ -1,7 +1,9 @@
 package com.termux.app.compose
 
 import android.content.Context
+import com.termux.R
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
@@ -18,6 +20,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -27,11 +31,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -48,6 +55,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import top.yukonga.miuix.kmp.basic.Card as MiuixCard
 import top.yukonga.miuix.kmp.basic.Icon
+import top.yukonga.miuix.kmp.basic.IconButton
+import top.yukonga.miuix.kmp.overlay.OverlayDialog
+import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.InputField
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.Scaffold
@@ -253,17 +263,22 @@ object PkgRepo {
     }
 
     suspend fun install(context: Context, name: String): Pair<Boolean, String> {
-        val (code, output) = AppShell.exec(context, "pkg install -y $name 2>&1", timeout = 180)
+        val (code, output) = AppShell.exec(context, "export DEBIAN_FRONTEND=noninteractive && pkg install -y $name 2>&1", timeout = 180)
         return (code == 0) to output
     }
 
     suspend fun uninstall(context: Context, name: String): Pair<Boolean, String> {
-        val (code, output) = AppShell.exec(context, "pkg uninstall -y $name 2>&1", timeout = 60)
+        val (code, output) = AppShell.exec(context, "export DEBIAN_FRONTEND=noninteractive && pkg uninstall -y $name 2>&1", timeout = 60)
+        return (code == 0) to output
+    }
+
+    suspend fun update(context: Context): Pair<Boolean, String> {
+        val (code, output) = AppShell.exec(context, "export DEBIAN_FRONTEND=noninteractive && pkg update 2>&1", timeout = 180)
         return (code == 0) to output
     }
 
     suspend fun upgradeAll(context: Context): Pair<Boolean, String> {
-        val (code, output) = AppShell.exec(context, "pkg update -y 2>&1 && pkg upgrade -y 2>&1", timeout = 300)
+        val (code, output) = AppShell.exec(context, "export DEBIAN_FRONTEND=noninteractive && pkg upgrade -y 2>&1", timeout = 300)
         return (code == 0) to output
     }
 
@@ -302,7 +317,12 @@ fun PackageManagerScreen(
     val isDark = isSystemInDarkTheme()
     val scope = rememberCoroutineScope()
 
-    var selectedTab by remember { mutableStateOf(0) }
+        var showProgressDialog by remember { mutableStateOf(false) }
+    var progressTitle by remember { mutableStateOf("") }
+    var progressLog by remember { mutableStateOf("") }
+    var progressSuccess by remember { mutableStateOf<Boolean?>(null) }
+            
+var selectedTab by remember { mutableStateOf(0) }
     var installedList by remember { mutableStateOf<List<PackageInfo>>(emptyList()) }
     var availableList by remember { mutableStateOf<List<PackageInfo>>(emptyList()) }
     var searchQuery by remember { mutableStateOf("") }
@@ -317,19 +337,25 @@ fun PackageManagerScreen(
         isLoading = false
     }
 
+
+
     LaunchedEffect(searchQuery, selectedTab) {
-        if (selectedTab != 1) return@LaunchedEffect
-        loadingAvailable = true
         if (searchQuery.isBlank()) {
-            availableList = PkgRepo.getAvailableAll(context)
+            if (selectedTab == 1) {
+                loadingAvailable = true
+                availableList = PkgRepo.getAvailableAll(context)
+                loadingAvailable = false
+            }
         } else {
+            loadingAvailable = true
             delay(300)
             availableList = PkgRepo.searchAvailable(context, searchQuery)
+            loadingAvailable = false
         }
-        loadingAvailable = false
     }
 
     if (showDetail != null) {
+        BackHandler { showDetail = null }
         PackageDetailScreen(
             pkg = showDetail!!,
             navBarBottomPadding = navBarBottomPadding,
@@ -352,23 +378,85 @@ fun PackageManagerScreen(
         return
     }
 
+    BackHandler {
+        when {
+            searchQuery.isNotBlank() -> searchQuery = ""
+            else -> onBackPressed()
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
-                title = "包管理",
+                title = "软件包管理",
                 scrollBehavior = scrollBehavior,
                 navigationIcon = {
                     Box(
                         modifier = Modifier
-                            .size(48.dp)
-                            .clickable { onBackPressed() },
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .clickable {
+                                if (searchQuery.isNotBlank()) searchQuery = ""
+                                else onBackPressed()
+                            },
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = MiuixIcons.Back,
-                            contentDescription = null,
+                            contentDescription = "返回",
                             tint = MiuixTheme.colorScheme.onSurface,
                             modifier = Modifier.size(24.dp)
+                        )
+                    }
+                },
+                actions = {
+                    IconButton(
+                        onClick = {
+                            progressTitle = "正在刷新软件源"
+                            progressLog = ""
+                            progressSuccess = null
+                            showProgressDialog = true
+                            scope.launch {
+                                val (ok, log) = PkgRepo.update(context)
+                                progressLog = log
+                                progressSuccess = ok
+                                if (ok) {
+                                    installedList = PkgRepo.getInstalled(context)
+                                    if (searchQuery.isBlank()) {
+                                        availableList = PkgRepo.getAvailableAll(context)
+                                    }
+                                }
+                            }
+                        }
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_refresh),
+                            contentDescription = "刷新软件源",
+                            tint = MiuixTheme.colorScheme.onSurface,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+                    IconButton(
+                        onClick = {
+                            progressTitle = "正在升级所有包"
+                            progressLog = ""
+                            progressSuccess = null
+                            showProgressDialog = true
+                            scope.launch {
+                                val (ok, log) = PkgRepo.upgradeAll(context)
+                                progressLog = log
+                                progressSuccess = ok
+                                if (ok) {
+                                    installedList = PkgRepo.getInstalled(context)
+                                }
+                            }
+                        }
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_download),
+                            contentDescription = "升级所有包",
+                            tint = MiuixTheme.colorScheme.onSurface,
+                            modifier = Modifier.size(22.dp)
                         )
                     }
                 }
@@ -379,31 +467,30 @@ fun PackageManagerScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .padding(bottom = navBarBottomPadding + 16.dp)
         ) {
-            TabRowWithContour(
-                tabs = listOf("已安装 (${installedList.size})", "未安装"),
-                selectedTabIndex = selectedTab,
-                onTabSelected = { selectedTab = it },
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
-            )
+            SearchBar(
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                inputField = {
+                    InputField(
+                        query = searchQuery,
+                        onQueryChange = { searchQuery = it },
+                        onSearch = { },
+                        expanded = true,
+                        onExpandedChange = { },
+                        label = "搜索软件包"
+                    )
+                },
+                expanded = true,
+                onExpandedChange = { }
+            ) { }
 
-            if (selectedTab == 1) {
-                SearchBar(
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                    inputField = {
-                        InputField(
-                            query = searchQuery,
-                            onQueryChange = { searchQuery = it },
-                            onSearch = { },
-                            expanded = true,
-                            onExpandedChange = { },
-                            label = "搜索未安装的包"
-                        )
-                    },
-                    expanded = true,
-                    onExpandedChange = { }
-                ) { }
+            if (searchQuery.isBlank()) {
+                TabRowWithContour(
+                    tabs = listOf("已安装 (${installedList.size})", "未安装"),
+                    selectedTabIndex = selectedTab,
+                    onTabSelected = { selectedTab = it },
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                )
             }
 
             Box(modifier = Modifier.fillMaxSize()) {
@@ -413,14 +500,19 @@ fun PackageManagerScreen(
                         color = Color(0xFF2563EB)
                     )
                 } else {
-                    val list = if (selectedTab == 0) installedList else availableList
+                    val list = if (searchQuery.isNotBlank()) {
+                        val q = searchQuery.lowercase()
+                        val installedMatch = installedList.filter { it.name.lowercase().contains(q) }
+                        val availableMatch = availableList.filter { it.name.lowercase().contains(q) }
+                        (installedMatch + availableMatch).distinctBy { it.name }
+                    } else if (selectedTab == 0) installedList else availableList
                     LazyColumn(
                         state = listState,
                         modifier = Modifier.fillMaxSize().nestedScroll(scrollBehavior.nestedScrollConnection),
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                         contentPadding = androidx.compose.foundation.layout.PaddingValues(
                             start = 16.dp, end = 16.dp,
-                            top = 4.dp, bottom = 16.dp
+                            top = 4.dp, bottom = navBarBottomPadding + 16.dp
                         )
                     ) {
                         if (list.isEmpty()) {
@@ -432,8 +524,9 @@ fun PackageManagerScreen(
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Text(
-                                        text = if (selectedTab == 0) "暂无已安装的包"
-                                               else "搜索框留空显示全部未安装包",
+                                        text = if (searchQuery.isNotBlank()) "未找到匹配的软件包"
+                                               else if (selectedTab == 0) "暂无已安装的包"
+                                               else "暂无未安装的包",
                                         color = if (isDark) Color.White.copy(alpha = 0.5f)
                                                 else Color.Black.copy(alpha = 0.5f),
                                         fontSize = 14.sp
@@ -451,6 +544,67 @@ fun PackageManagerScreen(
                     }
                 }
             }
+
+            OverlayDialog(
+                show = showProgressDialog,
+                title = progressTitle.ifBlank { "正在处理" },
+                summary = "",
+                onDismissRequest = { if (progressSuccess != null) showProgressDialog = false },
+                content = {
+                    val logScrollState = rememberScrollState()
+                    Column(modifier = Modifier.fillMaxWidth().padding(top = 12.dp)) {
+                        if (progressSuccess == null) {
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(28.dp),
+                                    color = MiuixTheme.colorScheme.primary,
+                                    strokeWidth = 3.dp
+                                )
+                            }
+                            Spacer(Modifier.height(12.dp))
+                        }
+                        if (progressSuccess != null) {
+                            Text(
+                                text = if (progressSuccess == true) "操作成功" else "操作失败",
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = if (progressSuccess == true) MiuixTheme.colorScheme.primary else Color(0xFFDC2626)
+                            )
+                            Spacer(Modifier.height(12.dp))
+                        }
+                        if (progressLog.isNotBlank()) {
+                            val displayLog = if (progressLog.length > 5000) progressLog.substring(progressLog.length - 5000) else progressLog
+                            Box(
+                                modifier = Modifier.fillMaxWidth()
+                                    .height(200.dp)
+                                    .background(
+                                        color = if (isDark) Color(0xFF1A1A1A) else Color(0xFFF5F5F5),
+                                        shape = RoundedCornerShape(8.dp)
+                                    )
+                                    .padding(12.dp)
+                            ) {
+                                Text(
+                                    text = displayLog,
+                                    fontSize = 12.sp,
+                                    color = if (isDark) Color.White.copy(alpha = 0.8f) else Color.Black.copy(alpha = 0.7f),
+                                    lineHeight = 16.sp,
+                                    modifier = Modifier.verticalScroll(logScrollState)
+                                )
+                            }
+                            Spacer(Modifier.height(12.dp))
+                        }
+                        if (progressSuccess != null) {
+                            Row(modifier = Modifier.fillMaxWidth()) {
+                                TextButton(
+                                    text = "关闭",
+                                    onClick = { showProgressDialog = false },
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                        }
+                    }
+                }
+            )
         }
     }
 }

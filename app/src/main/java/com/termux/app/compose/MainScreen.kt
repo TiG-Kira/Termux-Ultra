@@ -598,8 +598,11 @@ fun MainScreen(
 
                                 if (exceeded && isMainTabSwipe) {
                                     // Animation complete: overlay is fully faded out
-                                    // Commit tab change - AnimatedContent is already showing target page
+                                    // Skip AnimatedContent transition to avoid double animation flash
+                                    skipNextTransition = true
                                     handleSwipe(finalOffset)
+                                    kotlinx.coroutines.delay(50)
+                                    skipNextTransition = false
                                     isSwipingInProgress = false
                                     swipeTargetTab = null
                                     rawDragOffset = 0f

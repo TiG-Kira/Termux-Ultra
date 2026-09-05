@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
@@ -35,6 +36,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -82,6 +84,7 @@ fun PackageDetailScreen(
     var detail by remember { mutableStateOf<PackageInfo?>(pkg) }
     var isLoading by remember { mutableStateOf(true) }
     var showLockDialog by remember { mutableStateOf(false) }
+    var showUninstallConfirm by remember { mutableStateOf(false) }
     var showProgressDialog by remember { mutableStateOf(false) }
     var progressTitle by remember { mutableStateOf("") }
     var progressLog by remember { mutableStateOf("") }
@@ -157,13 +160,18 @@ fun PackageDetailScreen(
                 },
                 scrollBehavior = scrollBehavior,
                 navigationIcon = {
-                    IconButton(
-                        onClick = { if (!showProgressDialog && !showLockDialog) onBack() }
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .clickable { if (!showProgressDialog && !showLockDialog) onBack() },
+                        contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = MiuixIcons.Back,
-                            contentDescription = null,
-                            tint = colorScheme.onSurface
+                            contentDescription = "返回",
+                            tint = colorScheme.onSurface,
+                            modifier = Modifier.size(24.dp)
                         )
                     }
                 },
@@ -386,7 +394,7 @@ fun PackageDetailScreen(
                 ) {
                     if (d.isInstalled) {
                         Button(
-                            onClick = { startOperation(isInstall = false) },
+                            onClick = { showUninstallConfirm = true },
                             modifier = Modifier.fillMaxWidth(),
                             colors = ButtonDefaults.buttonColors(
                                 color = DangerRed
@@ -407,6 +415,35 @@ fun PackageDetailScreen(
                     }
                 }
             }
+
+            OverlayDialog(
+                show = showUninstallConfirm,
+                title = "确认卸载",
+                summary = "确定要卸载 ${pkg.name} 吗？此操作不可撤销。",
+                onDismissRequest = { showUninstallConfirm = false },
+                content = {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        TextButton(
+                            text = "取消",
+                            onClick = { showUninstallConfirm = false },
+                            modifier = Modifier.weight(1f)
+                        )
+                        Button(
+                            onClick = {
+                                showUninstallConfirm = false
+                                startOperation(isInstall = false)
+                            },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(color = DangerRed)
+                        ) {
+                            Text("确认卸载", color = Color.White, fontWeight = FontWeight.Medium)
+                        }
+                    }
+                }
+            )
 
             OverlayDialog(
                 show = showLockDialog,

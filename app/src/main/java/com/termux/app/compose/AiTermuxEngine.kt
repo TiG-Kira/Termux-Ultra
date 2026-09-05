@@ -2519,6 +2519,36 @@ object SkillExecutor {
 
 object AiApiClient {
 
+    /** 在线获取可用模型列表（GET {baseUrl}/models） */
+    suspend fun fetchOnlineModels(baseUrl: String, apiKey: String): Pair<List<String>, String?> = withContext(Dispatchers.IO) {
+        try {
+            val url = URL("${baseUrl.trimEnd('/')}/models")
+            val conn = (url.openConnection() as HttpURLConnection).apply {
+                requestMethod = "GET"
+                connectTimeout = 15_000
+                readTimeout = 15_000
+                setRequestProperty("Authorization", "Bearer $apiKey")
+                setRequestProperty("Content-Type", "application/json")
+            }
+            val code = conn.responseCode
+            if (code !in 200..299) {
+                val err = conn.errorStream?.bufferedReader()?.use { it.readText() } ?: "HTTP $code"
+                return@withContext Pair(emptyList(), err)
+            }
+            val body = conn.inputStream.bufferedReader().use { it.readText() }
+            val gson = Gson()
+            val json = gson.fromJson(body, Map::class.java)
+            val data = (json["data"] as? List<*>) ?: emptyList<Any>()
+            val models = data.mapNotNull { item ->
+                val m = item as? Map<*, *>
+                (m?.get("id") as? String)
+            }
+            Pair(models, null)
+        } catch (e: Exception) {
+            Pair(emptyList(), e.message ?: "未知错误")
+        }
+    }
+
     /** 内部：在线 HTTP 非流式调用（供 chat() 与 fallback 复用） */
     private suspend fun callOnlineChat(
         config: AiProviderConfig,

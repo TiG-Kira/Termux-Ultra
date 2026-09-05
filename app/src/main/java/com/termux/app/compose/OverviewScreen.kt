@@ -1155,7 +1155,7 @@ private fun TipsAgentCard(
                     icon = Icons.Rounded.Archive,
                     iconColor = Color(0xFF2563EB),
                     iconBgColor = Color(0xFF2563EB).copy(alpha = 0.12f),
-                    label = "包管理",
+                    label = "软件包管理",
                     onClick = {
                         val intent = Intent(context, com.termux.app.activities.PackageManagerActivity::class.java)
                         context.startActivity(intent)
@@ -1168,13 +1168,8 @@ private fun TipsAgentCard(
                     iconBgColor = Color(0xFFEC4899).copy(alpha = 0.12f),
                     label = "主题外观",
                     onClick = {
-                        try {
-                            val intent = Intent().apply {
-                                setClassName(context.packageName, "com.termux.styling.TermuxStyleActivity")
-                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                            }
-                            context.startActivity(intent)
-                        } catch (_: Exception) {}
+                        val intent = Intent(context, com.termux.app.activities.TermuxStylingActivity::class.java)
+                        context.startActivity(intent)
                     }
                 )
                 QuickEntryButton(

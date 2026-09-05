@@ -1420,6 +1420,12 @@ private fun AiSetupScreen(vm: AiTermuxViewModel, onBack: () -> Unit) {
     var customPrompt by remember { mutableStateOf(vm.config.customSystemPrompt) }
     var testing by remember { mutableStateOf(false) }
     var testResult by remember { mutableStateOf<String?>(null) }
+    var availableModels by remember { mutableStateOf<List<String>>(emptyList()) }
+    var loadingModels by remember { mutableStateOf(false) }
+    var modelsError by remember { mutableStateOf<String?>(null) }
+    var modelExpanded by remember { mutableStateOf(false) }
+
+    val modelScope = rememberCoroutineScope()
 
     // ---- 本地大模型状态 ----
     var downloadingModelId by remember { mutableStateOf<String?>(null) }
@@ -1472,7 +1478,19 @@ private fun AiSetupScreen(vm: AiTermuxViewModel, onBack: () -> Unit) {
             )
         }
     ) { padding ->
-        LazyColumn(
+                    LaunchedEffect(apiKey, baseUrl, provider) {
+                if (provider != "local" && apiKey.isNotBlank() && baseUrl.isNotBlank()) {
+                    loadingModels = true
+                    modelsError = null
+                    val (models, err) = AiApiClient.fetchOnlineModels(baseUrl, apiKey)
+                    availableModels = models
+                    modelsError = err
+                    loadingModels = false
+                } else {
+                    availableModels = emptyList()
+                }
+            }
+LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
@@ -2012,7 +2030,93 @@ private fun AiSetupScreen(vm: AiTermuxViewModel, onBack: () -> Unit) {
                 )
             }
 
-            item { SectionTitle("4. 模型名称") }
+            // Auto-fetch models when API key and URL are filled
+
+
+            item { SectionTitle("4. 模型选择") }
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(48.dp)
+                            .clickable { if (availableModels.isNotEmpty()) modelExpanded = true }
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(if (isDark) Color(0xFF2A2A2E) else Color(0xFFF5F5F5))
+                            .padding(horizontal = 14.dp),
+                        contentAlignment = Alignment.CenterStart
+                    ) {
+                        when {
+                            loadingModels -> Text("加载中...", color = MiuixTheme.colorScheme.onSurfaceVariantSummary, fontSize = 14.sp)
+                            availableModels.isEmpty() && modelsError != null -> Text("加载失败：$modelsError", color = Color(0xFFDC2626), fontSize = 13.sp)
+                            availableModels.isEmpty() -> Text("手动输入模型名（无法自动获取）", color = MiuixTheme.colorScheme.onSurfaceVariantSummary, fontSize = 14.sp)
+                            model.isNotBlank() -> Text(model, color = MiuixTheme.colorScheme.onSurface, fontSize = 14.sp)
+                            else -> Text("选择或输入模型", color = MiuixTheme.colorScheme.onSurfaceVariantSummary, fontSize = 14.sp)
+                        }
+                        if (availableModels.isNotEmpty()) {
+                            Icon(
+                                imageVector = androidx.compose.material.icons.Icons.Default.ArrowDropDown,
+                                contentDescription = null,
+                                modifier = Modifier.align(Alignment.CenterEnd).size(24.dp),
+                                tint = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                            )
+                        }
+                    }
+                    IconButton(
+                        onClick = {
+                            if (apiKey.isNotBlank() && baseUrl.isNotBlank()) {
+                                loadingModels = true
+                                modelsError = null
+                                modelScope.launch {
+                                    val (models, err) = AiApiClient.fetchOnlineModels(baseUrl, apiKey)
+                                    availableModels = models
+                                    modelsError = err
+                                    loadingModels = false
+                                }
+                            }
+                        },
+                        modifier = Modifier.size(48.dp).clip(CircleShape)
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_refresh),
+                            contentDescription = "刷新模型列表",
+                            modifier = Modifier.size(22.dp),
+                            tint = MiuixTheme.colorScheme.onSurface
+                        )
+                    }
+                }
+            }
+
+                        if (modelExpanded && availableModels.isNotEmpty()) {
+                item {
+                    Box(modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) {
+                        androidx.compose.material3.DropdownMenu(
+                            expanded = modelExpanded,
+                            onDismissRequest = { modelExpanded = false },
+                            modifier = Modifier.fillMaxWidth(0.9f)
+                                .background(MiuixTheme.colorScheme.surface)
+                        ) {
+                            androidx.compose.material3.DropdownMenuItem(
+                                text = { Text("✏️ 手动输入", fontSize = 14.sp) },
+                                onClick = { modelExpanded = false; model = "" }
+                            )
+                            androidx.compose.material3.HorizontalDivider()
+                            availableModels.forEach { m ->
+                                androidx.compose.material3.DropdownMenuItem(
+                                    text = { Text(m, fontSize = 14.sp, color = if (m == model) MiuixTheme.colorScheme.primary else MiuixTheme.colorScheme.onSurface) },
+                                    onClick = { model = m; modelExpanded = false }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Manual input field (always visible, for custom models)
             item {
                 TextField(
                     value = model,
