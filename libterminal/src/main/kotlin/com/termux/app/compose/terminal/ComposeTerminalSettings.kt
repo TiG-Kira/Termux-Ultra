@@ -158,7 +158,9 @@ object ComposeTerminalSettings {
     }
 
     private inline fun edit(block: (SharedPreferences.Editor) -> Unit) {
-        val p = prefs ?: return
+        // 兜底：init 未调用时（如后台服务路径直接 setter）自动初始化，避免静默丢失持久化
+        val p = prefs ?: appContext?.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)?.also { prefs = it }
+            ?: return
         block(p.edit())
     }
 

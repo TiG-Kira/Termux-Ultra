@@ -103,11 +103,13 @@ fun TerminalListScreen(
         .getInt("KEY_CARD_LAYOUT_MODE", 0)
     var horizontalPage by remember { mutableIntStateOf(0) }
     // 已结束（被杀死/自然退出）的会话信息列表，从 TermuxService 拉取。
-    // 这些会话已从 mTermuxSessions 移除，不计入会话数量，但以"死亡卡片"形式保留显示，
-    // 直到用户手动消除。红色标题 + "退出代码:N" 小字。
+    // 这些会话已从 mTermuxSessions 移除，不计入会话数量，但以context.getString(R.string.dead_card)形式保留显示，
+    // 直到用户手动消除。红色标题 + context.getString(R.string.exit_code_dead) 小字。
     // 本地会话状态：从 TermuxService 实时拉取，避免依赖外部 2 秒轮询延迟
     var localSessions by remember { mutableStateOf(termuxService?.termuxSessions?.toList() ?: sessions) }
     var deadSessions by remember { mutableStateOf<List<TermuxService.DeadSessionInfo>>(termuxService?.deadSessionInfos ?: emptyList()) }
+    // 上一次进入的会话（当前会话）：用于卡片高亮显示
+    var currentEnteredSession by remember { mutableStateOf<TermuxSession?>(null) }
     val useHorizontalLayout = cardLayoutMode == 1
     // 已结束会话卡片过滤（按搜索条件）
     val filteredDeadSessions = deadSessions.filter {
@@ -122,6 +124,8 @@ fun TerminalListScreen(
                 if (fresh != localSessions) localSessions = fresh
                 val freshDead = svc.deadSessionInfos
                 if (freshDead != deadSessions) deadSessions = freshDead
+                val freshCurrent = svc.lastEnteredTermuxSession
+                if (freshCurrent != currentEnteredSession) currentEnteredSession = freshCurrent
             }
             delay(400)
         }
@@ -132,6 +136,7 @@ fun TerminalListScreen(
         termuxService?.let { svc ->
             localSessions = svc.termuxSessions.toList()
             deadSessions = svc.deadSessionInfos
+            currentEnteredSession = svc.lastEnteredTermuxSession
         }
     }
 
@@ -417,6 +422,7 @@ fun TerminalListScreen(
                         items(localSessions) { session ->
                             TerminalCard(
                                 session = session,
+                                isCurrent = session == currentEnteredSession,
                                 onClick = { onSessionClick(session) },
                                 onStop = { handleStopSession(session) },
                                 onRename = {
@@ -482,6 +488,7 @@ fun TerminalListScreen(
                 items(localSessions) { session ->
                     TerminalCard(
                         session = session,
+                        isCurrent = session == currentEnteredSession,
                         onClick = { onSessionClick(session) },
                         onStop = { handleStopSession(session) },
                         onRename = {
@@ -496,7 +503,7 @@ fun TerminalListScreen(
                     )
                 }
 
-                // 已结束会话卡片（从 deadSessions 列表）：红色标题 + "退出代码:N" 小字 + 手动消除按钮
+                // 已结束会话卡片（从 deadSessions 列表）：红色标题 + context.getString(R.string.exit_code_dead) 小字 + 手动消除按钮
                 items(filteredDeadSessions) { info ->
                     DeadSessionCard(
                         info = info,
@@ -559,6 +566,7 @@ fun TerminalListScreen(
 @Composable
 private fun TerminalCard(
     session: TermuxSession,
+    isCurrent: Boolean,
     onClick: () -> Unit,
     onStop: () -> Unit,
     onRename: () -> Unit,
@@ -569,6 +577,7 @@ private fun TerminalCard(
     // 实时订阅终端会话状态 —— 解决 Compose 无法自动检测普通 Java 对象字段变化的问题
     // shellPid: 0=未初始化, >0=运行中, -1=已结束
     var shellPid by remember { mutableStateOf(terminalSession.shellPid) }
+    val context = LocalContext.current
     var exitCode by remember { mutableStateOf(terminalSession.exitStatus) }
     var lastCommand by remember { mutableStateOf(terminalSession.lastCommand) }
     LaunchedEffect(terminalSession) {
@@ -584,10 +593,12 @@ private fun TerminalCard(
     val isDead = shellPid == -1
     val isUninitialized = shellPid == 0
     val titleColor = if (isDead) Color(0xFFFF5252) else MiuixTheme.colorScheme.onSurface
+    // 当前会话高亮底色：暗色模式深灰，亮色模式亮灰白（图标等颜色不变）
+    val currentHighlightColor = if (isSystemInDarkTheme()) Color(0xFF424242) else Color(0xFFE0E0E0)
     val statusText: String? = when {
-        isDead -> "退出代码:$exitCode"
-        isUninitialized -> "未初始化"
-        lastCommand.isNotEmpty() -> "最近执行:$lastCommand"
+        isDead -> context.getString(R.string.exit_code_short, exitCode)
+        isUninitialized -> context.getString(R.string.uninitialized)
+        lastCommand.isNotEmpty() -> context.getString(R.string.last_command, lastCommand)
         else -> null
     }
 
@@ -609,6 +620,7 @@ private fun TerminalCard(
             ) {
                 val iconBgColor = when {
                     isDead -> Color(0xFFFFEBEE)
+                    isCurrent -> currentHighlightColor
                     else -> MiuixTheme.colorScheme.surfaceVariant
                 }
                 Box(
@@ -664,7 +676,7 @@ private fun TerminalCard(
                     ) {
                         Icon(
                             painter = painterResource(R.drawable.ic_close),
-                            contentDescription = "消除",
+                            contentDescription = context.getString(R.string.dismiss),
                             modifier = Modifier.size(20.dp),
                             tint = Color.White
                         )
@@ -707,8 +719,8 @@ private fun TerminalCard(
  *
  * 与 [TerminalCard] 的区别：
  *  - 标题文字为红色（提示会话已结束/被杀死）
- *  - 标题下方显示"退出代码:N"小字
- *  - 右下角是"消除"按钮（X 图标），点击后从 [TermuxService] 的死亡会话队列移除并刷新 UI
+ *  - 标题下方显示context.getString(R.string.exit_code_dead)小字
+ *  - 右下角是context.getString(R.string.dismiss)按钮（X 图标），点击后从 [TermuxService] 的死亡会话队列移除并刷新 UI
  *  - 不计入会话数量（已从 mTermuxSessions 移除，LiveUpdate 通知数量自动排除）
  */
 @Composable
@@ -717,6 +729,7 @@ private fun DeadSessionCard(
     onDismiss: () -> Unit
 ) {
     val isDark = isSystemInDarkTheme()
+    val context = LocalContext.current
     val titleColor = Color(0xFFFF5252) // 红色标题，深浅色模式统一
     val subColor = if (isDark) Color(0xFFEF9A9A) else Color(0xFFD32F2F)
 
@@ -763,7 +776,7 @@ private fun DeadSessionCard(
                         overflow = TextOverflow.Ellipsis
                     )
                     Text(
-                        text = "退出代码:${info.exitCode}",
+                        text = context.getString(R.string.exit_code_info, info.exitCode),
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Normal,
                         color = subColor,
@@ -787,7 +800,7 @@ private fun DeadSessionCard(
                 ) {
                     Icon(
                         painter = painterResource(R.drawable.ic_close),
-                        contentDescription = "消除",
+                        contentDescription = context.getString(R.string.dismiss),
                         modifier = Modifier.size(20.dp),
                         tint = Color.White
                     )
@@ -826,7 +839,7 @@ fun KeepAliveWarningCard(onClose: () -> Unit, horizontalMode: Boolean = false) {
             description = stringResource(R.string.keep_alive_warning_message),
             titleColor = if (isDark) Color.White else Color.Black,
             descriptionColor = if (isDark) Color.White.copy(alpha = 0.8f) else Color.Black.copy(alpha = 0.8f),
-            statusBadgeText = "需注意",
+            statusBadgeText = context.getString(R.string.attention),
             statusBadgeColor = if (isDark) Color(0xFFFCD34D) else Color(0xFFB45309),
             statusBadgeBackgroundColor = if (isDark) Color(0xFFFCD34D).copy(alpha = 0.14f) else Color(0xFFF59E0B).copy(alpha = 0.14f),
             onClose = onClose,
@@ -1154,11 +1167,11 @@ fun ServiceStatusCard(
             ServiceStatus.MEMORY_WARNING -> listOf(Color(0xFFF59E0B), Color(0xFFFDD835))
         }
         val (badgeText, badgeColor) = when (status) {
-            ServiceStatus.NORMAL, ServiceStatus.WAKE_LOCK_ACTIVE -> "运行中" to Color(0xFF36D167)
-            ServiceStatus.SERVICE_STOPPED -> "已停止" to Color(0xFFFF5252)
-            ServiceStatus.MEMORY_WARNING -> "需注意" to Color(0xFFF59E0B)
-            ServiceStatus.MEMORY_KILL -> "内存不足" to Color(0xFFFF5252)
-            ServiceStatus.SESSION_KILLED -> "已终止" to Color(0xFFFF5252)
+            ServiceStatus.NORMAL, ServiceStatus.WAKE_LOCK_ACTIVE -> context.getString(R.string.running) to Color(0xFF36D167)
+            ServiceStatus.SERVICE_STOPPED -> context.getString(R.string.stopped) to Color(0xFFFF5252)
+            ServiceStatus.MEMORY_WARNING -> context.getString(R.string.attention) to Color(0xFFF59E0B)
+            ServiceStatus.MEMORY_KILL -> context.getString(R.string.out_of_memory) to Color(0xFFFF5252)
+            ServiceStatus.SESSION_KILLED -> context.getString(R.string.terminated) to Color(0xFFFF5252)
         }
         HorizontalTipCard(
             cardColor = cardColor,
@@ -1358,7 +1371,7 @@ fun LowAndroidWarningCard(horizontalMode: Boolean = false) {
                 description = briefDescription,
                 titleColor = if (isDark) Color.White else Color.Black,
                 descriptionColor = if (isDark) Color.White.copy(alpha = 0.8f) else Color.Black.copy(alpha = 0.8f),
-                statusBadgeText = "强制启用",
+                statusBadgeText = context.getString(R.string.force_enable),
                 statusBadgeColor = Color(0xFFFF5252),
                 statusBadgeBackgroundColor = Color(0xFFFF5252).copy(alpha = 0.14f),
                 actionButton = {

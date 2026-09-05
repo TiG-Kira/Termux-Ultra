@@ -237,6 +237,39 @@ public final class TermuxService extends Service implements TermuxTask.TermuxTas
                 return autoBlocked;
             }
         });
+
+        // 注册 Compose 核心的终端输入拦截器（增强防护对 Compose 会话的适配，
+        // 与 Java 核心走同一套 RiskConfirmManager 检测/确认流程）
+        com.termux.app.compose.terminal.engine.TerminalSession.setInputInterceptor(
+            new com.termux.app.compose.terminal.engine.TerminalSession.InputInterceptor() {
+                @Override
+                public boolean onCommandEntered(com.termux.app.compose.terminal.engine.TerminalSession session, String command) {
+                    return com.termux.app.compose.RiskConfirmManager.INSTANCE
+                        .handleComposeTerminalCommand(TermuxService.this, session, command);
+                }
+
+                @Override
+                public void onCommandBlocked(com.termux.app.compose.terminal.engine.TerminalSession session, String command) {
+                    // 被拦截时显示 Toast
+                    android.os.Handler handler = new android.os.Handler(android.os.Looper.getMainLooper());
+                    handler.post(() -> {
+                        android.widget.Toast.makeText(TermuxService.this,
+                            getString(R.string.access_denied),
+                            android.widget.Toast.LENGTH_LONG).show();
+                    });
+                }
+
+                @Override
+                public boolean onCommandAutoBlocked(com.termux.app.compose.terminal.engine.TerminalSession session, String command) {
+                    // 检查是否为自动拦截模式（AUTO_BLOCK）
+                    boolean autoBlocked = com.termux.app.compose.RiskConfirmManager.INSTANCE.isLastCommandAutoBlocked();
+                    if (autoBlocked) {
+                        // 重置标志
+                        com.termux.app.compose.RiskConfirmManager.INSTANCE.resetAutoBlockedFlag();
+                    }
+                    return autoBlocked;
+                }
+            });
     }
 
     @SuppressLint("Wakelock")
@@ -1397,6 +1430,23 @@ public synchronized int removeTermuxSession(TerminalSession sessionToRemove) {
 
     public synchronized TermuxSession getLastTermuxSession() {
         return mTermuxSessions.isEmpty() ? null : mTermuxSessions.get(mTermuxSessions.size() - 1);
+    }
+
+    /**
+     * 上一次进入的会话（存储的当前会话，否则最后一个会话），供主页终端列表高亮显示。
+     * 语义与 {@link TermuxTerminalSessionClient#getCurrentStoredSessionOrLast()} 一致，
+     * 返回值映射回列表中的 {@link TermuxSession}。
+     */
+    public synchronized TermuxSession getLastEnteredTermuxSession() {
+        TerminalSession terminalSession = null;
+        if (mTermuxTerminalSessionClient != null)
+            terminalSession = mTermuxTerminalSessionClient.getCurrentStoredSessionOrLast();
+        if (terminalSession == null) return null;
+        for (TermuxSession session : mTermuxSessions) {
+            if (session.getTerminalSession() == terminalSession)
+                return session;
+        }
+        return null;
     }
 
     public synchronized int getIndexOfSession(TerminalSession terminalSession) {

@@ -1143,6 +1143,9 @@ fun TerminalDetailScreen(
                                 val isActive = activity.currentSession == termSession
                                 val shellPid = termSession.shellPid
                                 val isDead = shellPid == -1
+                                // 当前会话高亮底色：暗色模式深灰，亮色模式亮灰白（图标等颜色不变）
+                                val currentHighlightColor =
+                                    if (isSystemInDarkTheme()) Color(0xFF424242) else Color(0xFFE0E0E0)
                                 val titleColor = when {
                                     isDead -> Color(0xFFFF5252)
                                     isActive -> MiuixTheme.colorScheme.primary
@@ -1168,7 +1171,7 @@ fun TerminalDetailScreen(
                                                 .size(36.dp)
                                                 .clip(RoundedCornerShape(10.dp))
                                                 .background(
-                                                    if (isActive) MiuixTheme.colorScheme.primaryContainer
+                                                    if (isActive) currentHighlightColor
                                                     else MiuixTheme.colorScheme.surfaceVariant
                                                 ),
                                             contentAlignment = Alignment.Center

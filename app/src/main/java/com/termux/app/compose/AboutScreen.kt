@@ -499,7 +499,8 @@ fun AboutScreen(onBack: () -> Unit) {
                                 )
                             )
                             Text(
-                                text = "${context.getString(R.string.based_on_termux_version)} $termuxCoreVersion\nLibTerminal Compose 重构核心版本号: 2.6.3, 作者: @awkox",
+                                text = context.getString(R.string.based_on_termux_version) + " " + termuxCoreVersion + "\n" +
+                                    context.getString(R.string.libterminal_core_info, BuildConfig.LIBTERMINAL_VERSION),
                                 style = TextStyle(
                                     fontSize = 12.sp,
                                     color = MiuixTheme.colorScheme.onSurfaceVariantSummary
@@ -524,7 +525,7 @@ fun AboutScreen(onBack: () -> Unit) {
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Text(
-                                text = "Termux Ultra 使用 GPL 3.0 以及 MIT 许可。\nTermux 团队拥有 Termux Ultra 终端模块的版权，VNC 功能模块的版权所属 ©2020 Gaurav Ujjwal，感谢开源贡献。",
+                                text = context.getString(R.string.about_license),
                                 style = TextStyle(
                                     fontSize = 13.sp,
                                     color = MiuixTheme.colorScheme.onSurface

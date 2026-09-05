@@ -118,7 +118,7 @@ fun SettingsScreen(
     // Whitelistable skills definition
     val whitelistSkillLabels = remember {
         listOf(
-            SkillType.CAPTURE_OUTPUT to "CAPTURE_OUTPUT — 执行命令并捕获输出",
+            SkillType.CAPTURE_OUTPUT to context.getString(R.string.capture_output_desc),
         )
     }
     var showRestartPrompt by remember { mutableStateOf(false) }
@@ -200,12 +200,12 @@ fun SettingsScreen(
     var keyLoggingEnabled by remember { mutableStateOf(terminalPrefs?.isTerminalViewKeyLoggingEnabled() ?: false) }
     var logLevel by remember { mutableStateOf(terminalPrefs?.logLevel ?: Logger.DEFAULT_LOG_LEVEL) }
 
-    // Terminal settings - Kotlin+Compose mode
-    val composePrefs = remember { context.getSharedPreferences("compose_terminal", Context.MODE_PRIVATE) }
+    // Terminal settings - Kotlin+Compose mode（订阅 ComposeTerminalSettings StateFlow，
+    // 单一事实来源：写入经 setter 持久化到 SP，显示实时同步，重进设置页不回退）
     com.termux.app.compose.terminal.ComposeTerminalSettings.init(context)
-    var composeFontSize by remember { mutableIntStateOf(composePrefs.getInt("font_size", 14)) }
-    var composeCursorBlink by remember { mutableStateOf(composePrefs.getBoolean("cursor_blink", true)) }
-    var composeScrollbackLines by remember { mutableIntStateOf(composePrefs.getInt("scrollback_lines", 5000)) }
+    val composeFontSize by com.termux.app.compose.terminal.ComposeTerminalSettings.fontSize.collectAsState()
+    val composeCursorBlink by com.termux.app.compose.terminal.ComposeTerminalSettings.cursorBlink.collectAsState()
+    val composeScrollbackLines by com.termux.app.compose.terminal.ComposeTerminalSettings.scrollbackLines.collectAsState()
 
     // Official standalone APK detection. Keys match the add-on app package names; when a standalone
     // APK is installed, the integrated toggle is forced OFF and disabled, with the row shows
@@ -330,12 +330,12 @@ fun SettingsScreen(
                     useCustomSystemPrompt = true
                     val fileName = uri.lastPathSegment?.substringAfterLast("/") ?: "custom_prompt.md"
                     systemPromptSource = fileName
-                    showSnackbar("已加载自定义 System Prompt")
+                    showSnackbar(context.getString(R.string.custom_prompt_loaded))
                 } else {
-                    showSnackbar("文件内容为空")
+                    showSnackbar(context.getString(R.string.file_empty))
                 }
             } catch (e: Exception) {
-                showSnackbar("读取文件失败: ${e.message}")
+                showSnackbar(context.getString(R.string.read_file_failed, e.message))
             }
         }
     }
@@ -589,15 +589,15 @@ fun SettingsScreen(
                             modifier = Modifier.padding(start = 72.dp, end = 16.dp)
                         )
                         SwitchPreference(
-                            title = "提示卡片横向布局",
-                            summary = "开启后总览页的提示/状态卡片以横向滑动形式展示",
+                            title = context.getString(R.string.horizontal_tip_layout),
+                            summary = context.getString(R.string.overview_horizontal_cards_desc),
                             checked = cardLayoutMode == 1,
                             onCheckedChange = { enabled ->
                                 cardLayoutMode = if (enabled) 1 else 0
                                 prefs.edit().putInt("KEY_CARD_LAYOUT_MODE", cardLayoutMode).apply()
                             },
                             startAction = {
-                                SettingIcon(R.drawable.ic_swap, contentDescription = "提示卡片横向布局")
+                                SettingIcon(R.drawable.ic_swap, contentDescription = context.getString(R.string.horizontal_tip_layout))
                             }
                         )
                     }
@@ -649,7 +649,7 @@ fun SettingsScreen(
             item(key = "card_data_group") { SettingsGroupCard(items = dataSettings) }
 
             // ---------- 终端 ----------
-            item(key = "section_terminal") { SmallTitle(text = "终端") }
+            item(key = "section_terminal") { SmallTitle(text = context.getString(R.string.terminal)) }
             item(key = "card_terminal_runtime") {
                 val isComposeMode = runtimeCore == TerminalRuntimeCore.Core.KOTLIN_COMPOSE
                 val composeSupported = TerminalRuntimeCore.isComposeSupported
@@ -663,8 +663,8 @@ fun SettingsScreen(
                 ) {
                     Column {
                         OverlayDropdownPreference(
-                            title = "终端运行核心",
-                            summary = "切换终端后端，Compose 模式可能会有部分插件不再可用，执行切换操作会立刻关闭所有运行会话，请提前保存工作。",
+                            title = context.getString(R.string.terminal_runtime_core),
+                            summary = context.getString(R.string.runtime_core_switch_desc),
                             items = runtimeCoreItems,
                             selectedIndex = currentCoreIndex,
                             onSelectedIndexChange = { idx ->
@@ -681,7 +681,7 @@ fun SettingsScreen(
                                     termuxStylingEnabled = IntegratedTools.isEnabled(context, IntegratedTools.Tool.TERMUX_STYLING)
                                     termuxTaskerEnabled = IntegratedTools.isEnabled(context, IntegratedTools.Tool.TERMUX_TASKER)
                                     termuxWidgetEnabled = IntegratedTools.isEnabled(context, IntegratedTools.Tool.TERMUX_WIDGET)
-                                    showSnackbar("已切换到 ${selected.displayName}，所有会话已关闭")
+                                    showSnackbar(context.getString(R.string.switched_core_selected, selected.displayName))
                                 }
                             },
                             startAction = {
@@ -696,8 +696,8 @@ fun SettingsScreen(
                                 modifier = Modifier.padding(start = 72.dp, end = 16.dp)
                             )
                             SwitchPreference(
-                                title = "启用软键盘",
-                                summary = if (softKeyboardEnabled) "已启用" else "未启用",
+                                title = context.getString(R.string.enable_softkeyboard),
+                                summary = if (softKeyboardEnabled) context.getString(R.string.enabled) else context.getString(R.string.disabled),
                                 checked = softKeyboardEnabled,
                                 onCheckedChange = {
                                     softKeyboardEnabled = it
@@ -710,8 +710,8 @@ fun SettingsScreen(
                                 modifier = Modifier.padding(start = 72.dp, end = 16.dp)
                             )
                             SwitchPreference(
-                                title = "仅无硬件键盘时启用软键盘",
-                                summary = if (softKeyboardOnlyIfNoHardware) "已启用" else "未启用",
+                                title = context.getString(R.string.enable_soft_keyboard_no_hw),
+                                summary = if (softKeyboardOnlyIfNoHardware) context.getString(R.string.enabled) else context.getString(R.string.disabled),
                                 checked = softKeyboardOnlyIfNoHardware,
                                 onCheckedChange = {
                                     softKeyboardOnlyIfNoHardware = it
@@ -724,8 +724,8 @@ fun SettingsScreen(
                                 modifier = Modifier.padding(start = 72.dp, end = 16.dp)
                             )
                             SwitchPreference(
-                                title = "终端边距调整",
-                                summary = if (terminalMarginAdjustment) "已启用" else "未启用",
+                                title = context.getString(R.string.terminal_margin_adjustment),
+                                summary = if (terminalMarginAdjustment) context.getString(R.string.enabled) else context.getString(R.string.disabled),
                                 checked = terminalMarginAdjustment,
                                 onCheckedChange = {
                                     terminalMarginAdjustment = it
@@ -738,9 +738,9 @@ fun SettingsScreen(
                                 modifier = Modifier.padding(start = 72.dp, end = 16.dp)
                             )
                             OverlayDropdownPreference(
-                                title = "日志级别",
-                                summary = listOf("关闭", "普通", "调试", "详细")[logLevel.coerceIn(0, 3)],
-                                items = listOf("关闭", "普通", "调试", "详细"),
+                                title = context.getString(R.string.log_level),
+                                summary = listOf(context.getString(R.string.off), context.getString(R.string.normal), context.getString(R.string.debug), context.getString(R.string.verbose))[logLevel.coerceIn(0, 3)],
+                                items = listOf(context.getString(R.string.off), context.getString(R.string.normal), context.getString(R.string.debug), context.getString(R.string.verbose)),
                                 selectedIndex = logLevel.coerceIn(0, 3),
                                 onSelectedIndexChange = { idx ->
                                     logLevel = idx
@@ -753,8 +753,8 @@ fun SettingsScreen(
                                 modifier = Modifier.padding(start = 72.dp, end = 16.dp)
                             )
                             SwitchPreference(
-                                title = "终端按键日志",
-                                summary = if (keyLoggingEnabled) "已启用" else "未启用",
+                                title = context.getString(R.string.terminal_key_logging),
+                                summary = if (keyLoggingEnabled) context.getString(R.string.enabled) else context.getString(R.string.disabled),
                                 checked = keyLoggingEnabled,
                                 onCheckedChange = {
                                     keyLoggingEnabled = it
@@ -771,13 +771,14 @@ fun SettingsScreen(
                                 modifier = Modifier.padding(start = 72.dp, end = 16.dp)
                             )
                             OverlayDropdownPreference(
-                                title = "字体大小",
-                                summary = "更改终端控制台字体大小",
+                                title = context.getString(R.string.font_size),
+                                summary = context.getString(R.string.font_size_desc),
                                 items = listOf("10sp", "12sp", "14sp", "16sp", "18sp", "20sp", "24sp"),
                                 selectedIndex = listOf(10, 12, 14, 16, 18, 20, 24).indexOf(composeFontSize).coerceAtLeast(0),
                                 onSelectedIndexChange = { idx ->
-                                    composeFontSize = listOf(10, 12, 14, 16, 18, 20, 24)[idx]
-                                    com.termux.app.compose.terminal.ComposeTerminalSettings.setFontSize(composeFontSize)
+                                    com.termux.app.compose.terminal.ComposeTerminalSettings.setFontSize(
+                                        listOf(10, 12, 14, 16, 18, 20, 24)[idx]
+                                    )
                                 },
                                 startAction = { SettingIcon(R.drawable.ic_text_size) }
                             )
@@ -786,11 +787,10 @@ fun SettingsScreen(
                                 modifier = Modifier.padding(start = 72.dp, end = 16.dp)
                             )
                             SwitchPreference(
-                                title = "光标闪烁",
-                                summary = if (composeCursorBlink) "已启用" else "未启用",
+                                title = context.getString(R.string.cursor_blink),
+                                summary = if (composeCursorBlink) context.getString(R.string.enabled) else context.getString(R.string.disabled),
                                 checked = composeCursorBlink,
                                 onCheckedChange = {
-                                    composeCursorBlink = it
                                     com.termux.app.compose.terminal.ComposeTerminalSettings.setCursorBlink(it)
                                 },
                                 startAction = { SettingIcon(R.drawable.ic_terminal) }
@@ -800,13 +800,14 @@ fun SettingsScreen(
                                 modifier = Modifier.padding(start = 72.dp, end = 16.dp)
                             )
                             OverlayDropdownPreference(
-                                title = "滚动缓冲区",
-                                summary = "更改缓冲区行数大小",
-                                items = listOf("1000 行", "5000 行", "10000 行", "50000 行"),
+                                title = context.getString(R.string.scrollback_buffer),
+                                summary = context.getString(R.string.scrollback_desc),
+                                items = listOf(context.getString(R.string.lines_1000), context.getString(R.string.lines_5000), context.getString(R.string.lines_10000), context.getString(R.string.lines_50000)),
                                 selectedIndex = listOf(1000, 5000, 10000, 50000).indexOf(composeScrollbackLines).coerceAtLeast(0),
                                 onSelectedIndexChange = { idx ->
-                                    composeScrollbackLines = listOf(1000, 5000, 10000, 50000)[idx]
-                                    com.termux.app.compose.terminal.ComposeTerminalSettings.setScrollbackLines(composeScrollbackLines)
+                                    com.termux.app.compose.terminal.ComposeTerminalSettings.setScrollbackLines(
+                                        listOf(1000, 5000, 10000, 50000)[idx]
+                                    )
                                 },
                                 startAction = { SettingIcon(R.drawable.ic_screen_rotation) }
                             )
@@ -926,7 +927,7 @@ fun SettingsScreen(
                     Column {
                         SwitchPreference(
                             title = "Termux Agent",
-                            summary = "开启后显示终端页 Termux Agent 入口卡片及相关设置",
+                            summary = context.getString(R.string.agent_entry_card_desc),
                             checked = aiTermuxEnabled,
                             onCheckedChange = {
                                 aiTermuxEnabled = it
@@ -943,34 +944,34 @@ fun SettingsScreen(
                             )
                             val whitelistCount = autoExecConfig.autoExecSkills.size
                             val whitelistSummary = when {
-                                unlimitedMode -> "已打开Agent 无限制模式，无需手动配置"
-                                whitelistCount == 0 -> "未选择任何技能，信任白名单未开启"
-                                else -> "已选择 $whitelistCount 个技能可自动执行"
+                                unlimitedMode -> context.getString(R.string.unrestricted_opened)
+                                whitelistCount == 0 -> context.getString(R.string.whitelist_off)
+                                else -> context.getString(R.string.whitelist_count_selected, whitelistCount)
                             }
                             ArrowPreference(
-                                title = "信任白名单",
+                                title = context.getString(R.string.trust_whitelist),
                                 summary = whitelistSummary,
                                 enabled = !unlimitedMode,
                                 onClick = { showWhitelistDialog = true },
                                 startAction = {
-                                    SettingIcon(R.drawable.ic_shield, contentDescription = "信任白名单")
+                                    SettingIcon(R.drawable.ic_shield, contentDescription = context.getString(R.string.trust_whitelist))
                                 }
                             )
 
                             if (aiProvider == "local") {
                                 HorizontalDivider(color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f), modifier = Modifier.padding(start = 72.dp, end = 16.dp))
                                 ArrowPreference(
-                                    title = "训练本地模型",
+                                    title = context.getString(R.string.train_local_model),
                                     summary = if (hasFallbackCached) {
-                                            "在线全自动 · 配置了备用在线大模型：出题+批改+评分+自动把教训追加到 System Prompt（推荐）"
+                                            context.getString(R.string.training_online_full_auto)
                                         } else {
-                                            "手动模式 · 用户手动评分，给出启发式参考评分+建议（无在线模型）"
+                                            context.getString(R.string.training_manual_mode)
                                         },
                                     onClick = {
                                         context.startActivity(android.content.Intent(context, com.termux.app.activities.AiLocalTrainerActivity::class.java))
                                     },
                                     startAction = {
-                                        SettingIcon(R.drawable.ic_tools, contentDescription = "训练本地模型")
+                                        SettingIcon(R.drawable.ic_tools, contentDescription = context.getString(R.string.train_local_model))
                                     }
                                 )
                             }
@@ -980,15 +981,15 @@ fun SettingsScreen(
                                 modifier = Modifier.padding(start = 72.dp, end = 16.dp)
                             )
                             ArrowPreference(
-                                title = "重新配置 AI",
-                                summary = "返回配置页面修改 API Key、模型等参数",
+                                title = context.getString(R.string.reconfigure_ai),
+                                summary = context.getString(R.string.back_to_config_desc),
                                 onClick = {
                                     val intent = Intent(context, com.termux.app.activities.AiTermuxActivity::class.java)
                                     intent.putExtra("force_setup", true)
                                     context.startActivity(intent)
                                 },
                                 startAction = {
-                                    SettingIcon(R.drawable.ic_refresh, contentDescription = "重新配置 AI")
+                                    SettingIcon(R.drawable.ic_refresh, contentDescription = context.getString(R.string.reconfigure_ai))
                                 }
                             )
                             HorizontalDivider(
@@ -996,11 +997,11 @@ fun SettingsScreen(
                                 modifier = Modifier.padding(start = 72.dp, end = 16.dp)
                             )
                             ArrowPreference(
-                                title = "清空对话记录",
-                                summary = "清空当前 Termux Agent 的全部聊天记录",
+                                title = context.getString(R.string.clear_chat_history),
+                                summary = context.getString(R.string.clear_agent_history_desc),
                                 onClick = { showAiClearConfirm = true },
                                 startAction = {
-                                    SettingIcon(R.drawable.ic_delete, contentDescription = "清空对话记录")
+                                    SettingIcon(R.drawable.ic_delete, contentDescription = context.getString(R.string.clear_chat_history))
                                 }
                             )
                             // 本地模式专属：备用在线大模型（fallback）
@@ -1010,13 +1011,13 @@ fun SettingsScreen(
                                     modifier = Modifier.padding(start = 72.dp, end = 16.dp)
                                 )
                                 SwitchPreference(
-                                    title = "备用在线大模型",
+                                    title = context.getString(R.string.backup_online_llm),
                                     summary = if (fallbackEnabled) {
                                         val ready = AiTermuxPrefs.isFallbackOnlineConfigReady(context)
-                                        if (ready) "已开启：本地推理失败时将自动切换到备用在线模型完成问答"
-                                        else "已开启：⚠️ 请先点击下方「配置备用在线参数」补全 API Key/URL/模型"
+                                        if (ready) context.getString(R.string.fallback_enabled_ready)
+                                        else context.getString(R.string.fallback_not_configured)
                                     } else {
-                                        "关闭时仅使用本地大模型，出错时直接返回错误（不自动切换）"
+                                        context.getString(R.string.fallback_off_desc)
                                     },
                                     checked = fallbackEnabled,
                                     onCheckedChange = {
@@ -1024,7 +1025,7 @@ fun SettingsScreen(
                                         AiTermuxPrefs.setFallbackOnlineEnabled(context, it)
                                     },
                                     startAction = {
-                                        SettingIcon(R.drawable.ic_refresh, contentDescription = "备用在线大模型")
+                                        SettingIcon(R.drawable.ic_refresh, contentDescription = context.getString(R.string.backup_online_llm))
                                     }
                                 )
                                 if (fallbackEnabled) {
@@ -1033,13 +1034,13 @@ fun SettingsScreen(
                                         modifier = Modifier.padding(start = 72.dp, end = 16.dp)
                                     )
                                     ArrowPreference(
-                                        title = "配置备用在线参数",
+                                        title = context.getString(R.string.configure_backup_params),
                                         summary = run {
                                             val c = AiTermuxPrefs.getFallbackOnlineConfig(context)
-                                            val urlShown = if (c.baseUrl.isBlank()) "(未填写)" else c.baseUrl
-                                            val modelShown = if (c.model.isBlank()) "(未填写)" else c.model
-                                            val keyShown = if (c.apiKey.isBlank()) "API Key 未填写" else "********"
-                                            "模型：$modelShown ｜ URL：$urlShown ｜ Key：$keyShown"
+                                            val urlShown = if (c.baseUrl.isBlank()) context.getString(R.string.not_set) else c.baseUrl
+                                            val modelShown = if (c.model.isBlank()) context.getString(R.string.not_set) else c.model
+                                            val keyShown = if (c.apiKey.isBlank()) context.getString(R.string.api_key_empty) else "********"
+                                            context.getString(R.string.model_url_key, modelShown, urlShown, keyShown)
                                         },
                                         onClick = {
                                             // 打开对话框前，载入当前保存的值
@@ -1051,7 +1052,7 @@ fun SettingsScreen(
                                             showFallbackEditor = true
                                         },
                                         startAction = {
-                                            SettingIcon(R.drawable.ic_edit, contentDescription = "配置备用在线参数")
+                                            SettingIcon(R.drawable.ic_edit, contentDescription = context.getString(R.string.configure_backup_params))
                                         }
                                     )
                                 }
@@ -1061,15 +1062,15 @@ fun SettingsScreen(
                                 modifier = Modifier.padding(start = 72.dp, end = 16.dp)
                             )
                             SwitchPreference(
-                                title = "开发者模式",
-                                summary = "允许编辑 System Prompt、管理自定义技能、查看完整对话记录",
+                                title = context.getString(R.string.developer_mode),
+                                summary = context.getString(R.string.developer_mode_desc),
                                 checked = aiDeveloperMode,
                                 onCheckedChange = {
                                     aiDeveloperMode = it
                                     AiTermuxPrefs.setDeveloperMode(context, it)
                                 },
                                 startAction = {
-                                    SettingIcon(R.drawable.ic_wrench, contentDescription = "开发者模式")
+                                    SettingIcon(R.drawable.ic_wrench, contentDescription = context.getString(R.string.developer_mode))
                                 }
                             )
                             if (aiDeveloperMode) {
@@ -1079,20 +1080,23 @@ fun SettingsScreen(
                                 )
                                 if (useCustomSystemPrompt) {
                                     ArrowPreference(
-                                        title = "使用官方 System Prompt",
-                                        summary = "当前使用: ${systemPromptSource.ifBlank { "自定义文件" }}。点击切换回官方默认 System Prompt",
+                                        title = context.getString(R.string.use_official_prompt),
+                                        summary = context.getString(
+                                            R.string.currently_using_source,
+                                            systemPromptSource.ifBlank { context.getString(R.string.custom_file) }
+                                        ),
                                         onClick = { showSystemPromptRestoreConfirm = true },
                                         startAction = {
-                                            SettingIcon(R.drawable.ic_restore, contentDescription = "使用官方 System Prompt")
+                                            SettingIcon(R.drawable.ic_restore, contentDescription = context.getString(R.string.use_official_prompt))
                                         }
                                     )
                                 } else {
                                     ArrowPreference(
-                                        title = "使用自定义 System Prompt",
-                                        summary = "从文件加载 System Prompt（支持 .md 文件）",
+                                        title = context.getString(R.string.use_custom_prompt),
+                                        summary = context.getString(R.string.load_prompt_from_file),
                                         onClick = { showSystemPromptFilePicker = true },
                                         startAction = {
-                                            SettingIcon(R.drawable.ic_edit, contentDescription = "使用自定义 System Prompt")
+                                            SettingIcon(R.drawable.ic_edit, contentDescription = context.getString(R.string.use_custom_prompt))
                                         }
                                     )
                                 }
@@ -1101,11 +1105,11 @@ fun SettingsScreen(
                                     modifier = Modifier.padding(start = 72.dp, end = 16.dp)
                                 )
                                 ArrowPreference(
-                                    title = "自定义技能",
-                                    summary = "创建和管理用户自定义技能卡（官方技能不可修改）",
+                                    title = context.getString(R.string.custom_skills),
+                                    summary = context.getString(R.string.custom_skill_create_manage),
                                     onClick = { showCustomSkillManager = true },
                                     startAction = {
-                                        SettingIcon(R.drawable.ic_code, contentDescription = "自定义技能")
+                                        SettingIcon(R.drawable.ic_code, contentDescription = context.getString(R.string.custom_skills))
                                     }
                                 )
                                 HorizontalDivider(
@@ -1113,19 +1117,19 @@ fun SettingsScreen(
                                     modifier = Modifier.padding(start = 72.dp, end = 16.dp)
                                 )
                                 ArrowPreference(
-                                        title = "完整对话记录",
-                                        summary = "查看包含 System 提示在内的完整对话历史",
+                                        title = context.getString(R.string.full_chat_history),
+                                        summary = context.getString(R.string.view_full_history_desc),
                                         onClick = { showFullHistoryViewer = true },
                                         startAction = {
-                                            SettingIcon(R.drawable.ic_files, contentDescription = "完整对话记录")
+                                            SettingIcon(R.drawable.ic_files, contentDescription = context.getString(R.string.full_chat_history))
                                         }
                                     )
                                     SwitchPreference(
-                                        title = "无限制模式",
+                                        title = context.getString(R.string.unrestricted_mode),
                                         summary = if (unlimitedMode) {
-                                            "已开启：放开全部限制，允许任意命令和 SSH 连接，ROOT 设备自动提权"
+                                            context.getString(R.string.fallback_enabled_desc)
                                         } else {
-                                            "放开所有安全限制，允许 Agent 执行任意命令、SSH 连接、ROOT 提权等，需生物验证二次确认"
+                                            context.getString(R.string.unrestricted_mode_desc)
                                         },
                                         checked = unlimitedMode,
                                         onCheckedChange = { newValue ->
@@ -1137,7 +1141,7 @@ fun SettingsScreen(
                                             }
                                         },
                                         startAction = {
-                                            SettingIcon(R.drawable.ic_shield, contentDescription = "无限制模式")
+                                            SettingIcon(R.drawable.ic_shield, contentDescription = context.getString(R.string.unrestricted_mode))
                                         }
                                     )
                                     if (unlimitedMode) {
@@ -1146,15 +1150,15 @@ fun SettingsScreen(
                                             modifier = Modifier.padding(start = 72.dp, end = 16.dp)
                                         )
                                         SwitchPreference(
-                                            title = "使用 Root 权限执行 Agent 功能",
-                                            summary = "检测到 ROOT 时，Agent 自动使用 su 执行命令，无需手动确认",
+                                            title = context.getString(R.string.root_exec_agent),
+                                            summary = context.getString(R.string.root_auto_su_desc),
                                             checked = rootAutoShell,
                                             onCheckedChange = {
                                                 rootAutoShell = it
                                                 AiTermuxPrefs.setRootAutoShell(context, it)
                                             },
                                             startAction = {
-                                                SettingIcon(R.drawable.ic_root_skull, contentDescription = "使用 Root 权限执行 Agent 功能")
+                                                SettingIcon(R.drawable.ic_root_skull, contentDescription = context.getString(R.string.root_exec_agent))
                                             }
                                         )
                                     }
@@ -1171,7 +1175,7 @@ fun SettingsScreen(
             }
 
             // ---------- Security Settings ----------
-            item(key = "section_security") { SmallTitle(text = "安全设置") }
+            item(key = "section_security") { SmallTitle(text = context.getString(R.string.security_settings)) }
             item(key = "card_security") {
                 Card(
                     modifier = Modifier
@@ -1532,8 +1536,8 @@ fun SettingsScreen(
     if (showAiClearConfirm) {
         OverlayDialog(
             show = true,
-            title = "清空对话记录？",
-            summary = "当前对话将被清空且不可恢复，是否继续？",
+            title = context.getString(R.string.clear_chat_title),
+            summary = context.getString(R.string.clear_chat_confirm),
             onDismissRequest = { showAiClearConfirm = false },
             content = {
             Row(
@@ -1541,13 +1545,13 @@ fun SettingsScreen(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 TextButton(
-                    text = "取消",
+                    text = context.getString(R.string.cancel),
                     onClick = { showAiClearConfirm = false },
                     modifier = Modifier.weight(1f)
                 )
                 Spacer(Modifier.width(20.dp))
                 TextButton(
-                    text = "清空",
+                    text = context.getString(R.string.clear),
                     onClick = {
                         showAiClearConfirm = false
                         AiTermuxPrefs.clearChatHistory(context)
@@ -1568,12 +1572,12 @@ fun SettingsScreen(
         OverlayDialog(
             show = showWhitelistDialog,
             onDismissRequest = { showWhitelistDialog = false },
-            title = "信任白名单",
-            summary = "选择允许自动执行的技能。未选择任何技能时，信任白名单将关闭。",
+            title = context.getString(R.string.trust_whitelist),
+            summary = context.getString(R.string.whitelist_select_desc),
             content = {
                 Column(modifier = Modifier.fillMaxWidth()) {
                     Text(
-                        text = "⚠️ 仅勾选你完全信任的技能。自动执行意味着 AI 可以直接触发操作，跳过人工确认。",
+                        text = context.getString(R.string.whitelist_warning),
                         fontSize = 13.sp,
                         color = Color(0xFFDC2626),
                         modifier = Modifier.padding(vertical = 8.dp)
@@ -1597,12 +1601,12 @@ fun SettingsScreen(
 
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        text = "以下技能无需加入白名单，默认自动执行：",
+                        text = context.getString(R.string.auto_exec_skills_note),
                         fontSize = 13.sp,
                         color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
                     )
                     Text(
-                        text = "GET_CURRENT_SESSION、CLIPBOARD_READ、CLIPBOARD_WRITE、FILE_READ、FILE_WRITE、FILE_DELETE 等",
+                        text = context.getString(R.string.agent_permissions_examples),
                         fontSize = 13.sp,
                         color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.7f),
                         modifier = Modifier.padding(top = 2.dp)
@@ -1614,13 +1618,13 @@ fun SettingsScreen(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         TextButton(
-                            text = "取消",
+                            text = context.getString(R.string.cancel),
                             onClick = { showWhitelistDialog = false },
                             modifier = Modifier.weight(1f)
                         )
                         Spacer(Modifier.width(20.dp))
                         TextButton(
-                            text = "确定",
+                            text = context.getString(R.string.ok),
                             onClick = {
                                 // If no skills selected, whitelist is disabled
                                 val enabled = tempWhitelistSkills.isNotEmpty()
@@ -1647,8 +1651,8 @@ fun SettingsScreen(
     // ---------- AI Termux：编辑 System Prompt ----------
     var systemPromptText by remember { mutableStateOf(AiTermuxPrefs.getConfig(context).customSystemPrompt) }
     OverlayDialog(
-        title = "编辑 System Prompt",
-        summary = "自定义额外的系统指令，将附加在官方 System Prompt 之后。\n修改需谨慎，错误配置可能导致 AI 行为异常。",
+        title = context.getString(R.string.edit_system_prompt),
+        summary = context.getString(R.string.custom_extra_instructions_desc),
         show = showSystemPromptEditor,
         onDismissRequest = { showSystemPromptEditor = false },
         content = {
@@ -1663,7 +1667,7 @@ fun SettingsScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .heightIn(min = 150.dp),
-                label = "在此输入自定义 System Prompt 内容...",
+                label = context.getString(R.string.custom_prompt_hint),
                 useLabelAsPlaceholder = true,
                 maxLines = Int.MAX_VALUE,
                 minLines = 5
@@ -1672,7 +1676,7 @@ fun SettingsScreen(
         Spacer(Modifier.height(12.dp))
         Row(horizontalArrangement = Arrangement.SpaceBetween) {
             TextButton(
-                text = "恢复默认",
+                text = context.getString(R.string.reset_default),
                 onClick = {
                     systemPromptText = ""
                     val cfg = AiTermuxPrefs.getConfig(context)
@@ -1682,7 +1686,7 @@ fun SettingsScreen(
             )
             Spacer(Modifier.width(16.dp))
             TextButton(
-                text = "保存",
+                text = context.getString(R.string.save),
                 onClick = {
                     val cfg = AiTermuxPrefs.getConfig(context)
                     AiTermuxPrefs.saveConfig(context, cfg.copy(customSystemPrompt = systemPromptText))
@@ -1697,8 +1701,8 @@ fun SettingsScreen(
 
     // ---------- AI Termux：备用在线模型参数编辑 ----------
     OverlayDialog(
-        title = "配置备用在线大模型",
-        summary = "当本地大模型调用失败或无响应时，若已开启开关，会先提示错误原因，然后自动切换到该在线模型完成问答。参数与标准 OpenAI 兼容接口一致。",
+        title = context.getString(R.string.configure_backup_llm),
+        summary = context.getString(R.string.fallback_desc),
         show = showFallbackEditor,
         onDismissRequest = { showFallbackEditor = false },
         content = {
@@ -1712,25 +1716,25 @@ fun SettingsScreen(
                     value = fbUrl,
                     onValueChange = { v -> fbUrl = v },
                     modifier = Modifier.fillMaxWidth(),
-                    label = "API Base URL（例如 https://api.deepseek.com/v1）",
+                    label = context.getString(R.string.api_base_url_hint),
                     useLabelAsPlaceholder = true
                 )
                 TextField(
                     value = fbKey,
                     onValueChange = { v -> fbKey = v },
                     modifier = Modifier.fillMaxWidth(),
-                    label = "API Key（以 sk- 开头的密钥）",
+                    label = context.getString(R.string.api_key_hint),
                     useLabelAsPlaceholder = true
                 )
                 TextField(
                     value = fbModel,
                     onValueChange = { v -> fbModel = v },
                     modifier = Modifier.fillMaxWidth(),
-                    label = "模型名称（例如 deepseek-chat / gpt-4o-mini / qwen-plus）",
+                    label = context.getString(R.string.model_name_hint),
                     useLabelAsPlaceholder = true
                 )
                 Text(
-                    text = "Temperature：当前值 %.2f  (0 偏严谨，1 偏创意)".format(fbTemp),
+                    text = context.getString(R.string.temperature_current, fbTemp),
                     fontSize = 12.sp,
                     color = MiuixTheme.colorScheme.onSurfaceVariantSummary
                 )
@@ -1746,13 +1750,13 @@ fun SettingsScreen(
         Spacer(Modifier.height(12.dp))
         Row(horizontalArrangement = Arrangement.SpaceBetween) {
             TextButton(
-                text = "取消",
+                text = context.getString(R.string.cancel),
                 onClick = { showFallbackEditor = false },
                 modifier = Modifier.weight(1f)
             )
             Spacer(Modifier.width(16.dp))
             TextButton(
-                text = "保存",
+                text = context.getString(R.string.save),
                 onClick = {
                     AiTermuxPrefs.saveFallbackOnlineConfig(
                         context,
@@ -1776,14 +1780,14 @@ fun SettingsScreen(
     // ---------- AI Termux：选择 System Prompt 文件 ----------
     var showInternalPromptPicker by remember { mutableStateOf(false) }
     OverlayDialog(
-        title = "选择 System Prompt 文件",
-        summary = "请选择一个 .md 文件作为自定义 System Prompt。\n此文件将完全替代官方默认 System Prompt。",
+        title = context.getString(R.string.select_prompt_file),
+        summary = context.getString(R.string.custom_prompt_pick_md),
         show = showSystemPromptFilePicker,
         onDismissRequest = { showSystemPromptFilePicker = false },
         content = {
         Column {
             Text(
-                text = "请选择使用哪种文件选择器：",
+                text = context.getString(R.string.file_picker_choice),
                 style = TextStyle(fontSize = 14.sp)
             )
             Spacer(Modifier.height(16.dp))
@@ -1792,7 +1796,7 @@ fun SettingsScreen(
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 TextButton(
-                    text = "Termux 内部",
+                    text = context.getString(R.string.termux_builtin),
                     onClick = {
                         showSystemPromptFilePicker = false
                         showInternalPromptPicker = true
@@ -1800,7 +1804,7 @@ fun SettingsScreen(
                     modifier = Modifier.weight(1f)
                 )
                 TextButton(
-                    text = "系统选择器",
+                    text = context.getString(R.string.system_picker),
                     onClick = {
                         showSystemPromptFilePicker = false
                         // 使用系统文件选择器
@@ -1816,7 +1820,7 @@ fun SettingsScreen(
     // Termux 内部文件选择器
     TermuxInternalFilePicker(
         show = showInternalPromptPicker,
-        title = "选择 System Prompt 文件",
+        title = context.getString(R.string.select_prompt_file),
         fileExtensions = listOf("md", "txt"),
         onDismiss = { showInternalPromptPicker = false },
         onFileSelected = { path ->
@@ -1830,21 +1834,21 @@ fun SettingsScreen(
                         AiTermuxPrefs.setUseCustomSystemPrompt(context, true)
                         useCustomSystemPrompt = true
                         systemPromptSource = file.name
-                        showSnackbar("已加载自定义 System Prompt")
+                        showSnackbar(context.getString(R.string.custom_prompt_loaded))
                     } else {
-                        showSnackbar("文件内容为空")
+                        showSnackbar(context.getString(R.string.file_empty))
                     }
                 }
             } catch (e: Exception) {
-                showSnackbar("读取文件失败: ${e.message}")
+                showSnackbar(context.getString(R.string.read_file_failed, e.message))
             }
         }
     )
 
     // ---------- AI Termux：确认还原官方 System Prompt ----------
     OverlayDialog(
-        title = "还原官方 System Prompt",
-        summary = "确定要切换回官方默认 System Prompt 吗？\n您的自定义文件将不再被使用。",
+        title = context.getString(R.string.restore_official_prompt),
+        summary = context.getString(R.string.restore_official_prompt_confirm),
         show = showSystemPromptRestoreConfirm,
         onDismissRequest = { showSystemPromptRestoreConfirm = false },
         content = {
@@ -1853,18 +1857,18 @@ fun SettingsScreen(
             horizontalArrangement = Arrangement.End
         ) {
             TextButton(
-                text = "取消",
+                text = context.getString(R.string.cancel),
                 onClick = { showSystemPromptRestoreConfirm = false }
             )
             Spacer(Modifier.width(12.dp))
             TextButton(
-                text = "确定还原",
+                text = context.getString(R.string.confirm_restore),
                 onClick = {
                     AiTermuxPrefs.setUseCustomSystemPrompt(context, false)
                     useCustomSystemPrompt = false
                     systemPromptSource = ""
                     showSystemPromptRestoreConfirm = false
-                    showSnackbar("已切换回官方 System Prompt")
+                    showSnackbar(context.getString(R.string.switched_official_prompt))
                 },
                 colors = ButtonDefaults.textButtonColorsPrimary()
             )
@@ -1875,8 +1879,8 @@ fun SettingsScreen(
     // ---------- AI Termux：自定义技能管理 ----------
     var skillsRefreshKey by remember { mutableStateOf(0) }
     OverlayDialog(
-        title = "自定义技能",
-        summary = "管理用户自定义的技能卡。官方技能不可修改，仅支持添加、编辑和删除您自己创建的技能。",
+        title = context.getString(R.string.custom_skills),
+        summary = context.getString(R.string.custom_skill_manage_desc),
         show = showCustomSkillManager,
         onDismissRequest = { showCustomSkillManager = false },
         content = {
@@ -1889,7 +1893,7 @@ fun SettingsScreen(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = "暂无自定义技能，点击下方按钮添加",
+                    text = context.getString(R.string.no_custom_skills),
                     fontSize = 14.sp,
                     color = MiuixTheme.colorScheme.onSurfaceVariantSummary
                 )
@@ -1931,7 +1935,7 @@ fun SettingsScreen(
                                 horizontalArrangement = Arrangement.End
                             ) {
                                 TextButton(
-                                    text = "编辑",
+                                    text = context.getString(R.string.edit),
                                     onClick = {
                                         editingSkill = skill
                                         showAddEditSkillDialog = true
@@ -1939,7 +1943,7 @@ fun SettingsScreen(
                                 )
                                 Spacer(Modifier.width(8.dp))
                                 TextButton(
-                                    text = "删除",
+                                    text = context.getString(R.string.delete),
                                     onClick = {
                                         AiTermuxPrefs.deleteCustomSkill(context, skill.id)
                                         skillsRefreshKey++
@@ -1957,14 +1961,14 @@ fun SettingsScreen(
                 content = {
                     Column(modifier = Modifier.fillMaxWidth().padding(24.dp)) {
                         Text(
-                            text = "切换运行核心",
+                            text = context.getString(R.string.switch_runtime_core),
                             fontSize = 18.sp,
                             fontWeight = FontWeight.Bold,
                             color = MiuixTheme.colorScheme.onSurface
                         )
                         Spacer(Modifier.height(12.dp))
                         Text(
-                            text = "切换运行核心需要关闭所有正在运行的会话和任务。此操作不可撤销。",
+                            text = context.getString(R.string.core_switch_unreversible),
                             fontSize = 14.sp,
                             color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
                             lineHeight = 20.sp
@@ -1975,7 +1979,7 @@ fun SettingsScreen(
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             TextButton(
-                                text = "取消",
+                                text = context.getString(R.string.cancel),
                                 onClick = { showKillSessionsDialog = false },
                                 modifier = Modifier.weight(1f)
                             )
@@ -1991,12 +1995,12 @@ fun SettingsScreen(
                                     termuxTaskerEnabled = IntegratedTools.isEnabled(context, IntegratedTools.Tool.TERMUX_TASKER)
                                     termuxWidgetEnabled = IntegratedTools.isEnabled(context, IntegratedTools.Tool.TERMUX_WIDGET)
                                     showKillSessionsDialog = false
-                                    showSnackbar("已切换到 ${pendingRuntimeCore.displayName}，所有会话已关闭")
+                                    showSnackbar(context.getString(R.string.switched_core_pending, pendingRuntimeCore.displayName))
                                 },
                                 modifier = Modifier.weight(1f),
                                 colors = ButtonDefaults.buttonColors(color = Color(0xFFDC2626))
                             ) {
-                                Text("确认切换", color = Color.White, fontWeight = FontWeight.Medium)
+                                Text(context.getString(R.string.confirm_switch), color = Color.White, fontWeight = FontWeight.Medium)
                             }
                         }
                     }
@@ -2008,13 +2012,13 @@ fun SettingsScreen(
         Spacer(Modifier.height(12.dp))
         Row(horizontalArrangement = Arrangement.SpaceBetween) {
             TextButton(
-                text = "关闭",
+                text = context.getString(R.string.off),
                 onClick = { showCustomSkillManager = false },
                 modifier = Modifier.weight(1f)
             )
             Spacer(Modifier.width(16.dp))
             TextButton(
-                text = "添加技能",
+                text = context.getString(R.string.add_skill),
                 onClick = {
                     editingSkill = null
                     showAddEditSkillDialog = true
@@ -2034,10 +2038,10 @@ fun SettingsScreen(
     var skillImplementationType by remember { mutableStateOf("shell_command") }
 
     val implOptions = listOf(
-        "shell_command" to "Shell 命令",
-        "open_activity" to "打开页面",
-        "send_broadcast" to "发送广播",
-        "custom" to "自定义"
+        "shell_command" to context.getString(R.string.shell_command),
+        "open_activity" to context.getString(R.string.open_page),
+        "send_broadcast" to context.getString(R.string.send_broadcast),
+        "custom" to context.getString(R.string.custom)
     )
 
     val implJsonTemplates = mapOf(
@@ -2064,8 +2068,8 @@ fun SettingsScreen(
     }
 
     OverlayDialog(
-        title = if (editingSkill != null) "编辑技能" else "添加自定义技能",
-        summary = "创建一个供 AI 调用的自定义技能。技能将作为系统指令的一部分注入。",
+        title = if (editingSkill != null) context.getString(R.string.edit_skill) else context.getString(R.string.add_custom_skill),
+        summary = context.getString(R.string.custom_skill_create_desc),
         show = showAddEditSkillDialog,
         onDismissRequest = { showAddEditSkillDialog = false },
         content = {
@@ -2079,7 +2083,7 @@ fun SettingsScreen(
                 value = skillName,
                 onValueChange = { skillName = it },
                 modifier = Modifier.fillMaxWidth(),
-                label = "技能名称（必填）",
+                label = context.getString(R.string.skill_name_hint),
                 useLabelAsPlaceholder = true,
                 singleLine = true
             )
@@ -2088,14 +2092,14 @@ fun SettingsScreen(
                 value = skillDescription,
                 onValueChange = { skillDescription = it },
                 modifier = Modifier.fillMaxWidth(),
-                label = "技能描述",
+                label = context.getString(R.string.skill_description),
                 useLabelAsPlaceholder = true,
                 singleLine = false,
                 maxLines = 2
             )
             Spacer(Modifier.height(8.dp))
             Text(
-                text = "实现方式",
+                text = context.getString(R.string.implementation),
                 fontSize = 12.sp,
                 color = MiuixTheme.colorScheme.onSurfaceVariantSummary
             )
@@ -2121,7 +2125,7 @@ fun SettingsScreen(
             }
             Spacer(Modifier.height(8.dp))
             Text(
-                text = "调用方式（AI 输出的 skillType 结构）",
+                text = context.getString(R.string.skill_invocation_desc),
                 fontSize = 12.sp,
                 color = MiuixTheme.colorScheme.onSurfaceVariantSummary
             )
@@ -2131,14 +2135,14 @@ fun SettingsScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .heightIn(min = 60.dp),
-                label = "示例：${implJsonTemplates[skillImplementationType]}",
+                label = context.getString(R.string.impl_example_prefix, implJsonTemplates[skillImplementationType]),
                 useLabelAsPlaceholder = true,
                 maxLines = Int.MAX_VALUE,
                 minLines = 3
             )
             Spacer(Modifier.height(8.dp))
             Text(
-                text = "实现方式说明（可选）",
+                text = context.getString(R.string.impl_notes_hint),
                 fontSize = 12.sp,
                 color = MiuixTheme.colorScheme.onSurfaceVariantSummary
             )
@@ -2148,7 +2152,7 @@ fun SettingsScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .heightIn(min = 60.dp),
-                label = "详细说明该技能如何实现，会注入到 System Prompt 中指导 AI",
+                label = context.getString(R.string.skill_impl_detail_hint),
                 useLabelAsPlaceholder = true,
                 maxLines = Int.MAX_VALUE,
                 minLines = 3
@@ -2158,13 +2162,13 @@ fun SettingsScreen(
         Spacer(Modifier.height(12.dp))
         Row(horizontalArrangement = Arrangement.SpaceBetween) {
             TextButton(
-                text = "取消",
+                text = context.getString(R.string.cancel),
                 onClick = { showAddEditSkillDialog = false },
                 modifier = Modifier.weight(1f)
             )
             Spacer(Modifier.width(16.dp))
             TextButton(
-                text = "保存",
+                text = context.getString(R.string.save),
                 onClick = {
                     if (skillName.isBlank()) return@TextButton
                     val existing = editingSkill
@@ -2197,8 +2201,8 @@ fun SettingsScreen(
 
     // ---------- AI Termux：完整对话记录 ----------
     OverlayDialog(
-        title = "完整对话记录",
-        summary = "包含 System 系统提示在内的完整对话历史。仅显示 Termux Agent 保存的最近 100 条消息。",
+        title = context.getString(R.string.full_chat_history),
+        summary = context.getString(R.string.chat_history_full_desc),
         show = showFullHistoryViewer,
         onDismissRequest = { showFullHistoryViewer = false },
         content = {
@@ -2214,7 +2218,7 @@ fun SettingsScreen(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = "暂无对话记录",
+                    text = context.getString(R.string.no_chat_history),
                     fontSize = 14.sp,
                     color = MiuixTheme.colorScheme.onSurfaceVariantSummary
                 )
@@ -2259,9 +2263,9 @@ fun SettingsScreen(
                         Column(modifier = Modifier.padding(12.dp)) {
                             Text(
                                 text = when (msg.role) {
-                                    "user" -> "👤 用户"
+                                    "user" -> context.getString(R.string.tab_user)
                                     "assistant" -> "🤖 AI"
-                                    "system" -> "⚙️ 系统"
+                                    "system" -> context.getString(R.string.tab_system)
                                     else -> msg.role
                                 },
                                 fontSize = 12.sp,
@@ -2284,7 +2288,7 @@ fun SettingsScreen(
                                 )
                             }
                             Text(
-                                text = msg.content.ifBlank { "(空)" },
+                                text = msg.content.ifBlank { context.getString(R.string.empty) },
                                 fontSize = 13.sp,
                                 color = MiuixTheme.colorScheme.onSurface,
                                 lineHeight = 18.sp,
@@ -2297,12 +2301,12 @@ fun SettingsScreen(
                                 horizontalArrangement = Arrangement.End
                             ) {
                                 Text(
-                                    text = "复制",
+                                    text = context.getString(R.string.copy),
                                     fontSize = 11.sp,
                                     color = MiuixTheme.colorScheme.primary,
                                     modifier = Modifier
                                         .clickable {
-                                            val clip = android.content.ClipData.newPlainText("消息", msg.content)
+                                            val clip = android.content.ClipData.newPlainText(context.getString(R.string.messages), msg.content)
                                             clipboard.setPrimaryClip(clip)
                                         }
                                         .padding(horizontal = 8.dp, vertical = 4.dp)
@@ -2317,25 +2321,25 @@ fun SettingsScreen(
         Spacer(Modifier.height(12.dp))
         Row(horizontalArrangement = Arrangement.SpaceBetween) {
             TextButton(
-                text = "复制全部",
+                text = context.getString(R.string.copy_all),
                 onClick = {
                     val allContent = buildString {
                         appendLine("=== System Prompt ===")
                         appendLine(AiTermuxPrefs.buildFullSystemPrompt(context))
                         appendLine()
-                        appendLine("=== 对话记录 ===")
+                        appendLine(context.getString(R.string.chat_history_header))
                         messages.forEach { msg ->
                             appendLine("[${msg.role}] ${msg.content}")
                         }
                     }
-                    val clip = android.content.ClipData.newPlainText("完整对话记录", allContent)
+                    val clip = android.content.ClipData.newPlainText(context.getString(R.string.full_chat_history), allContent)
                     clipboard.setPrimaryClip(clip)
                 },
                 modifier = Modifier.weight(1f)
             )
             Spacer(Modifier.width(16.dp))
             TextButton(
-                text = "关闭",
+                text = context.getString(R.string.off),
                 onClick = { showFullHistoryViewer = false },
                 modifier = Modifier.weight(1f),
                 colors = ButtonDefaults.textButtonColorsPrimary()
@@ -2363,8 +2367,8 @@ fun SettingsScreen(
         onDismissRequest = {
             showUnlimitedModeConfirm = false
         },
-        title = "开启无限制模式",
-        summary = "此模式将彻底放开 Termux Agent 的所有安全限制",
+        title = context.getString(R.string.enable_unrestricted),
+        summary = context.getString(R.string.unrestricted_mode_banner),
         content = {
             Column(
                 modifier = Modifier
@@ -2372,7 +2376,7 @@ fun SettingsScreen(
                     .padding(top = 4.dp)
             ) {
                 Text(
-                    text = "开启后：\n• 所有命令无需二次确认，Agent 可直接执行\n• 允许任意 SSH 连接到远程主机\n• ROOT 设备自动使用 su 提权执行命令\n• 所有 System 安全规则约束将被无视\n\n此操作风险极高，请确认设备在可信环境下使用。",
+                    text = context.getString(R.string.unrestricted_mode_warning),
                     fontSize = 13.sp,
                     color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
                     lineHeight = 20.sp,
@@ -2380,7 +2384,7 @@ fun SettingsScreen(
                 )
 
                 CheckboxPreference(
-                    title = "我已了解风险，确认开启无限制模式",
+                    title = context.getString(R.string.confirm_unrestricted),
                     checked = unlimitedCheckboxChecked,
                     onCheckedChange = { unlimitedCheckboxChecked = it },
                     modifier = Modifier.fillMaxWidth()
@@ -2402,7 +2406,7 @@ fun SettingsScreen(
                         )
                     ) {
                         Text(
-                            text = "取消",
+                            text = context.getString(R.string.cancel),
                             color = MiuixTheme.colorScheme.onSurface,
                             fontSize = 15.sp,
                             fontWeight = FontWeight.Medium
@@ -2437,7 +2441,7 @@ fun SettingsScreen(
                         )
                     ) {
                         Text(
-                            text = "确认开启",
+                            text = context.getString(R.string.confirm_enable),
                             color = Color.White,
                             fontSize = 15.sp,
                             fontWeight = FontWeight.Medium
@@ -2617,15 +2621,15 @@ private fun HelpContentWithCopyableCommands(
                             .clip(RoundedCornerShape(6.dp))
                             .background(MiuixTheme.colorScheme.primary.copy(alpha = 0.12f))
                             .clickable {
-                                val clip = android.content.ClipData.newPlainText("命令", commandText)
+                                val clip = android.content.ClipData.newPlainText(context.getString(R.string.command), commandText)
                                 clipboard.setPrimaryClip(clip)
-                                showSnackbar("已复制: $commandText")
+                                showSnackbar(context.getString(R.string.copied_command, commandText))
                             },
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             painter = painterResource(R.drawable.ic_copy),
-                            contentDescription = "复制",
+                            contentDescription = context.getString(R.string.copy),
                             modifier = Modifier.size(16.dp),
                             tint = MiuixTheme.colorScheme.primary
                         )

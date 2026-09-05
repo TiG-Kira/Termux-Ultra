@@ -166,12 +166,12 @@ fun TerminalDetailScreenCompose(
     val currentSessionName = when {
         rawSessionName.isNotEmpty() -> rawSessionName
         !oscTitle.isNullOrBlank() -> oscTitle!!
-        else -> "会话 $sessionDisplayNumber"
+        else -> context.getString(R.string.session_display_number, sessionDisplayNumber)
     }
 
     // pid 语义与 Java 版一致：0=未初始化（不算已结束），-1=已结束。
     // pid 是普通字段不触发重组，收集 sessionExited 流保证会话结束的瞬间
-    // 就立刻显示"会话已结束"并展开 TopAppBar（对齐 Java 版行为）
+    // 就立刻显示context.getString(R.string.session_ended)并展开 TopAppBar（对齐 Java 版行为）
     val sessionExited by currentSession.sessionExited.collectAsState()
     val removeRequested by currentSession.isRemove.collectAsState()
     val currentSessionIsDead = currentSession.pid == -1 || sessionExited
@@ -245,30 +245,30 @@ fun TerminalDetailScreenCompose(
             else window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         }
         showContextMenu = false
-        showSnack(if (!isKeepScreenOn) "已开启屏幕常亮" else "已关闭屏幕常亮")
+        showSnack(if (!isKeepScreenOn) context.getString(R.string.keep_screen_on_enabled) else context.getString(R.string.keep_screen_on_disabled))
     }
 
     fun resetSession() {
         currentSession.reset()
         showContextMenu = false
-        showSnack("已重置终端")
+        showSnack(context.getString(R.string.terminal_reset))
     }
 
     fun killSessionProcess() {
         currentSession.finishIfRunning()
         showContextMenu = false
-        showSnack("已结束进程")
+        showSnack(context.getString(R.string.process_killed))
     }
 
     fun closeCurrentSession() {
         sessionManager.killSession(currentSession.id)
         sessionKey++
-        showSnack("会话已关闭")
+        showSnack(context.getString(R.string.sessions_closed))
     }
 
     fun renameSession(newName: String) {
         val fallbackNumber = allSessions.indexOfFirst { it.session.id == currentSession.id }.let { if (it >= 0) it + 1 else 1 }
-        currentSession.sessionName.value = newName.ifEmpty { "会话 $fallbackNumber" }
+        currentSession.sessionName.value = newName.ifEmpty { context.getString(R.string.session_fallback_number, fallbackNumber) }
         showRenameDialog = false
     }
 
@@ -292,9 +292,9 @@ fun TerminalDetailScreenCompose(
         val intent = Intent(Intent.ACTION_SEND).apply {
             type = "text/plain"
             putExtra(Intent.EXTRA_TEXT, text)
-            putExtra(Intent.EXTRA_TITLE, "${currentSessionName.ifEmpty { "终端" }} 会话转储")
+            putExtra(Intent.EXTRA_TITLE, "${currentSessionName.ifEmpty { context.getString(R.string.terminal) }} session dump")
         }
-        context.startActivity(Intent.createChooser(intent, "分享会话"))
+        context.startActivity(Intent.createChooser(intent, context.getString(R.string.share_session)))
         showContextMenu = false
     }
 
@@ -384,7 +384,7 @@ fun TerminalDetailScreenCompose(
         val newSession = sessionManager.createDefaultSession(startImmediately = true, isFailsafe = isFailSafe)
         sessionManager.switchTo(newSession.id)
         // TopAppBar 自动触发逻辑看齐 Java 版：
-        // 展开大 TopAppBar + 显示"新会话"副标题 + 重启 3 秒自动收起计时
+        // 展开大 TopAppBar + 显示context.getString(R.string.new_session)副标题 + 重启 3 秒自动收起计时
         if (isCompact) {
             showTopBarTemporarily()
         } else {
@@ -455,11 +455,11 @@ fun TerminalDetailScreenCompose(
     val addSessionEntry = DropdownEntry(
         items = listOf(
             DropdownItem(
-                text = "新建会话",
+                text = context.getString(R.string.new_session),
                 onClick = { addNewSession() }
             ),
             DropdownItem(
-                text = "安全模式新建会话",
+                text = context.getString(R.string.new_failsafe_session),
                 onClick = { addNewSession(isFailSafe = true) }
             )
         )
@@ -684,7 +684,7 @@ fun TerminalDetailScreenCompose(
             ) {
                 if (!showLargeButtons) {
                     Text(
-                        text = currentSessionName.ifEmpty { "终端" },
+                        text = currentSessionName.ifEmpty { context.getString(R.string.terminal) },
                         fontSize = 20.sp,
                         fontWeight = FontWeight.Normal,
                         color = effectiveTopBarContentColor,
@@ -802,8 +802,8 @@ fun TerminalDetailScreenCompose(
                                     currentSessionIsDead -> {
                                         Text(
                                             text = if (sessionExitCode >= 0)
-                                                "会话已结束 (退出代码: $sessionExitCode)"
-                                            else "会话已结束",
+                                                context.getString(R.string.session_exit_code_label, sessionExitCode)
+                                            else context.getString(R.string.session_ended),
                                             fontSize = 13.sp,
                                             color = Color(0xFFFF5252),
                                             modifier = Modifier.padding(bottom = 1.dp)
@@ -812,7 +812,7 @@ fun TerminalDetailScreenCompose(
                                     showNewSessionLabel -> {
                                         val handleText = sessionDisplayNumber.toString()
                                         Text(
-                                            text = "新会话 [$handleText]",
+                                            text = context.getString(R.string.new_session_handle, handleText),
                                             fontSize = 13.sp,
                                             color = effectiveTopBarContentColorSecondary,
                                             modifier = Modifier.padding(bottom = 1.dp)
@@ -820,7 +820,7 @@ fun TerminalDetailScreenCompose(
                                     }
                                 }
                                 Text(
-                                    text = currentSessionName.ifEmpty { "终端" },
+                                    text = currentSessionName.ifEmpty { context.getString(R.string.terminal) },
                                     fontSize = 28.sp,
                                     fontWeight = FontWeight.Normal,
                                     color = effectiveTopBarContentColor,
@@ -867,7 +867,7 @@ fun TerminalDetailScreenCompose(
                 OverlayDialog(
                     show = showSessionList,
                     onDismissRequest = { showSessionList = false },
-                    title = "会话列表",
+                    title = context.getString(R.string.session_list),
                     content = {
                         Column(
                             modifier = Modifier
@@ -881,6 +881,9 @@ fun TerminalDetailScreenCompose(
                                 // pid 语义与 Java 版一致：0=未初始化, >0=运行中, -1=已结束
                                 val isDead = s.pid == -1
                                 val isUninitialized = s.pid == 0
+                                // 当前会话高亮底色：暗色模式深灰，亮色模式亮灰白（图标等颜色不变）
+                                val currentHighlightColor =
+                                    if (isSystemDarkTheme) Color(0xFF424242) else Color(0xFFE0E0E0)
                                 val titleColor = when {
                                     isDead -> Color(0xFFFF5252)
                                     isActive -> MiuixTheme.colorScheme.primary
@@ -893,7 +896,7 @@ fun TerminalDetailScreenCompose(
                                 val displayName = when {
                                     sessionName.isNotEmpty() -> sessionName
                                     !sessionOscTitle.isNullOrBlank() -> sessionOscTitle!!
-                                    else -> "会话 ${if (sessionIndexInList >= 0) sessionIndexInList + 1 else 1}"
+                                    else -> "Session ${if (sessionIndexInList >= 0) sessionIndexInList + 1 else 1}"
                                 }
 
                                 Card(
@@ -913,7 +916,7 @@ fun TerminalDetailScreenCompose(
                                                 .size(36.dp)
                                                 .clip(RoundedCornerShape(10.dp))
                                                 .background(
-                                                    if (isActive) MiuixTheme.colorScheme.primaryContainer
+                                                    if (isActive) currentHighlightColor
                                                     else MiuixTheme.colorScheme.surfaceVariant
                                                 ),
                                             contentAlignment = Alignment.Center
@@ -935,8 +938,9 @@ fun TerminalDetailScreenCompose(
                                                 color = titleColor
                                             )
                                             val pidText = when {
-                                                isUninitialized -> "未初始化"
-                                                isDead -> "已结束${if (s.exitStatus >= 0) " · 退出代码 ${s.exitStatus}" else ""}"
+                                                isUninitialized -> context.getString(R.string.uninitialized)
+                                                isDead -> if (s.exitStatus >= 0) context.getString(R.string.card_ended_code, s.exitStatus)
+                                                          else context.getString(R.string.ended)
                                                 else -> "PID ${s.pid}"
                                             }
                                             Text(
@@ -947,7 +951,7 @@ fun TerminalDetailScreenCompose(
                                         }
                                         if (isActive) {
                                             Text(
-                                                text = "活跃",
+                                                text = context.getString(R.string.active),
                                                 fontSize = 11.sp,
                                                 color = MiuixTheme.colorScheme.primary
                                             )
@@ -964,7 +968,7 @@ fun TerminalDetailScreenCompose(
                 OverlayDialog(
                     show = showContextMenu,
                     onDismissRequest = { showContextMenu = false },
-                    title = currentSessionName.ifEmpty { "终端" },
+                    title = currentSessionName.ifEmpty { context.getString(R.string.terminal) },
                     content = {
                         Column(
                             modifier = Modifier
@@ -981,7 +985,7 @@ fun TerminalDetailScreenCompose(
                                         tint = MiuixTheme.colorScheme.onSurface
                                     )
                                 },
-                                text = "重置终端",
+                                text = context.getString(R.string.reset_terminal),
                                 onClick = { resetSession() }
                             )
                             ContextMenuItem(
@@ -994,7 +998,7 @@ fun TerminalDetailScreenCompose(
                                         else MiuixTheme.colorScheme.onSurface.copy(alpha = 0.4f)
                                     )
                                 },
-                                text = if (currentSession.isRunning) "结束进程 (PID ${currentSession.pid})" else "进程未运行",
+                                text = if (currentSession.isRunning) context.getString(R.string.kill_process_pid, currentSession.pid) else context.getString(R.string.process_not_running),
                                 enabled = currentSession.isRunning,
                                 onClick = { killSessionProcess() }
                             )
@@ -1011,7 +1015,7 @@ fun TerminalDetailScreenCompose(
                                         tint = MiuixTheme.colorScheme.onSurface
                                     )
                                 },
-                                text = if (isKeepScreenOn) "关闭屏幕常亮" else "保持屏幕常亮",
+                                text = if (isKeepScreenOn) context.getString(R.string.disable_keep_screen_on) else context.getString(R.string.keep_screen_on),
                                 trailing = if (isKeepScreenOn) "✓" else "",
                                 onClick = { toggleKeepScreenOn() }
                             )
@@ -1024,7 +1028,7 @@ fun TerminalDetailScreenCompose(
                                         tint = MiuixTheme.colorScheme.onSurface
                                     )
                                 },
-                                text = "切换软键盘",
+                                text = context.getString(R.string.toggle_soft_keyboard),
                                 onClick = { toggleKeyboard(); showContextMenu = false }
                             )
                             ContextMenuItem(
@@ -1036,7 +1040,7 @@ fun TerminalDetailScreenCompose(
                                         tint = MiuixTheme.colorScheme.onSurface
                                     )
                                 },
-                                text = "分享会话转储",
+                                text = context.getString(R.string.share_session_dump),
                                 onClick = { shareTranscript() }
                             )
 
@@ -1051,7 +1055,7 @@ fun TerminalDetailScreenCompose(
                                         tint = MiuixTheme.colorScheme.onSurface
                                     )
                                 },
-                                text = "应用设置",
+                                text = context.getString(R.string.app_settings_entry),
                                 onClick = { openSettings() }
                             )
                             ContextMenuItem(
@@ -1063,7 +1067,7 @@ fun TerminalDetailScreenCompose(
                                         tint = MiuixTheme.colorScheme.onSurface
                                     )
                                 },
-                                text = "系统权限",
+                                text = context.getString(R.string.system_permissions),
                                 onClick = { requestPermissions() }
                             )
                         }
@@ -1075,13 +1079,13 @@ fun TerminalDetailScreenCompose(
                 OverlayDialog(
                     show = showRenameDialog,
                     onDismissRequest = { showRenameDialog = false },
-                    title = "重命名会话",
+                    title = context.getString(R.string.rename_session),
                     content = {
                         Column(modifier = Modifier.fillMaxWidth()) {
                             TextField(
                                 value = renameValue,
                                 onValueChange = { renameValue = it },
-                                label = "会话名称"
+                                label = context.getString(R.string.session_name)
                             )
                             Spacer(Modifier.height(12.dp))
                             Row(
@@ -1089,13 +1093,13 @@ fun TerminalDetailScreenCompose(
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 TextButton(
-                                    text = "取消",
+                                    text = context.getString(R.string.cancel),
                                     onClick = { showRenameDialog = false },
                                     modifier = Modifier.weight(1f)
                                 )
                                 Spacer(Modifier.width(20.dp))
                                 TextButton(
-                                    text = "确定",
+                                    text = context.getString(R.string.ok),
                                     onClick = { renameSession(renameValue) },
                                     modifier = Modifier.weight(1f),
                                     colors = ButtonDefaults.textButtonColorsPrimary()

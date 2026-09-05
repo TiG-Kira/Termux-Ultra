@@ -140,9 +140,9 @@
     <string name="desc_lock_zoom_btn">Lock zoom</string>
     <string name="desc_save_zoom_btn">Save current zoom as default</string>
     <string name="desc_audio_btn">Toggle QEMU audio</string>
-    <string name="msg_audio_connection_failed">无法连接到音频，请检查音频设置</string>
-    <string name="msg_audio_enabled">音频已开启</string>
-    <string name="msg_audio_disabled">音频已关闭</string>
+    <string name="msg_audio_connection_failed">Failed to connect to audio. Check audio settings.</string>
+    <string name="msg_audio_enabled">Audio enabled</string>
+    <string name="msg_audio_disabled">Audio disabled</string>
     <string name="desc_retry_connection_btn">Reconnect</string>
     <string name="desc_back_btn">Back</string>
     <string name="desc_clear_url_btn">Clear</string>

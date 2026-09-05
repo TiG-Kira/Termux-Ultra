@@ -511,6 +511,15 @@ public final class TermuxActivity extends ComponentActivity implements ServiceCo
 
         TerminalSession session = findSessionByHandle(sessionHandle);
         if (session == null) {
+            // Java 会话未找到：尝试按 Compose 核心会话恢复（增强防护适配 Compose 核心）
+            if (com.termux.app.compose.RiskConfirmManager.INSTANCE
+                    .consumePendingComposeSession(sessionHandle, result)) {
+                Logger.logInfo(LOG_TAG, "Risk confirm (Compose): result applied, handle=" + sessionHandle);
+                intent.removeExtra(com.termux.app.compose.RiskConfirmManager.EXTRA_RISK_RESULT);
+                intent.removeExtra(com.termux.app.compose.RiskConfirmManager.EXTRA_SESSION_HANDLE);
+                com.termux.app.compose.RiskConfirmManager.INSTANCE.clearPendingState(this);
+                return;
+            }
             Logger.logWarn(LOG_TAG, "Risk confirm result: session not found for handle " + sessionHandle);
             return;
         }
@@ -587,6 +596,12 @@ public final class TermuxActivity extends ComponentActivity implements ServiceCo
 
         TerminalSession session = findSessionByHandle(sessionHandle);
         if (session == null) {
+            // Java 会话未找到：尝试按 Compose 核心会话恢复（增强防护适配 Compose 核心）
+            if (com.termux.app.compose.RiskConfirmManager.INSTANCE
+                    .consumePendingComposeSession(sessionHandle, result)) {
+                Logger.logInfo(LOG_TAG, "Risk confirm (from prefs, Compose): result applied, handle=" + sessionHandle);
+                return;
+            }
             Logger.logWarn(LOG_TAG, "handlePendingRiskConfirmFromPrefs: session not found for handle " + sessionHandle);
             return;
         }

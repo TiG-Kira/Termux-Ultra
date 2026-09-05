@@ -26,6 +26,9 @@ android {
         // 注意：termux_core_version 字符串已在 strings.xml 中定义
         buildConfigField "String", "TERMUX_CORE_VERSION", "\"0.118.3\""
 
+        // LibTerminal Compose 重构核心版本号（与 Termux 核心版本保持一致）
+        buildConfigField "String", "LIBTERMINAL_VERSION", "\"0.118.3\""
+
         if (appVersionName) versionName = appVersionName
 
         manifestPlaceholders.TERMUX_PACKAGE_NAME = "com.termux"

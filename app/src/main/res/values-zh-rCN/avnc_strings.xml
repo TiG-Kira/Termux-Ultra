@@ -237,4 +237,10 @@
     <string name="pref_gesture_action_remote_back_press">在服务器上按返回</string>
     <string name="pref_vk_use_super_with_single_tap">单次轻按使用超级键</string>
     <string name="pref_bell">响铃</string>
+    <string name="desc_audio_btn">切换 QEMU 音频</string>
+    <string name="msg_audio_connection_failed">无法连接到音频，请检查音频设置</string>
+    <string name="msg_audio_disabled">音频已关闭</string>
+    <string name="msg_audio_enabled">音频已开启</string>
+    <string name="pref_gesture_action_none">无</string>
+    <string name="pref_gesture_style_auto">自动</string>
 </resources>

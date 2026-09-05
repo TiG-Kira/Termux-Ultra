@@ -884,6 +884,51 @@ object RiskConfirmManager {
     }
 
     /**
+     * 终端会话风险检测适配器：屏蔽 Java 核心（com.termux.terminal.TerminalSession）
+     * 与 Compose 核心（libterminal TerminalSession）的实现差异，
+     * 供增强防护对两种内核使用同一套检测/确认流程。
+     */
+    private interface RiskSessionAdapter {
+        /** 会话唯一句柄（确认结果返回时按此找回会话） */
+        val sessionHandle: String
+
+        val shellPath: String?
+
+        val sessionName: String?
+
+        val args: Array<out String>?
+
+        fun confirmPendingCommand()
+
+        fun denyPendingCommand()
+    }
+
+    /** Java 核心会话适配器 */
+    private class JavaSessionAdapter(val session: com.termux.terminal.TerminalSession) : RiskSessionAdapter {
+        override val sessionHandle: String get() = session.mHandle
+        override val shellPath: String? get() = session.shellPath
+        override val sessionName: String? get() = session.mSessionName
+        override val args: Array<out String>? get() = session.args
+        override fun confirmPendingCommand() = session.confirmPendingCommand()
+        override fun denyPendingCommand() = session.denyPendingCommand()
+    }
+
+    /** Compose 核心会话适配器 */
+    private class ComposeSessionAdapter(
+        val session: com.termux.app.compose.terminal.engine.TerminalSession
+    ) : RiskSessionAdapter {
+        override val sessionHandle: String get() = session.handle
+        override val shellPath: String? get() = session.shellPath
+        override val sessionName: String? get() = session.sessionName.value
+        override val args: Array<out String>? get() = session.args
+        override fun confirmPendingCommand() = session.confirmPendingCommand()
+        override fun denyPendingCommand() = session.denyPendingCommand()
+    }
+
+    /** 待确认的 Compose 核心会话（确认结果返回时按 handle 恢复，Java 会话由 TermuxActivity 按句柄查找） */
+    private var pendingComposeSession: com.termux.app.compose.terminal.engine.TerminalSession? = null
+
+    /**
      * 处理终端会话中用户输入的高危命令。
      * 由 TerminalSession.InputInterceptor 调用。
      *
@@ -900,6 +945,27 @@ object RiskConfirmManager {
      * @return true 表示命令已被拦截处理，false 表示非高危命令
      */
     fun handleTerminalCommand(context: Context, session: com.termux.terminal.TerminalSession, command: String): Boolean {
+        return handleTerminalCommandInternal(context, JavaSessionAdapter(session), command)
+    }
+
+    /**
+     * 处理 Compose 核心会话中用户输入的高危命令。
+     * 由 libterminal TerminalSession.InputInterceptor 调用，
+     * 与 Java 核心走同一套 [handleTerminalCommandInternal] 检测/确认流程。
+     */
+    fun handleComposeTerminalCommand(
+        context: Context,
+        session: com.termux.app.compose.terminal.engine.TerminalSession,
+        command: String
+    ): Boolean {
+        return handleTerminalCommandInternal(context, ComposeSessionAdapter(session), command)
+    }
+
+    private fun handleTerminalCommandInternal(
+        context: Context,
+        adapter: RiskSessionAdapter,
+        command: String
+    ): Boolean {
         // 无限制模式：仅对 Agent 命令放行（shouldSkipRiskCheck 为 true），用户手敲命令仍按保护级别检查
         if (isUnlimitedModeActive(context) && shouldSkipRiskCheck()) return false
 
@@ -919,7 +985,7 @@ object RiskConfirmManager {
         incrementDangerCount()
 
         // 检测当前环境（带缓存）
-        val envType = detectEnvironment(context, session)
+        val envType = detectEnvironment(context, adapter)
 
         // --- SSH 会话快速路径优化 ---
         // SSH 会话中，危险操作实际发生在远程设备，本地防护意义有限
@@ -951,7 +1017,7 @@ object RiskConfirmManager {
                     RiskCommandDetector.RiskType.FORMAT,
                     RiskCommandDetector.RiskType.RM_RF_ROOT -> {
                         // 这些命令在远程服务器上也很危险，继续拦截流程
-                        return handleDangerousCommand(context, session, command, nativeDetection, envType)
+                        return handleDangerousCommand(context, adapter, command, nativeDetection, envType)
                     }
                     else -> {
                         // 其他命令仅 Snackbar 提示，放行
@@ -997,7 +1063,7 @@ object RiskConfirmManager {
                 val wrappedDetection = RiskCommandDetector.detect(wrappedCommand)
                 if (wrappedDetection.isDangerous && wrappedDetection.riskType != RiskCommandDetector.RiskType.SU_SUDO) {
                     // 包装的命令更危险，按包装命令的类型处理
-                    return handleDangerousCommand(context, session, command, wrappedDetection, envType)
+                    return handleDangerousCommand(context, adapter, command, wrappedDetection, envType)
                 }
             }
 
@@ -1015,7 +1081,7 @@ object RiskConfirmManager {
         }
 
         // 其他高危命令或原生环境下的 su/sudo：正常拦截流程
-        return handleDangerousCommand(context, session, command, nativeDetection, envType)
+        return handleDangerousCommand(context, adapter, command, nativeDetection, envType)
     }
 
     /**
@@ -1048,11 +1114,15 @@ object RiskConfirmManager {
      */
     private fun handleDangerousCommand(
         context: Context,
-        session: com.termux.terminal.TerminalSession,
+        adapter: RiskSessionAdapter,
         command: String,
         detection: RiskCommandDetector.DetectionResult,
         envType: EnvironmentType
     ): Boolean {
+        // Compose 核心会话：记录引用，确认结果返回时按 handle 恢复
+        if (adapter is ComposeSessionAdapter) {
+            pendingComposeSession = adapter.session
+        }
         // SHUTDOWN_REBOOT 类型：原生环境和 SSH 环境都拦截
         if (detection.riskType == RiskCommandDetector.RiskType.SHUTDOWN_REBOOT) {
             // SSH 环境下，对 init 命令额外检查只拦截 init 0 和 init 6
@@ -1066,7 +1136,7 @@ object RiskConfirmManager {
                 }
             }
             // SSH 电源操作，设置特殊弹窗状态
-            savePendingState(context, session.mHandle, command)
+            savePendingState(context, adapter.sessionHandle, command)
             startCountdown()
             _dialogState.value = DialogState(
                 command = command,
@@ -1097,7 +1167,7 @@ object RiskConfirmManager {
 
         // 其他高危命令：拦截流程
         // 保存待处理状态到 SharedPreferences
-        savePendingState(context, session.mHandle, command)
+        savePendingState(context, adapter.sessionHandle, command)
 
         // 启动倒计时
         startCountdown()
@@ -1148,15 +1218,15 @@ object RiskConfirmManager {
      */
     private fun detectEnvironment(
         context: Context,
-        session: com.termux.terminal.TerminalSession
+        adapter: RiskSessionAdapter
     ): EnvironmentType {
-        val sessionHandle = session.mHandle
-        
+        val sessionHandle = adapter.sessionHandle
+
         // 先从缓存读取
         environmentCache[sessionHandle]?.let { return it }
 
-        val shellPath = session.shellPath ?: ""
-        val sessionName = session.mSessionName ?: ""
+        val shellPath = adapter.shellPath ?: ""
+        val sessionName = adapter.sessionName ?: ""
 
         // 检查 shell 路径是否指向容器
         val containerIndicators = listOf("proot", "/rootfs/", "/container/")
@@ -1186,7 +1256,7 @@ object RiskConfirmManager {
         }
 
         // 检查会话参数是否包含 SSH 命令（通过远程页面创建的 SSH 会话）
-        val args = session.args
+        val args = adapter.args
         if (args != null) {
             for (arg in args) {
                 if (arg != null && arg.contains("ssh", ignoreCase = true)) {
@@ -1204,8 +1274,27 @@ object RiskConfirmManager {
     /** 判断是否为原生 Termux 环境 */
     private fun isNativeTermuxEnvironment(
         context: Context,
-        session: com.termux.terminal.TerminalSession
-    ): Boolean = detectEnvironment(context, session) == EnvironmentType.NATIVE
+        adapter: RiskSessionAdapter
+    ): Boolean = detectEnvironment(context, adapter) == EnvironmentType.NATIVE
+
+    /**
+     * 消费 Compose 核心会话的待确认结果。
+     * TermuxActivity 按 handle 找不到 Java 会话时调用此方法恢复 Compose 会话的
+     * 确认流程（确认 → 放行 Enter；拒绝 → 输出拒绝信息并清行）。
+     *
+     * @return true 表示已按 Compose 会话处理
+     */
+    fun consumePendingComposeSession(handle: String, result: String): Boolean {
+        val session = pendingComposeSession ?: return false
+        if (session.handle != handle) return false
+        pendingComposeSession = null
+        if (RESULT_CONFIRMED.equals(result)) {
+            session.confirmPendingCommand()
+        } else if (RESULT_DENIED.equals(result)) {
+            session.denyPendingCommand()
+        }
+        return true
+    }
 
     /** 显示"关闭二次确认"的警告弹窗（使用主页授权遮罩覆盖方式） */
     fun showDisableWarning(context: Context, targetLevel: ProtectionLevel = ProtectionLevel.OFF) {

@@ -63,6 +63,9 @@ class ComposeSessionManager private constructor(private val context: Context) {
             sessionName = kotlinx.coroutines.flow.MutableStateFlow(sessionName),
             processFactory = processFactory
         )
+        // 记录 shell 元数据，供增强防护的环境检测（RiskConfirmManager.detectEnvironment）使用
+        session.shellPath = shellPath
+        session.args = args
 
         _sessions.value = _sessions.value + SessionInfo(session, sessionName)
         if (startImmediately) {

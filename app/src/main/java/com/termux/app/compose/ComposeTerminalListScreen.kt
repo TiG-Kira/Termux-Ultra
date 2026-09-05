@@ -14,6 +14,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -38,6 +39,7 @@ import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.PullToRefresh
 import top.yukonga.miuix.kmp.basic.SearchBar
 import top.yukonga.miuix.kmp.basic.Scaffold
+import androidx.compose.ui.platform.LocalContext
 import top.yukonga.miuix.kmp.basic.Switch
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
@@ -107,9 +109,9 @@ fun ComposeTerminalListScreen(
                             val createdSession = sessionManager.createDefaultSession(startImmediately = false)
                             val count = sessionManager.sessions.value.indexOfFirst { it.session.id == createdSession.id }
                             createdSession.sessionName.value = if (com.termux.app.LocaleHelper.isChinese(context)) {
-                                "会话 ${count + 1}"
+                                context.getString(R.string.session_count_plus, count + 1)
                             } else {
-                                "Session ${count + 1}"
+                                context.getString(R.string.session_count_plus, count + 1)
                             }
                         }) {
                             Icon(
@@ -393,6 +395,7 @@ private fun ComposeTerminalCard(
     onRename: () -> Unit
 ) {
     val session = info.session
+    val context = LocalContext.current
     val sessionName by session.sessionName.collectAsState(initial = "")
     val oscTitle by session.titleState.collectAsState(initial = null)
 
@@ -407,10 +410,12 @@ private fun ComposeTerminalCard(
     }
 
     val titleColor = if (isDead) Color(0xFFFF5252) else MiuixTheme.colorScheme.onSurface
+    // 当前会话高亮底色：暗色模式深灰，亮色模式亮灰白（图标等颜色不变）
+    val currentHighlightColor = if (isSystemInDarkTheme()) Color(0xFF424242) else Color(0xFFE0E0E0)
     val statusText: String? = when {
-        isDead && session.exitStatus > 0 -> "退出代码:${session.exitStatus}"
-        isDead -> "已结束"
-        isUninitialized -> "未初始化"
+        isDead && session.exitStatus > 0 -> context.getString(R.string.exit_code_session, session.exitStatus)
+        isDead -> context.getString(R.string.ended)
+        isUninitialized -> context.getString(R.string.uninitialized)
         session.pid > 0 -> "PID ${session.pid}"
         else -> null
     }
@@ -433,7 +438,7 @@ private fun ComposeTerminalCard(
             ) {
                 val iconBgColor = when {
                     isDead -> Color(0xFFFFEBEE)
-                    isCurrent -> MiuixTheme.colorScheme.primaryContainer
+                    isCurrent -> currentHighlightColor
                     else -> MiuixTheme.colorScheme.surfaceVariant
                 }
                 Box(
@@ -491,7 +496,7 @@ private fun ComposeTerminalCard(
                     ) {
                         Icon(
                             painter = painterResource(R.drawable.ic_close),
-                            contentDescription = "消除",
+                            contentDescription = context.getString(R.string.dismiss),
                             modifier = Modifier.size(20.dp),
                             tint = Color.White
                         )
