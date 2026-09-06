@@ -709,13 +709,13 @@ fun SettingsScreen(
                             )
                             SwitchPreference(
                                 title = context.getString(R.string.enable_soft_keyboard_no_hw),
-                                summary = if (softKeyboardOnlyIfNoHardware) context.getString(R.string.enabled) else context.getString(R.string.disabled),
+                                summary = context.getString(R.string.soft_keyboard_only_if_no_hardware_desc),
                                 checked = softKeyboardOnlyIfNoHardware,
                                 onCheckedChange = {
                                     softKeyboardOnlyIfNoHardware = it
                                     terminalPrefs?.setSoftKeyboardEnabledOnlyIfNoHardware(it)
                                 },
-                                startAction = { SettingIcon(R.drawable.ic_keyboard) }
+                                startAction = { SettingIcon(R.drawable.ic_keyboard_disabled) }
                             )
                             HorizontalDivider(
                                 color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f),
@@ -723,7 +723,7 @@ fun SettingsScreen(
                             )
                             SwitchPreference(
                                 title = context.getString(R.string.terminal_margin_adjustment),
-                                summary = if (terminalMarginAdjustment) context.getString(R.string.enabled) else context.getString(R.string.disabled),
+                                summary = context.getString(R.string.terminal_margin_adjustment_desc),
                                 checked = terminalMarginAdjustment,
                                 onCheckedChange = {
                                     terminalMarginAdjustment = it
@@ -737,7 +737,7 @@ fun SettingsScreen(
                             )
                             OverlayDropdownPreference(
                                 title = context.getString(R.string.log_level),
-                                summary = listOf(context.getString(R.string.off), context.getString(R.string.normal), context.getString(R.string.debug), context.getString(R.string.verbose))[logLevel.coerceIn(0, 3)],
+                                summary = context.getString(R.string.log_level_desc),
                                 items = listOf(context.getString(R.string.off), context.getString(R.string.normal), context.getString(R.string.debug), context.getString(R.string.verbose)),
                                 selectedIndex = logLevel.coerceIn(0, 3),
                                 onSelectedIndexChange = { idx ->
@@ -752,13 +752,13 @@ fun SettingsScreen(
                             )
                             SwitchPreference(
                                 title = context.getString(R.string.terminal_key_logging),
-                                summary = if (keyLoggingEnabled) context.getString(R.string.enabled) else context.getString(R.string.disabled),
+                                summary = context.getString(R.string.terminal_key_logging_desc),
                                 checked = keyLoggingEnabled,
                                 onCheckedChange = {
                                     keyLoggingEnabled = it
                                     terminalPrefs?.setTerminalViewKeyLoggingEnabled(it)
                                 },
-                                startAction = { SettingIcon(R.drawable.ic_bug) }
+                                startAction = { SettingIcon(R.drawable.ic_bug_keyboard) }
                             )
                         }
 
@@ -825,7 +825,7 @@ fun SettingsScreen(
                         .clip(RoundedCornerShape(16.dp))
                 ) {
                     Column {
-                        if (!isComposeMode) {
+                        // Termux:API 已适配新星(Nova)引擎，任何核心模式下都可启用
                         IntegratedToolSwitch(
                             title = context.getString(R.string.termux_api_tool),
                             summary = if (apiStandaloneInstalled) replacedSummary
@@ -836,12 +836,18 @@ fun SettingsScreen(
                                 termuxApiEnabled = it
                                 IntegratedTools.setEnabled(context, IntegratedTools.Tool.TERMUX_API, it)
                                 IntegratedTools.applyComponentState(context, IntegratedTools.Tool.TERMUX_API, it)
+                                // 同步 am 包装器：开启后无需重启应用即可使用 termux-* 命令
+                                try {
+                                    if (it) TermuxApiBroadcastFix.applyAmWrapper(context)
+                                    else TermuxApiBroadcastFix.removeAmWrapper()
+                                } catch (_: Exception) {}
                             },
                             enabled = !apiStandaloneInstalled,
                             onDisabledClick = {
                                 IntegratedTools.showStandaloneConflictPrompt(context, IntegratedTools.Tool.TERMUX_API)
                             }
                         )
+                        if (!isComposeMode) {
                         IntegratedToolSwitch(
                             title = context.getString(R.string.termux_boot_tool),
                             summary = if (bootStandaloneInstalled) replacedSummary

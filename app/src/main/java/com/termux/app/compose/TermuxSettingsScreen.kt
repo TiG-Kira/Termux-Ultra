@@ -425,10 +425,7 @@ private fun TerminalViewSettingsPage(
             SettingCard {
                 SwitchPreference(
                     title = stringResource(R.string.termux_terminal_view_terminal_margin_adjustment_title),
-                    summary = stringResource(
-                        if (terminalMarginAdjustment) R.string.termux_terminal_view_terminal_margin_adjustment_on
-                        else R.string.termux_terminal_view_terminal_margin_adjustment_off
-                    ),
+                    summary = stringResource(R.string.terminal_margin_adjustment_desc),
                     checked = terminalMarginAdjustment,
                     onCheckedChange = {
                         terminalMarginAdjustment = it
@@ -482,17 +479,14 @@ private fun TerminalIoSettingsPage(
                 )
                 SwitchPreference(
                     title = stringResource(R.string.termux_soft_keyboard_enabled_only_if_no_hardware_title),
-                    summary = stringResource(
-                        if (softKeyboardOnlyIfNoHardware) R.string.termux_soft_keyboard_enabled_only_if_no_hardware_on
-                        else R.string.termux_soft_keyboard_enabled_only_if_no_hardware_off
-                    ),
+                    summary = stringResource(R.string.soft_keyboard_only_if_no_hardware_desc),
                     checked = softKeyboardOnlyIfNoHardware,
                     onCheckedChange = {
                         softKeyboardOnlyIfNoHardware = it
                         prefs?.setSoftKeyboardEnabledOnlyIfNoHardware(it)
                     },
                     startAction = {
-                        SettingIcon(R.drawable.ic_keyboard)
+                        SettingIcon(R.drawable.ic_keyboard_disabled)
                     }
                 )
             }
@@ -531,7 +525,7 @@ private fun DebuggingSettingsPage(
             SettingCard {
                 OverlayDropdownPreference(
                     title = stringResource(R.string.termux_log_level_title),
-                    summary = logLevelItems[logLevel],
+                    summary = stringResource(R.string.log_level_desc),
                     items = logLevelItems,
                     selectedIndex = logLevel,
                     onSelectedIndexChange = { idx ->
@@ -548,17 +542,14 @@ private fun DebuggingSettingsPage(
                 )
                 SwitchPreference(
                     title = stringResource(R.string.termux_terminal_view_key_logging_enabled_title),
-                    summary = stringResource(
-                        if (keyLoggingEnabled) R.string.termux_terminal_view_key_logging_enabled_on
-                        else R.string.termux_terminal_view_key_logging_enabled_off
-                    ),
+                    summary = stringResource(R.string.terminal_key_logging_desc),
                     checked = keyLoggingEnabled,
                     onCheckedChange = {
                         keyLoggingEnabled = it
                         prefs?.setTerminalViewKeyLoggingEnabled(it)
                     },
                     startAction = {
-                        SettingIcon(R.drawable.ic_bug)
+                        SettingIcon(R.drawable.ic_bug_keyboard)
                     }
                 )
                 HorizontalDivider(

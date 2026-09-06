@@ -121,6 +121,7 @@
     <string name="tmux_install_hint">tmux must be installed before performing this action. Please install it from the Resources page.</string>
     <string name="termux_logging_header">Logging</string>
     <string name="termux_log_level_title">Log level</string>
+    <string name="log_level_desc">Adjust the Termux log output level. More detailed logs help analyze issues.</string>
     <string name="termux_terminal_view_key_logging_enabled_off">Key logging enabled</string>
 
     <string name="copy_text">Copy</string>
@@ -129,6 +130,7 @@
     <string name="cut_text">Cut</string>
 
     <string name="termux_terminal_view_key_logging_enabled_title">Key logging enabled</string>
+    <string name="terminal_key_logging_desc">Log keyboard-related events</string>
     <string name="termux_terminal_view_key_logging_enabled_on">Enabled</string>
     <string name="termux_plugin_error_notifications_enabled_title">Plugin error notifications</string>
     <string name="termux_plugin_error_notifications_enabled_on">Enabled</string>
@@ -142,11 +144,13 @@
     <string name="termux_soft_keyboard_enabled_title">Soft keyboard enabled</string>
     <string name="termux_soft_keyboard_enabled_on">Enabled</string>
     <string name="termux_soft_keyboard_enabled_off">Disabled</string>
-    <string name="termux_soft_keyboard_enabled_only_if_no_hardware_title">Soft keyboard enabled only if no hardware</string>
+    <string name="termux_soft_keyboard_enabled_only_if_no_hardware_title">Disable soft keyboard when using a physical keyboard</string>
+    <string name="soft_keyboard_only_if_no_hardware_desc">Automatically disable the soft keyboard when a physical keyboard is detected</string>
     <string name="termux_soft_keyboard_enabled_only_if_no_hardware_on">Enabled</string>
     <string name="termux_soft_keyboard_enabled_only_if_no_hardware_off">Disabled</string>
     <string name="termux_terminal_view_view_header">View</string>
     <string name="termux_terminal_view_terminal_margin_adjustment_title">Terminal margin adjustment</string>
+    <string name="terminal_margin_adjustment_desc">Optimize terminal margins</string>
     <string name="termux_terminal_view_terminal_margin_adjustment_on">Enabled</string>
     <string name="termux_terminal_view_terminal_margin_adjustment_off">Disabled</string>
 
@@ -1121,7 +1125,7 @@
     <string name="confirm_unrestricted">I understand the risks. Enable unrestricted mode</string>
     <string name="session_count_plus">Session %1$s</string>
     <string name="chat_history_header">=== Chat History ===</string>
-    <string name="enable_soft_keyboard_no_hw">Enable soft keyboard only when no hardware keyboard</string>
+    <string name="enable_soft_keyboard_no_hw">Disable soft keyboard when using a physical keyboard</string>
     <string name="file_picker_choice">Choose which file picker to use:</string>
     <string name="font_size_desc">Change terminal console font size</string>
     <string name="api_key_empty">API Key is empty</string>

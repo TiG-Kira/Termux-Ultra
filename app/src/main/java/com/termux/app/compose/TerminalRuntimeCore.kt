@@ -10,7 +10,7 @@ import com.termux.shared.termux.TermuxConstants
  *
  * 两种模式：
  * - JAVA_NDK: 使用现有的 Java + NDK terminal-emulator / terminal-view 模块（默认）
- * - KOTLIN_COMPOSE: 使用新的 Kotlin + Compose libterminal 方案（实验性，插件不可用，需 Android 9+）
+ * - KOTLIN_COMPOSE: 使用新的 Kotlin + Compose libterminal 方案（实验性，除 Termux:API 外的插件不可用，需 Android 9+）
  */
 object TerminalRuntimeCore {
 
@@ -69,15 +69,14 @@ object TerminalRuntimeCore {
         return getCurrent(context) == Core.KOTLIN_COMPOSE
     }
 
-    /** Java+NDK 模式下可用的插件，Kotlin+Compose 模式下会被禁用。 */
+    /** 新星(Nova)模式下会被禁用的插件（Termux:API 已适配 Nova，不受核心切换影响）。 */
     private val DISABLED_IN_COMPOSE_MODE = listOf(
-        IntegratedTools.Tool.TERMUX_API,
         IntegratedTools.Tool.TERMUX_BOOT,
         IntegratedTools.Tool.TERMUX_TASKER,
         IntegratedTools.Tool.TERMUX_WIDGET
     )
 
-    /** 切换核心时自动禁用/启用插件（Styling 除外）。 */
+    /** 切换核心时自动禁用/启用插件（Termux:API 和 Styling 除外）。 */
     fun applyPluginState(context: Context, targetCore: Core) {
         val shouldDisable = targetCore == Core.KOTLIN_COMPOSE
         for (tool in DISABLED_IN_COMPOSE_MODE) {

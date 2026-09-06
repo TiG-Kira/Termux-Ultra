@@ -115,6 +115,7 @@
     <string name="termux_terminal_view_preferences_title">终端视图</string>
     <string name="termux_logging_header">日志</string>
     <string name="termux_log_level_title">日志级别</string>
+    <string name="log_level_desc">调整 Termux 的输出日志级别，更详细的 Log 日志有助于分析问题</string>
     <string name="termux_terminal_view_key_logging_enabled_off">按键日志已启用</string>
 
     <string name="copy_text">复制</string>
@@ -123,6 +124,7 @@
     <string name="cut_text">剪切</string>
 
     <string name="termux_terminal_view_key_logging_enabled_title">按键日志已启用</string>
+    <string name="terminal_key_logging_desc">记录按键相关 Log 日志</string>
     <string name="termux_terminal_view_key_logging_enabled_on">已启用</string>
     <string name="termux_plugin_error_notifications_enabled_title">插件错误通知</string>
     <string name="termux_plugin_error_notifications_enabled_on">已启用</string>
@@ -136,11 +138,13 @@
     <string name="termux_soft_keyboard_enabled_title">软键盘已启用</string>
     <string name="termux_soft_keyboard_enabled_on">已启用</string>
     <string name="termux_soft_keyboard_enabled_off">已禁用</string>
-    <string name="termux_soft_keyboard_enabled_only_if_no_hardware_title">仅在无硬件键盘时启用软键盘</string>
+    <string name="termux_soft_keyboard_enabled_only_if_no_hardware_title">使用物理键盘时禁用软键盘</string>
+    <string name="soft_keyboard_only_if_no_hardware_desc">在检测到物理键盘时自动禁用软键盘</string>
     <string name="termux_soft_keyboard_enabled_only_if_no_hardware_on">已启用</string>
     <string name="termux_soft_keyboard_enabled_only_if_no_hardware_off">已禁用</string>
     <string name="termux_terminal_view_view_header">视图</string>
     <string name="termux_terminal_view_terminal_margin_adjustment_title">终端边距调整</string>
+    <string name="terminal_margin_adjustment_desc">优化终端边距</string>
     <string name="termux_terminal_view_terminal_margin_adjustment_on">已启用</string>
     <string name="termux_terminal_view_terminal_margin_adjustment_off">已禁用</string>
 
@@ -968,7 +972,7 @@
     <string name="confirm_unrestricted">我已了解风险，确认开启无限制模式</string>
     <string name="session_count_plus">会话 %1$s</string>
     <string name="chat_history_header">=== 对话记录 ===</string>
-    <string name="enable_soft_keyboard_no_hw">仅无硬件键盘时启用软键盘</string>
+    <string name="enable_soft_keyboard_no_hw">使用物理键盘时禁用软键盘</string>
     <string name="file_picker_choice">请选择使用哪种文件选择器：</string>
     <string name="font_size_desc">更改终端控制台字体大小</string>
     <string name="api_key_empty">API Key 未填写</string>
