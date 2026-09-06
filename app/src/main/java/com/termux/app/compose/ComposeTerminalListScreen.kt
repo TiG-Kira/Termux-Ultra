@@ -9,6 +9,7 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -210,7 +211,8 @@ fun ComposeTerminalListScreen(
                             ) {
                                 filteredSessions.forEach { info ->
                                     val sessionName by info.session.sessionName.collectAsState(initial = "")
-                                    val displayName = sessionName.ifEmpty { info.name.ifEmpty { stringResource(R.string.terminal) } }
+                                    val searchNumber = allSessions.indexOfFirst { it.session.id == info.session.id } + 1
+                                    val displayName = sessionName.ifEmpty { info.name.ifEmpty { context.getString(R.string.session_display_number, searchNumber) } }
                                     Row(
                                         modifier = Modifier
                                             .fillMaxWidth()
@@ -310,11 +312,12 @@ fun ComposeTerminalListScreen(
                                 }
                             }
                         } else {
-                            items(allSessions) { info ->
+                            itemsIndexed(allSessions) { index, info ->
                                 val isCurrent = info.session.id == currentSessionId
                                 val sessionName by info.session.sessionName.collectAsState(initial = "")
                                 ComposeTerminalCard(
                                     info = info,
+                                    sessionNumber = index + 1,
                                     isCurrent = isCurrent,
                                     onClick = {
                                         sessionManager.switchTo(info.session.id)
@@ -389,6 +392,7 @@ fun ComposeTerminalListScreen(
 @Composable
 private fun ComposeTerminalCard(
     info: ComposeSessionManager.SessionInfo,
+    sessionNumber: Int,
     isCurrent: Boolean,
     onClick: () -> Unit,
     onStop: () -> Unit,
@@ -400,13 +404,15 @@ private fun ComposeTerminalCard(
     val oscTitle by session.titleState.collectAsState(initial = null)
 
     // Compose TerminalSession pid 语义与 Java 版一致: 0=未初始化, >0=运行中, -1=已结束
-    val isDead = session.pid == -1
-    val isUninitialized = session.pid == 0
+    // pid 是普通字段不触发重组，收集 pidState 流保证状态（未初始化/运行中/已结束）实时刷新
+    val sessionPid by session.pidState.collectAsState()
+    val isDead = sessionPid == -1
+    val isUninitialized = sessionPid == 0
     val displayName = when {
         sessionName.isNotEmpty() -> sessionName
         !oscTitle.isNullOrBlank() -> oscTitle!!
         info.name.isNotEmpty() -> info.name
-        else -> stringResource(R.string.terminal)
+        else -> context.getString(R.string.session_display_number, sessionNumber)
     }
 
     val titleColor = if (isDead) Color(0xFFFF5252) else MiuixTheme.colorScheme.onSurface
@@ -416,7 +422,7 @@ private fun ComposeTerminalCard(
         isDead && session.exitStatus > 0 -> context.getString(R.string.exit_code_session, session.exitStatus)
         isDead -> context.getString(R.string.ended)
         isUninitialized -> context.getString(R.string.uninitialized)
-        session.pid > 0 -> "PID ${session.pid}"
+        sessionPid > 0 -> "PID $sessionPid"
         else -> null
     }
 

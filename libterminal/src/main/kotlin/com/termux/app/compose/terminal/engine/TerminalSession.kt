@@ -98,8 +98,16 @@ class TerminalSession(
      * 语义与 Java 版 TerminalSession.mShellPid 保持一致：
      * 0=未初始化（尚未调用 [execute]），>0=运行中，-1=已结束。
      */
+    // pid 变化同步到 pidState，供 Compose UI 订阅，实现状态（未初始化/运行中/已结束）实时刷新
+    private val _pidState = MutableStateFlow(0)
+    val pidState: StateFlow<Int> = _pidState.asStateFlow()
+
     @Volatile
     var pid: Int = 0
+        set(value) {
+            field = value
+            _pidState.value = value
+        }
 
     val isRunning: Boolean
         get() = pid > 0

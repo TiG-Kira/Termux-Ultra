@@ -1109,6 +1109,9 @@ fun TerminalDetailScreenCompose(
                     }
                 )
             }
+
+            // 挂载风险确认宿主：收集增强防护 Snackbar 事件（仅提示/完全拦截），与 Java 版控制台行为一致
+            RiskConfirmDialogHost(snackbarHostState)
         }
     }
 }

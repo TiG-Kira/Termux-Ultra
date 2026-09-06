@@ -612,9 +612,12 @@ private fun TerminalCard(
     val statusText: String? = when {
         isDead -> context.getString(R.string.exit_code_short, exitCode)
         isUninitialized -> context.getString(R.string.uninitialized)
-        lastCommand.isNotEmpty() -> context.getString(R.string.last_command, lastCommand)
+        shellPid > 0 -> "PID $shellPid"
         else -> null
     }
+    // 运行中会话在 PID 下方独立一行显示最近执行的命令
+    val lastCommandText: String? = if (shellPid > 0 && lastCommand.isNotEmpty())
+        context.getString(R.string.last_command, lastCommand) else null
 
     Card(
         modifier = Modifier
@@ -668,6 +671,18 @@ private fun TerminalCard(
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Normal,
                             color = if (isDead) Color(0xFFD32F2F) else MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                            lineHeight = 16.sp,
+                            modifier = Modifier.padding(top = 2.dp),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    if (lastCommandText != null) {
+                        Text(
+                            text = lastCommandText,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Normal,
+                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
                             lineHeight = 16.sp,
                             modifier = Modifier.padding(top = 2.dp),
                             maxLines = 1,
