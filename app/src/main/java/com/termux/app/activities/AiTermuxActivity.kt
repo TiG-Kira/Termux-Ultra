@@ -86,20 +86,20 @@ class AiTermuxActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        val vm: AiTermuxViewModel by viewModels()
+
         // 注册停止 Agent 的 broadcast receiver（通知按钮触发）
         val filter = android.content.IntentFilter()
         filter.addAction(com.termux.app.TermuxService.ACTION_STOP_AGENT)
-        val activity = this
         val stopReceiver = object : android.content.BroadcastReceiver() {
             override fun onReceive(context: android.content.Context, intent: android.content.Intent) {
                 if (intent.action == com.termux.app.TermuxService.ACTION_STOP_AGENT) {
-                    activity.cancelGeneration()
+                    vm.cancelGeneration()
                 }
             }
         }
         registerReceiver(stopReceiver, filter)
         WindowCompat.setDecorFitsSystemWindows(window, false)
-        val vm: AiTermuxViewModel by viewModels()
         handlePendingAgentResult(vm)
         // 如果是从设置页面"重新配置 AI"启动的，强制进入配置页面
         if (intent?.getBooleanExtra("force_setup", false) == true) {
@@ -458,6 +458,7 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
 
         runInScope {
             isLoading = true
+            LiveUpdateState.agentStart()
             try {
                 processAiTurn(ctx, "[用户回答] ${card.askQuestion}\n回答：$answer")
             } finally {
@@ -557,6 +558,7 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
 
         runInScope {
             isLoading = true
+            LiveUpdateState.agentStart()
             try {
                 // 跳过风险确认：用户已在对话框中确认过
                 RiskConfirmManager.setSkipRiskCheck(true)
@@ -585,6 +587,7 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
                 // 恢复风险确认标志
                 RiskConfirmManager.setSkipRiskCheck(false)
                 isLoading = false
+                LiveUpdateState.agentStop()
                 AiTermuxPrefs.saveChatHistory(ctx, messages.toOpenAiMessages())
             }
         }

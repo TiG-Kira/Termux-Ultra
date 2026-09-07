@@ -437,7 +437,7 @@ public final class TermuxService extends Service implements TermuxTask.TermuxTas
     /** Make service run in foreground mode. */
     private void runStartForeground() {
         setupNotificationChannel();
-        startForeground(TermuxConstants.TERMUX_APP_NOTIFICATION_ID, buildNotification(null));
+        startForeground(TermuxConstants.TERMUX_APP_NOTIFICATION_ID, buildNotification());
     }
 
     /** Make service leave foreground mode. */
