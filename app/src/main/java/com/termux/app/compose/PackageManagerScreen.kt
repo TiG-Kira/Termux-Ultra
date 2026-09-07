@@ -517,7 +517,7 @@ fun PackageManagerScreen(
                             }
                         ) {
                             Icon(
-                                painter = painterResource(R.drawable.ic_restore),
+                                painter = painterResource(R.drawable.ic_play),
                                 contentDescription = "恢复后台任务",
                                 tint = MiuixTheme.colorScheme.primary,
                                 modifier = Modifier.size(22.dp)
