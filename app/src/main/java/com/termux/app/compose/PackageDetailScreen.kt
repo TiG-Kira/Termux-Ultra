@@ -107,25 +107,33 @@ fun PackageDetailScreen(
                lower.contains("cache/apt/archives/lock")
     }
 
-    fun runInstallUninstall(isInstall: Boolean, forceRemoveLock: Boolean = false) {
+    fun runInstallUninstall(isInstall: Boolean, forceRemoveLock: Boolean = false, backgrounded: Boolean = false) {
         progressTitle = if (isInstall) "正在安装 ${pkg.name}" else "正在卸载 ${pkg.name}"
         progressLog = ""
         progressSuccess = null
-        showProgressDialog = true
+        if (!backgrounded) showProgressDialog = true
+        val op = if (isInstall) LiveUpdateState.PkgOperation.INSTALL else LiveUpdateState.PkgOperation.UNINSTALL
+        LiveUpdateState.startPkg(op, pkg.name, backgrounded = backgrounded)
         scope.launch {
             val result = if (isInstall) PkgRepo.install(context, pkg.name) else PkgRepo.uninstall(context, pkg.name)
             val ok = result.first
             val log = result.second
+            LiveUpdateState.finishPkg(ok)
             if (!ok && !forceRemoveLock && isLockError(log)) {
                 progressLog = log
                 progressSuccess = false
-                // Show lock dialog after showing the lock error briefly
-                showProgressDialog = false
-                pendingAction = { runInstallUninstall(isInstall, forceRemoveLock = true) }
+                if (backgrounded) {
+                    // 后台运行遇到锁 — 重新弹窗让用户处理
+                    showProgressDialog = true
+                } else {
+                    showProgressDialog = false
+                }
+                pendingAction = { runInstallUninstall(isInstall, forceRemoveLock = true, backgrounded = backgrounded) }
                 showLockDialog = true
             } else {
                 progressLog = log
                 progressSuccess = ok
+                if (backgrounded) showProgressDialog = true
             }
         }
     }
@@ -497,6 +505,15 @@ fun PackageDetailScreen(
                                 CircularProgressIndicator(modifier = Modifier.size(28.dp), color = AccentBlue, strokeWidth = 3.dp)
                             }
                             Spacer(Modifier.height(12.dp))
+                            // 后台运行按钮（前台模式下允许用户切换到后台）
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                TextButton(
+                                    text = "后台运行",
+                                    onClick = { showProgressDialog = false },
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                            Spacer(Modifier.height(4.dp))
                         }
 
                         // Result text

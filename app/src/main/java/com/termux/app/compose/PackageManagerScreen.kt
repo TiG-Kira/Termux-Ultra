@@ -416,8 +416,10 @@ var selectedTab by remember { mutableStateOf(0) }
                             progressLog = ""
                             progressSuccess = null
                             showProgressDialog = true
+                            LiveUpdateState.startPkg(LiveUpdateState.PkgOperation.UPDATE, "", backgrounded = false)
                             scope.launch {
                                 val (ok, log) = PkgRepo.update(context)
+                                LiveUpdateState.finishPkg(ok)
                                 progressLog = log
                                 progressSuccess = ok
                                 if (ok) {
@@ -442,8 +444,10 @@ var selectedTab by remember { mutableStateOf(0) }
                             progressLog = ""
                             progressSuccess = null
                             showProgressDialog = true
+                            LiveUpdateState.startPkg(LiveUpdateState.PkgOperation.UPGRADE, "", backgrounded = false)
                             scope.launch {
                                 val (ok, log) = PkgRepo.upgradeAll(context)
+                                LiveUpdateState.finishPkg(ok)
                                 progressLog = log
                                 progressSuccess = ok
                                 if (ok) {

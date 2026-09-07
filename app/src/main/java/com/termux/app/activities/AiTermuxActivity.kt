@@ -85,6 +85,19 @@ class AiTermuxActivity : FragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // 注册停止 Agent 的 broadcast receiver（通知按钮触发）
+        val filter = android.content.IntentFilter()
+        filter.addAction(com.termux.app.TermuxService.ACTION_STOP_AGENT)
+        val activity = this
+        val stopReceiver = object : android.content.BroadcastReceiver() {
+            override fun onReceive(context: android.content.Context, intent: android.content.Intent) {
+                if (intent.action == com.termux.app.TermuxService.ACTION_STOP_AGENT) {
+                    activity.cancelGeneration()
+                }
+            }
+        }
+        registerReceiver(stopReceiver, filter)
         WindowCompat.setDecorFitsSystemWindows(window, false)
         val vm: AiTermuxViewModel by viewModels()
         handlePendingAgentResult(vm)
@@ -321,10 +334,12 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
 
         runInScope {
             isLoading = true
+            LiveUpdateState.agentStart()
             try {
                 processUserMessage(ctx, text)
             } finally {
                 isLoading = false
+                LiveUpdateState.agentStop()
                 AiTermuxPrefs.saveChatHistory(ctx, messages.toOpenAiMessages())
             }
         }
@@ -447,6 +462,7 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
                 processAiTurn(ctx, "[用户回答] ${card.askQuestion}\n回答：$answer")
             } finally {
                 isLoading = false
+                LiveUpdateState.agentStop()
                 AiTermuxPrefs.saveChatHistory(ctx, messages.toOpenAiMessages())
             }
         }
@@ -597,10 +613,12 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
 
         runInScope {
             isLoading = true
+            LiveUpdateState.agentStart()
             try {
                 processAiTurn(ctx, "[用户在二次确认中拒绝了危险操作] ${card.dangerousAction ?: card.title}，用户选择不执行。")
             } finally {
                 isLoading = false
+                LiveUpdateState.agentStop()
                 AiTermuxPrefs.saveChatHistory(ctx, messages.toOpenAiMessages())
             }
         }
@@ -628,10 +646,12 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
 
         runInScope {
             isLoading = true
+            LiveUpdateState.agentStart()
             try {
                 processAiTurn(ctx, "[用户取消了危险操作] ${card.dangerousAction ?: card.title}，用户选择不执行。")
             } finally {
                 isLoading = false
+                LiveUpdateState.agentStop()
                 AiTermuxPrefs.saveChatHistory(ctx, messages.toOpenAiMessages())
             }
         }

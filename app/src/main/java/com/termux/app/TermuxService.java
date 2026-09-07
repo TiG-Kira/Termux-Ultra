@@ -51,6 +51,7 @@ import com.termux.shared.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.shell.TermuxSession;
 import com.termux.shared.terminal.TermuxTerminalSessionClientBase;
 import com.termux.shared.logger.Logger;
+import com.termux.app.compose.LiveUpdateState;
 import com.termux.shared.notification.NotificationUtils;
 import com.termux.shared.packages.PermissionUtils;
 import com.termux.shared.data.DataUtils;
@@ -144,6 +145,9 @@ public final class TermuxService extends Service implements TermuxTask.TermuxTas
 
     private static final String LOG_TAG = "TermuxService";
 
+    /** 停止 Termux Agent 的 Intent Action（通知按钮 → Service → broadcast → Activity）。 */
+    public static final String ACTION_STOP_AGENT = "com.termux.app.ACTION_STOP_AGENT";
+
     private MemoryBroadcastReceiver mMemoryBroadcastReceiver;
     private boolean mIsMemoryWarningActive = false;
     private boolean mIsMemoryKillActive = false;
@@ -161,6 +165,12 @@ public final class TermuxService extends Service implements TermuxTask.TermuxTas
      * 死亡会话不计入 [mTermuxSessions]，因此 LiveUpdate 通知中的会话数量自动排除。
      */
     private final List<DeadSessionInfo> mDeadSessionInfos = new ArrayList<>();
+
+    /** LiveUpdateState 变化监听器：Kotlin 层状态变化时触发 updateNotification()。 */
+    private final LiveUpdateState.OnChangeListener mLiveUpdateListener = () -> {
+        try { updateNotification(); }
+        catch (Throwable t) { Logger.logDebug(LOG_TAG, "LiveUpdateState listener failed: " + t.getMessage()); }
+    };
 
     /** 已结束会话的信息载体（name + exitCode + exitedAt）。 */
     public static class DeadSessionInfo {
@@ -206,6 +216,9 @@ public final class TermuxService extends Service implements TermuxTask.TermuxTas
             }
             return kotlin.Unit.INSTANCE;
         });
+
+        // 注册 LiveUpdateState 监听器（Kotlin 层包管理/Agent 状态变化时刷新通知）
+        LiveUpdateState.addListener(mLiveUpdateListener);
 
         // 注册终端输入拦截器，用于检测高危命令
         com.termux.terminal.TerminalSession.setInputInterceptor(new com.termux.terminal.TerminalSession.InputInterceptor() {
@@ -289,6 +302,18 @@ public final class TermuxService extends Service implements TermuxTask.TermuxTas
 
         if (action != null) {
             switch (action) {
+                case ACTION_STOP_AGENT: {
+                    Logger.logDebug(LOG_TAG, "ACTION_STOP_AGENT: stopping agent");
+                    LiveUpdateState.agentStop();
+                    try {
+                        Intent stopIntent = new Intent(ACTION_STOP_AGENT);
+                        stopIntent.setPackage(getPackageName());
+                        sendBroadcast(stopIntent);
+                    } catch (Throwable t) {
+                        Logger.logDebug(LOG_TAG, "Failed to broadcast STOP_AGENT: " + t.getMessage());
+                    }
+                    break;
+                }
                 case TERMUX_SERVICE.ACTION_STOP_SERVICE:
                     Logger.logDebug(LOG_TAG, "ACTION_STOP_SERVICE intent received");
                     actionStopService();
@@ -360,6 +385,9 @@ public final class TermuxService extends Service implements TermuxTask.TermuxTas
             killAllTermuxExecutionCommands();
             runStopForeground();
         }
+
+        // 注销 LiveUpdateState 监听器
+        LiveUpdateState.removeListener(mLiveUpdateListener);
 
         unregisterMemoryBroadcastReceiver();
         stopMemoryCheck();
@@ -1196,21 +1224,117 @@ public synchronized int removeTermuxSession(TerminalSession sessionToRemove) {
 
     /**
      * 构建前台服务通知。
+     *
+     * 三档优先级（越靠前越优先）：
+     *   1) LiveUpdateState.hasPkg()  → 包管理器操作中
+     *   2) LiveUpdateState.hasAgent() → Agent 正在执行
+     *   3) 终端会话（现有逻辑兜底）
      */
     private Notification buildNotification() {
         Resources res = getResources();
 
-        // Set pending intent to be launched when notification is clicked
         Intent notificationIntent = TermuxActivity.newInstance(this);
         int pendingIntentFlags = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ? PendingIntent.FLAG_IMMUTABLE : 0;
         PendingIntent contentIntent = PendingIntent.getActivity(this, 0, notificationIntent, pendingIntentFlags);
 
+        // ===== 档 1：包管理器操作 =====
+        LiveUpdateState.PkgState pkgState = LiveUpdateState.getPkgStateSnapshot();
+        if (pkgState != null && !pkgState.getFinished()) {
+            return buildPkgNotification(pkgState, contentIntent, pendingIntentFlags);
+        }
 
-        // Set notification text
+        // ===== 档 2：Agent 执行中 =====
+        if (LiveUpdateState.hasAgent()) {
+            return buildAgentNotification(contentIntent, pendingIntentFlags);
+        }
+
+        // ===== 档 3：终端会话 =====
+        return buildTerminalNotification(res, contentIntent, pendingIntentFlags);
+    }
+
+    /** 档 1：包管理器进度通知（带 ProgressStyle + 药丸"操作进行:XX%"）。 */
+    private Notification buildPkgNotification(LiveUpdateState.PkgState pkg, PendingIntent contentIntent, int piFlags) {
+        Resources res = getResources();
+        Notification.Builder builder = (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+            ? new Notification.Builder(this, TermuxConstants.TERMUX_APP_NOTIFICATION_CHANNEL_ID)
+            : new Notification.Builder(this);
+
+        String title = "正在执行软件包更改";
+        String body;
+        switch (pkg.getOperation()) {
+            case INSTALL:  body = "Termux 正在安装软件包: " + pkg.getPackageName(); break;
+            case UNINSTALL: body = "Termux 正在卸载软件包: " + pkg.getPackageName(); break;
+            case UPGRADE:  body = "正在升级已安装的软件包"; break;
+            case UPDATE:
+            default:       body = "正在刷新软件包列表"; break;
+        }
+
+        builder.setContentTitle(title);
+        builder.setContentText(body);
+        builder.setContentIntent(contentIntent);
+        builder.setShowWhen(false);
+        builder.setSmallIcon(R.drawable.ic_service_notification);
+        builder.setOngoing(true);
+        builder.setPriority(Notification.PRIORITY_HIGH);
+        builder.setStyle(new Notification.BigTextStyle().bigText(body));
+
+        // 进度条
+        if (pkg.getProgress() > 0) {
+            builder.setProgress(100, pkg.getProgress(), false);
+        } else {
+            builder.setProgress(0, 0, true);  // indeterminate
+        }
+
+        // LiveUpdate 上岛 + 药丸
+        if (Build.VERSION.SDK_INT >= 36) {
+            try {
+                Bundle extras = new Bundle();
+                extras.putBoolean(Notification.EXTRA_REQUEST_PROMOTED_ONGOING, true);
+                builder.addExtras(extras);
+                if (pkg.getProgress() > 0) {
+                    builder.setShortCriticalText("操作进行:" + pkg.getProgress() + "%");
+                } else {
+                    builder.setShortCriticalText("操作进行中");
+                }
+            } catch (Throwable ignored) {}
+        }
+        return builder.build();
+    }
+
+    /** 档 2：Agent 执行通知（药丸"思考中" + 停止按钮）。 */
+    private Notification buildAgentNotification(PendingIntent contentIntent, int piFlags) {
+        Notification.Builder builder = (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+            ? new Notification.Builder(this, TermuxConstants.TERMUX_APP_NOTIFICATION_CHANNEL_ID)
+            : new Notification.Builder(this);
+
+        builder.setContentTitle("Termux Agent");
+        builder.setContentText("Agent 正在执行任务");
+        builder.setContentIntent(contentIntent);
+        builder.setShowWhen(false);
+        builder.setSmallIcon(R.drawable.ic_service_notification);
+        builder.setOngoing(true);
+        builder.setPriority(Notification.PRIORITY_HIGH);
+        builder.setStyle(new Notification.BigTextStyle().bigText("Agent 正在执行任务"));
+
+        // 停止按钮
+        Intent stopIntent = new Intent(this, TermuxService.class).setAction(ACTION_STOP_AGENT);
+        builder.addAction(android.R.drawable.ic_media_pause, "停止",
+            PendingIntent.getService(this, 1001, stopIntent, PendingIntent.FLAG_UPDATE_CURRENT | piFlags));
+
+        if (Build.VERSION.SDK_INT >= 36) {
+            try {
+                Bundle extras = new Bundle();
+                extras.putBoolean(Notification.EXTRA_REQUEST_PROMOTED_ONGOING, true);
+                builder.addExtras(extras);
+                builder.setShortCriticalText("思考中");
+            } catch (Throwable ignored) {}
+        }
+        return builder.build();
+    }
+
+    /** 档 3：终端会话通知（兜底）。 */
+    private Notification buildTerminalNotification(Resources res, PendingIntent contentIntent, int piFlags) {
         int sessionCount = getTermuxSessionsSize();
-        // Compose 模式：mTermuxSessions 只含第三方路径的镜像会话，Compose 直建的会话
-        // （主页/终端页"新建会话"）不在其中。以 ComposeSessionManager 的实际会话数为准，
-        // 避免 LiveUpdate 通知的会话数量计算错误。
         if (com.termux.app.compose.TerminalRuntimeCore.isComposeMode(this)) {
             try {
                 sessionCount = com.termux.app.compose.terminal.ComposeSessionManager
@@ -1220,141 +1344,101 @@ public synchronized int removeTermuxSession(TerminalSession sessionToRemove) {
             }
         }
         int taskCount = mTermuxTasks.size();
-        String notificationText;
 
-        // Reset cleared state if a session/task came back (requirement 1)
         if (mAllSessionsCleared && (sessionCount > 0 || taskCount > 0)) {
             mAllSessionsCleared = false;
         }
 
-        // --- Detect QEMU / proot container processes (requirement 2) ---
         com.termux.app.compose.ProcessDetector.DetectionResult detection = null;
         if (sessionCount > 0 || taskCount > 0) {
-            // Only run detection when something is running; keeps the no-session path fast
             detection = com.termux.app.compose.ProcessDetector.detectAllBlocking(this);
         }
         final int qemuCount  = (detection == null) ? 0 : detection.getQemuCount();
         final boolean containerRunning = (detection != null) && detection.getContainerRunning();
 
-        // --- Format notification text ---
-        // 三档优先级（与 LiveUpdate 药丸 shortCriticalText 保持一致）：
-        //   1) 有 QEMU 虚拟机运行        → 以虚拟机数量为主线
-        //   2) 否则有 proot 容器在运行    → 会话数 + (含容器) 标记
-        //   3) 都没有                     → 仅会话数
-        if (mAllSessionsCleared && sessionCount == 0 && taskCount == 0) {
-            // Requirement 1: downgrade text after end-sessions click until new sessions start
-            notificationText = "终端会话已清理(已无会话运行)。";
-        } else if (sessionCount == 0 && taskCount == 0) {
-            notificationText = res.getString(R.string.notification_no_terminals_running);
-        } else if (qemuCount > 0) {
-            // 最优先：有虚拟机运行 —— 以虚拟机数量为主线
-            notificationText = "正运行 " + qemuCount + " 台虚拟机";
-            if (taskCount > 0) {
-                notificationText += "，" + taskCount + " 个任务";
-            }
-        } else if (containerRunning) {
-            // 次优先：有容器运行 —— 会话数 + 含容器标记
-            notificationText = "正运行 " + sessionCount + " 个会话(含容器)";
-            if (taskCount > 0) {
-                notificationText += "，" + taskCount + " 个任务";
-            }
-        } else {
-            // 默认：仅会话数
-            notificationText = "正运行 " + sessionCount + " 个会话";
-            if (taskCount > 0) {
-                notificationText += "，" + taskCount + " 个任务";
-            }
-        }
-
         final boolean wakeLockHeld = mWakeLock != null;
-        if (wakeLockHeld && !(mAllSessionsCleared && sessionCount == 0 && taskCount == 0)) {
-            notificationText += " (" + res.getString(R.string.notification_wake_lock_held) + ")";
-        }
+        boolean sessionsCleared = mAllSessionsCleared && sessionCount == 0 && taskCount == 0;
 
-
-        // Set notification priority
-        // Requirement 1: if sessions have just been cleaned -> normal (low) priority, NOT high/LiveUpdate
-        int priority;
-        if (mAllSessionsCleared && sessionCount == 0 && taskCount == 0) {
-            priority = Notification.PRIORITY_LOW;
+        // --- 标题 ---
+        String title;
+        if (qemuCount > 0) {
+            title = qemuCount + " 个虚拟机会话";
+        } else if (containerRunning) {
+            title = sessionCount + " 个会话(含容器)";
         } else {
-            priority = (wakeLockHeld) ? Notification.PRIORITY_HIGH : Notification.PRIORITY_LOW;
+            title = sessionCount + " 个会话";
         }
 
-
-        Notification.Builder builder;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            builder = new Notification.Builder(this, TermuxConstants.TERMUX_APP_NOTIFICATION_CHANNEL_ID);
+        // --- 内容 ---
+        String body;
+        if (sessionsCleared) {
+            body = "终端会话已清理(已无会话运行)。";
+        } else if (sessionCount == 0 && taskCount == 0) {
+            body = res.getString(R.string.notification_no_terminals_running);
+        } else if (containerRunning) {
+            body = "Termux 内有容器正在运行";
         } else {
-            builder = new Notification.Builder(this);
+            body = "Termux 正在运行中";
+        }
+        if (!sessionsCleared && taskCount > 0) {
+            body += "，" + taskCount + " 个任务";
+        }
+        if (wakeLockHeld && !sessionsCleared) {
+            body += " (" + res.getString(R.string.notification_wake_lock_held) + ")";
         }
 
-        builder.setContentTitle("Termux 终端");
-        builder.setContentText(notificationText);
+        int priority = sessionsCleared ? Notification.PRIORITY_LOW :
+            (wakeLockHeld ? Notification.PRIORITY_HIGH : Notification.PRIORITY_LOW);
+
+        Notification.Builder builder = (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+            ? new Notification.Builder(this, TermuxConstants.TERMUX_APP_NOTIFICATION_CHANNEL_ID)
+            : new Notification.Builder(this);
+
+        builder.setContentTitle(title);
+        builder.setContentText(body);
         builder.setContentIntent(contentIntent);
         builder.setPriority(priority);
         builder.setShowWhen(false);
         builder.setSmallIcon(R.drawable.ic_service_notification);
         builder.setOngoing(true);
 
-        // "结束会话" action: send ACTION_STOP_SERVICE to service, which will launch MainActivity
-        // and show a data-loss warning dialog if VMs/containers are running.
+        // 按钮
         Intent stopIntent = new Intent(this, TermuxService.class).setAction(TERMUX_SERVICE.ACTION_STOP_SERVICE);
-        // Use FLAG_UPDATE_CURRENT so the extra is delivered correctly even when the same PendingIntent already exists
-        int exitPiFlags = PendingIntent.FLAG_UPDATE_CURRENT;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) exitPiFlags |= PendingIntent.FLAG_IMMUTABLE;
         builder.addAction(android.R.drawable.ic_delete, res.getString(R.string.notification_action_exit),
-                PendingIntent.getService(this, 1, stopIntent, exitPiFlags));
+            PendingIntent.getService(this, 1, stopIntent, PendingIntent.FLAG_UPDATE_CURRENT | piFlags));
 
-        // "关闭程序" action: send ACTION_QUIT_APP to service, which will exit immediately
-        // or show a data-loss warning dialog if VMs/containers are running.
         Intent quitIntent = new Intent(this, TermuxService.class).setAction(TERMUX_SERVICE.ACTION_QUIT_APP);
         builder.addAction(android.R.drawable.ic_menu_close_clear_cancel, res.getString(R.string.notification_action_quit),
-                PendingIntent.getService(this, 2, quitIntent, exitPiFlags));
+            PendingIntent.getService(this, 2, quitIntent, PendingIntent.FLAG_UPDATE_CURRENT | piFlags));
 
         String newWakeAction = wakeLockHeld ? TERMUX_SERVICE.ACTION_WAKE_UNLOCK : TERMUX_SERVICE.ACTION_WAKE_LOCK;
         Intent toggleWakeLockIntent = new Intent(this, TermuxService.class).setAction(newWakeAction);
         String actionTitle = res.getString(wakeLockHeld ? R.string.notification_action_wake_unlock : R.string.notification_action_wake_lock);
         int actionIcon = wakeLockHeld ? android.R.drawable.ic_lock_idle_lock : android.R.drawable.ic_lock_lock;
-        builder.addAction(actionIcon, actionTitle, PendingIntent.getService(this, 0, toggleWakeLockIntent, pendingIntentFlags));
+        builder.addAction(actionIcon, actionTitle,
+            PendingIntent.getService(this, 0, toggleWakeLockIntent, PendingIntent.FLAG_UPDATE_CURRENT | piFlags));
 
+        // LiveUpdate 上岛
         if (Build.VERSION.SDK_INT >= 36) {
             try {
-                // Requirement 1: when sessions cleared, do NOT promote to LiveUpdate,
-                // do NOT set HIGH priority, and do NOT use shortCriticalText.
-                if (!(mAllSessionsCleared && sessionCount == 0 && taskCount == 0)) {
+                if (!sessionsCleared && (sessionCount > 0 || qemuCount > 0 || containerRunning)) {
                     builder.setPriority(Notification.PRIORITY_HIGH);
-
-                    if (sessionCount > 0 || qemuCount > 0 || containerRunning) {
-                        builder.setStyle(new Notification.BigTextStyle().bigText(notificationText));
-                    }
-
-                    if (sessionCount > 0) {
-                        // Android 16+ Live Update (Promoted Ongoing): opt in via extras + short critical text.
-                        // Requires an ongoing notification with a Style (BigTextStyle set above).
-                        Bundle promotedExtras = new Bundle();
-                        promotedExtras.putBoolean(Notification.EXTRA_REQUEST_PROMOTED_ONGOING, true);
-                        builder.addExtras(promotedExtras);
-                        // 药丸文字（shortCriticalText）三档优先级，与通知正文保持一致：
-                        //   1) 有 QEMU 虚拟机运行 → "<N> 台虚拟机"
-                        //   2) 否则有 proot 容器在运行 → "<M> 个会话(含容器)"
-                        //   3) 都没有 → "<M> 个会话"
-                        // 注：QEMU 检测已统一使用 ProcessDetector.countRunningQemuBlocking()，
-                        // 与 QemuVmActivity 虚拟机页面卡片上的"运行中"数量同步（包含容器内 QEMU 进程）。
-                        if (qemuCount > 0) {
-                            builder.setShortCriticalText(qemuCount + " 台虚拟机");
-                        } else if (containerRunning) {
-                            builder.setShortCriticalText(sessionCount + " 个会话(含容器)");
-                        } else {
-                            builder.setShortCriticalText(sessionCount + " 个会话");
-                        }
+                    builder.setStyle(new Notification.BigTextStyle().bigText(body));
+                    Bundle extras = new Bundle();
+                    extras.putBoolean(Notification.EXTRA_REQUEST_PROMOTED_ONGOING, true);
+                    builder.addExtras(extras);
+                    if (qemuCount > 0) {
+                        builder.setShortCriticalText(qemuCount + " 个虚拟机会话");
+                    } else if (containerRunning) {
+                        builder.setShortCriticalText(sessionCount + " 个会话(含容器)");
+                    } else {
+                        builder.setShortCriticalText(sessionCount + " 个会话");
                     }
                 }
-            } catch (Exception e) {
-                Logger.logDebug(LOG_TAG, "Failed to set Live Update notification properties: " + e.getMessage());
+            } catch (Throwable e) {
+                Logger.logDebug(LOG_TAG, "Failed to set LiveUpdate properties: " + e.getMessage());
             }
         }
-
         return builder.build();
     }
 
