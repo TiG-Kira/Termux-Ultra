@@ -35,6 +35,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Modifier
@@ -91,6 +92,29 @@ fun PackageDetailScreen(
     var progressSuccess by remember { mutableStateOf<Boolean?>(null) }
     var pendingAction by remember { mutableStateOf<(() -> Unit)?>(null) }
 
+    // 观察 LiveUpdateState 的实时 log 和后台恢复请求
+    val livePkgLog by LiveUpdateState.pkgLog.collectAsState()
+    val pkgStateSnap by LiveUpdateState.pkgState.collectAsState()
+
+    // 后台恢复请求 — 切回前台后自动恢复弹窗
+    LaunchedEffect(Unit) {
+        LiveUpdateState.pkgResumeRequest.collect { shouldResume ->
+            if (shouldResume && LiveUpdateState.hasPkg()) {
+                LiveUpdateState.consumeResumeRequest()
+                val snap = LiveUpdateState.getPkgStateSnapshot()
+                if (snap != null) {
+                    showProgressDialog = true
+                    progressTitle = when (snap.operation) {
+                        LiveUpdateState.PkgOperation.INSTALL -> "正在安装 ${snap.packageName}"
+                        LiveUpdateState.PkgOperation.UNINSTALL -> "正在卸载 ${snap.packageName}"
+                        else -> "正在处理 ${snap.packageName}"
+                    }
+                    progressSuccess = null
+                }
+            }
+        }
+    }
+
     LaunchedEffect(pkg.name) {
         isLoading = true
         detail = PkgRepo.getDetail(context, pkg.name) ?: pkg
@@ -114,8 +138,13 @@ fun PackageDetailScreen(
         if (!backgrounded) showProgressDialog = true
         val op = if (isInstall) LiveUpdateState.PkgOperation.INSTALL else LiveUpdateState.PkgOperation.UNINSTALL
         LiveUpdateState.startPkg(op, pkg.name, backgrounded = backgrounded)
-        scope.launch {
-            val result = if (isInstall) PkgRepo.install(context, pkg.name) else PkgRepo.uninstall(context, pkg.name)
+        // 使用 LiveUpdateState.pkgScope — 独立于 UI 生命周期，切后台不取消
+        LiveUpdateState.pkgScope.launch {
+            val result = if (isInstall) {
+                PkgRepo.install(context, pkg.name, onOutput = { LiveUpdateState.appendPkgLog(it) })
+            } else {
+                PkgRepo.uninstall(context, pkg.name, onOutput = { LiveUpdateState.appendPkgLog(it) })
+            }
             val ok = result.first
             val log = result.second
             LiveUpdateState.finishPkg(ok)
@@ -497,23 +526,37 @@ fun PackageDetailScreen(
                 content = {
                     val logScrollState = rememberScrollState()
                     Column(
-                        modifier = Modifier.fillMaxWidth().padding(top = 12.dp)
+                        modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        // Loading indicator
+                        // Loading indicator + "处理中..." 一行居中
                         if (progressSuccess == null) {
-                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-                                CircularProgressIndicator(modifier = Modifier.size(28.dp), color = AccentBlue, strokeWidth = 3.dp)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                CircularProgressIndicator(modifier = Modifier.size(24.dp), color = AccentBlue, strokeWidth = 3.dp)
+                                Spacer(Modifier.width(12.dp))
+                                Text(
+                                    text = "处理中...",
+                                    fontSize = 14.sp,
+                                    color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                                )
                             }
                             Spacer(Modifier.height(12.dp))
-                            // 后台运行按钮（前台模式下允许用户切换到后台）
+                            // 后台运行按钮
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 TextButton(
                                     text = "后台运行",
-                                    onClick = { showProgressDialog = false },
+                                    onClick = {
+                                        LiveUpdateState.markPkgBackgrounded()
+                                        showProgressDialog = false
+                                    },
                                     modifier = Modifier.weight(1f)
                                 )
                             }
-                            Spacer(Modifier.height(4.dp))
+                            Spacer(Modifier.height(8.dp))
                         }
 
                         // Result text
@@ -527,9 +570,10 @@ fun PackageDetailScreen(
                             Spacer(Modifier.height(12.dp))
                         }
 
-                        // Log area - only show on failure, scrollable
-                        if (progressSuccess == false && progressLog.isNotBlank()) {
-                            val displayLog = if (progressLog.length > 5000) progressLog.substring(progressLog.length - 5000) else progressLog
+                        // Log area — 加载中和完成后都显示，实时更新
+                        val displayLog = if (progressSuccess == null) livePkgLog else progressLog
+                        val clippedLog = if (displayLog.length > 5000) displayLog.substring(displayLog.length - 5000) else displayLog
+                        if (clippedLog.isNotBlank()) {
                             Box(
                                 modifier = Modifier.fillMaxWidth()
                                     .height(200.dp)
@@ -540,7 +584,7 @@ fun PackageDetailScreen(
                                     .padding(12.dp)
                             ) {
                                 Text(
-                                    text = displayLog,
+                                    text = clippedLog,
                                     fontSize = 12.sp,
                                     color = if (isDark) Color.White.copy(alpha = 0.8f) else Color.Black.copy(alpha = 0.7f),
                                     lineHeight = 16.sp,

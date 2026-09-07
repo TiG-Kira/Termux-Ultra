@@ -30,6 +30,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.painterResource
@@ -103,6 +104,65 @@ object AppShell {
             val code = rd.exitCode ?: -1
             Pair(code, if (out.isNotBlank()) out else err)
         }
+
+    /**
+     * 流式执行 shell 命令。每 150ms 读取一次 stdout/stderr 增量，
+     * 通过 onOutput 回调实时推送。
+     */
+    suspend fun execStreaming(
+        context: Context,
+        command: String,
+        timeout: Int = 60,
+        onOutput: (String) -> Unit
+    ): Pair<Int, String> = withContext(Dispatchers.IO) {
+        val shell = resolveShell()
+        if (shell == null) return@withContext Pair(-1, "找不到 shell")
+
+        val ec = ExecutionCommand(
+            System.currentTimeMillis().toInt(),
+            shell,
+            arrayOf("-c", command),
+            null, null, true, false
+        )
+        val client = TermuxShellEnvironmentClient()
+        val task = try {
+            TermuxTask.execute(context, ec, null, client, false)
+        } catch (e: Exception) {
+            return@withContext Pair(-1, e.message ?: "执行失败")
+        }
+
+        var lastStdoutLen = 0
+        var lastStderrLen = 0
+        val deadline = System.currentTimeMillis() + timeout * 1000L
+        while (System.currentTimeMillis() < deadline) {
+            delay(150)
+            val rd = ec.resultData
+            val outLen = rd.stdout.length
+            val errLen = rd.stderr.length
+            if (outLen > lastStdoutLen || errLen > lastStderrLen) {
+                val sb = StringBuilder()
+                if (outLen > lastStdoutLen) {
+                    sb.append(rd.stdout.substring(lastStdoutLen))
+                }
+                if (errLen > lastStderrLen) {
+                    sb.append(rd.stderr.substring(lastStderrLen))
+                }
+                val delta = sb.toString()
+                if (delta.isNotBlank()) onOutput(delta)
+                lastStdoutLen = outLen
+                lastStderrLen = errLen
+            }
+            if (ec.hasExecuted() || rd.exitCode != null) break
+        }
+        runCatching { task.killIfExecuting(context, false) }
+
+        val rd = ec.resultData
+        val out = rd.stdout.toString()
+        val err = rd.stderr.toString()
+        val code = rd.exitCode ?: -1
+        val fullOut = if (out.isNotBlank()) out else err
+        Pair(code, fullOut)
+    }
 
     private fun resolveShell(): String? {
         val binDir = TermuxShellUtils.getDefaultBinPath()
@@ -262,23 +322,31 @@ object PkgRepo {
         )
     }
 
-    suspend fun install(context: Context, name: String): Pair<Boolean, String> {
-        val (code, output) = AppShell.exec(context, "export DEBIAN_FRONTEND=noninteractive && pkg install -y $name 2>&1", timeout = 180)
+    suspend fun install(context: Context, name: String, onOutput: ((String) -> Unit)? = null): Pair<Boolean, String> {
+        val cmd = "export DEBIAN_FRONTEND=noninteractive && pkg install -y $name 2>&1"
+        val (code, output) = if (onOutput != null) AppShell.execStreaming(context, cmd, timeout = 180, onOutput = onOutput)
+                             else AppShell.exec(context, cmd, timeout = 180)
         return (code == 0) to output
     }
 
-    suspend fun uninstall(context: Context, name: String): Pair<Boolean, String> {
-        val (code, output) = AppShell.exec(context, "export DEBIAN_FRONTEND=noninteractive && pkg uninstall -y $name 2>&1", timeout = 60)
+    suspend fun uninstall(context: Context, name: String, onOutput: ((String) -> Unit)? = null): Pair<Boolean, String> {
+        val cmd = "export DEBIAN_FRONTEND=noninteractive && pkg uninstall -y $name 2>&1"
+        val (code, output) = if (onOutput != null) AppShell.execStreaming(context, cmd, timeout = 60, onOutput = onOutput)
+                             else AppShell.exec(context, cmd, timeout = 60)
         return (code == 0) to output
     }
 
-    suspend fun update(context: Context): Pair<Boolean, String> {
-        val (code, output) = AppShell.exec(context, "export DEBIAN_FRONTEND=noninteractive && pkg update 2>&1", timeout = 180)
+    suspend fun update(context: Context, onOutput: ((String) -> Unit)? = null): Pair<Boolean, String> {
+        val cmd = "export DEBIAN_FRONTEND=noninteractive && pkg update 2>&1"
+        val (code, output) = if (onOutput != null) AppShell.execStreaming(context, cmd, timeout = 180, onOutput = onOutput)
+                             else AppShell.exec(context, cmd, timeout = 180)
         return (code == 0) to output
     }
 
-    suspend fun upgradeAll(context: Context): Pair<Boolean, String> {
-        val (code, output) = AppShell.exec(context, "export DEBIAN_FRONTEND=noninteractive && pkg upgrade -y 2>&1", timeout = 300)
+    suspend fun upgradeAll(context: Context, onOutput: ((String) -> Unit)? = null): Pair<Boolean, String> {
+        val cmd = "export DEBIAN_FRONTEND=noninteractive && pkg upgrade -y 2>&1"
+        val (code, output) = if (onOutput != null) AppShell.execStreaming(context, cmd, timeout = 300, onOutput = onOutput)
+                             else AppShell.exec(context, cmd, timeout = 300)
         return (code == 0) to output
     }
 
@@ -317,12 +385,12 @@ fun PackageManagerScreen(
     val isDark = isSystemInDarkTheme()
     val scope = rememberCoroutineScope()
 
-        var showProgressDialog by remember { mutableStateOf(false) }
+    var showProgressDialog by remember { mutableStateOf(false) }
     var progressTitle by remember { mutableStateOf("") }
     var progressLog by remember { mutableStateOf("") }
     var progressSuccess by remember { mutableStateOf<Boolean?>(null) }
-            
-var selectedTab by remember { mutableStateOf(0) }
+
+    var selectedTab by remember { mutableStateOf(0) }
     var installedList by remember { mutableStateOf<List<PackageInfo>>(emptyList()) }
     var availableList by remember { mutableStateOf<List<PackageInfo>>(emptyList()) }
     var searchQuery by remember { mutableStateOf("") }
@@ -330,6 +398,29 @@ var selectedTab by remember { mutableStateOf(0) }
     var isLoading by remember { mutableStateOf(true) }
     var loadingAvailable by remember { mutableStateOf(false) }
     var showDetail by remember { mutableStateOf<PackageInfo?>(null) }
+
+    // 观察 LiveUpdateState — 实时 log + 后台任务按钮 + 恢复请求
+    val livePkgLog by LiveUpdateState.pkgLog.collectAsState()
+    val pkgStateSnap by LiveUpdateState.pkgState.collectAsState()
+
+    LaunchedEffect(LiveUpdateState.pkgResumeRequest) {
+        LiveUpdateState.pkgResumeRequest.collect { shouldResume ->
+            if (shouldResume && LiveUpdateState.hasPkg()) {
+                LiveUpdateState.consumeResumeRequest()
+                val snap = LiveUpdateState.getPkgStateSnapshot()
+                if (snap != null) {
+                    showProgressDialog = true
+                    progressTitle = when (snap.operation) {
+                        LiveUpdateState.PkgOperation.UPDATE -> "正在刷新软件源"
+                        LiveUpdateState.PkgOperation.UPGRADE -> "正在升级所有包"
+                        LiveUpdateState.PkgOperation.INSTALL -> "正在安装 ${snap.packageName}"
+                        LiveUpdateState.PkgOperation.UNINSTALL -> "正在卸载 ${snap.packageName}"
+                    }
+                    progressSuccess = null
+                }
+            }
+        }
+    }
 
     LaunchedEffect(Unit) {
         isLoading = true
@@ -410,6 +501,29 @@ var selectedTab by remember { mutableStateOf(0) }
                     }
                 },
                 actions = {
+                    // 后台任务恢复按钮 — 有运行中的包操作时显示
+                    if (pkgStateSnap != null && !pkgStateSnap!!.finished) {
+                        IconButton(
+                            onClick = {
+                                LiveUpdateState.requestResumePkg()
+                                showProgressDialog = true
+                                progressSuccess = null
+                                progressTitle = when (pkgStateSnap!!.operation) {
+                                    LiveUpdateState.PkgOperation.UPDATE -> "正在刷新软件源"
+                                    LiveUpdateState.PkgOperation.UPGRADE -> "正在升级所有包"
+                                    LiveUpdateState.PkgOperation.INSTALL -> "正在安装 ${pkgStateSnap!!.packageName}"
+                                    LiveUpdateState.PkgOperation.UNINSTALL -> "正在卸载 ${pkgStateSnap!!.packageName}"
+                                }
+                            }
+                        ) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_restore),
+                                contentDescription = "恢复后台任务",
+                                tint = MiuixTheme.colorScheme.primary,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+                    }
                     IconButton(
                         onClick = {
                             progressTitle = "正在刷新软件源"
@@ -417,8 +531,8 @@ var selectedTab by remember { mutableStateOf(0) }
                             progressSuccess = null
                             showProgressDialog = true
                             LiveUpdateState.startPkg(LiveUpdateState.PkgOperation.UPDATE, "", backgrounded = false)
-                            scope.launch {
-                                val (ok, log) = PkgRepo.update(context)
+                            LiveUpdateState.pkgScope.launch {
+                                val (ok, log) = PkgRepo.update(context, onOutput = { LiveUpdateState.appendPkgLog(it) })
                                 LiveUpdateState.finishPkg(ok)
                                 progressLog = log
                                 progressSuccess = ok
@@ -445,8 +559,8 @@ var selectedTab by remember { mutableStateOf(0) }
                             progressSuccess = null
                             showProgressDialog = true
                             LiveUpdateState.startPkg(LiveUpdateState.PkgOperation.UPGRADE, "", backgrounded = false)
-                            scope.launch {
-                                val (ok, log) = PkgRepo.upgradeAll(context)
+                            LiveUpdateState.pkgScope.launch {
+                                val (ok, log) = PkgRepo.upgradeAll(context, onOutput = { LiveUpdateState.appendPkgLog(it) })
                                 LiveUpdateState.finishPkg(ok)
                                 progressLog = log
                                 progressSuccess = ok
@@ -556,13 +670,27 @@ var selectedTab by remember { mutableStateOf(0) }
                 onDismissRequest = { if (progressSuccess != null) showProgressDialog = false },
                 content = {
                     val logScrollState = rememberScrollState()
-                    Column(modifier = Modifier.fillMaxWidth().padding(top = 12.dp)) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        // Loading indicator + "处理中..." 一行居中
                         if (progressSuccess == null) {
-                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
                                 CircularProgressIndicator(
-                                    modifier = Modifier.size(28.dp),
+                                    modifier = Modifier.size(24.dp),
                                     color = MiuixTheme.colorScheme.primary,
                                     strokeWidth = 3.dp
+                                )
+                                Spacer(Modifier.width(12.dp))
+                                Text(
+                                    text = "处理中...",
+                                    fontSize = 14.sp,
+                                    color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.7f)
                                 )
                             }
                             Spacer(Modifier.height(12.dp))
@@ -576,8 +704,10 @@ var selectedTab by remember { mutableStateOf(0) }
                             )
                             Spacer(Modifier.height(12.dp))
                         }
-                        if (progressLog.isNotBlank()) {
-                            val displayLog = if (progressLog.length > 5000) progressLog.substring(progressLog.length - 5000) else progressLog
+                        // Log area — 加载中和完成后都显示，实时更新
+                        val displayLog = if (progressSuccess == null) livePkgLog else progressLog
+                        val clippedLog = if (displayLog.length > 5000) displayLog.substring(displayLog.length - 5000) else displayLog
+                        if (clippedLog.isNotBlank()) {
                             Box(
                                 modifier = Modifier.fillMaxWidth()
                                     .height(200.dp)
@@ -588,7 +718,7 @@ var selectedTab by remember { mutableStateOf(0) }
                                     .padding(12.dp)
                             ) {
                                 Text(
-                                    text = displayLog,
+                                    text = clippedLog,
                                     fontSize = 12.sp,
                                     color = if (isDark) Color.White.copy(alpha = 0.8f) else Color.Black.copy(alpha = 0.7f),
                                     lineHeight = 16.sp,

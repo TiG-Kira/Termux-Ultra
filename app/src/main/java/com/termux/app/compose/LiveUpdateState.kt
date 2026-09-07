@@ -1,5 +1,8 @@
 package com.termux.app.compose
 
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -14,6 +17,8 @@ import kotlinx.coroutines.flow.asStateFlow
  *
  * TermuxService.buildNotification() 读取此状态决定通知样式。
  * 包管理器 / Agent 通过对应 API 发布状态。
+ *
+ * 包操作统一使用 [pkgScope] 执行 — 独立于 UI 生命周期，切后台不会被取消。
  */
 object LiveUpdateState {
 
@@ -35,12 +40,25 @@ object LiveUpdateState {
     private val _pkgState = MutableStateFlow<PkgState?>(null)
     val pkgState: StateFlow<PkgState?> = _pkgState.asStateFlow()
 
+    /** 实时 log（流式追加，max ~ 20000 字符） */
+    private val _pkgLog = MutableStateFlow("")
+    val pkgLog: StateFlow<String> = _pkgLog.asStateFlow()
+
+    /** 后台操作结束后恢复弹窗标记 — 置位后 UI 观察到此值变为 true 时弹回 */
+    private val _pkgResumeRequest = MutableStateFlow(false)
+    val pkgResumeRequest: StateFlow<Boolean> = _pkgResumeRequest.asStateFlow()
+
+    /** 全局包操作协程 — 独立于 Activity/Composable 生命周期 */
+    val pkgScope: CoroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+
     @JvmStatic fun getPkgStateSnapshot(): PkgState? = _pkgState.value
 
     /** 开始包操作（初始进度 -1 indeterminate） */
     @JvmStatic
     fun startPkg(operation: PkgOperation, packageName: String, backgrounded: Boolean = false) {
         _pkgState.value = PkgState(operation, packageName, progress = -1, backgrounded = backgrounded)
+        _pkgLog.value = ""
+        _pkgResumeRequest.value = false
         notifyChanged()
     }
 
@@ -52,23 +70,54 @@ object LiveUpdateState {
         notifyChanged()
     }
 
+    /** 追加实时 log（截断到 20000 字符上限） */
+    @JvmStatic
+    fun appendPkgLog(delta: String) {
+        if (delta.isEmpty()) return
+        val cur = _pkgLog.value
+        val next = cur + delta
+        _pkgLog.value = if (next.length > 20000) next.substring(next.length - 20000) else next
+    }
+
     /** 包操作完成 */
     @JvmStatic
     fun finishPkg(success: Boolean) {
         val current = _pkgState.value ?: return
         _pkgState.value = current.copy(finished = true, success = success)
         notifyChanged()
-        // 3 秒后清除，让完成态有机会被看到
+        // 5 秒后清除，让完成态有机会被看到
         android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
             _pkgState.value = null
+            _pkgLog.value = ""
             notifyChanged()
-        }, 3000)
+        }, 5000)
     }
 
     /** 取消/清除包状态 */
     @JvmStatic
     fun clearPkg() {
         _pkgState.value = null
+        _pkgLog.value = ""
+        notifyChanged()
+    }
+
+    /** 后台操作 → 请求前台 UI 恢复弹窗（PackageManagerScreen 右上角按钮调用） */
+    @JvmStatic
+    fun requestResumePkg() {
+        _pkgResumeRequest.value = true
+    }
+
+    /** UI 消费完恢复请求后调用 */
+    @JvmStatic
+    fun consumeResumeRequest() {
+        _pkgResumeRequest.value = false
+    }
+
+    /** 前台操作转后台 — 更新 PkgState.backgrounded 标志（通知和右上角按钮靠此判断） */
+    @JvmStatic
+    fun markPkgBackgrounded() {
+        val cur = _pkgState.value ?: return
+        _pkgState.value = cur.copy(backgrounded = true)
         notifyChanged()
     }
 
