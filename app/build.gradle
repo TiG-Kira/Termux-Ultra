@@ -126,43 +126,6 @@ kotlin {
     jvmToolchain(21)
 }
 
-// [OS4 标记] 超级岛 SDK 版本（单一来源）：OS4 支持跟进详见 SuperIslandBridge.SDK_VERSION_MARKER 注释
-ext.superIslandSdkVersion = "v1"
-
-// 构建期自动检测超级岛 SDK 上游新版本（GitHub Releases），
-// 有新版本时输出提醒：确认支持 HyperOS 4 或更换上岛方案后恢复 OS4 上岛
-tasks.register("checkSuperIslandSdkVersion") {
-    doLast {
-        try {
-            def conn = new URL("https://api.github.com/repos/HuberHaYu/Xiaomi-SuperIsland-Playground/releases/latest").openConnection()
-            conn.setConnectTimeout(4000)
-            conn.setReadTimeout(4000)
-            conn.setRequestProperty("User-Agent", "TermuxUltra")
-            conn.setRequestProperty("Accept", "application/vnd.github+json")
-            if (conn.getResponseCode() == 200) {
-                def latest = new groovy.json.JsonSlurper().parseText(conn.getInputStream().getText("UTF-8")).tag_name
-                def current = project.ext.superIslandSdkVersion
-                if (latest && latest != current) {
-                    println "=" * 62
-                    println "[超级岛SDK] 检测到上游新版本: ${latest}（当前使用: ${current}）"
-                    println "  若新版已支持 HyperOS 4 或更换了上岛方案："
-                    println "  1. 更新 superIslandSdkVersion 与 SuperIslandBridge.SDK_VERSION_MARKER"
-                    println "  2. 移除 publishOrUpdate 中 hyperOsMajorVersion() >= 4 的禁入判断，恢复 OS4 上岛"
-                    println "=" * 62
-                } else {
-                    println "[超级岛SDK] 已是上游最新（${current}），HyperOS 4 支持仍未恢复，保持 OS4 禁入"
-                }
-            }
-        } catch (Exception e) {
-            println "[超级岛SDK] 版本检测跳过（网络不可用）: ${e.message}"
-        }
-    }
-}
-
-tasks.matching { it.name == "preBuild" }.configureEach {
-    dependsOn "checkSuperIslandSdkVersion"
-}
-
 dependencies {
     implementation fileTree(dir: 'libs', include: ['*.jar'])
     coreLibraryDesugaring "com.android.tools:desugar_jdk_libs:1.1.5"
@@ -202,9 +165,6 @@ dependencies {
     implementation project(':terminal-view')
     implementation project(':libterminal')
 
-    // 小米 HyperOS 超级岛通知 SDK（LiveUpdate 通知上岛；jitpack 仓库已在根 build.gradle 配置）
-    // [OS4 标记] 版本单一来源：升级后需同步 SuperIslandBridge.SDK_VERSION_MARKER 并恢复 OS4 上岛
-    implementation("com.github.HuberHaYu:Xiaomi-SuperIsland-Playground:${superIslandSdkVersion}")
     implementation project(':termux-shared')
     // Integrated Termux add-on tools
     implementation project(':termux-api')

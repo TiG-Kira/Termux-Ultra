@@ -5,9 +5,6 @@
     android:sharedUserId="${TERMUX_PACKAGE_NAME}"
     android:sharedUserLabel="@string/shared_user_label">
 
-    <!-- 超级岛 SDK 要求 minSdk 31；应用 minSdk 26，运行时经 Build.VERSION 检查守卫，
-         仅 Android 12+ 尝试上岛，低版本不加载 SDK 相关代码路径 -->
-    <uses-sdk tools:overrideLibrary="com.lab.island.sdk" />
 
     <uses-feature
         android:name="android.hardware.touchscreen"
