@@ -825,7 +825,7 @@ fun SettingsScreen(
                         .clip(RoundedCornerShape(16.dp))
                 ) {
                     Column {
-                        // Termux:API 已适配新星(Nova)引擎，任何核心模式下都可启用
+                        if (!isComposeMode) {
                         IntegratedToolSwitch(
                             title = context.getString(R.string.termux_api_tool),
                             summary = if (apiStandaloneInstalled) replacedSummary
@@ -836,18 +836,12 @@ fun SettingsScreen(
                                 termuxApiEnabled = it
                                 IntegratedTools.setEnabled(context, IntegratedTools.Tool.TERMUX_API, it)
                                 IntegratedTools.applyComponentState(context, IntegratedTools.Tool.TERMUX_API, it)
-                                // 同步 am 包装器：开启后无需重启应用即可使用 termux-* 命令
-                                try {
-                                    if (it) TermuxApiBroadcastFix.applyAmWrapper(context)
-                                    else TermuxApiBroadcastFix.removeAmWrapper()
-                                } catch (_: Exception) {}
                             },
                             enabled = !apiStandaloneInstalled,
                             onDisabledClick = {
                                 IntegratedTools.showStandaloneConflictPrompt(context, IntegratedTools.Tool.TERMUX_API)
                             }
                         )
-                        if (!isComposeMode) {
                         IntegratedToolSwitch(
                             title = context.getString(R.string.termux_boot_tool),
                             summary = if (bootStandaloneInstalled) replacedSummary

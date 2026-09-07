@@ -361,6 +361,9 @@ public final class TermuxService extends Service implements TermuxTask.TermuxTas
             runStopForeground();
         }
 
+        // 服务销毁时撤销超级岛及其通知，避免残留
+        com.termux.app.compose.SuperIslandBridge.cancel(this);
+
         unregisterMemoryBroadcastReceiver();
         stopMemoryCheck();
     }
@@ -409,7 +412,7 @@ public final class TermuxService extends Service implements TermuxTask.TermuxTas
     /** Make service run in foreground mode. */
     private void runStartForeground() {
         setupNotificationChannel();
-        startForeground(TermuxConstants.TERMUX_APP_NOTIFICATION_ID, buildNotification());
+        startForeground(TermuxConstants.TERMUX_APP_NOTIFICATION_ID, buildNotification(null));
     }
 
     /** Make service leave foreground mode. */
@@ -1194,7 +1197,12 @@ public synchronized int removeTermuxSession(TerminalSession sessionToRemove) {
 
 
 
-    private Notification buildNotification() {
+    /**
+     * 构建前台服务通知。
+     * @param outTexts 非 null 时回填通知内容 {标题, 正文, 药丸短文本(可为 null)}，
+     *                 供小米超级岛通知复用同一份内容，保证岛与通知显示一致。
+     */
+    private Notification buildNotification(String[] outTexts) {
         Resources res = getResources();
 
         // Set pending intent to be launched when notification is clicked
@@ -1268,6 +1276,23 @@ public synchronized int removeTermuxSession(TerminalSession sessionToRemove) {
             notificationText += " (" + res.getString(R.string.notification_wake_lock_held) + ")";
         }
 
+
+        // 超级岛复用内容回填：药丸短文本与 LiveUpdate 药丸保持同一套三档优先级
+        if (outTexts != null) {
+            outTexts[0] = "Termux 终端";
+            outTexts[1] = notificationText;
+            String pillText = null;
+            if (sessionCount > 0 && !(mAllSessionsCleared && sessionCount == 0 && taskCount == 0)) {
+                if (qemuCount > 0) {
+                    pillText = qemuCount + " 台虚拟机";
+                } else if (containerRunning) {
+                    pillText = sessionCount + " 个会话(含容器)";
+                } else {
+                    pillText = sessionCount + " 个会话";
+                }
+            }
+            outTexts[2] = pillText;
+        }
 
         // Set notification priority
         // Requirement 1: if sessions have just been cleaned -> normal (low) priority, NOT high/LiveUpdate
@@ -1362,9 +1387,28 @@ public synchronized int removeTermuxSession(TerminalSession sessionToRemove) {
             TermuxConstants.TERMUX_APP_NOTIFICATION_CHANNEL_NAME, NotificationManager.IMPORTANCE_DEFAULT);
     }
 
+    /** 超级岛通知复用的内容缓存 {标题, 正文, 药丸短文本}，由 buildNotification 回填 */
+    private final String[] mIslandTexts = new String[3];
+
     /** Update the shown foreground service notification after making any changes that affect it. */
     private synchronized void updateNotification() {
-        ((NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE)).notify(TermuxConstants.TERMUX_APP_NOTIFICATION_ID, buildNotification());
+        Notification notification = buildNotification(mIslandTexts);
+
+        // ---- 小米 HyperOS 超级岛通知（最高优先级展示路径）----
+        // HyperOS 上尝试上岛；上岛失败（通知退化为普通通知/出错）时，桥接层已取消
+        // SDK 发出的普通通知，前台通知继续走下方现有逻辑（Android 16+ LiveUpdate，
+        // 不满足条件时按项目现有退回逻辑降级为普通通知）。
+        if (Build.VERSION.SDK_INT >= 31 && com.termux.app.compose.SuperIslandBridge.isHyperOs()) {
+            if (mIslandTexts[2] != null) {
+                com.termux.app.compose.SuperIslandBridge.publishOrUpdate(
+                    this, mIslandTexts[0], mIslandTexts[1], mIslandTexts[2], islandShown -> {});
+            } else {
+                // 清理态/无运行内容：撤销岛避免残留旧信息
+                com.termux.app.compose.SuperIslandBridge.cancel(this);
+            }
+        }
+
+        ((NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE)).notify(TermuxConstants.TERMUX_APP_NOTIFICATION_ID, notification);
     }
 
 

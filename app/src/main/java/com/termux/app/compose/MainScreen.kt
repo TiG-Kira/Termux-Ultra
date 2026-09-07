@@ -58,6 +58,13 @@ import top.yukonga.miuix.kmp.basic.FloatingNavigationBarItem
 import top.yukonga.miuix.kmp.basic.SnackbarHost
 import top.yukonga.miuix.kmp.basic.SnackbarHostState
 import top.yukonga.miuix.kmp.basic.SnackbarDuration
+import top.yukonga.miuix.kmp.basic.ButtonDefaults
+import top.yukonga.miuix.kmp.basic.TextButton
+import top.yukonga.miuix.kmp.overlay.OverlayDialog
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
 import com.termux.R
 import com.termux.shared.shell.TermuxSession
 
@@ -778,6 +785,56 @@ fun MainScreen(
 
         // 风险命令确认弹窗（主页不显示风险 Snackbar，由终端页独占）
         RiskConfirmDialogHost(snackbarHostState, collectSnackbar = false)
+
+        // HyperOS 焦点通知权限引导（超级岛通知前置授权，仅提示一次）
+        var showFocusPermissionDialog by remember {
+            mutableStateOf(
+                SuperIslandBridge.isHyperOs() &&
+                    !SuperIslandBridge.isFocusNotificationGranted(context) &&
+                    !context.getSharedPreferences("app_settings", Context.MODE_PRIVATE)
+                        .getBoolean("super_island_focus_prompted", false)
+            )
+        }
+        if (showFocusPermissionDialog) {
+            OverlayDialog(
+                show = true,
+                onDismissRequest = {
+                    context.getSharedPreferences("app_settings", Context.MODE_PRIVATE)
+                        .edit().putBoolean("super_island_focus_prompted", true).apply()
+                    showFocusPermissionDialog = false
+                },
+                title = "开启焦点通知",
+                summary = "检测到 HyperOS 系统。开启焦点通知权限后，终端运行状态通知可上浮为超级岛灵动展示。请在接下来的页面中找到 Termux Ultra 并开启「焦点通知」。",
+                content = {
+                    Row(
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        TextButton(
+                            text = "暂不",
+                            onClick = {
+                                context.getSharedPreferences("app_settings", Context.MODE_PRIVATE)
+                                    .edit().putBoolean("super_island_focus_prompted", true).apply()
+                                showFocusPermissionDialog = false
+                            },
+                            modifier = Modifier.weight(1f)
+                        )
+                        Spacer(Modifier.width(20.dp))
+                        TextButton(
+                            text = "去开启",
+                            onClick = {
+                                context.getSharedPreferences("app_settings", Context.MODE_PRIVATE)
+                                    .edit().putBoolean("super_island_focus_prompted", true).apply()
+                                showFocusPermissionDialog = false
+                                SuperIslandBridge.openFocusNotificationSettings(context)
+                            },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.textButtonColorsPrimary()
+                        )
+                    }
+                }
+            )
+        }
     }
 }
 
