@@ -1,5 +1,6 @@
 package com.termux.app.compose
 
+import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
 import android.os.Build
@@ -50,6 +51,9 @@ object SuperIslandBridge {
     /** HyperOS 焦点通知白名单（Settings.Secure，JSON 数组，仅系统可写） */
     private const val FOCUS_NOTIFICATION_WHITELIST_KEY = "focus_notification_white_list"
 
+    /** 超级岛 SDK 固定通知 id（IslandController companion NOTIFICATION_ID = 51_000，SDK v1） */
+    private const val SDK_NOTIFICATION_ID = 51_000
+
     /** 是否为小米 HyperOS 设备（仅 API 31+ 尝试，与超级岛 SDK minSdk 一致）。 */
     @JvmStatic
     fun isHyperOs(): Boolean {
@@ -86,6 +90,26 @@ object SuperIslandBridge {
     }
 
     /**
+     * 超级岛是否兼容当前设备（HyperOS 且主版本 < 4）。
+     * OS4 上 SDK 完全不使用（连初始化都不做），仅走默认 LiveUpdate：
+     * 实时通知在 OS4 由系统自动以实时通知样式上浮，无需 SDK。
+     */
+    @JvmStatic
+    fun isIslandCompatible(): Boolean = isHyperOs() && hyperOsMajorVersion() < 4
+
+    /**
+     * 系统级清理 SDK 残留通知（不初始化 SDK，任何 OS 版本可安全调用）。
+     */
+    @JvmStatic
+    fun cancelResidue(context: Context) {
+        try {
+            (context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager)
+                ?.cancel(SDK_NOTIFICATION_ID)
+        } catch (_: Throwable) {
+        }
+    }
+
+    /**
      * 发布/更新超级岛通知。
      *
      * @param title   通知标题
@@ -108,9 +132,10 @@ object SuperIslandBridge {
             return
         }
         // [OS4 标记] HyperOS 4 的超级岛协议暂不兼容（XMSF 认证可"成功"但岛不渲染，
-        // 通知会以普通形式残留）：直接走调用方的现有通知逻辑，不发布 SDK 通知。
+        // 通知会以普通形式残留）：完全不走 SDK，仅清理可能的历史残留通知。
         // 恢复方法见 SDK_VERSION_MARKER 注释。
-        if (hyperOsMajorVersion() >= 4) {
+        if (!isIslandCompatible()) {
+            cancelResidue(context)
             shown.onShown(false)
             return
         }
@@ -203,12 +228,15 @@ object SuperIslandBridge {
         }
     }
 
-    /** 取消超级岛及其通知。 */
+    /** 取消超级岛及其通知（OS4 上不初始化 SDK，仅系统级清理）。 */
     @JvmStatic
     fun cancel(context: Context) {
-        try {
-            IslandClient.get(context).cancel(-1)
-        } catch (_: Throwable) {
+        cancelResidue(context)
+        if (isIslandCompatible()) {
+            try {
+                IslandClient.get(context).cancel(-1)
+            } catch (_: Throwable) {
+            }
         }
     }
 

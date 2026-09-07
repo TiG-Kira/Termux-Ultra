@@ -789,7 +789,7 @@ fun MainScreen(
         // HyperOS 焦点通知权限引导（超级岛通知前置授权，仅提示一次）
         var showFocusPermissionDialog by remember {
             mutableStateOf(
-                SuperIslandBridge.isHyperOs() &&
+                SuperIslandBridge.isIslandCompatible() &&
                     !SuperIslandBridge.isFocusNotificationGranted(context) &&
                     !context.getSharedPreferences("app_settings", Context.MODE_PRIVATE)
                         .getBoolean("super_island_focus_prompted", false)
