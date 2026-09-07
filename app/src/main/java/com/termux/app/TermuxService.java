@@ -361,8 +361,8 @@ public final class TermuxService extends Service implements TermuxTask.TermuxTas
             runStopForeground();
         }
 
-        // 服务销毁时撤销超级岛及其通知，避免残留
-        com.termux.app.compose.SuperIslandBridge.cancel(this);
+        // [OS4 待适配] 超级岛整体暂停，服务销毁无需清理（SDK 不再被初始化）
+        // com.termux.app.compose.SuperIslandBridge.cancel(this);
 
         unregisterMemoryBroadcastReceiver();
         stopMemoryCheck();
@@ -1394,19 +1394,23 @@ public synchronized int removeTermuxSession(TerminalSession sessionToRemove) {
     private synchronized void updateNotification() {
         Notification notification = buildNotification(mIslandTexts);
 
-        // ---- 小米 HyperOS 超级岛通知（最高优先级展示路径）----
-        // HyperOS 上尝试上岛；上岛失败（通知退化为普通通知/出错）时，桥接层已取消
-        // SDK 发出的普通通知，前台通知继续走下方现有逻辑（Android 16+ LiveUpdate，
-        // 不满足条件时按项目现有退回逻辑降级为普通通知）。
-        if (Build.VERSION.SDK_INT >= 31 && com.termux.app.compose.SuperIslandBridge.isHyperOs()) {
-            if (mIslandTexts[2] != null) {
-                com.termux.app.compose.SuperIslandBridge.publishOrUpdate(
-                    this, mIslandTexts[0], mIslandTexts[1], mIslandTexts[2], islandShown -> {});
-            } else {
-                // 清理态/无运行内容：撤销岛避免残留旧信息
-                com.termux.app.compose.SuperIslandBridge.cancel(this);
-            }
-        }
+        // ---- [OS4 待适配] 小米 HyperOS 超级岛通知：整体暂停 ----
+        // 原因：SDK(Xiaomi-SuperIsland-Playground v1) 在 HyperOS 4 上仍会产生残留通知
+        // （XMSF 认证可"成功"但岛不渲染）。OS4 正式发布后几乎都会升级上去，
+        // 故整体关闭超级岛功能，等待 SDK 适配 OS4 或更换上岛方案后恢复。
+        // 恢复方法：解注释下方调用块即可（SuperIslandBridge / 焦点通知引导弹窗保留未删；
+        // 恢复前记得同步恢复 MainScreen 中的焦点通知引导弹窗）。
+        // build.gradle 的 checkSuperIslandSdkVersion 任务会持续检测上游新版本。
+        //
+        // if (Build.VERSION.SDK_INT >= 31 && com.termux.app.compose.SuperIslandBridge.isHyperOs()) {
+        //     if (mIslandTexts[2] != null) {
+        //         com.termux.app.compose.SuperIslandBridge.publishOrUpdate(
+        //             this, mIslandTexts[0], mIslandTexts[1], mIslandTexts[2], islandShown -> {});
+        //     } else {
+        //         // 清理态/无运行内容：撤销岛避免残留旧信息
+        //         com.termux.app.compose.SuperIslandBridge.cancel(this);
+        //     }
+        // }
 
         ((NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE)).notify(TermuxConstants.TERMUX_APP_NOTIFICATION_ID, notification);
     }
