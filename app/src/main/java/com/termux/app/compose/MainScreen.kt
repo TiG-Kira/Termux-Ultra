@@ -389,14 +389,7 @@ fun MainScreen(
                     }
                 }
                 1 -> {
-                    val floatingDims = computeNavDimensions(availableTabs.size, NavStyle.FLOATING)
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .offset(y = floatingDims.bottomMargin - 4.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        FloatingNavigationBar() {
+                    FloatingNavigationBar() {
                         if (0 in availableTabs) {
                             FloatingNavigationBarItem(
                                 icon = ImageVector.vectorResource(R.drawable.ic_overview),
@@ -437,9 +430,9 @@ fun MainScreen(
                                 onClick = { previousTab = selectedTab; onTabChange(4) }
                             )
                         }
-                        }
                     }
-                }                else -> {
+                }
+                else -> {
                     NavigationBar() {
                         if (0 in availableTabs) {
                             NavigationBarItem(
