@@ -390,77 +390,56 @@ fun MainScreen(
                 }
                 1 -> {
                     val floatingDims = computeNavDimensions(availableTabs.size, NavStyle.FLOATING)
-                    val configuration = LocalConfiguration.current
-                    val density = LocalDensity.current
-                    val screenWidthDp = with(density) { configuration.screenWidthDp.dp }
-                    val sidePadding = 12.dp * 2
-                    val availableWidthPx = with(density) { (screenWidthDp - sidePadding).toPx() }
-                    val baseItemWidthPx = with(density) { 72.dp.toPx() }
-                    val baseGapPx = with(density) { 16.dp.toPx() }
-                    val baseWidthPx = availableTabs.size * baseItemWidthPx + (availableTabs.size - 1) * baseGapPx
-                    val scaleFactor = if (baseWidthPx > availableWidthPx) {
-                        (availableWidthPx / baseWidthPx).coerceAtLeast(0.85f)
-                    } else {
-                        1.0f
-                    }
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
                             .offset(y = floatingDims.bottomMargin - 4.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Box(
-                            modifier = Modifier.graphicsLayer {
-                                scaleX = scaleFactor
-                                scaleY = scaleFactor
-                            }
-                        ) {
-                            FloatingNavigationBar() {
-                            if (0 in availableTabs) {
-                                FloatingNavigationBarItem(
-                                    icon = ImageVector.vectorResource(R.drawable.ic_overview),
-                                    label = stringResource(R.string.overview),
-                                    selected = selectedTab == 0,
-                                    onClick = { previousTab = selectedTab; onTabChange(0) }
-                                )
-                            }
-                            if (1 in availableTabs) {
-                                FloatingNavigationBarItem(
-                                    icon = ImageVector.vectorResource(R.drawable.ic_terminal),
-                                    label = stringResource(R.string.terminal),
-                                    selected = selectedTab == 1,
-                                    onClick = { previousTab = selectedTab; onTabChange(1) }
-                                )
-                            }
-                            if (2 in availableTabs) {
-                                FloatingNavigationBarItem(
-                                    icon = ImageVector.vectorResource(R.drawable.ic_files),
-                                    label = stringResource(R.string.files),
-                                    selected = selectedTab == 2,
-                                    onClick = { previousTab = selectedTab; onTabChange(2) }
-                                )
-                            }
-                            if (3 in availableTabs) {
-                                FloatingNavigationBarItem(
-                                    icon = ImageVector.vectorResource(R.drawable.ic_vnc),
-                                    label = stringResource(R.string.remote),
-                                    selected = selectedTab == 3,
-                                    onClick = { previousTab = selectedTab; onTabChange(3) }
-                                )
-                            }
-                            if (4 in availableTabs) {
-                                FloatingNavigationBarItem(
-                                    icon = ImageVector.vectorResource(R.drawable.ic_settings),
-                                    label = stringResource(R.string.settings),
-                                    selected = selectedTab == 4,
-                                    onClick = { previousTab = selectedTab; onTabChange(4) }
-                                )
-                            }
-                            }
+                        FloatingNavigationBar() {
+                        if (0 in availableTabs) {
+                            FloatingNavigationBarItem(
+                                icon = ImageVector.vectorResource(R.drawable.ic_overview),
+                                label = stringResource(R.string.overview),
+                                selected = selectedTab == 0,
+                                onClick = { previousTab = selectedTab; onTabChange(0) }
+                            )
+                        }
+                        if (1 in availableTabs) {
+                            FloatingNavigationBarItem(
+                                icon = ImageVector.vectorResource(R.drawable.ic_terminal),
+                                label = stringResource(R.string.terminal),
+                                selected = selectedTab == 1,
+                                onClick = { previousTab = selectedTab; onTabChange(1) }
+                            )
+                        }
+                        if (2 in availableTabs) {
+                            FloatingNavigationBarItem(
+                                icon = ImageVector.vectorResource(R.drawable.ic_files),
+                                label = stringResource(R.string.files),
+                                selected = selectedTab == 2,
+                                onClick = { previousTab = selectedTab; onTabChange(2) }
+                            )
+                        }
+                        if (3 in availableTabs) {
+                            FloatingNavigationBarItem(
+                                icon = ImageVector.vectorResource(R.drawable.ic_vnc),
+                                label = stringResource(R.string.remote),
+                                selected = selectedTab == 3,
+                                onClick = { previousTab = selectedTab; onTabChange(3) }
+                            )
+                        }
+                        if (4 in availableTabs) {
+                            FloatingNavigationBarItem(
+                                icon = ImageVector.vectorResource(R.drawable.ic_settings),
+                                label = stringResource(R.string.settings),
+                                selected = selectedTab == 4,
+                                onClick = { previousTab = selectedTab; onTabChange(4) }
+                            )
+                        }
                         }
                     }
-                }
-                else -> {
+                }                else -> {
                     NavigationBar() {
                         if (0 in availableTabs) {
                             NavigationBarItem(
