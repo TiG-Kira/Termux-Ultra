@@ -71,7 +71,6 @@ object TerminalRuntimeCore {
 
     /** Java+NDK 模式下可用的插件，Kotlin+Compose 模式下会被禁用。 */
     private val DISABLED_IN_COMPOSE_MODE = listOf(
-        IntegratedTools.Tool.TERMUX_API,
         IntegratedTools.Tool.TERMUX_BOOT,
         IntegratedTools.Tool.TERMUX_TASKER,
         IntegratedTools.Tool.TERMUX_WIDGET

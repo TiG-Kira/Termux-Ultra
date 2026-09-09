@@ -477,6 +477,7 @@ fun PackageManagerScreen(
     }
 
     Scaffold(
+        contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0),
         topBar = {
             TopAppBar(
                 title = "软件包管理",
@@ -630,7 +631,7 @@ fun PackageManagerScreen(
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                         contentPadding = androidx.compose.foundation.layout.PaddingValues(
                             start = 16.dp, end = 16.dp,
-                            top = 4.dp, bottom = navBarBottomPadding + 16.dp
+                            top = 4.dp, bottom = 16.dp
                         )
                     ) {
                         if (list.isEmpty()) {
