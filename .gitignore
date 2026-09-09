@@ -33,3 +33,7 @@ google-services.json
 *.hprof
 
 vendor
+memory
+memory.md
+.opensquilla
+.trae

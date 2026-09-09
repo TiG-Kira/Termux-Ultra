@@ -6,6 +6,12 @@ plugins {
     id "kotlin-parcelize"
 }
 
+configurations.all {
+    resolutionStrategy {
+        force "top.yukonga.miuix.kmp:miuix-ui-android:0.9.4-rc01"
+    }
+}
+
 android {
     namespace "com.termux"
     compileSdkVersion project.properties.compileSdkVersion.toInteger()
@@ -131,7 +137,7 @@ dependencies {
     coreLibraryDesugaring "com.android.tools:desugar_jdk_libs:1.1.5"
     implementation "top.yukonga.miuix.kmp:miuix-ui-android:0.9.4-rc01"
     implementation "top.yukonga.miuix.kmp:miuix-icons-android:0.9.4-rc01"
-    implementation "top.yukonga.miuix.kmp:miuix-preference-android:0.9.4-rc01"
+        implementation "top.yukonga.miuix.kmp:miuix-preference-android:0.9.4-rc01"
 
     implementation "androidx.navigationevent:navigationevent-compose-android:1.0.0-alpha05"
 
