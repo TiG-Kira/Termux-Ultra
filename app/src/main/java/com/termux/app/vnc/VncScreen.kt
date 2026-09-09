@@ -199,14 +199,14 @@ fun VncConnectionCard(
                     IconButton(onClick = { onEdit() }) {
                         Icon(
                             painter = painterResource(R.drawable.ic_edit),
-                            contentDescription = "编辑",
+                            contentDescription = stringResource(R.string.action_file_received_edit),
                             tint = MiuixTheme.colorScheme.onSurface
                         )
                     }
                     IconButton(onClick = { onDelete() }) {
                         Icon(
                             painter = painterResource(R.drawable.ic_delete),
-                            contentDescription = "删除",
+                            contentDescription = stringResource(R.string.delete),
                             tint = MiuixTheme.colorScheme.onSurface
                         )
                     }
@@ -275,25 +275,25 @@ fun VncEditDialog(
                 TextField(
                     value = name.value,
                     onValueChange = { name.value = it },
-                    label = "名称"
+                    label = stringResource(R.string.ssh_field_name)
                 )
 
                 TextField(
                     value = host.value,
                     onValueChange = { host.value = it },
-                    label = "主机地址"
+                    label = stringResource(R.string.ssh_field_host)
                 )
 
                 TextField(
                     value = port.value,
                     onValueChange = { port.value = it },
-                    label = "端口"
+                    label = stringResource(R.string.ssh_field_port)
                 )
 
                 TextField(
                     value = password.value,
                     onValueChange = { password.value = it },
-                    label = "密码"
+                    label = stringResource(R.string.vnc_password_caption)
                 )
 
                 Spacer(Modifier.height(12.dp))
@@ -303,7 +303,7 @@ fun VncEditDialog(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     TextButton(
-                        text = "取消",
+                        text = stringResource(R.string.cancel),
                         onClick = {
                             showDialog.value = false
                             onDismiss()
@@ -312,7 +312,7 @@ fun VncEditDialog(
                     )
                     Spacer(Modifier.width(20.dp))
                     TextButton(
-                        text = "保存",
+                        text = stringResource(R.string.save),
                         onClick = {
                             val conn = VncConnection(
                                 id = connection?.id ?: UUID.randomUUID().toString(),

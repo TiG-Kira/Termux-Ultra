@@ -1,4 +1,5 @@
 package com.termux.app
+import com.termux.R
 
 import android.content.Intent
 import android.os.Build
@@ -24,10 +25,10 @@ class NewTerminalTileService : TileService() {
 
     private fun updateTile() {
         val tile = qsTile ?: return
-        tile.state = Tile.STATE_INACTIVE  // 非 toggle 模式，不显示"开启/关闭"
-        tile.label = "新建终端"
+        tile.state = Tile.STATE_INACTIVE
+        tile.label = getString(R.string.new_terminal)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            tile.subtitle = "一键启动终端"
+            tile.subtitle = getString(R.string.tile_launch_terminal)
         }
         tile.updateTile()
     }

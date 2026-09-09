@@ -113,6 +113,11 @@
             android:exported="false" />
 
         <activity
+            android:name=".app.activities.TextEditorActivity"
+            android:label="文本编辑器"
+            android:exported="false" />
+
+        <activity
             android:name=".app.TerminalDetailActivity"
             android:label="@string/application_name" />
 

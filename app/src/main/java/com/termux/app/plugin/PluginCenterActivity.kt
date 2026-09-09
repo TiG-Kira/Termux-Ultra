@@ -394,8 +394,8 @@ private fun PluginItemCard(
                         ) {
                             Text(
                                 text = when (plugin.state) {
-                                    PluginState.ENABLED -> "启用"
-                                    PluginState.DISABLED -> "禁用"
+                                    PluginState.ENABLED -> stringResource(R.string.plugin_enable)
+                                    PluginState.DISABLED -> stringResource(R.string.plugin_disable)
                                     PluginState.CORRUPTED -> "损坏"
                                     PluginState.NEEDS_PERMISSION -> "待授权"
                                     else -> "已安装"
@@ -450,7 +450,7 @@ private fun PluginItemCard(
                         EntryTag(text = "资源卡片", color = MiuixTheme.colorScheme.primary)
                     }
                     if (plugin.manifest.entryPoints?.agentSkills?.isNotEmpty() == true) {
-                        EntryTag(text = "技能卡片", color = Color(0xFF4CAF50))
+                        EntryTag(text = stringResource(R.string.plugin_skill_card), color = Color(0xFF4CAF50))
                     }
                     if (plugin.manifest.entryPoints?.h5Home?.enabled == true ||
                         plugin.manifest.entryPoints?.pages?.isNotEmpty() == true) {
@@ -485,7 +485,7 @@ private fun PluginItemCard(
                         ) {
                             Icon(
                                 imageVector = Icons.Rounded.Home,
-                                contentDescription = "插件主页",
+                                contentDescription = stringResource(R.string.plugin_h5_home),
                                 modifier = Modifier.size(16.dp),
                                 tint = onSurface
                             )
@@ -529,7 +529,7 @@ private fun PluginItemCard(
                             tint = Color.White
                         )
                         Text(
-                            text = "授权并启用",
+                            text = stringResource(R.string.plugin_dialog_confirm),
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color.White
@@ -552,7 +552,7 @@ private fun PluginItemCard(
                             tint = onSurface
                         )
                         Text(
-                            text = "禁用",
+                            text = stringResource(R.string.plugin_disable),
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
                             color = onSurface
@@ -573,7 +573,7 @@ private fun PluginItemCard(
                             tint = Color.White
                         )
                         Text(
-                            text = "启用",
+                            text = stringResource(R.string.plugin_enable),
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color.White

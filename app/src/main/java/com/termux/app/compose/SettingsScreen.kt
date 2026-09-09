@@ -34,7 +34,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
-import top.yukonga.miuix.kmp.basic.HorizontalDivider
 import top.yukonga.miuix.kmp.basic.LinearProgressIndicator
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.TopAppBar
@@ -54,6 +53,7 @@ import top.yukonga.miuix.kmp.basic.SnackbarDuration
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.ui.res.stringResource
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.preference.SwitchPreference
 import top.yukonga.miuix.kmp.preference.CheckboxPreference
@@ -162,7 +162,7 @@ fun SettingsScreen(
 
     // 监听关闭警告弹窗的结果，同步状态
     val disableWarningState by RiskConfirmManager.disableWarningState.collectAsState()
-    LaunchedEffect(disableWarningState.show) {
+                            LaunchedEffect(disableWarningState.show) {
         if (!disableWarningState.show) {
             protectionLevel = RiskConfirmManager.getProtectionLevel(context)
             protectionLevelIndex = protectionLevel.ordinal
@@ -309,8 +309,7 @@ fun SettingsScreen(
             }
         }
     }
-
-    LaunchedEffect(launchRestore) {
+                            LaunchedEffect(launchRestore) {
         if (launchRestore) {
             restoreFileLauncher.launch(arrayOf("application/zip", "application/x-tar", "application/gzip", "application/x-gzip", "application/x-xz", "application/octet-stream", "*/*"))
             launchRestore = false
@@ -339,7 +338,8 @@ fun SettingsScreen(
     }
 
     val remoteSettings = listOfNotNull(
-        if (vncEnabled) SettingItem(
+        if (vncEnabled)
+                            SettingItem(
             title = context.getString(R.string.vnc_settings),
             description = context.getString(R.string.vnc_settings_desc),
             iconRes = R.drawable.ic_vnc_settings,
@@ -507,13 +507,12 @@ fun SettingsScreen(
             }
         }
     }
-
-    Scaffold(
+                            Scaffold(
         modifier = Modifier.fillMaxSize(),
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         snackbarHost = { Box(modifier = Modifier.fillMaxSize().padding(bottom = navBarBottomPadding), contentAlignment = Alignment.BottomCenter) { SnackbarHost(state = snackbarHostState) } },
         topBar = {
-            TopAppBar(title = context.getString(R.string.settings_title), scrollBehavior = scrollBehavior)
+                                TopAppBar(title = context.getString(R.string.settings_title), scrollBehavior = scrollBehavior)
         }
     ) { padding ->
         LazyColumn(
@@ -526,14 +525,14 @@ fun SettingsScreen(
             // ---------- Appearance ----------
             item(key = "section_appearance") { SmallTitle(text = context.getString(R.string.appearance)) }
             item(key = "card_appearance") {
-                Card(
+                                Card(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp, vertical = 8.dp)
                         .clip(RoundedCornerShape(16.dp))
                 ) {
                     Column {
-                        OverlayDropdownPreference(
+                                OverlayDropdownPreference(
                             title = context.getString(R.string.language),
                             summary = context.getString(R.string.language_description),
                             items = languageOptions,
@@ -551,11 +550,7 @@ fun SettingsScreen(
                                 SettingIcon(R.drawable.ic_language, contentDescription = context.getString(R.string.language))
                             }
                         )
-                        HorizontalDivider(
-                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f),
-                            modifier = Modifier.padding(start = 72.dp, end = 16.dp)
-                        )
-                        OverlayDropdownPreference(
+                            OverlayDropdownPreference(
                             title = context.getString(R.string.navigation_bar_style),
                             summary = context.getString(R.string.navigation_bar_style_description),
                             items = navBarStyleOptions,
@@ -582,11 +577,7 @@ fun SettingsScreen(
                                 SettingIcon(R.drawable.ic_navigation, contentDescription = context.getString(R.string.navigation_bar_style))
                             }
                         )
-                        HorizontalDivider(
-                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f),
-                            modifier = Modifier.padding(start = 72.dp, end = 16.dp)
-                        )
-                        SwitchPreference(
+                            SwitchPreference(
                             title = context.getString(R.string.horizontal_tip_layout),
                             summary = context.getString(R.string.overview_horizontal_cards_desc),
                             checked = cardLayoutMode == 1,
@@ -605,14 +596,14 @@ fun SettingsScreen(
             // ---------- Remote ----------
             item(key = "section_remote") { SmallTitle(text = context.getString(R.string.remote)) }
             item(key = "card_remote") {
-                Card(
+                                Card(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp, vertical = 8.dp)
                         .clip(RoundedCornerShape(16.dp))
                 ) {
                     Column {
-                        SwitchPreference(
+                                SwitchPreference(
                             title = context.getString(R.string.vnc),
                             summary = context.getString(R.string.vnc_description),
                             checked = vncEnabled,
@@ -627,14 +618,12 @@ fun SettingsScreen(
                                 SettingIcon(R.drawable.ic_vnc, contentDescription = context.getString(R.string.vnc))
                             }
                         )
-                        remoteSettings.firstOrNull()?.let { item ->
-                            HorizontalDivider(color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f))
-                            ArrowPreference(
+                        remoteSettings.firstOrNull()?.let { item ->                            ArrowPreference(
                                 title = item.title,
                                 summary = item.description,
                                 onClick = item.action,
                                 startAction = {
-                                    SettingIcon(item.iconRes, contentDescription = item.title)
+                                SettingIcon(item.iconRes, contentDescription = item.title)
                                 }
                             )
                         }
@@ -649,18 +638,27 @@ fun SettingsScreen(
             // ---------- 终端 ----------
             item(key = "section_terminal") { SmallTitle(text = context.getString(R.string.terminal)) }
             item(key = "card_terminal_runtime") {
+                val prefs = context.getSharedPreferences("termux_preferences", android.content.Context.MODE_PRIVATE)
+                var showStartupCmdDialog by remember { mutableStateOf(false) }
+                var startupCmdText by remember { mutableStateOf(prefs.getString("auto_start_command", "") ?: "") }
+                val defaultWelcome = remember {
+                    try {
+                        java.io.File("/data/data/com.termux/files/usr/etc/motd").takeIf { it.exists() }?.readText()
+                            ?: "Welcome to Termux!"
+                    } catch (_: Exception) { "Welcome to Termux!" }
+                }
                 val isComposeMode = runtimeCore == TerminalRuntimeCore.Core.KOTLIN_COMPOSE
                 val composeSupported = TerminalRuntimeCore.isComposeSupported
                 val runtimeCoreItems = TerminalRuntimeCore.Core.entries.map { it.displayName(context) }
                 val currentCoreIndex = TerminalRuntimeCore.Core.entries.indexOf(runtimeCore)
-                Card(
+                            Card(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp, vertical = 8.dp)
                         .clip(RoundedCornerShape(16.dp))
                 ) {
                     Column {
-                        OverlayDropdownPreference(
+                                OverlayDropdownPreference(
                             title = context.getString(R.string.terminal_runtime_core),
                             summary = context.getString(R.string.runtime_core_switch_desc),
                             items = runtimeCoreItems,
@@ -689,11 +687,7 @@ fun SettingsScreen(
 
                         // ===== Java+NDK 模式设置 =====
                         if (!isComposeMode) {
-                            HorizontalDivider(
-                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f),
-                                modifier = Modifier.padding(start = 72.dp, end = 16.dp)
-                            )
-                            SwitchPreference(
+                                SwitchPreference(
                                 title = context.getString(R.string.enable_softkeyboard),
                                 summary = if (softKeyboardEnabled) context.getString(R.string.enabled) else context.getString(R.string.disabled),
                                 checked = softKeyboardEnabled,
@@ -702,10 +696,6 @@ fun SettingsScreen(
                                     terminalPrefs?.setSoftKeyboardEnabled(it)
                                 },
                                 startAction = { SettingIcon(R.drawable.ic_keyboard) }
-                            )
-                            HorizontalDivider(
-                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f),
-                                modifier = Modifier.padding(start = 72.dp, end = 16.dp)
                             )
                             SwitchPreference(
                                 title = context.getString(R.string.enable_soft_keyboard_no_hw),
@@ -717,10 +707,6 @@ fun SettingsScreen(
                                 },
                                 startAction = { SettingIcon(R.drawable.ic_keyboard_disabled) }
                             )
-                            HorizontalDivider(
-                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f),
-                                modifier = Modifier.padding(start = 72.dp, end = 16.dp)
-                            )
                             SwitchPreference(
                                 title = context.getString(R.string.terminal_margin_adjustment),
                                 summary = context.getString(R.string.terminal_margin_adjustment_desc),
@@ -730,10 +716,6 @@ fun SettingsScreen(
                                     terminalPrefs?.setTerminalMarginAdjustment(it)
                                 },
                                 startAction = { SettingIcon(R.drawable.ic_terminal) }
-                            )
-                            HorizontalDivider(
-                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f),
-                                modifier = Modifier.padding(start = 72.dp, end = 16.dp)
                             )
                             OverlayDropdownPreference(
                                 title = context.getString(R.string.log_level),
@@ -745,10 +727,6 @@ fun SettingsScreen(
                                     terminalPrefs?.setLogLevel(context, idx)
                                 },
                                 startAction = { SettingIcon(R.drawable.ic_bug) }
-                            )
-                            HorizontalDivider(
-                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f),
-                                modifier = Modifier.padding(start = 72.dp, end = 16.dp)
                             )
                             SwitchPreference(
                                 title = context.getString(R.string.terminal_key_logging),
@@ -764,11 +742,7 @@ fun SettingsScreen(
 
                         // ===== Kotlin+Compose 模式设置 =====
                         if (isComposeMode) {
-                            HorizontalDivider(
-                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f),
-                                modifier = Modifier.padding(start = 72.dp, end = 16.dp)
-                            )
-                            OverlayDropdownPreference(
+                                OverlayDropdownPreference(
                                 title = context.getString(R.string.font_size),
                                 summary = context.getString(R.string.font_size_desc),
                                 items = listOf("10sp", "12sp", "14sp", "16sp", "18sp", "20sp", "24sp"),
@@ -780,10 +754,6 @@ fun SettingsScreen(
                                 },
                                 startAction = { SettingIcon(R.drawable.ic_text_size) }
                             )
-                            HorizontalDivider(
-                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f),
-                                modifier = Modifier.padding(start = 72.dp, end = 16.dp)
-                            )
                             SwitchPreference(
                                 title = context.getString(R.string.cursor_blink),
                                 summary = if (composeCursorBlink) context.getString(R.string.enabled) else context.getString(R.string.disabled),
@@ -792,10 +762,6 @@ fun SettingsScreen(
                                     com.termux.app.compose.terminal.ComposeTerminalSettings.setCursorBlink(it)
                                 },
                                 startAction = { SettingIcon(R.drawable.ic_terminal) }
-                            )
-                            HorizontalDivider(
-                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f),
-                                modifier = Modifier.padding(start = 72.dp, end = 16.dp)
                             )
                             OverlayDropdownPreference(
                                 title = context.getString(R.string.scrollback_buffer),
@@ -810,11 +776,92 @@ fun SettingsScreen(
                                 startAction = { SettingIcon(R.drawable.ic_screen_rotation) }
                             )
                         }
+
+                            // ===== 通用设置（经典+Nova）=====
+                            var editorToolIndex by remember { mutableStateOf(prefs.getString("editor_tool", "internal")?.let { if (it == "vim") 1 else 0 } ?: 0) }
+                            OverlayDropdownPreference(
+                                title = stringResource(R.string.editor_tools),
+                                summary = if (editorToolIndex == 0) "内置文本编辑器" else "Vim (终端中)",
+                                items = listOf("内置", "Vim"),
+                                selectedIndex = editorToolIndex,
+                                onSelectedIndexChange = { idx ->
+                                    editorToolIndex = idx
+                                    prefs.edit().putString("editor_tool", if (idx == 0) "internal" else "vim").apply()
+                                },
+                                startAction = { SettingIcon(R.drawable.ic_edit) }
+                            )
+                            ArrowPreference(
+                                title = stringResource(R.string.auto_execute_new_session),
+                                summary = if (startupCmdText.isBlank()) "设置每次启动新会话自动运行的指令" else "已设置：${startupCmdText.take(40)}${if (startupCmdText.length > 40) "..." else ""}",
+                                onClick = { showStartupCmdDialog = true },
+                                startAction = { SettingIcon(R.drawable.ic_terminal) }
+                            )
+                            ArrowPreference(
+                                title = stringResource(R.string.edit_welcome_motd),
+                                summary = "直接编辑 /data/data/com.termux/files/usr/etc/motd",
+                                onClick = {
+                                    val tool = prefs.getString("editor_tool", "internal") ?: "internal"
+                                    if (tool == "vim") {
+                                        // 在终端中用 vim 打开
+                                        val intent = Intent(Intent.ACTION_SEND)
+                                        intent.setPackage(context.packageName)
+                                        intent.putExtra("command_path", "/data/data/com.termux/files/usr/etc/motd")
+                                        intent.putExtra("command", "vim /data/data/com.termux/files/usr/etc/motd")
+                                        intent.putExtra("session_name", "motd")
+                                        context.startActivity(intent)
+                                    } else {
+                                        val intent = android.content.Intent(context, com.termux.app.activities.TextEditorActivity::class.java)
+                                        intent.putExtra("file_path", "/data/data/com.termux/files/usr/etc/motd")
+                                        context.startActivity(intent)
+                                    }
+                                },
+                                startAction = { SettingIcon(R.drawable.ic_text_size) }
+                            )
+                        }
                     }
-                }
+                // ===== 弹窗（和 Card 平级，都在 item 块内）=====
+                        OverlayDialog(
+                    show = showStartupCmdDialog,
+                    onDismissRequest = { showStartupCmdDialog = false },
+                    title = stringResource(R.string.auto_execute_new_session),
+                    summary = "设置每次启动新会话自动运行的指令",
+                    content = {
+                                TextField(
+                            value = startupCmdText,
+                            onValueChange = { startupCmdText = it },
+                            label = stringResource(R.string.common_auto_execute),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            top.yukonga.miuix.kmp.basic.TextButton(
+                                text = stringResource(R.string.cancel),
+                                onClick = { showStartupCmdDialog = false },
+                                modifier = Modifier.weight(1f)
+                            )
+                            top.yukonga.miuix.kmp.basic.TextButton(
+                                text = stringResource(R.string.save),
+                                onClick = {
+                                    prefs.edit().putString("auto_start_command", startupCmdText).apply()
+                                    showStartupCmdDialog = false
+                                },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+                )
+
+
             }
 
-                        // ---------- Integrated Tools ----------
+                        
+
+
+                
+// ---------- Integrated Tools ----------
             item(key = "section_tools") { SmallTitle(text = context.getString(R.string.integrated_tools_category)) }
             item(key = "card_integrated_tools") {
                 val isComposeMode = runtimeCore == TerminalRuntimeCore.Core.KOTLIN_COMPOSE
@@ -825,8 +872,7 @@ fun SettingsScreen(
                         .clip(RoundedCornerShape(16.dp))
                 ) {
                     Column {
-                        if (!isComposeMode) {
-                        IntegratedToolSwitch(
+                                IntegratedToolSwitch(
                             title = context.getString(R.string.termux_api_tool),
                             summary = if (apiStandaloneInstalled) replacedSummary
                                       else context.getString(R.string.termux_api_tool_summary),
@@ -842,7 +888,8 @@ fun SettingsScreen(
                                 IntegratedTools.showStandaloneConflictPrompt(context, IntegratedTools.Tool.TERMUX_API)
                             }
                         )
-                        IntegratedToolSwitch(
+                        if (!isComposeMode) {
+                                IntegratedToolSwitch(
                             title = context.getString(R.string.termux_boot_tool),
                             summary = if (bootStandaloneInstalled) replacedSummary
                                       else context.getString(R.string.termux_boot_tool_summary),
@@ -858,7 +905,7 @@ fun SettingsScreen(
                                 IntegratedTools.showStandaloneConflictPrompt(context, IntegratedTools.Tool.TERMUX_BOOT)
                             }
                         )
-                        IntegratedToolSwitch(
+                            IntegratedToolSwitch(
                             title = context.getString(R.string.termux_tasker_tool),
                             summary = if (taskerStandaloneInstalled) replacedSummary
                                       else context.getString(R.string.termux_tasker_tool_summary),
@@ -874,7 +921,7 @@ fun SettingsScreen(
                                 IntegratedTools.showStandaloneConflictPrompt(context, IntegratedTools.Tool.TERMUX_TASKER)
                             }
                         )
-                        IntegratedToolSwitch(
+                            IntegratedToolSwitch(
                             title = context.getString(R.string.termux_widget_tool),
                             summary = if (widgetStandaloneInstalled) replacedSummary
                                       else context.getString(R.string.termux_widget_tool_summary),
@@ -916,14 +963,14 @@ fun SettingsScreen(
 // ---------- AI Termux ----------
             item(key = "section_ai") { SmallTitle(text = "Termux Agent") }
             item(key = "card_ai") {
-                Card(
+                                Card(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp, vertical = 8.dp)
                         .clip(RoundedCornerShape(16.dp))
                 ) {
                     Column {
-                        SwitchPreference(
+                                SwitchPreference(
                             title = "Termux Agent",
                             summary = context.getString(R.string.agent_entry_card_desc),
                             checked = aiTermuxEnabled,
@@ -935,12 +982,7 @@ fun SettingsScreen(
                                 SettingIcon(R.drawable.ic_lightbulb, contentDescription = "Termux Agent")
                             }
                         )
-                        if (aiTermuxEnabled) {
-                            HorizontalDivider(
-                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f),
-                                modifier = Modifier.padding(start = 72.dp, end = 16.dp)
-                            )
-                            val whitelistCount = autoExecConfig.autoExecSkills.size
+                        if (aiTermuxEnabled) {                            val whitelistCount = autoExecConfig.autoExecSkills.size
                             val whitelistSummary = when {
                                 unlimitedMode -> context.getString(R.string.unrestricted_opened)
                                 whitelistCount == 0 -> context.getString(R.string.whitelist_off)
@@ -952,12 +994,11 @@ fun SettingsScreen(
                                 enabled = !unlimitedMode,
                                 onClick = { showWhitelistDialog = true },
                                 startAction = {
-                                    SettingIcon(R.drawable.ic_shield, contentDescription = context.getString(R.string.trust_whitelist))
+                                SettingIcon(R.drawable.ic_shield, contentDescription = context.getString(R.string.trust_whitelist))
                                 }
                             )
 
                             if (aiProvider == "local") {
-                                HorizontalDivider(color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f), modifier = Modifier.padding(start = 72.dp, end = 16.dp))
                                 ArrowPreference(
                                     title = context.getString(R.string.train_local_model),
                                     summary = if (hasFallbackCached) {
@@ -969,15 +1010,10 @@ fun SettingsScreen(
                                         context.startActivity(android.content.Intent(context, com.termux.app.activities.AiLocalTrainerActivity::class.java))
                                     },
                                     startAction = {
-                                        SettingIcon(R.drawable.ic_tools, contentDescription = context.getString(R.string.train_local_model))
+                                SettingIcon(R.drawable.ic_tools, contentDescription = context.getString(R.string.train_local_model))
                                     }
                                 )
                             }
-
-                            HorizontalDivider(
-                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f),
-                                modifier = Modifier.padding(start = 72.dp, end = 16.dp)
-                            )
                             ArrowPreference(
                                 title = context.getString(R.string.reconfigure_ai),
                                 summary = context.getString(R.string.back_to_config_desc),
@@ -987,27 +1023,19 @@ fun SettingsScreen(
                                     context.startActivity(intent)
                                 },
                                 startAction = {
-                                    SettingIcon(R.drawable.ic_refresh, contentDescription = context.getString(R.string.reconfigure_ai))
+                                SettingIcon(R.drawable.ic_refresh, contentDescription = context.getString(R.string.reconfigure_ai))
                                 }
-                            )
-                            HorizontalDivider(
-                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f),
-                                modifier = Modifier.padding(start = 72.dp, end = 16.dp)
                             )
                             ArrowPreference(
                                 title = context.getString(R.string.clear_chat_history),
                                 summary = context.getString(R.string.clear_agent_history_desc),
                                 onClick = { showAiClearConfirm = true },
                                 startAction = {
-                                    SettingIcon(R.drawable.ic_delete, contentDescription = context.getString(R.string.clear_chat_history))
+                                SettingIcon(R.drawable.ic_delete, contentDescription = context.getString(R.string.clear_chat_history))
                                 }
                             )
                             // 本地模式专属：备用在线大模型（fallback）
                             if (isLocalMode) {
-                                HorizontalDivider(
-                                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f),
-                                    modifier = Modifier.padding(start = 72.dp, end = 16.dp)
-                                )
                                 SwitchPreference(
                                     title = context.getString(R.string.backup_online_llm),
                                     summary = if (fallbackEnabled) {
@@ -1023,15 +1051,11 @@ fun SettingsScreen(
                                         AiTermuxPrefs.setFallbackOnlineEnabled(context, it)
                                     },
                                     startAction = {
-                                        SettingIcon(R.drawable.ic_refresh, contentDescription = context.getString(R.string.backup_online_llm))
+                                SettingIcon(R.drawable.ic_refresh, contentDescription = context.getString(R.string.backup_online_llm))
                                     }
                                 )
                                 if (fallbackEnabled) {
-                                    HorizontalDivider(
-                                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f),
-                                        modifier = Modifier.padding(start = 72.dp, end = 16.dp)
-                                    )
-                                    ArrowPreference(
+                                ArrowPreference(
                                         title = context.getString(R.string.configure_backup_params),
                                         summary = run {
                                             val c = AiTermuxPrefs.getFallbackOnlineConfig(context)
@@ -1050,15 +1074,11 @@ fun SettingsScreen(
                                             showFallbackEditor = true
                                         },
                                         startAction = {
-                                            SettingIcon(R.drawable.ic_edit, contentDescription = context.getString(R.string.configure_backup_params))
+                                SettingIcon(R.drawable.ic_edit, contentDescription = context.getString(R.string.configure_backup_params))
                                         }
                                     )
                                 }
                             }
-                            HorizontalDivider(
-                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f),
-                                modifier = Modifier.padding(start = 72.dp, end = 16.dp)
-                            )
                             SwitchPreference(
                                 title = context.getString(R.string.developer_mode),
                                 summary = context.getString(R.string.developer_mode_desc),
@@ -1068,16 +1088,11 @@ fun SettingsScreen(
                                     AiTermuxPrefs.setDeveloperMode(context, it)
                                 },
                                 startAction = {
-                                    SettingIcon(R.drawable.ic_wrench, contentDescription = context.getString(R.string.developer_mode))
+                                SettingIcon(R.drawable.ic_wrench, contentDescription = context.getString(R.string.developer_mode))
                                 }
                             )
-                            if (aiDeveloperMode) {
-                                HorizontalDivider(
-                                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f),
-                                    modifier = Modifier.padding(start = 72.dp, end = 16.dp)
-                                )
-                                if (useCustomSystemPrompt) {
-                                    ArrowPreference(
+                            if (aiDeveloperMode) {                                if (useCustomSystemPrompt) {
+                                ArrowPreference(
                                         title = context.getString(R.string.use_official_prompt),
                                         summary = context.getString(
                                             R.string.currently_using_source,
@@ -1085,44 +1100,36 @@ fun SettingsScreen(
                                         ),
                                         onClick = { showSystemPromptRestoreConfirm = true },
                                         startAction = {
-                                            SettingIcon(R.drawable.ic_restore, contentDescription = context.getString(R.string.use_official_prompt))
+                                SettingIcon(R.drawable.ic_restore, contentDescription = context.getString(R.string.use_official_prompt))
                                         }
                                     )
                                 } else {
-                                    ArrowPreference(
+                                ArrowPreference(
                                         title = context.getString(R.string.use_custom_prompt),
                                         summary = context.getString(R.string.load_prompt_from_file),
                                         onClick = { showSystemPromptFilePicker = true },
                                         startAction = {
-                                            SettingIcon(R.drawable.ic_edit, contentDescription = context.getString(R.string.use_custom_prompt))
+                                SettingIcon(R.drawable.ic_edit, contentDescription = context.getString(R.string.use_custom_prompt))
                                         }
                                     )
                                 }
-                                HorizontalDivider(
-                                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f),
-                                    modifier = Modifier.padding(start = 72.dp, end = 16.dp)
-                                )
-                                ArrowPreference(
+                            ArrowPreference(
                                     title = context.getString(R.string.custom_skills),
                                     summary = context.getString(R.string.custom_skill_create_manage),
                                     onClick = { showCustomSkillManager = true },
                                     startAction = {
-                                        SettingIcon(R.drawable.ic_code, contentDescription = context.getString(R.string.custom_skills))
+                                SettingIcon(R.drawable.ic_code, contentDescription = context.getString(R.string.custom_skills))
                                     }
                                 )
-                                HorizontalDivider(
-                                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f),
-                                    modifier = Modifier.padding(start = 72.dp, end = 16.dp)
-                                )
-                                ArrowPreference(
+                            ArrowPreference(
                                         title = context.getString(R.string.full_chat_history),
                                         summary = context.getString(R.string.view_full_history_desc),
                                         onClick = { showFullHistoryViewer = true },
                                         startAction = {
-                                            SettingIcon(R.drawable.ic_files, contentDescription = context.getString(R.string.full_chat_history))
+                                SettingIcon(R.drawable.ic_files, contentDescription = context.getString(R.string.full_chat_history))
                                         }
                                     )
-                                    SwitchPreference(
+                            SwitchPreference(
                                         title = context.getString(R.string.unrestricted_mode),
                                         summary = if (unlimitedMode) {
                                             context.getString(R.string.fallback_enabled_desc)
@@ -1139,15 +1146,11 @@ fun SettingsScreen(
                                             }
                                         },
                                         startAction = {
-                                            SettingIcon(R.drawable.ic_shield, contentDescription = context.getString(R.string.unrestricted_mode))
+                                SettingIcon(R.drawable.ic_shield, contentDescription = context.getString(R.string.unrestricted_mode))
                                         }
                                     )
                                     if (unlimitedMode) {
-                                        HorizontalDivider(
-                                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f),
-                                            modifier = Modifier.padding(start = 72.dp, end = 16.dp)
-                                        )
-                                        SwitchPreference(
+                                SwitchPreference(
                                             title = context.getString(R.string.root_exec_agent),
                                             summary = context.getString(R.string.root_auto_su_desc),
                                             checked = rootAutoShell,
@@ -1156,7 +1159,7 @@ fun SettingsScreen(
                                                 AiTermuxPrefs.setRootAutoShell(context, it)
                                             },
                                             startAction = {
-                                                SettingIcon(R.drawable.ic_root_skull, contentDescription = context.getString(R.string.root_exec_agent))
+                                SettingIcon(R.drawable.ic_root_skull, contentDescription = context.getString(R.string.root_exec_agent))
                                             }
                                         )
                                     }
@@ -1175,7 +1178,7 @@ fun SettingsScreen(
             // ---------- Security Settings ----------
             item(key = "section_security") { SmallTitle(text = context.getString(R.string.security_settings)) }
             item(key = "card_security") {
-                Card(
+                                Card(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp, vertical = 8.dp)
@@ -1188,7 +1191,7 @@ fun SettingsScreen(
                                 summary = level.description
                             )
                         }
-                        WindowSpinnerPreference(
+                            WindowSpinnerPreference(
                             title = context.getString(R.string.protection_level_title),
                             summary = protectionLevel.description,
                             items = protectionItems,
@@ -1210,10 +1213,6 @@ fun SettingsScreen(
                                 SettingIcon(R.drawable.ic_shield, contentDescription = context.getString(R.string.protection_level_title))
                             }
                         )
-                        HorizontalDivider(
-                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f),
-                            modifier = Modifier.padding(start = 72.dp, end = 16.dp)
-                        )
                         val detectionEnabled = protectionLevel != RiskConfirmManager.ProtectionLevel.OFF
                         val detectionItems = listOf(
                             RiskConfirmManager.DetectionMode.STATIC to R.string.detection_mode_static_desc,
@@ -1229,7 +1228,7 @@ fun SettingsScreen(
                             RiskConfirmManager.DetectionMode.RUNTIME -> 1
                             else -> 0
                         }
-                        WindowSpinnerPreference(
+                            WindowSpinnerPreference(
                             title = context.getString(R.string.detection_mode_title),
                             summary = if (detectionEnabled) {
                                 when (detectionMode) {
@@ -1270,13 +1269,13 @@ fun SettingsScreen(
         }
 
     // ---------- Language restart prompt ----------
-    OverlayDialog(
+                        OverlayDialog(
         title = context.getString(R.string.restart_required),
         summary = context.getString(R.string.language_restart_message),
         show = showRestartPrompt,
         onDismissRequest = { showRestartPrompt = false },
         content = {
-        TextButton(
+                                TextButton(
             text = context.getString(R.string.ok),
             onClick = { showRestartPrompt = false },
             modifier = Modifier.fillMaxWidth()
@@ -1285,13 +1284,13 @@ fun SettingsScreen(
     )
 
     // ---------- Navigation bar style restart prompt ----------
-    OverlayDialog(
+                        OverlayDialog(
         title = context.getString(R.string.restart_required),
         summary = context.getString(R.string.navigation_bar_restart_message),
         show = showNavRestartPrompt,
         onDismissRequest = { showNavRestartPrompt = false },
         content = {
-        TextButton(
+                                TextButton(
             text = context.getString(R.string.ok),
             onClick = { showNavRestartPrompt = false },
             modifier = Modifier.fillMaxWidth()
@@ -1301,7 +1300,7 @@ fun SettingsScreen(
 
     // ---------- Critical glass nav bar incompatibility dialog ----------
     if (showCriticalNavDialog) {
-        ForceEnableCriticalDialog(
+                                ForceEnableCriticalDialog(
             feature = ApiCompat.Feature.GLASS_NAVIGATION_BAR,
             onConfirmed = {
                 showCriticalNavDialog = false
@@ -1325,20 +1324,20 @@ fun SettingsScreen(
     }
 
     // ---------- Termux:API usage guide ----------
-    OverlayDialog(
+                        OverlayDialog(
         title = context.getString(R.string.termux_api_help),
         show = showApiHelpDialog,
         onDismissRequest = { showApiHelpDialog = false },
         content = {
-            Box(modifier = Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
-                HelpContentWithCopyableCommands(
+                                Box(modifier = Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
+                                HelpContentWithCopyableCommands(
                     content = context.getString(R.string.termux_api_help_content),
                     context = context,
                     snackbarHostState = snackbarHostState
                 )
             }
-            Spacer(Modifier.height(12.dp))
-            TextButton(
+                            Spacer(Modifier.height(12.dp))
+                            TextButton(
                 text = context.getString(R.string.ok),
                 onClick = { showApiHelpDialog = false },
                 modifier = Modifier.fillMaxWidth()
@@ -1347,20 +1346,20 @@ fun SettingsScreen(
     )
 
     // ---------- Termux:Boot startup guide ----------
-    OverlayDialog(
+                        OverlayDialog(
         title = context.getString(R.string.termux_boot_help),
         show = showBootHelpDialog,
         onDismissRequest = { showBootHelpDialog = false },
         content = {
-            Box(modifier = Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
-                HelpContentWithCopyableCommands(
+                                Box(modifier = Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
+                                HelpContentWithCopyableCommands(
                     content = context.getString(R.string.termux_boot_help_content),
                     context = context,
                     snackbarHostState = snackbarHostState
                 )
             }
-            Spacer(Modifier.height(12.dp))
-            TextButton(
+                            Spacer(Modifier.height(12.dp))
+                            TextButton(
                 text = context.getString(R.string.ok),
                 onClick = { showBootHelpDialog = false },
                 modifier = Modifier.fillMaxWidth()
@@ -1369,14 +1368,14 @@ fun SettingsScreen(
     )
 
     // ---------- Restore: choose backup file ----------
-    OverlayDialog(
+                        OverlayDialog(
         title = context.getString(R.string.restore),
         show = showRestoreDialog,
         onDismissRequest = { showRestoreDialog = false },
         content = {
-        Column(modifier = Modifier.heightIn(max = 300.dp)) {
+                                Column(modifier = Modifier.heightIn(max = 300.dp)) {
             if (backupFiles.isEmpty()) {
-                Text(
+                                Text(
                     text = context.getString(R.string.no_backup_files),
                     fontSize = 14.sp,
                     color = MiuixTheme.colorScheme.onSurface
@@ -1399,9 +1398,9 @@ fun SettingsScreen(
                 }
             }
         }
-        Spacer(Modifier.height(12.dp))
-        Row(horizontalArrangement = Arrangement.SpaceBetween) {
-            TextButton(
+                            Spacer(Modifier.height(12.dp))
+                            Row(horizontalArrangement = Arrangement.SpaceBetween) {
+                                TextButton(
                 text = context.getString(R.string.cancel),
                 onClick = { showRestoreDialog = false },
                 modifier = Modifier.weight(1f)
@@ -1411,20 +1410,20 @@ fun SettingsScreen(
     )
 
     // ---------- Restore: confirm ----------
-    OverlayDialog(
+                        OverlayDialog(
         title = context.getString(R.string.restore),
         summary = context.getString(R.string.restore_confirm_message),
         show = showRestoreConfirmDialog,
         onDismissRequest = { showRestoreConfirmDialog = false },
         content = {
-        Row(horizontalArrangement = Arrangement.SpaceBetween) {
-            TextButton(
+                                Row(horizontalArrangement = Arrangement.SpaceBetween) {
+                                TextButton(
                 text = context.getString(R.string.cancel),
                 onClick = { showRestoreConfirmDialog = false },
                 modifier = Modifier.weight(1f)
             )
-            Spacer(Modifier.width(16.dp))
-            TextButton(
+                            Spacer(Modifier.width(16.dp))
+                            TextButton(
                 text = context.getString(R.string.confirm),
                 onClick = {
                     showRestoreConfirmDialog = false
@@ -1470,19 +1469,19 @@ fun SettingsScreen(
     )
 
     // ---------- Restore: progress ----------
-    OverlayDialog(
+                        OverlayDialog(
         title = context.getString(R.string.restore),
         summary = restoreMessage,
         show = showRestoreProgressDialog,
         onDismissRequest = { BackupManager.cancelRestore() },
         content = {
-        Column(modifier = Modifier.padding(vertical = 8.dp)) {
+                                Column(modifier = Modifier.padding(vertical = 8.dp)) {
             if (restoreTotal > 0) {
-                LinearProgressIndicator(
+                                LinearProgressIndicator(
                     progress = restoreProgress.toFloat() / 100f,
                     modifier = Modifier.fillMaxWidth()
                 )
-                Text(
+                            Text(
                     text = "$restoreProgress%",
                     fontSize = 12.sp,
                     modifier = Modifier
@@ -1492,10 +1491,10 @@ fun SettingsScreen(
                     color = MiuixTheme.colorScheme.onSurface
                 )
             } else {
-                LinearProgressIndicator(
+                                LinearProgressIndicator(
                     modifier = Modifier.fillMaxWidth()
                 )
-                Text(
+                            Text(
                     text = restoreMessage.ifBlank { context.getString(R.string.initializing) },
                     fontSize = 12.sp,
                     modifier = Modifier
@@ -1506,8 +1505,8 @@ fun SettingsScreen(
                 )
             }
         }
-        Spacer(Modifier.height(12.dp))
-        TextButton(
+                            Spacer(Modifier.height(12.dp))
+                            TextButton(
             text = context.getString(R.string.cancel),
             onClick = { BackupManager.cancelRestore() },
             modifier = Modifier.fillMaxWidth()
@@ -1516,13 +1515,13 @@ fun SettingsScreen(
     )
 
     // ---------- Result ----------
-    OverlayDialog(
+                        OverlayDialog(
         title = context.getString(R.string.result),
         summary = resultMessage,
         show = showResultDialog,
         onDismissRequest = { showResultDialog = false },
         content = {
-        TextButton(
+                                TextButton(
             text = context.getString(R.string.ok),
             onClick = { showResultDialog = false },
             modifier = Modifier.fillMaxWidth()
@@ -1532,23 +1531,23 @@ fun SettingsScreen(
 
     // ---------- AI Termux：清空对话确认 ----------
     if (showAiClearConfirm) {
-        OverlayDialog(
+                                OverlayDialog(
             show = true,
             title = context.getString(R.string.clear_chat_title),
             summary = context.getString(R.string.clear_chat_confirm),
             onDismissRequest = { showAiClearConfirm = false },
             content = {
-            Row(
+                                Row(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                TextButton(
+                                TextButton(
                     text = context.getString(R.string.cancel),
                     onClick = { showAiClearConfirm = false },
                     modifier = Modifier.weight(1f)
                 )
-                Spacer(Modifier.width(20.dp))
-                TextButton(
+                            Spacer(Modifier.width(20.dp))
+                            TextButton(
                     text = context.getString(R.string.clear),
                     onClick = {
                         showAiClearConfirm = false
@@ -1564,17 +1563,17 @@ fun SettingsScreen(
     // ---------- AI Termux：信任白名单选择对话框 ----------
     if (showWhitelistDialog && aiTermuxEnabled) {
         // Initialize temp skills from current config when dialog opens
-        LaunchedEffect(showWhitelistDialog) {
+                        LaunchedEffect(showWhitelistDialog) {
             tempWhitelistSkills = autoExecConfig.autoExecSkills.mapNotNull { runCatching { SkillType.valueOf(it) }.getOrNull() }.toSet()
         }
-        OverlayDialog(
+                            OverlayDialog(
             show = showWhitelistDialog,
             onDismissRequest = { showWhitelistDialog = false },
             title = context.getString(R.string.trust_whitelist),
             summary = context.getString(R.string.whitelist_select_desc),
             content = {
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    Text(
+                                Column(modifier = Modifier.fillMaxWidth()) {
+                                Text(
                         text = context.getString(R.string.whitelist_warning),
                         fontSize = 13.sp,
                         color = Color(0xFFDC2626),
@@ -1583,7 +1582,7 @@ fun SettingsScreen(
 
                     whitelistSkillLabels.forEach { (skill, label) ->
                         val checked = tempWhitelistSkills.contains(skill)
-                        CheckboxPreference(
+                            CheckboxPreference(
                             title = label,
                             checked = checked,
                             onCheckedChange = { isChecked ->
@@ -1596,32 +1595,30 @@ fun SettingsScreen(
                             modifier = Modifier.padding(vertical = 4.dp)
                         )
                     }
-
-                    Spacer(Modifier.height(8.dp))
-                    Text(
+                            Spacer(Modifier.height(8.dp))
+                            Text(
                         text = context.getString(R.string.auto_exec_skills_note),
                         fontSize = 13.sp,
                         color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
                     )
-                    Text(
+                            Text(
                         text = context.getString(R.string.agent_permissions_examples),
                         fontSize = 13.sp,
                         color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.7f),
                         modifier = Modifier.padding(top = 2.dp)
                     )
-
-                    Spacer(Modifier.height(16.dp))
-                    Row(
+                            Spacer(Modifier.height(16.dp))
+                            Row(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        TextButton(
+                                TextButton(
                             text = context.getString(R.string.cancel),
                             onClick = { showWhitelistDialog = false },
                             modifier = Modifier.weight(1f)
                         )
-                        Spacer(Modifier.width(20.dp))
-                        TextButton(
+                            Spacer(Modifier.width(20.dp))
+                            TextButton(
                             text = context.getString(R.string.ok),
                             onClick = {
                                 // If no skills selected, whitelist is disabled
@@ -1648,18 +1645,18 @@ fun SettingsScreen(
 
     // ---------- AI Termux：编辑 System Prompt ----------
     var systemPromptText by remember { mutableStateOf(AiTermuxPrefs.getConfig(context).customSystemPrompt) }
-    OverlayDialog(
+                            OverlayDialog(
         title = context.getString(R.string.edit_system_prompt),
         summary = context.getString(R.string.custom_extra_instructions_desc),
         show = showSystemPromptEditor,
         onDismissRequest = { showSystemPromptEditor = false },
         content = {
-        Box(
+                                Box(
             modifier = Modifier
                 .heightIn(max = 400.dp)
                 .verticalScroll(rememberScrollState())
         ) {
-            TextField(
+                                TextField(
                 value = systemPromptText,
                 onValueChange = { systemPromptText = it },
                 modifier = Modifier
@@ -1671,9 +1668,9 @@ fun SettingsScreen(
                 minLines = 5
             )
         }
-        Spacer(Modifier.height(12.dp))
-        Row(horizontalArrangement = Arrangement.SpaceBetween) {
-            TextButton(
+                            Spacer(Modifier.height(12.dp))
+                            Row(horizontalArrangement = Arrangement.SpaceBetween) {
+                                TextButton(
                 text = context.getString(R.string.reset_default),
                 onClick = {
                     systemPromptText = ""
@@ -1682,8 +1679,8 @@ fun SettingsScreen(
                 },
                 modifier = Modifier.weight(1f)
             )
-            Spacer(Modifier.width(16.dp))
-            TextButton(
+                            Spacer(Modifier.width(16.dp))
+                            TextButton(
                 text = context.getString(R.string.save),
                 onClick = {
                     val cfg = AiTermuxPrefs.getConfig(context)
@@ -1698,40 +1695,40 @@ fun SettingsScreen(
     )
 
     // ---------- AI Termux：备用在线模型参数编辑 ----------
-    OverlayDialog(
+                        OverlayDialog(
         title = context.getString(R.string.configure_backup_llm),
         summary = context.getString(R.string.fallback_desc),
         show = showFallbackEditor,
         onDismissRequest = { showFallbackEditor = false },
         content = {
-        Box(
+                                Box(
             modifier = Modifier
                 .heightIn(max = 480.dp)
                 .verticalScroll(rememberScrollState())
         ) {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                TextField(
+                                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                TextField(
                     value = fbUrl,
                     onValueChange = { v -> fbUrl = v },
                     modifier = Modifier.fillMaxWidth(),
                     label = context.getString(R.string.api_base_url_hint),
                     useLabelAsPlaceholder = true
                 )
-                TextField(
+                            TextField(
                     value = fbKey,
                     onValueChange = { v -> fbKey = v },
                     modifier = Modifier.fillMaxWidth(),
                     label = context.getString(R.string.api_key_hint),
                     useLabelAsPlaceholder = true
                 )
-                TextField(
+                            TextField(
                     value = fbModel,
                     onValueChange = { v -> fbModel = v },
                     modifier = Modifier.fillMaxWidth(),
                     label = context.getString(R.string.model_name_hint),
                     useLabelAsPlaceholder = true
                 )
-                Text(
+                            Text(
                     text = context.getString(R.string.temperature_current, fbTemp),
                     fontSize = 12.sp,
                     color = MiuixTheme.colorScheme.onSurfaceVariantSummary
@@ -1745,15 +1742,15 @@ fun SettingsScreen(
                 )
             }
         }
-        Spacer(Modifier.height(12.dp))
-        Row(horizontalArrangement = Arrangement.SpaceBetween) {
-            TextButton(
+                            Spacer(Modifier.height(12.dp))
+                            Row(horizontalArrangement = Arrangement.SpaceBetween) {
+                                TextButton(
                 text = context.getString(R.string.cancel),
                 onClick = { showFallbackEditor = false },
                 modifier = Modifier.weight(1f)
             )
-            Spacer(Modifier.width(16.dp))
-            TextButton(
+                            Spacer(Modifier.width(16.dp))
+                            TextButton(
                 text = context.getString(R.string.save),
                 onClick = {
                     AiTermuxPrefs.saveFallbackOnlineConfig(
@@ -1777,23 +1774,23 @@ fun SettingsScreen(
 
     // ---------- AI Termux：选择 System Prompt 文件 ----------
     var showInternalPromptPicker by remember { mutableStateOf(false) }
-    OverlayDialog(
+                            OverlayDialog(
         title = context.getString(R.string.select_prompt_file),
         summary = context.getString(R.string.custom_prompt_pick_md),
         show = showSystemPromptFilePicker,
         onDismissRequest = { showSystemPromptFilePicker = false },
         content = {
         Column {
-            Text(
+                                Text(
                 text = context.getString(R.string.file_picker_choice),
                 style = TextStyle(fontSize = 14.sp)
             )
-            Spacer(Modifier.height(16.dp))
-            Row(
+                            Spacer(Modifier.height(16.dp))
+                            Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                TextButton(
+                                TextButton(
                     text = context.getString(R.string.termux_builtin),
                     onClick = {
                         showSystemPromptFilePicker = false
@@ -1801,7 +1798,7 @@ fun SettingsScreen(
                     },
                     modifier = Modifier.weight(1f)
                 )
-                TextButton(
+                            TextButton(
                     text = context.getString(R.string.system_picker),
                     onClick = {
                         showSystemPromptFilePicker = false
@@ -1816,7 +1813,7 @@ fun SettingsScreen(
     )
 
     // Termux 内部文件选择器
-    TermuxInternalFilePicker(
+                        TermuxInternalFilePicker(
         show = showInternalPromptPicker,
         title = context.getString(R.string.select_prompt_file),
         fileExtensions = listOf("md", "txt"),
@@ -1844,22 +1841,22 @@ fun SettingsScreen(
     )
 
     // ---------- AI Termux：确认还原官方 System Prompt ----------
-    OverlayDialog(
+                        OverlayDialog(
         title = context.getString(R.string.restore_official_prompt),
         summary = context.getString(R.string.restore_official_prompt_confirm),
         show = showSystemPromptRestoreConfirm,
         onDismissRequest = { showSystemPromptRestoreConfirm = false },
         content = {
-        Row(
+                                Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.End
         ) {
-            TextButton(
+                                TextButton(
                 text = context.getString(R.string.cancel),
                 onClick = { showSystemPromptRestoreConfirm = false }
             )
-            Spacer(Modifier.width(12.dp))
-            TextButton(
+                            Spacer(Modifier.width(12.dp))
+                            TextButton(
                 text = context.getString(R.string.confirm_restore),
                 onClick = {
                     AiTermuxPrefs.setUseCustomSystemPrompt(context, false)
@@ -1876,7 +1873,7 @@ fun SettingsScreen(
 
     // ---------- AI Termux：自定义技能管理 ----------
     var skillsRefreshKey by remember { mutableStateOf(0) }
-    OverlayDialog(
+                            OverlayDialog(
         title = context.getString(R.string.custom_skills),
         summary = context.getString(R.string.custom_skill_manage_desc),
         show = showCustomSkillManager,
@@ -1884,20 +1881,20 @@ fun SettingsScreen(
         content = {
         val customSkills = remember(skillsRefreshKey) { AiTermuxPrefs.getCustomSkills(context) }
         if (customSkills.isEmpty()) {
-            Box(
+                                Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(120.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Text(
+                                Text(
                     text = context.getString(R.string.no_custom_skills),
                     fontSize = 14.sp,
                     color = MiuixTheme.colorScheme.onSurfaceVariantSummary
                 )
             }
         } else {
-            Box(
+                                Box(
                 modifier = Modifier
                     .heightIn(max = 350.dp)
                     .verticalScroll(rememberScrollState())
@@ -1909,10 +1906,10 @@ fun SettingsScreen(
                             .fillMaxWidth()
                             .padding(vertical = 4.dp)
                     ) {
-                        Column(
+                                Column(
                             modifier = Modifier.padding(12.dp)
                         ) {
-                            Text(
+                                Text(
                                 text = skill.name,
                                 fontSize = 15.sp,
                                 fontWeight = FontWeight.Bold,
@@ -1939,8 +1936,8 @@ fun SettingsScreen(
                                         showAddEditSkillDialog = true
                                     }
                                 )
-                                Spacer(Modifier.width(8.dp))
-                                TextButton(
+                            Spacer(Modifier.width(8.dp))
+                            TextButton(
                                     text = context.getString(R.string.delete),
                                     onClick = {
                                         AiTermuxPrefs.deleteCustomSkill(context, skill.id)
@@ -1955,15 +1952,15 @@ fun SettingsScreen(
 }
             }
         }
-        Spacer(Modifier.height(12.dp))
-        Row(horizontalArrangement = Arrangement.SpaceBetween) {
-            TextButton(
+                            Spacer(Modifier.height(12.dp))
+                            Row(horizontalArrangement = Arrangement.SpaceBetween) {
+                                TextButton(
                 text = context.getString(R.string.off),
                 onClick = { showCustomSkillManager = false },
                 modifier = Modifier.weight(1f)
             )
-            Spacer(Modifier.width(16.dp))
-            TextButton(
+                            Spacer(Modifier.width(16.dp))
+                            TextButton(
                 text = context.getString(R.string.add_skill),
                 onClick = {
                     editingSkill = null
@@ -1996,8 +1993,7 @@ fun SettingsScreen(
         "send_broadcast" to """{"skillType":"CUSTOM_COMMAND","params":{"action":"com.example.MY_ACTION","extras":{"key":"value"}}}""",
         "custom" to """{"skillType":"CUSTOM_COMMAND","params":{"key":"value"}}"""
     )
-
-    LaunchedEffect(editingSkill) {
+                            LaunchedEffect(editingSkill) {
         editingSkill?.let { skill ->
             skillName = skill.name
             skillDescription = skill.description
@@ -2012,20 +2008,19 @@ fun SettingsScreen(
             skillImplementationType = "shell_command"
         }
     }
-
-    OverlayDialog(
+                            OverlayDialog(
         title = if (editingSkill != null) context.getString(R.string.edit_skill) else context.getString(R.string.add_custom_skill),
         summary = context.getString(R.string.custom_skill_create_desc),
         show = showAddEditSkillDialog,
         onDismissRequest = { showAddEditSkillDialog = false },
         content = {
-        Box(
+                                Box(
             modifier = Modifier
                 .heightIn(max = 520.dp)
                 .verticalScroll(rememberScrollState())
         ) {
             Column {
-            TextField(
+                                TextField(
                 value = skillName,
                 onValueChange = { skillName = it },
                 modifier = Modifier.fillMaxWidth(),
@@ -2033,8 +2028,8 @@ fun SettingsScreen(
                 useLabelAsPlaceholder = true,
                 singleLine = true
             )
-            Spacer(Modifier.height(8.dp))
-            TextField(
+                            Spacer(Modifier.height(8.dp))
+                            TextField(
                 value = skillDescription,
                 onValueChange = { skillDescription = it },
                 modifier = Modifier.fillMaxWidth(),
@@ -2043,14 +2038,14 @@ fun SettingsScreen(
                 singleLine = false,
                 maxLines = 2
             )
-            Spacer(Modifier.height(8.dp))
-            Text(
+                            Spacer(Modifier.height(8.dp))
+                            Text(
                 text = context.getString(R.string.implementation),
                 fontSize = 12.sp,
                 color = MiuixTheme.colorScheme.onSurfaceVariantSummary
             )
-            Spacer(Modifier.height(4.dp))
-            Row(
+                            Spacer(Modifier.height(4.dp))
+                            Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
@@ -2069,13 +2064,13 @@ fun SettingsScreen(
                     )
                 }
             }
-            Spacer(Modifier.height(8.dp))
-            Text(
+                            Spacer(Modifier.height(8.dp))
+                            Text(
                 text = context.getString(R.string.skill_invocation_desc),
                 fontSize = 12.sp,
                 color = MiuixTheme.colorScheme.onSurfaceVariantSummary
             )
-            TextField(
+                            TextField(
                 value = skillJson,
                 onValueChange = { skillJson = it },
                 modifier = Modifier
@@ -2086,13 +2081,13 @@ fun SettingsScreen(
                 maxLines = Int.MAX_VALUE,
                 minLines = 3
             )
-            Spacer(Modifier.height(8.dp))
-            Text(
+                            Spacer(Modifier.height(8.dp))
+                            Text(
                 text = context.getString(R.string.impl_notes_hint),
                 fontSize = 12.sp,
                 color = MiuixTheme.colorScheme.onSurfaceVariantSummary
             )
-            TextField(
+                            TextField(
                 value = skillSystemPrompt,
                 onValueChange = { skillSystemPrompt = it },
                 modifier = Modifier
@@ -2105,15 +2100,15 @@ fun SettingsScreen(
             )
             }
         }
-        Spacer(Modifier.height(12.dp))
-        Row(horizontalArrangement = Arrangement.SpaceBetween) {
-            TextButton(
+                            Spacer(Modifier.height(12.dp))
+                            Row(horizontalArrangement = Arrangement.SpaceBetween) {
+                                TextButton(
                 text = context.getString(R.string.cancel),
                 onClick = { showAddEditSkillDialog = false },
                 modifier = Modifier.weight(1f)
             )
-            Spacer(Modifier.width(16.dp))
-            TextButton(
+                            Spacer(Modifier.width(16.dp))
+                            TextButton(
                 text = context.getString(R.string.save),
                 onClick = {
                     if (skillName.isBlank()) return@TextButton
@@ -2146,7 +2141,7 @@ fun SettingsScreen(
     )
 
     // ---------- AI Termux：完整对话记录 ----------
-    OverlayDialog(
+                        OverlayDialog(
         title = context.getString(R.string.full_chat_history),
         summary = context.getString(R.string.chat_history_full_desc),
         show = showFullHistoryViewer,
@@ -2157,40 +2152,40 @@ fun SettingsScreen(
             context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
         }
         if (messages.isEmpty()) {
-            Box(
+                                Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(120.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Text(
+                                Text(
                     text = context.getString(R.string.no_chat_history),
                     fontSize = 14.sp,
                     color = MiuixTheme.colorScheme.onSurfaceVariantSummary
                 )
             }
         } else {
-            Box(
+                                Box(
                 modifier = Modifier
                     .heightIn(max = 400.dp)
                     .verticalScroll(rememberScrollState())
             ) {
                 Column {
                 // System Prompt
-                Card(
+                        Card(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(vertical = 4.dp)
                 ) {
-                    Column(modifier = Modifier.padding(12.dp)) {
-                        Text(
+                                Column(modifier = Modifier.padding(12.dp)) {
+                                Text(
                             text = "System Prompt",
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Bold,
                             color = MiuixTheme.colorScheme.primary
                         )
-                        Spacer(Modifier.height(4.dp))
-                        Text(
+                            Spacer(Modifier.height(4.dp))
+                            Text(
                             text = AiTermuxPrefs.buildFullSystemPrompt(context),
                             fontSize = 11.sp,
                             color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
@@ -2206,8 +2201,8 @@ fun SettingsScreen(
                             .fillMaxWidth()
                             .padding(vertical = 4.dp)
                     ) {
-                        Column(modifier = Modifier.padding(12.dp)) {
-                            Text(
+                                Column(modifier = Modifier.padding(12.dp)) {
+                                Text(
                                 text = when (msg.role) {
                                     "user" -> context.getString(R.string.tab_user)
                                     "assistant" -> "🤖 AI"
@@ -2264,9 +2259,9 @@ fun SettingsScreen(
                 }
             }
         }
-        Spacer(Modifier.height(12.dp))
-        Row(horizontalArrangement = Arrangement.SpaceBetween) {
-            TextButton(
+                            Spacer(Modifier.height(12.dp))
+                            Row(horizontalArrangement = Arrangement.SpaceBetween) {
+                                TextButton(
                 text = context.getString(R.string.copy_all),
                 onClick = {
                     val allContent = buildString {
@@ -2283,8 +2278,8 @@ fun SettingsScreen(
                 },
                 modifier = Modifier.weight(1f)
             )
-            Spacer(Modifier.width(16.dp))
-            TextButton(
+                            Spacer(Modifier.width(16.dp))
+                            TextButton(
                 text = context.getString(R.string.off),
                 onClick = { showFullHistoryViewer = false },
                 modifier = Modifier.weight(1f),
@@ -2297,7 +2292,7 @@ fun SettingsScreen(
     // ---------- 无限制模式二次确认弹窗 ----------
     var unlimitedCheckboxChecked by remember { mutableStateOf(false) }
     var isUnlimitedAuthenticating by remember { mutableStateOf(false) }
-    LaunchedEffect(showUnlimitedModeConfirm) {
+                            LaunchedEffect(showUnlimitedModeConfirm) {
         if (!showUnlimitedModeConfirm) {
             unlimitedCheckboxChecked = false
             isUnlimitedAuthenticating = false
@@ -2308,7 +2303,7 @@ fun SettingsScreen(
         val msg = context.getString(R.string.accessibility_guard_blocked_toast)
         SnackbarHelper.show(context, msg, Snackbar.LENGTH_LONG)
     }
-    OverlayDialog(
+                            OverlayDialog(
         show = showUnlimitedModeConfirm,
         onDismissRequest = {
             showUnlimitedModeConfirm = false
@@ -2316,33 +2311,30 @@ fun SettingsScreen(
         title = context.getString(R.string.enable_unrestricted),
         summary = context.getString(R.string.unrestricted_mode_banner),
         content = {
-            Column(
+                                Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 4.dp)
             ) {
-                Text(
+                                Text(
                     text = context.getString(R.string.unrestricted_mode_warning),
                     fontSize = 13.sp,
                     color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
                     lineHeight = 20.sp,
                     modifier = Modifier.padding(bottom = 12.dp)
                 )
-
-                CheckboxPreference(
+                            CheckboxPreference(
                     title = context.getString(R.string.confirm_unrestricted),
                     checked = unlimitedCheckboxChecked,
                     onCheckedChange = { unlimitedCheckboxChecked = it },
                     modifier = Modifier.fillMaxWidth()
                 )
-
-                Spacer(Modifier.height(16.dp))
-
-                Row(
+                            Spacer(Modifier.height(16.dp))
+                            Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(20.dp)
                 ) {
-                    Button(
+                                Button(
                         onClick = {
                             showUnlimitedModeConfirm = false
                         },
@@ -2351,14 +2343,14 @@ fun SettingsScreen(
                             color = Color.Transparent
                         )
                     ) {
-                        Text(
+                                Text(
                             text = context.getString(R.string.cancel),
                             color = MiuixTheme.colorScheme.onSurface,
                             fontSize = 15.sp,
                             fontWeight = FontWeight.Medium
                         )
                     }
-                    Button(
+                            Button(
                         onClick = {
                             isUnlimitedAuthenticating = true
                             val activity = context as? FragmentActivity
@@ -2383,10 +2375,11 @@ fun SettingsScreen(
                         enabled = unlimitedCheckboxChecked && !isUnlimitedAuthenticating,
                         modifier = Modifier.weight(1f),
                         colors = ButtonDefaults.buttonColors(
-                            color = if (unlimitedCheckboxChecked && !isUnlimitedAuthenticating) Color(0xFFD32F2F) else Color(0xFFBDBDBD)
+                            color = if (unlimitedCheckboxChecked && !isUnlimitedAuthenticating)
+                            Color(0xFFD32F2F) else Color(0xFFBDBDBD)
                         )
                     ) {
-                        Text(
+                                Text(
                             text = context.getString(R.string.confirm_enable),
                             color = Color.White,
                             fontSize = 15.sp,
@@ -2402,14 +2395,14 @@ fun SettingsScreen(
 
 @Composable
 private fun SettingIcon(iconRes: Int, contentDescription: String?) {
-    Box(
+                                Box(
         modifier = Modifier
             .size(40.dp)
             .clip(RoundedCornerShape(12.dp))
             .background(MiuixTheme.colorScheme.surfaceVariant),
         contentAlignment = Alignment.Center
     ) {
-        Icon(
+                                Icon(
             painter = painterResource(iconRes),
             contentDescription = contentDescription,
             modifier = Modifier.size(24.dp),
@@ -2420,7 +2413,7 @@ private fun SettingIcon(iconRes: Int, contentDescription: String?) {
 
 @Composable
 private fun SettingsGroupCard(items: List<SettingItem>) {
-    Card(
+                                Card(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 8.dp)
@@ -2429,31 +2422,26 @@ private fun SettingsGroupCard(items: List<SettingItem>) {
         Column {
             items.forEachIndexed { index, item ->
                 if (item.hasSwitch) {
-                    SwitchPreference(
+                                SwitchPreference(
                         title = item.title,
                         summary = item.description,
                         checked = item.switchValue,
                         onCheckedChange = item.onSwitchChange,
                         startAction = {
-                            SettingIcon(item.iconRes, contentDescription = item.title)
+                                SettingIcon(item.iconRes, contentDescription = item.title)
                         }
                     )
                 } else {
-                    ArrowPreference(
+                                ArrowPreference(
                         title = item.title,
                         summary = item.description,
                         onClick = item.action,
                         startAction = {
-                            SettingIcon(item.iconRes, contentDescription = item.title)
+                                SettingIcon(item.iconRes, contentDescription = item.title)
                         }
                     )
                 }
-                if (index < items.lastIndex) {
-                    HorizontalDivider(
-                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f),
-                        modifier = Modifier.padding(start = 72.dp, end = 16.dp)
-                    )
-                }
+                if (index < items.lastIndex) {                }
             }
         }
     }
@@ -2469,7 +2457,7 @@ private fun IntegratedToolSwitch(
     enabled: Boolean = true,
     onDisabledClick: (() -> Unit)? = null
 ) {
-    Box(
+                                Box(
         modifier = Modifier
             .let { m ->
                 if (!enabled && onDisabledClick != null) {
@@ -2477,7 +2465,7 @@ private fun IntegratedToolSwitch(
                 } else m
             }
     ) {
-        SwitchPreference(
+                                SwitchPreference(
             title = title,
             summary = summary,
             checked = checked,
@@ -2486,7 +2474,7 @@ private fun IntegratedToolSwitch(
                 else onDisabledClick?.invoke()
             },
             startAction = {
-                SettingIcon(iconRes, contentDescription = title)
+                                SettingIcon(iconRes, contentDescription = title)
             }
         )
     }
@@ -2517,12 +2505,11 @@ private fun HelpContentWithCopyableCommands(
     val clipboard = remember {
         context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
     }
-
-    Column(modifier = Modifier.fillMaxWidth()) {
+                            Column(modifier = Modifier.fillMaxWidth()) {
         lines.forEachIndexed { index, rawLine ->
             val trimmed = rawLine.trim()
             if (trimmed.isEmpty()) {
-                Spacer(Modifier.height(8.dp))
+                                Spacer(Modifier.height(8.dp))
                 return@forEachIndexed
             }
 
@@ -2547,21 +2534,21 @@ private fun HelpContentWithCopyableCommands(
             }
 
             if (commandText != null) {
-                Row(
+                                Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(vertical = 2.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
+                                Text(
                         text = rawLine,
                         fontSize = 13.sp,
                         color = MiuixTheme.colorScheme.onSurface,
                         lineHeight = 20.sp,
                         modifier = Modifier.weight(1f)
                     )
-                    Spacer(Modifier.width(4.dp))
-                    Box(
+                            Spacer(Modifier.width(4.dp))
+                            Box(
                         modifier = Modifier
                             .size(28.dp)
                             .clip(RoundedCornerShape(6.dp))
@@ -2573,7 +2560,7 @@ private fun HelpContentWithCopyableCommands(
                             },
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(
+                                Icon(
                             painter = painterResource(R.drawable.ic_copy),
                             contentDescription = context.getString(R.string.copy),
                             modifier = Modifier.size(16.dp),
@@ -2582,7 +2569,7 @@ private fun HelpContentWithCopyableCommands(
                     }
                 }
             } else {
-                Text(
+                                Text(
                     text = rawLine,
                     fontSize = 14.sp,
                     color = MiuixTheme.colorScheme.onSurface,

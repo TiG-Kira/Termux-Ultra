@@ -54,6 +54,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.res.stringResource
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.toBitmap
 import coil.compose.AsyncImage
@@ -308,7 +309,7 @@ private fun OobeWelcomePage(
             if (isUpgrade) {
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(
-                    text = "升级完成",
+                    text = stringResource(R.string.upgrade_complete),
                     style = TextStyle(
                         fontSize = 16.sp,
                         color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.7f)
@@ -355,7 +356,7 @@ private fun OobeEulaPage(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
-                title = "许可条款",
+                title = stringResource(R.string.license_agreement),
                 navigationIcon = {
                     Box(
                         modifier = Modifier
@@ -390,7 +391,7 @@ private fun OobeEulaPage(
             ) {
                 // EULA 部分
                 Text(
-                    text = "Termux Ultra 最终用户许可协议",
+                    text = stringResource(R.string.termux_ultra_eula),
                     style = TextStyle(
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold,
@@ -432,7 +433,7 @@ private fun OobeEulaPage(
                     .padding(bottom = 32.dp)
             ) {
                 CheckboxPreference(
-                    title = "我已阅读并同意上述许可条款",
+                    title = stringResource(R.string.i_agree_license),
                     checked = eulaAgreed,
                     onCheckedChange = { onEulaAgreeChange(it) }
                 )
@@ -447,7 +448,7 @@ private fun OobeEulaPage(
                     )
                 ) {
                     Text(
-                        text = "继续",
+                        text = stringResource(R.string.critical_force_enable_action_continue),
                         fontWeight = FontWeight.Bold,
                         color = if (eulaAgreed) Color.White 
                                 else MiuixTheme.colorScheme.onSurfaceVariantSummary
@@ -593,7 +594,7 @@ private fun OobePermissionPage(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
-                title = "权限",
+                title = stringResource(R.string.file_info_permissions),
                 navigationIcon = {
                     Box(
                         modifier = Modifier
@@ -687,7 +688,7 @@ private fun OobePermissionPage(
                 )
             ) {
                 Text(
-                    text = "继续",
+                    text = stringResource(R.string.critical_force_enable_action_continue),
                     fontWeight = FontWeight.Bold,
                     color = if (isPermissionGranted) Color.White 
                             else MiuixTheme.colorScheme.onSurfaceVariantSummary
@@ -739,7 +740,7 @@ private fun OobeInstallPage(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
-                title = "安装",
+                title = stringResource(R.string.action_styling_install),
                 navigationIcon = {
                     Box(
                         modifier = Modifier
@@ -832,7 +833,7 @@ private fun OobeInstallPage(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
-                        text = "继续",
+                        text = stringResource(R.string.critical_force_enable_action_continue),
                         fontWeight = FontWeight.Bold,
                         color = Color.White
                     )
@@ -857,7 +858,7 @@ private fun OobeInstallPage(
                 }
                 Spacer(modifier = Modifier.height(24.dp))
                 Text(
-                    text = "安装失败",
+                    text = stringResource(R.string.install_failed),
                     style = TextStyle(
                         fontSize = 20.sp,
                         fontWeight = FontWeight.Bold,
@@ -913,7 +914,7 @@ private fun OobeInstallPage(
                         modifier = Modifier.weight(1f)
                     ) {
                         Text(
-                            text = "重试",
+                            text = stringResource(R.string.bootstrap_error_try_again),
                             fontWeight = FontWeight.Bold,
                             color = Color.White
                         )
@@ -1059,7 +1060,7 @@ private fun OobeReleaseNotesPage(
                     .padding(bottom = 32.dp)
             ) {
                 Text(
-                    text = "继续",
+                    text = stringResource(R.string.critical_force_enable_action_continue),
                     fontWeight = FontWeight.Bold,
                     color = Color.White
                 )
@@ -1222,7 +1223,7 @@ private fun OobeCompletePage(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = "完成",
+                    text = stringResource(R.string.overview_done),
                     style = TextStyle(
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,

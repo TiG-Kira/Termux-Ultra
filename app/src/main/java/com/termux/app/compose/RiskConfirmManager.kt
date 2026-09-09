@@ -586,7 +586,7 @@ object RiskConfirmManager {
             Handler(Looper.getMainLooper()).post {
                 SnackbarHelper.show(
                     context,
-                    context.getString(R.string.access_denied),
+                    "Access Denied(权限拒绝)",
                     Snackbar.LENGTH_LONG
                 )
             }
@@ -699,7 +699,7 @@ object RiskConfirmManager {
             Handler(Looper.getMainLooper()).post {
                 SnackbarHelper.show(
                     context,
-                    context.getString(R.string.access_denied),
+                    "Access Denied(权限拒绝)",
                     Snackbar.LENGTH_LONG
                 )
             }
@@ -733,7 +733,7 @@ object RiskConfirmManager {
     ): Boolean {
         if (blockingRequestActive) {
             Handler(Looper.getMainLooper()).post {
-                SnackbarHelper.show(context, context.getString(R.string.access_denied), Snackbar.LENGTH_LONG)
+                SnackbarHelper.show(context, "Access Denied(权限拒绝)", Snackbar.LENGTH_LONG)
             }
             return false
         }
@@ -996,7 +996,7 @@ object RiskConfirmManager {
                 Handler(Looper.getMainLooper()).post {
                     SnackbarHelper.show(
                         context,
-                        context.getString(R.string.risk_command_container_sudo_warning),
+                        "检测到容器/SSH/虚拟机环境内提权，请注意使用安全",
                         Snackbar.LENGTH_SHORT
                     )
                 }
@@ -1072,7 +1072,7 @@ object RiskConfirmManager {
                 Handler(Looper.getMainLooper()).post {
                     SnackbarHelper.show(
                         context,
-                        context.getString(R.string.risk_command_container_sudo_warning),
+                        "检测到容器/SSH/虚拟机环境内提权，请注意使用安全",
                         Snackbar.LENGTH_LONG
                     )
                 }
@@ -1350,7 +1350,7 @@ fun RiskConfirmDialogHost(
     val context = LocalContext.current
     val snackbarScope = rememberCoroutineScope()
     val showBlockedMessage: () -> Unit = {
-        val msg = context.getString(R.string.accessibility_guard_blocked_toast)
+        val msg = "请手动点击按钮完成操作，第三方无障碍服务无法执行此操作"
         if (snackbarHostState != null) {
             snackbarScope.launch {
                 snackbarHostState.showSnackbar(
@@ -1438,8 +1438,8 @@ fun RiskConfirmDialogHost(
             OverlayDialog(
                 show = true,
                 onDismissRequest = {},
-                title = stringResource(R.string.risk_command_ssh_power_title),
-                summary = stringResource(R.string.risk_command_ssh_power_warning),
+                title = "远程电源操作确认",
+                summary = "您即将对通过 SSH 连接的远程系统执行关机或重新启动。\n\n您确认后，远程主机将终止全部正在运行的程序与服务并断开 SSH 会话。如您选择关机，如果没有相关人员物理接触此远程设备或此设备不具备网络开机能力，系统将要持续离线，您无法通过远程方式恢复运行。\n\n若此环境为生产环境，此操作会造成服务中断与可能的业务损失。\n\n请确认您确实需要执行电源操作再继续！",
                 content = {
                     Column(
                         modifier = Modifier
@@ -1450,7 +1450,7 @@ fun RiskConfirmDialogHost(
                         horizontalAlignment = Alignment.Start
                     ) {
                         Text(
-                            text = stringResource(R.string.risk_command_label) + ":",
+                            text = "命令" + ":",
                             style = androidx.compose.ui.text.TextStyle(
                                 fontSize = 13.sp,
                                 color = MiuixTheme.colorScheme.onSurfaceVariantSummary
@@ -1490,7 +1490,7 @@ fun RiskConfirmDialogHost(
                                 )
                             ) {
                                 Text(
-                                    text = "${stringResource(R.string.risk_command_ssh_power_confirm_no)}(${countdown}s)",
+                                    text = "${"否"}(${countdown}s)",
                                     color = MiuixTheme.colorScheme.onSurface,
                                     fontSize = 15.sp,
                                     fontWeight = FontWeight.Medium
@@ -1506,7 +1506,7 @@ fun RiskConfirmDialogHost(
                                 )
                             ) {
                                 Text(
-                                    text = stringResource(R.string.risk_command_ssh_power_confirm_yes),
+                                    text = "是，关机/重启",
                                     color = Color.White,
                                     fontSize = 15.sp,
                                     fontWeight = FontWeight.Medium
@@ -1520,25 +1520,25 @@ fun RiskConfirmDialogHost(
             // 普通高危命令弹窗
             // 根据环境类型选择不同的标题和描述
             val dialogTitle = when (state.environmentType) {
-                RiskConfirmManager.EnvironmentType.NATIVE -> stringResource(R.string.risk_command_dialog_title)
-                RiskConfirmManager.EnvironmentType.CONTAINER -> stringResource(R.string.risk_command_env_container_title)
-                RiskConfirmManager.EnvironmentType.VM -> stringResource(R.string.risk_command_env_vm_title)
-                RiskConfirmManager.EnvironmentType.SSH -> stringResource(R.string.risk_command_env_ssh_title)
+                RiskConfirmManager.EnvironmentType.NATIVE -> "即将执行风险命令"
+                RiskConfirmManager.EnvironmentType.CONTAINER -> "高危命令 - 容器环境"
+                RiskConfirmManager.EnvironmentType.VM -> "高危命令 - 虚拟机环境"
+                RiskConfirmManager.EnvironmentType.SSH -> "高危命令 - 远程系统 (SSH)"
             }
             val envWarning = when (state.environmentType) {
                  RiskConfirmManager.EnvironmentType.NATIVE -> null
-                 RiskConfirmManager.EnvironmentType.CONTAINER -> stringResource(R.string.risk_command_env_container_warning)
-                 RiskConfirmManager.EnvironmentType.VM -> stringResource(R.string.risk_command_env_vm_warning)
+                 RiskConfirmManager.EnvironmentType.CONTAINER -> "此命令正在容器环境中执行，可能会对容器系统造成不可逆的损害，包括但不限于：容器数据丢失、容器系统损坏、容器无法重新启动等。请在执行前仔细评估此命令的必要性和安全性。"
+                 RiskConfirmManager.EnvironmentType.VM -> "此命令正在虚拟机环境中执行，可能会对虚拟机系统造成不可逆的损害，包括但不限于：虚拟机数据丢失、虚拟机系统损坏、虚拟机无法启动等。请在执行前仔细评估此命令的必要性和安全性。"
                  RiskConfirmManager.EnvironmentType.SSH -> {
                      val isDiskCommand = state.riskType in listOf("dd 磁盘写入", "格式化/分区")
                      if (isDiskCommand) {
                          if (state.isWindowsDiskCommand) {
-                             stringResource(R.string.risk_command_env_ssh_disk_windows_warning)
+                             "此磁盘级命令将在通过 SSH 连接的远程 Windows 系统上执行。format、diskpart、bcdedit 等操作可格式化分区、擦除磁盘分区表、修改或删除系统启动配置。diskpart 的 clean / clean all 指令会清除磁盘全部分区信息，clean-all 将覆写磁盘全部扇区，数据几乎无法恢复。错误指定磁盘号、盘符会造成整块磁盘数据丢失；即使系统正在运行，管理员权限仍可摧毁非系统卷数据。如果远程系统为生产环境，执行此命令将造成大规模数据丢失、业务中断甚至系统无法启动，并可能带来法律风险。请在执行前仔细核对磁盘编号、盘符，评估执行必要性。"
                          } else {
-                             stringResource(R.string.risk_command_env_ssh_disk_warning)
+                             "此磁盘级命令将在通过 SSH 连接的远程系统上执行。dd、mkfs、fdisk 和 parted 等操作可能会覆盖原始磁盘、破坏分区表并永久擦除所有数据。错误指定设备路径可能导致远程主机完全无法启动，且损坏的数据几乎无法恢复。如果远程系统为生产环境，执行此命令可能导致服务中断、大规模数据丢失，甚至带来法律风险。请在执行前仔细检查目标设备路径并评估执行的必要性。"
                          }
                      } else {
-                         stringResource(R.string.risk_command_env_ssh_warning)
+                         "此命令正在通过 SSH 连接的远程系统上执行，可能会对远程系统造成不可逆的损害，包括但不限于：远程数据丢失、远程系统损坏、服务中断等。如果远程系统为生产环境，执行此命令可能导致服务中断、数据丢失，甚至带来法律风险。请在执行前仔细评估此命令的必要性和安全性。"
                      }
                  }
              }
@@ -1554,7 +1554,7 @@ fun RiskConfirmDialogHost(
                         append(envWarning)
                     }
                     append("\n\n")
-                    append(stringResource(R.string.risk_command_dialog_disclaimer))
+                    append("该命令可能造成不可恢复的数据丢失、系统损坏或安全问题。您执行高危命令所造成的任何后果，本应用不承担任何责任，且不受理因高危操作产生的 Issue。")
                 },
                 content = {
                     Column(
@@ -1566,7 +1566,7 @@ fun RiskConfirmDialogHost(
                         horizontalAlignment = Alignment.Start
                     ) {
                         Text(
-                            text = stringResource(R.string.risk_command_label) + ":",
+                            text = "命令" + ":",
                             style = androidx.compose.ui.text.TextStyle(
                                 fontSize = 13.sp,
                                 color = MiuixTheme.colorScheme.onSurfaceVariantSummary
@@ -1593,7 +1593,7 @@ fun RiskConfirmDialogHost(
                         Spacer(Modifier.height(12.dp))
 
                         Text(
-                            text = stringResource(R.string.risk_command_warning),
+                            text = "警告：这是一项高危操作，可能导致不可逆的后果。",
                             style = androidx.compose.ui.text.TextStyle(
                                 fontSize = 12.sp,
                                 color = MiuixTheme.colorScheme.error,
@@ -1604,7 +1604,7 @@ fun RiskConfirmDialogHost(
                         Spacer(Modifier.height(12.dp))
 
                         CheckboxPreference(
-                            title = stringResource(R.string.risk_command_confirm_checkbox),
+                            title = "我自愿承担执行此命令的全部风险，继续执行",
                             checked = checkboxChecked,
                             onCheckedChange = { checkboxChecked = it },
                             modifier = Modifier.fillMaxWidth()
@@ -1626,7 +1626,7 @@ fun RiskConfirmDialogHost(
                                 )
                             ) {
                                 Text(
-                                    text = "${stringResource(R.string.cancel)}(${countdown}s)",
+                                    text = "${"取消"}(${countdown}s)",
                                     color = MiuixTheme.colorScheme.onSurface,
                                     fontSize = 15.sp,
                                     fontWeight = FontWeight.Medium
@@ -1643,7 +1643,7 @@ fun RiskConfirmDialogHost(
                                 )
                             ) {
                                 Text(
-                                    text = stringResource(R.string.risk_command_continue),
+                                    text = "继续执行",
                                     color = Color.White,
                                     fontSize = 15.sp,
                                     fontWeight = FontWeight.Medium
@@ -1681,15 +1681,15 @@ fun launchBiometricAuth(
     if (!hasBiometricAuthentication(activity)) {
         SnackbarHelper.show(
             activity,
-            activity.getString(R.string.risk_command_biometric_not_set),
+            "设备未设置生物验证或屏幕锁。已跳过验证。建议在系统设置中设置屏幕锁（PIN/图案）或生物验证以获得更好的安全性。",
             Snackbar.LENGTH_LONG
         )
         onResult(true)
         return
     }
 
-    val title = activity.getString(R.string.risk_command_biometric_prompt)
-    val subtitle = activity.getString(R.string.risk_command_disable_confirm)
+    val title = "请验证您的身份以继续"
+    val subtitle = "确认调整"
 
     RiskConfirmManager.countdownScope.launch {
         try {

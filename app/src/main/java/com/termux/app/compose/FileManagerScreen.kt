@@ -278,9 +278,9 @@ fun FileManagerScreen(
         topBar = {
             TopAppBar(
                 title = if (isInSelectionMode) {
-                    "${selectedFiles.size} ${stringResource(R.string.items)}"
+                    "${selectedFiles.size} ${"项"}"
                 } else {
-                    stringResource(R.string.files_title)
+                    "文件"
                 },
                 scrollBehavior = scrollBehavior,
                 navigationIcon = {
@@ -341,7 +341,7 @@ fun FileManagerScreen(
                         }) {
                             Icon(
                                 painter = painterResource(R.drawable.ic_copy),
-                                contentDescription = stringResource(R.string.copy),
+                                contentDescription = "复制",
                                 modifier = Modifier.size(24.dp),
                                 tint = MiuixTheme.colorScheme.onSurface
                             )
@@ -354,7 +354,7 @@ fun FileManagerScreen(
                         }) {
                             Icon(
                                 painter = painterResource(R.drawable.ic_cut),
-                                contentDescription = stringResource(R.string.cut),
+                                contentDescription = "剪切",
                                 modifier = Modifier.size(24.dp),
                                 tint = MiuixTheme.colorScheme.onSurface
                             )
@@ -366,7 +366,7 @@ fun FileManagerScreen(
                             }) {
                                 Icon(
                                     painter = painterResource(R.drawable.ic_edit),
-                                    contentDescription = stringResource(R.string.rename),
+                                    contentDescription = "重命名",
                                     modifier = Modifier.size(24.dp),
                                     tint = MiuixTheme.colorScheme.onSurface
                                 )
@@ -377,7 +377,7 @@ fun FileManagerScreen(
                         }) {
                             Icon(
                                 painter = painterResource(R.drawable.ic_delete),
-                                contentDescription = stringResource(R.string.delete),
+                                contentDescription = "删除",
                                 modifier = Modifier.size(24.dp),
                                 tint = MiuixTheme.colorScheme.onSurface
                             )
@@ -413,7 +413,7 @@ fun FileManagerScreen(
                         }) {
                             Icon(
                                 painter = painterResource(R.drawable.ic_paste),
-                                contentDescription = stringResource(R.string.paste),
+                                contentDescription = "粘贴",
                                 modifier = Modifier.size(24.dp),
                                 tint = MiuixTheme.colorScheme.onSurface
                             )
@@ -445,7 +445,7 @@ fun FileManagerScreen(
                             }) {
                                 Icon(
                                     painter = painterResource(R.drawable.ic_add),
-                                    contentDescription = stringResource(R.string.folder),
+                                    contentDescription = "文件夹",
                                     modifier = Modifier.size(24.dp),
                                     tint = MiuixTheme.colorScheme.onSurface
                                 )
@@ -496,7 +496,7 @@ fun FileManagerScreen(
                                 )
                             }
                             Text(
-                                text = stringResource(R.string.files_warning_message),
+                                text = "请谨慎操作文件，误操作可能会影响 Termux 容器内以外的文件。",
                                 fontSize = 14.sp,
                                 modifier = Modifier.weight(1f),
                                 color = MiuixTheme.colorScheme.onSurface,
@@ -504,7 +504,7 @@ fun FileManagerScreen(
                             )
                             Icon(
                                 painter = painterResource(R.drawable.ic_close),
-                                contentDescription = stringResource(R.string.ok),
+                                contentDescription = "确定",
                                 modifier = Modifier
                                     .size(24.dp)
                                     .clickable {
@@ -548,7 +548,7 @@ fun FileManagerScreen(
                         verticalArrangement = Arrangement.Center
                     ) {
                         Text(
-                            text = stringResource(R.string.empty_folder),
+                            text = "空文件夹",
                             fontSize = 15.sp,
                             fontWeight = FontWeight.Medium,
                             color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
@@ -681,7 +681,7 @@ fun FileManagerScreen(
                             Text(
                                 text = if (file.isDirectory) {
                                     val count = file.listFiles()?.size ?: 0
-                                    "${stringResource(R.string.folder)} · $count ${stringResource(R.string.items)}"
+                                    "${"文件夹"} · $count ${"项"}"
                                 } else {
                                     "${getFileTypeDescription(file)} · ${android.text.format.Formatter.formatFileSize(context, file.length())}"
                                 },
@@ -716,7 +716,7 @@ fun FileManagerScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = stringResource(R.string.file_info_path),
+                                    text = "路径",
                                     fontSize = 13.sp,
                                     color = dialogSubtextColor,
                                     modifier = Modifier.width(70.dp)
@@ -739,7 +739,7 @@ fun FileManagerScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = stringResource(R.string.file_info_ext),
+                                    text = "扩展名",
                                     fontSize = 13.sp,
                                     color = dialogSubtextColor,
                                     modifier = Modifier.width(70.dp)
@@ -759,13 +759,13 @@ fun FileManagerScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = stringResource(R.string.file_info_type),
+                                    text = "类型",
                                     fontSize = 13.sp,
                                     color = dialogSubtextColor,
                                     modifier = Modifier.width(70.dp)
                                 )
                                 Text(
-                                    text = if (file.isDirectory) stringResource(R.string.folder) else getFileTypeDescription(file),
+                                    text = if (file.isDirectory) "文件夹" else getFileTypeDescription(file),
                                     fontSize = 13.sp,
                                     color = dialogTextColor,
                                     lineHeight = 18.sp
@@ -778,7 +778,7 @@ fun FileManagerScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = if (file.isDirectory) stringResource(R.string.items) else stringResource(R.string.file_info_size),
+                                    text = if (file.isDirectory) "项" else "大小",
                                     fontSize = 13.sp,
                                     color = dialogSubtextColor,
                                     modifier = Modifier.width(70.dp)
@@ -786,7 +786,7 @@ fun FileManagerScreen(
                                 Text(
                                     text = if (file.isDirectory) {
                                         val count = file.listFiles()?.size ?: 0
-                                        "$count ${stringResource(R.string.items)}"
+                                        "$count ${"项"}"
                                     } else {
                                         android.text.format.Formatter.formatFileSize(context, file.length())
                                     },
@@ -802,7 +802,7 @@ fun FileManagerScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = stringResource(R.string.file_info_permissions),
+                                    text = "权限",
                                     fontSize = 13.sp,
                                     color = dialogSubtextColor,
                                     modifier = Modifier.width(70.dp)
@@ -821,7 +821,7 @@ fun FileManagerScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = stringResource(R.string.file_info_modified),
+                                    text = "修改时间",
                                     fontSize = 13.sp,
                                     color = dialogSubtextColor,
                                     modifier = Modifier.width(70.dp)
@@ -866,7 +866,7 @@ fun FileManagerScreen(
                                     )
                                 }
                                 Text(
-                                    text = stringResource(R.string.shell_script_warning),
+                                    text = "请谨慎运行脚本，先查看脚本内是否存在针对设备的危险操作，特别是以 ROOT 权限执行脚本，执行危险脚本有可能导致内核 Panic 或设备无法启动。请记住：能力越大，责任越大。Termux 原作者或 Termux Ultra 开发人员不对用户执行未知脚本造成的软硬件损坏或数据丢失负责。",
                                     fontSize = 12.sp,
                                     color = dialogTextColor,
                                     lineHeight = 18.sp,
@@ -907,7 +907,7 @@ fun FileManagerScreen(
                             )
                             Spacer(modifier = Modifier.width(16.dp))
                             Text(
-                                text = stringResource(R.string.action_file_received_open_directory),
+                                text = "打开目录",
                                 color = dialogTextColor,
                                 fontSize = 14.sp
                             )
@@ -940,7 +940,7 @@ fun FileManagerScreen(
                         )
                         Spacer(modifier = Modifier.width(16.dp))
                         Text(
-                            text = stringResource(R.string.view_content),
+                            text = "查看内容 (cat)",
                             color = dialogTextColor,
                             fontSize = 14.sp
                         )
@@ -958,11 +958,14 @@ fun FileManagerScreen(
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(8.dp))
                             .clickable {
-                                val vimPath = "/data/data/com.termux/files/usr/bin/vim"
-                                if (File(vimPath).exists()) {
-                                    onOpenFile(file.absolutePath, "vi \"${file.absolutePath}\"")
-                                } else {
-                                    onOpenFile(file.absolutePath, "pkg install vim -y && vi \"${file.absolutePath}\"")
+                                val act = context as? android.app.Activity
+                                val tool = context.getSharedPreferences("termux_preferences", 0).getString("editor_tool", "internal") ?: "internal"
+                                if (tool == "vim") {
+                                    onOpenFile(file.absolutePath, "vim \"${file.absolutePath}\"")
+                                } else if (act != null) {
+                                    val intent = android.content.Intent(act, com.termux.app.activities.TextEditorActivity::class.java)
+                                    intent.putExtra("file_path", file.absolutePath)
+                                    act.startActivity(intent)
                                 }
                                 showOpenWithDialog = false
                                 fileToOpen = null
@@ -978,7 +981,7 @@ fun FileManagerScreen(
                         )
                         Spacer(modifier = Modifier.width(16.dp))
                         Text(
-                            text = stringResource(R.string.edit_file),
+                            text = "编辑 (vi)",
                             color = dialogTextColor,
                             fontSize = 14.sp
                         )
@@ -1063,7 +1066,7 @@ fun FileManagerScreen(
                             )
                             Spacer(Modifier.width(8.dp))
                             Text(
-                                text = stringResource(R.string.copy_path),
+                                text = "复制路径",
                                 color = dialogTextColor,
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.Medium
@@ -1110,7 +1113,7 @@ fun FileManagerScreen(
                                 )
                                 Spacer(Modifier.width(8.dp))
                                 Text(
-                                    text = stringResource(R.string.execute_script),
+                                    text = "执行脚本",
                                     color = Color.White,
                                     fontSize = 14.sp,
                                     fontWeight = FontWeight.Medium
@@ -1136,21 +1139,21 @@ fun FileManagerScreen(
         OverlayDialog(
             show = showDeleteDialog,
             onDismissRequest = { showDeleteDialog = false },
-            title = stringResource(R.string.delete_confirm_title),
-            summary = "${stringResource(R.string.delete_confirm_message)} (${selectedFiles.size})",
+            title = "确认删除",
+            summary = "${"确定要删除此项目吗？"} (${selectedFiles.size})",
             content = {
                 Row(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     TextButton(
-                        text = stringResource(R.string.cancel),
+                        text = "取消",
                         onClick = { showDeleteDialog = false },
                         modifier = Modifier.weight(1f)
                     )
                     Spacer(Modifier.width(20.dp))
                     TextButton(
-                        text = stringResource(R.string.delete_confirm),
+                        text = "删除",
                         onClick = {
                             showDeleteDialog = false
                             showOperationProgress = true
@@ -1183,13 +1186,13 @@ fun FileManagerScreen(
         OverlayDialog(
             show = showRenameDialog,
             onDismissRequest = { showRenameDialog = false },
-            title = stringResource(R.string.rename),
+            title = "重命名",
             content = {
                 Column(modifier = Modifier.fillMaxWidth()) {
                     TextField(
                         value = newFileName,
                         onValueChange = { newFileName = it },
-                        label = stringResource(R.string.file_name)
+                        label = "文件名"
                     )
 
                     Spacer(Modifier.height(12.dp))
@@ -1199,13 +1202,13 @@ fun FileManagerScreen(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         TextButton(
-                            text = stringResource(R.string.cancel),
+                            text = "取消",
                             onClick = { showRenameDialog = false },
                             modifier = Modifier.weight(1f)
                         )
                         Spacer(Modifier.width(20.dp))
                         TextButton(
-                            text = stringResource(R.string.ok),
+                            text = "确定",
                             onClick = {
                                 val newFile = File(renameFile.parentFile, newFileName)
                                 renameFile.renameTo(newFile)
@@ -1227,13 +1230,13 @@ fun FileManagerScreen(
         OverlayDialog(
             show = showNewFolderDialog,
             onDismissRequest = { showNewFolderDialog = false },
-            title = stringResource(R.string.folder),
+            title = "文件夹",
             content = {
                 Column(modifier = Modifier.fillMaxWidth()) {
                     TextField(
                         value = newFolderName,
                         onValueChange = { newFolderName = it },
-                        label = stringResource(R.string.file_name)
+                        label = "文件名"
                     )
 
                     Spacer(Modifier.height(12.dp))
@@ -1243,13 +1246,13 @@ fun FileManagerScreen(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         TextButton(
-                            text = stringResource(R.string.cancel),
+                            text = "取消",
                             onClick = { showNewFolderDialog = false },
                             modifier = Modifier.weight(1f)
                         )
                         Spacer(Modifier.width(20.dp))
                         TextButton(
-                            text = stringResource(R.string.ok),
+                            text = "确定",
                             onClick = {
                                 showNewFolderDialog = false
                                 showOperationProgress = true
@@ -1285,7 +1288,7 @@ fun FileManagerScreen(
                     TextField(
                         value = newFileInputName,
                         onValueChange = { newFileInputName = it },
-                        label = stringResource(R.string.file_name)
+                        label = "文件名"
                     )
 
                     Spacer(Modifier.height(12.dp))
@@ -1295,13 +1298,13 @@ fun FileManagerScreen(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         TextButton(
-                            text = stringResource(R.string.cancel),
+                            text = "取消",
                             onClick = { showNewFileDialog = false },
                             modifier = Modifier.weight(1f)
                         )
                         Spacer(Modifier.width(20.dp))
                         TextButton(
-                            text = stringResource(R.string.ok),
+                            text = "确定",
                             onClick = {
                                 showNewFileDialog = false
                                 showOperationProgress = true
@@ -1357,7 +1360,7 @@ fun FileManagerScreen(
                             tint = rowTextColor
                         )
                         Spacer(modifier = Modifier.width(16.dp))
-                        Text(stringResource(R.string.folder), color = rowTextColor)
+                        Text("文件夹", color = rowTextColor)
                     }
 
                     Row(
@@ -1385,7 +1388,7 @@ fun FileManagerScreen(
                     Spacer(Modifier.height(12.dp))
 
                     TextButton(
-                        text = stringResource(R.string.cancel),
+                        text = "取消",
                         onClick = { showNewTypeDialog = false },
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -1432,12 +1435,16 @@ fun FileManagerScreen(
                 showScriptDetectionDialog = false
             },
             onEditScript = {
-                // 编辑脚本 - 用 vim 打开
-                val vimPath = "/data/data/com.termux/files/usr/bin/vim"
-                if (java.io.File(vimPath).exists()) {
-                    onOpenFile(scriptDetectionFilePath, "vi \"${scriptDetectionFilePath}\"")
+                val tool = context.getSharedPreferences("termux_preferences", 0).getString("editor_tool", "internal") ?: "internal"
+                if (tool == "vim") {
+                    onOpenFile(scriptDetectionFilePath, "vim \"$scriptDetectionFilePath\"")
                 } else {
-                    onOpenFile(scriptDetectionFilePath, "pkg install vim -y && vi \"${scriptDetectionFilePath}\"")
+                    val act = context as? android.app.Activity
+                    if (act != null) {
+                        val intent = android.content.Intent(act, com.termux.app.activities.TextEditorActivity::class.java)
+                        intent.putExtra("file_path", scriptDetectionFilePath)
+                        act.startActivity(intent)
+                    }
                 }
                 showScriptDetectionDialog = false
             },
@@ -1521,7 +1528,7 @@ private fun FileItem(
                 Text(
                     text = if (file.isDirectory) {
                         val count = file.listFiles()?.size ?: 0
-                        "$count ${stringResource(R.string.items)}"
+                        "$count ${"项"}"
                     } else {
                         "${formatFileSize(file.length())} · ${Date(file.lastModified()).toString()}"
                     },

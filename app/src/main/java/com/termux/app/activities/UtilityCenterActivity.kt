@@ -212,7 +212,7 @@ class UtilityCenterActivity : ComponentActivity() {
                     contentWindowInsets = WindowInsets(0, 0, 0, 0),
                     topBar = {
                         TopAppBar(
-                            title = stringResource(R.string.utility_center),
+                            title = getString(R.string.utility_center),
                             scrollBehavior = scrollBehavior,
                             navigationIcon = {
                                 Box(
@@ -253,11 +253,11 @@ class UtilityCenterActivity : ComponentActivity() {
                             ) {
                                 Column(modifier = Modifier.padding(16.dp)) {
                                     Text(
-                                        text = stringResource(R.string.official_maintained),
+                                        text = getString(R.string.official_maintained),
                                         style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Bold, color = MiuixTheme.colorScheme.onSurface)
                                     )
                                     Text(
-                                        text = stringResource(R.string.official_maintained_desc),
+                                        text = getString(R.string.official_maintained_desc),
                                         style = TextStyle(fontSize = 13.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary),
                                         modifier = Modifier.padding(top = 4.dp)
                                     )
@@ -306,21 +306,21 @@ class UtilityCenterActivity : ComponentActivity() {
                     OverlayDialog(
                         show = showTmuxHelpDialog,
                         onDismissRequest = { showTmuxHelpDialog = false },
-                        title = stringResource(R.string.tmux_help_title),
+                        title = getString(R.string.tmux_help_title),
                         content = {
                         Column(modifier = Modifier.padding(vertical = 8.dp)) {
                             Text(
-                                text = stringResource(R.string.tmux_help_new),
+                                text = getString(R.string.tmux_help_new),
                                 style = TextStyle(fontSize = 13.sp, color = MiuixTheme.colorScheme.onSurface),
                                 modifier = Modifier.padding(bottom = 8.dp)
                             )
                             Text(
-                                text = stringResource(R.string.tmux_help_detach),
+                                text = getString(R.string.tmux_help_detach),
                                 style = TextStyle(fontSize = 13.sp, color = MiuixTheme.colorScheme.onSurface),
                                 modifier = Modifier.padding(bottom = 8.dp)
                             )
                             Text(
-                                text = stringResource(R.string.tmux_help_attach),
+                                text = getString(R.string.tmux_help_attach),
                                 style = TextStyle(fontSize = 13.sp, color = MiuixTheme.colorScheme.onSurface),
                                 modifier = Modifier.padding(bottom = 12.dp)
                             )
@@ -329,7 +329,7 @@ class UtilityCenterActivity : ComponentActivity() {
                                 horizontalArrangement = Arrangement.End
                             ) {
                                 TextButton(
-                                    text = stringResource(R.string.ok),
+                                    text = getString(R.string.ok),
                                     onClick = { showTmuxHelpDialog = false }
                                 )
                             }

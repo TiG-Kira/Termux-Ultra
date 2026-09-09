@@ -80,7 +80,7 @@ fun ResourcesScreen(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
-                title = stringResource(R.string.resources_center),
+                title = "功能中心",
                 navigationIcon = {
                     if (showBackButton) {
                         Box(
@@ -120,7 +120,7 @@ fun ResourcesScreen(
 
                 item {
                     SmallTitle(
-                        text = stringResource(R.string.resource_quick_entry),
+                        text = "快速入口",
                         modifier = Modifier.padding(top = 8.dp)
                     )
                 }
@@ -133,8 +133,8 @@ fun ResourcesScreen(
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         EntryCard(
-                            title = stringResource(R.string.utility_center),
-                            subtitle = stringResource(R.string.official_maintained_short),
+                            title = "实用功能中心",
+                            subtitle = "官方维护",
                             iconRes = R.drawable.ic_server,
                             iconBackground = MiuixTheme.colorScheme.primary.copy(alpha = 0.15f),
                             iconTint = MiuixTheme.colorScheme.primary,
@@ -146,8 +146,8 @@ fun ResourcesScreen(
                             modifier = Modifier.weight(1f)
                         )
                         EntryCard(
-                            title = stringResource(R.string.third_party_center),
-                            subtitle = stringResource(R.string.third_party_maintained_short),
+                            title = "第三方资源中心",
+                            subtitle = "社区资源",
                             iconRes = R.drawable.ic_code,
                             iconBackground = Color(0xFF7C4DFF).copy(alpha = 0.15f),
                             iconTint = Color(0xFF7C4DFF),
@@ -163,8 +163,8 @@ fun ResourcesScreen(
 
                 item {
                     EntryCard(
-                        title = stringResource(R.string.plugin_center),
-                        subtitle = stringResource(R.string.plugin_center_desc),
+                        title = "插件中心",
+                        subtitle = "扩展 Termux Ultra 功能的插件系统",
                         iconRes = R.drawable.ic_extension,
                         iconBackground = Color(0xFF00BCD4).copy(alpha = 0.15f),
                         iconTint = Color(0xFF00BCD4),
@@ -180,7 +180,7 @@ fun ResourcesScreen(
                 }
 
                 item {
-                    SmallTitle(text = stringResource(R.string.resource_tips))
+                    SmallTitle(text = "使用提示")
                 }
 
                 item {
@@ -346,7 +346,7 @@ fun ResourceCard(
                         }
                     } else {
                         val isConfigType = item.type == "qemu_on_vnc"
-                        val buttonText = if (isExpanded) "收起" else if (isConfigType) "配置" else context.getString(R.string.execute)
+                        val buttonText = if (isExpanded) "收起" else if (isConfigType) "配置" else "执行"
                         Button(
                             onClick = {
                                 if (isFeatureDisabled) { showDisabledDialog { onToggleExpand() }; return@Button }
@@ -710,7 +710,7 @@ fun HeroWelcomeCard(modifier: Modifier = Modifier) {
             )
             Spacer(Modifier.height(4.dp))
             Text(
-                text = stringResource(R.string.resource_center_welcome_subtitle),
+                text = "探索 Termux 的新可能",
                 style = TextStyle(
                     fontSize = 22.sp,
                     fontWeight = FontWeight.Bold,
@@ -719,7 +719,7 @@ fun HeroWelcomeCard(modifier: Modifier = Modifier) {
             )
             Spacer(Modifier.height(10.dp))
             Text(
-                text = stringResource(R.string.resource_center_welcome_desc),
+                text = "汇集官方维护工具与第三方脚本资源，按需选择，安全使用。",
                 style = TextStyle(
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Medium,
@@ -785,7 +785,7 @@ fun EntryCard(
             Spacer(Modifier.height(12.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = stringResource(R.string.enter),
+                    text = "进入",
                     style = TextStyle(
                         fontSize = 13.sp,
                         fontWeight = FontWeight.SemiBold,
@@ -829,7 +829,7 @@ fun WarningNoteCard(modifier: Modifier = Modifier) {
                 )
             }
             Text(
-                text = stringResource(R.string.resource_center_warning),
+                text = "实用功能中心的功能由 Termux Ultra 官方维护；第三方资源中心的脚本由第三方开发者维护，使用前请自行评估安全性。",
                 style = TextStyle(
                     fontSize = 13.sp,
                     lineHeight = 20.sp,

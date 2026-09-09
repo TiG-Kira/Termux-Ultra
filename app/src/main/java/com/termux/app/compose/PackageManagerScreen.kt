@@ -45,6 +45,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.res.stringResource
 import com.termux.shared.models.ExecutionCommand
 import com.termux.shared.shell.TermuxShellEnvironmentClient
 import com.termux.shared.shell.TermuxShellUtils
@@ -495,7 +496,7 @@ fun PackageManagerScreen(
                     ) {
                         Icon(
                             imageVector = MiuixIcons.Back,
-                            contentDescription = "返回",
+                            contentDescription = stringResource(R.string.back),
                             tint = MiuixTheme.colorScheme.onSurface,
                             modifier = Modifier.size(24.dp)
                         )
@@ -519,7 +520,7 @@ fun PackageManagerScreen(
                         ) {
                             Icon(
                                 painter = painterResource(R.drawable.ic_play),
-                                contentDescription = "恢复后台任务",
+                                contentDescription = stringResource(R.string.resume_background),
                                 tint = MiuixTheme.colorScheme.primary,
                                 modifier = Modifier.size(22.dp)
                             )
@@ -548,7 +549,7 @@ fun PackageManagerScreen(
                     ) {
                         Icon(
                             painter = painterResource(R.drawable.ic_refresh),
-                            contentDescription = "刷新软件源",
+                            contentDescription = stringResource(R.string.refresh_sources),
                             tint = MiuixTheme.colorScheme.onSurface,
                             modifier = Modifier.size(22.dp)
                         )
@@ -573,7 +574,7 @@ fun PackageManagerScreen(
                     ) {
                         Icon(
                             painter = painterResource(R.drawable.ic_download),
-                            contentDescription = "升级所有包",
+                            contentDescription = stringResource(R.string.upgrade_all_packages),
                             tint = MiuixTheme.colorScheme.onSurface,
                             modifier = Modifier.size(22.dp)
                         )
@@ -587,20 +588,22 @@ fun PackageManagerScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
+            val searchFocusRequester = remember { androidx.compose.ui.focus.FocusRequester() }
+            var searchBarActivated by remember { mutableStateOf(false) }
             SearchBar(
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                 inputField = {
                     InputField(
                         query = searchQuery,
-                        onQueryChange = { searchQuery = it },
+                        onQueryChange = { searchQuery = it; searchBarActivated = true },
                         onSearch = { },
-                        expanded = true,
-                        onExpandedChange = { },
+                        expanded = searchBarActivated,
+                        onExpandedChange = { searchBarActivated = it },
                         label = "搜索软件包"
                     )
                 },
-                expanded = true,
-                onExpandedChange = { }
+                expanded = searchBarActivated,
+                onExpandedChange = { searchBarActivated = it }
             ) { }
 
             if (searchQuery.isBlank()) {
@@ -689,7 +692,7 @@ fun PackageManagerScreen(
                                 )
                                 Spacer(Modifier.width(12.dp))
                                 Text(
-                                    text = "处理中...",
+                                    text = stringResource(R.string.common_processing),
                                     fontSize = 14.sp,
                                     color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.7f)
                                 )
@@ -731,7 +734,7 @@ fun PackageManagerScreen(
                         if (progressSuccess != null) {
                             Row(modifier = Modifier.fillMaxWidth()) {
                                 TextButton(
-                                    text = "关闭",
+                                    text = stringResource(R.string.low_android_force_disable_confirm),
                                     onClick = { showProgressDialog = false },
                                     modifier = Modifier.fillMaxWidth()
                                 )

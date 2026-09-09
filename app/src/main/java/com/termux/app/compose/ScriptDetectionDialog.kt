@@ -74,7 +74,7 @@ fun ScriptDetectionDialog(
             showDialog = false
             onCancel()
         },
-        title = "脚本安全检测",
+        title = stringResource(R.string.script_detection),
         summary = buildString {
             append("检测到 ${results.size} 条危险命令")
             if (results.isNotEmpty()) {
@@ -170,7 +170,7 @@ fun ScriptDetectionDialog(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     TextButton(
-                        text = "查看脚本",
+                        text = stringResource(R.string.script_detection_view),
                         onClick = {
                             showDialog = false
                             onViewScript()
@@ -178,7 +178,7 @@ fun ScriptDetectionDialog(
                         modifier = Modifier.weight(1f)
                     )
                     TextButton(
-                        text = "编辑脚本",
+                        text = stringResource(R.string.script_detection_edit),
                         onClick = {
                             showDialog = false
                             onEditScript()
@@ -194,7 +194,7 @@ fun ScriptDetectionDialog(
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     TextButton(
-                        text = "取消",
+                        text = stringResource(R.string.cancel),
                         onClick = {
                             showDialog = false
                             onCancel()
@@ -212,7 +212,7 @@ fun ScriptDetectionDialog(
                         )
                     ) {
                         Text(
-                            text = "继续执行",
+                            text = stringResource(R.string.risk_command_continue),
                             color = Color.White,
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Medium

@@ -332,7 +332,7 @@ private fun DisableWarningDialogContent(
             showDialog = false
             onDismiss()
         },
-        title = stringResource(R.string.risk_command_disable_title),
+        title = "调整增强防护模式？",
         summary = stringResource(summaryRes),
         content = {
             Column(
@@ -366,7 +366,7 @@ private fun DisableWarningDialogContent(
                         )
                     ) {
                         Text(
-                            text = stringResource(R.string.cancel),
+                            text = "取消",
                             color = MiuixTheme.colorScheme.onSurface,
                             fontSize = 15.sp,
                             fontWeight = FontWeight.Medium
@@ -397,7 +397,7 @@ private fun DisableWarningDialogContent(
                         )
                     ) {
                         Text(
-                            text = stringResource(R.string.risk_command_disable_confirm),
+                            text = "确认调整",
                             color = Color.White,
                             fontSize = 15.sp,
                             fontWeight = FontWeight.Medium
@@ -437,8 +437,8 @@ private fun launchBiometricAuth(
         return
     }
 
-    val title = activity.getString(R.string.risk_command_biometric_prompt)
-    val subtitle = activity.getString(R.string.risk_command_disable_confirm)
+    val title = "请验证您的身份以继续"
+    val subtitle = "确认调整"
 
     activity.startClass2BiometricOrCredentialAuthentication(
         title = title,
@@ -520,7 +520,7 @@ private fun CrashErrorDialogContent(
                     // === 可恢复（非主线程 Exception）===
                     // 每个操作：删 md → 执行操作 → 进程继续跑
                     TextButton(
-                        text = stringResource(R.string.view_crash_report),
+                        text = "查看崩溃报告",
                         onClick = guardedOnClick(context, thirdPartyBlocked) {
                             deleteCrashLog()
                             val intent = Intent(context, TermuxCrashReportActivity::class.java)
@@ -532,7 +532,7 @@ private fun CrashErrorDialogContent(
                         modifier = Modifier.fillMaxWidth()
                     )
                     TextButton(
-                        text = stringResource(R.string.view_logs),
+                        text = "查看日志",
                         onClick = guardedOnClick(context, thirdPartyBlocked) {
                             deleteCrashLog()
                             val intent = Intent(context, LogViewerActivity::class.java)
@@ -544,7 +544,7 @@ private fun CrashErrorDialogContent(
                         modifier = Modifier.fillMaxWidth()
                     )
                     TextButton(
-                        text = stringResource(R.string.confirm),
+                        text = "确认",
                         onClick = guardedOnClick(context, thirdPartyBlocked) {
                             deleteCrashLog()
                             showDialog = false
@@ -558,7 +558,7 @@ private fun CrashErrorDialogContent(
                     // 主线程挂了 → 查看崩溃报告 / 降级模式 不能选（崩溃就发生在主线程）
                     // 只有"关闭应用"可选
                     TextButton(
-                        text = stringResource(R.string.close_app),
+                        text = "关闭应用",
                         onClick = guardedOnClick(context, thirdPartyBlocked) {
                             deleteCrashLog()
                             showDialog = false
@@ -572,7 +572,7 @@ private fun CrashErrorDialogContent(
                     // === 不可恢复 + 非主线程崩溃 或 native SIGSEGV ===
                     // 三个按钮都可用，每个操作：删 md → 执行操作 → 杀进程
                     TextButton(
-                        text = stringResource(R.string.view_crash_report),
+                        text = "查看崩溃报告",
                         onClick = guardedOnClick(context, thirdPartyBlocked) {
                             deleteCrashLog()
                             val intent = Intent(context, TermuxCrashReportActivity::class.java)
@@ -585,7 +585,7 @@ private fun CrashErrorDialogContent(
                         modifier = Modifier.fillMaxWidth()
                     )
                     TextButton(
-                        text = stringResource(R.string.use_fallback_mode),
+                        text = "使用降级模式",
                         onClick = guardedOnClick(context, thirdPartyBlocked) {
                             // 写入一次性降级 flag → 下次启动自动消费并进入降级模式
                             FallbackHelper.setOneShotFallbackFlag(context)
@@ -597,7 +597,7 @@ private fun CrashErrorDialogContent(
                         modifier = Modifier.fillMaxWidth()
                     )
                     TextButton(
-                        text = stringResource(R.string.close_app),
+                        text = "关闭应用",
                         onClick = guardedOnClick(context, thirdPartyBlocked) {
                             deleteCrashLog()
                             showDialog = false
@@ -630,9 +630,9 @@ private fun CrashPostDialogContent(
             showDialog = false
             onDismiss()
         },
-        title = stringResource(R.string.crash_post_title),
+        title = "侦测到已发生错误",
         summary = buildString {
-            append(stringResource(R.string.crash_post_message))
+            append("侦测到上次运行时发生了错误和崩溃，以下是崩溃详情。")
             if (errorMessage.isNotBlank()) {
                 append("\n\n")
                 append(errorMessage)
@@ -647,7 +647,7 @@ private fun CrashPostDialogContent(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 TextButton(
-                    text = stringResource(R.string.view_crash_report),
+                    text = "查看崩溃报告",
                     onClick = guardedOnClick(context, thirdPartyBlocked) {
                         // 用原生 ReportActivity.newInstance 传真实崩溃数据
                         try {
@@ -655,7 +655,7 @@ private fun CrashPostDialogContent(
                             val reportInfo = com.termux.shared.models.ReportInfo(
                                 userActionName,                                                          // userAction
                                 "CrashPostDialog",                                                       // sender
-                                context.getString(R.string.title_crash_report),                           // reportTitle
+                                "崩溃报告",                           // reportTitle
                                 null,                                                                     // reportStringPrefix
                                 if (fullCrashReport.isNotBlank()) fullCrashReport else errorMessage,     // reportString (完整崩溃日志)
                                 "\n\n" + com.termux.shared.termux.TermuxUtils.getReportIssueMarkdownString(context), // reportStringSuffix
@@ -674,7 +674,7 @@ private fun CrashPostDialogContent(
                     modifier = Modifier.fillMaxWidth()
                 )
                 TextButton(
-                    text = stringResource(R.string.view_logs),
+                    text = "查看日志",
                     onClick = guardedOnClick(context, thirdPartyBlocked) {
                         val intent = Intent(context, LogViewerActivity::class.java)
                         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -685,7 +685,7 @@ private fun CrashPostDialogContent(
                     modifier = Modifier.fillMaxWidth()
                 )
                 TextButton(
-                    text = stringResource(R.string.confirm),
+                    text = "确认",
                     onClick = guardedOnClick(context, thirdPartyBlocked) {
                         showDialog = false
                         onDismiss()

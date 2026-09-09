@@ -39,6 +39,7 @@ import java.io.InputStreamReader
 import java.net.HttpURLConnection
 import java.net.URLEncoder
 import java.net.URL
+import androidx.compose.ui.res.stringResource
 
 /** ---------- 技能执行器 ---------- */
 

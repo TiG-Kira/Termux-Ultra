@@ -183,7 +183,7 @@ class ThirdPartyCenterActivity : ComponentActivity() {
                         val runScript = java.io.File("$containerDir/run.sh")
                         val rootfsBash = java.io.File("$containerDir/rootfs/bin/bash")
                         if (!runScript.exists() || !rootfsBash.exists()) {
-                            SnackbarHelper.show(context, context.getString(R.string.need_container_first), Snackbar.LENGTH_LONG)
+                            SnackbarHelper.show(context, "请先安装 Ubuntu 容器！", Snackbar.LENGTH_LONG)
                             return
                         }
                     }
@@ -196,7 +196,7 @@ class ThirdPartyCenterActivity : ComponentActivity() {
                             val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                             val clip = ClipData.newPlainText(r.name, r.script)
                             clipboard.setPrimaryClip(clip)
-                            SnackbarHelper.show(context, context.getString(R.string.copy_to_clipboard_toast), Snackbar.LENGTH_SHORT)
+                            SnackbarHelper.show(context, "指令已复制到剪贴板", Snackbar.LENGTH_SHORT)
                         }
                         return
                     }
@@ -209,7 +209,7 @@ class ThirdPartyCenterActivity : ComponentActivity() {
                     contentWindowInsets = WindowInsets(0, 0, 0, 0),
                     topBar = {
                         TopAppBar(
-                            title = stringResource(R.string.third_party_center),
+                            title = "第三方资源中心",
                             scrollBehavior = scrollBehavior,
                             navigationIcon = {
                                 Box(
@@ -277,11 +277,11 @@ class ThirdPartyCenterActivity : ComponentActivity() {
                             ) {
                                 Column(modifier = Modifier.padding(16.dp)) {
                                     Text(
-                                        text = stringResource(R.string.third_party_maintained),
+                                        text = "第三方开发者维护",
                                         style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Bold, color = MiuixTheme.colorScheme.onSurface)
                                     )
                                     Text(
-                                        text = stringResource(R.string.third_party_maintained_desc),
+                                        text = "以下资源由第三方开发者提供，Termux Ultra 不对其内容及安全性负责。请自行评估风险后使用。",
                                         style = TextStyle(fontSize = 13.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary),
                                         modifier = Modifier.padding(top = 4.dp)
                                     )
@@ -303,11 +303,11 @@ class ThirdPartyCenterActivity : ComponentActivity() {
                                         horizontalAlignment = Alignment.CenterHorizontally
                                     ) {
                                         Text(
-                                            text = stringResource(R.string.no_third_party_resources),
+                                            text = "尚未添加任何第三方资源",
                                             style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Bold, color = MiuixTheme.colorScheme.onSurface)
                                         )
                                         Text(
-                                            text = stringResource(R.string.add_custom_script),
+                                            text = "点击右上角 + 按钮添加自定义脚本",
                                             style = TextStyle(fontSize = 13.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary),
                                             modifier = Modifier.padding(top = 4.dp)
                                         )
@@ -370,11 +370,11 @@ class ThirdPartyCenterActivity : ComponentActivity() {
                             showAddDialog = false
                             editingItem = null
                         },
-                        title = if (editingItem?.name?.isBlank() != false) stringResource(R.string.add_third_party_resource) else stringResource(R.string.edit_third_party_resource)
+                        title = if (editingItem?.name?.isBlank() != false) "添加第三方资源" else "编辑第三方资源"
                     ) {
                     Column(modifier = Modifier.padding(vertical = 8.dp)) {
                         Text(
-                            text = stringResource(R.string.resource_name),
+                            text = "名称",
                             style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Bold, color = MiuixTheme.colorScheme.onSurface)
                         )
                         TextField(
@@ -384,7 +384,7 @@ class ThirdPartyCenterActivity : ComponentActivity() {
                         )
                         Spacer(Modifier.height(8.dp))
                         Text(
-                            text = stringResource(R.string.resource_description_optional),
+                            text = "描述（可选）",
                             style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Bold, color = MiuixTheme.colorScheme.onSurface)
                         )
                         TextField(
@@ -395,7 +395,7 @@ class ThirdPartyCenterActivity : ComponentActivity() {
                         )
                         Spacer(Modifier.height(8.dp))
                         Text(
-                            text = stringResource(R.string.resource_script),
+                            text = "脚本内容（将在 bash -c 中执行）",
                             style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Bold, color = MiuixTheme.colorScheme.onSurface)
                         )
                         TextField(
@@ -406,7 +406,7 @@ class ThirdPartyCenterActivity : ComponentActivity() {
                         )
                         Spacer(Modifier.height(8.dp))
                         Text(
-                            text = stringResource(R.string.resource_reference_link),
+                            text = "参考链接（可选）",
                             style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Bold, color = MiuixTheme.colorScheme.onSurface)
                         )
                         TextField(
@@ -416,7 +416,7 @@ class ThirdPartyCenterActivity : ComponentActivity() {
                         )
                         Spacer(Modifier.height(12.dp))
                         Text(
-                            text = stringResource(R.string.advanced_options),
+                            text = "高级选项",
                             style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Bold, color = MiuixTheme.colorScheme.onSurface)
                         )
                         Spacer(Modifier.height(4.dp))
@@ -425,7 +425,7 @@ class ThirdPartyCenterActivity : ComponentActivity() {
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = stringResource(R.string.option_need_container),
+                                text = "需要 Linux 容器",
                                 style = TextStyle(fontSize = 13.sp, color = MiuixTheme.colorScheme.onSurface),
                                 modifier = Modifier.weight(1f)
                             )
@@ -436,7 +436,7 @@ class ThirdPartyCenterActivity : ComponentActivity() {
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = stringResource(R.string.option_copy_to_clipboard),
+                                text = "复制到剪贴板（不执行）",
                                 style = TextStyle(fontSize = 13.sp, color = MiuixTheme.colorScheme.onSurface),
                                 modifier = Modifier.weight(1f)
                             )
@@ -448,7 +448,7 @@ class ThirdPartyCenterActivity : ComponentActivity() {
                             horizontalArrangement = Arrangement.End
                         ) {
                             TextButton(
-                                text = stringResource(R.string.cancel),
+                                text = "取消",
                                 onClick = {
                                     showAddDialog = false
                                     editingItem = null
@@ -456,7 +456,7 @@ class ThirdPartyCenterActivity : ComponentActivity() {
                             )
                             Spacer(Modifier.width(12.dp))
                             TextButton(
-                                text = stringResource(R.string.save),
+                                text = "保存",
                                 onClick = {
                                     if (editName.isBlank()) return@TextButton
                                     val saved = ThirdPartyResource(
@@ -484,7 +484,7 @@ class ThirdPartyCenterActivity : ComponentActivity() {
                     OverlayDialog(
                         show = showDeleteConfirm != null,
                         onDismissRequest = { showDeleteConfirm = null },
-                        title = stringResource(R.string.delete_resource),
+                        title = "删除资源",
                         summary = showDeleteConfirm?.name?.let { stringResource(R.string.delete_resource_confirm, it) } ?: ""
                     ) {
                         Row(
@@ -492,12 +492,12 @@ class ThirdPartyCenterActivity : ComponentActivity() {
                             horizontalArrangement = Arrangement.End
                         ) {
                             TextButton(
-                                text = stringResource(R.string.cancel),
+                                text = "取消",
                                 onClick = { showDeleteConfirm = null }
                             )
                             Spacer(Modifier.width(12.dp))
                             TextButton(
-                                text = stringResource(R.string.delete),
+                                text = "删除",
                                 onClick = {
                                     showDeleteConfirm?.let { remove(it.id) }
                                     showDeleteConfirm = null
@@ -534,16 +534,16 @@ class ThirdPartyCenterActivity : ComponentActivity() {
             return listOf(
                 ThirdPartyResource(
                     id = "preset_moe",
-                    name = context.getString(R.string.resource_moe),
-                    description = context.getString(R.string.resource_moe_desc),
+                    name = "TMOE Linux Manager",
+                    description = "TMOE Linux 管理器，一键配置 chroot/PRoot 容器、安装各种 Linux 发行版",
                     script = "awk -f <(curl -L gitee.com/mo2/linux/raw/2/2.awk)",
                     url = "https://github.trss.me/Install/TMOE.html",
                     type = "moe_awk"
                 ),
                 ThirdPartyResource(
                     id = "preset_lightpanel",
-                    name = context.getString(R.string.resource_lightpanel),
-                    description = context.getString(R.string.resource_lightpanel_desc),
+                    name = "朱雀面板",
+                    description = "一款专为轻量 Linux 设备设计的极致轻量服务器管理面板，单二进制、零依赖、无 Docker，支持应用商店、进程守护、日志管理、系统监控等功能，完美适配 OpenWrt、Termux、ARM 设备等所有 Linux 环境",
                     script = "install_lightpanel",
                     url = "https://github.com/MyUI0/lightpanel",
                     needsContainerCheck = true,
@@ -552,8 +552,8 @@ class ThirdPartyCenterActivity : ComponentActivity() {
                 ),
                 ThirdPartyResource(
                     id = "preset_minecraft",
-                    name = context.getString(R.string.resource_minecraft_server),
-                    description = context.getString(R.string.resource_minecraft_server_desc),
+                    name = "Minecraft 服务器",
+                    description = "搭建 Minecraft Bedrock 服务器",
                     script = "curl -sSL https://raw.githubusercontent.com/TheRemote/MinecraftBedrockServer/master/SetupMinecraft.sh | bash",
                     url = "https://github.com/TheRemote/MinecraftBedrockServer",
                     needsContainerCheck = true,
@@ -561,8 +561,8 @@ class ThirdPartyCenterActivity : ComponentActivity() {
                 ),
                 ThirdPartyResource(
                     id = "preset_lamp",
-                    name = context.getString(R.string.resource_linux_server),
-                    description = context.getString(R.string.resource_linux_server_desc),
+                    name = "Linux 服务器",
+                    description = "安装 LAMP 环境",
                     script = "curl -sSL https://raw.githubusercontent.com/teddysun/lamp/master/lamp.sh | bash",
                     url = "https://github.com/teddysun/lamp",
                     needsContainerCheck = true,
@@ -570,8 +570,8 @@ class ThirdPartyCenterActivity : ComponentActivity() {
                 ),
                 ThirdPartyResource(
                     id = "preset_nginx",
-                    name = context.getString(R.string.resource_web_server),
-                    description = context.getString(R.string.resource_web_server_desc),
+                    name = "Web 服务器",
+                    description = "配置 Nginx 服务器",
                     script = "curl -sSL https://raw.githubusercontent.com/angristan/nginx-autoinstall/master/nginx-autoinstall.sh | bash",
                     url = "https://nginx.org/",
                     needsContainerCheck = true,
@@ -579,15 +579,15 @@ class ThirdPartyCenterActivity : ComponentActivity() {
                 ),
                 ThirdPartyResource(
                     id = "preset_nodejs",
-                    name = context.getString(R.string.resource_node_js),
-                    description = context.getString(R.string.resource_node_js_desc),
+                    name = "Node.js",
+                    description = "安装 Node.js 和 npm",
                     script = "https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh",
                     url = "https://nodejs.org/"
                 ),
                 ThirdPartyResource(
                     id = "preset_python",
-                    name = context.getString(R.string.resource_python_env),
-                    description = context.getString(R.string.resource_python_env_desc),
+                    name = "Python 环境",
+                    description = "配置 Python 与 Poetry",
                     script = "pkg install python -y",
                     url = "https://www.python.org/",
                     type = "python_pkg"
@@ -756,7 +756,7 @@ private fun ThirdPartyResourceCard(
                                 )
                                 Spacer(Modifier.height(2.dp))
                                 Text(
-                                    text = stringResource(R.string.view_reference),
+                                    text = "说明",
                                     color = onSurfaceColor,
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold,
@@ -783,7 +783,7 @@ private fun ThirdPartyResourceCard(
                             )
                             Spacer(Modifier.height(2.dp))
                             Text(
-                                text = stringResource(R.string.edit),
+                                text = "编辑",
                                 color = onSurfaceColor,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold,
@@ -809,7 +809,7 @@ private fun ThirdPartyResourceCard(
                             )
                             Spacer(Modifier.height(2.dp))
                             Text(
-                                text = stringResource(R.string.delete),
+                                text = "删除",
                                 color = onSurfaceColor,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold,
@@ -835,7 +835,7 @@ private fun ThirdPartyResourceCard(
                                 )
                                 Spacer(Modifier.height(2.dp))
                                 Text(
-                                    text = stringResource(R.string.copy_resource),
+                                    text = "复制",
                                     color = Color.White,
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold,
@@ -844,7 +844,7 @@ private fun ThirdPartyResourceCard(
                             }
                         }
                     } else {
-                        val buttonText = if (isExpanded) stringResource(R.string.collapse) else stringResource(R.string.execute)
+                        val buttonText = if (isExpanded) "收起" else "执行"
                         Button(
                             onClick = onToggleExpand,
                             colors = ButtonDefaults.buttonColorsPrimary()
@@ -884,7 +884,7 @@ private fun ThirdPartyResourceCard(
                         .padding(12.dp)
                 ) {
                     Text(
-                        text = stringResource(R.string.select_execution_method),
+                        text = "选择执行方式",
                         style = TextStyle(
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Bold,
@@ -906,7 +906,7 @@ private fun ThirdPartyResourceCard(
                         )
                         Spacer(Modifier.width(4.dp))
                         Text(
-                            text = stringResource(R.string.execute_in_new_session),
+                            text = "在新会话执行",
                             color = Color.White,
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Bold
@@ -925,7 +925,7 @@ private fun ThirdPartyResourceCard(
                         )
                         Spacer(Modifier.width(4.dp))
                         Text(
-                            text = stringResource(R.string.execute_in_tmux),
+                            text = "在 tmux 执行",
                             color = onSurfaceColor,
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Bold
@@ -934,7 +934,7 @@ private fun ThirdPartyResourceCard(
 
                     if (hasRunningSessions) {
                         Text(
-                            text = stringResource(R.string.execute_in_running_session),
+                            text = "在运行的会话内执行：",
                             style = TextStyle(
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold,

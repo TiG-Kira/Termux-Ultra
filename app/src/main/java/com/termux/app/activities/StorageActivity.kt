@@ -236,8 +236,8 @@ private fun scanTermuxStorage(context: android.content.Context): List<CategorySt
     addToCategory(StorageCategory.OTHER, cacheSize)
     if (appCacheDir.exists() && cacheSize > 0) {
         addToCategory(StorageCategory.OTHER, cacheSize, CleanableItem(
-            name = context.getString(R.string.storage_clean_cache),
-            description = context.getString(R.string.storage_clean_cache_desc),
+            name = "缓存文件",
+            description = "应用缓存数据",
             sizeBytes = cacheSize,
             path = appCacheDir.absolutePath,
             type = CleanableType.CACHE
@@ -249,8 +249,8 @@ private fun scanTermuxStorage(context: android.content.Context): List<CategorySt
     if (tempDir.exists()) {
         val tempSize = getDirSize(tempDir)
         addToCategory(StorageCategory.OTHER, tempSize, CleanableItem(
-            name = context.getString(R.string.storage_clean_temp),
-            description = context.getString(R.string.storage_clean_temp_desc),
+            name = "临时文件",
+            description = "临时下载和处理文件",
             sizeBytes = tempSize,
             path = tempDir.absolutePath,
             type = CleanableType.TEMP
@@ -262,8 +262,8 @@ private fun scanTermuxStorage(context: android.content.Context): List<CategorySt
     if (logDir.exists()) {
         val logSize = getDirSize(logDir)
         addToCategory(StorageCategory.OTHER, logSize, CleanableItem(
-            name = context.getString(R.string.storage_clean_logs),
-            description = context.getString(R.string.storage_clean_logs_desc),
+            name = "日志文件",
+            description = "运行日志和崩溃报告",
             sizeBytes = logSize,
             path = logDir.absolutePath,
             type = CleanableType.LOGS
@@ -275,8 +275,8 @@ private fun scanTermuxStorage(context: android.content.Context): List<CategorySt
     if (backupDir.exists()) {
         val backupSize = getDirSize(backupDir)
         addToCategory(StorageCategory.OTHER, backupSize, CleanableItem(
-            name = context.getString(R.string.storage_clean_backup),
-            description = context.getString(R.string.storage_clean_backup_desc),
+            name = "旧备份文件",
+            description = "过期的 Termux 备份文件",
             sizeBytes = backupSize,
             path = backupDir.absolutePath,
             type = CleanableType.BACKUP
@@ -288,8 +288,8 @@ private fun scanTermuxStorage(context: android.content.Context): List<CategorySt
     if (thumbDir.exists()) {
         val thumbSize = getDirSize(thumbDir)
         addToCategory(StorageCategory.OTHER, thumbSize, CleanableItem(
-            name = context.getString(R.string.storage_clean_thumbnails),
-            description = context.getString(R.string.storage_clean_thumbnails_desc),
+            name = "缩略图缓存",
+            description = "文件管理器生成的缩略图",
             sizeBytes = thumbSize,
             path = thumbDir.absolutePath,
             type = CleanableType.THUMBNAIL
@@ -427,7 +427,7 @@ fun StorageScreen(onBack: () -> Unit) {
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
-                title = context.getString(R.string.storage_title),
+                title = "存储",
                 scrollBehavior = scrollBehavior,
                 navigationIcon = {
                     Box(
@@ -439,7 +439,7 @@ fun StorageScreen(onBack: () -> Unit) {
                     ) {
                         Icon(
                             imageVector = MiuixIcons.Back,
-                            contentDescription = context.getString(R.string.back),
+                            contentDescription = "返回",
                             tint = MiuixTheme.colorScheme.onSurface,
                             modifier = Modifier.size(24.dp)
                         )
@@ -472,12 +472,12 @@ fun StorageScreen(onBack: () -> Unit) {
                         ) {
                             Column {
                                 Text(
-                                    text = context.getString(R.string.storage_total_usage),
+                                    text = "总占用",
                                     fontSize = 14.sp,
                                     color = MiuixTheme.colorScheme.onSurfaceVariantSummary
                                 )
                                 Text(
-                                    text = if (isScanning) context.getString(R.string.storage_scanning)
+                                    text = if (isScanning) "正在扫描存储..."
                                     else formatSize(context, accurateUsedBytes),
                                     fontSize = 28.sp,
                                     fontWeight = FontWeight.Bold,
@@ -487,7 +487,7 @@ fun StorageScreen(onBack: () -> Unit) {
                             }
                             Column(horizontalAlignment = Alignment.End) {
                                 Text(
-                                    text = context.getString(R.string.storage_total_space),
+                                    text = "设备存储",
                                     fontSize = 12.sp,
                                     color = MiuixTheme.colorScheme.onSurfaceVariantSummary
                                 )
@@ -499,7 +499,7 @@ fun StorageScreen(onBack: () -> Unit) {
                                     modifier = Modifier.padding(top = 2.dp)
                                 )
                                 Text(
-                                    text = context.getString(R.string.storage_free_space) + " " +
+                                    text = "可用空间" + " " +
                                             formatSize(context, freeBytes.coerceAtLeast(0)),
                                     fontSize = 12.sp,
                                     color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
@@ -526,7 +526,7 @@ fun StorageScreen(onBack: () -> Unit) {
                                 color = MiuixTheme.colorScheme.onSurfaceVariantSummary
                             )
                             Text(
-                                text = context.getString(R.string.storage_category_estimate_note),
+                                text = "分类占用按文件逻辑大小估算，可能与系统统计存在差异",
                                 fontSize = 11.sp,
                                 color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
                                 modifier = Modifier.padding(top = 8.dp)
@@ -548,7 +548,7 @@ fun StorageScreen(onBack: () -> Unit) {
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = context.getString(R.string.storage_scanning),
+                            text = "正在扫描存储...",
                             fontSize = 14.sp,
                             color = MiuixTheme.colorScheme.onSurfaceVariantSummary
                         )
@@ -688,7 +688,7 @@ fun StorageScreen(onBack: () -> Unit) {
                                     modifier = Modifier.fillMaxWidth()
                                 ) {
                                     Text(
-                                        text = context.getString(R.string.storage_one_click_clean),
+                                        text = "一键清理",
                                         fontSize = 14.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = Color.White
@@ -711,7 +711,7 @@ fun StorageScreen(onBack: () -> Unit) {
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
-                                    text = context.getString(R.string.storage_no_cleanable),
+                                    text = "暂无清理内容",
                                     fontSize = 14.sp,
                                     color = MiuixTheme.colorScheme.onSurfaceVariantSummary
                                 )
@@ -724,7 +724,7 @@ fun StorageScreen(onBack: () -> Unit) {
         // 清理确认对话框
         val cleaningItems = allCleanableItems.filter { it.path in selectedCleanablePaths }
         OverlayDialog(
-            title = context.getString(R.string.storage_clean_confirm_title),
+            title = "确认清理",
             summary = context.getString(
                 R.string.storage_clean_confirm_summary,
                 cleaningItems.size,
@@ -739,7 +739,7 @@ fun StorageScreen(onBack: () -> Unit) {
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text(
-                            text = context.getString(R.string.storage_clean_confirm),
+                            text = "确认清理",
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color.White
@@ -747,7 +747,7 @@ fun StorageScreen(onBack: () -> Unit) {
                     }
                     Spacer(modifier = Modifier.height(8.dp))
                     TextButton(
-                        text = context.getString(R.string.storage_clean_cancel),
+                        text = "取消",
                         onClick = { showCleanConfirm = false },
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -767,7 +767,7 @@ fun StorageScreen(onBack: () -> Unit) {
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
-                        text = context.getString(R.string.ok),
+                        text = "确定",
                         fontWeight = FontWeight.Bold,
                         color = Color.White
                     )
@@ -809,7 +809,7 @@ fun StorageScreen(onBack: () -> Unit) {
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
-                title = context.getString(R.string.storage_local_model_detail_title),
+                title = "本地大模型",
                 scrollBehavior = scrollBehavior,
                 navigationIcon = {
                     Box(
@@ -821,7 +821,7 @@ fun StorageScreen(onBack: () -> Unit) {
                     ) {
                         Icon(
                             imageVector = MiuixIcons.Back,
-                            contentDescription = context.getString(R.string.back),
+                            contentDescription = "返回",
                             tint = MiuixTheme.colorScheme.onSurface,
                             modifier = Modifier.size(24.dp)
                         )
@@ -837,23 +837,23 @@ fun StorageScreen(onBack: () -> Unit) {
         ) {
             itemDetailCard(
                 icon = R.drawable.ic_computer,
-                title = context.getString(R.string.storage_local_model_name),
-                summary = selected?.displayName ?: context.getString(R.string.storage_local_model_not_installed)
+                title = "模型",
+                summary = selected?.displayName ?: "尚未下载本地大模型"
             )
             itemDetailCard(
                 icon = R.drawable.ic_storage,
-                title = context.getString(R.string.storage_local_model_occupancy),
-                summary = if (installed) formatSize(context, size) else context.getString(R.string.storage_local_model_not_installed)
+                title = "占用空间",
+                summary = if (installed) formatSize(context, size) else "尚未下载本地大模型"
             )
             itemDetailCard(
                 icon = R.drawable.ic_folder,
-                title = context.getString(R.string.storage_local_model_location),
+                title = "存放路径",
                 summary = path
             )
             if (dateText.isNotBlank()) {
                 itemDetailCard(
                     icon = R.drawable.ic_download,
-                    title = context.getString(R.string.storage_local_model_downloaded_at),
+                    title = "下载时间",
                     summary = dateText
                 )
             }
@@ -871,7 +871,7 @@ fun StorageScreen(onBack: () -> Unit) {
                     )
                 ) {
                     Text(
-                        text = context.getString(R.string.storage_local_model_delete),
+                        text = "删除本地大模型",
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color(0xFFD32F2F)
@@ -881,8 +881,8 @@ fun StorageScreen(onBack: () -> Unit) {
         }
 
         OverlayDialog(
-            title = context.getString(R.string.storage_local_model_delete),
-            summary = context.getString(R.string.storage_local_model_delete_confirm_summary),
+            title = "删除本地大模型",
+            summary = "将删除已下载的本地大模型文件，并重置 Termux Agent 到未配置状态。确定要删除吗？",
             show = showDeleteConfirm,
             onDismissRequest = { showDeleteConfirm = false },
             content = {
@@ -901,7 +901,7 @@ fun StorageScreen(onBack: () -> Unit) {
                         )
                     ) {
                         Text(
-                            text = context.getString(R.string.storage_local_model_delete),
+                            text = "删除本地大模型",
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color(0xFFD32F2F)
@@ -909,7 +909,7 @@ fun StorageScreen(onBack: () -> Unit) {
                     }
                     Spacer(Modifier.height(8.dp))
                     TextButton(
-                        text = context.getString(R.string.storage_clean_cancel),
+                        text = "取消",
                         onClick = { showDeleteConfirm = false },
                         modifier = Modifier.fillMaxWidth()
                     )

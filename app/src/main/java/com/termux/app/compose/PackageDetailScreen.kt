@@ -46,6 +46,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.res.stringResource
 import kotlinx.coroutines.launch
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
@@ -206,7 +207,7 @@ fun PackageDetailScreen(
                     ) {
                         Icon(
                             imageVector = MiuixIcons.Back,
-                            contentDescription = "返回",
+                            contentDescription = stringResource(R.string.back),
                             tint = colorScheme.onSurface,
                             modifier = Modifier.size(24.dp)
                         )
@@ -258,7 +259,7 @@ fun PackageDetailScreen(
                     if (d.description.isNotBlank()) {
                         item {
                             SmallTitle(
-                                text = "描述",
+                                text = stringResource(R.string.plugin_description),
                                 modifier = Modifier.padding(top = 6.dp)
                             )
                             Card(
@@ -285,7 +286,7 @@ fun PackageDetailScreen(
                     if (infoRows.isNotEmpty()) {
                         item {
                             SmallTitle(
-                                text = "信息",
+                                text = stringResource(R.string.log_level_info),
                                 modifier = Modifier.padding(top = 6.dp)
                             )
                             Card(
@@ -447,7 +448,7 @@ fun PackageDetailScreen(
                                 color = AccentBlue
                             )
                         ) {
-                            Text("安装", fontSize = 15.sp, fontWeight = FontWeight.Medium, color = Color.White)
+                            Text(stringResource(R.string.action_styling_install), fontSize = 15.sp, fontWeight = FontWeight.Medium, color = Color.White)
                         }
                     }
                 }
@@ -464,7 +465,7 @@ fun PackageDetailScreen(
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         TextButton(
-                            text = "取消",
+                            text = stringResource(R.string.cancel),
                             onClick = { showUninstallConfirm = false },
                             modifier = Modifier.weight(1f)
                         )
@@ -484,7 +485,7 @@ fun PackageDetailScreen(
 
             OverlayDialog(
                 show = showLockDialog,
-                title = "包管理器被占用",
+                title = stringResource(R.string.pkg_manager_busy),
                 summary = "检测到 Termux 的 apt/dpkg 正在被其他进程占用。\n\n强行解除锁可能导致：\n• 正在进行的安装/升级进程被中断\n• 数据库状态不一致\n• 已下载的包文件残留\n\n建议：先关闭其他正在运行的 Termux 会话，然后再试。",
                 onDismissRequest = {
                     showLockDialog = false
@@ -496,7 +497,7 @@ fun PackageDetailScreen(
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         TextButton(
-                            text = "取消",
+                            text = stringResource(R.string.cancel),
                             onClick = { showLockDialog = false; pendingAction = null },
                             modifier = Modifier.weight(1f)
                         )
@@ -539,7 +540,7 @@ fun PackageDetailScreen(
                                 CircularProgressIndicator(modifier = Modifier.size(24.dp), color = AccentBlue, strokeWidth = 3.dp)
                                 Spacer(Modifier.width(12.dp))
                                 Text(
-                                    text = "处理中...",
+                                    text = stringResource(R.string.common_processing),
                                     fontSize = 14.sp,
                                     color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.7f)
                                 )
@@ -598,7 +599,7 @@ fun PackageDetailScreen(
                         if (progressSuccess != null) {
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 TextButton(
-                                    text = "关闭",
+                                    text = stringResource(R.string.low_android_force_disable_confirm),
                                     onClick = { dismissProgress() },
                                     modifier = Modifier.weight(1f)
                                 )

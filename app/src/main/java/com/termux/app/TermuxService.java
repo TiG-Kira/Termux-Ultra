@@ -941,6 +941,46 @@ public final class TermuxService extends Service implements TermuxTask.TermuxTas
 
         mTermuxSessions.add(newTermuxSession);
 
+        // ===== 新会话自动执行命令（经典引擎）=====
+        try {
+            android.content.SharedPreferences prefs = getSharedPreferences("termux_preferences", MODE_PRIVATE);
+            String autoCmd = prefs.getString("auto_start_command", "");
+            Logger.logDebug(LOG_TAG, "[AutoStart] 读取到 auto_start_command: '" + autoCmd + "' (长度=" + (autoCmd == null ? 0 : autoCmd.length()) + ")");
+            if (autoCmd != null && !autoCmd.isEmpty()) {
+                String finalCmd = autoCmd.endsWith("\n") ? autoCmd : autoCmd + "\n";
+                Logger.logDebug(LOG_TAG, "[AutoStart] 等待 shell 就绪后写入: '" + autoCmd + "'");
+                Runnable autoStartTask = new Runnable() {
+                    int retries = 0;
+                    @Override
+                    public void run() {
+                        try {
+                            TerminalSession ts = newTermuxSession.getTerminalSession();
+                            if (ts == null) {
+                                Logger.logError(LOG_TAG, "[AutoStart] TerminalSession 为 null！");
+                                return;
+                            }
+                            int shellPid = ts.getShellPid();
+                            Logger.logDebug(LOG_TAG, "[AutoStart] 轮询 shellPid=" + shellPid + " (第" + (retries + 1) + "次)");
+                            if (shellPid > 0) {
+                                ts.write(finalCmd.getBytes(), 0, finalCmd.length());
+                                Logger.logDebug(LOG_TAG, "[AutoStart] 已写入 " + finalCmd.length() + " bytes");
+                            } else if (retries < 30) {
+                                retries++;
+                                new Handler(Looper.getMainLooper()).postDelayed(this, 200);
+                            } else {
+                                Logger.logError(LOG_TAG, "[AutoStart] 超时（30次重试），shellPid 仍为 0，放弃自动执行");
+                            }
+                        } catch (Exception e) {
+                            Logger.logError(LOG_TAG, "[AutoStart] 写入失败: " + e.getMessage());
+                        }
+                    }
+                };
+                new Handler(Looper.getMainLooper()).postDelayed(autoStartTask, 300);
+            }
+        } catch (Exception e) {
+            Logger.logError(LOG_TAG, "[AutoStart] 异常: " + e.getMessage());
+        }
+
         // Remove the execution command from the pending plugin execution commands list since it has
         // now been processed
         if (executionCommand.isPluginExecutionCommand)
@@ -1318,7 +1358,7 @@ public synchronized int removeTermuxSession(TerminalSession sessionToRemove) {
 
         // 停止按钮
         Intent stopIntent = new Intent(this, TermuxService.class).setAction(ACTION_STOP_AGENT);
-        builder.addAction(android.R.drawable.ic_media_pause, "停止",
+        builder.addAction(android.R.drawable.ic_media_pause, getString(R.string.common_stop),
             PendingIntent.getService(this, 1001, stopIntent, PendingIntent.FLAG_UPDATE_CURRENT | piFlags));
 
         if (Build.VERSION.SDK_INT >= 36) {

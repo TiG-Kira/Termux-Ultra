@@ -72,6 +72,7 @@ import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.ui.res.stringResource
 import top.yukonga.miuix.kmp.window.WindowDialog
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
@@ -100,7 +101,7 @@ fun AiLocalTrainerScreen(
             contentWindowInsets = WindowInsets(0, 0, 0, 0),
             topBar = {
                 TopAppBar(
-                    title = "训练本地模型",
+                    title = stringResource(R.string.train_local_model),
                     scrollBehavior = scrollBehavior,
                     navigationIcon = {
                         Box(
@@ -109,7 +110,7 @@ fun AiLocalTrainerScreen(
                         ) {
                             Icon(
                                 imageVector = MiuixIcons.Back,
-                                contentDescription = "返回",
+                                contentDescription = stringResource(R.string.back),
                                 modifier = Modifier.size(24.dp),
                                 tint = MiuixTheme.colorScheme.onSurface
                             )
@@ -767,7 +768,7 @@ private fun TeacherChatTab(ctx: Context, onlineReady: MutableState<Boolean>, ref
                 },
                 modifier = Modifier.height(44.dp)
             ) {
-                Text("发送")
+                Text(stringResource(R.string.vnc_send_button))
             }
         }
 
@@ -860,7 +861,7 @@ private fun LessonsTab(ctx: Context, refreshKey: Int) {
                                 }
                                 Spacer(Modifier.weight(1f))
                                 TextButton(
-                                    text = "编辑",
+                                    text = stringResource(R.string.action_file_received_edit),
                                     onClick = {
                                         editingLesson = lesson
                                         editingText = lesson.content
@@ -868,7 +869,7 @@ private fun LessonsTab(ctx: Context, refreshKey: Int) {
                                 )
                                 Spacer(Modifier.width(4.dp))
                                 TextButton(
-                                    text = "删除",
+                                    text = stringResource(R.string.delete),
                                     onClick = {
                                         AiTermuxPrefs.deleteLesson(ctx, lesson.id)
                                         refresh()
@@ -906,7 +907,7 @@ private fun LessonsTab(ctx: Context, refreshKey: Int) {
                         horizontalArrangement = Arrangement.End
                     ) {
                         TextButton(
-                            text = "取消",
+                            text = stringResource(R.string.cancel),
                             onClick = { editingLesson = null },
                             modifier = Modifier.height(40.dp)
                         )
@@ -920,7 +921,7 @@ private fun LessonsTab(ctx: Context, refreshKey: Int) {
                             },
                             modifier = Modifier.height(40.dp)
                         ) {
-                            Text("保存")
+                            Text(stringResource(R.string.save))
                         }
                     }
                 }

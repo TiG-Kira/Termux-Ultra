@@ -1578,7 +1578,7 @@ fun TerminalDetailScreen(
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 top.yukonga.miuix.kmp.basic.TextButton(
-                                    text = "关闭",
+                                    text = stringResource(R.string.low_android_force_disable_confirm),
                                     onClick = { showRootStatusDialog = false },
                                     modifier = Modifier.weight(1f)
                                 )

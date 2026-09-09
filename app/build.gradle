@@ -26,7 +26,7 @@ android {
         minSdkVersion project.properties.minSdkVersion.toInteger()
         targetSdkVersion project.properties.targetSdkVersion.toInteger()
         versionCode 1096
-        versionName "1.6.3.R3"
+        versionName "1.6.4.R3"
 
         // Termux 核心版本号（基于的上游 Termux 版本）
         // 注意：termux_core_version 字符串已在 strings.xml 中定义

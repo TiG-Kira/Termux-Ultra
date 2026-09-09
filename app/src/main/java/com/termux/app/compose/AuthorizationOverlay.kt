@@ -42,7 +42,7 @@ fun AuthorizationMask() {
         modifier = Modifier.fillMaxSize(),
         containerColor = MiuixTheme.colorScheme.surface,
         topBar = {
-            TopAppBar(title = stringResource(R.string.authorization_title))
+            TopAppBar(title = "授权")
         }
     ) { padding ->
         Column(
@@ -51,7 +51,7 @@ fun AuthorizationMask() {
                 .padding(padding)
         ) {
             Text(
-                text = stringResource(R.string.authorization_subtitle),
+                text = "敏感操作需要得到你的授权来继续",
                 fontSize = 14.sp,
                 color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                 modifier = Modifier
@@ -80,7 +80,7 @@ fun DisableWarningMask() {
         modifier = Modifier.fillMaxSize(),
         containerColor = MiuixTheme.colorScheme.surface,
         topBar = {
-            TopAppBar(title = stringResource(R.string.authorization_title))
+            TopAppBar(title = "授权")
         }
     ) { padding ->
         Column(
@@ -89,7 +89,7 @@ fun DisableWarningMask() {
                 .padding(padding)
         ) {
             Text(
-                text = stringResource(R.string.authorization_subtitle),
+                text = "敏感操作需要得到你的授权来继续",
                 fontSize = 14.sp,
                 color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                 modifier = Modifier
@@ -102,7 +102,7 @@ fun DisableWarningMask() {
                 onDismissRequest = {
                     RiskConfirmManager.hideDisableWarning()
                 },
-                title = stringResource(R.string.risk_command_disable_title),
+                title = "调整增强防护模式？",
                 summary = stringResource(summaryRes),
                 content = {
                     Column(
@@ -133,7 +133,7 @@ fun DisableWarningMask() {
                                 )
                             ) {
                                 Text(
-                                    text = stringResource(R.string.cancel),
+                                    text = "取消",
                                     color = MiuixTheme.colorScheme.onSurface,
                                     fontSize = 15.sp,
                                     fontWeight = FontWeight.Medium
@@ -162,7 +162,7 @@ fun DisableWarningMask() {
                                 )
                             ) {
                                 Text(
-                                    text = stringResource(R.string.risk_command_disable_confirm),
+                                    text = "确认调整",
                                     color = Color.White,
                                     fontSize = 15.sp,
                                     fontWeight = FontWeight.Medium
@@ -193,8 +193,8 @@ private fun launchDisableBiometricAuth(
         return
     }
 
-    val title = activity.getString(R.string.risk_command_biometric_prompt)
-    val subtitle = activity.getString(R.string.risk_command_disable_confirm)
+    val title = "请验证您的身份以继续"
+    val subtitle = "确认调整"
 
     activity.startClass2BiometricOrCredentialAuthentication(
         title = title,

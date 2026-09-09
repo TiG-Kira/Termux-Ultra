@@ -19,6 +19,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.res.stringResource
 import com.termux.R
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -279,6 +280,30 @@ fun TermuxInternalFilePicker(
                             }
                         }
                         item { Spacer(Modifier.height(16.dp)) }
+                    }
+                }
+
+                // 选当前目录确认按钮
+                if (allowFolders) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            androidx.compose.material3.Text(
+                                text = "当前: ${toDisplayPath(currentDir)}",
+                                fontSize = 11.sp,
+                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                maxLines = 1
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        TextButton(
+                            text = "确认此目录",
+                            onClick = { onFileSelected(toSavedPath(currentDir)) }
+                        )
                     }
                 }
             }

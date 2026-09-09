@@ -2,6 +2,7 @@ package com.termux.app.compose
 
 import android.content.Context
 import android.os.Build
+import androidx.compose.ui.res.stringResource
 
 /**
  * API 兼容性中心：集中管理各功能所需的最低 Android API 等级，以及运行时异常触发的屏蔽状态。

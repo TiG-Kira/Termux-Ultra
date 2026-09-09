@@ -220,7 +220,7 @@ fun LogViewerScreen(
                             ) {
                                 Icon(
                                     painter = painterResource(R.drawable.ic_search),
-                                    contentDescription = "搜索",
+                                    contentDescription = stringResource(R.string.search),
                                     tint = MiuixTheme.colorScheme.onSurface,
                                     modifier = Modifier.size(20.dp)
                                 )

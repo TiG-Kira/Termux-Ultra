@@ -68,6 +68,20 @@ class ComposeSessionManager private constructor(private val context: Context) {
         session.args = args
 
         _sessions.value = _sessions.value + SessionInfo(session, sessionName)
+
+                // 设置启动后回调：注入自动执行命令
+        session.onSessionStarted = {
+            try {
+                val prefs = context.getSharedPreferences("termux_preferences", android.content.Context.MODE_PRIVATE)
+                val cmd = prefs.getString("auto_start_command", "") ?: ""
+                if (cmd.isNotBlank()) {
+                    val withNewline = if (cmd.endsWith('\n')) cmd else cmd + '\n'
+                    session.write(withNewline.toByteArray())
+                }
+            } catch (_: Throwable) {}
+        }
+
+
         if (startImmediately) {
             session.execute()
             _currentSessionId.value = session.id

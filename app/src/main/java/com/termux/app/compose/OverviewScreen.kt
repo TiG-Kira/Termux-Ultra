@@ -1029,7 +1029,7 @@ private fun TipsAgentCard(
                         Color(0xFFFF5252), Icons.Rounded.ErrorOutline, "未运行"
                     )
                     serviceStatus == ServiceStatus.NORMAL || runningSessionsCount > 0 -> Triple(
-                        Color(0xFF36D167), Icons.Rounded.CheckCircleOutline, "运行中"
+                        Color(0xFF36D167), Icons.Rounded.CheckCircleOutline, stringResource(R.string.overview_running)
                     )
                     else -> Triple(
                         Color(0xFFF59E0B), Icons.Rounded.Warning, "待启动"
@@ -1137,7 +1137,7 @@ private fun TipsAgentCard(
             // ===== 快捷入口（始终显示，不受收缩影响）=====
             Spacer(Modifier.height(12.dp))
             Text(
-                text = "快捷入口",
+                text = stringResource(R.string.quick_entry),
                 fontSize = 14.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = MiuixTheme.colorScheme.onSurface,
@@ -1179,14 +1179,14 @@ private fun TipsAgentCard(
                     iconColor = Color(0xFF0EA5E9),
                     iconBgColor = Color(0xFF0EA5E9).copy(alpha = 0.12f),
                     label = "新建文本",
-                    onClick = { onExecuteScript("新建文本", "(command -v vim >/dev/null || pkg install -y vim) && vim") }
+                     onClick = { val intent = android.content.Intent(context, com.termux.app.activities.TextEditorActivity::class.java); context.startActivity(intent) }
                 )
                 QuickEntryButton(
                     modifier = Modifier.weight(1f),
                     icon = Icons.Rounded.AutoAwesome,
                     iconColor = Color(0xFF7C3AED),
                     iconBgColor = Color(0xFF7C3AED).copy(alpha = 0.12f),
-                    label = "功能中心",
+                    label = stringResource(R.string.resources_center),
                     onClick = {
                         val intent = Intent(context, com.termux.app.activities.FeatureCenterActivity::class.java)
                         context.startActivity(intent)
@@ -1402,7 +1402,7 @@ private fun ServiceStatusOverviewTipCard(status: ServiceStatus) {
         ServiceStatus.MEMORY_WARNING -> listOf(Color(0xFFF59E0B), Color(0xFFFDD835))
     }
     val (badgeText, badgeColor) = when (status) {
-        ServiceStatus.NORMAL, ServiceStatus.WAKE_LOCK_ACTIVE -> "运行中" to Color(0xFF36D167)
+        ServiceStatus.NORMAL, ServiceStatus.WAKE_LOCK_ACTIVE -> stringResource(R.string.overview_running) to Color(0xFF36D167)
         ServiceStatus.SERVICE_STOPPED -> "已停止" to Color(0xFFFF5252)
         ServiceStatus.MEMORY_WARNING -> "需注意" to Color(0xFFF59E0B)
         ServiceStatus.MEMORY_KILL -> "内存不足" to Color(0xFFFF5252)
@@ -1463,7 +1463,7 @@ private fun LowAndroidOverviewTipCard(context: Context) {
             description = briefDescription,
             titleColor = if (isDark) Color.White else Color.Black,
             descriptionColor = if (isDark) Color.White.copy(alpha = 0.8f) else Color.Black.copy(alpha = 0.8f),
-            statusBadgeText = "强制启用",
+            statusBadgeText = stringResource(R.string.force_enable),
             statusBadgeColor = Color(0xFFFF5252),
             statusBadgeBackgroundColor = Color(0xFFFF5252).copy(alpha = 0.14f),
             actionButton = {

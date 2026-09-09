@@ -17,6 +17,7 @@ import kotlinx.coroutines.channels.Channel
 import java.io.BufferedReader
 import java.io.File
 import java.io.InputStreamReader
+import androidx.compose.ui.res.stringResource
 
 /**
  * 本地大模型支持（通过 Termux 的 llama.cpp 在设备上运行 GGUF 模型）。

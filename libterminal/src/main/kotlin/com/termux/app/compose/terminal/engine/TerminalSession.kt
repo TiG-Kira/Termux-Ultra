@@ -145,6 +145,9 @@ class TerminalSession(
         }
     }
 
+    /** 会话启动完成后的回调，可注入欢迎文本和自动执行命令。 */
+    var onSessionStarted: (() -> Unit)? = null
+
     fun execute() {
         val p = processFactory(
             emulator.mRows,
@@ -159,6 +162,12 @@ class TerminalSession(
         launchOutputWriter(p)
         launchEmulatorProcessor()
         launchExitHandler(p)
+
+        // 启动后延迟注入自定义内容（shell 初始化需要一小段时间）
+        scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            kotlinx.coroutines.delay(500)
+            onSessionStarted?.invoke()
+        }
     }
 
     private inline fun launchInputReader(p: ITerminalProcess) {
