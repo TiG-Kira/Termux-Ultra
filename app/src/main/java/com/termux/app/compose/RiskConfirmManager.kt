@@ -1,5 +1,7 @@
 package com.termux.app.compose
 
+import java.io.File
+
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
@@ -1119,6 +1121,21 @@ object RiskConfirmManager {
         detection: RiskCommandDetector.DetectionResult,
         envType: EnvironmentType
     ): Boolean {
+        // ===== Agent 增强判定：本地检测到危险后，让 Agent 给出更精准的 reason =====
+        var agentReason: String? = null
+        try {
+            if (AgentScriptJudge.isAvailable(context)) {
+                val scriptPath = extractScriptPath(command)
+                if (scriptPath != null) {
+                    val result = AgentScriptJudge.judge(context, scriptPath)
+                    if (result.agentResponded) agentReason = result.reason
+                } else {
+                    val result = AgentScriptJudge.judgeContent(context, "<terminal>", command)
+                    if (result.agentResponded) agentReason = result.reason
+                }
+            }
+        } catch (_: Exception) {}
+
         // Compose 核心会话：记录引用，确认结果返回时按 handle 恢复
         if (adapter is ComposeSessionAdapter) {
             pendingComposeSession = adapter.session
@@ -1140,7 +1157,7 @@ object RiskConfirmManager {
             startCountdown()
             _dialogState.value = DialogState(
                 command = command,
-                riskDescription = detection.description,
+                riskDescription = agentReason ?: detection.description,
                 riskType = detection.riskType?.displayName ?: "高危操作",
                 environmentType = envType,
                 isSshPowerOperation = true
@@ -1175,7 +1192,7 @@ object RiskConfirmManager {
         // 设置弹窗状态（MainActivity 中的 RiskConfirmDialogHost 会观察到并显示）
         val dialogState = DialogState(
             command = command,
-            riskDescription = detection.description,
+            riskDescription = agentReason ?: detection.description,
             riskType = detection.riskType?.displayName ?: "高危操作",
             environmentType = envType,
             isWindowsDiskCommand = detection.isWindowsDiskCommand
@@ -1315,6 +1332,26 @@ object RiskConfirmManager {
         val targetLevel = _disableWarningState.value.targetLevel
         setProtectionLevel(context, targetLevel)
         hideDisableWarning()
+    }
+/**
+     * 从 shell 命令里提取脚本文件路径。
+     * 识别: bash xxx.sh, sh -c xxx, source xxx, . xxx, 直接执行 .sh 文件 等
+     */
+    private fun extractScriptPath(command: String): String? {
+        val trimmed = command.trim()
+        val patterns = listOf(
+            Regex("""(?:bash|sh|zsh|fish|dash)\s+(?:-c\s+)?['"]?(\S+\.(?:sh|bash|zsh|py|pl|rb|js|php))['"]?"""),
+            Regex("""(?:source|\.)\s+['"]?(\S+)['"]?"""),
+            Regex("""['"]?(/(?:data|sdcard|storage|mnt|home|root|tmp|var|opt|usr)/\S+\.(?:sh|bash|zsh|py|pl|rb|js|php))['"]?""")
+        )
+        for (p in patterns) {
+            val m = p.find(trimmed)
+            if (m != null) {
+                val path = m.groupValues[1]
+                if (java.io.File(path).exists()) return path
+            }
+        }
+        return null
     }
 }
 
@@ -1667,8 +1704,8 @@ private fun hasBiometricAuthentication(activity: ComponentActivity): Boolean {
         BiometricManager.Authenticators.BIOMETRIC_WEAK or BiometricManager.Authenticators.DEVICE_CREDENTIAL
     )
     return canAuthenticate == BiometricManager.BIOMETRIC_SUCCESS
-}
 
+}
 /**
  * 启动生物识别验证。
  * 如果设备未设置任何生物验证或屏幕锁，则跳过验证并提示用户。

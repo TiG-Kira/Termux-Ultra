@@ -65,6 +65,7 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
 import com.termux.R
 import com.termux.app.LocaleHelper
 import com.termux.app.compose.AiTermuxPrefs
+import com.termux.app.compose.AiLocalModel
 import com.termux.app.compose.AiTermuxConfig
 import com.termux.app.compose.SkillType
 import com.termux.app.utils.SnackbarHelper
@@ -1254,6 +1255,39 @@ fun SettingsScreen(
                             enabled = detectionEnabled,
                             startAction = {
                                 SettingIcon(R.drawable.ic_detection, contentDescription = context.getString(R.string.detection_mode_title))
+                            }
+                        )
+                        val agentJudgeEnabled = protectionLevel != RiskConfirmManager.ProtectionLevel.OFF
+                        val hasAgentCfg = remember {
+                            val cfg = AiTermuxPrefs.getConfig(context).providerConfig
+                            val hasApi = cfg.apiKey?.isNotBlank() == true || cfg.provider == "local"
+                            val localReady = cfg.provider != "local" || AiLocalModel.isLocalModelReady()
+                            hasApi && localReady
+                        }
+                        var agentScriptJudge by remember {
+                            mutableStateOf(
+                                context.getSharedPreferences("termux_preferences", android.content.Context.MODE_PRIVATE)
+                                    .getBoolean("agent_script_judge", false)
+                            )
+                        }
+                        SwitchPreference(
+                            title = "脚本运行前 Agent 参与判定",
+                            summary = when {
+                                !agentJudgeEnabled -> "需开启增强防护后可用"
+                                !hasAgentCfg -> "需先在 Termux Agent 中配置模型"
+                                agentScriptJudge -> "已启用：执行脚本时 Agent 先判定，超时退回本地检测"
+                                else -> "关闭"
+                            },
+                            checked = agentScriptJudge && agentJudgeEnabled && hasAgentCfg,
+                            onCheckedChange = {
+                                val newValue = it && agentJudgeEnabled && hasAgentCfg
+                                agentScriptJudge = newValue
+                                context.getSharedPreferences("termux_preferences", android.content.Context.MODE_PRIVATE)
+                                    .edit().putBoolean("agent_script_judge", newValue).apply()
+                            },
+                            enabled = agentJudgeEnabled && hasAgentCfg,
+                            startAction = {
+                                SettingIcon(R.drawable.ic_ai_agent, contentDescription = "Agent 脚本判定")
                             }
                         )
                     }

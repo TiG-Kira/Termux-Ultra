@@ -63,11 +63,12 @@ object RiskCommandDetector {
         ),
         // su/sudo 在 Termux 原生环境（容器和虚拟机内正常使用不拦截）
         RiskPattern(
-            Pattern.compile("""^\s*(?:su|sudo)\b"""),
+            Pattern.compile("""(?:^|[;|&])\s*(?:su|sudo)\b"""),
             RiskType.SU_SUDO,
             "检测到 su/sudo 提权命令，在 Termux 原生环境下可能导致权限混乱或安全风险",
             requireNative = true
         ),
+
         // 格式化命令
         RiskPattern(
             Pattern.compile("""\b(mkfs(?:\.[a-z0-9]+)?|mkfs\.(?:ext[234]|fat|vfat|ntfs|xfs|btrfs|zfs)|newfs(?:_msdos)?)""", Pattern.CASE_INSENSITIVE),
@@ -207,7 +208,61 @@ object RiskCommandDetector {
     )
 
     /**
+     * Shell 变量与命令拼接预处理。
+     *
+     * 解析 shell 风格的变量赋值和展开：
+     *   a="rm -rf /"           → 变量表{a="rm -rf /"}
+     *   $a                      → rm -rf /
+     *   ${a}                    → rm -rf /
+     *   CMD=su; $CMD -c ls     → su -c ls
+     *   mycmd="sudo"; $mycmd shutdown → sudo shutdown
+     *   "rm -rf /" | sh         → rm -rf / (管道右半展开)
+     *
+     * 只做安全近似解析（不 fork 子进程），目的是让检测器看到用户实际要执行的内容。
+     */
+    fun expandShellVarsPublic(input: String): String {
+        var s = input
+
+        // 1. 提取并展开变量赋值：KEY=VALUE 后面紧跟使用
+        //    处理 "CMD=su -c ls; $CMD ..." 这种拼接
+        val varAssignPattern = Regex("""(\w+)\s*=\s*(?:"([^"]*)"|'([^']*)'|(\S+))""")
+        val varMap = mutableMapOf<String, String>()
+
+        // 从整条命令里提取变量赋值（按分号/换行/&& 分段）
+        val segments = s.split(Regex("""[;\n]|&&|\|\|"""))
+        val expandedSegments = mutableListOf<String>()
+        for (seg in segments) {
+            var seg2 = seg.trim()
+            // 提取赋值
+            for (m in varAssignPattern.findAll(seg2)) {
+                val key = m.groupValues[1]
+                val value = m.groupValues[2] ?: m.groupValues[3] ?: m.groupValues[4] ?: ""
+                if (key.length < 12) varMap[key] = value
+            }
+            // 展开 $VAR 和 ${VAR}
+            seg2 = seg2.replace(Regex("""\$\{(\w+)\}""")) { m ->
+                varMap[m.groupValues[1]] ?: m.value
+            }
+            seg2 = seg2.replace(Regex("""\$(\w+)""")) { m ->
+                varMap[m.groupValues[1]] ?: m.value
+            }
+            expandedSegments.add(seg2)
+        }
+        s = expandedSegments.joinToString("; ")
+
+        // 2. 管道展开：A | B 取 B 的实际含义（shell 下是 B 执行 A 的输出）
+        //    用户写 "rm -rf / | sh" 实际 rm -rf / 才是危险的
+        s = s.replace(Regex("""^\s*cat\s+\S+\s*\|\s*"""), "")
+
+        // 3. quote 剥离（检测时不需要引号）
+        s = s.replace(Regex("""["']"""), "")
+
+        return s
+    }
+
+    /**
      * 检测命令是否为高危命令。
+
      *
      * @param command 待检测的命令
      * @param inNativeTermux 是否运行在原生 Termux 环境下（非容器/虚拟机）。
@@ -220,9 +275,16 @@ object RiskCommandDetector {
         }
 
         val trimmed = command.trim()
+        // 先做 shell 变量展开/拼接解析，让检测器看到实际要执行的内容
+        val expanded = expandShellVarsPublic(trimmed)
         for (rp in riskPatterns) {
             if (rp.requireNative && !inNativeTermux) continue
-            val matcher = rp.pattern.matcher(trimmed)
+            val matcher = rp.pattern.matcher(expanded)
+            if (!matcher.find()) {
+                // 展开后没匹配到，再试原始命令（展开可能破坏了原始含义）
+                val matcher2 = rp.pattern.matcher(trimmed)
+                if (!matcher2.find()) continue
+            }
             if (matcher.find()) {
                 return DetectionResult(
                     isDangerous = true,
@@ -280,8 +342,10 @@ object RiskCommandDetector {
             // 跳过空行和注释
             if (trimmedLine.isBlank() || trimmedLine.startsWith("#")) continue
 
+            // 先展开变量赋值/替换
+            val expandedLine = expandShellVarsPublic(trimmedLine)
             // 移除常见的 shell 前缀（变量赋值前的命令等）
-            val detection = detect(trimmedLine, inNativeTermux)
+            val detection = detect(expandedLine, inNativeTermux)
             if (detection.isDangerous) {
                 results.add(
                     ScriptDetectionResult(
