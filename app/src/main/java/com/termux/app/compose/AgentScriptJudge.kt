@@ -7,6 +7,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -39,6 +40,64 @@ object AgentScriptJudge {
 
     enum class Verdict {
         SAFE, DANGEROUS, SKIP, TIMEOUT, ERROR
+    }
+
+    /** 一条 Agent 判定历史记录 */
+    @Serializable
+    data class JudgeHistoryEntry(
+        val timestamp: Long,
+        val scriptPath: String,
+        val verdict: String,
+        val reason: String,
+        val riskType: String? = null,
+        val provider: String = ""
+    )
+
+    private const val HISTORY_KEY = "agent_judge_history"
+    private const val MAX_HISTORY = 50
+
+    /** 记录 Agent 判定历史（仅 Agent 真正回复的判定） */
+    fun recordHistory(context: Context, filePath: String, result: JudgeResult) {
+        if (!result.agentResponded) return
+        val cfg = try {
+            AiTermuxPrefs.getConfig(context).providerConfig
+        } catch (e: Exception) {
+            null
+        }
+        val entry = JudgeHistoryEntry(
+            timestamp = System.currentTimeMillis(),
+            scriptPath = filePath,
+            verdict = if (result.verdict == Verdict.DANGEROUS) "dangerous" else "safe",
+            reason = result.reason,
+            riskType = result.riskType,
+            provider = cfg?.provider ?: ""
+        )
+        val prefs = context.getSharedPreferences("termux_preferences", Context.MODE_PRIVATE)
+        val list = getHistory(context).toMutableList()
+        list.add(0, entry)
+        if (list.size > MAX_HISTORY) list.removeAt(list.size - 1)
+        try {
+            prefs.edit().putString(HISTORY_KEY, Json.encodeToString(list)).apply()
+        } catch (e: Exception) {
+            Log.e(TAG, "保存判定历史失败: ${e.message}")
+        }
+    }
+
+    /** 读取 Agent 判定历史（最新的在前） */
+    fun getHistory(context: Context): List<JudgeHistoryEntry> {
+        val prefs = context.getSharedPreferences("termux_preferences", Context.MODE_PRIVATE)
+        val raw = prefs.getString(HISTORY_KEY, null) ?: return emptyList()
+        return try {
+            Json.decodeFromString<List<JudgeHistoryEntry>>(raw)
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    /** 清空 Agent 判定历史 */
+    fun clearHistory(context: Context) {
+        context.getSharedPreferences("termux_preferences", Context.MODE_PRIVATE)
+            .edit().remove(HISTORY_KEY).apply()
     }
 
     fun isAvailable(context: Context): Boolean {
@@ -131,7 +190,7 @@ object AgentScriptJudge {
         // 关键：runBlocking(Dispatchers.IO) 不阻塞主线程！
         // runBlocking 本身是阻塞当前线程，但我们让它阻塞 IO dispatcher
         // 所以调用方（主线程）不会被卡住
-        return runBlocking(Dispatchers.IO) {
+        val result = runBlocking(Dispatchers.IO) {
             try {
                 withTimeout(timeoutMs) {
                     callAgentSafe(context, filePath, trimmed)
@@ -156,6 +215,9 @@ object AgentScriptJudge {
                 )
             }
         }
+        // 记录 Agent 判定历史（仅 Agent 真正回复的判定）
+        recordHistory(context, filePath, result)
+        return result
     }
 
     /** 只做本地检测（在 IO 线程） */

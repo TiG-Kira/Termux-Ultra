@@ -1441,7 +1441,7 @@ object RiskConfirmManager {
      * 从 shell 命令里提取脚本文件路径。
      * 识别: bash xxx.sh, sh -c xxx, source xxx, . xxx, 直接执行 .sh 文件 等
      */
-    private fun extractScriptPath(command: String): String? {
+    fun extractScriptPath(command: String): String? {
         val trimmed = command.trim()
         // 1. shell 前缀（bash xxx, sh -c xxx, zsh xxx, fish xxx, dash xxx）
         val shellRegex = Regex("""(?:bash|sh|zsh|fish|dash)\s+(?:-c\s+)?['"]?(\S+?)['"]?(?:\s|$)""")

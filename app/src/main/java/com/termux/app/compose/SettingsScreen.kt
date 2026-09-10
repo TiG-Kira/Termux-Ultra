@@ -1290,6 +1290,62 @@ fun SettingsScreen(
                                 SettingIcon(R.drawable.ic_ai_agent, contentDescription = "Agent 脚本判定")
                             }
                         )
+                        // ---------- Agent 判定历史 ----------
+                        var agentHistory by remember {
+                            mutableStateOf(com.termux.app.compose.AgentScriptJudge.getHistory(context))
+                        }
+                        var showAgentHistory by remember { mutableStateOf(false) }
+                        ArrowPreference(
+                            title = "Agent 判定历史",
+                            summary = if (agentHistory.isEmpty()) {
+                                "暂无记录"
+                            } else {
+                                "共 ${agentHistory.size} 条（仅记录 Agent 实际判定的脚本）"
+                            },
+                            onClick = { showAgentHistory = true },
+                            startAction = {
+                                SettingIcon(R.drawable.ic_restore, contentDescription = "Agent 判定历史")
+                            }
+                        )
+                        // ---------- Agent 判定历史 dialog ----------
+                        OverlayDialog(
+                            title = "Agent 判定历史",
+                            summary = if (agentHistory.isEmpty()) {
+                                "暂无 Agent 参与判定的记录"
+                            } else {
+                                "共 ${agentHistory.size} 条，仅展示最近判定"
+                            },
+                            show = showAgentHistory,
+                            onDismissRequest = { showAgentHistory = false },
+                            content = {
+                                if (agentHistory.isEmpty()) {
+                                    Text(
+                                        text = "暂无记录",
+                                        modifier = Modifier.padding(vertical = 16.dp),
+                                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                                    )
+                                } else {
+                                    LazyColumn(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .heightIn(max = 380.dp)
+                                    ) {
+                                        items(agentHistory) { entry ->
+                                            AgentHistoryItem(entry)
+                                        }
+                                    }
+                                    Spacer(Modifier.height(12.dp))
+                                    TextButton(
+                                        text = "清空历史",
+                                        onClick = {
+                                            com.termux.app.compose.AgentScriptJudge.clearHistory(context)
+                                            agentHistory = emptyList()
+                                        },
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                }
+                            }
+                        )
                     }
                 }
             }
@@ -2424,6 +2480,61 @@ fun SettingsScreen(
             }
         }
     )
+    }
+}
+
+@Composable
+private fun AgentHistoryItem(entry: com.termux.app.compose.AgentScriptJudge.JudgeHistoryEntry) {
+    val timeStr = remember(entry.timestamp) {
+        java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.getDefault())
+            .format(java.util.Date(entry.timestamp))
+    }
+    val isDanger = entry.verdict == "dangerous"
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 6.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = if (isDanger) "危险" else "安全",
+                color = if (isDanger) Color(0xFFE53935) else Color(0xFF43A047),
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = timeStr,
+                fontSize = 12.sp,
+                color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+            )
+            Spacer(Modifier.weight(1f))
+            if (entry.provider.isNotBlank()) {
+                Text(
+                    text = entry.provider,
+                    fontSize = 11.sp,
+                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                )
+            }
+        }
+        Text(
+            text = entry.scriptPath,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Medium,
+            maxLines = 1,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            modifier = Modifier.padding(top = 2.dp)
+        )
+        if (entry.reason.isNotBlank()) {
+            Text(
+                text = entry.reason,
+                fontSize = 12.sp,
+                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                maxLines = 3,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 2.dp)
+            )
+        }
     }
 }
 

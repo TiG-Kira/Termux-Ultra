@@ -202,11 +202,21 @@ public final class TermuxService extends Service implements TermuxTask.TermuxTas
         // 预加载增强防护缓存，避免首次命令读取 SharedPreferences 造成延迟
         com.termux.app.compose.RiskConfirmManager.INSTANCE.preloadCache(this);
 
-        // 启动 Shell 安全检测 Socket Server（用于 hook 拦截 shell 层所有命令执行）
-        com.termux.app.compose.SecuritySocketServer.INSTANCE.start(this);
-
-        // 部署 shell hook 脚本到 Termux home
-        deploySecurityHook(this);
+        // 只在增强防护非 OFF 时启动 server + 部署 hook
+        com.termux.app.compose.RiskConfirmManager.ProtectionLevel level =
+                com.termux.app.compose.RiskConfirmManager.INSTANCE.getProtectionLevel(this);
+        if (level != com.termux.app.compose.RiskConfirmManager.ProtectionLevel.OFF) {
+            // 启动 Shell 安全检测 Socket Server（用于 hook 拦截 shell 层所有命令执行）
+            com.termux.app.compose.SecuritySocketServer.INSTANCE.start(this);
+            // 部署 shell hook 脚本到 Termux home
+            deploySecurityHook(this, false);
+            Logger.logDebug(LOG_TAG, "Security hook deployed (level=" + level + ")");
+        } else {
+            // 增强防护 OFF → 清理旧 hook 注入（删 port 文件 + 删 source 行）
+            deploySecurityHook(this, true);
+            com.termux.app.compose.SecuritySocketServer.INSTANCE.stop();
+            Logger.logDebug(LOG_TAG, "Security hook skipped (level=OFF)");
+        }
 
         // 按运行核心设置项同步镜像写转发状态（Kotlin+Compose 时启用，Java+NDK 时禁用）
         com.termux.terminal.TerminalSession.setComposeForwardingEnabled(
@@ -1970,55 +1980,74 @@ public synchronized int removeTermuxSession(TerminalSession sessionToRemove) {
 
 
     /**
-     * 部署 shell 安全检测 hook 脚本。
-     * 从 app assets 拷贝到 Termux home，并在 shell profile 里注入 source 指令。
+     * 部署或清理 shell 安全检测 hook。
+     * @param remove true=增强防护 OFF → 删 port 文件 + 删 profile 注入，让 shell hook 完全跳过
+     *               false=正常部署 → 拷贝 hook 脚本 + 注入 source 行
      */
-    private void deploySecurityHook(android.content.Context ctx) {
+    private void deploySecurityHook(android.content.Context ctx, boolean remove) {
         try {
-            // Termux home 路径
             String home = ctx.getFilesDir().getParent() + "/files/home";
             java.io.File homeDir = new java.io.File(home);
             if (!homeDir.exists()) homeDir.mkdirs();
 
-            // 1. 拷贝 hook 脚本
-            java.io.File hookFile = new java.io.File(homeDir, ".termux-security-hook.sh");
-            try (java.io.InputStream is = ctx.getAssets().open("termux-security-hook.sh");
-                 java.io.FileOutputStream fos = new java.io.FileOutputStream(hookFile)) {
-                byte[] buf = new byte[8192];
-                int n;
-                while ((n = is.read(buf)) > 0) fos.write(buf, 0, n);
+            // port 文件：无论 remove/deploy，先处理
+            java.io.File sockDir = new java.io.File(ctx.getFilesDir().getParent() + "/files/sock");
+            java.io.File portFile = new java.io.File(sockDir, "termux-security.port");
+            if (remove) {
+                // OFF → 删 port 文件 → hook 的 DEBUG trap 里 [ -f "$PORT_FILE" ] 失败 → return 0
+                if (portFile.exists()) portFile.delete();
             }
-            hookFile.setReadable(true, false);
-            hookFile.setExecutable(true, false);
 
-            // 2. 在 bashrc / zshrc / profile 里注入 source 指令
             String marker = "# >>> termux-security-hook >>>";
             String hookLine = "source ~/.termux-security-hook.sh";
             String markerEnd = "# <<< termux-security-hook <<<";
             String[] profiles = {".bashrc", ".zshrc", ".profile"};
+
             for (String profileName : profiles) {
                 java.io.File pf = new java.io.File(homeDir, profileName);
                 if (!pf.exists()) {
+                    if (remove) continue;  // OFF 时不创建空 profile
                     pf.createNewFile();
                 }
                 String content = new String(java.nio.file.Files.readAllBytes(pf.toPath()), java.nio.charset.StandardCharsets.UTF_8);
-                // 清理旧注入（任何 termux-security-hook 相关的旧 source 行和旧 marker）
+                // 清旧注入
                 content = content.replaceAll("(?m)^.*termux-security-hook.*\\n?", "");
                 content = content.replaceAll("(?m)^#.*termux-security.*\\n?", "");
                 content = content.replaceAll("(?m)^source.*\\.termux-security.*\\n?", "");
-                content = content.replaceAll("\\n{3,}", "\n\n");  // 清理多余空行
-                if (!content.contains(marker)) {
-                    String inject = "\n" + marker + "\n" + hookLine + "\n" + markerEnd + "\n";
-                    java.nio.file.Files.write(pf.toPath(), (content + inject).getBytes(java.nio.charset.StandardCharsets.UTF_8));
-                    Logger.logDebug(LOG_TAG, "Injected security hook into " + profileName);
-                } else {
+                content = content.replaceAll("\\n{3,}", "\n\n");
+
+                if (remove) {
+                    // OFF → 完全不注入
                     java.nio.file.Files.write(pf.toPath(), content.getBytes(java.nio.charset.StandardCharsets.UTF_8));
-                    Logger.logDebug(LOG_TAG, "Security hook already present in " + profileName);
+                } else {
+                    // 非 OFF → 拷贝 hook 脚本（统一转 LF，防 CRLF 导致 bash 语法错误）
+                    java.io.File hookFile = new java.io.File(homeDir, ".termux-security-hook.sh");
+                    if (hookFile.exists()) hookFile.delete();
+                    java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+                    try (java.io.InputStream is = ctx.getAssets().open("termux-security-hook.sh")) {
+                        byte[] buf = new byte[8192];
+                        int n;
+                        while ((n = is.read(buf)) > 0) baos.write(buf, 0, n);
+                    }
+                    String hookContent = new String(baos.toByteArray(), java.nio.charset.StandardCharsets.UTF_8)
+                            .replace("\r\n", "\n").replace("\r", "\n");
+                    try (java.io.FileOutputStream fos = new java.io.FileOutputStream(hookFile, false)) {
+                        fos.write(hookContent.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                    }
+                    hookFile.setReadable(true, false);
+                    hookFile.setExecutable(true, false);
+
+                    if (!content.contains(marker)) {
+                        String inject = "\n" + marker + "\n" + hookLine + "\n" + markerEnd + "\n";
+                        java.nio.file.Files.write(pf.toPath(), (content + inject).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                    } else {
+                        java.nio.file.Files.write(pf.toPath(), content.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                    }
                 }
             }
-            Logger.logDebug(LOG_TAG, "Security hook deployed to " + home);
+            Logger.logDebug(LOG_TAG, "deploySecurityHook remove=" + remove);
         } catch (Throwable t) {
-            Logger.logDebug(LOG_TAG, "Failed to deploy security hook: " + t.getMessage());
+            Logger.logDebug(LOG_TAG, "deploySecurityHook failed: " + t.getMessage());
         }
     }
 
