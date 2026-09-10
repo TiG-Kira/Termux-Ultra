@@ -278,6 +278,83 @@ object RiskConfirmManager {
     private var countdownJob: kotlinx.coroutines.Job? = null
     internal val countdownScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
+    // ===== Agent loading Dialog 状态 =====
+    // 显示一个全局 loading 弹窗，提示"正在询问 Agent..."
+    private val _agentLoadingVisible = kotlinx.coroutines.flow.MutableStateFlow(false)
+    val agentLoadingVisible: kotlinx.coroutines.flow.StateFlow<Boolean> = _agentLoadingVisible
+    private val _agentLoadingText = kotlinx.coroutines.flow.MutableStateFlow("")
+    val agentLoadingText: kotlinx.coroutines.flow.StateFlow<String> = _agentLoadingText
+
+    private fun showAgentLoadingDialog(context: Context, command: String) {
+        _agentLoadingText.value = "正在询问 Agent 判定脚本安全性..."
+        _agentLoadingVisible.value = true
+        android.util.Log.i("RiskConfirmManager", "显示 Agent loading dialog")
+    }
+
+    private fun hideAgentLoadingDialog() {
+        _agentLoadingVisible.value = false
+        android.util.Log.i("RiskConfirmManager", "隐藏 Agent loading dialog")
+    }
+
+    /**
+     * 脚本判定结果处理（主线程调用）。
+     * - Agent 开：只看 Agent verdict
+     * - Agent 关：做本地 detectScript
+     */
+    private fun processScriptJudgeResult(
+        context: Context,
+        adapter: RiskSessionAdapter,
+        command: String,
+        scriptPath: String,
+        agentEnabled: Boolean,
+        agentResult: AgentScriptJudge.JudgeResult?
+    ) {
+        val isSafe: Boolean
+        val denyReason: String?
+
+        if (agentEnabled && agentResult != null && agentResult.agentResponded) {
+            // Agent 结果
+            isSafe = agentResult.verdict == AgentScriptJudge.Verdict.SAFE
+            denyReason = if (isSafe) null else agentResult.reason
+            android.util.Log.i("RiskConfirmManager", "Agent verdict=${agentResult.verdict}, safe=$isSafe")
+        } else {
+            // Agent 关闭或没回复 → 本地检测脚本
+            val localDetections = try {
+                val content = java.io.File(scriptPath).readText(Charsets.UTF_8).take(50 * 1024)
+                val expanded = RiskCommandDetector.expandShellVarsPublic(content)
+                RiskCommandDetector.detectScript(expanded)
+            } catch (e: Exception) {
+                android.util.Log.w("RiskConfirmManager", "本地脚本检测异常: ${e.message}")
+                emptyList()
+            }
+            isSafe = localDetections.isEmpty()
+            denyReason = if (isSafe) null else (localDetections.firstOrNull()?.lineContent?.take(100) ?: "本地检测发现危险模式")
+            android.util.Log.i("RiskConfirmManager", "本地检测: detections=${localDetections.size}, safe=$isSafe")
+        }
+
+        android.util.Log.i("RiskConfirmManager", "[RESULT] agentEnabled=$agentEnabled, agentResponded=${agentResult?.agentResponded}, isSafe=$isSafe, reason=$denyReason")
+        if (isSafe) {
+            android.util.Log.i("RiskConfirmManager", "[RESULT] → confirmPendingCommand 放行")
+            adapter.confirmPendingCommand()
+        } else {
+            android.util.Log.i("RiskConfirmManager", "[RESULT] → denyPendingCommand 拦截, reason=$denyReason")
+            // 用 Snackbar 提示原因，然后 deny
+            denyWithReason(context, adapter, command, denyReason)
+        }
+    }
+
+    private fun denyWithReason(
+        context: Context,
+        adapter: RiskSessionAdapter,
+        command: String,
+        reason: String?
+    ) {
+        val msg = reason ?: "脚本被拦截：检测到危险操作"
+        emitSnackbar(msg, android.widget.Toast.LENGTH_LONG)
+        // 然后 denyPendingCommand 会向终端输出 Permission Denied
+        adapter.denyPendingCommand()
+    }
+
     /** 开始倒计时 */
     internal fun startCountdown() {
         stopCountdown()
@@ -974,13 +1051,52 @@ object RiskConfirmManager {
         val level = getProtectionLevel(context)
         setLastProtectionLevel(level)
 
-        // OFF: 直接放行，不检测
-        if (level == ProtectionLevel.OFF) return false
-
         val trimmed = command.trim()
+
+        // ===== 脚本执行前置判定（独立于 ProtectionLevel） =====
+        // 只要是脚本执行就拦截 + 弹窗 + 异步判定。
+        // Agent 开 → 只靠 Agent；Agent 关 → 只靠本地检测。
+        // 判定完成后：通过 → 放行；不通过 → deny。
+        val scriptPath = extractScriptPath(command)
+        val isScriptExecution = scriptPath != null
+        android.util.Log.i("RiskConfirmManager", "[SCRIPT] command=${command.take(80)} -> scriptPath=$scriptPath, isScript=$isScriptExecution")
+
+        if (isScriptExecution) {
+            android.util.Log.i("RiskConfirmManager", "脚本执行拦截: path=$scriptPath, command=${command.take(80)}")
+            // 立即拦截命令（buffer 在 TerminalSession.pending）
+            showAgentLoadingDialog(context, command)
+            // 后台协程执行判定（IO 线程，不阻塞主线程）
+            countdownScope.launch(Dispatchers.IO) {
+                val agentEnabled = AgentScriptJudge.isAvailable(context)
+                val agentResult = try {
+                    if (agentEnabled) {
+                        AgentScriptJudge.judge(context, scriptPath!!)
+                    } else {
+                        // Agent 关闭：直接本地检测
+                        null
+                    }
+                } catch (e: Throwable) {
+                    android.util.Log.e("RiskConfirmManager", "脚本判定异常: ${e.message}")
+                    null
+                }
+                android.util.Log.i("RiskConfirmManager",
+                    "脚本判定完成: agentEnabled=$agentEnabled, verdict=${agentResult?.verdict}, responded=${agentResult?.agentResponded}")
+                // 回到主线程处理结果
+                kotlinx.coroutines.withContext(Dispatchers.Main) {
+                    hideAgentLoadingDialog()
+                    processScriptJudgeResult(context, adapter, command, scriptPath!!, agentEnabled, agentResult)
+                }
+            }
+            return true
+        }
+
+        // OFF: 非脚本命令直接放行
+        if (level == ProtectionLevel.OFF) return false
 
         // 先用原生环境模式检测（su/sudo 会被标记为危险）
         val nativeDetection = RiskCommandDetector.detect(command, inNativeTermux = true)
+
+        // ===== 非脚本命令：原有同步逻辑 =====
         if (!nativeDetection.isDangerous) return false
 
         // 记录危险命令计数
@@ -1119,22 +1235,10 @@ object RiskConfirmManager {
         adapter: RiskSessionAdapter,
         command: String,
         detection: RiskCommandDetector.DetectionResult,
-        envType: EnvironmentType
+        envType: EnvironmentType,
+        agentReason: String? = null
     ): Boolean {
-        // ===== Agent 增强判定：本地检测到危险后，让 Agent 给出更精准的 reason =====
-        var agentReason: String? = null
-        try {
-            if (AgentScriptJudge.isAvailable(context)) {
-                val scriptPath = extractScriptPath(command)
-                if (scriptPath != null) {
-                    val result = AgentScriptJudge.judge(context, scriptPath)
-                    if (result.agentResponded) agentReason = result.reason
-                } else {
-                    val result = AgentScriptJudge.judgeContent(context, "<terminal>", command)
-                    if (result.agentResponded) agentReason = result.reason
-                }
-            }
-        } catch (_: Exception) {}
+
 
         // Compose 核心会话：记录引用，确认结果返回时按 handle 恢复
         if (adapter is ComposeSessionAdapter) {
@@ -1339,17 +1443,28 @@ object RiskConfirmManager {
      */
     private fun extractScriptPath(command: String): String? {
         val trimmed = command.trim()
-        val patterns = listOf(
-            Regex("""(?:bash|sh|zsh|fish|dash)\s+(?:-c\s+)?['"]?(\S+\.(?:sh|bash|zsh|py|pl|rb|js|php))['"]?"""),
-            Regex("""(?:source|\.)\s+['"]?(\S+)['"]?"""),
-            Regex("""['"]?(/(?:data|sdcard|storage|mnt|home|root|tmp|var|opt|usr)/\S+\.(?:sh|bash|zsh|py|pl|rb|js|php))['"]?""")
-        )
-        for (p in patterns) {
-            val m = p.find(trimmed)
-            if (m != null) {
-                val path = m.groupValues[1]
-                if (java.io.File(path).exists()) return path
-            }
+        // 1. shell 前缀（bash xxx, sh -c xxx, zsh xxx, fish xxx, dash xxx）
+        val shellRegex = Regex("""(?:bash|sh|zsh|fish|dash)\s+(?:-c\s+)?['"]?(\S+?)['"]?(?:\s|$)""")
+        shellRegex.find(trimmed)?.let { m ->
+            val path = m.groupValues[1].trimEnd(';', '&', '|')
+            if (path.isNotBlank()) return path
+        }
+        // 2. source / . 前缀（source xxx, . xxx）
+        val sourceRegex = Regex("""(?:source|(?<!\w)\.(?!\w))\s+['"]?(\S+?)['"]?(?:\s|$)""")
+        sourceRegex.find(trimmed)?.let { m ->
+            val path = m.groupValues[1].trimEnd(';', '&', '|')
+            if (path.isNotBlank()) return path
+        }
+        // 3. 直接执行带扩展名（./install.sh, /path/to/run.py, ./deploy.sh）
+        val directRegex = Regex("""^['"]?(\.?/\S+\.(?:sh|bash|zsh|py|pl|rb|js|php|ksh))['"]?(?:\s|$)""")
+        directRegex.find(trimmed)?.let { m ->
+            return m.groupValues[1].trimEnd(';', '&', '|')
+        }
+        // 4. 直接执行相对/绝对路径（./setup, ./deploy, /data/local/tmp/run）
+        val directExecRegex = Regex("""^['"]?(\.?/\S+?)['"]?(?:\s|$)""")
+        directExecRegex.find(trimmed)?.let { m ->
+            val path = m.groupValues[1].trimEnd(';', '&', '|')
+            if (path.startsWith("./") || path.startsWith("/")) return path
         }
         return null
     }
@@ -1376,6 +1491,8 @@ fun RiskConfirmDialogHost(
 ) {
     val dialogState by RiskConfirmManager.dialogState.collectAsState()
     val countdown by RiskConfirmManager.countdown.collectAsState()
+    val agentLoading by RiskConfirmManager.agentLoadingVisible.collectAsState()
+    val agentLoadingText by RiskConfirmManager.agentLoadingText.collectAsState()
     var checkboxChecked by remember { mutableStateOf(false) }
 
     LaunchedEffect(dialogState) {
@@ -1447,6 +1564,28 @@ fun RiskConfirmDialogHost(
             }
         }
     }
+
+
+    // ===== Agent Loading WindowDialog (miuix 组件) =====
+    top.yukonga.miuix.kmp.window.WindowDialog(
+        show = agentLoading,
+        onDismissRequest = { /* 不可取消 */ },
+        title = "安全检测中",
+        summary = agentLoadingText.ifBlank { "正在检测脚本安全性..." },
+        content = {
+            androidx.compose.foundation.layout.Column(
+                modifier = androidx.compose.ui.Modifier
+                    .fillMaxWidth()
+                    .then(androidx.compose.ui.Modifier.padding(top = 8.dp)),
+                horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally
+            ) {
+                androidx.compose.material3.CircularProgressIndicator(
+                    modifier = androidx.compose.ui.Modifier.size(36.dp),
+                    strokeWidth = 3.dp
+                )
+            }
+        }
+    )
 
     val thirdPartyBlocked = rememberThirdPartyBlocked(context)
 

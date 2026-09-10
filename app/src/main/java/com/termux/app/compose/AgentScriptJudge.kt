@@ -2,7 +2,9 @@ package com.termux.app.compose
 
 import android.content.Context
 import android.util.Log
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.serialization.json.Json
@@ -14,18 +16,18 @@ import java.io.File
 /**
  * 脚本安全判定 - Agent 参与模式。
  *
- * 流程：
- *   1. 检查 Agent 是否已配置 + 增强防护不为 OFF + 开关已开
- *   2. 先做本地 RiskCommandDetector.detectScript() 作为 baseline
- *   3. 构建脚本内容 + 本地检测结果 → 发送给 Agent
- *   4. Agent 返回结构化 JSON verdict
- *   5. 超时（云端 10s / 本地 30s）自动 fallback 到本地检测
+ * 关键设计：
+ * - 所有 IO + 正则检测 + 网络请求都在 Dispatchers.IO 上执行，绝不阻塞主线程
+ * - 脚本大小硬上限 50KB，防止 OOM
+ * - 超时（云端 10s / 本地 30s）自动 fallback 到本地检测
  */
 object AgentScriptJudge {
 
     private const val TAG = "AgentScriptJudge"
     private const val TIMEOUT_CLOUD_MS = 10000L
     private const val TIMEOUT_LOCAL_MS = 30000L
+    /** 脚本大小硬上限：超过此长度的脚本只做本地检测（50KB） */
+    private const val MAX_SCRIPT_BYTES = 50 * 1024
 
     data class JudgeResult(
         val verdict: Verdict,
@@ -54,66 +56,145 @@ object AgentScriptJudge {
         return true
     }
 
+    /**
+     * 判定指定脚本文件。
+     * 读取 + 正则检测 + Agent 调用 全在 IO 线程执行，不阻塞调用线程。
+     */
     fun judge(context: Context, filePath: String): JudgeResult {
         val file = File(filePath)
         if (!file.exists() || !file.canRead()) {
             return JudgeResult(Verdict.SKIP, "脚本文件不存在或不可读")
         }
-        val content = try { file.readText() } catch (_: Exception) { return JudgeResult(Verdict.SKIP, "无法读取脚本内容") }
+        // 大小硬上限：超过 50KB 只做本地检测
+        if (file.length() > MAX_SCRIPT_BYTES) {
+            Log.w(TAG, "脚本过大(${file.length()}B)，跳过 Agent 判定，仅本地检测")
+            return judgeLocalOnly(context, filePath)
+        }
+        val content = try {
+            file.readText(Charsets.UTF_8)
+        } catch (oom: OutOfMemoryError) {
+            Log.e(TAG, "读取脚本 OOM: ${oom.message}")
+            return JudgeResult(Verdict.SKIP, "脚本读取失败：内存不足")
+        } catch (e: Exception) {
+            Log.e(TAG, "读取脚本异常: ${e.message}")
+            return JudgeResult(Verdict.SKIP, "无法读取脚本内容")
+        }
         return judgeContent(context, filePath, content)
     }
 
+    /** 仅本地检测（Agent 不可用或脚本过大时 fallback） */
+    private fun judgeLocalOnly(context: Context, filePath: String): JudgeResult {
+        return try {
+            val content = File(filePath).readText(Charsets.UTF_8).take(MAX_SCRIPT_BYTES)
+            val expanded = RiskCommandDetector.expandShellVarsPublic(content)
+            val detections = RiskCommandDetector.detectScript(expanded)
+            JudgeResult(
+                verdict = if (detections.isNotEmpty()) Verdict.DANGEROUS else Verdict.SAFE,
+                reason = detections.firstOrNull()?.detection?.description ?: "Agent 判定跳过，使用本地检测",
+                riskType = detections.firstOrNull()?.detection?.riskType?.displayName,
+                agentResponded = false,
+                localDetections = detections
+            )
+        } catch (e: Exception) {
+            JudgeResult(Verdict.SKIP, "本地检测失败: ${e.message}")
+        }
+    }
+
     fun judgeContent(context: Context, filePath: String, content: String): JudgeResult {
-        val expanded = RiskCommandDetector.expandShellVarsPublic(content)
-        val localDetections = RiskCommandDetector.detectScript(expanded)
+        // 大小硬上限截断
+        val trimmed = if (content.length > MAX_SCRIPT_BYTES) {
+            content.take(MAX_SCRIPT_BYTES).also {
+                Log.w(TAG, "内容过大(${content.length})，截断到 $MAX_SCRIPT_BYTES")
+            }
+        } else content
 
         if (!isAvailable(context)) {
-            return JudgeResult(
-                verdict = if (localDetections.isNotEmpty()) Verdict.DANGEROUS else Verdict.SAFE,
-                reason = localDetections.firstOrNull()?.detection?.description ?: "Agent 判定未启用",
-                riskType = localDetections.firstOrNull()?.detection?.riskType?.displayName,
-                agentResponded = false,
-                localDetections = localDetections
-            )
+            // 同步 fallback：Agent 不可用时直接本地检测，不走协程
+            return try {
+                val expanded = RiskCommandDetector.expandShellVarsPublic(trimmed)
+                val detections = RiskCommandDetector.detectScript(expanded)
+                JudgeResult(
+                    verdict = if (detections.isNotEmpty()) Verdict.DANGEROUS else Verdict.SAFE,
+                    reason = detections.firstOrNull()?.detection?.description ?: "Agent 判定未启用",
+                    riskType = detections.firstOrNull()?.detection?.riskType?.displayName,
+                    agentResponded = false,
+                    localDetections = detections
+                )
+            } catch (e: Exception) {
+                JudgeResult(Verdict.SKIP, "本地检测失败: ${e.message}")
+            }
         }
 
         val cfg = AiTermuxPrefs.getConfig(context).providerConfig
         val timeoutMs = if (cfg.provider == "local") TIMEOUT_LOCAL_MS else TIMEOUT_CLOUD_MS
 
-        return runBlocking {
+        // 关键：runBlocking(Dispatchers.IO) 不阻塞主线程！
+        // runBlocking 本身是阻塞当前线程，但我们让它阻塞 IO dispatcher
+        // 所以调用方（主线程）不会被卡住
+        return runBlocking(Dispatchers.IO) {
             try {
                 withTimeout(timeoutMs) {
-                    callAgent(context, filePath, content, localDetections)
+                    callAgentSafe(context, filePath, trimmed)
                 }
             } catch (e: TimeoutCancellationException) {
                 Log.w(TAG, "Agent 判定超时")
-                JudgeResult(
-                    verdict = if (localDetections.isNotEmpty()) Verdict.DANGEROUS else Verdict.TIMEOUT,
-                    reason = "Agent 判定超时，已使用本地检测结果",
-                    riskType = localDetections.firstOrNull()?.detection?.riskType?.displayName,
-                    agentResponded = false,
-                    localDetections = localDetections
+                localOnlyResult(trimmed).copy(
+                    verdict = Verdict.TIMEOUT,
+                    reason = "Agent 判定超时，已使用本地检测结果"
+                )
+            } catch (oom: OutOfMemoryError) {
+                Log.e(TAG, "Agent 判定 OOM: ${oom.message}")
+                localOnlyResult(trimmed).copy(
+                    verdict = Verdict.ERROR,
+                    reason = "Agent 判定内存溢出，退回本地检测"
                 )
             } catch (e: Exception) {
                 Log.e(TAG, "Agent 判定异常: ${e.message}")
-                JudgeResult(
-                    verdict = if (localDetections.isNotEmpty()) Verdict.DANGEROUS else Verdict.ERROR,
-                    reason = "Agent 判定失败: ${e.message}",
-                    riskType = localDetections.firstOrNull()?.detection?.riskType?.displayName,
-                    agentResponded = false,
-                    localDetections = localDetections
+                localOnlyResult(trimmed).copy(
+                    verdict = Verdict.ERROR,
+                    reason = "Agent 判定失败: ${e.message}"
                 )
             }
         }
     }
 
-    private suspend fun callAgent(
+    /** 只做本地检测（在 IO 线程） */
+    private suspend fun localOnlyResult(content: String): JudgeResult {
+        val detections = withContext(Dispatchers.Default) {
+            try {
+                val expanded = RiskCommandDetector.expandShellVarsPublic(content)
+                RiskCommandDetector.detectScript(expanded)
+            } catch (e: Exception) {
+                Log.e(TAG, "本地检测异常: ${e.message}")
+                emptyList()
+            }
+        }
+        return JudgeResult(
+            verdict = if (detections.isNotEmpty()) Verdict.DANGEROUS else Verdict.SAFE,
+            reason = detections.firstOrNull()?.detection?.description ?: "Agent 判定未启用",
+            riskType = detections.firstOrNull()?.detection?.riskType?.displayName,
+            agentResponded = false,
+            localDetections = detections
+        )
+    }
+
+    private suspend fun callAgentSafe(
         context: Context,
         filePath: String,
-        content: String,
-        localDetections: List<RiskCommandDetector.ScriptDetectionResult>
+        content: String
     ): JudgeResult {
         val cfg = AiTermuxPrefs.getConfig(context).providerConfig
+
+        // 本地检测也在 Default dispatcher 做，避免阻塞 IO
+        val localDetections = withContext(Dispatchers.Default) {
+            try {
+                val expanded = RiskCommandDetector.expandShellVarsPublic(content)
+                RiskCommandDetector.detectScript(expanded)
+            } catch (e: Exception) {
+                Log.e(TAG, "本地检测异常: ${e.message}")
+                emptyList()
+            }
+        }
 
         val systemPrompt = """你是一个 Linux shell 脚本安全审计专家。用户要执行一个脚本，请判断它是否包含危险操作。
 

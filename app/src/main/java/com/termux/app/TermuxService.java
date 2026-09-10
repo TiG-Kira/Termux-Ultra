@@ -202,6 +202,12 @@ public final class TermuxService extends Service implements TermuxTask.TermuxTas
         // 预加载增强防护缓存，避免首次命令读取 SharedPreferences 造成延迟
         com.termux.app.compose.RiskConfirmManager.INSTANCE.preloadCache(this);
 
+        // 启动 Shell 安全检测 Socket Server（用于 hook 拦截 shell 层所有命令执行）
+        com.termux.app.compose.SecuritySocketServer.INSTANCE.start(this);
+
+        // 部署 shell hook 脚本到 Termux home
+        deploySecurityHook(this);
+
         // 按运行核心设置项同步镜像写转发状态（Kotlin+Compose 时启用，Java+NDK 时禁用）
         com.termux.terminal.TerminalSession.setComposeForwardingEnabled(
             com.termux.app.compose.TerminalRuntimeCore.isComposeMode(this));
@@ -220,69 +226,9 @@ public final class TermuxService extends Service implements TermuxTask.TermuxTas
         // 注册 LiveUpdateState 监听器（Kotlin 层包管理/Agent 状态变化时刷新通知）
         LiveUpdateState.addListener(mLiveUpdateListener);
 
-        // 注册终端输入拦截器，用于检测高危命令
-        com.termux.terminal.TerminalSession.setInputInterceptor(new com.termux.terminal.TerminalSession.InputInterceptor() {
-            @Override
-            public boolean onCommandEntered(com.termux.terminal.TerminalSession session, String command) {
-                return com.termux.app.compose.RiskConfirmManager.INSTANCE
-                    .handleTerminalCommand(TermuxService.this, session, command);
-            }
-
-            @Override
-            public void onCommandBlocked(com.termux.terminal.TerminalSession session, String command) {
-                // 被拦截时显示 Toast
-                android.os.Handler handler = new android.os.Handler(android.os.Looper.getMainLooper());
-                handler.post(() -> {
-                    android.widget.Toast.makeText(TermuxService.this,
-                        getString(R.string.access_denied),
-                        android.widget.Toast.LENGTH_LONG).show();
-                });
-            }
-
-            @Override
-            public boolean onCommandAutoBlocked(com.termux.terminal.TerminalSession session, String command) {
-                // 检查是否为自动拦截模式（AUTO_BLOCK）
-                boolean autoBlocked = com.termux.app.compose.RiskConfirmManager.INSTANCE.isLastCommandAutoBlocked();
-                if (autoBlocked) {
-                    // 重置标志
-                    com.termux.app.compose.RiskConfirmManager.INSTANCE.resetAutoBlockedFlag();
-                }
-                return autoBlocked;
-            }
-        });
-
-        // 注册 Compose 核心的终端输入拦截器（增强防护对 Compose 会话的适配，
-        // 与 Java 核心走同一套 RiskConfirmManager 检测/确认流程）
-        com.termux.app.compose.terminal.engine.TerminalSession.setInputInterceptor(
-            new com.termux.app.compose.terminal.engine.TerminalSession.InputInterceptor() {
-                @Override
-                public boolean onCommandEntered(com.termux.app.compose.terminal.engine.TerminalSession session, String command) {
-                    return com.termux.app.compose.RiskConfirmManager.INSTANCE
-                        .handleComposeTerminalCommand(TermuxService.this, session, command);
-                }
-
-                @Override
-                public void onCommandBlocked(com.termux.app.compose.terminal.engine.TerminalSession session, String command) {
-                    // 被拦截时显示 Toast
-                    android.os.Handler handler = new android.os.Handler(android.os.Looper.getMainLooper());
-                    handler.post(() -> {
-                        android.widget.Toast.makeText(TermuxService.this,
-                            getString(R.string.access_denied),
-                            android.widget.Toast.LENGTH_LONG).show();
-                    });
-                }
-
-                @Override
-                public boolean onCommandAutoBlocked(com.termux.app.compose.terminal.engine.TerminalSession session, String command) {
-                    // 检查是否为自动拦截模式（AUTO_BLOCK）
-                    boolean autoBlocked = com.termux.app.compose.RiskConfirmManager.INSTANCE.isLastCommandAutoBlocked();
-                    if (autoBlocked) {
-                        // 重置标志
-                        com.termux.app.compose.RiskConfirmManager.INSTANCE.resetAutoBlockedFlag();
-                    }
-                    return autoBlocked;
-                }
-            });
+        // 注：不再注册 InputInterceptor。命令/脚本拦截已完全由
+        // shell hook（trap DEBUG + PROMPT_COMMAND 延迟启用）+ SecuritySocketServer TCP 接管。
+        // 100% 覆盖手动输入、历史命令、脚本执行等所有路径。
     }
 
     @SuppressLint("Wakelock")
@@ -385,6 +331,9 @@ public final class TermuxService extends Service implements TermuxTask.TermuxTas
             killAllTermuxExecutionCommands();
             runStopForeground();
         }
+
+        // 停止 Shell 安全检测 Socket Server
+        com.termux.app.compose.SecuritySocketServer.INSTANCE.stop();
 
         // 注销 LiveUpdateState 监听器
         LiveUpdateState.removeListener(mLiveUpdateListener);
@@ -2017,6 +1966,60 @@ public synchronized int removeTermuxSession(TerminalSession sessionToRemove) {
 
         // Otherwise, return the executable path itself
         return executable;
+    }
+
+
+    /**
+     * 部署 shell 安全检测 hook 脚本。
+     * 从 app assets 拷贝到 Termux home，并在 shell profile 里注入 source 指令。
+     */
+    private void deploySecurityHook(android.content.Context ctx) {
+        try {
+            // Termux home 路径
+            String home = ctx.getFilesDir().getParent() + "/files/home";
+            java.io.File homeDir = new java.io.File(home);
+            if (!homeDir.exists()) homeDir.mkdirs();
+
+            // 1. 拷贝 hook 脚本
+            java.io.File hookFile = new java.io.File(homeDir, ".termux-security-hook.sh");
+            try (java.io.InputStream is = ctx.getAssets().open("termux-security-hook.sh");
+                 java.io.FileOutputStream fos = new java.io.FileOutputStream(hookFile)) {
+                byte[] buf = new byte[8192];
+                int n;
+                while ((n = is.read(buf)) > 0) fos.write(buf, 0, n);
+            }
+            hookFile.setReadable(true, false);
+            hookFile.setExecutable(true, false);
+
+            // 2. 在 bashrc / zshrc / profile 里注入 source 指令
+            String marker = "# >>> termux-security-hook >>>";
+            String hookLine = "source ~/.termux-security-hook.sh";
+            String markerEnd = "# <<< termux-security-hook <<<";
+            String[] profiles = {".bashrc", ".zshrc", ".profile"};
+            for (String profileName : profiles) {
+                java.io.File pf = new java.io.File(homeDir, profileName);
+                if (!pf.exists()) {
+                    pf.createNewFile();
+                }
+                String content = new String(java.nio.file.Files.readAllBytes(pf.toPath()), java.nio.charset.StandardCharsets.UTF_8);
+                // 清理旧注入（任何 termux-security-hook 相关的旧 source 行和旧 marker）
+                content = content.replaceAll("(?m)^.*termux-security-hook.*\\n?", "");
+                content = content.replaceAll("(?m)^#.*termux-security.*\\n?", "");
+                content = content.replaceAll("(?m)^source.*\\.termux-security.*\\n?", "");
+                content = content.replaceAll("\\n{3,}", "\n\n");  // 清理多余空行
+                if (!content.contains(marker)) {
+                    String inject = "\n" + marker + "\n" + hookLine + "\n" + markerEnd + "\n";
+                    java.nio.file.Files.write(pf.toPath(), (content + inject).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                    Logger.logDebug(LOG_TAG, "Injected security hook into " + profileName);
+                } else {
+                    java.nio.file.Files.write(pf.toPath(), content.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                    Logger.logDebug(LOG_TAG, "Security hook already present in " + profileName);
+                }
+            }
+            Logger.logDebug(LOG_TAG, "Security hook deployed to " + home);
+        } catch (Throwable t) {
+            Logger.logDebug(LOG_TAG, "Failed to deploy security hook: " + t.getMessage());
+        }
     }
 
 }
