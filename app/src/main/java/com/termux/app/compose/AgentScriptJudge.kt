@@ -29,8 +29,24 @@ object AgentScriptJudge {
     private const val TAG = "AgentScriptJudge"
     private const val TIMEOUT_CLOUD_MS = 10000L
     private const val TIMEOUT_LOCAL_MS = 30000L
-    /** 脚本大小硬上限：超过此长度的脚本只做本地检测（50KB） */
-    private const val MAX_SCRIPT_BYTES = 50 * 1024
+    /** 脚本大小硬上限：超过此长度的脚本只做本地检测（100KB） */
+    private const val MAX_SCRIPT_BYTES = 100 * 1024
+
+    /** 长脚本阈值：超过此长度触发扩展超时（15KB） */
+    private const val LONG_SCRIPT_THRESHOLD = 15 * 1024
+
+    /** 混淆/绕过特征（密集出现时 Agent 推理成本高） */
+    private const val OBFUSCATION_HINT_PATTERN = """(base64\s*[-|]\s*d|xxd\s*[-|]\s*r|\\x[0-9a-fA-F]{2}|gzip\s*[-|]\s*d\s*\|\s*base64|openssl\s*.*\s*dgst|str\s*\(.*\))"""
+
+    /** 拼接/链式执行特征（Agent 需要跨段/跨文件分析逻辑） */
+    private const val CHAIN_HINT_PATTERN = """(source\s+\S+(\s*;\s*source\s+\S+){1,}|\.\s+\S+(\s*&&\s*\.\s+\S+){1,}|cat\s+\S+(\s+\S+){1,}\s*\|\s*(ba)?sh|cat\s+['"`]\*?\.sh['"`]?\s*\|\s*(ba)?sh|curl[^\n|]*\|\s*(ba)?sh[^\n]*&&[^\n]*curl[^\n|]*\|\s*(ba)?sh|wget[^\n|]*\|\s*(ba)?sh[^\n]*&&[^\n]*wget[^\n|]*\|\s*(ba)?sh|<<['"]?[A-Z]+['"]?[\s\S]{200,}?\n[A-Z]+\s*$|\{[^}]{100,}?\}\s*\|\s*(ba)?sh|eval\s*\(|source\s*\(|\b(ba)?sh\s+[-c]\s+["'][^"']{300,}["'])"""
+
+    /** 隐式动态命令构造（Agent 需要追踪变量赋值链才能还原实际执行内容） */
+    private const val DYNAMIC_CMD_HINT_PATTERN = """(\$\{?[a-zA-Z_]\w*\}?\s*\$\{?[a-zA-Z_]\w*\}?|\w+\s*=\s*["']?\$\([^)]+\)|^\s*\$\{?[a-zA-Z_]\w*\}?\s+[-a-zA-Z]+[=:]\S+|\w+\s*=\s*`[^`]+`|\$\{?\w+\}?\s*\+\s*["']\w+["']|\b(readonly|export)\s+\w+\s*=\s*\$\{?\w+\}?)"""
+
+    /** 长脚本/混淆脚本时的扩展超时（云端 30s / 本地 90s） */
+    private const val TIMEOUT_CLOUD_EXTENDED_MS = 30000L
+    private const val TIMEOUT_LOCAL_EXTENDED_MS = 90000L
 
     data class JudgeResult(
         val verdict: Verdict,
@@ -187,7 +203,18 @@ object AgentScriptJudge {
         }
 
         val cfg = AiTermuxPrefs.getConfig(context).providerConfig
-        val timeoutMs = if (cfg.provider == "local") TIMEOUT_LOCAL_MS else TIMEOUT_CLOUD_MS
+
+        // 动态超时：长脚本 / 混淆脚本自动升级超时
+        val isLocal = cfg.provider == "local"
+        val baseTimeout = if (isLocal) TIMEOUT_LOCAL_MS else TIMEOUT_CLOUD_MS
+        val extTimeout = if (isLocal) TIMEOUT_LOCAL_EXTENDED_MS else TIMEOUT_CLOUD_EXTENDED_MS
+
+        val useExtended = shouldUseExtendedTimeout(trimmed)
+        val timeoutMs = if (useExtended) extTimeout else baseTimeout
+
+        if (useExtended) {
+            Log.i(TAG, "检测到长脚本/混淆特征，使用扩展超时 ${timeoutMs}ms (脚本长度=${trimmed.length})")
+        }
 
         // 关键：不能只用协程 withTimeout —— Agent 调用是阻塞 IO（HttpURLConnection 读 / 子进程 waitFor），
         // 协程取消无法中断阻塞调用，服务端会一直卡到阻塞调用结束（最长 120s+）。
@@ -195,7 +222,7 @@ object AgentScriptJudge {
         val result = runWithHardTimeout(timeoutMs) {
             runBlocking(Dispatchers.IO) {
                 try {
-                    callAgentSafe(context, filePath, trimmed)
+                    callAgentSafe(context, filePath, trimmed, useExtended)
                 } catch (oom: OutOfMemoryError) {
                     Log.e(TAG, "Agent 判定 OOM: ${oom.message}")
                     localOnlyResult(trimmed).copy(
@@ -219,6 +246,27 @@ object AgentScriptJudge {
         // 记录 Agent 判定历史（仅 Agent 真正回复的判定）
         recordHistory(context, filePath, finalResult)
         return finalResult
+    }
+
+    /**
+     * 判断脚本是否需要扩展超时。
+     *
+     * 触发条件（任一即可）：
+     *  1. 脚本长度 > LONG_SCRIPT_THRESHOLD（默认 15KB）
+     *  2. 存在混淆/绕过特征（base64管道、hex转义、openssl 等）
+     *  3. 存在拼接/链式执行特征（source 链、cat 多文件 | bash、curl 多段 &&、heredoc、eval、sh -c 长串 等）
+     *  4. 存在隐式动态命令构造（变量拼接命令、命令替换赋值、反引号赋值、变量直接当命令执行 等）
+     */
+    private fun shouldUseExtendedTimeout(content: String): Boolean {
+        if (content.length > LONG_SCRIPT_THRESHOLD) return true
+        return try {
+            val obf = Regex(OBFUSCATION_HINT_PATTERN, setOf(RegexOption.IGNORE_CASE))
+            val chain = Regex(CHAIN_HINT_PATTERN, setOf(RegexOption.IGNORE_CASE, RegexOption.MULTILINE))
+            val dyn = Regex(DYNAMIC_CMD_HINT_PATTERN, setOf(RegexOption.IGNORE_CASE, RegexOption.MULTILINE))
+            obf.containsMatchIn(content) || chain.containsMatchIn(content) || dyn.containsMatchIn(content)
+        } catch (_: Exception) {
+            false
+        }
     }
 
     /**
@@ -277,7 +325,8 @@ object AgentScriptJudge {
     private suspend fun callAgentSafe(
         context: Context,
         filePath: String,
-        content: String
+        content: String,
+        extendedTimeout: Boolean = false
     ): JudgeResult {
         val cfg = AiTermuxPrefs.getConfig(context).providerConfig
 
@@ -326,7 +375,7 @@ ${content.take(12000)}
             }
             localResp.choices.firstOrNull()?.message?.content.orEmpty()
         } else {
-            callAgentHttp(cfg, messages)
+            callAgentHttp(cfg, messages, extendedTimeout)
                 ?: throw RuntimeException("Agent API 请求失败或超时")
         }
 
@@ -371,7 +420,7 @@ ${content.take(12000)}
      *
      * @return 解析出的模型回复文本；请求失败/超时/无有效内容时返回 null
      */
-    private fun callAgentHttp(cfg: AiProviderConfig, messages: List<OpenAiMessage>): String? {
+    private fun callAgentHttp(cfg: AiProviderConfig, messages: List<OpenAiMessage>, extended: Boolean = false): String? {
         val baseUrl = cfg.apiBaseUrl.trimEnd('/')
         if (baseUrl.isBlank()) {
             Log.e(TAG, "Agent API URL 为空，无法发送判定请求")
@@ -397,10 +446,10 @@ ${content.take(12000)}
 
         val conn = (url.openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
-            // 短超时：connect 3s / read 5s，最坏 8s < 云端判定预算 10s。
-            // 第三方 API 不稳定时 5s 内快速失败走本地兜底，避免判定长时间等待
-            connectTimeout = 3000
-            readTimeout = 5000
+            // 短超时：默认 connect 3s / read 5s，长/混淆脚本扩展为 connect 5s / read 25s
+            // 保证在硬超时预算内完成，不会被 HTTP readTimeout 先截断
+            connectTimeout = if (extended) 5000 else 3000
+            readTimeout = if (extended) 25000 else 5000
             setRequestProperty("Content-Type", "application/json")
             if (cfg.apiKey.isNotBlank()) {
                 setRequestProperty("Authorization", "Bearer ${cfg.apiKey}")
