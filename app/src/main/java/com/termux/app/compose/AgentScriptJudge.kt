@@ -5,13 +5,15 @@ import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeout
-import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.contentOrNull
+import java.io.DataOutputStream
+import java.net.HttpURLConnection
+import java.net.URL
 import java.io.File
 
 /**
@@ -187,37 +189,69 @@ object AgentScriptJudge {
         val cfg = AiTermuxPrefs.getConfig(context).providerConfig
         val timeoutMs = if (cfg.provider == "local") TIMEOUT_LOCAL_MS else TIMEOUT_CLOUD_MS
 
-        // 关键：runBlocking(Dispatchers.IO) 不阻塞主线程！
-        // runBlocking 本身是阻塞当前线程，但我们让它阻塞 IO dispatcher
-        // 所以调用方（主线程）不会被卡住
-        val result = runBlocking(Dispatchers.IO) {
-            try {
-                withTimeout(timeoutMs) {
+        // 关键：不能只用协程 withTimeout —— Agent 调用是阻塞 IO（HttpURLConnection 读 / 子进程 waitFor），
+        // 协程取消无法中断阻塞调用，服务端会一直卡到阻塞调用结束（最长 120s+）。
+        // 必须用独立线程 + Future.get 硬超时：超时后立即返回，放弃等待线程。
+        val result = runWithHardTimeout(timeoutMs) {
+            runBlocking(Dispatchers.IO) {
+                try {
                     callAgentSafe(context, filePath, trimmed)
+                } catch (oom: OutOfMemoryError) {
+                    Log.e(TAG, "Agent 判定 OOM: ${oom.message}")
+                    localOnlyResult(trimmed).copy(
+                        verdict = Verdict.ERROR,
+                        reason = "Agent 判定内存溢出，退回本地检测"
+                    )
+                } catch (e: Exception) {
+                    Log.e(TAG, "Agent 判定异常: ${e.message}")
+                    localOnlyResult(trimmed).copy(
+                        verdict = Verdict.ERROR,
+                        reason = "Agent 判定失败: ${e.message}"
+                    )
                 }
-            } catch (e: TimeoutCancellationException) {
-                Log.w(TAG, "Agent 判定超时")
-                localOnlyResult(trimmed).copy(
-                    verdict = Verdict.TIMEOUT,
-                    reason = "Agent 判定超时，已使用本地检测结果"
-                )
-            } catch (oom: OutOfMemoryError) {
-                Log.e(TAG, "Agent 判定 OOM: ${oom.message}")
-                localOnlyResult(trimmed).copy(
-                    verdict = Verdict.ERROR,
-                    reason = "Agent 判定内存溢出，退回本地检测"
-                )
-            } catch (e: Exception) {
-                Log.e(TAG, "Agent 判定异常: ${e.message}")
-                localOnlyResult(trimmed).copy(
-                    verdict = Verdict.ERROR,
-                    reason = "Agent 判定失败: ${e.message}"
-                )
             }
         }
+        // 硬超时 → 本地检测兜底（本地检测已被限定在毫秒级，不会卡住）
+        val finalResult = result ?: runBlocking(Dispatchers.IO) { localOnlyResult(trimmed) }.copy(
+            verdict = Verdict.TIMEOUT,
+            reason = "Agent 判定超时，已使用本地检测结果"
+        )
         // 记录 Agent 判定历史（仅 Agent 真正回复的判定）
-        recordHistory(context, filePath, result)
-        return result
+        recordHistory(context, filePath, finalResult)
+        return finalResult
+    }
+
+    /**
+     * 硬超时执行阻塞任务。
+     *
+     * 协程 withTimeout 无法中断阻塞调用（HttpURLConnection.read / Process.waitFor 等），
+     * 只能靠独立线程 + Future.get(timeout) 做到真正超时。
+     * 超时后该线程仍在后台运行（daemon），其结果被丢弃，服务端立即返回。
+     */
+    private fun <T> runWithHardTimeout(timeoutMs: Long, block: () -> T): T? {
+        val future = java.util.concurrent.CompletableFuture<T>()
+        Thread {
+            try {
+                future.complete(block())
+            } catch (t: Throwable) {
+                future.completeExceptionally(t)
+            }
+        }.apply {
+            isDaemon = true
+            name = "AgentScriptJudge-worker"
+        }.start()
+        return try {
+            future.get(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS)
+        } catch (e: java.util.concurrent.TimeoutException) {
+            Log.w(TAG, "Agent 调用硬超时(${timeoutMs}ms)，放弃等待，使用本地检测兜底")
+            null
+        } catch (e: java.util.concurrent.ExecutionException) {
+            Log.e(TAG, "Agent 调用异常: ${e.cause?.message ?: e.message}")
+            null
+        } catch (e: Exception) {
+            Log.w(TAG, "Agent 调用中断: ${e.message}")
+            null
+        }
     }
 
     /** 只做本地检测（在 IO 线程） */
@@ -282,8 +316,19 @@ ${content.take(12000)}
             OpenAiMessage(role = "user", content = userPrompt)
         )
 
-        val resp = AiApiClient.chat(context, cfg, messages)
-        val text = resp.choices.firstOrNull()?.message?.content.orEmpty()
+        // 直接使用 Agent 配置的 API URL + Key 发送 POST（短超时快速判定）。
+        // 不复用 AiApiClient.chat：其 connect/read 超时高达 60s/120s，远超判定
+        // 预算，是服务端被硬超时兜底、长时间卡住的根因。
+        val text = if (cfg.provider == "local") {
+            val localResp = AiApiClient.chat(context, cfg, messages)
+            if (localResp.error != null) {
+                throw RuntimeException("本地模型判定失败: ${localResp.error.message}")
+            }
+            localResp.choices.firstOrNull()?.message?.content.orEmpty()
+        } else {
+            callAgentHttp(cfg, messages)
+                ?: throw RuntimeException("Agent API 请求失败或超时")
+        }
 
         val jsonStr = text
             .substringAfter("```json", text)
@@ -314,5 +359,81 @@ ${content.take(12000)}
             agentResponded = true,
             localDetections = localDetections
         )
+    }
+
+    /**
+     * 直接向 Agent 配置的 API URL 发送 POST（POST {apiBaseUrl}/chat/completions）。
+     *
+     * - URL / Key 取自 Agent 设置（AiProviderConfig.apiBaseUrl / apiKey）
+     * - 短超时：connect 5s / read 9s，保证在云端判定预算（10s）内失败或成功，
+     *   不会拖到硬超时才返回
+     * - 详细日志：完整 URL、HTTP code、耗时、响应长度，便于定位连接/鉴权问题
+     *
+     * @return 解析出的模型回复文本；请求失败/超时/无有效内容时返回 null
+     */
+    private fun callAgentHttp(cfg: AiProviderConfig, messages: List<OpenAiMessage>): String? {
+        val baseUrl = cfg.apiBaseUrl.trimEnd('/')
+        if (baseUrl.isBlank()) {
+            Log.e(TAG, "Agent API URL 为空，无法发送判定请求")
+            return null
+        }
+        val t0 = System.currentTimeMillis()
+        val url = URL("$baseUrl/chat/completions")
+
+        val body = org.json.JSONObject().apply {
+            put("model", cfg.model)
+            put("temperature", cfg.temperature.toDouble())
+            put("stream", false)
+            put("max_tokens", 2048)
+            put("messages", org.json.JSONArray().apply {
+                for (m in messages) {
+                    put(org.json.JSONObject().apply {
+                        put("role", m.role)
+                        put("content", m.content)
+                    })
+                }
+            })
+        }.toString()
+
+        val conn = (url.openConnection() as HttpURLConnection).apply {
+            requestMethod = "POST"
+            // 短超时：connect 3s / read 5s，最坏 8s < 云端判定预算 10s。
+            // 第三方 API 不稳定时 5s 内快速失败走本地兜底，避免判定长时间等待
+            connectTimeout = 3000
+            readTimeout = 5000
+            setRequestProperty("Content-Type", "application/json")
+            if (cfg.apiKey.isNotBlank()) {
+                setRequestProperty("Authorization", "Bearer ${cfg.apiKey}")
+            }
+            doOutput = true
+            doInput = true
+            useCaches = false
+        }
+        try {
+            DataOutputStream(conn.outputStream).use {
+                it.write(body.toByteArray(Charsets.UTF_8))
+            }
+            val code = conn.responseCode
+            val elapsed = System.currentTimeMillis() - t0
+            Log.i(TAG, "Agent POST $url -> HTTP $code (${elapsed}ms)")
+            if (code !in 200..299) {
+                val err = conn.errorStream?.bufferedReader()?.use { it.readText() }.orEmpty()
+                Log.e(TAG, "Agent POST 失败 HTTP $code: ${err.take(300)}")
+                return null
+            }
+            val respText = conn.inputStream.bufferedReader().use { it.readText() }
+            Log.i(TAG, "Agent POST 响应 ${respText.length}B (${System.currentTimeMillis() - t0}ms)")
+            val json = org.json.JSONObject(respText)
+            val choices = json.optJSONArray("choices")
+            val content = if (choices != null && choices.length() > 0) {
+                choices.optJSONObject(0)?.optJSONObject("message")?.optString("content").orEmpty()
+            } else ""
+            return content.ifBlank { null }
+        } catch (e: Exception) {
+            Log.e(TAG, "Agent POST 异常(${System.currentTimeMillis() - t0}ms): ${e.message}")
+            return null
+        } finally {
+            conn.disconnect()
+        }
     }
 }

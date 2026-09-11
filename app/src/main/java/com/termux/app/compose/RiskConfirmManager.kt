@@ -53,7 +53,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 /**
@@ -61,7 +60,7 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
  *
  * 负责：
  * 1. 通过 [RiskCommandDetector] 检测命令是否为高危命令
- * 2. 通过 OverlayDialog 要求用户二次确认
+ * 2. 通过 WindowDialog 要求用户二次确认
  * 3. 根据用户选择决定放行或拦截
  * 4. 管理"高风险命令二次确认"开关状态
  */
@@ -296,6 +295,17 @@ object RiskConfirmManager {
         android.util.Log.i("RiskConfirmManager", "隐藏 Agent loading dialog")
     }
 
+    /** 显示"安全检测中"加载弹窗（SecuritySocketServer 脚本判定期间调用） */
+    fun showAgentLoading(text: String? = null) {
+        _agentLoadingText.value = text ?: "正在检测脚本安全性..."
+        _agentLoadingVisible.value = true
+    }
+
+    /** 隐藏"安全检测中"加载弹窗 */
+    fun hideAgentLoading() {
+        _agentLoadingVisible.value = false
+    }
+
     /**
      * 脚本判定结果处理（主线程调用）。
      * - Agent 开：只看 Agent verdict
@@ -355,12 +365,17 @@ object RiskConfirmManager {
         adapter.denyPendingCommand()
     }
 
+    /** 自动确认等待时限(秒)：倒计时、auto-deny、latch await 三者一致。
+     * 超过此时限（弹窗异常/未及时点击）自动按 DENY 返回并写响应，
+     * 绝不让 shell 长时间卡死（此前 60s/90s 不一致导致“超90s才恢复/一直不恢复”）。 */
+    private const val CONFIRM_WAIT_SECONDS = 25
+
     /** 开始倒计时 */
     internal fun startCountdown() {
         stopCountdown()
-        _countdown.value = 60
+        _countdown.value = CONFIRM_WAIT_SECONDS
         countdownJob = countdownScope.launch {
-            for (i in 60 downTo 1) {
+            for (i in CONFIRM_WAIT_SECONDS downTo 1) {
                 _countdown.value = i
                 delay(1000)
             }
@@ -794,7 +809,7 @@ object RiskConfirmManager {
                 latch.countDown()
             }
             try {
-                latch.await(90, TimeUnit.SECONDS)
+                latch.await(CONFIRM_WAIT_SECONDS.toLong(), TimeUnit.SECONDS)
             } catch (_: InterruptedException) {
                 return false
             }
@@ -808,6 +823,97 @@ object RiskConfirmManager {
         context: Context,
         command: String,
         detection: RiskCommandDetector.DetectionResult,
+        environmentType: EnvironmentType = EnvironmentType.NATIVE
+    ): Boolean {
+        return doDialogConfirmationBlocking(
+            context, command,
+            detection.description,
+            detection.riskType?.displayName ?: "高危操作",
+            environmentType
+        )
+    }
+
+    /**
+     * 检测结果已知时的阻塞式确认（供 SecuritySocketServer 的 CHECK_CMD / CHECK_SCRIPT 使用）。
+     *
+     * 不重新检测命令，直接按增强模式处理：
+     *   OFF         → 直接放行（PASS）
+     *   WARN_ONLY   → Snackbar 提示危险原因，放行（PASS）
+     *   AUTO_BLOCK  → Snackbar「已自动拒绝: 原因」，拒绝（DENY）
+     *   WARN_VERIFY → 弹二次确认框（附原因），用户选择执行则放行（PASS），否则拒绝（DENY）
+     *
+     * @return true = 放行（PASS），false = 拒绝（DENY）
+     */
+    @JvmOverloads
+    fun requestDetectedConfirmationBlocking(
+        context: Context,
+        command: String,
+        reason: String,
+        riskType: String? = null,
+        environmentType: EnvironmentType = EnvironmentType.NATIVE
+    ): Boolean {
+        // 注意：此处【不再】受 isUnlimitedModeActive（AI 无限制模式）影响。
+        // 该函数只被 SecuritySocketServer 的 CHECK_CMD / CHECK_SCRIPT 调用，属于 shell
+        // 命令/脚本安全拦截。若被无限制模式绕过，则 su、危险脚本等都会被无条件放行（pass），
+        // 不弹二次确认 → 增强防护失效。因此这里严格以防护等级为准。
+
+        val level = getProtectionLevel(context)
+        setLastProtectionLevel(level)
+
+        // OFF: 直接放行
+        if (level == ProtectionLevel.OFF) return true
+
+        return when (level) {
+            // WARN_ONLY: Snackbar 提示危险原因后放行
+            ProtectionLevel.WARN_ONLY -> {
+                Handler(Looper.getMainLooper()).post {
+                    emitSnackbar(reason, Snackbar.LENGTH_LONG)
+                }
+                true
+            }
+            // AUTO_BLOCK: Snackbar 提示已自动拒绝后拦截
+            ProtectionLevel.AUTO_BLOCK -> {
+                lastCommandAutoBlocked = true
+                Handler(Looper.getMainLooper()).post {
+                    emitSnackbar("已自动拒绝: $reason", Snackbar.LENGTH_LONG)
+                }
+                false
+            }
+            // WARN_VERIFY: 弹二次确认框，等待用户选择
+            ProtectionLevel.WARN_VERIFY -> {
+                if (Looper.myLooper() == Looper.getMainLooper()) {
+                    val result = arrayOf(false)
+                    val latch = CountDownLatch(1)
+                    CoroutineScope(Dispatchers.Default).launch {
+                        result[0] = doDialogConfirmationBlocking(
+                            context, command, reason, riskType ?: "高危操作", environmentType
+                        )
+                        latch.countDown()
+                    }
+                    try {
+                        latch.await(CONFIRM_WAIT_SECONDS.toLong(), TimeUnit.SECONDS)
+                    } catch (_: InterruptedException) {
+                        return false
+                    }
+                    result[0]
+                } else {
+                    doDialogConfirmationBlocking(
+                        context, command, reason, riskType ?: "高危操作", environmentType
+                    )
+                }
+            }
+            ProtectionLevel.OFF -> true
+        }
+    }
+
+    /**
+     * 弹窗确认流程（阻塞等待用户选择，WARN_VERIFY 使用）。
+     */
+    private fun doDialogConfirmationBlocking(
+        context: Context,
+        command: String,
+        reason: String,
+        riskType: String,
         environmentType: EnvironmentType = EnvironmentType.NATIVE
     ): Boolean {
         if (blockingRequestActive) {
@@ -825,8 +931,8 @@ object RiskConfirmManager {
         handler.post {
             _dialogState.value = DialogState(
                 command = command,
-                riskDescription = detection.description,
-                riskType = detection.riskType?.displayName ?: "高危操作",
+                riskDescription = reason,
+                riskType = riskType,
                 environmentType = environmentType
             )
             startCountdown()
@@ -848,11 +954,11 @@ object RiskConfirmManager {
                     stopCountdown()
                     latch.countDown()
                 }
-            }, 60000L)
+            }, CONFIRM_WAIT_SECONDS * 1000L)
         }
 
         try {
-            latch.await(90, TimeUnit.SECONDS)
+            latch.await(CONFIRM_WAIT_SECONDS.toLong(), TimeUnit.SECONDS)
         } catch (_: InterruptedException) {
             return false
         }
@@ -863,6 +969,17 @@ object RiskConfirmManager {
     /** 用户点击"确认执行" */
     internal fun confirm(context: Context) {
         stopCountdown()
+        // 优先处理阻塞式请求(SecuritySocketServer 的 shell 拦截)。必须即时释放 latch，
+        // 否则 shell 会一直等待 server 响应而卡死。此前该分支排在 Agent/session 之后，
+        // 会被残留的 pendingAction/handle 截住——弹窗被清掉却不释放 latch，
+        // 导致"点了没反应→只能等超时→超过90秒才恢复/一直不恢复"。
+        if (blockingRequest != null) {
+            blockingRequest?.invoke(true)
+            blockingRequest = null
+            blockingRequestActive = false
+            _dialogState.value = null
+            return
+        }
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         // 先处理 Agent 流程（无 session handle 但有 agent pending action）
         val agentAction = prefs.getString(KEY_AGENT_PENDING_ACTION, null)
@@ -907,6 +1024,13 @@ object RiskConfirmManager {
     /** 用户点击"取消" */
     internal fun cancel(context: Context) {
         stopCountdown()
+        if (blockingRequest != null) {
+            blockingRequest?.invoke(false)
+            blockingRequest = null
+            blockingRequestActive = false
+            _dialogState.value = null
+            return
+        }
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         // 先处理 Agent 流程
         val agentAction = prefs.getString(KEY_AGENT_PENDING_ACTION, null)
@@ -1455,23 +1579,25 @@ object RiskConfirmManager {
             val path = m.groupValues[1].trimEnd(';', '&', '|')
             if (path.isNotBlank()) return path
         }
-        // 3. 直接执行带扩展名（./install.sh, /path/to/run.py, ./deploy.sh）
-        val directRegex = Regex("""^['"]?(\.?/\S+\.(?:sh|bash|zsh|py|pl|rb|js|php|ksh))['"]?(?:\s|$)""")
+        // 3. 直接执行带扩展名的 shell 脚本（./install.sh, /path/to/deploy.sh, ./setup.bash）
+        //    只识别 sh/bash/zsh/ksh/dash/fish 后缀；py/pl/rb/js 等非 sh 文件不走 Agent，走本地检测
+        val directRegex = Regex("""^['"]?(\.?/\S+\.(?:sh|bash|zsh|ksh|dash|fish))['"]?(?:\s|$)""")
         directRegex.find(trimmed)?.let { m ->
             return m.groupValues[1].trimEnd(';', '&', '|')
         }
-        // 4. 直接执行相对/绝对路径（./setup, ./deploy, /data/local/tmp/run）
-        val directExecRegex = Regex("""^['"]?(\.?/\S+?)['"]?(?:\s|$)""")
+        // 4. 直接执行相对路径（./setup, ./deploy）
+        //    绝对路径（/data/.../binary）可能是普通程序，不识别为脚本 → 走本地检测
+        val directExecRegex = Regex("""^['"]?(\./\S+?)['"]?(?:\s|$)""")
         directExecRegex.find(trimmed)?.let { m ->
             val path = m.groupValues[1].trimEnd(';', '&', '|')
-            if (path.startsWith("./") || path.startsWith("/")) return path
+            if (path.startsWith("./")) return path
         }
         return null
     }
 }
 
 /**
- * 风险确认 OverlayDialog 宿主。
+ * 风险确认 WindowDialog 宿主。
  *
  * 放置在 Activity 的 Compose 树顶层，通过观察 RiskConfirmManager.dialogState
  * 来渲染弹窗。必须保持 Activity 存活。
@@ -1566,27 +1692,6 @@ fun RiskConfirmDialogHost(
     }
 
 
-    // ===== Agent Loading WindowDialog (miuix 组件) =====
-    top.yukonga.miuix.kmp.window.WindowDialog(
-        show = agentLoading,
-        onDismissRequest = { /* 不可取消 */ },
-        title = "安全检测中",
-        summary = agentLoadingText.ifBlank { "正在检测脚本安全性..." },
-        content = {
-            androidx.compose.foundation.layout.Column(
-                modifier = androidx.compose.ui.Modifier
-                    .fillMaxWidth()
-                    .then(androidx.compose.ui.Modifier.padding(top = 8.dp)),
-                horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally
-            ) {
-                androidx.compose.material3.CircularProgressIndicator(
-                    modifier = androidx.compose.ui.Modifier.size(36.dp),
-                    strokeWidth = 3.dp
-                )
-            }
-        }
-    )
-
     val thirdPartyBlocked = rememberThirdPartyBlocked(context)
 
     val activity = context as? ComponentActivity
@@ -1603,20 +1708,74 @@ fun RiskConfirmDialogHost(
         }
     }
 
-    // 主风险确认弹窗
-    dialogState?.let { state ->
+    // ===== 统一弹窗宿主：Agent Loading 与风险确认合并为【单个】WindowDialog =====
+    // 关键：同一时间只允许存在一个 DialogWindow。此前 Loading 与确认各开一个
+    // WindowDialog，Loading 关闭动画与新确认窗叠加时 z-order 冲突，导致确认弹窗
+    // 渲染不出来（用户看到"检测弹窗消失但没有二次确认"，随后 latch 等待 → shell 卡死）。
+    val state = dialogState
+    val isSshPower = state?.isSshPowerOperation == true
+    val showDialog = agentLoading || state != null
+
+    val dialogTitle: String = when {
+        isSshPower -> "远程电源操作确认"
+        state != null -> when (state.environmentType) {
+            RiskConfirmManager.EnvironmentType.NATIVE -> "即将执行风险命令"
+            RiskConfirmManager.EnvironmentType.CONTAINER -> "高危命令 - 容器环境"
+            RiskConfirmManager.EnvironmentType.VM -> "高危命令 - 虚拟机环境"
+            RiskConfirmManager.EnvironmentType.SSH -> "高危命令 - 远程系统 (SSH)"
+        }
+        else -> "安全检测中"
+    }
+    val envWarning: String? = when (state?.environmentType) {
+        null -> null
+        RiskConfirmManager.EnvironmentType.NATIVE -> null
+        RiskConfirmManager.EnvironmentType.CONTAINER -> "此命令正在容器环境中执行，可能会对容器系统造成不可逆的损害，包括但不限于：容器数据丢失、容器系统损坏、容器无法重新启动等。请在执行前仔细评估此命令的必要性和安全性。"
+        RiskConfirmManager.EnvironmentType.VM -> "此命令正在虚拟机环境中执行，可能会对虚拟机系统造成不可逆的损害，包括但不限于：虚拟机数据丢失、虚拟机系统损坏、虚拟机无法启动等。请在执行前仔细评估此命令的必要性和安全性。"
+        RiskConfirmManager.EnvironmentType.SSH -> {
+            val isDiskCommand = state?.riskType in listOf("dd 磁盘写入", "格式化/分区")
+            if (isDiskCommand) {
+                if (state?.isWindowsDiskCommand == true) {
+                    "此磁盘级命令将在通过 SSH 连接的远程 Windows 系统上执行。format、diskpart、bcdedit 等操作可格式化分区、擦除磁盘分区表、修改或删除系统启动配置。diskpart 的 clean / clean all 指令会清除磁盘全部分区信息，clean-all 将覆写磁盘全部扇区，数据几乎无法恢复。错误指定磁盘号、盘符会造成整块磁盘数据丢失；即使系统正在运行，管理员权限仍可摧毁非系统卷数据。如果远程系统为生产环境，执行此命令将造成大规模数据丢失、业务中断甚至系统无法启动，并可能带来法律风险。请在执行前仔细核对磁盘编号、盘符，评估执行必要性。"
+                } else {
+                    "此磁盘级命令将在通过 SSH 连接的远程系统上执行。dd、mkfs、fdisk 和 parted 等操作可能会覆盖原始磁盘、破坏分区表并永久擦除所有数据。错误指定设备路径可能导致远程主机完全无法启动，且损坏的数据几乎无法恢复。如果远程系统为生产环境，执行此命令可能导致服务中断、大规模数据丢失，甚至带来法律风险。请在执行前仔细检查目标设备路径并评估执行的必要性。"
+                }
+            } else {
+                "此命令正在通过 SSH 连接的远程系统上执行，可能会对远程系统造成不可逆的损害，包括但不限于：远程数据丢失、远程系统损坏、服务中断等。如果远程系统为生产环境，执行此命令可能导致服务中断、数据丢失，甚至带来法律风险。请在执行前仔细评估此命令的必要性和安全性。"
+            }
+        }
+        else -> null
+    }
+    val dialogSummary: String = when {
+        isSshPower -> "您即将对通过 SSH 连接的远程系统执行关机或重新启动。\n\n您确认后，远程主机将终止全部正在运行的程序与服务并断开 SSH 会话。如您选择关机，如果没有相关人员物理接触此远程设备或此设备不具备网络开机能力，系统将要持续离线，您无法通过远程方式恢复运行。\n\n若此环境为生产环境，此操作会造成服务中断与可能的业务损失。\n\n请确认您确实需要执行电源操作再继续！"
+        state != null -> buildString {
+            append(state.riskDescription)
+            if (envWarning != null) {
+                append("\n\n")
+                append(envWarning)
+            }
+            append("\n\n")
+            append("该命令可能造成不可恢复的数据丢失、系统损坏或安全问题。您执行高危命令所造成的任何后果，本应用不承担任何责任，且不受理因高危操作产生的 Issue。")
+        }
+        else -> agentLoadingText.ifBlank { "正在检测脚本安全性..." }
+    }
+
+    if (state != null) {
         LaunchedEffect(state.command) {
             checkboxChecked = false
         }
+    }
 
-        if (state.isSshPowerOperation) {
-            // SSH 电源操作专用弹窗
-            OverlayDialog(
-                show = true,
-                onDismissRequest = {},
-                title = "远程电源操作确认",
-                summary = "您即将对通过 SSH 连接的远程系统执行关机或重新启动。\n\n您确认后，远程主机将终止全部正在运行的程序与服务并断开 SSH 会话。如您选择关机，如果没有相关人员物理接触此远程设备或此设备不具备网络开机能力，系统将要持续离线，您无法通过远程方式恢复运行。\n\n若此环境为生产环境，此操作会造成服务中断与可能的业务损失。\n\n请确认您确实需要执行电源操作再继续！",
-                content = {
+    // 用 key 强制 content 分支变化（Loading ↔ 确认）时重建整个 Dialog，
+    // 避免同一个 WindowDialog 内 content 切换时残留"安全检测中"内容、确认帧渲染不出来。
+    key(agentLoading, state?.command, isSshPower) {
+    top.yukonga.miuix.kmp.window.WindowDialog(
+        show = showDialog,
+        onDismissRequest = {},
+        title = dialogTitle,
+        summary = dialogSummary,
+        content = {
+            when {
+                isSshPower && state != null -> {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -1691,48 +1850,7 @@ fun RiskConfirmDialogHost(
                         }
                     }
                 }
-            )
-        } else {
-            // 普通高危命令弹窗
-            // 根据环境类型选择不同的标题和描述
-            val dialogTitle = when (state.environmentType) {
-                RiskConfirmManager.EnvironmentType.NATIVE -> "即将执行风险命令"
-                RiskConfirmManager.EnvironmentType.CONTAINER -> "高危命令 - 容器环境"
-                RiskConfirmManager.EnvironmentType.VM -> "高危命令 - 虚拟机环境"
-                RiskConfirmManager.EnvironmentType.SSH -> "高危命令 - 远程系统 (SSH)"
-            }
-            val envWarning = when (state.environmentType) {
-                 RiskConfirmManager.EnvironmentType.NATIVE -> null
-                 RiskConfirmManager.EnvironmentType.CONTAINER -> "此命令正在容器环境中执行，可能会对容器系统造成不可逆的损害，包括但不限于：容器数据丢失、容器系统损坏、容器无法重新启动等。请在执行前仔细评估此命令的必要性和安全性。"
-                 RiskConfirmManager.EnvironmentType.VM -> "此命令正在虚拟机环境中执行，可能会对虚拟机系统造成不可逆的损害，包括但不限于：虚拟机数据丢失、虚拟机系统损坏、虚拟机无法启动等。请在执行前仔细评估此命令的必要性和安全性。"
-                 RiskConfirmManager.EnvironmentType.SSH -> {
-                     val isDiskCommand = state.riskType in listOf("dd 磁盘写入", "格式化/分区")
-                     if (isDiskCommand) {
-                         if (state.isWindowsDiskCommand) {
-                             "此磁盘级命令将在通过 SSH 连接的远程 Windows 系统上执行。format、diskpart、bcdedit 等操作可格式化分区、擦除磁盘分区表、修改或删除系统启动配置。diskpart 的 clean / clean all 指令会清除磁盘全部分区信息，clean-all 将覆写磁盘全部扇区，数据几乎无法恢复。错误指定磁盘号、盘符会造成整块磁盘数据丢失；即使系统正在运行，管理员权限仍可摧毁非系统卷数据。如果远程系统为生产环境，执行此命令将造成大规模数据丢失、业务中断甚至系统无法启动，并可能带来法律风险。请在执行前仔细核对磁盘编号、盘符，评估执行必要性。"
-                         } else {
-                             "此磁盘级命令将在通过 SSH 连接的远程系统上执行。dd、mkfs、fdisk 和 parted 等操作可能会覆盖原始磁盘、破坏分区表并永久擦除所有数据。错误指定设备路径可能导致远程主机完全无法启动，且损坏的数据几乎无法恢复。如果远程系统为生产环境，执行此命令可能导致服务中断、大规模数据丢失，甚至带来法律风险。请在执行前仔细检查目标设备路径并评估执行的必要性。"
-                         }
-                     } else {
-                         "此命令正在通过 SSH 连接的远程系统上执行，可能会对远程系统造成不可逆的损害，包括但不限于：远程数据丢失、远程系统损坏、服务中断等。如果远程系统为生产环境，执行此命令可能导致服务中断、数据丢失，甚至带来法律风险。请在执行前仔细评估此命令的必要性和安全性。"
-                     }
-                 }
-             }
-
-            OverlayDialog(
-                show = true,
-                onDismissRequest = {},
-                title = dialogTitle,
-                summary = buildString {
-                    append(state.riskDescription)
-                    if (envWarning != null) {
-                        append("\n\n")
-                        append(envWarning)
-                    }
-                    append("\n\n")
-                    append("该命令可能造成不可恢复的数据丢失、系统损坏或安全问题。您执行高危命令所造成的任何后果，本应用不承担任何责任，且不受理因高危操作产生的 Issue。")
-                },
-                content = {
+                state != null -> {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -1828,16 +1946,26 @@ fun RiskConfirmDialogHost(
                         }
                     }
                 }
-            )
+                else -> {
+                    androidx.compose.foundation.layout.Column(
+                        modifier = androidx.compose.ui.Modifier
+                            .fillMaxWidth()
+                            .then(androidx.compose.ui.Modifier.padding(top = 8.dp)),
+                        horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally
+                    ) {
+                        androidx.compose.material3.CircularProgressIndicator(
+                            modifier = androidx.compose.ui.Modifier.size(36.dp),
+                            strokeWidth = 3.dp
+                        )
+                    }
+                }
+            }
         }
-    }
+    )
+    } // key(...) 闭合：强制 content 分支变化时重建 Dialog
 }
 
-/**
- * 检测设备是否设置了生物识别或屏幕锁验证。
- * 如果没有设置任何验证方式，返回 false，应跳过生物验证。
- */
-private fun hasBiometricAuthentication(activity: ComponentActivity): Boolean {
+fun hasBiometricAuthentication(activity: ComponentActivity): Boolean {
     val biometricManager = BiometricManager.from(activity)
     val canAuthenticate = biometricManager.canAuthenticate(
         BiometricManager.Authenticators.BIOMETRIC_WEAK or BiometricManager.Authenticators.DEVICE_CREDENTIAL

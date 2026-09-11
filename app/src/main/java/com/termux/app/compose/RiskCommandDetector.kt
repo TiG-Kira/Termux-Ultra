@@ -15,6 +15,13 @@ import java.util.regex.Pattern
  */
 object RiskCommandDetector {
 
+    /** 单条命令/脚本行的最大检测长度：超长输入先截断再检测，防止正则灾难性回溯导致服务端卡死 */
+    private const val MAX_DETECT_INPUT = 8 * 1024
+    /** detectScript 单行脚本的最大检测长度 */
+    private const val MAX_LINE_DETECT = 4 * 1024
+    /** expandShellVarsPublic 输入上限 */
+    private const val MAX_EXPAND_INPUT = 64 * 1024
+
     /** 危险命令类型 */
     enum class RiskType(val displayName: String) {
         DD("dd 磁盘写入"),
@@ -41,15 +48,16 @@ object RiskCommandDetector {
     /** 危险命令模式列表，按优先级排序。 */
     private val riskPatterns = listOf(
         // dd 直接磁盘写入 - of= 指向块设备节点（含分区号，如 sda1, nvme0n1p1, mmcblk0p1）
+        // 用 [^\n;|&]* 替代 .*：限定扫描范围，避免长行上灾难性回溯
         RiskPattern(
-            Pattern.compile("""\bdd\s+.*of=/dev/(?:null|zero|random|urandom|(?:sd[a-z]|nvme\d+n\d+|mmcblk\d+|loop\d+|ram\d+|zram\d+|vd[a-z]|xvd[a-z]|blk\d+)(?:p?\d*)?)""", Pattern.CASE_INSENSITIVE),
+            Pattern.compile("""\bdd\b\s+[^\n;|&]*of=/dev/(?:null|zero|random|urandom|(?:sd[a-z]|nvme\d+n\d+|mmcblk\d+|loop\d+|ram\d+|zram\d+|vd[a-z]|xvd[a-z]|blk\d+)(?:p?\d*)?)""", Pattern.CASE_INSENSITIVE),
             RiskType.DD,
             "检测到 dd 直接写入设备节点，可能导致数据永久丢失或设备损坏",
             requireNative = false
         ),
         // dd 管道写入 (dd ... | dd ... 或通过管道写入设备)
         RiskPattern(
-            Pattern.compile("""\bdd\s+.*\|\s*dd\s+.*of=/dev/""", Pattern.CASE_INSENSITIVE),
+            Pattern.compile("""\bdd\b\s+[^\n;|&]*\|\s*dd\b\s+[^\n;|&]*of=/dev/""", Pattern.CASE_INSENSITIVE),
             RiskType.DD,
             "检测到 dd 直接写入设备节点，可能导致数据永久丢失或设备损坏",
             requireNative = false
@@ -112,7 +120,7 @@ object RiskCommandDetector {
         ),
         // 原始磁盘写入 (除 dd 外的 raw 写入)
         RiskPattern(
-            Pattern.compile("""\b(?:cat|cp|pv|tee|gunzip|gzip|bzip2|xz|zstd)\s+.*>\s*/dev/(?:sd[a-z]|nvme\d+n\d+|mmcblk\d+|loop\d+|ram\d+|zram\d+|vd[a-z]|xvd[a-z]|blk\d+)""", Pattern.CASE_INSENSITIVE),
+            Pattern.compile("""\b(?:cat|cp|pv|tee|gunzip|gzip|bzip2|xz|zstd)\b[^\n;|]*>\s*/dev/(?:sd[a-z]|nvme\d+n\d+|mmcblk\d+|loop\d+|ram\d+|zram\d+|vd[a-z]|xvd[a-z]|blk\d+)""", Pattern.CASE_INSENSITIVE),
             RiskType.RAW_DISK_WRITE,
             "检测到直接写入块设备操作，可能导致数据永久丢失",
             requireNative = false
@@ -221,7 +229,8 @@ object RiskCommandDetector {
      * 只做安全近似解析（不 fork 子进程），目的是让检测器看到用户实际要执行的内容。
      */
     fun expandShellVarsPublic(input: String): String {
-        var s = input
+        // 输入上限保护：超长内容截断，避免正则处理巨大字符串拖慢/拖死服务端
+        var s = if (input.length > MAX_EXPAND_INPUT) input.take(MAX_EXPAND_INPUT) else input
 
         // 1. 提取并展开变量赋值：KEY=VALUE 后面紧跟使用
         //    处理 "CMD=su -c ls; $CMD ..." 这种拼接
@@ -275,25 +284,24 @@ object RiskCommandDetector {
         }
 
         val trimmed = command.trim()
+        // 超长命令截断后检测：正则匹配成本与输入长度相关，必须限制上限
+        val detectTarget = if (trimmed.length > MAX_DETECT_INPUT) {
+            trimmed.take(MAX_DETECT_INPUT)
+        } else trimmed
         // 先做 shell 变量展开/拼接解析，让检测器看到实际要执行的内容
-        val expanded = expandShellVarsPublic(trimmed)
+        val expanded = expandShellVarsPublic(detectTarget)
         for (rp in riskPatterns) {
             if (rp.requireNative && !inNativeTermux) continue
-            val matcher = rp.pattern.matcher(expanded)
-            if (!matcher.find()) {
-                // 展开后没匹配到，再试原始命令（展开可能破坏了原始含义）
-                val matcher2 = rp.pattern.matcher(trimmed)
-                if (!matcher2.find()) continue
-            }
-            if (matcher.find()) {
-                return DetectionResult(
-                    isDangerous = true,
-                    riskType = rp.type,
-                    matchedCommand = trimmed,
-                    description = rp.description,
-                    isWindowsDiskCommand = rp.isWindowsDiskCommand
-                )
-            }
+            // 展开后没匹配到，再试原始命令（展开可能破坏了原始含义）
+            val found = rp.pattern.matcher(expanded).find() || rp.pattern.matcher(detectTarget).find()
+            if (!found) continue
+            return DetectionResult(
+                isDangerous = true,
+                riskType = rp.type,
+                matchedCommand = trimmed,
+                description = rp.description,
+                isWindowsDiskCommand = rp.isWindowsDiskCommand
+            )
         }
 
         return DetectionResult(false, null, trimmed, "")
@@ -342,8 +350,12 @@ object RiskCommandDetector {
             // 跳过空行和注释
             if (trimmedLine.isBlank() || trimmedLine.startsWith("#")) continue
 
+            // 单行超长截断：压缩/混淆脚本常为超长单行，整行匹配会触发灾难性回溯拖死服务端
+            val detectLine = if (trimmedLine.length > MAX_LINE_DETECT) {
+                trimmedLine.take(MAX_LINE_DETECT)
+            } else trimmedLine
             // 先展开变量赋值/替换
-            val expandedLine = expandShellVarsPublic(trimmedLine)
+            val expandedLine = expandShellVarsPublic(detectLine)
             // 移除常见的 shell 前缀（变量赋值前的命令等）
             val detection = detect(expandedLine, inNativeTermux)
             if (detection.isDangerous) {
