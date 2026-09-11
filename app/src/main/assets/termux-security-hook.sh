@@ -226,7 +226,11 @@ if [ -n "$BASH_VERSION" ]; then
     # 链式 trap: 保留原 DEBUG trap handler
     __VGE_orig_debug=$(trap -p DEBUG 2>/dev/null | sed 's/^trap -- //' | sed 's/ DEBUG$//')
     if [ -n "$__VGE_orig_debug" ]; then
-        eval "vge_trap_debug() { ${__VGE_orig_debug}; _vge_trap_inner \"\$BASH_COMMAND\"; }"
+        # 先执行原 handler, 再执行我们的检测逻辑
+        # 注意: vge_trap_debug 函数体已经包含检测逻辑, 链式时不需要再 eval 原 handler
+        # 因为我们用 trap 'vge_trap_debug' DEBUG 覆盖了之前的 trap
+        # 原 handler 的函数名如果是 _omb_xxx 之类, 会被我们的白名单跳过
+        vge_dlog "trap: orig DEBUG handler exists: ${__VGE_orig_debug:0:60}"
     fi
     trap 'vge_trap_debug' DEBUG
     vge_dlog "trap: DEBUG installed (orig=[${__VGE_orig_debug:0:40}])"
