@@ -37,7 +37,7 @@ class TerminalSession(
     /**
      * 高危命令输入拦截器。
      * 语义与 Java 版 com.termux.terminal.TerminalSession.InputInterceptor 一致，
-     * 供增强防护（RiskConfirmManager）在 Compose 核心下检测用户输入的命令行。
+     * 供VorteX Guard Engine（RiskConfirmManager）在 Compose 核心下检测用户输入的命令行。
      */
     interface InputInterceptor {
         /** 回车时回调。返回 true 表示命令已被拦截处理（如高危命令弹窗确认）。 */
@@ -188,6 +188,9 @@ class TerminalSession(
                 }
             } catch (e: IOException) {
                 // 输入流关闭时静默忽略
+            } catch (t: Throwable) {
+                // 兜底：捕获所有非 IOException，防止 PTY 读循环静默死亡导致输出管线阻塞
+                android.util.Log.e("TerminalSession", "launchInputReader crash", t)
             } finally {
                 terminalReadChannel.close()
                 terminalReadBufferPoolChannel.close()
@@ -212,26 +215,43 @@ class TerminalSession(
         }
     }
 
-    private inline fun launchEmulatorProcessor() {
+    private fun launchEmulatorProcessor() {
         scope.launch(Dispatchers.Default) {
-            for (chunk in terminalReadChannel) {
-                var bytesProcessed = chunk.length
+            var consecutiveCrashes = 0
+            val maxCrashes = 5
+            while (consecutiveCrashes < maxCrashes) {
+                try {
+                    for (chunk in terminalReadChannel) {
+                        consecutiveCrashes = 0 // 正常处理一个 chunk 后重置计数
+                        var bytesProcessed = chunk.length
 
-                synchronized(emulator) {
-                    emulator.append(chunk.buffer, chunk.length)
+                        synchronized(emulator) {
+                            emulator.append(chunk.buffer, chunk.length)
 
-                    while (bytesProcessed < 32 * 1024) {
-                        val moreChunk = terminalReadChannel.tryReceive().getOrNull() ?: break
-                        emulator.append(moreChunk.buffer, moreChunk.length)
-                        bytesProcessed += moreChunk.length
-                        terminalReadBufferPoolChannel.trySend(moreChunk)
+                            while (bytesProcessed < 32 * 1024) {
+                                val moreChunk = terminalReadChannel.tryReceive().getOrNull() ?: break
+                                emulator.append(moreChunk.buffer, moreChunk.length)
+                                bytesProcessed += moreChunk.length
+                                terminalReadBufferPoolChannel.trySend(moreChunk)
+                            }
+                        }
+
+                        terminalReadBufferPoolChannel.trySend(chunk)
+                        notifyScreenUpdate()
+                        yield()
                     }
+                    return@launch // channel closed → 正常退出
+                } catch (t: Throwable) {
+                    consecutiveCrashes++
+                    android.util.Log.e("TerminalSession",
+                        "launchEmulatorProcessor crash ($consecutiveCrashes/$maxCrashes), restarting...", t)
+                    // 注意: chunk 已经在 catch 前被消费但未回池, 所以这里只回池一个占位
+                    terminalReadBufferPoolChannel.trySend(DataChunk(ByteArray(4096), 0))
+                    kotlinx.coroutines.delay(100)
                 }
-
-                terminalReadBufferPoolChannel.trySend(chunk)
-                notifyScreenUpdate()
-                yield()
             }
+            android.util.Log.e("TerminalSession",
+                "launchEmulatorProcessor crashed $maxCrashes times, giving up. PTY output may stop.")
         }
     }
 

@@ -451,6 +451,7 @@ object RiskConfirmManager {
                 cachedProtectionLevel = level
                 cachedDetectionMode = DetectionMode.NONE
                 _disableWarningState.value = DisableWarningState()
+                applySecurityConfiguration(context, level == ProtectionLevel.OFF)
                 return
             }
         }
@@ -465,6 +466,7 @@ object RiskConfirmManager {
             cachedProtectionLevel = level
             cachedDetectionMode = DetectionMode.entries.getOrElse(previousDetection) { DetectionMode.STATIC }
             _disableWarningState.value = DisableWarningState()
+            applySecurityConfiguration(context, level == ProtectionLevel.OFF)
             return
         }
         
@@ -473,6 +475,7 @@ object RiskConfirmManager {
             .apply()
         cachedProtectionLevel = level
         _disableWarningState.value = DisableWarningState()
+        applySecurityConfiguration(context, level == ProtectionLevel.OFF)
     }
 
     /** 获取侦测模式（优先从缓存读取） */
@@ -501,6 +504,22 @@ object RiskConfirmManager {
             .putInt(KEY_DETECTION_MODE, mode.ordinal)
             .apply()
         cachedDetectionMode = mode
+    }
+
+    /**
+     * 根据最新防护等级实时重载 shell 安全配置（hook 部署 + TCP 服务器启停）。
+     * 仅在 TermuxService 已启动时生效；前台服务未运行时无需干预。
+     */
+    private fun applySecurityConfiguration(context: Context, remove: Boolean) {
+        if (com.termux.app.TermuxService.serviceStartTimeMs <= 0L) return
+        val appContext = context.applicationContext
+        if (remove) {
+            com.termux.app.TermuxService.deploySecurityHook(appContext, true)
+            com.termux.app.compose.SecuritySocketServer.stop()
+        } else {
+            com.termux.app.compose.SecuritySocketServer.start(appContext)
+            com.termux.app.TermuxService.deploySecurityHook(appContext, false)
+        }
     }
 
     /** @Deprecated 请使用 getProtectionLevel() 代替 */
@@ -855,7 +874,7 @@ object RiskConfirmManager {
         // 注意：此处【不再】受 isUnlimitedModeActive（AI 无限制模式）影响。
         // 该函数只被 SecuritySocketServer 的 CHECK_CMD / CHECK_SCRIPT 调用，属于 shell
         // 命令/脚本安全拦截。若被无限制模式绕过，则 su、危险脚本等都会被无条件放行（pass），
-        // 不弹二次确认 → 增强防护失效。因此这里严格以防护等级为准。
+        // 不弹二次确认 → VorteX Guard Engine失效。因此这里严格以防护等级为准。
 
         val level = getProtectionLevel(context)
         setLastProtectionLevel(level)
@@ -1089,7 +1108,7 @@ object RiskConfirmManager {
     /**
      * 终端会话风险检测适配器：屏蔽 Java 核心（com.termux.terminal.TerminalSession）
      * 与 Compose 核心（libterminal TerminalSession）的实现差异，
-     * 供增强防护对两种内核使用同一套检测/确认流程。
+     * 供VorteX Guard Engine对两种内核使用同一套检测/确认流程。
      */
     private interface RiskSessionAdapter {
         /** 会话唯一句柄（确认结果返回时按此找回会话） */

@@ -332,7 +332,7 @@ private fun DisableWarningDialogContent(
             showDialog = false
             onDismiss()
         },
-        title = "调整增强防护模式？",
+        title = "调整VorteX Guard Engine模式？",
         summary = stringResource(summaryRes),
         content = {
             Column(

@@ -511,7 +511,7 @@ public final class TermuxActivity extends ComponentActivity implements ServiceCo
 
         TerminalSession session = findSessionByHandle(sessionHandle);
         if (session == null) {
-            // Java 会话未找到：尝试按 Compose 核心会话恢复（增强防护适配 Compose 核心）
+            // Java 会话未找到：尝试按 Compose 核心会话恢复（VorteX Guard Engine适配 Compose 核心）
             if (com.termux.app.compose.RiskConfirmManager.INSTANCE
                     .consumePendingComposeSession(sessionHandle, result)) {
                 Logger.logInfo(LOG_TAG, "Risk confirm (Compose): result applied, handle=" + sessionHandle);
@@ -596,7 +596,7 @@ public final class TermuxActivity extends ComponentActivity implements ServiceCo
 
         TerminalSession session = findSessionByHandle(sessionHandle);
         if (session == null) {
-            // Java 会话未找到：尝试按 Compose 核心会话恢复（增强防护适配 Compose 核心）
+            // Java 会话未找到：尝试按 Compose 核心会话恢复（VorteX Guard Engine适配 Compose 核心）
             if (com.termux.app.compose.RiskConfirmManager.INSTANCE
                     .consumePendingComposeSession(sessionHandle, result)) {
                 Logger.logInfo(LOG_TAG, "Risk confirm (from prefs, Compose): result applied, handle=" + sessionHandle);

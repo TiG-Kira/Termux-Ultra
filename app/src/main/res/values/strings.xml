@@ -710,10 +710,10 @@
     <string name="risk_command_ssh_power_warning">You are about to shut down or restart a remote system connected via SSH.\n\nAfter you confirm, the remote host will terminate all running programs and services and the SSH session will be disconnected. If you choose to shut down, and there is no one physically present at the remote device or the device does not have Wake-on-LAN capability, the system will remain offline and you will not be able to restore it remotely.\n\nIf this is a production environment, this operation will cause service interruption and potential business losses.\n\nPlease confirm that you really need to perform a power operation before proceeding!</string>
     <string name="risk_command_ssh_power_confirm_yes">Yes, shut down / restart</string>
     <string name="risk_command_ssh_power_confirm_no">No</string>
-    <string name="risk_command_disable_title">Adjust Enhanced Protection Mode?</string>
+    <string name="risk_command_disable_title">Adjust VorteX Guard Engine Mode?</string>
     <string name="risk_command_disable_off_message">Disabling this means high-risk commands will be executed without secondary confirmation. You will lose the safety net that prevents accidental data loss or system damage. We strongly recommend keeping this enabled. By continuing, you acknowledge that you understand the risks and agree that we are not responsible for any consequences.</string>
     <string name="risk_command_disable_warn_message">Downgrading to warn-only mode means high-risk commands will only show a Snackbar notification but will not be blocked. You could still accidentally execute dangerous commands. By continuing, you acknowledge the risks.</string>
-    <string name="risk_command_disable_off_checkbox">I understand the risks and confirm to disable enhanced protection mode; it can be re-enabled in Settings</string>
+    <string name="risk_command_disable_off_checkbox">I understand the risks and confirm to disable VorteX Guard Engine Mode; it can be re-enabled in Settings</string>
     <string name="risk_command_disable_warn_checkbox">I understand the risks and confirm to downgrade to warn-only mode; it can be adjusted in Settings</string>
     <string name="risk_command_disable_confirm">Confirm Adjustment</string>
     <string name="risk_command_biometric_prompt">Please verify your identity to continue</string>
@@ -767,7 +767,7 @@
     <string name="disable_launcher_icon_message">The Termux:Widget app does not require a launcher icon to function. Are you sure you want to disable it? You can re-enable it later from the app settings.</string>
 
     <!-- Protection Level -->
-    <string name="protection_level_title">Enhanced Protection Mode</string>
+    <string name="protection_level_title">VorteX Guard Engine Mode</string>
     <string name="protection_level_summary">Current: %1$s •%2$s</string>
     <string name="protection_level_dialog_summary">Choose how aggressively dangerous commands are handled. Higher levels provide stronger safety but may interrupt your workflow more.</string>
     <string name="protection_level_off">Off</string>
@@ -801,8 +801,8 @@
 
     <!-- ROOT Protection -->
     <string name="root_protection_title">ROOT Protection</string>
-    <string name="root_protection_summary">Enhanced protection for ROOT users</string>
-    <string name="root_status_detected">ROOT detected - Enhanced protection enabled</string>
+    <string name="root_protection_summary">VorteX Guard Engine for ROOT users</string>
+    <string name="root_status_detected">ROOT detected - VorteX Guard Engine enabled</string>
     <string name="root_status_not_detected">ROOT not detected</string>
     <string name="root_warning_title">ROOT Environment Detected</string>
     <string name="root_warning_message">ROOT access has been detected on this device. For your safety, Termux Ultra automatically enables maximum protection (Level 3 - Auto Block) when running in ROOT environments. This prevents accidental system damage. You can adjust this in Settings if needed.</string>

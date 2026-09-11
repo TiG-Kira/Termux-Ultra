@@ -14,6 +14,22 @@
 
 ## 最近更新
 
+### VorteX Guard Engine (v1.7.0)
+
+> ⚠️ **原增强防护模块已全面改版升级为 VorteX Guard Engine (VGE)**，Shell hook 架构重写、检测更精准、零终端干扰
+
+- **VorteX Guard Engine 内核重构**：Shell hook 架构全面重写，彻底解决长时间运行后终端无提示符、输入无回显、oh-my-bash 主题崩坏等问题
+- **TCP 通信隔离**：所有服务端通信放入子 Shell 执行，父进程零 fd 改动，杜绝 PTY termios 被意外修改
+- **DEGUB trap 安全化**：extdebug 不再全局常开，仅在 DENY 跳过命令时瞬时开启，PROMPT_COMMAND 前兜底关闭
+- **函数覆盖替代 trap**：su/sudo/dd/mkfs 等高危单词命令改为函数覆盖拦截，零干扰 bash 内部行为
+- **初始化宽限期**：OMB/OMZ 初始化脚本在安全模块加载期间自动放行，避免框架初始化被拦截
+- **PTY termios 修复**：JNI 层显式设置 ECHO|ICANON|ISIG，解决 Android toybox stty 在某些设备上不生效的问题
+- **OMB/OMZ 适配**：自动检测 oh-my-bash / oh-my-zsh 并通过其原生 preexec/precmd 接口注册，零 DEBUG trap 干扰
+- **高危命令二次确认**：增强模式支持 OFF（关闭）、WARN_ONLY（仅提示）、AUTO_BLOCK（自动拦截）、WARN_VERIFY（警告并弹窗验证）四种模式
+- **设置实时生效**：增强模式切换后 hook 与 SecuritySocketServer 立即重启，无需重启应用
+- **脚本检测覆盖**：bash/sh/zsh/ksh/dash/fish 脚本执行 + ./script.sh 直接执行 + rm -rf / / chmod 777 / 等危险参数组合
+- **UTF-8 BOM 修复**：解决 Windows 写入 shell 脚本时自动添加 BOM 导致 bash source 报错的问题
+
 ### 插件系统（v1.2.0.RB）
 - 全新插件系统，支持 ZIP/TUP 格式插件包安装
 - 插件可扩展：资源卡片、设置项、Agent Skill、H5 多页面界面

@@ -1273,7 +1273,7 @@ fun SettingsScreen(
                         SwitchPreference(
                             title = "脚本运行前 Agent 参与判定",
                             summary = when {
-                                !agentJudgeEnabled -> "需开启增强防护后可用"
+                                !agentJudgeEnabled -> "需开启VorteX Guard Engine后可用"
                                 !hasAgentCfg -> "需先在 Termux Agent 中配置模型"
                                 agentScriptJudge -> "已启用：执行脚本时 Agent 先判定，超时退回本地检测"
                                 else -> "关闭"

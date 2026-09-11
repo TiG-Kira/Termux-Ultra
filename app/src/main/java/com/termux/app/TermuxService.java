@@ -199,21 +199,21 @@ public final class TermuxService extends Service implements TermuxTask.TermuxTas
         runStartForeground();
         registerMemoryBroadcastReceiver();
 
-        // 预加载增强防护缓存，避免首次命令读取 SharedPreferences 造成延迟
+        // 预加载VorteX Guard Engine缓存，避免首次命令读取 SharedPreferences 造成延迟
         com.termux.app.compose.RiskConfirmManager.INSTANCE.preloadCache(this);
 
-        // 只在增强防护非 OFF 时启动 server + 部署 hook
+        // 只在VorteX Guard Engine非 OFF 时启动 server + 部署 hook
         com.termux.app.compose.RiskConfirmManager.ProtectionLevel level =
                 com.termux.app.compose.RiskConfirmManager.INSTANCE.getProtectionLevel(this);
         if (level != com.termux.app.compose.RiskConfirmManager.ProtectionLevel.OFF) {
             // 启动 Shell 安全检测 Socket Server（用于 hook 拦截 shell 层所有命令执行）
             com.termux.app.compose.SecuritySocketServer.INSTANCE.start(this);
             // 部署 shell hook 脚本到 Termux home
-            deploySecurityHook(this, false);
+            TermuxService.deploySecurityHook(this, false);
             Logger.logDebug(LOG_TAG, "Security hook deployed (level=" + level + ")");
         } else {
-            // 增强防护 OFF → 清理旧 hook 注入（删 port 文件 + 删 source 行）
-            deploySecurityHook(this, true);
+            // VorteX Guard Engine OFF → 清理旧 hook 注入（删 port 文件 + 删 source 行）
+            TermuxService.deploySecurityHook(this, true);
             com.termux.app.compose.SecuritySocketServer.INSTANCE.stop();
             Logger.logDebug(LOG_TAG, "Security hook skipped (level=OFF)");
         }
@@ -1981,10 +1981,10 @@ public synchronized int removeTermuxSession(TerminalSession sessionToRemove) {
 
     /**
      * 部署或清理 shell 安全检测 hook。
-     * @param remove true=增强防护 OFF → 删 port 文件 + 删 profile 注入，让 shell hook 完全跳过
+     * @param remove true=VorteX Guard Engine OFF → 删 port 文件 + 删 profile 注入，让 shell hook 完全跳过
      *               false=正常部署 → 拷贝 hook 脚本 + 注入 source 行
      */
-    private void deploySecurityHook(android.content.Context ctx, boolean remove) {
+    public static void deploySecurityHook(android.content.Context ctx, boolean remove) {
         try {
             String home = ctx.getFilesDir().getParent() + "/files/home";
             java.io.File homeDir = new java.io.File(home);

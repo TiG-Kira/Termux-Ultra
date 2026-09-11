@@ -102,7 +102,7 @@ fun DisableWarningMask() {
                 onDismissRequest = {
                     RiskConfirmManager.hideDisableWarning()
                 },
-                title = "调整增强防护模式？",
+                title = "调整VorteX Guard Engine模式？",
                 summary = stringResource(summaryRes),
                 content = {
                     Column(
