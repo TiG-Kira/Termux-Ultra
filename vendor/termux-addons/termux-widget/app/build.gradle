@@ -1,0 +1,31 @@
+apply plugin: 'com.android.library'
+
+android {
+    namespace "com.termux.widget"
+    compileSdk project.properties.compileSdkVersion.toInteger()
+
+    defaultConfig {
+        minSdk project.properties.minSdkVersion.toInteger()
+        targetSdk project.properties.targetSdkVersion.toInteger()
+        manifestPlaceholders.TERMUX_PACKAGE_NAME = "com.termux"
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+}
+
+dependencies {
+    // required for TermuxWidgetControlsProviderService
+    implementation "org.reactivestreams:reactive-streams:1.0.3"
+    implementation 'io.reactivex.rxjava2:rxjava:2.2.10'
+
+    implementation 'androidx.annotation:annotation:1.9.1'
+    implementation 'com.google.android.material:material:1.7.0'
+    implementation("com.google.guava:guava:24.1-jre") {
+        exclude group: 'com.google.guava', module: 'listenablefuture'
+    }
+
+    implementation project(':termux-shared')
+}

@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<!DOCTYPE resources [
+    <!ENTITY TERMUX_PACKAGE_NAME "com.termux">
+    <!ENTITY TERMUX_APP_NAME "Termux">
+    <!ENTITY TERMUX_WIDGET_APP_NAME "Termux:Widget">
+    <!ENTITY TERMUX_SHORTCUT_SCRIPTS_DIR_PATH_SHORT "~/.shortcuts/">
+    <!ENTITY TERMUX_SHORTCUT_SCRIPT_ICONS_DIR_PATH_SHORT "~/.shortcuts/icons">
+    ]>
+
+<resources>
+    <string name="app_name">&TERMUX_WIDGET_APP_NAME;</string>
+    <string name="title_widget_settings">Shortcuts &amp; Widgets Settings</string>
+    <string name="plugin_info">&TERMUX_WIDGET_APP_NAME; is a plugin app for the &TERMUX_APP_NAME; app. Check &TERMUX_APP_NAME; app github %1$s and &TERMUX_WIDGET_APP_NAME; app github %2$s for more info.</string>
+    <string name="plugin_api_help">Visit %1$s for more info on plugin usage.</string>
+
+    <!-- TermuxWidgetActivity -->
+    <string name="msg_disable_launcher_icon_details">The &TERMUX_WIDGET_APP_NAME; app does not require
+        a require launcher icon/activity to function. You can optionally disable it if you want and
+        can enabled in again either by reinstalling the app or from the &TERMUX_APP_NAME; app settings
+        if the option has been implemented in your installed version."</string>
+
+
+    <string name="title_widget">&TERMUX_APP_NAME;</string>
+    <string name="title_shortcut_widget_name">&TERMUX_APP_NAME; widget</string>
+    <string name="title_single_shortcut_name">&TERMUX_APP_NAME; shortcut</string>
+    <string name="title_termux_shortcuts">&TERMUX_APP_NAME; Shortcuts</string>
+    <string name="title_create_shortcut">Create Shortcut</string>
+
+    <string name="msg_scripts_reloaded">&TERMUX_APP_NAME; shortcuts reloaded (%1$d)</string>
+    <string name="msg_no_shortcut_scripts">No files in\n&TERMUX_SHORTCUT_SCRIPTS_DIR_PATH_SHORT;</string>
+    <string name="msg_bad_token">This shortcut is invalid - remove and add again.</string>
+    <string name="msg_executing_task">Executing task: \"%1$s\"</string>
+    <string name="msg_executable_absolute_path">Executable Absolute Path: \"%1$s\"</string>
+    <string name="msg_icon_absolute_path">Icon Absolute Path: \"%1$s\"</string>
+    <string name="msg_request_create_pinned_shortcut">Requesting to create pinned shortcut for \"%1$s\"</string>
+    <string name="msg_request_create_static_shortcut">Requesting to create static shortcut for \"%1$s\"</string>
+
+    <string name="action_refresh">Refresh</string>
+
+    <string name="error_null_or_empty_executable">The executable is null or empty.</string>
+    <string name="error_executable_not_under_shortcuts_directories">An executable can only be
+        executed if its under the following directories: %1$s</string>
+    <string name="error_icon_not_under_shortcut_icons_directories">The icon is not under the following directories: %1$s</string>
+    <string name="error_icon_not_a_regular_file">The icon file is not a regular file but is instead
+        a \"%1$s\".</string>
+    <string name="error_create_pinned_shortcut_failed">Failed to create pinned shortcut for \"%1$s\"</string>
+    <string name="error_create_static_shortcut_failed">Failed to create static shortcut for \"%1$s\"</string>
+
+</resources>

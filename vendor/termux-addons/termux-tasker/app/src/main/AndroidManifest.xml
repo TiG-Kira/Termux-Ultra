@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application>
+
+        <!--
+        This is the "edit" Activity. Disabled by default; enabled when Termux:Tasker is toggled on.
+        Tasker/Locale discovers it via the EDIT_SETTING action (exported).
+        -->
+        <activity
+            android:name=".EditConfigurationActivity"
+            android:exported="true"
+            android:icon="@drawable/ic_launcher"
+            android:label="@string/plugin_name"
+            android:enabled="false"
+            android:theme="@style/TermuxTaskerTheme"
+            android:uiOptions="splitActionBarWhenNarrow">
+            <intent-filter>
+                <action android:name="com.twofortyfouram.locale.intent.action.EDIT_SETTING" />
+            </intent-filter>
+        </activity>
+
+        <!--
+         This is the "fire" BroadcastReceiver. Disabled by default; enabled when Termux:Tasker is toggled on.
+         Restricted by the RUN_COMMAND permission defined by the host Termux app.
+        -->
+        <receiver
+            android:name=".FireReceiver"
+            android:exported="true"
+            android:process=":background"
+            android:permission="com.termux.permission.RUN_COMMAND"
+            android:enabled="false">
+            <intent-filter>
+                <action android:name="com.twofortyfouram.locale.intent.action.FIRE_SETTING" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Service that receives execution result from the execution service via a PendingIntent -->
+        <service android:name=".PluginResultsService"
+            android:enabled="false"
+            android:exported="false" />
+    </application>
+
+</manifest>

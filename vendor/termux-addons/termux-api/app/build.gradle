@@ -1,0 +1,27 @@
+apply plugin: 'com.android.library'
+
+android {
+    namespace "com.termux.api"
+    compileSdk project.properties.compileSdkVersion.toInteger()
+
+    defaultConfig {
+        minSdk project.properties.minSdkVersion.toInteger()
+        targetSdk project.properties.targetSdkVersion.toInteger()
+        manifestPlaceholders.TERMUX_PACKAGE_NAME = "com.termux"
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+}
+
+dependencies {
+    // Themes (DialogTheme/TransparentTheme extend Theme.AppCompat.*)
+    implementation 'androidx.appcompat:appcompat:1.7.0'
+    implementation 'com.google.android.material:material:1.7.0'
+    implementation 'androidx.biometric:biometric:1.2.0-alpha05'
+    implementation 'androidx.media:media:1.7.0'
+
+    implementation project(':termux-shared')
+}
