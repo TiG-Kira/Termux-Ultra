@@ -157,7 +157,7 @@ dependencies {
     // Liquid Glass effects (Android-only artifacts)
     // CM Compose artifacts are excluded to avoid duplication;
     // the project's androidx.compose (already resolved to 1.11.2 via MIUIX strictly) is used instead
-    implementation("io.github.kyant0:backdrop-android:2.0.0") {
+    implementation("io.github.kyant0:backdrop-android:2.0.1") {
         exclude group: 'org.jetbrains.compose'
         exclude group: 'org.jetbrains.compose.ui'
         exclude group: 'org.jetbrains.compose.foundation'
