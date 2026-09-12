@@ -162,7 +162,7 @@ dependencies {
         exclude group: 'org.jetbrains.compose.ui'
         exclude group: 'org.jetbrains.compose.foundation'
     }
-    implementation("io.github.kyant0:shapes-android:1.2.0") {
+    implementation("io.github.kyant0:shapes-android:1.2.1") {
         exclude group: 'org.jetbrains.compose'
         exclude group: 'org.jetbrains.compose.ui'
         exclude group: 'org.jetbrains.compose.foundation'
