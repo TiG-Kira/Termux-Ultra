@@ -49,6 +49,7 @@ import top.yukonga.miuix.kmp.basic.SmallTopAppBar
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
+import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.preference.SwitchPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import kotlinx.coroutines.Dispatchers
@@ -59,6 +60,7 @@ import com.termux.app.utils.UpdateResult
 import com.termux.app.utils.ApkDownloader
 import com.termux.BuildConfig
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.animation.core.animateFloatAsState
@@ -171,11 +173,39 @@ fun AboutScreen(onBack: () -> Unit) {
     )
 
 
+    // Dual-track background: API 33+ RuntimeShader animated, older Brush fallback
+    val useShaderBg = android.os.Build.VERSION.SDK_INT >= 33
+
     Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(if (darkTheme) darkGradient else lightGradient)
+        modifier = Modifier.fillMaxSize()
     ) {
+        if (useShaderBg) {
+            AndroidView(
+                modifier = Modifier.fillMaxSize(),
+                factory = { ctx ->
+                    android.view.View(ctx).apply {
+                        val ctl = AboutBgEffect.createFor(this, darkTheme)
+                        setTag(1000, ctl)
+                        setTag(1001, darkTheme)
+                        ctl?.start()
+                    }
+                },
+                update = { view ->
+                    val ctl = view.getTag(1000) as? AboutBgEffect.ShaderController
+                    val last = view.getTag(1001) as? Boolean
+                    if (last != darkTheme) {
+                        ctl?.updateParams(AboutBgEffect.getParams(darkTheme))
+                        view.setTag(1001, darkTheme)
+                    }
+                }
+            )
+        } else {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(if (darkTheme) darkGradient else lightGradient)
+            )
+        }
         // 页面遮罩: 亮色白/暗色黑, 跟随上滑渐显
         Box(
             modifier = Modifier
@@ -217,7 +247,7 @@ fun AboutScreen(onBack: () -> Unit) {
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center
                     ) {
-                        Spacer(modifier = Modifier.height(40.dp))
+                        Spacer(modifier = Modifier.height(95.dp))
                         val appIcon = remember {
                             ContextCompat.getDrawable(context, R.mipmap.ic_launcher)
                                 ?.toBitmap()
@@ -246,7 +276,7 @@ fun AboutScreen(onBack: () -> Unit) {
                                 )
                             }
                         }
-                        Spacer(modifier = Modifier.height(16.dp))
+                        Spacer(modifier = Modifier.height(20.dp))
                         Text(
                             text = "Termux Ultra",
                             style = TextStyle(
@@ -255,7 +285,7 @@ fun AboutScreen(onBack: () -> Unit) {
                                 color = MiuixTheme.colorScheme.onSurface
                             )
                         )
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(20.dp))
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -304,204 +334,102 @@ fun AboutScreen(onBack: () -> Unit) {
                 }
 
                 item {
-                    Card(
-                        modifier = Modifier.graphicsLayer { alpha = cardsAlphaAnim }
-                            .fillMaxWidth()
-                            .padding(16.dp)
-                            .clip(RoundedCornerShape(20.dp))
-                            .clickable {
-                                val intent = android.content.Intent(
-                                    android.content.Intent.ACTION_VIEW,
-                                    android.net.Uri.parse("https://github.com/TiG-Kira")
-                                )
-                                context.startActivity(intent)
-                            }
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(16.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(48.dp)
-                                        .clip(CircleShape)
-                                        .background(MiuixTheme.colorScheme.surfaceVariant),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    AsyncImage(
-                                        model = "https://github.com/TiG-Kira.png",
-                                        contentDescription = "Developer Avatar",
-                                        modifier = Modifier.size(48.dp)
-                                    )
-                                }
-                                Column(
-                                    verticalArrangement = Arrangement.Center
-                                ) {
-                                    Text(
-                                        text = context.getString(R.string.developer_name),
-                                        style = TextStyle(
-                                            fontSize = 16.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = MiuixTheme.colorScheme.onSurface
-                                        )
-                                    )
-                                    Text(
-                                        text = "@TiG-Kira",
-                                        style = TextStyle(
-                                            fontSize = 13.sp,
-                                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                                        )
-                                    )
-                                }
-                            }
-                            Icon(
-                                painter = painterResource(R.drawable.ic_arrow_right),
-                                contentDescription = context.getString(R.string.arrow),
-                                tint = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                                modifier = Modifier.size(24.dp)
+                    ArrowPreference(
+                        title = context.getString(R.string.developer_name),
+                        summary = "@TiG-Kira",
+                        onClick = {
+                            val intent = android.content.Intent(
+                                android.content.Intent.ACTION_VIEW,
+                                android.net.Uri.parse("https://github.com/TiG-Kira")
                             )
+                            context.startActivity(intent)
+                        },
+                        startAction = {
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(CircleShape)
+                                    .background(MiuixTheme.colorScheme.surfaceVariant),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                AsyncImage(
+                                    model = "https://github.com/TiG-Kira.png",
+                                    contentDescription = "Developer Avatar",
+                                    modifier = Modifier.size(40.dp)
+                                )
+                            }
                         }
-                    }
+                    )
                 }
 
                 item {
-                    Card(
-                        modifier = Modifier.graphicsLayer { alpha = cardsAlphaAnim }
+                    Text(
+                        text = context.getString(R.string.about_contributors_section),
+                        style = TextStyle(
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                        ),
+                        modifier = Modifier
                             .fillMaxWidth()
-                            .padding(16.dp)
-                            .clip(RoundedCornerShape(20.dp))
-                            .clickable {
-                                val intent = android.content.Intent(
-                                    android.content.Intent.ACTION_VIEW,
-                                    android.net.Uri.parse("https://github.com/awkox")
-                                )
-                                context.startActivity(intent)
-                            }
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(16.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(48.dp)
-                                        .clip(CircleShape)
-                                        .background(MiuixTheme.colorScheme.surfaceVariant),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    AsyncImage(
-                                        model = "https://avatars.githubusercontent.com/u/133107732?v=4",
-                                        contentDescription = "Contributor Avatar",
-                                        modifier = Modifier.size(48.dp)
-                                    )
-                                }
-                                Column(
-                                    verticalArrangement = Arrangement.Center
-                                ) {
-                                    Text(
-                                        text = context.getString(R.string.contributor_awkoo_name),
-                                        style = TextStyle(
-                                            fontSize = 16.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = MiuixTheme.colorScheme.onSurface
-                                        )
-                                    )
-                                    Text(
-                                        text = "@awkox",
-                                        style = TextStyle(
-                                            fontSize = 13.sp,
-                                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                                        )
-                                    )
-                                }
-                            }
-                            Icon(
-                                painter = painterResource(R.drawable.ic_arrow_right),
-                                contentDescription = context.getString(R.string.arrow),
-                                tint = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                                modifier = Modifier.size(24.dp)
-                            )
-                        }
-                    }
+                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                    )
                 }
 
                 item {
-                    Card(
-                        modifier = Modifier.graphicsLayer { alpha = cardsAlphaAnim }
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp)
-                            .clip(RoundedCornerShape(20.dp))
-                            .clickable {
-                                if (!checkingUpdate) {
-                                    checkingUpdate = true
-                                    scope.launch {
-                                        updateResult = UpdateChecker.checkForUpdates(currentVersion, betaUpdateEnabled)
-                                        showUpdateDialog = true
-                                        checkingUpdate = false
-                                    }
-                                }
-                            }
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 16.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                if (checkingUpdate) {
-                                    androidx.compose.material3.CircularProgressIndicator(
-                                        modifier = Modifier.size(16.dp),
-                                        strokeWidth = 2.dp
-                                    )
-                                }
-                                Column {
-                                    Text(
-                                        text = context.getString(R.string.check_updates),
-                                        style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                                    )
-                                    val hasUpdate = updateResult is UpdateResult.UpdateAvailable
-                                    if (hasUpdate) {
-                                        val available = updateResult as UpdateResult.UpdateAvailable
-                                        Text(
-                                            text = if (available.isBeta)
-                                                context.getString(R.string.beta_version_available)
-                                            else
-                                                context.getString(R.string.new_version_available),
-                                            style = TextStyle(
-                                                fontSize = 13.sp,
-                                                color = MiuixTheme.colorScheme.error
-                                            )
-                                        )
-                                    }
-                                }
-                            }
-                            Icon(
-                                painter = painterResource(R.drawable.ic_arrow_right),
-                                contentDescription = context.getString(R.string.arrow),
-                                tint = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                                modifier = Modifier.size(24.dp)
+                    ArrowPreference(
+                        title = context.getString(R.string.contributor_awkoo_name),
+                        summary = "@awkox",
+                        onClick = {
+                            val intent = android.content.Intent(
+                                android.content.Intent.ACTION_VIEW,
+                                android.net.Uri.parse("https://github.com/awkox")
                             )
+                            context.startActivity(intent)
+                        },
+                        startAction = {
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(CircleShape)
+                                    .background(MiuixTheme.colorScheme.surfaceVariant),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                AsyncImage(
+                                    model = "https://avatars.githubusercontent.com/u/133107732?v=4",
+                                    contentDescription = "Contributor Avatar",
+                                    modifier = Modifier.size(40.dp)
+                                )
+                            }
                         }
+                    )
+                }
+
+                item {
+                    val updateSummary = when {
+                        checkingUpdate -> context.getString(R.string.checking_updates)
+                        updateResult is UpdateResult.UpdateAvailable -> {
+                            val available = updateResult as UpdateResult.UpdateAvailable
+                            if (available.isBeta) context.getString(R.string.beta_version_available)
+                            else context.getString(R.string.new_version_available)
+                        }
+                        updateResult is UpdateResult.UpToDate -> context.getString(R.string.up_to_date)
+                        else -> ""
                     }
+                    ArrowPreference(
+                        title = context.getString(R.string.check_updates),
+                        summary = updateSummary,
+                        onClick = {
+                            if (!checkingUpdate) {
+                                checkingUpdate = true
+                                scope.launch {
+                                    updateResult = UpdateChecker.checkForUpdates(currentVersion, betaUpdateEnabled)
+                                    showUpdateDialog = true
+                                    checkingUpdate = false
+                                }
+                            }
+                        }
+                    )
                 }
 
                 item {
