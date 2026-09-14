@@ -63,4 +63,12 @@
         <item name="android:windowAnimationStyle">@android:style/Animation.Dialog</item>
     </style>
 
+    <!-- HyperCeiler-style About page theme. DayNight so light/dark both correct. -->
+    <style name="Theme.Termux.About" parent="@style/Theme.AppCompat.DayNight.NoActionBar">
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowBackground">#F7F7F7</item>
+        <item name="android:windowContentOverlay">@null</item>
+    </style>
+
 </resources>
