@@ -1065,7 +1065,7 @@
     <string name="model_url_key">模型：%1$s ｜ URL：%2$s ｜ Key：%3$s</string>
     <string name="card_ended_code">已结束 · 退出代码 %1$s</string>
     <string name="custom_file">自定义文件</string>
-    <string name="libterminal_core_info">新星引擎 (LibTerminal) 重构核心版本号: %1$s, LibTerminal 作者: @awkox</string>
+    <string name="libterminal_core_info">新星引擎 (LibTerminal) 重构核心版本号: %1$s</string>
     <string name="currently_using_source">当前使用: %1$s。点击切换回官方默认 System Prompt</string>
     <string name="temperature_current">Temperature：当前值 %1$.2f  (0 偏严谨，1 偏创意)</string>
     <string name="fallback_not_configured">已开启：⚠️ 请先点击下方「配置备用在线参数」补全 API Key/URL/模型</string>

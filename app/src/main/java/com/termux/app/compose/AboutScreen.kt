@@ -243,34 +243,55 @@ fun AboutScreen(onBack: () -> Unit) {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .graphicsLayer {
-                                alpha = headerAlphaAnim
-                                blendMode = BlendMode.Multiply
-                                compositingStrategy = CompositingStrategy.Offscreen
-                            }
+                            .graphicsLayer { alpha = headerAlphaAnim }
                             .padding(top = 60.dp, bottom = 30.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center
                     ) {
-                        val appIcon = remember {
-                            ContextCompat.getDrawable(context, R.mipmap.ic_launcher)
-                                ?.toBitmap()
-                                ?.asImageBitmap()
-                                ?.let { BitmapPainter(it) }
+                        val headerFg = if (darkTheme) Color.White else Color(0xFF333333)
+                        val fgInt = android.graphics.Color.argb(
+                            (headerFg.alpha * 255).toInt(),
+                            (headerFg.red * 255).toInt(),
+                            (headerFg.green * 255).toInt(),
+                            (headerFg.blue * 255).toInt()
+                        )
+                        val appIcon = remember(darkTheme) {
+                            val orig = ContextCompat.getDrawable(context, R.mipmap.ic_launcher)?.toBitmap()
+                            orig?.let { bm ->
+                                val copy = bm.copy(android.graphics.Bitmap.Config.ARGB_8888, true)
+                                val pixels = IntArray(copy.width * copy.height)
+                                copy.getPixels(pixels, 0, copy.width, 0, 0, copy.width, copy.height)
+                                for (i in pixels.indices) {
+                                    val c = pixels[i]
+                                    val r = (c shr 16) and 0xFF
+                                    val g = (c shr 8) and 0xFF
+                                    val b = c and 0xFF
+                                    val a = (c shr 24) and 0xFF
+                                    val brightness = (r + g + b) / 3f
+                                    if (a > 128 && brightness > 180f) {
+                                        // 白色像素(提示符>_) → 透明，让 shader 透出
+                                        pixels[i] = 0x00000000
+                                    } else if (a > 128) {
+                                        // 其他非透明像素（黑色圆）→ 染成和文字同色
+                                        pixels[i] = fgInt
+                                    }
+                                }
+                                copy.setPixels(pixels, 0, copy.width, 0, 0, copy.width, copy.height)
+                                copy.asImageBitmap().let { BitmapPainter(it) }
+                            }
                         }
                         if (appIcon != null) {
                             Image(
                                 painter = appIcon,
                                 contentDescription = "Logo",
-                                modifier = Modifier.size(100.dp),
-                                colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(Color(0xFF888888), BlendMode.SrcIn)
+                                modifier = Modifier.size(100.dp)
                             )
                         } else {
                             Icon(
                                 painter = painterResource(R.drawable.ic_terminal),
                                 contentDescription = "Logo",
                                 modifier = Modifier.size(60.dp),
-                                tint = Color(0xFF888888)
+                                tint = headerFg
                             )
                         }
                         Spacer(modifier = Modifier.height(20.dp))
@@ -279,7 +300,7 @@ fun AboutScreen(onBack: () -> Unit) {
                             style = TextStyle(
                                 fontSize = 36.sp,
                                 fontWeight = FontWeight.Black,
-                                color = Color(0xFF888888)
+                                color = headerFg
                             )
                         )
                         Spacer(modifier = Modifier.height(10.dp))
@@ -291,7 +312,7 @@ fun AboutScreen(onBack: () -> Unit) {
                                 text = currentVersion,
                                 style = TextStyle(
                                     fontSize = 16.sp,
-                                    color = Color(0xFF888888)
+                                    color = headerFg
                                 )
                             )
                             if (releaseStatus == UpdateChecker.ReleaseStatus.PRERELEASE) {
@@ -382,13 +403,9 @@ fun AboutScreen(onBack: () -> Unit) {
                         ),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                            .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp)
                     )
                 }
-
-                item {
-                     Spacer(modifier = Modifier.height(12.dp))
-                 }
 
                  item {
                      Card(
