@@ -174,7 +174,7 @@ fun AboutScreen(onBack: () -> Unit) {
 
 
     // Dual-track background: API 33+ RuntimeShader animated, older Brush fallback
-    val useShaderBg = android.os.Build.VERSION.SDK_INT >= 33
+    val useShaderBg = android.os.Build.VERSION.SDK_INT >= 31
     var bgController by remember { mutableStateOf<AboutBgEffect.ShaderController?>(null) }
     var bgDarkTheme by remember { mutableStateOf(darkTheme) }
 
@@ -206,13 +206,7 @@ fun AboutScreen(onBack: () -> Unit) {
                     .background(if (darkTheme) darkGradient else lightGradient)
             )
         }
-        // 页面遮罩: 亮色白/暗色黑, 跟随上滑渐显
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .graphicsLayer { alpha = pageMaskAlphaAnim }
-                .background(MiuixTheme.colorScheme.surface)
-        )
+
         Scaffold(
             modifier = Modifier.fillMaxSize(),
             containerColor = Color.Transparent,
