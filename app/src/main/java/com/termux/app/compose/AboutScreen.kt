@@ -12,8 +12,11 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.Color
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -61,6 +64,7 @@ import com.termux.app.utils.ApkDownloader
 import com.termux.BuildConfig
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.zIndex
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.animation.core.animateFloatAsState
@@ -162,7 +166,7 @@ fun AboutScreen(onBack: () -> Unit) {
 
     // 头部卡片淡出动画
     val headerAlphaAnim by animateFloatAsState(
-        targetValue = 0.9f * (1f - scrollFraction),
+        targetValue = 1f * (1f - scrollFraction),
         label = "headerAlpha"
     )
 
@@ -179,20 +183,21 @@ fun AboutScreen(onBack: () -> Unit) {
     var bgDarkTheme by remember { mutableStateOf(darkTheme) }
 
     Box(
-        modifier = Modifier.fillMaxSize()
+        modifier = Modifier.fillMaxSize().background(MiuixTheme.colorScheme.surface)
     ) {
         if (useShaderBg) {
             AndroidView(
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier.fillMaxSize().graphicsLayer { alpha = 1f - scrollFraction }.blur(120.dp).zIndex(-1f),
                 factory = { ctx ->
                     android.view.View(ctx).apply {
+                        setBackgroundColor(android.graphics.Color.TRANSPARENT)
                         val ctl = AboutBgEffect.createFor(this, darkTheme)
                         bgController = ctl
                         bgDarkTheme = darkTheme
                         ctl?.start()
                     }
                 },
-                update = { _ ->
+                update = { v ->
                     if (bgDarkTheme != darkTheme) {
                         bgController?.updateParams(AboutBgEffect.getParams(darkTheme))
                         bgDarkTheme = darkTheme
@@ -203,6 +208,7 @@ fun AboutScreen(onBack: () -> Unit) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
+                    .graphicsLayer { alpha = 1f - scrollFraction }
                     .background(if (darkTheme) darkGradient else lightGradient)
             )
         }
@@ -237,38 +243,34 @@ fun AboutScreen(onBack: () -> Unit) {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .graphicsLayer { alpha = headerAlphaAnim },
+                            .graphicsLayer {
+                                alpha = headerAlphaAnim
+                                blendMode = BlendMode.Multiply
+                                compositingStrategy = CompositingStrategy.Offscreen
+                            }
+                            .padding(top = 60.dp, bottom = 30.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center
                     ) {
-                        Spacer(modifier = Modifier.height(95.dp))
                         val appIcon = remember {
                             ContextCompat.getDrawable(context, R.mipmap.ic_launcher)
                                 ?.toBitmap()
                                 ?.asImageBitmap()
                                 ?.let { BitmapPainter(it) }
                         }
-                        Box(
-                            modifier = Modifier
-                                .size(80.dp)
-                                .clip(CircleShape)
-                                .background(Color.Black),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            if (appIcon != null) {
-                                Image(
-                                    painter = appIcon,
-                                    contentDescription = "Logo",
-                                    modifier = Modifier.size(80.dp)
-                                )
-                            } else {
-                                Icon(
-                                    painter = painterResource(R.drawable.ic_terminal),
-                                    contentDescription = "Logo",
-                                    modifier = Modifier.size(44.dp),
-                                    tint = Color.White
-                                )
-                            }
+                        if (appIcon != null) {
+                            Image(
+                                painter = appIcon,
+                                contentDescription = "Logo",
+                                modifier = Modifier.size(100.dp)
+                            )
+                        } else {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_terminal),
+                                contentDescription = "Logo",
+                                modifier = Modifier.size(60.dp),
+                                tint = MiuixTheme.colorScheme.onSurface
+                            )
                         }
                         Spacer(modifier = Modifier.height(20.dp))
                         Text(
@@ -279,7 +281,7 @@ fun AboutScreen(onBack: () -> Unit) {
                                 color = MiuixTheme.colorScheme.onSurface
                             )
                         )
-                        Spacer(modifier = Modifier.height(20.dp))
+                        Spacer(modifier = Modifier.height(10.dp))
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -287,8 +289,8 @@ fun AboutScreen(onBack: () -> Unit) {
                             Text(
                                 text = currentVersion,
                                 style = TextStyle(
-                                    fontSize = 14.sp,
-                                    color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                    fontSize = 16.sp,
+                                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary
                                 )
                             )
                             if (releaseStatus == UpdateChecker.ReleaseStatus.PRERELEASE) {
@@ -297,9 +299,12 @@ fun AboutScreen(onBack: () -> Unit) {
                                 InternalBuildTag()
                             }
                         }
-                        Spacer(modifier = Modifier.height(40.dp))
                     }
                 }
+
+                item {
+                     Spacer(modifier = Modifier.height(12.dp))
+                 }
 
                 item {
                     Card(
@@ -326,6 +331,10 @@ fun AboutScreen(onBack: () -> Unit) {
                         }
                     }
                 }
+
+                item {
+                     Spacer(modifier = Modifier.height(12.dp))
+                 }
 
                 item {
                      Card(
@@ -377,7 +386,7 @@ fun AboutScreen(onBack: () -> Unit) {
                 }
 
                 item {
-                     Spacer(modifier = Modifier.height(4.dp))
+                     Spacer(modifier = Modifier.height(12.dp))
                  }
 
                  item {
@@ -416,7 +425,7 @@ fun AboutScreen(onBack: () -> Unit) {
                  }
 
                 item {
-                     Spacer(modifier = Modifier.height(4.dp))
+                     Spacer(modifier = Modifier.height(12.dp))
                  }
 
                  item {

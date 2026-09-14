@@ -74,12 +74,12 @@ object AboutBgEffect {
     )
 
     private val PHONE_DARK = BgParams(
-        gradientColors1 = floatArrayOf(0.2f, 0.06f, 0.88f, 1f, 0.3f, 0.14f, 0.55f, 1f, 0f, 0.64f, 0.96f, 1f, 0.11f, 0.16f, 0.83f, 1f),
-        gradientColors2 = floatArrayOf(0.07f, 0.15f, 0.79f, 1f, 0.62f, 0.21f, 0.67f, 1f, 0.06f, 0.25f, 0.84f, 1f, 0f, 0.2f, 0.78f, 1f),
-        gradientColors3 = floatArrayOf(0.58f, 0.3f, 0.74f, 1f, 0.27f, 0.18f, 0.6f, 1f, 0.66f, 0.26f, 0.62f, 1f, 0.12f, 0.16f, 0.7f, 1f),
+        gradientColors1 = floatArrayOf(0.2f, 0.06f, 0.88f, 0.4f, 0.3f, 0.14f, 0.55f, 0.5f, 0f, 0.64f, 0.96f, 0.5f, 0.11f, 0.16f, 0.83f, 0.4f),
+        gradientColors2 = floatArrayOf(0.07f, 0.15f, 0.79f, 0.4f, 0.62f, 0.21f, 0.67f, 0.5f, 0.06f, 0.25f, 0.84f, 0.5f, 0f, 0.2f, 0.78f, 0.4f),
+        gradientColors3 = floatArrayOf(0.58f, 0.3f, 0.74f, 0.4f, 0.27f, 0.18f, 0.6f, 0.5f, 0.66f, 0.26f, 0.62f, 0.5f, 0.12f, 0.16f, 0.7f, 0.4f),
         colorInterpPeriod = 8f, gradientSpeedChange = 1f, gradientSpeedRest = 1f,
         uAlphaMulti = 1f, uAlphaOffset = 0.5f, uLightOffset = 0f, uNoiseScale = 1.5f,
-        uPointOffset = 0.4f, uPointRadiusMulti = 1f, uSaturateOffset = 0.17f,
+        uPointOffset = 0.4f, uPointRadiusMulti = 1f, uSaturateOffset = 0f,
         uShadowColorMulti = 0.3f, uShadowColorOffset = 0.3f, uShadowNoiseScale = 5f,
         uShadowOffset = 0.01f, uTranslateY = 0f,
     )
@@ -224,9 +224,9 @@ object AboutBgEffect {
                 cycleCount += 1f
             }
             prevFloor = floor
-            // Simple linear - HyperCeiler uses Folme spring animation here which we skip.
-            // colorInterpT always 1f for instant transition.
-            linearInterpolate(uColors, startColors, endColors, 1f)
+            // 三角波 floor 作为插值进度 (0->1->0->1...)
+            val t = floor.coerceIn(0f, 1f)
+            linearInterpolate(uColors, startColors, endColors, t)
         }
 
         companion object {
