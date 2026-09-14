@@ -1,4 +1,4 @@
-package com.termux.app.compose
+﻿package com.termux.app.compose
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -354,6 +354,74 @@ fun AboutScreen(onBack: () -> Unit) {
                                     )
                                     Text(
                                         text = "@TiG-Kira",
+                                        style = TextStyle(
+                                            fontSize = 13.sp,
+                                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                                        )
+                                    )
+                                }
+                            }
+                            Icon(
+                                painter = painterResource(R.drawable.ic_arrow_right),
+                                contentDescription = context.getString(R.string.arrow),
+                                tint = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                    }
+                }
+
+                item {
+                    Card(
+                        modifier = Modifier.graphicsLayer { alpha = cardsAlphaAnim }
+                            .fillMaxWidth()
+                            .padding(16.dp)
+                            .clip(RoundedCornerShape(20.dp))
+                            .clickable {
+                                val intent = android.content.Intent(
+                                    android.content.Intent.ACTION_VIEW,
+                                    android.net.Uri.parse("https://github.com/awkox")
+                                )
+                                context.startActivity(intent)
+                            }
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(48.dp)
+                                        .clip(CircleShape)
+                                        .background(MiuixTheme.colorScheme.surfaceVariant),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    AsyncImage(
+                                        model = "https://avatars.githubusercontent.com/u/133107732?v=4",
+                                        contentDescription = "Contributor Avatar",
+                                        modifier = Modifier.size(48.dp)
+                                    )
+                                }
+                                Column(
+                                    verticalArrangement = Arrangement.Center
+                                ) {
+                                    Text(
+                                        text = context.getString(R.string.contributor_awkoo_name),
+                                        style = TextStyle(
+                                            fontSize = 16.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MiuixTheme.colorScheme.onSurface
+                                        )
+                                    )
+                                    Text(
+                                        text = "@awkox",
                                         style = TextStyle(
                                             fontSize = 13.sp,
                                             color = MiuixTheme.colorScheme.onSurfaceVariantSummary

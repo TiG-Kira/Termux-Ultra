@@ -7,7 +7,7 @@
     </style>
 
     <!-- HyperCeiler-style About page theme (dark override) -->
-    <style name="Theme.Termux.About" parent="@style/Theme.AppCompat.DayNight.NoActionBar">
+    <style name="Theme.Termux.About" parent="@style/Theme.MaterialComponents.DayNight.NoActionBar">
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:windowBackground">#1C1B1F</item>
