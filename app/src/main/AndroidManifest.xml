@@ -202,6 +202,7 @@
 
         <activity
             android:name=".app.activities.AboutActivity"
+            android:theme="@style/Theme.Termux.About"
             android:label="@string/application_name" />
 
         <activity
