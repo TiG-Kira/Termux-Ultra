@@ -67,7 +67,6 @@ vec4 main(vec2 fragCoord) {
     // draw circles
     for (int i = 0; i < 4; i++) {
         vec4 pointColor = uColors[i];
-        pointColor.rgb *= pointColor.a;
         vec2 point = uPoints[i].xy;
         float rad = uPoints[i].z * uPointRadiusMulti;
 
@@ -93,5 +92,5 @@ vec4 main(vec2 fragCoord) {
 
     color += (10.0 / 255.0) * gradientNoise(fragCoord.xy) - (5.0 / 255.0);
 
-    return vec4(color.rgb * color.a, color.a);
+    return vec4(color.rgb, 1.0);
 }

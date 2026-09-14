@@ -26,12 +26,7 @@ object AboutBgEffect {
     private val BOUND = floatArrayOf(0f, 0f, 1f, 1f)
 
     // Point positions (same for all modes)
-    private val POINTS = floatArrayOf(
-        0.8f, 0.2f, 1.0f,
-        0.8f, 0.9f, 1.0f,
-        0.2f, 0.9f, 1.0f,
-        0.2f, 0.2f, 1.0f
-    )
+    private val POINTS = floatArrayOf(0.8f, 0.2f, 1.0f, 1f, 0.9f, 1.0f, 0.2f, 1f, 1.0f, 0.2f, 0.2f, 1f)
 
     // ---------------------------------------------------------------
     // Color parameter bundles (RGB+A in 0..1 range), copied verbatim
@@ -68,9 +63,9 @@ object AboutBgEffect {
     }
 
     private val PHONE_LIGHT = BgParams(
-        gradientColors1 = floatArrayOf(1f,0.9f,0.94f,1f,  1f,0.84f,0.89f,1f,  0.97f,0.73f,0.82f,1f,  0.64f,0.65f,0.98f,1f),
-        gradientColors2 = floatArrayOf(0.58f,0.74f,1f,1f,  1f,0.9f,0.93f,1f,  0.74f,0.76f,1f,1f,  0.97f,0.77f,0.84f,1f),
-        gradientColors3 = floatArrayOf(0.98f,0.86f,0.9f,1f,  0.6f,0.73f,0.98f,1f,  0.92f,0.93f,1f,1f,  0.56f,0.69f,1f,1f),
+        gradientColors1 = floatArrayOf(1f, 0.9f, 0.94f, 1f, 1f, 0.84f, 0.89f, 1f, 0.97f, 0.73f, 0.82f, 1f, 0.64f, 0.65f, 0.98f, 1f),
+        gradientColors2 = floatArrayOf(0.58f, 0.74f, 1f, 1f, 1f, 0.9f, 0.93f, 1f, 0.74f, 0.76f, 1f, 1f, 0.97f, 0.77f, 0.84f, 1f),
+        gradientColors3 = floatArrayOf(0.98f, 0.86f, 0.9f, 1f, 0.6f, 0.73f, 0.98f, 1f, 0.92f, 0.93f, 1f, 1f, 0.56f, 0.69f, 1f, 1f),
         colorInterpPeriod = 5f, gradientSpeedChange = 1.6f, gradientSpeedRest = 1.05f,
         uAlphaMulti = 1f, uAlphaOffset = 0.5f, uLightOffset = 0.1f, uNoiseScale = 1.5f,
         uPointOffset = 0.2f, uPointRadiusMulti = 1f, uSaturateOffset = 0.2f,
@@ -79,9 +74,9 @@ object AboutBgEffect {
     )
 
     private val PHONE_DARK = BgParams(
-        gradientColors1 = floatArrayOf(0.2f,0.06f,0.88f,0.4f,  0.3f,0.14f,0.55f,0.5f,  0f,0.64f,0.96f,0.5f,  0.11f,0.16f,0.83f,0.4f),
-        gradientColors2 = floatArrayOf(0.07f,0.15f,0.79f,0.5f,  0.62f,0.21f,0.67f,0.5f,  0.06f,0.25f,0.84f,0.5f,  0f,0.2f,0.78f,0.5f),
-        gradientColors3 = floatArrayOf(0.58f,0.3f,0.74f,0.4f,  0.27f,0.18f,0.6f,0.5f,  0.66f,0.26f,0.62f,0.5f,  0.12f,0.16f,0.7f,0.6f),
+        gradientColors1 = floatArrayOf(0.2f, 0.06f, 0.88f, 1f, 0.3f, 0.14f, 0.55f, 1f, 0f, 0.64f, 0.96f, 1f, 0.11f, 0.16f, 0.83f, 1f),
+        gradientColors2 = floatArrayOf(0.07f, 0.15f, 0.79f, 1f, 0.62f, 0.21f, 0.67f, 1f, 0.06f, 0.25f, 0.84f, 1f, 0f, 0.2f, 0.78f, 1f),
+        gradientColors3 = floatArrayOf(0.58f, 0.3f, 0.74f, 1f, 0.27f, 0.18f, 0.6f, 1f, 0.66f, 0.26f, 0.62f, 1f, 0.12f, 0.16f, 0.7f, 1f),
         colorInterpPeriod = 8f, gradientSpeedChange = 1f, gradientSpeedRest = 1f,
         uAlphaMulti = 1f, uAlphaOffset = 0.5f, uLightOffset = 0f, uNoiseScale = 1.5f,
         uPointOffset = 0.4f, uPointRadiusMulti = 1f, uSaturateOffset = 0.17f,
@@ -140,8 +135,7 @@ object AboutBgEffect {
                 lastNanos = now
                 animTime += dt * speed
                 computeGradientColor()
-                shader.setFloatUniform("uResolution", floatArrayOf(
-                    target.width.toFloat().coerceAtLeast(1f),
+                shader.setFloatUniform("uResolution", floatArrayOf(target.width.toFloat().coerceAtLeast(1f),
                     target.height.toFloat().coerceAtLeast(1f)
                 ))
                 shader.setFloatUniform("uAnimTime", animTime)
@@ -168,8 +162,7 @@ object AboutBgEffect {
             linearInterpolate(uColors, startColors, endColors, 0f)
             applyStaticUniforms()
             // Initial resolution — view may not be laid out yet, tick will correct
-            shader.setFloatUniform("uResolution", floatArrayOf(
-                target.width.toFloat().coerceAtLeast(1f),
+            shader.setFloatUniform("uResolution", floatArrayOf(target.width.toFloat().coerceAtLeast(1f),
                 target.height.toFloat().coerceAtLeast(1f)
             ))
             target.postOnAnimation(tick)

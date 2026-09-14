@@ -377,6 +377,10 @@ fun AboutScreen(onBack: () -> Unit) {
                 }
 
                 item {
+                     Spacer(modifier = Modifier.height(4.dp))
+                 }
+
+                 item {
                      Card(
                          modifier = Modifier.graphicsLayer { alpha = cardsAlphaAnim }
                              .fillMaxWidth()
@@ -412,6 +416,10 @@ fun AboutScreen(onBack: () -> Unit) {
                  }
 
                 item {
+                     Spacer(modifier = Modifier.height(4.dp))
+                 }
+
+                 item {
                      val updateSummary = when {
                          checkingUpdate -> context.getString(R.string.checking_updates)
                          updateResult is UpdateResult.UpdateAvailable -> {
@@ -420,7 +428,7 @@ fun AboutScreen(onBack: () -> Unit) {
                              else context.getString(R.string.new_version_available)
                          }
                          updateResult is UpdateResult.UpToDate -> context.getString(R.string.up_to_date)
-                         else -> ""
+                         else -> context.getString(R.string.about_check_updates_desc)
                      }
                      Card(
                          modifier = Modifier.graphicsLayer { alpha = cardsAlphaAnim }
