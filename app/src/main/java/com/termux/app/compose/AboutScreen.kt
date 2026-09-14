@@ -1,4 +1,4 @@
-﻿package com.termux.app.compose
+package com.termux.app.compose
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -274,8 +274,8 @@ fun AboutScreen(onBack: () -> Unit) {
                         Text(
                             text = "Termux Ultra",
                             style = TextStyle(
-                                fontSize = 24.sp,
-                                fontWeight = FontWeight.Bold,
+                                fontSize = 36.sp,
+                                fontWeight = FontWeight.Black,
                                 color = MiuixTheme.colorScheme.onSurface
                             )
                         )
@@ -328,33 +328,39 @@ fun AboutScreen(onBack: () -> Unit) {
                 }
 
                 item {
-                    ArrowPreference(
-                        title = context.getString(R.string.developer_name),
-                        summary = "@TiG-Kira",
-                        onClick = {
-                            val intent = android.content.Intent(
-                                android.content.Intent.ACTION_VIEW,
-                                android.net.Uri.parse("https://github.com/TiG-Kira")
-                            )
-                            context.startActivity(intent)
-                        },
-                        startAction = {
-                            Box(
-                                modifier = Modifier
-                                    .size(40.dp)
-                                    .clip(CircleShape)
-                                    .background(MiuixTheme.colorScheme.surfaceVariant),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                AsyncImage(
-                                    model = "https://github.com/TiG-Kira.png",
-                                    contentDescription = "Developer Avatar",
-                                    modifier = Modifier.size(40.dp)
-                                )
-                            }
-                        }
-                    )
-                }
+                     Card(
+                         modifier = Modifier.graphicsLayer { alpha = cardsAlphaAnim }
+                             .fillMaxWidth()
+                             .padding(horizontal = 16.dp)
+                     ) {
+                         ArrowPreference(
+                             title = context.getString(R.string.developer_name),
+                             summary = "@TiG-Kira",
+                             onClick = {
+                                 val intent = android.content.Intent(
+                                     android.content.Intent.ACTION_VIEW,
+                                     android.net.Uri.parse("https://github.com/TiG-Kira")
+                                 )
+                                 context.startActivity(intent)
+                             },
+                             startAction = {
+                                 Box(
+                                     modifier = Modifier
+                                         .size(40.dp)
+                                         .clip(CircleShape)
+                                         .background(MiuixTheme.colorScheme.surfaceVariant),
+                                     contentAlignment = Alignment.Center
+                                 ) {
+                                     AsyncImage(
+                                         model = "https://github.com/TiG-Kira.png",
+                                         contentDescription = "Developer Avatar",
+                                         modifier = Modifier.size(40.dp)
+                                     )
+                                 }
+                             }
+                         )
+                     }
+                 }
 
                 item {
                     Text(
@@ -371,60 +377,72 @@ fun AboutScreen(onBack: () -> Unit) {
                 }
 
                 item {
-                    ArrowPreference(
-                        title = context.getString(R.string.contributor_awkoo_name),
-                        summary = "@awkox",
-                        onClick = {
-                            val intent = android.content.Intent(
-                                android.content.Intent.ACTION_VIEW,
-                                android.net.Uri.parse("https://github.com/awkox")
-                            )
-                            context.startActivity(intent)
-                        },
-                        startAction = {
-                            Box(
-                                modifier = Modifier
-                                    .size(40.dp)
-                                    .clip(CircleShape)
-                                    .background(MiuixTheme.colorScheme.surfaceVariant),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                AsyncImage(
-                                    model = "https://avatars.githubusercontent.com/u/133107732?v=4",
-                                    contentDescription = "Contributor Avatar",
-                                    modifier = Modifier.size(40.dp)
-                                )
-                            }
-                        }
-                    )
-                }
+                     Card(
+                         modifier = Modifier.graphicsLayer { alpha = cardsAlphaAnim }
+                             .fillMaxWidth()
+                             .padding(horizontal = 16.dp)
+                     ) {
+                         ArrowPreference(
+                             title = context.getString(R.string.contributor_awkoo_name),
+                             summary = "@awkox",
+                             onClick = {
+                                 val intent = android.content.Intent(
+                                     android.content.Intent.ACTION_VIEW,
+                                     android.net.Uri.parse("https://github.com/awkox")
+                                 )
+                                 context.startActivity(intent)
+                             },
+                             startAction = {
+                                 Box(
+                                     modifier = Modifier
+                                         .size(40.dp)
+                                         .clip(CircleShape)
+                                         .background(MiuixTheme.colorScheme.surfaceVariant),
+                                     contentAlignment = Alignment.Center
+                                 ) {
+                                     AsyncImage(
+                                         model = "https://avatars.githubusercontent.com/u/133107732?v=4",
+                                         contentDescription = "Contributor Avatar",
+                                         modifier = Modifier.size(40.dp)
+                                     )
+                                 }
+                             }
+                         )
+                     }
+                 }
 
                 item {
-                    val updateSummary = when {
-                        checkingUpdate -> context.getString(R.string.checking_updates)
-                        updateResult is UpdateResult.UpdateAvailable -> {
-                            val available = updateResult as UpdateResult.UpdateAvailable
-                            if (available.isBeta) context.getString(R.string.beta_version_available)
-                            else context.getString(R.string.new_version_available)
-                        }
-                        updateResult is UpdateResult.UpToDate -> context.getString(R.string.up_to_date)
-                        else -> ""
-                    }
-                    ArrowPreference(
-                        title = context.getString(R.string.check_updates),
-                        summary = updateSummary,
-                        onClick = {
-                            if (!checkingUpdate) {
-                                checkingUpdate = true
-                                scope.launch {
-                                    updateResult = UpdateChecker.checkForUpdates(currentVersion, betaUpdateEnabled)
-                                    showUpdateDialog = true
-                                    checkingUpdate = false
-                                }
-                            }
-                        }
-                    )
-                }
+                     val updateSummary = when {
+                         checkingUpdate -> context.getString(R.string.checking_updates)
+                         updateResult is UpdateResult.UpdateAvailable -> {
+                             val available = updateResult as UpdateResult.UpdateAvailable
+                             if (available.isBeta) context.getString(R.string.beta_version_available)
+                             else context.getString(R.string.new_version_available)
+                         }
+                         updateResult is UpdateResult.UpToDate -> context.getString(R.string.up_to_date)
+                         else -> ""
+                     }
+                     Card(
+                         modifier = Modifier.graphicsLayer { alpha = cardsAlphaAnim }
+                             .fillMaxWidth()
+                             .padding(horizontal = 16.dp)
+                     ) {
+                         ArrowPreference(
+                             title = context.getString(R.string.check_updates),
+                             summary = updateSummary,
+                             onClick = {
+                                 if (!checkingUpdate) {
+                                     checkingUpdate = true
+                                     scope.launch {
+                                         updateResult = UpdateChecker.checkForUpdates(currentVersion, betaUpdateEnabled)
+                                         showUpdateDialog = true
+                                         checkingUpdate = false
+                                     }
+                                 }
+                             }
+                         )
+                     }
+                 }
 
                 item {
                     Spacer(modifier = Modifier.height(12.dp))
