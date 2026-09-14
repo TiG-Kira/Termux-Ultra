@@ -63,12 +63,12 @@ object AboutBgEffect {
     }
 
     private val PHONE_LIGHT = BgParams(
-        gradientColors1 = floatArrayOf(1f, 0.9f, 0.94f, 1f, 1f, 0.84f, 0.89f, 1f, 0.97f, 0.73f, 0.82f, 1f, 0.64f, 0.65f, 0.98f, 1f),
-        gradientColors2 = floatArrayOf(0.58f, 0.74f, 1f, 1f, 1f, 0.9f, 0.93f, 1f, 0.74f, 0.76f, 1f, 1f, 0.97f, 0.77f, 0.84f, 1f),
-        gradientColors3 = floatArrayOf(0.98f, 0.86f, 0.9f, 1f, 0.6f, 0.73f, 0.98f, 1f, 0.92f, 0.93f, 1f, 1f, 0.56f, 0.69f, 1f, 1f),
+        gradientColors1 = floatArrayOf(1f, 0.9f, 0.94f, 0.4f, 1f, 0.84f, 0.89f, 0.5f, 0.97f, 0.73f, 0.82f, 0.5f, 0.64f, 0.65f, 0.98f, 0.4f),
+        gradientColors2 = floatArrayOf(0.58f, 0.74f, 1f, 0.4f, 1f, 0.9f, 0.93f, 0.5f, 0.74f, 0.76f, 1f, 0.5f, 0.97f, 0.77f, 0.84f, 0.4f),
+        gradientColors3 = floatArrayOf(0.98f, 0.86f, 0.9f, 0.4f, 0.6f, 0.73f, 0.98f, 0.5f, 0.92f, 0.93f, 1f, 0.5f, 0.56f, 0.69f, 1f, 0.4f),
         colorInterpPeriod = 5f, gradientSpeedChange = 1.6f, gradientSpeedRest = 1.05f,
-        uAlphaMulti = 1f, uAlphaOffset = 0.5f, uLightOffset = 0.1f, uNoiseScale = 1.5f,
-        uPointOffset = 0.2f, uPointRadiusMulti = 1f, uSaturateOffset = 0.2f,
+        uAlphaMulti = 1f, uAlphaOffset = 0.5f, uLightOffset = 0f, uNoiseScale = 1.5f,
+        uPointOffset = 0.2f, uPointRadiusMulti = 1f, uSaturateOffset = 0f,
         uShadowColorMulti = 0.3f, uShadowColorOffset = 0.3f, uShadowNoiseScale = 5f,
         uShadowOffset = 0.01f, uTranslateY = 0f,
     )
