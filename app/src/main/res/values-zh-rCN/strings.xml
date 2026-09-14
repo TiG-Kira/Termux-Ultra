@@ -1274,5 +1274,18 @@
     <string name="index_update_failed">包索引更新失败，可能网络异常</string>
     <string name="pkg_manager_busy">包管理器被占用</string>
     <string name="dangerous_action_confirm">危险操作，需要确认</string>
+    <string name="prefs_about_cat_devs">开发者与贡献者</string>
+    <string name="prefs_about_cat_device">设备信息</string>
+    <string name="prefs_about_cat_update">更新</string>
+    <string name="prefs_about_cat_version">版本信息</string>
+    <string name="prefs_about_cat_legal">开源与许可</string>
+    <string name="check_updates_summary">检查 GitHub 是否有新版本发布</string>
+    <string name="libterminal_core_title">新星引擎核心</string>
+    <string name="prefs_about_github">Termux Ultra GitHub</string>
+    <string name="prefs_about_github_desc">访问 Termux Ultra 源代码仓库</string>
+    <string name="prefs_about_termux_original">Termux 原版项目</string>
+    <string name="prefs_about_termux_original_desc">查看 Termux 上游原版项目</string>
+    <string name="contributor_1_name">awkoo</string>
+    <string name="contributor_1_username">@awkox</string>
 </resources>
 

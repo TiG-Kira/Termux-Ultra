@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Termux Ultra About Page — HyperCeiler-style Preference XML
+-->
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- ========== 开发者与贡献者 ========== -->
+    <PreferenceCategory
+        android:key="cat_devs"
+        android:title="@string/prefs_about_cat_devs">
+
+        <com.termux.app.preference.CircleIconPreference
+            android:key="about_developer"
+            android:title="@string/developer_name"
+            android:summary="@string/developer_username"
+            android:icon="@drawable/ic_person" />
+
+        <com.termux.app.preference.CircleIconPreference
+            android:key="about_contributor_1"
+            android:title="@string/contributor_1_name"
+            android:summary="@string/contributor_1_username"
+            android:icon="@drawable/ic_person" />
+
+    </PreferenceCategory>
+
+    <!-- ========== 设备信息 ========== -->
+    <PreferenceCategory
+        android:key="cat_device"
+        android:title="@string/prefs_about_cat_device">
+
+        <Preference
+            android:key="device_model"
+            android:selectable="false"
+            android:title="@string/device_model" />
+
+        <Preference
+            android:key="android_version"
+            android:selectable="false"
+            android:title="@string/android_version" />
+
+        <Preference
+            android:key="kernel_version"
+            android:selectable="false"
+            android:title="@string/kernel_version" />
+
+    </PreferenceCategory>
+
+    <!-- ========== 更新 ========== -->
+    <PreferenceCategory
+        android:key="cat_update"
+        android:title="@string/prefs_about_cat_update">
+
+        <Preference
+            android:key="check_updates"
+            android:title="@string/check_updates" />
+
+    </PreferenceCategory>
+
+    <!-- ========== 版本信息 ========== -->
+    <PreferenceCategory
+        android:key="cat_version"
+        android:title="@string/prefs_about_cat_version">
+
+        <Preference
+            android:key="tu_version"
+            android:selectable="false"
+            android:title="@string/termux_ultra_version" />
+
+        <Preference
+            android:key="based_on_termux"
+            android:selectable="false"
+            android:title="@string/based_on_termux_version" />
+
+        <Preference
+            android:key="libterminal_version"
+            android:selectable="false"
+            android:title="@string/libterminal_core_title" />
+
+    </PreferenceCategory>
+
+    <!-- ========== 开源与许可 ========== -->
+    <PreferenceCategory
+        android:key="cat_legal"
+        android:title="@string/prefs_about_cat_legal">
+
+        <Preference
+            android:key="about_license"
+            android:selectable="false"
+            android:title="@string/about_license" />
+
+        <Preference
+            android:key="termux_ultra_github"
+            android:title="@string/prefs_about_github">
+            <intent
+                android:action="android.intent.action.VIEW"
+                android:data="https://github.com/TiG-Kira/Termux-Ultra" />
+        </Preference>
+
+        <Preference
+            android:key="termux_original"
+            android:title="@string/prefs_about_termux_original">
+            <intent
+                android:action="android.intent.action.VIEW"
+                android:data="https://github.com/termux/termux-app" />
+        </Preference>
+
+    </PreferenceCategory>
+
+</PreferenceScreen>
