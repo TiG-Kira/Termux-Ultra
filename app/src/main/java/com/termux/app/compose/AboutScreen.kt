@@ -187,7 +187,7 @@ fun AboutScreen(onBack: () -> Unit) {
     ) {
         if (useShaderBg) {
             AndroidView(
-                modifier = Modifier.fillMaxSize().graphicsLayer { alpha = 1f - scrollFraction }.blur(120.dp).zIndex(-1f),
+                modifier = Modifier.fillMaxSize().graphicsLayer { alpha = (1f - scrollFraction) * (if (darkTheme) 0.5f else 1f) }.blur(120.dp).zIndex(-1f),
                 factory = { ctx ->
                     android.view.View(ctx).apply {
                         setBackgroundColor(android.graphics.Color.TRANSPARENT)
@@ -208,7 +208,7 @@ fun AboutScreen(onBack: () -> Unit) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .graphicsLayer { alpha = 1f - scrollFraction }
+                    .graphicsLayer { alpha = (1f - scrollFraction) * (if (darkTheme) 0.5f else 1f) }
                     .background(if (darkTheme) darkGradient else lightGradient)
             )
         }
@@ -262,14 +262,15 @@ fun AboutScreen(onBack: () -> Unit) {
                             Image(
                                 painter = appIcon,
                                 contentDescription = "Logo",
-                                modifier = Modifier.size(100.dp)
+                                modifier = Modifier.size(100.dp),
+                                colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(Color(0xFF888888), BlendMode.SrcIn)
                             )
                         } else {
                             Icon(
                                 painter = painterResource(R.drawable.ic_terminal),
                                 contentDescription = "Logo",
                                 modifier = Modifier.size(60.dp),
-                                tint = MiuixTheme.colorScheme.onSurface
+                                tint = Color(0xFF888888)
                             )
                         }
                         Spacer(modifier = Modifier.height(20.dp))
@@ -278,7 +279,7 @@ fun AboutScreen(onBack: () -> Unit) {
                             style = TextStyle(
                                 fontSize = 36.sp,
                                 fontWeight = FontWeight.Black,
-                                color = MiuixTheme.colorScheme.onSurface
+                                color = Color(0xFF888888)
                             )
                         )
                         Spacer(modifier = Modifier.height(10.dp))
@@ -290,7 +291,7 @@ fun AboutScreen(onBack: () -> Unit) {
                                 text = currentVersion,
                                 style = TextStyle(
                                     fontSize = 16.sp,
-                                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                                    color = Color(0xFF888888)
                                 )
                             )
                             if (releaseStatus == UpdateChecker.ReleaseStatus.PRERELEASE) {
