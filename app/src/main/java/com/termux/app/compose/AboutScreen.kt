@@ -170,9 +170,9 @@ fun AboutScreen(onBack: () -> Unit) {
         label = "headerAlpha"
     )
 
-    // 其他卡片透明度: 初始85%不透明, 上滑到100%
+    // 其他卡片: 始终完全不透明 (背景穿透只在 header)
     val cardsAlphaAnim by animateFloatAsState(
-        targetValue = 0.85f + scrollFraction * 0.15f,
+        targetValue = 1f,
         label = "cardsAlpha"
     )
 
