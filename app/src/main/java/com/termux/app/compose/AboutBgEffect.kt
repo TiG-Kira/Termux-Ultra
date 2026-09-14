@@ -140,11 +140,17 @@ object AboutBgEffect {
                 lastNanos = now
                 animTime += dt * speed
                 computeGradientColor()
+                shader.setFloatUniform("uResolution", floatArrayOf(
+                    target.width.toFloat().coerceAtLeast(1f),
+                    target.height.toFloat().coerceAtLeast(1f)
+                ))
                 shader.setFloatUniform("uAnimTime", animTime)
                 shader.setFloatUniform("uColors", uColors)
                 try {
                     target.setRenderEffect(RenderEffect.createShaderEffect(shader))
-                } catch (_: Throwable) { /* API guard */ }
+                } catch (_: Throwable) {
+                    try { target.setRenderEffect(null) } catch (_: Throwable) {}
+                }
                 target.postOnAnimation(this)
             }
         }
@@ -161,6 +167,11 @@ object AboutBgEffect {
             endColors = params.gradientColors2.copyOf()
             linearInterpolate(uColors, startColors, endColors, 0f)
             applyStaticUniforms()
+            // Initial resolution — view may not be laid out yet, tick will correct
+            shader.setFloatUniform("uResolution", floatArrayOf(
+                target.width.toFloat().coerceAtLeast(1f),
+                target.height.toFloat().coerceAtLeast(1f)
+            ))
             target.postOnAnimation(tick)
         }
 
@@ -236,7 +247,7 @@ object AboutBgEffect {
      * Entry point — returns null on API < 33 (caller should fall back to Brush).
      */
     fun createFor(target: View, isDark: Boolean): ShaderController? {
-        if (Build.VERSION.SDK_INT < 33) return null
+        if (Build.VERSION.SDK_INT < 31) return null
         return ShaderController(target, getParams(isDark), R.raw.about_bg_shader)
     }
 }
