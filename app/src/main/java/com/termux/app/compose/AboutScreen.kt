@@ -175,6 +175,8 @@ fun AboutScreen(onBack: () -> Unit) {
 
     // Dual-track background: API 33+ RuntimeShader animated, older Brush fallback
     val useShaderBg = android.os.Build.VERSION.SDK_INT >= 33
+    var bgController by remember { mutableStateOf<AboutBgEffect.ShaderController?>(null) }
+    var bgDarkTheme by remember { mutableStateOf(darkTheme) }
 
     Box(
         modifier = Modifier.fillMaxSize()
@@ -185,17 +187,15 @@ fun AboutScreen(onBack: () -> Unit) {
                 factory = { ctx ->
                     android.view.View(ctx).apply {
                         val ctl = AboutBgEffect.createFor(this, darkTheme)
-                        setTag(1000, ctl)
-                        setTag(1001, darkTheme)
+                        bgController = ctl
+                        bgDarkTheme = darkTheme
                         ctl?.start()
                     }
                 },
-                update = { view ->
-                    val ctl = view.getTag(1000) as? AboutBgEffect.ShaderController
-                    val last = view.getTag(1001) as? Boolean
-                    if (last != darkTheme) {
-                        ctl?.updateParams(AboutBgEffect.getParams(darkTheme))
-                        view.setTag(1001, darkTheme)
+                update = { _ ->
+                    if (bgDarkTheme != darkTheme) {
+                        bgController?.updateParams(AboutBgEffect.getParams(darkTheme))
+                        bgDarkTheme = darkTheme
                     }
                 }
             )
