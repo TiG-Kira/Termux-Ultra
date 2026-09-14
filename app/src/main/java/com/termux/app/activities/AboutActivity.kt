@@ -1,28 +1,48 @@
 package com.termux.app.activities
 
-import androidx.activity.ComponentActivity
-import androidx.activity.compose.setContent
-import androidx.compose.runtime.CompositionLocalProvider
-import androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner
-import com.termux.app.compose.AboutScreen
-import com.termux.app.compose.KiTerminalTheme
-import com.termux.app.compose.NavigationHelper
+import android.os.Bundle
+import android.view.MenuItem
+import android.view.WindowManager
+import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.widget.Toolbar
+import androidx.core.view.WindowCompat
 
-class AboutActivity : ComponentActivity() {
+import com.termux.R
+import com.termux.app.fragments.AboutFragment
 
-    override fun onCreate(savedInstanceState: android.os.Bundle?) {
+/**
+ * HyperCeiler-style AboutActivity.
+ * Replaces the old Compose AboutScreen with a native Fragment-based layout.
+ */
+class AboutActivity : AppCompatActivity() {
+
+    override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        setContent {
-            val navDispatcher = NavigationHelper.createDispatcher()
-            val navDispatcherOwner = NavigationHelper.createOwner(navDispatcher)
-            CompositionLocalProvider(
-                LocalNavigationEventDispatcherOwner provides navDispatcherOwner
-            ) {
-                KiTerminalTheme {
-                    AboutScreen(onBack = { finish() })
-                }
-            }
+        // Edge-to-edge (matches Compose version behavior)
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+
+        setContentView(R.layout.activity_about)
+
+        val toolbar = findViewById<Toolbar>(R.id.toolbar)
+        setSupportActionBar(toolbar)
+        supportActionBar?.setDisplayHomeAsUpEnabled(true)
+        supportActionBar?.setHomeButtonEnabled(true)
+        supportActionBar?.title = getString(R.string.about_preference_title)
+
+        if (savedInstanceState == null) {
+            supportFragmentManager.beginTransaction()
+                .replace(R.id.container, AboutFragment())
+                .commit()
         }
+    }
+
+    override fun onOptionsItemSelected(item: MenuItem): Boolean {
+        if (item.itemId == android.R.id.home) {
+            finish()
+            return true
+        }
+        return super.onOptionsItemSelected(item)
     }
 }
