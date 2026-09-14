@@ -69,8 +69,6 @@ object RiskConfirmManager {
     const val PREFS_NAME = "termux_risk_confirm"
     const val KEY_ENABLED = "risk_confirm_enabled"       // 迁移用：旧的布尔开关
     const val KEY_PROTECTION_LEVEL = "protection_level"   // 新的保护级别 (Int)
-    const val KEY_DETECTION_MODE = "detection_mode"       // 新的侦测模式 (Int)
-    const val KEY_PREVIOUS_DETECTION_MODE = "previous_detection_mode"  // 上次选择的侦测模式
     const val KEY_PENDING_SESSION_HANDLE = "pending_session_handle"
     const val KEY_PENDING_COMMAND = "pending_command"
     const val KEY_PENDING_RESULT = "pending_result"
@@ -114,12 +112,9 @@ object RiskConfirmManager {
         lastCommandAutoBlocked = false
     }
 
-    // ---- 性能优化：缓存防护等级和侦测模式，避免每次命令都读取 SharedPreferences ----
+    // ---- 性能优化：缓存防护等级，避免每次命令都读取 SharedPreferences ----
     @Volatile
     private var cachedProtectionLevel: ProtectionLevel? = null
-
-    @Volatile
-    private var cachedDetectionMode: DetectionMode? = null
 
     /** 会话环境类型缓存（使用 WeakHashMap 避免内存泄漏） */
     private val environmentCache = java.util.concurrent.ConcurrentHashMap<String, EnvironmentType>()
@@ -140,13 +135,6 @@ object RiskConfirmManager {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             val levelOrdinal = prefs.getInt(KEY_PROTECTION_LEVEL, ProtectionLevel.WARN_VERIFY.ordinal)
             cachedProtectionLevel = ProtectionLevel.entries.getOrElse(levelOrdinal) { ProtectionLevel.WARN_VERIFY }
-            
-            if (cachedProtectionLevel != ProtectionLevel.OFF) {
-                val modeOrdinal = prefs.getInt(KEY_DETECTION_MODE, DetectionMode.STATIC.ordinal)
-                cachedDetectionMode = DetectionMode.entries.getOrElse(modeOrdinal) { DetectionMode.STATIC }
-            } else {
-                cachedDetectionMode = DetectionMode.NONE
-            }
         } catch (_: Exception) {
             // 忽略异常，保持缓存为 null
         }
@@ -246,13 +234,6 @@ object RiskConfirmManager {
         WARN_ONLY("仅提示", "Snackbar 提示但不拦截"),
         WARN_VERIFY("警告并验证", "弹窗 + 倒计时 + 生物认证"),
         AUTO_BLOCK("自动拦截", "直接拒绝执行危险命令")
-    }
-
-    /** 侦测模式 */
-    enum class DetectionMode(val displayName: String) {
-        NONE("无"),
-        STATIC("静态侦测"),
-        RUNTIME("运行时解析")
     }
 
     /** 弹窗状态 */
@@ -434,76 +415,15 @@ object RiskConfirmManager {
         return level
     }
 
-    /** 设置保护级别（同时更新缓存，并通知 SettingsScreen 刷新） */
+        /** 设置保护级别（同时更新缓存，并通知 SettingsScreen 刷新） */
     fun setProtectionLevel(context: Context, level: ProtectionLevel) {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val currentLevel = getProtectionLevel(context)
-        
-        // 如果切换到 OFF，保存当前检测模式到 previous，然后设置为 NONE
-        if (level == ProtectionLevel.OFF && currentLevel != ProtectionLevel.OFF) {
-            val currentDetection = getDetectionMode(context)
-            if (currentDetection != DetectionMode.NONE) {
-                prefs.edit()
-                    .putInt(KEY_PREVIOUS_DETECTION_MODE, currentDetection.ordinal)
-                    .putInt(KEY_DETECTION_MODE, DetectionMode.NONE.ordinal)
-                    .putInt(KEY_PROTECTION_LEVEL, level.ordinal)
-                    .apply()
-                cachedProtectionLevel = level
-                cachedDetectionMode = DetectionMode.NONE
-                _disableWarningState.value = DisableWarningState()
-                applySecurityConfiguration(context, level == ProtectionLevel.OFF)
-                return
-            }
-        }
-        
-        // 从 OFF 切换到其他等级时，恢复之前保存的检测模式
-        if (level != ProtectionLevel.OFF && currentLevel == ProtectionLevel.OFF) {
-            val previousDetection = prefs.getInt(KEY_PREVIOUS_DETECTION_MODE, DetectionMode.STATIC.ordinal)
-            prefs.edit()
-                .putInt(KEY_PROTECTION_LEVEL, level.ordinal)
-                .putInt(KEY_DETECTION_MODE, previousDetection)
-                .apply()
-            cachedProtectionLevel = level
-            cachedDetectionMode = DetectionMode.entries.getOrElse(previousDetection) { DetectionMode.STATIC }
-            _disableWarningState.value = DisableWarningState()
-            applySecurityConfiguration(context, level == ProtectionLevel.OFF)
-            return
-        }
-        
         prefs.edit()
             .putInt(KEY_PROTECTION_LEVEL, level.ordinal)
             .apply()
         cachedProtectionLevel = level
         _disableWarningState.value = DisableWarningState()
         applySecurityConfiguration(context, level == ProtectionLevel.OFF)
-    }
-
-    /** 获取侦测模式（优先从缓存读取） */
-    fun getDetectionMode(context: Context): DetectionMode {
-        // 如果防护等级为 OFF，返回 NONE
-        val protectionLevel = getProtectionLevel(context)
-        if (protectionLevel == ProtectionLevel.OFF) {
-            cachedDetectionMode = DetectionMode.NONE
-            return DetectionMode.NONE
-        }
-        cachedDetectionMode?.let { mode ->
-            if (mode != DetectionMode.NONE) return mode
-        }
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val ordinal = prefs.getInt(KEY_DETECTION_MODE, DetectionMode.STATIC.ordinal)
-        val mode = DetectionMode.entries.getOrElse(ordinal) { DetectionMode.STATIC }
-        val result = if (mode == DetectionMode.NONE) DetectionMode.STATIC else mode
-        cachedDetectionMode = result
-        return result
-    }
-
-    /** 设置侦测模式（同时更新缓存） */
-    fun setDetectionMode(context: Context, mode: DetectionMode) {
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        prefs.edit()
-            .putInt(KEY_DETECTION_MODE, mode.ordinal)
-            .apply()
-        cachedDetectionMode = mode
     }
 
     /**
@@ -1382,7 +1302,6 @@ object RiskConfirmManager {
         agentReason: String? = null
     ): Boolean {
 
-
         // Compose 核心会话：记录引用，确认结果返回时按 handle 恢复
         if (adapter is ComposeSessionAdapter) {
             pendingComposeSession = adapter.session
@@ -1709,7 +1628,6 @@ fun RiskConfirmDialogHost(
             }
         }
     }
-
 
     val thirdPartyBlocked = rememberThirdPartyBlocked(context)
 
