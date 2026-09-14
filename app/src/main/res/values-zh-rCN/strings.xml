@@ -668,17 +668,6 @@
     <string name="protection_level_auto_block">自动拦截</string>
     <string name="protection_level_auto_block_desc">直接拦截危险命令执行</string>
 
-    <!-- 防护检测手段 -->
-    <string name="detection_mode_title">防护检测手段</string>
-    <string name="detection_mode_summary">当前：%1$s</string>
-    <string name="detection_mode_dialog_summary">选择危险命令的检测方式。静态扫描在执行前检查命令模式；运行时解析在命令运行时拦截。</string>
-    <string name="detection_mode_none">无</string>
-    <string name="detection_mode_none_desc">不自动检测 — 仅依赖手动或可信输入</string>
-    <string name="detection_mode_static">静态侦测</string>
-    <string name="detection_mode_static_desc">基于正则的命令模式预匹配 — 快速轻量</string>
-    <string name="detection_mode_runtime">运行时解析</string>
-    <string name="detection_mode_runtime_desc">运行时命令解析与拦截 — 捕获动态构造的危险命令</string>
-
     <!-- 脚本检测 -->
     <string name="script_detection_title">脚本安全检查</string>
     <string name="script_detection_message">脚本中包含 %1$d 条危险命令，请审查后再执行。</string>

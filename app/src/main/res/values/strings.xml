@@ -779,17 +779,6 @@
     <string name="protection_level_auto_block">Auto Block</string>
     <string name="protection_level_auto_block_desc">Directly block execution of dangerous commands</string>
 
-    <!-- Detection Mode -->
-    <string name="detection_mode_title">Protection Detection Method</string>
-    <string name="detection_mode_summary">Current: %1$s</string>
-    <string name="detection_mode_dialog_summary">Choose how dangerous commands are detected. Static scanning checks command patterns before execution; runtime parsing intercepts commands as they run.</string>
-    <string name="detection_mode_none">None</string>
-    <string name="detection_mode_none_desc">No automatic detection •relies on manual or trusted input only</string>
-    <string name="detection_mode_static">Static Detection</string>
-    <string name="detection_mode_static_desc">Regex-based command pattern matching before execution •fast and lightweight</string>
-    <string name="detection_mode_runtime">Runtime Parsing</string>
-    <string name="detection_mode_runtime_desc">Runtime command parsing and interception •catches dynamically constructed dangerous commands</string>
-
     <!-- Script Detection -->
     <string name="script_detection_title">Script Safety Check</string>
     <string name="script_detection_message">The script contains %1$d dangerous command(s). Review before executing.</string>

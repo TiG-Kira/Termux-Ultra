@@ -155,11 +155,9 @@ fun SettingsScreen(
     // 高风险命令二次确认
     var riskConfirmEnabled by remember { mutableStateOf(RiskConfirmManager.isEnabled(context)) }
 
-    // 防护等级和检测模式
+    // 防护等级
     var protectionLevel by remember { mutableStateOf(RiskConfirmManager.getProtectionLevel(context)) }
-    var detectionMode by remember { mutableStateOf(RiskConfirmManager.getDetectionMode(context)) }
     var protectionLevelIndex by remember { mutableIntStateOf(RiskConfirmManager.getProtectionLevel(context).ordinal) }
-    var detectionModeIndex by remember { mutableIntStateOf(RiskConfirmManager.getDetectionMode(context).ordinal) }
 
     // 监听关闭警告弹窗的结果，同步状态
     val disableWarningState by RiskConfirmManager.disableWarningState.collectAsState()
@@ -855,11 +853,9 @@ fun SettingsScreen(
                     }
                 )
 
-
             }
 
                         
-
 
                 
 // ---------- Integrated Tools ----------
@@ -1214,49 +1210,7 @@ fun SettingsScreen(
                                 SettingIcon(R.drawable.ic_shield, contentDescription = context.getString(R.string.protection_level_title))
                             }
                         )
-                        val detectionEnabled = protectionLevel != RiskConfirmManager.ProtectionLevel.OFF
-                        val detectionItems = listOf(
-                            RiskConfirmManager.DetectionMode.STATIC to R.string.detection_mode_static_desc,
-                            RiskConfirmManager.DetectionMode.RUNTIME to R.string.detection_mode_runtime_desc
-                        ).map { (mode, descRes) ->
-                            DropdownItem(
-                                text = mode.displayName,
-                                summary = context.getString(descRes)
-                            )
-                        }
-                        // 计算在过滤后的列表中的索引
-                        val filteredDetectionIndex = when (detectionMode) {
-                            RiskConfirmManager.DetectionMode.RUNTIME -> 1
-                            else -> 0
-                        }
-                            WindowSpinnerPreference(
-                            title = context.getString(R.string.detection_mode_title),
-                            summary = if (detectionEnabled) {
-                                when (detectionMode) {
-                                    RiskConfirmManager.DetectionMode.RUNTIME -> context.getString(R.string.detection_mode_runtime_desc)
-                                    else -> context.getString(R.string.detection_mode_static_desc)
-                                }
-                            } else {
-                                context.getString(R.string.detection_mode_none_desc)
-                            },
-                            items = detectionItems,
-                            selectedIndex = filteredDetectionIndex,
-                            onSelectedIndexChange = { idx ->
-                                if (!detectionEnabled) return@WindowSpinnerPreference
-                                val mode = if (idx == 1) {
-                                    RiskConfirmManager.DetectionMode.RUNTIME
-                                } else {
-                                    RiskConfirmManager.DetectionMode.STATIC
-                                }
-                                detectionModeIndex = idx
-                                detectionMode = mode
-                                RiskConfirmManager.setDetectionMode(context, mode)
-                            },
-                            enabled = detectionEnabled,
-                            startAction = {
-                                SettingIcon(R.drawable.ic_detection, contentDescription = context.getString(R.string.detection_mode_title))
-                            }
-                        )
+
                         val agentJudgeEnabled = protectionLevel != RiskConfirmManager.ProtectionLevel.OFF
                         val hasAgentCfg = remember {
                             val cfg = AiTermuxPrefs.getConfig(context).providerConfig
