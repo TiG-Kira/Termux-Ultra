@@ -1218,7 +1218,7 @@
     <string name="model_url_key">Model: %1$s | URL: %2$s | Key: %3$s</string>
     <string name="card_ended_code">Ended · exit code %1$s</string>
     <string name="custom_file">custom file</string>
-    <string name="libterminal_core_info">Nova Engine (LibTerminal) Core Version: %1$s, LibTerminal Author: @awkox</string>
+    <string name="libterminal_core_info">Nova Engine (LibTerminal) Core Version: %1$s</string>
     <string name="currently_using_source">Currently using: %1$s. Tap to switch back to the official default System Prompt</string>
     <string name="temperature_current">Temperature: current %1$.2f  (0 = strict, 1 = creative)</string>
     <string name="fallback_not_configured">Enabled: ⚠️ Tap \\"Configure Backup Online Params\\" below to complete API Key/URL/Model first</string>

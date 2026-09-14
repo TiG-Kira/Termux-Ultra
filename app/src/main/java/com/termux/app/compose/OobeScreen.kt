@@ -6,7 +6,13 @@ import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -33,6 +39,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -40,12 +47,12 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
@@ -55,6 +62,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.zIndex
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.toBitmap
 import coil.compose.AsyncImage
@@ -189,22 +198,69 @@ fun OobeScreen(
     // 第一页和最后一页使用渐变背景
     val useGradient = currentPage == 0 || currentPage == 5
 
+    // Dual-track background: API 33+ RuntimeShader animated, older Brush fallback
+    val useShaderBg = android.os.Build.VERSION.SDK_INT >= 31
+    var bgController by remember { mutableStateOf<AboutBgEffect.ShaderController?>(null) }
+    var bgDarkTheme by remember { mutableStateOf(darkTheme) }
+
     Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .then(
-                if (useGradient) {
-                    Modifier.background(if (darkTheme) darkGradient else lightGradient)
-                } else {
-                    Modifier.background(MiuixTheme.colorScheme.surface)
-                }
-            )
+        modifier = Modifier.fillMaxSize().background(MiuixTheme.colorScheme.surface)
     ) {
-        when (currentPage) {
+        if (useGradient) {
+            if (useShaderBg) {
+                AndroidView(
+                    modifier = Modifier.fillMaxSize()
+                        .graphicsLayer { alpha = if (darkTheme) 0.5f else 1f }
+                        .blur(120.dp)
+                        .zIndex(-1f),
+                    factory = { ctx ->
+                        android.view.View(ctx).apply {
+                            setBackgroundColor(android.graphics.Color.TRANSPARENT)
+                            val ctl = AboutBgEffect.createFor(this, darkTheme)
+                            bgController = ctl
+                            bgDarkTheme = darkTheme
+                            ctl?.start()
+                        }
+                    },
+                    update = { v ->
+                        if (bgDarkTheme != darkTheme) {
+                            bgController?.updateParams(AboutBgEffect.getParams(darkTheme))
+                            bgDarkTheme = darkTheme
+                        }
+                    }
+                )
+                DisposableEffect(Unit) {
+                    onDispose { bgController?.stop() }
+                }
+            } else {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer { alpha = if (darkTheme) 0.5f else 1f }
+                        .background(if (darkTheme) darkGradient else lightGradient)
+                )
+            }
+        }
+        AnimatedContent(
+            targetState = currentPage,
+            transitionSpec = {
+                val direction = if (targetState > initialState) 1 else -1
+                slideInHorizontally(
+                    initialOffsetX = { fullWidth -> fullWidth * direction },
+                    animationSpec = tween(300)
+                ) + fadeIn(animationSpec = tween(200)) togetherWith
+                slideOutHorizontally(
+                    targetOffsetX = { fullWidth -> -fullWidth * direction },
+                    animationSpec = tween(300)
+                ) + fadeOut(animationSpec = tween(200))
+            },
+            label = "oobePage"
+        ) { page ->
+            when (page) {
             0 -> OobeWelcomePage(
                 isUpgrade = isUpgrade,
                 onNext = { goNext() },
-                useGradient = useGradient,
+                darkTheme = darkTheme,
                 )
             1 -> OobeEulaPage(
                 eulaAgreed = eulaAgreed,
@@ -239,8 +295,9 @@ fun OobeScreen(
             )
             5 -> OobeCompletePage(
                 onComplete = onComplete,
-                useGradient = useGradient,
+                darkTheme = darkTheme,
                 )
+            }
         }
     }
 }
@@ -251,48 +308,62 @@ fun OobeScreen(
 private fun OobeWelcomePage(
     isUpgrade: Boolean,
     onNext: () -> Unit,
-    useGradient: Boolean
+    darkTheme: Boolean
 ) {
     val context = LocalContext.current
+    val headerFg = if (darkTheme) Color.White else Color(0xFF333333)
+    val fgInt = android.graphics.Color.argb(
+        (headerFg.alpha * 255).toInt(),
+        (headerFg.red * 255).toInt(),
+        (headerFg.green * 255).toInt(),
+        (headerFg.blue * 255).toInt()
+    )
+    val appIcon = remember(darkTheme) {
+        val orig = ContextCompat.getDrawable(context, R.mipmap.ic_launcher)?.toBitmap()
+        orig?.let { bm ->
+            val copy = bm.copy(android.graphics.Bitmap.Config.ARGB_8888, true)
+            val pixels = IntArray(copy.width * copy.height)
+            copy.getPixels(pixels, 0, copy.width, 0, 0, copy.width, copy.height)
+            for (i in pixels.indices) {
+                val c = pixels[i]
+                val r = (c shr 16) and 0xFF
+                val g = (c shr 8) and 0xFF
+                val b = c and 0xFF
+                val a = (c shr 24) and 0xFF
+                val brightness = (r + g + b) / 3f
+                if (a > 128 && brightness > 180f) {
+                    pixels[i] = 0x00000000
+                } else if (a > 128) {
+                    pixels[i] = fgInt
+                }
+            }
+            copy.setPixels(pixels, 0, copy.width, 0, 0, copy.width, copy.height)
+            copy.asImageBitmap()
+        }
+    }
 
     Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
+        modifier = Modifier.fillMaxSize()
     ) {
+        // Header — 真正垂直居中
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(top = 120.dp, bottom = 80.dp + 32.dp)
+            modifier = Modifier.fillMaxSize().align(Alignment.Center)
         ) {
-            // Logo
-            val appIcon = remember {
-                ContextCompat.getDrawable(context, R.mipmap.ic_launcher)
-                    ?.toBitmap()
-                    ?.asImageBitmap()
-            }
-            Box(
-                modifier = Modifier
-                    .size(96.dp)
-                    .clip(CircleShape)
-                    .background(Color.Black),
-                contentAlignment = Alignment.Center
-            ) {
-                if (appIcon != null) {
-                    Image(
-                        bitmap = appIcon,
-                        contentDescription = "Logo",
-                        modifier = Modifier.size(96.dp)
-                    )
-                } else {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_terminal),
-                        contentDescription = "Logo",
-                        modifier = Modifier.size(48.dp),
-                        tint = Color.White
-                    )
-                }
+            if (appIcon != null) {
+                Image(
+                    bitmap = appIcon,
+                    contentDescription = "Logo",
+                    modifier = Modifier.size(100.dp)
+                )
+            } else {
+                Icon(
+                    painter = painterResource(R.drawable.ic_terminal),
+                    contentDescription = "Logo",
+                    modifier = Modifier.size(60.dp),
+                    tint = headerFg
+                )
             }
 
             Spacer(modifier = Modifier.height(24.dp))
@@ -300,9 +371,9 @@ private fun OobeWelcomePage(
             Text(
                 text = "Termux Ultra",
                 style = TextStyle(
-                    fontSize = 28.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MiuixTheme.colorScheme.onSurface
+                    fontSize = 36.sp,
+                    fontWeight = FontWeight.Black,
+                    color = headerFg
                 )
             )
 
@@ -312,29 +383,29 @@ private fun OobeWelcomePage(
                     text = stringResource(R.string.upgrade_complete),
                     style = TextStyle(
                         fontSize = 16.sp,
-                        color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                        color = headerFg.copy(alpha = 0.7f)
                     )
                 )
             }
+        }
 
-            Spacer(modifier = Modifier.weight(1f))
-
-            // 右箭头圆形按钮
-            Box(
-                modifier = Modifier
-                    .size(64.dp)
-                    .clip(CircleShape)
-                    .background(Color.White.copy(alpha = 0.9f))
-                    .clickable { onNext() },
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_arrow_right),
-                    contentDescription = "Next",
-                    tint = Color.Black,
-                    modifier = Modifier.size(32.dp)
-                )
-            }
+        // 右下箭头按钮 — 底部居中
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 120.dp)
+                .size(64.dp)
+                .clip(CircleShape)
+                .background(Color.White.copy(alpha = if (darkTheme) 0.2f else 0.9f))
+                .clickable { onNext() },
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                painter = painterResource(R.drawable.ic_arrow_right),
+                contentDescription = "Next",
+                tint = if (darkTheme) Color.White else Color.Black,
+                modifier = Modifier.size(32.dp)
+            )
         }
     }
 }
@@ -830,7 +901,10 @@ private fun OobeInstallPage(
                 
                 Button(
                     onClick = { onNext() },
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(
+                        color = MiuixTheme.colorScheme.primary
+                    )
                 ) {
                     Text(
                         text = stringResource(R.string.critical_force_enable_action_continue),
@@ -960,7 +1034,10 @@ private fun OobeInstallPage(
                 
                 Button(
                     onClick = { onStartBootstrap() },
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(
+                        color = MiuixTheme.colorScheme.primary
+                    )
                 ) {
                     Text(
                         text = "开始安装",
@@ -1057,7 +1134,10 @@ private fun OobeReleaseNotesPage(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 20.dp, vertical = 12.dp)
-                    .padding(bottom = 32.dp)
+                    .padding(bottom = 32.dp),
+                colors = ButtonDefaults.buttonColors(
+                    color = MiuixTheme.colorScheme.primary
+                )
             ) {
                 Text(
                     text = stringResource(R.string.critical_force_enable_action_continue),
@@ -1150,41 +1230,55 @@ private fun MarkdownContent(text: String) {
 @Composable
 private fun OobeCompletePage(
     onComplete: () -> Unit,
-    useGradient: Boolean
+    darkTheme: Boolean
 ) {
     val context = LocalContext.current
+    val headerFg = if (darkTheme) Color.White else Color(0xFF333333)
+    val fgInt = android.graphics.Color.argb(
+        (headerFg.alpha * 255).toInt(),
+        (headerFg.red * 255).toInt(),
+        (headerFg.green * 255).toInt(),
+        (headerFg.blue * 255).toInt()
+    )
+    val appIcon = remember(darkTheme) {
+        val orig = ContextCompat.getDrawable(context, R.mipmap.ic_launcher)?.toBitmap()
+        orig?.let { bm ->
+            val copy = bm.copy(android.graphics.Bitmap.Config.ARGB_8888, true)
+            val pixels = IntArray(copy.width * copy.height)
+            copy.getPixels(pixels, 0, copy.width, 0, 0, copy.width, copy.height)
+            for (i in pixels.indices) {
+                val c = pixels[i]
+                val r = (c shr 16) and 0xFF
+                val g = (c shr 8) and 0xFF
+                val b = c and 0xFF
+                val a = (c shr 24) and 0xFF
+                val brightness = (r + g + b) / 3f
+                if (a > 128 && brightness > 180f) {
+                    pixels[i] = 0x00000000
+                } else if (a > 128) {
+                    pixels[i] = fgInt
+                }
+            }
+            copy.setPixels(pixels, 0, copy.width, 0, 0, copy.width, copy.height)
+            copy.asImageBitmap()
+        }
+    }
 
     Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
+        modifier = Modifier.fillMaxSize()
     ) {
+        // Header — 真正垂直居中
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(top = 80.dp, bottom = 60.dp + 32.dp)
+            modifier = Modifier.fillMaxSize().align(Alignment.Center)
         ) {
-            // Logo
-            val appIcon = remember {
-                ContextCompat.getDrawable(context, R.mipmap.ic_launcher)
-                    ?.toBitmap()
-                    ?.asImageBitmap()
-            }
-            Box(
-                modifier = Modifier
-                    .size(96.dp)
-                    .clip(CircleShape)
-                    .background(Color.Black),
-                contentAlignment = Alignment.Center
-            ) {
-                if (appIcon != null) {
-                    Image(
-                        bitmap = appIcon,
-                        contentDescription = "Logo",
-                        modifier = Modifier.size(96.dp)
-                    )
-                }
+            if (appIcon != null) {
+                Image(
+                    bitmap = appIcon,
+                    contentDescription = "Logo",
+                    modifier = Modifier.size(100.dp)
+                )
             }
 
             Spacer(modifier = Modifier.height(24.dp))
@@ -1192,45 +1286,45 @@ private fun OobeCompletePage(
             Text(
                 text = "Termux Ultra",
                 style = TextStyle(
-                    fontSize = 28.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MiuixTheme.colorScheme.onSurface
+                    fontSize = 36.sp,
+                    fontWeight = FontWeight.Black,
+                    color = headerFg
                 )
             )
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(36.dp))
 
             Text(
                 text = "配置完成",
                 style = TextStyle(
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Medium,
-                    color = MiuixTheme.colorScheme.onSurface
+                    color = headerFg.copy(alpha = 0.85f)
                 )
             )
+        }
 
-            Spacer(modifier = Modifier.weight(1f))
-
-            // 完成按钮 - 白底黑字, 90%不透明度
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 40.dp)
-                    .height(56.dp)
-                    .clip(RoundedCornerShape(28.dp))
-                    .background(Color.White.copy(alpha = 0.9f))
-                    .clickable { onComplete() },
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = stringResource(R.string.overview_done),
-                    style = TextStyle(
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.Black
-                    )
+        // 完成按钮 — 底部居中
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 120.dp)
+                .fillMaxWidth()
+                .padding(horizontal = 40.dp)
+                .height(56.dp)
+                .clip(RoundedCornerShape(28.dp))
+                .background(Color.White.copy(alpha = if (darkTheme) 0.15f else 0.9f))
+                .clickable { onComplete() },
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = stringResource(R.string.overview_done),
+                style = TextStyle(
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = if (darkTheme) Color.White else Color.Black
                 )
-            }
+            )
         }
     }
 }
