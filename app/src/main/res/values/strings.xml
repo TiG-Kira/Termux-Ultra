@@ -1292,5 +1292,6 @@
     <string name="prefs_about_termux_original_desc">查看 Termux 上游原版项目</string>
     <string name="contributor_1_name">awkoo</string>
     <string name="contributor_1_username">@awkox</string>
+    <string name="contributor_awkoo_name">awkoo</string>
 </resources>
 
