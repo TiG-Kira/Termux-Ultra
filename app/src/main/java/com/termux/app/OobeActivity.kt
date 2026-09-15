@@ -30,7 +30,7 @@ class OobeActivity : ComponentActivity() {
         const val EXTRA_IS_UPGRADE = "extra_is_upgrade"
         
         // 许可条款最终修改日期 (YYYYMMDD)
-        const val EULA_LAST_MODIFIED = "20260829"
+        const val EULA_LAST_MODIFIED = "20260916"
     }
 
     private var isUpgrade by mutableStateOf(false)
@@ -107,7 +107,8 @@ class OobeActivity : ComponentActivity() {
                             onStartBootstrap = { performBootstrap() },
                             onRetryBootstrap = { retryBootstrap() },
                             onExitApp = { exitApp() },
-                            onComplete = { completeOobe() }
+                            onCompleteStart = { startMainActivity() },
+                            onCompleteFinish = { finish() }
                         )
                     }
                 }
@@ -248,10 +249,15 @@ class OobeActivity : ComponentActivity() {
         finish()
     }
 
-    private fun completeOobe() {
+    private fun startMainActivity() {
         SplashActivity.setEulaDate(this, EULA_LAST_MODIFIED)
         SplashActivity.setProvisioned(this, true)
         startActivity(Intent(this, MainActivity::class.java))
+        overridePendingTransition(0, 0)
+    }
+
+    private fun completeOobe() {
+        startMainActivity()
         finish()
     }
 }
