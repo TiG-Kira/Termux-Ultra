@@ -70,11 +70,13 @@
 
         <activity
             android:name=".app.OobeActivity"
-            android:label="@string/application_name" />
+            android:label="@string/application_name"
+            android:theme="@style/Theme.Termux.Oobe" />
 
         <activity
             android:name=".app.MainActivity"
             android:label="@string/application_name"
+            android:theme="@style/Theme.Termux.Main"
             android:launchMode="singleTask" />
 
         <activity
