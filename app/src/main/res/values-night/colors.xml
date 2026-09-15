@@ -10,4 +10,6 @@
     <color name="colorBorder">#464646</color>
     <color name="colorUrlBarBackground">#464646</color>
     <color name="icon_color">#FFFFFF</color>
+    <!-- HyperCeiler-style window background for splash/OOBE/main (dark) -->
+    <color name="hyper_surface">#1C1B1F</color>
 </resources>
