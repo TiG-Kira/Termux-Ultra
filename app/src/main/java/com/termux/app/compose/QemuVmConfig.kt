@@ -205,7 +205,7 @@ data class QemuVmConfig(
                     sb.append("        # 第二步：加载必要的模块\n")
                     sb.append("        pactl load-module module-null-sink sink_name=auto_null sink_properties=device.description=Virtual-Sink >/dev/null 2>&1 || true\n")
                     sb.append("        sleep 0.5\n")
-                    sb.append("        pactl load-module module-native-protocol-tcp auth-ip-acl=127.0.0.1;::1 port=4713 >/dev/null 2>&1 || true\n")
+                    sb.append("        pactl load-module module-native-protocol-tcp auth-ip-acl=\"127.0.0.1 ::1\" port=4713 >/dev/null 2>&1 || true\n")
                     sb.append("        sleep 0.5\n")
                     sb.append("        pactl load-module module-simple-protocol-tcp rate=44100 format=s16le channels=2 source=auto_null.monitor record=true port=4714 >/dev/null 2>&1 || true\n")
                     sb.append("        # 等待 TCP 端口就绪\n")
@@ -495,7 +495,7 @@ data class QemuVmConfig(
             sb.append("        # 加载必要模块\n")
             sb.append("        pactl load-module module-null-sink sink_name=auto_null sink_properties=device.description=Virtual-Sink >/dev/null 2>&1 || true\n")
             sb.append("        sleep 0.3\n")
-            sb.append("        pactl load-module module-native-protocol-tcp auth-ip-acl=127.0.0.1;::1 port=4713 >/dev/null 2>&1 || true\n")
+            sb.append("        pactl load-module module-native-protocol-tcp auth-ip-acl=\"127.0.0.1 ::1\" port=4713 >/dev/null 2>&1 || true\n")
             sb.append("        sleep 0.3\n")
             sb.append("        pactl load-module module-simple-protocol-tcp rate=44100 format=s16le channels=2 source=auto_null.monitor record=true port=4714 >/dev/null 2>&1 || true\n")
             // 等待 4713（QEMU PA 后端连接）和 4714（Android 播放器）就绪
