@@ -88,6 +88,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.EventNote
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.Icon as MaterialIcon
@@ -1074,15 +1077,38 @@ private fun OobeReleaseNotesPage(
                 bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 24.dp
             )
     ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 4.dp, bottom = 12.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(64.dp)
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(MiuixTheme.colorScheme.primary.copy(alpha = 0.1f)),
+                contentAlignment = Alignment.Center
+            ) {
+                MaterialIcon(
+                    imageVector = Icons.Default.EventNote,
+                    contentDescription = null,
+                    tint = MiuixTheme.colorScheme.primary,
+                    modifier = Modifier.size(32.dp)
+                )
+            }
+        }
         Text(
             text = "版本更新日志",
             style = TextStyle(
                 fontSize = 28.sp,
                 fontWeight = FontWeight.Bold,
                 color = MiuixTheme.colorScheme.onSurface
-            )
+            ),
+            modifier = Modifier.fillMaxWidth(),
+            textAlign = TextAlign.Center
         )
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(6.dp))
         Text(
             text = "Termux Ultra $currentVersionName",
             style = TextStyle(
