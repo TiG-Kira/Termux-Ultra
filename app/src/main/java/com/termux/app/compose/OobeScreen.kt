@@ -83,6 +83,14 @@ import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.preference.CheckboxPreference
+
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Error
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.RadioButtonUnchecked
+import androidx.compose.material.icons.filled.Wifi
+import androidx.compose.material3.Icon as MaterialIcon
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 @Composable
@@ -423,112 +431,136 @@ private fun OobeEulaPage(
 ) {
     val scrollState = rememberScrollState()
 
-    Scaffold(
-        contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        topBar = {
-            TopAppBar(
-                title = stringResource(R.string.license_agreement),
-                navigationIcon = {
-                    Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(CircleShape)
-                            .clickable { onBack() },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = MiuixIcons.Back,
-                            contentDescription = "Back",
-                            tint = MiuixTheme.colorScheme.onSurface,
-                            modifier = Modifier.size(24.dp)
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MiuixTheme.colorScheme.surface)
+            .padding(
+                top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 16.dp,
+                start = 24.dp,
+                end = 24.dp,
+                bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 24.dp
+            )
+    ) {
+        Text(
+            text = stringResource(R.string.license_agreement),
+            style = TextStyle(
+                fontSize = 28.sp,
+                fontWeight = FontWeight.Bold,
+                color = MiuixTheme.colorScheme.onSurface
+            )
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = "请仔细阅读以下条款，继续使用即表示您同意受其约束。",
+            style = TextStyle(
+                fontSize = 14.sp,
+                color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+            )
+        )
+        Spacer(modifier = Modifier.height(24.dp))
+
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .verticalScroll(scrollState)
+        ) {
+            Card(
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(verticalAlignment = Alignment.Top) {
+                        MaterialIcon(
+                            imageVector = Icons.Default.Info,
+                            contentDescription = null,
+                            tint = MiuixTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(
+                            text = "在使用 Termux Ultra 前，您必须阅读并同意我们的用户协议和隐私政策。我们将依法保护您的个人信息。",
+                            style = TextStyle(
+                                fontSize = 14.sp,
+                                color = MiuixTheme.colorScheme.onSurface
+                            ),
+                            modifier = Modifier.weight(1f)
                         )
                     }
                 }
-            )
-        }
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-        ) {
-            // 内容区域
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-                    .verticalScroll(scrollState)
-                    .padding(horizontal = 20.dp, vertical = 12.dp)
-            ) {
-                // EULA 部分
-                Text(
-                    text = stringResource(R.string.termux_ultra_eula),
-                    style = TextStyle(
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MiuixTheme.colorScheme.onSurface
-                    )
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "最后修改: $eulaLastModified",
-                    style = TextStyle(
-                        fontSize = 12.sp,
-                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                    )
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-
-                EulaContent()
-
-                Spacer(modifier = Modifier.height(24.dp))
-
-                // GPL 3.0 部分
-                Text(
-                    text = "GNU General Public License v3.0",
-                    style = TextStyle(
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MiuixTheme.colorScheme.onSurface
-                    )
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-                Gpl3Summary()
             }
+            Spacer(modifier = Modifier.height(20.dp))
 
-            // 同意复选框 + 继续按钮
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 12.dp)
-                    .padding(bottom = 32.dp)
-            ) {
-                CheckboxPreference(
-                    title = stringResource(R.string.i_agree_license),
-                    checked = eulaAgreed,
-                    onCheckedChange = { onEulaAgreeChange(it) }
+            Text(
+                text = "Termux Ultra 用户许可条款",
+                style = TextStyle(
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MiuixTheme.colorScheme.onSurface
                 )
-                Spacer(modifier = Modifier.height(12.dp))
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "最后修改: $eulaLastModified",
+                style = TextStyle(
+                    fontSize = 12.sp,
+                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                )
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            EulaContent()
+
+            Spacer(modifier = Modifier.height(24.dp))
+            Text(
+                text = "GNU General Public License v3.0",
+                style = TextStyle(
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MiuixTheme.colorScheme.onSurface
+                )
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            Gpl3Summary()
+        }
+
+        Column {
+            CheckboxPreference(
+                title = stringResource(R.string.i_agree_license),
+                checked = eulaAgreed,
+                onCheckedChange = { onEulaAgreeChange(it) }
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Button(
+                    onClick = { onBack() },
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(color = MiuixTheme.colorScheme.surfaceVariant)
+                ) {
+                    Text(
+                        text = stringResource(R.string.provision_back),
+                        color = MiuixTheme.colorScheme.onSurface
+                    )
+                }
                 Button(
                     onClick = { onNext() },
                     enabled = eulaAgreed,
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(
-                        color = if (eulaAgreed) MiuixTheme.colorScheme.primary 
-                                else MiuixTheme.colorScheme.surfaceVariant
-                    )
+                    modifier = Modifier.weight(1f)
                 ) {
                     Text(
                         text = stringResource(R.string.critical_force_enable_action_continue),
                         fontWeight = FontWeight.Bold,
-                        color = if (eulaAgreed) Color.White 
-                                else MiuixTheme.colorScheme.onSurfaceVariantSummary
+                        color = Color.White
                     )
                 }
             }
         }
     }
 }
+
+
 
 @Composable
 private fun EulaContent() {
@@ -661,115 +693,174 @@ private fun OobePermissionPage(
     onBack: () -> Unit,
     onNext: () -> Unit
 ) {
-    Scaffold(
-        contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        topBar = {
-            TopAppBar(
-                title = stringResource(R.string.file_info_permissions),
-                navigationIcon = {
-                    Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(CircleShape)
-                            .clickable { onBack() },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = MiuixIcons.Back,
-                            contentDescription = "Back",
-                            tint = MiuixTheme.colorScheme.onSurface,
-                            modifier = Modifier.size(24.dp)
-                        )
-                    }
-                }
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MiuixTheme.colorScheme.surface)
+            .padding(
+                top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 16.dp,
+                start = 24.dp,
+                end = 24.dp,
+                bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 24.dp
             )
-        }
-    ) { padding ->
+    ) {
+        Text(
+            text = stringResource(R.string.file_info_permissions),
+            style = TextStyle(
+                fontSize = 28.sp,
+                fontWeight = FontWeight.Bold,
+                color = MiuixTheme.colorScheme.onSurface
+            )
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = "授予所需权限以确保 Termux Ultra 正常运行",
+            style = TextStyle(
+                fontSize = 14.sp,
+                color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+            )
+        )
+        Spacer(modifier = Modifier.height(24.dp))
+
         Column(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(horizontal = 24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+                .weight(1f)
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
         ) {
-            Spacer(modifier = Modifier.height(40.dp))
-            
-            Text(
-                text = "授权所需权限",
-                style = TextStyle(
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold,
+            PermissionItemCard(
+                title = "网络访问",
+                desc = "运行命令、下载包、远程连接",
+                granted = true,
+                icon = { MaterialIcon(imageVector = Icons.Default.Wifi, contentDescription = null, tint = MiuixTheme.colorScheme.onSurface, modifier = Modifier.size(22.dp)) }
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            PermissionItemCard(
+                title = "文件存储",
+                desc = "访问设备存储空间",
+                granted = true,
+                icon = { MaterialIcon(imageVector = Icons.Default.CheckCircle, contentDescription = null, tint = MiuixTheme.colorScheme.onSurface, modifier = Modifier.size(22.dp)) }
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            PermissionItemCard(
+                title = "唤醒锁定",
+                desc = "后台运行时保持活跃",
+                granted = true,
+                icon = { MaterialIcon(imageVector = Icons.Default.CheckCircle, contentDescription = null, tint = MiuixTheme.colorScheme.onSurface, modifier = Modifier.size(22.dp)) }
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            PermissionItemCard(
+                title = "震动反馈",
+                desc = "触觉反馈",
+                granted = true,
+                icon = { MaterialIcon(imageVector = Icons.Default.CheckCircle, contentDescription = null, tint = MiuixTheme.colorScheme.onSurface, modifier = Modifier.size(22.dp)) }
+            )
+        }
+
+        Text(
+            text = permissionStatus,
+            style = TextStyle(
+                fontSize = 13.sp,
+                color = if (isPermissionGranted) MiuixTheme.colorScheme.primary 
+                       else MiuixTheme.colorScheme.onSurfaceVariantSummary
+            ),
+            modifier = Modifier.fillMaxWidth(),
+            textAlign = TextAlign.Center
+        )
+        
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Button(
+                onClick = { onBack() },
+                modifier = Modifier.weight(1f),
+                colors = ButtonDefaults.buttonColors(
+                    color = MiuixTheme.colorScheme.surfaceVariant
+                )
+            ) {
+                Text(
+                    text = stringResource(R.string.provision_back),
                     color = MiuixTheme.colorScheme.onSurface
                 )
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-            Text(
-                text = "Termux Ultra 需要以下权限以确保正常运行",
-                style = TextStyle(
-                    fontSize = 14.sp,
-                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                ),
-                textAlign = TextAlign.Center
-            )
-            
-            Spacer(modifier = Modifier.height(32.dp))
-            
-            Card(
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp)
-                ) {
-                    PermissionItem("网络访问", "运行命令、下载包、远程连接")
-                    PermissionItem("文件存储", "访问设备存储空间")
-                    PermissionItem("唤醒锁定", "后台运行时保持活跃")
-                    PermissionItem("震动反馈", "触觉反馈")
-                }
             }
-            
-            Spacer(modifier = Modifier.height(24.dp))
-            
-            Text(
-                text = permissionStatus,
-                style = TextStyle(
-                    fontSize = 14.sp,
-                    color = if (isPermissionGranted) MiuixTheme.colorScheme.primary 
-                           else MiuixTheme.colorScheme.onSurfaceVariantSummary
-                )
-            )
-            
-            Spacer(modifier = Modifier.weight(1f))
-            
             Button(
                 onClick = { onGrantAllPermissions() },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.weight(1f),
+                colors = ButtonDefaults.buttonColors(
+                    color = MiuixTheme.colorScheme.surfaceVariant
+                )
             ) {
-                Text(text = "授权所有权限")
+                Text(
+                    text = "授权所有",
+                    color = MiuixTheme.colorScheme.onSurface
+                )
             }
-            
-            Spacer(modifier = Modifier.height(12.dp))
-            
             Button(
                 onClick = { onNext() },
                 enabled = isPermissionGranted,
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(
-                    color = if (isPermissionGranted) MiuixTheme.colorScheme.primary 
-                            else MiuixTheme.colorScheme.surfaceVariant
-                )
+                modifier = Modifier.weight(1f)
             ) {
                 Text(
                     text = stringResource(R.string.critical_force_enable_action_continue),
                     fontWeight = FontWeight.Bold,
-                    color = if (isPermissionGranted) Color.White 
-                            else MiuixTheme.colorScheme.onSurfaceVariantSummary
+                    color = Color.White
                 )
             }
-            
-            Spacer(modifier = Modifier.height(24.dp))
         }
     }
 }
+
+@Composable
+private fun PermissionItemCard(
+    title: String,
+    desc: String,
+    granted: Boolean,
+    icon: @Composable () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            icon()
+            Spacer(modifier = Modifier.width(16.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    style = TextStyle(
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = MiuixTheme.colorScheme.onSurface
+                    )
+                )
+                Text(
+                    text = desc,
+                    style = TextStyle(
+                        fontSize = 12.sp,
+                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                    )
+                )
+            }
+            Spacer(modifier = Modifier.width(12.dp))
+            MaterialIcon(
+                imageVector = if (granted) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
+                contentDescription = null,
+                tint = if (granted) MiuixTheme.colorScheme.primary 
+                       else MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                modifier = Modifier.size(22.dp)
+            )
+        }
+    }
+}
+
+
 
 @Composable
 private fun PermissionItem(name: String, desc: String) {
@@ -807,250 +898,161 @@ private fun OobeInstallPage(
     onNext: () -> Unit,
     onBack: () -> Unit
 ) {
-    Scaffold(
-        contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        topBar = {
-            TopAppBar(
-                title = stringResource(R.string.action_styling_install),
-                navigationIcon = {
-                    Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(CircleShape)
-                            .clickable { onBack() },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = MiuixIcons.Back,
-                            contentDescription = "Back",
-                            tint = MiuixTheme.colorScheme.onSurface,
-                            modifier = Modifier.size(24.dp)
-                        )
-                    }
-                }
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MiuixTheme.colorScheme.surface)
+            .padding(
+                top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 16.dp,
+                start = 24.dp,
+                end = 24.dp,
+                bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 24.dp
             )
-        }
-    ) { padding ->
-        Column(
+    ) {
+        Text(
+            text = stringResource(R.string.action_styling_install),
+            style = TextStyle(
+                fontSize = 28.sp,
+                fontWeight = FontWeight.Bold,
+                color = MiuixTheme.colorScheme.onSurface
+            )
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = "首次安装需要下载并配置终端环境，通常需要几分钟",
+            style = TextStyle(
+                fontSize = 14.sp,
+                color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+            )
+        )
+
+        Box(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(horizontal = 24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+                .weight(1f)
+                .fillMaxWidth(),
+            contentAlignment = Alignment.Center
         ) {
-            Spacer(modifier = Modifier.height(80.dp))
-            
-            if (isBootstrapping) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(48.dp)
-                )
-                Spacer(modifier = Modifier.height(24.dp))
-                Text(
-                    text = "正在配置终端环境...",
-                    style = TextStyle(
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MiuixTheme.colorScheme.onSurface
-                    )
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "首次安装需要下载并配置基础环境",
-                    style = TextStyle(
-                        fontSize = 13.sp,
-                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                    )
-                )
-            } else if (bootstrapComplete) {
-                // 安装成功
-                Box(
-                    modifier = Modifier
-                        .size(64.dp)
-                        .clip(CircleShape)
-                        .background(MiuixTheme.colorScheme.primary),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "✓",
-                        style = TextStyle(
-                            fontSize = 32.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
-                        )
-                    )
-                }
-                Spacer(modifier = Modifier.height(24.dp))
-                Text(
-                    text = "配置完成",
-                    style = TextStyle(
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MiuixTheme.colorScheme.onSurface
-                    )
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "终端环境已成功初始化",
-                    style = TextStyle(
-                        fontSize = 14.sp,
-                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                    )
-                )
-                
-                Spacer(modifier = Modifier.weight(1f))
-                
-                Button(
-                    onClick = { onNext() },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(
-                        color = MiuixTheme.colorScheme.primary
-                    )
-                ) {
-                    Text(
-                        text = stringResource(R.string.critical_force_enable_action_continue),
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    )
-                }
-            } else if (bootstrapError != null) {
-                // 安装失败
-                Box(
-                    modifier = Modifier
-                        .size(64.dp)
-                        .clip(CircleShape)
-                        .background(MiuixTheme.colorScheme.error),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "!",
-                        style = TextStyle(
-                            fontSize = 36.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
-                        )
-                    )
-                }
-                Spacer(modifier = Modifier.height(24.dp))
-                Text(
-                    text = stringResource(R.string.install_failed),
-                    style = TextStyle(
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MiuixTheme.colorScheme.error
-                    )
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Card(
-                    modifier = Modifier.fillMaxWidth()
-                ) {
+            when {
+                isBootstrapping -> {
                     Column(
-                        modifier = Modifier.padding(16.dp)
+                        horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
+                        CircularProgressIndicator(modifier = Modifier.size(56.dp))
+                        Spacer(modifier = Modifier.height(24.dp))
                         Text(
-                            text = bootstrapError,
-                            style = TextStyle(
-                                fontSize = 13.sp,
-                                color = MiuixTheme.colorScheme.onSurface
-                            )
+                            text = "正在配置终端环境...",
+                            style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.Medium, color = MiuixTheme.colorScheme.onSurface)
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "可能原因:\n• 网络连接不稳定\n• 存储空间不足\n• 设备不支持",
-                            style = TextStyle(
-                                fontSize = 12.sp,
-                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                            )
+                            text = "请稍候，首次安装需要下载基础环境",
+                            style = TextStyle(fontSize = 13.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
                         )
                     }
                 }
-                
-                Spacer(modifier = Modifier.weight(1f))
-                
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Button(
-                        onClick = { onExitApp() },
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.buttonColors(
-                            color = MiuixTheme.colorScheme.error
-                        )
+                bootstrapComplete -> {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
-                        Text(
-                            text = "退出",
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
-                        )
+                        Box(
+                            modifier = Modifier.size(72.dp).clip(CircleShape).background(MiuixTheme.colorScheme.primary),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            MaterialIcon(imageVector = Icons.Default.CheckCircle, contentDescription = null, tint = Color.White, modifier = Modifier.size(40.dp))
+                        }
+                        Spacer(modifier = Modifier.height(24.dp))
+                        Text(text = "配置完成", style = TextStyle(fontSize = 22.sp, fontWeight = FontWeight.Bold, color = MiuixTheme.colorScheme.onSurface))
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(text = "终端环境已成功初始化", style = TextStyle(fontSize = 14.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary))
                     }
-                    Button(
-                        onClick = { onRetryBootstrap() },
-                        modifier = Modifier.weight(1f)
+                }
+                bootstrapError != null -> {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
-                        Text(
-                            text = stringResource(R.string.bootstrap_error_try_again),
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
-                        )
+                        Box(
+                            modifier = Modifier.size(72.dp).clip(CircleShape).background(MiuixTheme.colorScheme.error),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            MaterialIcon(imageVector = Icons.Default.Error, contentDescription = null, tint = Color.White, modifier = Modifier.size(40.dp))
+                        }
+                        Spacer(modifier = Modifier.height(24.dp))
+                        Text(text = stringResource(R.string.install_failed), style = TextStyle(fontSize = 22.sp, fontWeight = FontWeight.Bold, color = MiuixTheme.colorScheme.error))
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Card(modifier = Modifier.fillMaxWidth()) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Text(text = bootstrapError, style = TextStyle(fontSize = 13.sp, color = MiuixTheme.colorScheme.onSurface))
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(text = "可能原因：网络连接不稳定 / 存储空间不足 / 设备不支持", style = TextStyle(fontSize = 12.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary))
+                            }
+                        }
                     }
                 }
-            } else {
-                // 初始状态 - 等待开始
-                Box(
-                    modifier = Modifier
-                        .size(64.dp)
-                        .clip(CircleShape)
-                        .background(MiuixTheme.colorScheme.surfaceVariant),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "…",
-                        style = TextStyle(
-                            fontSize = 28.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                        )
-                    )
-                }
-                Spacer(modifier = Modifier.height(24.dp))
-                Text(
-                    text = "准备安装",
-                    style = TextStyle(
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MiuixTheme.colorScheme.onSurface
-                    )
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "点击下方按钮开始配置终端环境",
-                    style = TextStyle(
-                        fontSize = 14.sp,
-                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                    )
-                )
-                
-                Spacer(modifier = Modifier.weight(1f))
-                
-                Button(
-                    onClick = { onStartBootstrap() },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(
-                        color = MiuixTheme.colorScheme.primary
-                    )
-                ) {
-                    Text(
-                        text = "开始安装",
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    )
+                else -> {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        Box(
+                            modifier = Modifier.size(72.dp).clip(CircleShape).background(MiuixTheme.colorScheme.surfaceVariant),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator(modifier = Modifier.size(36.dp))
+                        }
+                        Spacer(modifier = Modifier.height(24.dp))
+                        Text(text = "准备安装", style = TextStyle(fontSize = 22.sp, fontWeight = FontWeight.Bold, color = MiuixTheme.colorScheme.onSurface))
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(text = "点击下方按钮开始配置终端环境", style = TextStyle(fontSize = 14.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary))
+                    }
                 }
             }
-            
-            Spacer(modifier = Modifier.height(24.dp))
+        }
+
+        when {
+            bootstrapComplete -> {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Button(onClick = { onBack() }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(color = MiuixTheme.colorScheme.surfaceVariant)) {
+                        Text(text = stringResource(R.string.provision_back), color = MiuixTheme.colorScheme.onSurface)
+                    }
+                    Button(onClick = { onNext() }, modifier = Modifier.weight(2f)) {
+                        Text(text = stringResource(R.string.critical_force_enable_action_continue), fontWeight = FontWeight.Bold, color = Color.White)
+                    }
+                }
+            }
+            bootstrapError != null -> {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Button(onClick = { onExitApp() }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(color = MiuixTheme.colorScheme.error)) {
+                        Text(text = "退出", fontWeight = FontWeight.Bold, color = Color.White)
+                    }
+                    Button(onClick = { onRetryBootstrap() }, modifier = Modifier.weight(1f)) {
+                        Text(text = stringResource(R.string.bootstrap_error_try_again), fontWeight = FontWeight.Bold, color = Color.White)
+                    }
+                }
+            }
+            isBootstrapping -> {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Button(onClick = { onBack() }, modifier = Modifier.weight(1f), enabled = false, colors = ButtonDefaults.buttonColors(color = MiuixTheme.colorScheme.surfaceVariant)) {
+                        Text(text = stringResource(R.string.provision_back), color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+                    }
+                    Button(onClick = {}, enabled = false, modifier = Modifier.weight(2f)) {
+                        Text(text = "正在配置...", fontWeight = FontWeight.Bold, color = Color.White.copy(alpha = 0.6f))
+                    }
+                }
+            }
+            else -> {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Button(onClick = { onBack() }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(color = MiuixTheme.colorScheme.surfaceVariant)) {
+                        Text(text = stringResource(R.string.provision_back), color = MiuixTheme.colorScheme.onSurface)
+                    }
+                    Button(onClick = { onStartBootstrap() }, modifier = Modifier.weight(2f)) {
+                        Text(text = "开始安装", fontWeight = FontWeight.Bold, color = Color.White)
+                    }
+                }
+            }
         }
     }
 }
+
+
 
 // ==================== 第五页: 版本更新日志 ====================
 
@@ -1061,93 +1063,75 @@ private fun OobeReleaseNotesPage(
     onNext: () -> Unit,
     onBack: () -> Unit
 ) {
-    val scrollState = rememberScrollState()
-
-    Scaffold(
-        contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        topBar = {
-            TopAppBar(
-                title = "版本更新日志",
-                navigationIcon = {
-                    Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(CircleShape)
-                            .clickable { onBack() },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = MiuixIcons.Back,
-                            contentDescription = "Back",
-                            tint = MiuixTheme.colorScheme.onSurface,
-                            modifier = Modifier.size(24.dp)
-                        )
-                    }
-                }
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MiuixTheme.colorScheme.surface)
+            .padding(
+                top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 16.dp,
+                start = 24.dp,
+                end = 24.dp,
+                bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 24.dp
             )
-        }
-    ) { padding ->
+    ) {
+        Text(
+            text = "版本更新日志",
+            style = TextStyle(
+                fontSize = 28.sp,
+                fontWeight = FontWeight.Bold,
+                color = MiuixTheme.colorScheme.onSurface
+            )
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = "Termux Ultra $currentVersionName",
+            style = TextStyle(
+                fontSize = 14.sp,
+                color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+            )
+        )
+        Spacer(modifier = Modifier.height(20.dp))
+
         Column(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
+                .weight(1f)
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
         ) {
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-                    .verticalScroll(scrollState)
-                    .padding(horizontal = 20.dp, vertical = 12.dp)
-            ) {
-                Text(
-                    text = "Termux Ultra $currentVersionName",
-                    style = TextStyle(
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MiuixTheme.colorScheme.onSurface
-                    )
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-                
-                if (releaseNotes != null && releaseNotes.isNotBlank()) {
-                    MarkdownContent(text = releaseNotes)
-                } else {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 32.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "暂无更新日志",
-                            style = TextStyle(
-                                fontSize = 14.sp,
-                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                            )
-                        )
+            if (releaseNotes != null && releaseNotes.isNotBlank()) {
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        MarkdownContent(text = releaseNotes)
+                    }
+                }
+            } else {
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.fillMaxWidth().padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                        MaterialIcon(imageVector = Icons.Default.Info, contentDescription = null, tint = MiuixTheme.colorScheme.onSurfaceVariantSummary, modifier = Modifier.size(32.dp))
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(text = "暂无更新日志", style = TextStyle(fontSize = 14.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary))
                     }
                 }
             }
-            
-            Button(
-                onClick = { onNext() },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 12.dp)
-                    .padding(bottom = 32.dp),
-                colors = ButtonDefaults.buttonColors(
-                    color = MiuixTheme.colorScheme.primary
-                )
-            ) {
-                Text(
-                    text = stringResource(R.string.critical_force_enable_action_continue),
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White
-                )
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Button(onClick = { onBack() }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(color = MiuixTheme.colorScheme.surfaceVariant)) {
+                Text(text = stringResource(R.string.provision_back), color = MiuixTheme.colorScheme.onSurface)
+            }
+            Button(onClick = { onNext() }, modifier = Modifier.weight(2f)) {
+                Text(text = stringResource(R.string.critical_force_enable_action_continue), fontWeight = FontWeight.Bold, color = Color.White)
             }
         }
     }
 }
+
+
 
 @Composable
 private fun MarkdownContent(text: String) {

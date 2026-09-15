@@ -1296,5 +1296,7 @@
     <string name="about_contributors_section">贡献者</string>
     <string name="checking_updates">检查更新中...</string>
     <string name="about_check_updates_desc">点击检查最新 Termux Ultra 更新</string>
+    <string name="provision_back">返回</string>
+    <string name="provision_skip">跳过</string>
 </resources>
 
