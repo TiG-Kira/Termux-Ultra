@@ -14,6 +14,7 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Image
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -86,6 +87,8 @@ import top.yukonga.miuix.kmp.preference.CheckboxPreference
 
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.EventNote
@@ -94,6 +97,7 @@ import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.Icon as MaterialIcon
+import androidx.compose.material3.IconButton
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 @Composable
@@ -444,16 +448,43 @@ private fun OobeEulaPage(
                 end = 24.dp,
                 bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 24.dp
             )
-    ) {
+        ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = { onBack() }) {
+                MaterialIcon(
+                    imageVector = Icons.Default.ArrowBack,
+                    contentDescription = stringResource(R.string.provision_back),
+                    tint = MiuixTheme.colorScheme.onSurface
+                )
+            }
+        }
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 0.dp, bottom = 8.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Image(
+                painter = painterResource(R.drawable.oobe_terms),
+                contentDescription = null,
+                modifier = Modifier.size(70.dp)
+            )
+        }
+
         Text(
             text = stringResource(R.string.license_agreement),
             style = TextStyle(
                 fontSize = 28.sp,
                 fontWeight = FontWeight.Bold,
                 color = MiuixTheme.colorScheme.onSurface
-            )
+            ),
+            modifier = Modifier.fillMaxWidth(),
+            textAlign = TextAlign.Center
         )
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(6.dp))
         Text(
             text = "请仔细阅读以下条款，继续使用即表示您同意受其约束。",
             style = TextStyle(
@@ -538,19 +569,9 @@ private fun OobeEulaPage(
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Button(
-                    onClick = { onBack() },
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.buttonColors(color = MiuixTheme.colorScheme.surfaceVariant)
-                ) {
-                    Text(
-                        text = stringResource(R.string.provision_back),
-                        color = MiuixTheme.colorScheme.onSurface
-                    )
-                }
-                Button(
                     onClick = { onNext() },
                     enabled = eulaAgreed,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
                         text = stringResource(R.string.critical_force_enable_action_continue),
@@ -706,16 +727,43 @@ private fun OobePermissionPage(
                 end = 24.dp,
                 bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 24.dp
             )
-    ) {
+        ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = { onBack() }) {
+                MaterialIcon(
+                    imageVector = Icons.Default.ArrowBack,
+                    contentDescription = stringResource(R.string.provision_back),
+                    tint = MiuixTheme.colorScheme.onSurface
+                )
+            }
+        }
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 0.dp, bottom = 8.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Image(
+                painter = painterResource(R.drawable.oobe_service_state),
+                contentDescription = null,
+                modifier = Modifier.size(70.dp)
+            )
+        }
+
         Text(
             text = stringResource(R.string.file_info_permissions),
             style = TextStyle(
                 fontSize = 28.sp,
                 fontWeight = FontWeight.Bold,
                 color = MiuixTheme.colorScheme.onSurface
-            )
+            ),
+            modifier = Modifier.fillMaxWidth(),
+            textAlign = TextAlign.Center
         )
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(6.dp))
         Text(
             text = "授予所需权限以确保 Termux Ultra 正常运行",
             style = TextStyle(
@@ -777,18 +825,6 @@ private fun OobePermissionPage(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Button(
-                onClick = { onBack() },
-                modifier = Modifier.weight(1f),
-                colors = ButtonDefaults.buttonColors(
-                    color = MiuixTheme.colorScheme.surfaceVariant
-                )
-            ) {
-                Text(
-                    text = stringResource(R.string.provision_back),
-                    color = MiuixTheme.colorScheme.onSurface
-                )
-            }
             Button(
                 onClick = { onGrantAllPermissions() },
                 modifier = Modifier.weight(1f),
@@ -911,16 +947,43 @@ private fun OobeInstallPage(
                 end = 24.dp,
                 bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 24.dp
             )
-    ) {
+        ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = { onBack() }) {
+                MaterialIcon(
+                    imageVector = Icons.Default.ArrowBack,
+                    contentDescription = stringResource(R.string.provision_back),
+                    tint = MiuixTheme.colorScheme.onSurface
+                )
+            }
+        }
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 0.dp, bottom = 8.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Image(
+                painter = painterResource(R.drawable.oobe_basic_settings),
+                contentDescription = null,
+                modifier = Modifier.size(70.dp)
+            )
+        }
+
         Text(
             text = stringResource(R.string.action_styling_install),
             style = TextStyle(
                 fontSize = 28.sp,
                 fontWeight = FontWeight.Bold,
                 color = MiuixTheme.colorScheme.onSurface
-            )
+            ),
+            modifier = Modifier.fillMaxWidth(),
+            textAlign = TextAlign.Center
         )
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(6.dp))
         Text(
             text = "首次安装需要下载并配置终端环境，通常需要几分钟",
             style = TextStyle(
@@ -1013,10 +1076,7 @@ private fun OobeInstallPage(
         when {
             bootstrapComplete -> {
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Button(onClick = { onBack() }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(color = MiuixTheme.colorScheme.surfaceVariant)) {
-                        Text(text = stringResource(R.string.provision_back), color = MiuixTheme.colorScheme.onSurface)
-                    }
-                    Button(onClick = { onNext() }, modifier = Modifier.weight(2f)) {
+                    Button(onClick = { onNext() }, modifier = Modifier.fillMaxWidth()) {
                         Text(text = stringResource(R.string.critical_force_enable_action_continue), fontWeight = FontWeight.Bold, color = Color.White)
                     }
                 }
@@ -1033,20 +1093,14 @@ private fun OobeInstallPage(
             }
             isBootstrapping -> {
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Button(onClick = { onBack() }, modifier = Modifier.weight(1f), enabled = false, colors = ButtonDefaults.buttonColors(color = MiuixTheme.colorScheme.surfaceVariant)) {
-                        Text(text = stringResource(R.string.provision_back), color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
-                    }
-                    Button(onClick = {}, enabled = false, modifier = Modifier.weight(2f)) {
+                    Button(onClick = {}, enabled = false, modifier = Modifier.fillMaxWidth()) {
                         Text(text = "正在配置...", fontWeight = FontWeight.Bold, color = Color.White.copy(alpha = 0.6f))
                     }
                 }
             }
             else -> {
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Button(onClick = { onBack() }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(color = MiuixTheme.colorScheme.surfaceVariant)) {
-                        Text(text = stringResource(R.string.provision_back), color = MiuixTheme.colorScheme.onSurface)
-                    }
-                    Button(onClick = { onStartBootstrap() }, modifier = Modifier.weight(2f)) {
+                    Button(onClick = { onStartBootstrap() }, modifier = Modifier.fillMaxWidth()) {
                         Text(text = "开始安装", fontWeight = FontWeight.Bold, color = Color.White)
                     }
                 }
@@ -1076,28 +1130,32 @@ private fun OobeReleaseNotesPage(
                 end = 24.dp,
                 bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 24.dp
             )
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 4.dp, bottom = 12.dp),
-            contentAlignment = Alignment.Center
         ) {
-            Box(
-                modifier = Modifier
-                    .size(64.dp)
-                    .clip(RoundedCornerShape(20.dp))
-                    .background(MiuixTheme.colorScheme.primary.copy(alpha = 0.1f)),
-                contentAlignment = Alignment.Center
-            ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = { onBack() }) {
                 MaterialIcon(
-                    imageVector = Icons.Default.EventNote,
-                    contentDescription = null,
-                    tint = MiuixTheme.colorScheme.primary,
-                    modifier = Modifier.size(32.dp)
+                    imageVector = Icons.Default.ArrowBack,
+                    contentDescription = stringResource(R.string.provision_back),
+                    tint = MiuixTheme.colorScheme.onSurface
                 )
             }
         }
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 0.dp, bottom = 8.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Image(
+                painter = painterResource(R.drawable.oobe_terms),
+                contentDescription = null,
+                modifier = Modifier.size(70.dp)
+            )
+        }
+
         Text(
             text = "版本更新日志",
             style = TextStyle(
@@ -1147,10 +1205,7 @@ private fun OobeReleaseNotesPage(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Button(onClick = { onBack() }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(color = MiuixTheme.colorScheme.surfaceVariant)) {
-                Text(text = stringResource(R.string.provision_back), color = MiuixTheme.colorScheme.onSurface)
-            }
-            Button(onClick = { onNext() }, modifier = Modifier.weight(2f)) {
+            Button(onClick = { onNext() }, modifier = Modifier.fillMaxWidth()) {
                 Text(text = stringResource(R.string.critical_force_enable_action_continue), fontWeight = FontWeight.Bold, color = Color.White)
             }
         }
