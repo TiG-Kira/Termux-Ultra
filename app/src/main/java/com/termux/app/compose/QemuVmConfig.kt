@@ -950,7 +950,10 @@ object QemuVmManager {
                 bootOrder = if (vm.bootOrder?.isNotEmpty() == true) vm.bootOrder else listOf("c"),
                 vncPort = if (vm.vncPort in 5900..5999) vm.vncPort else 5900,
                 diskInterface = vm.diskInterface.orEmpty().ifBlank { "ide" },
-                machineType = vm.machineType.orEmpty().ifBlank { "q35" }
+                machineType = vm.machineType.orEmpty().ifBlank { "q35" },
+                cpuModelOverride = vm.cpuModelOverride,
+                enableShareDir = vm.enableShareDir,
+                ssdCacheMode = vm.ssdCacheMode
             )
         }
     }
