@@ -268,7 +268,7 @@ private fun VmWizardContent(
                 onApplySuggestion = { s ->
                     // Agent 建议：只覆盖硬件配置（机型/CPU/内存/硬盘大小建议）
                     machineType = s.machineType
-                    cpuModelOverride = s.cpuModelOverride
+                    cpuModelOverride = s.cpuModelOverride ?: ""
                     cpuCores = s.cpuCores
                     memoryMB = s.memoryMB
                     if (s.recommendedDiskSizeGB != null) {
@@ -1124,8 +1124,8 @@ private fun parseAgentVmSuggestion(raw: String): AgentVmSuggestion? {
         .removeSuffix("```")
         .trim()
     // 2. 找第一个 { 到最后一个 } 的 JSON
-    val start = cleaned.indexOf(\"{\")
-    val end = cleaned.lastIndexOf(\"}\")
+    val start = cleaned.indexOf("{")
+    val end = cleaned.lastIndexOf("}")
     if (start < 0 || end <= start) return null
     val jsonStr = cleaned.substring(start, end + 1)
     return try {
