@@ -1,7 +1,15 @@
 package com.termux.app.compose
 
+import android.util.Log
 import androidx.activity.compose.BackHandler
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.FastOutLinearInEasing
+import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -15,6 +23,11 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Image
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -31,6 +44,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
@@ -46,6 +60,14 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.graphics.Outline
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
@@ -53,6 +75,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -79,7 +102,6 @@ import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
@@ -87,7 +109,6 @@ import top.yukonga.miuix.kmp.preference.CheckboxPreference
 
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Info
@@ -97,8 +118,8 @@ import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.Icon as MaterialIcon
-import androidx.compose.material3.IconButton
 import top.yukonga.miuix.kmp.theme.MiuixTheme
+import kotlinx.coroutines.delay
 
 @Composable
 fun OobeScreen(
@@ -120,7 +141,8 @@ fun OobeScreen(
     onStartBootstrap: () -> Unit,
     onRetryBootstrap: () -> Unit,
     onExitApp: () -> Unit,
-    onComplete: () -> Unit
+    onCompleteStart: () -> Unit,   // 启动 MainActivity (动画开始前调用)
+    onCompleteFinish: () -> Unit   // finish OOBE Activity (动画结束后调用)
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -163,6 +185,63 @@ fun OobeScreen(
     // 计算实际页面索引（考虑跳过）
     val actualPage = remember(currentPage, isUpgrade, shouldSkipEula, shouldSkipPermissionsAndInstall) {
         currentPage
+    }
+
+    // Circular reveal state (Welcome -> EULA transition)
+    var isCircularRevealing by remember { mutableStateOf(false) }
+    var revealRadius by remember { mutableStateOf(0f) }
+    var revealAlpha by remember { mutableStateOf(1f) }
+    var revealCenter by remember { mutableStateOf(Offset.Zero) }
+    var revealTargetPage by remember { mutableStateOf<Int?>(null) }
+
+    // REAL button center captured via onGloballyPositioned (not hardcoded!)
+    var welcomeBtnCenter by remember { mutableStateOf(Offset.Zero) }
+    var completeBtnCenter by remember { mutableStateOf(Offset.Zero) }
+
+    val coroutineScope = rememberCoroutineScope()
+    val configuration = LocalConfiguration.current
+    // maxRevealRadius large enough so that scaleXY = r/maxHalf covers entire screen
+    // Button center is near bottom; need radius >= center.y to cover top of screen
+    val maxRevealRadius = with(density) {
+        maxOf(
+            configuration.screenWidthDp.dp.toPx(),
+            configuration.screenHeightDp.dp.toPx()
+        ) * 3.0f
+    }
+
+    // Trigger circular reveal transition from Welcome to next page
+    fun triggerCircularReveal(btnCenter: Offset, targetPage: Int) {
+        if (isCircularRevealing) return
+        revealCenter = btnCenter
+        revealRadius = 0f
+        revealTargetPage = targetPage
+        isCircularRevealing = true
+        coroutineScope.launch {
+            val duration = 600
+            val steps = 60
+            val stepDuration = duration / steps
+            for (i in 0..steps) {
+                val t = i / steps.toFloat()
+                val eased = 1f - (1f - t) * (1f - t) * (1f - t)
+                revealRadius = maxRevealRadius * eased
+                if (i % 10 == 0) {
+                }
+                delay(stepDuration.toLong())
+            }
+            // Animation complete — Layer 2 (clip circle at full size) covers entire screen.
+            // Now switch Layer 1 to target, then cleanup Layer 2 (which is already invisible on target page)
+            onPageChange(targetPage)
+            delay(80)
+            isCircularRevealing = false
+            revealTargetPage = null
+            revealRadius = 0f
+        }
+    }
+
+    // Complete 按钮 → MainActivity：普通 Activity 切换（无动画）
+    fun triggerCompleteReveal(btnCenter: Offset) {
+        onCompleteStart()
+        onCompleteFinish()
     }
 
     // 导航到下一页
@@ -256,74 +335,158 @@ fun OobeScreen(
                 )
             }
         }
-        AnimatedContent(
-            targetState = currentPage,
-            transitionSpec = {
-                val direction = if (targetState > initialState) 1 else -1
-                slideInHorizontally(
-                    initialOffsetX = { fullWidth -> fullWidth * direction },
-                    animationSpec = tween(300)
-                ) + fadeIn(animationSpec = tween(200)) togetherWith
-                slideOutHorizontally(
-                    targetOffsetX = { fullWidth -> -fullWidth * direction },
-                    animationSpec = tween(300)
-                ) + fadeOut(animationSpec = tween(200))
-            },
-            label = "oobePage"
-        ) { page ->
-            when (page) {
-            0 -> OobeWelcomePage(
-                isUpgrade = isUpgrade,
-                onNext = { goNext() },
-                darkTheme = darkTheme,
-                )
-            1 -> OobeEulaPage(
-                eulaAgreed = eulaAgreed,
-                onEulaAgreeChange = onEulaAgreeChange,
-                onBack = { goBack() },
-                onNext = { goNext() },
-                eulaLastModified = eulaLastModified,
-                darkTheme = darkTheme
-            )
-            2 -> OobePermissionPage(
-                permissionStatus = permissionStatus,
-                isPermissionGranted = isPermissionGranted,
-                onGrantAllPermissions = onGrantAllPermissions,
-                onBack = { goBack() },
-                onNext = { goNext() }
-            )
-            3 -> OobeInstallPage(
-                isBootstrapping = isBootstrapping,
-                bootstrapComplete = bootstrapComplete,
-                bootstrapError = bootstrapError,
-                onStartBootstrap = onStartBootstrap,
-                onRetryBootstrap = onRetryBootstrap,
-                onExitApp = onExitApp,
-                onNext = { goNext() },
-                onBack = { goBack() }
-            )
-            4 -> OobeReleaseNotesPage(
-                releaseNotes = releaseNotes,
-                currentVersionName = currentVersionName,
-                onNext = { goNext() },
-                onBack = { goBack() }
-            )
-            5 -> OobeCompletePage(
-                onComplete = onComplete,
-                darkTheme = darkTheme,
-                )
+        // Circular Reveal Transition Box
+        Box(modifier = Modifier.fillMaxSize()) {
+            // Layer 1: Current page — Welcome 独立，中间页(1-5)用 AnimatedContent 做 slide+fade
+            Box(modifier = Modifier.fillMaxSize()) {
+                if (currentPage == 0) {
+                    // Welcome 页：独立显示，Circular Reveal 接管切出动画
+                    OobeWelcomePage(
+                        isUpgrade = isUpgrade,
+                        onNext = { _ ->
+                            val nextP = if (!isUpgrade) 1 else if (shouldSkipEula) 4 else 1
+                            if (currentPage == 0 && !isCircularRevealing) {
+                                if (welcomeBtnCenter != Offset.Zero) {
+                                    triggerCircularReveal(welcomeBtnCenter, nextP)
+                                } else {
+                                    goNext()
+                                }
+                            } else {
+                                goNext()
+                            }
+                        },
+                        darkTheme = darkTheme,
+                        onButtonPositioned = { centerPx ->
+                            welcomeBtnCenter = centerPx
+                        }
+                    )
+                } else {
+                    // 中间页 + Complete 页：HyperCeiler 风格 slide+fade 切换
+                    androidx.compose.animation.AnimatedContent(
+                        targetState = currentPage,
+                        label = "oobeMiddlePages",
+                        transitionSpec = {
+                            val isForward = targetState > initialState
+                            if (isForward) {
+                                // 前进：新页从右滑入 + fadeIn，旧页向左滑出小距离 + fadeOut
+                                androidx.compose.animation.slideInHorizontally(
+                                    animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing)
+                                ) { fullWidth -> fullWidth } +
+                                androidx.compose.animation.fadeIn(
+                                    animationSpec = tween(durationMillis = 200, delayMillis = 60, easing = LinearOutSlowInEasing)
+                                ) togetherWith
+                                androidx.compose.animation.slideOutHorizontally(
+                                    animationSpec = tween(durationMillis = 200, easing = FastOutLinearInEasing)
+                                ) { fullWidth -> -fullWidth / 5 } +
+                                androidx.compose.animation.fadeOut(
+                                    animationSpec = tween(durationMillis = 120, easing = FastOutLinearInEasing)
+                                )
+                            } else {
+                                // 后退：新页从左滑入小距离 + fadeIn，旧页向右滑出 + fadeOut
+                                androidx.compose.animation.slideInHorizontally(
+                                    animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing)
+                                ) { fullWidth -> -fullWidth / 5 } +
+                                androidx.compose.animation.fadeIn(
+                                    animationSpec = tween(durationMillis = 200, delayMillis = 60, easing = LinearOutSlowInEasing)
+                                ) togetherWith
+                                androidx.compose.animation.slideOutHorizontally(
+                                    animationSpec = tween(durationMillis = 200, easing = FastOutLinearInEasing)
+                                ) { fullWidth -> fullWidth } +
+                                androidx.compose.animation.fadeOut(
+                                    animationSpec = tween(durationMillis = 120, easing = FastOutLinearInEasing)
+                                )
+                            }
+                        }
+                    ) { page ->
+                        when (page) {
+                            1 -> OobeEulaPage(
+                                eulaAgreed = eulaAgreed,
+                                onEulaAgreeChange = onEulaAgreeChange,
+                                onBack = { goBack() },
+                                onNext = { goNext() },
+                                eulaLastModified = eulaLastModified,
+                                darkTheme = darkTheme
+                            )
+                            2 -> OobePermissionPage(
+                                permissionStatus = permissionStatus,
+                                isPermissionGranted = isPermissionGranted,
+                                onGrantAllPermissions = onGrantAllPermissions,
+                                onBack = { goBack() },
+                                onNext = { goNext() }
+                            )
+                            3 -> OobeInstallPage(
+                                isBootstrapping = isBootstrapping,
+                                bootstrapComplete = bootstrapComplete,
+                                bootstrapError = bootstrapError,
+                                onStartBootstrap = onStartBootstrap,
+                                onRetryBootstrap = onRetryBootstrap,
+                                onExitApp = onExitApp,
+                                onNext = { goNext() },
+                                onBack = { goBack() }
+                            )
+                            4 -> OobeReleaseNotesPage(
+                                releaseNotes = releaseNotes,
+                                currentVersionName = currentVersionName,
+                                onNext = { goNext() },
+                                onBack = { goBack() }
+                            )
+                            5 -> OobeCompletePage(
+                                onComplete = {
+                                    onCompleteStart()
+                                    onCompleteFinish()
+                                },
+                                darkTheme = darkTheme,
+                                onButtonPositioned = { centerPx ->
+                                    completeBtnCenter = centerPx
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Layer 2: Circular Reveal — fillMaxSize + 动态 DynamicCircleShape clip
+            // 目标页保持正常屏幕尺寸，只在圆形区域内可见
+            if (isCircularRevealing && revealTargetPage != null) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clip(DynamicCircleShape(revealCenter, revealRadius.coerceAtLeast(0f)))
+                ) {
+                    // Target page fills the clipped box — 正常屏幕尺寸！
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        when (revealTargetPage) {
+                            1 -> OobeEulaPage(
+                                eulaAgreed = eulaAgreed,
+                                onEulaAgreeChange = onEulaAgreeChange,
+                                onBack = { goBack() },
+                                onNext = { goNext() },
+                                eulaLastModified = eulaLastModified,
+                                darkTheme = darkTheme
+                            )
+                            4 -> OobeReleaseNotesPage(
+                                releaseNotes = releaseNotes,
+                                currentVersionName = currentVersionName,
+                                onNext = { goNext() },
+                                onBack = { goBack() }
+                            )
+                        }
+                    }
+                }
             }
         }
     }
 }
+
 
 // ==================== 第一页: 欢迎 ====================
 
 @Composable
 private fun OobeWelcomePage(
     isUpgrade: Boolean,
-    onNext: () -> Unit,
-    darkTheme: Boolean
+    onNext: (Offset) -> Unit,
+    darkTheme: Boolean,
+    onButtonPositioned: (Offset) -> Unit = {}
 ) {
     val context = LocalContext.current
     val headerFg = if (darkTheme) Color.White else Color(0xFF333333)
@@ -340,11 +503,11 @@ private fun OobeWelcomePage(
             val pixels = IntArray(copy.width * copy.height)
             copy.getPixels(pixels, 0, copy.width, 0, 0, copy.width, copy.height)
             for (i in pixels.indices) {
-                val c = pixels[i]
-                val r = (c shr 16) and 0xFF
-                val g = (c shr 8) and 0xFF
-                val b = c and 0xFF
-                val a = (c shr 24) and 0xFF
+                val px = pixels[i]
+                val r = (px shr 16) and 0xFF
+                val g = (px shr 8) and 0xFF
+                val b = px and 0xFF
+                val a = (px shr 24) and 0xFF
                 val brightness = (r + g + b) / 3f
                 if (a > 128 && brightness > 180f) {
                     pixels[i] = 0x00000000
@@ -357,62 +520,170 @@ private fun OobeWelcomePage(
         }
     }
 
-    Box(
-        modifier = Modifier.fillMaxSize()
-    ) {
-        // Header — 真正垂直居中
+    val density = LocalDensity.current
+    val configuration = LocalConfiguration.current
+
+    // ========== HyperCeiler OOBE 入场动画 ==========
+    var animStarted by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { animStarted = true }
+
+    // LOGO: 0.5→0.95 (sinOut 440ms) → 1.0 (cubicOut 700ms) - Folme state machine
+    var logoScaleState by remember { mutableStateOf(0.5f) }
+    LaunchedEffect(animStarted) {
+        if (animStarted) {
+            logoScaleState = 0.95f
+            delay(440)
+            logoScaleState = 1.0f
+        }
+    }
+    val logoScale by animateFloatAsState(
+        targetValue = logoScaleState,
+        animationSpec = tween(
+            durationMillis = if (logoScaleState == 0.95f) 440 else 700,
+            easing = if (logoScaleState == 0.95f) FastOutSlowInEasing else CubicBezierEasing(0.33f, 0f, 0.67f, 1f)
+        ),
+        label = "logoScale"
+    )
+    val logoAlpha by animateFloatAsState(
+        targetValue = if (animStarted) 1f else 0f,
+        animationSpec = tween(durationMillis = 230, delayMillis = 60),
+        label = "logoAlpha"
+    )
+
+    // TEXT: translationY 100dp→0 + alpha 0→1 (HyperCeiler AnimHelper)
+    val textOffsetY by animateFloatAsState(
+        targetValue = if (animStarted) 0f else 100f,
+        animationSpec = tween(durationMillis = 1700, easing = FastOutSlowInEasing),
+        label = "textOffset"
+    )
+    val textAlpha by animateFloatAsState(
+        targetValue = if (animStarted) 1f else 0f,
+        animationSpec = tween(durationMillis = 1400, delayMillis = 300, easing = FastOutSlowInEasing),
+        label = "textAlpha"
+    )
+
+    // BUTTON: scale 0.9→1.0 + alpha 0→1, delay 1340ms (logo settle first)
+    val btnScale by animateFloatAsState(
+        targetValue = if (animStarted) 1f else 0.9f,
+        animationSpec = tween(durationMillis = 450, delayMillis = 1340,
+                              easing = CubicBezierEasing(0.33f, 0f, 0.67f, 1f)),
+        label = "btnScale"
+    )
+    val btnAlpha by animateFloatAsState(
+        targetValue = if (animStarted) 1f else 0f,
+        animationSpec = tween(durationMillis = 450, delayMillis = 1340,
+                              easing = CubicBezierEasing(0.33f, 0f, 0.67f, 1f)),
+        label = "btnAlpha"
+    )
+    val upgradeAlpha by animateFloatAsState(
+        targetValue = if (animStarted) 1f else 0f,
+        animationSpec = tween(durationMillis = 500, delayMillis = 1340),
+        label = "upgradeAlpha"
+    )
+
+    // Glow pulse: infinite breathing behind logo (HyperCeiler GlowController)
+    val infiniteTransition = rememberInfiniteTransition(label = "oobeWelcomeGlow")
+    val glowPulse by infiniteTransition.animateFloat(
+        initialValue = 0.85f, targetValue = 1.15f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 2200, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "glowPulse"
+    )
+    val glowAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.45f, targetValue = 0.7f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 2200, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "glowAlpha"
+    )
+
+    // Real button center captured via onGloballyPositioned (for circular reveal transition)
+    
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        // Header - vertically centered
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
             modifier = Modifier.fillMaxSize().align(Alignment.Center)
         ) {
-            if (appIcon != null) {
-                Image(
-                    bitmap = appIcon,
-                    contentDescription = "Logo",
-                    modifier = Modifier.size(100.dp)
+            // Glow + Logo
+            Box(
+                modifier = Modifier.size(160.dp).graphicsLayer {
+                    scaleX = logoScale; scaleY = logoScale; alpha = logoAlpha
+                },
+                contentAlignment = Alignment.Center
+            ) {
+                Box(
+                    modifier = Modifier.size((120 * glowPulse).dp).graphicsLayer { alpha = glowAlpha }
+                        .background(
+                            Brush.radialGradient(
+                                colors = listOf(
+                                    headerFg.copy(alpha = 0.35f),
+                                    headerFg.copy(alpha = 0.15f),
+                                    Color.Transparent
+                                ),
+                                radius = 140f
+                            ),
+                            shape = CircleShape
+                        )
                 )
-            } else {
-                Icon(
-                    painter = painterResource(R.drawable.ic_terminal),
-                    contentDescription = "Logo",
-                    modifier = Modifier.size(60.dp),
-                    tint = headerFg
-                )
+                if (appIcon != null) {
+                    Image(bitmap = appIcon, contentDescription = "Logo", modifier = Modifier.size(100.dp))
+                } else {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_terminal),
+                        contentDescription = "Logo",
+                        modifier = Modifier.size(60.dp),
+                        tint = headerFg
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(24.dp))
 
             Text(
                 text = "Termux Ultra",
-                style = TextStyle(
-                    fontSize = 36.sp,
-                    fontWeight = FontWeight.Black,
-                    color = headerFg
-                )
+                style = TextStyle(fontSize = 36.sp, fontWeight = FontWeight.Black, color = headerFg),
+                modifier = Modifier.graphicsLayer {
+                    translationY = textOffsetY
+                    alpha = textAlpha
+                }
             )
 
             if (isUpgrade) {
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(
                     text = stringResource(R.string.upgrade_complete),
-                    style = TextStyle(
-                        fontSize = 16.sp,
-                        color = headerFg.copy(alpha = 0.7f)
-                    )
+                    style = TextStyle(fontSize = 16.sp, color = headerFg.copy(alpha = 0.7f)),
+                    modifier = Modifier.graphicsLayer {
+                        alpha = upgradeAlpha
+                    }
                 )
             }
         }
 
-        // 右下箭头按钮 — 底部居中
+        // Bottom button - triggers circular reveal transition
         Box(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
+            modifier = Modifier.align(Alignment.BottomCenter)
                 .padding(bottom = 120.dp)
                 .size(64.dp)
-                .clip(CircleShape)
+                .onGloballyPositioned { coords ->
+                    val topLeft = coords.positionInRoot()
+                    val size = coords.size
+                    val center = Offset(
+                        x = topLeft.x + size.width / 2f,
+                        y = topLeft.y + size.height / 2f
+                    )
+                    onButtonPositioned(center)
+                }
+                .graphicsLayer { scaleX = btnScale; scaleY = btnScale; alpha = btnAlpha }
+                .clip(androidx.compose.foundation.shape.CircleShape)
                 .background(Color.White.copy(alpha = if (darkTheme) 0.2f else 0.9f))
-                .clickable { onNext() },
+                .clickable { onNext(Offset.Zero) },
             contentAlignment = Alignment.Center
         ) {
             Icon(
@@ -434,14 +705,15 @@ private fun OobeEulaPage(
     onBack: () -> Unit,
     onNext: () -> Unit,
     eulaLastModified: String,
-    darkTheme: Boolean
+    darkTheme: Boolean,
+    transparentBackground: Boolean = false
 ) {
     val scrollState = rememberScrollState()
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(MiuixTheme.colorScheme.surface)
+            .background(if (transparentBackground) Color.Transparent else MiuixTheme.colorScheme.surface)
             .padding(
                 top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 16.dp,
                 start = 24.dp,
@@ -453,9 +725,15 @@ private fun OobeEulaPage(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            IconButton(onClick = { onBack() }) {
-                MaterialIcon(
-                    imageVector = Icons.Default.ArrowBack,
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(androidx.compose.foundation.shape.CircleShape)
+                    .clickable { onBack() },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = MiuixIcons.Back,
                     contentDescription = stringResource(R.string.provision_back),
                     tint = MiuixTheme.colorScheme.onSurface
                 )
@@ -490,7 +768,9 @@ private fun OobeEulaPage(
             style = TextStyle(
                 fontSize = 14.sp,
                 color = MiuixTheme.colorScheme.onSurfaceVariantSummary
-            )
+            ),
+            modifier = Modifier.fillMaxWidth(),
+            textAlign = TextAlign.Center
         )
         Spacer(modifier = Modifier.height(24.dp))
 
@@ -571,7 +851,8 @@ private fun OobeEulaPage(
                 Button(
                     onClick = { onNext() },
                     enabled = eulaAgreed,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(color = MiuixTheme.colorScheme.primary)
                 ) {
                     Text(
                         text = stringResource(R.string.critical_force_enable_action_continue),
@@ -616,8 +897,22 @@ private fun EulaContent() {
         "",
         "10. 不保证特定功能：由于 Android 系统版本差异、厂商定制、设备硬件差异、网络环境等因素，本软件的部分功能可能无法在所有设备上正常工作。开发者不保证所有功能在所有设备上的可用性。",
         "",
+        "11. VorteX Guard 安全引擎：VorteX Guard 仅作为辅助风险提示与拦截工具，其规则基于已知特征与启发式判断，不可能识别所有潜在风险，亦不保证 100% 拦截恶意行为。当您将防护等级设置为「仅提示」「关闭」，或开启「仅审查 Root 命令」「自定义规则」等选项后，安全防护能力会相应降低，由此带来的风险由您自行承担。",
+        "",
+        "12. 插件与第三方扩展：本软件支持加载第三方插件。插件由其作者独立开发并承担责任，开发者不对第三方插件的安全性、正确性、合规性作出担保。您应在加载前自行审查插件来源与代码。",
+        "",
+        "13. 自定义脚本与规则：您导入的自定义安全规则、自定义启动脚本、Agent 提示词等内容，其合法性、安全性、有效性由您自行负责。因上述内容导致的虚拟机异常、数据损坏、安全绕过，开发者不承担责任。",
+        "",
+        "14. 开源组件声明：本软件基于 Termux 相关项目与 QEMU 等开源项目构建，受其上游许可条款约束。上游项目的 bug、安全问题与行为变更，按上游项目的政策处理，不属于本软件开发者的维护范围。",
+        "",
+        "15. 不提供担保：在适用法律允许的最大范围内，本软件按「现状」（AS IS）提供，不附带任何明示或默示担保，包括但不限于对适销性、特定用途适用性、不侵权的默示担保。",
+        "",
+        "16. 责任上限：在适用法律允许的最大范围内，开发者及其贡献者不对任何间接、附带、特殊、惩罚性或后果性损害（包括数据丢失、利润损失、业务中断、设备损坏）承担责任，即便已被告知该等损害的可能性。",
+        "",
         "三、知识产权",
-        "本软件遵循 GNU General Public License v3.0（GPL-3.0）发布。本软件中集成的各组件分别受其各自开源许可协议约束。",
+        "本软件遵循 GNU General Public License v3.0（GPL-3.0）发布。",
+        "本软件中集成的各组件分别受其各自开源许可协议约束。",
+        "您有权依据 GPL-3.0 的条款使用、修改、再分发本软件源码；但再分发时必须同样以 GPL-3.0 开源，并保留原始版权声明与许可声明。您不得将本软件及其修改版本用于闭源、专有或商业分发目的，除非另行取得书面授权。",
         "",
         "四、协议修改",
         "开发者保留随时修改本协议的权利。修改后的协议将在新版本中生效。继续使用本软件即视为同意修改后的条款。",
@@ -715,12 +1010,13 @@ private fun OobePermissionPage(
     isPermissionGranted: Boolean,
     onGrantAllPermissions: () -> Unit,
     onBack: () -> Unit,
-    onNext: () -> Unit
+    onNext: () -> Unit,
+    transparentBackground: Boolean = false
 ) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(MiuixTheme.colorScheme.surface)
+            .background(if (transparentBackground) Color.Transparent else MiuixTheme.colorScheme.surface)
             .padding(
                 top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 16.dp,
                 start = 24.dp,
@@ -732,9 +1028,15 @@ private fun OobePermissionPage(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            IconButton(onClick = { onBack() }) {
-                MaterialIcon(
-                    imageVector = Icons.Default.ArrowBack,
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(androidx.compose.foundation.shape.CircleShape)
+                    .clickable { onBack() },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = MiuixIcons.Back,
                     contentDescription = stringResource(R.string.provision_back),
                     tint = MiuixTheme.colorScheme.onSurface
                 )
@@ -769,7 +1071,9 @@ private fun OobePermissionPage(
             style = TextStyle(
                 fontSize = 14.sp,
                 color = MiuixTheme.colorScheme.onSurfaceVariantSummary
-            )
+            ),
+            modifier = Modifier.fillMaxWidth(),
+            textAlign = TextAlign.Center
         )
         Spacer(modifier = Modifier.height(24.dp))
 
@@ -840,7 +1144,8 @@ private fun OobePermissionPage(
             Button(
                 onClick = { onNext() },
                 enabled = isPermissionGranted,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f),
+                colors = ButtonDefaults.buttonColors(color = MiuixTheme.colorScheme.primary)
             ) {
                 Text(
                     text = stringResource(R.string.critical_force_enable_action_continue),
@@ -935,12 +1240,13 @@ private fun OobeInstallPage(
     onRetryBootstrap: () -> Unit,
     onExitApp: () -> Unit,
     onNext: () -> Unit,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    transparentBackground: Boolean = false
 ) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(MiuixTheme.colorScheme.surface)
+            .background(if (transparentBackground) Color.Transparent else MiuixTheme.colorScheme.surface)
             .padding(
                 top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 16.dp,
                 start = 24.dp,
@@ -952,9 +1258,15 @@ private fun OobeInstallPage(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            IconButton(onClick = { onBack() }) {
-                MaterialIcon(
-                    imageVector = Icons.Default.ArrowBack,
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(androidx.compose.foundation.shape.CircleShape)
+                    .clickable { onBack() },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = MiuixIcons.Back,
                     contentDescription = stringResource(R.string.provision_back),
                     tint = MiuixTheme.colorScheme.onSurface
                 )
@@ -989,7 +1301,9 @@ private fun OobeInstallPage(
             style = TextStyle(
                 fontSize = 14.sp,
                 color = MiuixTheme.colorScheme.onSurfaceVariantSummary
-            )
+            ),
+            modifier = Modifier.fillMaxWidth(),
+            textAlign = TextAlign.Center
         )
 
         Box(
@@ -1021,7 +1335,7 @@ private fun OobeInstallPage(
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
                         Box(
-                            modifier = Modifier.size(72.dp).clip(CircleShape).background(MiuixTheme.colorScheme.primary),
+                            modifier = Modifier.size(72.dp).clip(androidx.compose.foundation.shape.CircleShape).background(MiuixTheme.colorScheme.primary),
                             contentAlignment = Alignment.Center
                         ) {
                             MaterialIcon(imageVector = Icons.Default.CheckCircle, contentDescription = null, tint = Color.White, modifier = Modifier.size(40.dp))
@@ -1037,7 +1351,7 @@ private fun OobeInstallPage(
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
                         Box(
-                            modifier = Modifier.size(72.dp).clip(CircleShape).background(MiuixTheme.colorScheme.error),
+                            modifier = Modifier.size(72.dp).clip(androidx.compose.foundation.shape.CircleShape).background(MiuixTheme.colorScheme.error),
                             contentAlignment = Alignment.Center
                         ) {
                             MaterialIcon(imageVector = Icons.Default.Error, contentDescription = null, tint = Color.White, modifier = Modifier.size(40.dp))
@@ -1059,7 +1373,7 @@ private fun OobeInstallPage(
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
                         Box(
-                            modifier = Modifier.size(72.dp).clip(CircleShape).background(MiuixTheme.colorScheme.surfaceVariant),
+                            modifier = Modifier.size(72.dp).clip(androidx.compose.foundation.shape.CircleShape).background(MiuixTheme.colorScheme.surfaceVariant),
                             contentAlignment = Alignment.Center
                         ) {
                             CircularProgressIndicator(modifier = Modifier.size(36.dp))
@@ -1076,7 +1390,8 @@ private fun OobeInstallPage(
         when {
             bootstrapComplete -> {
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Button(onClick = { onNext() }, modifier = Modifier.fillMaxWidth()) {
+                    Button(onClick = { onNext() }, modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(color = MiuixTheme.colorScheme.primary)) {
                         Text(text = stringResource(R.string.critical_force_enable_action_continue), fontWeight = FontWeight.Bold, color = Color.White)
                     }
                 }
@@ -1093,14 +1408,16 @@ private fun OobeInstallPage(
             }
             isBootstrapping -> {
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Button(onClick = {}, enabled = false, modifier = Modifier.fillMaxWidth()) {
+                    Button(onClick = {}, enabled = false, modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(color = MiuixTheme.colorScheme.primary)) {
                         Text(text = "正在配置...", fontWeight = FontWeight.Bold, color = Color.White.copy(alpha = 0.6f))
                     }
                 }
             }
             else -> {
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Button(onClick = { onStartBootstrap() }, modifier = Modifier.fillMaxWidth()) {
+                    Button(onClick = { onStartBootstrap() }, modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(color = MiuixTheme.colorScheme.primary)) {
                         Text(text = "开始安装", fontWeight = FontWeight.Bold, color = Color.White)
                     }
                 }
@@ -1118,12 +1435,13 @@ private fun OobeReleaseNotesPage(
     releaseNotes: String?,
     currentVersionName: String,
     onNext: () -> Unit,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    transparentBackground: Boolean = false
 ) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(MiuixTheme.colorScheme.surface)
+            .background(if (transparentBackground) Color.Transparent else MiuixTheme.colorScheme.surface)
             .padding(
                 top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 16.dp,
                 start = 24.dp,
@@ -1135,9 +1453,15 @@ private fun OobeReleaseNotesPage(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            IconButton(onClick = { onBack() }) {
-                MaterialIcon(
-                    imageVector = Icons.Default.ArrowBack,
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(androidx.compose.foundation.shape.CircleShape)
+                    .clickable { onBack() },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = MiuixIcons.Back,
                     contentDescription = stringResource(R.string.provision_back),
                     tint = MiuixTheme.colorScheme.onSurface
                 )
@@ -1172,7 +1496,9 @@ private fun OobeReleaseNotesPage(
             style = TextStyle(
                 fontSize = 14.sp,
                 color = MiuixTheme.colorScheme.onSurfaceVariantSummary
-            )
+            ),
+            modifier = Modifier.fillMaxWidth(),
+            textAlign = TextAlign.Center
         )
         Spacer(modifier = Modifier.height(20.dp))
 
@@ -1205,7 +1531,7 @@ private fun OobeReleaseNotesPage(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Button(onClick = { onNext() }, modifier = Modifier.fillMaxWidth()) {
+            Button(onClick = { onNext() }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(color = MiuixTheme.colorScheme.primary)) {
                 Text(text = stringResource(R.string.critical_force_enable_action_continue), fontWeight = FontWeight.Bold, color = Color.White)
             }
         }
@@ -1295,7 +1621,8 @@ private fun MarkdownContent(text: String) {
 @Composable
 private fun OobeCompletePage(
     onComplete: () -> Unit,
-    darkTheme: Boolean
+    darkTheme: Boolean,
+    onButtonPositioned: (Offset) -> Unit = {}
 ) {
     val context = LocalContext.current
     val headerFg = if (darkTheme) Color.White else Color(0xFF333333)
@@ -1393,3 +1720,30 @@ private fun OobeCompletePage(
         }
     }
 }
+
+// ==================== 动态圆形揭示 Shape ====================
+// 用于 Circular Reveal 动画，圆心和半径都可以动态改变
+private class DynamicCircleShape(
+    private val center: Offset,  // px - 相对于 Box 左上角
+    private val radius: Float    // px
+) : Shape {
+    override fun createOutline(
+        size: Size,
+        layoutDirection: LayoutDirection,
+        density: Density
+    ): Outline {
+        val r = radius.coerceAtLeast(0f)
+        val path = androidx.compose.ui.graphics.Path()
+        val rect = androidx.compose.ui.geometry.Rect(
+            left = center.x - r,
+            top = center.y - r,
+            right = center.x + r,
+            bottom = center.y + r
+        )
+        path.addOval(rect)
+        return Outline.Generic(path)
+    }
+}
+
+
+
