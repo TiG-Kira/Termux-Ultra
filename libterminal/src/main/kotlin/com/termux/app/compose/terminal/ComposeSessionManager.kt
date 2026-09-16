@@ -6,6 +6,8 @@ import com.termux.app.compose.terminal.process.ITerminalProcess
 import com.termux.app.compose.terminal.process.TermuxProcessBridge
 import com.termux.shared.termux.shell.command.environment.TermuxShellCommandShellEnvironment
 import com.termux.shared.termux.shell.TermuxShellUtils
+import com.termux.app.compat.ShellEnvironmentCompat
+import com.termux.app.compat.TermuxTaskCompat
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -101,7 +103,7 @@ class ComposeSessionManager private constructor(private val context: Context) {
      * （不加载 ~/.profile，避免配置文件损坏导致会话无法启动）。
      */
     fun createDefaultSession(startImmediately: Boolean = true, isFailsafe: Boolean = false): TerminalSession {
-        val envClient = TermuxShellEnvironmentClient()
+        val envClient = ShellEnvironmentCompat(TermuxShellCommandShellEnvironment())
         val prefs = context.getSharedPreferences("termux_preferences", Context.MODE_PRIVATE)
         val workingDir = prefs.getString("current_session_dir", null)
             ?: envClient.getDefaultWorkingDirectoryPath()

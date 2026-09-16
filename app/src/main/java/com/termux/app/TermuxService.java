@@ -36,6 +36,9 @@ import androidx.annotation.Nullable;
 import com.termux.R;
 import com.termux.app.settings.properties.TermuxAppSharedProperties;
 import com.termux.app.terminal.TermuxTerminalSessionActivityClient;
+import com.termux.app.compat.ShellEnvironmentCompat;
+import com.termux.app.compat.TermuxSessionCompat;
+import com.termux.app.compat.TermuxTaskCompat;
 import com.termux.app.receiver.MemoryBroadcastReceiver;
 import com.termux.app.utils.DomesticOSDetector;
 import com.termux.shared.termux.plugins.TermuxPluginUtils;
@@ -71,7 +74,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * A service holding a list of {@link TermuxSession} in {@link #mTermuxSessions} and background {@link TermuxTask}
+ * A service holding a list of {@link TermuxSession} in {@link #mTermuxSessions} and background {@link TermuxTaskCompat}
  * in {@link #mTermuxTasks}, showing a foreground notification while running so that it is not terminated.
  * The user interacts with the session through {@link TermuxActivity}, but this service may outlive
  * the activity when the user or the system disposes of the activity. In that case the user may
@@ -83,7 +86,7 @@ import java.util.List;
  * Optionally may hold a wake and a wifi lock, in which case that is shown in the notification - see
  * {@link #buildNotification()}.
  */
-public final class TermuxService extends Service implements TermuxTask.TermuxTaskClient, TermuxSession.TermuxSessionClient {
+public final class TermuxService extends Service implements TermuxTaskCompat.TermuxTaskClient, TermuxSession.TermuxSessionClient {
 
     private static int EXECUTION_ID = 1000;
 
@@ -110,7 +113,7 @@ public final class TermuxService extends Service implements TermuxTask.TermuxTas
     /**
      * The background TermuxTasks which this service manages.
      */
-    final List<TermuxTask> mTermuxTasks = new ArrayList<>();
+    final List<TermuxTaskCompat> mTermuxTasks = new ArrayList<>();
 
     /**
      * The pending plugin ExecutionCommands that have yet to be processed by this service.
@@ -545,7 +548,7 @@ public final class TermuxService extends Service implements TermuxTask.TermuxTas
             termuxSessions.get(i).killIfExecuting(this, processResult);
         }
 
-        List<TermuxTask> termuxTasks = new ArrayList<>(mTermuxTasks);
+        List<TermuxTaskCompat> termuxTasks = new ArrayList<>(mTermuxTasks);
         for (int i = 0; i < termuxTasks.size(); i++) {
             ExecutionCommand executionCommand = termuxTasks.get(i).getExecutionCommand();
             if (executionCommand.isPluginExecutionCommandWithPendingResult())
@@ -634,7 +637,7 @@ public final class TermuxService extends Service implements TermuxTask.TermuxTas
     }
 
     /** Process {@link TERMUX_SERVICE#ACTION_SERVICE_EXECUTE} intent to execute a shell command in
-     * a foreground TermuxSession or in a background TermuxTask. */
+     * a foreground TermuxSession or in a background TermuxTaskCompat. */
     private void actionServiceExecute(Intent intent) {
         if (intent == null) {
             Logger.logError(LOG_TAG, "Ignoring null intent to actionServiceExecute");
@@ -694,27 +697,27 @@ public final class TermuxService extends Service implements TermuxTask.TermuxTas
 
 
 
-    /** Execute a shell command in background {@link TermuxTask}. */
+    /** Execute a shell command in background {@link TermuxTaskCompat}. */
     private void executeTermuxTaskCommand(ExecutionCommand executionCommand) {
         if (executionCommand == null) return;
 
-        Logger.logDebug(LOG_TAG, "Executing background \"" + executionCommand.getCommandIdAndLabelLogString() + "\" TermuxTask command");
+        Logger.logDebug(LOG_TAG, "Executing background \"" + executionCommand.getCommandIdAndLabelLogString() + "\" TermuxTaskCompat command");
 
-        TermuxTask newTermuxTask = createTermuxTask(executionCommand);
+        TermuxTaskCompat newTermuxTask = createTermuxTask(executionCommand);
     }
 
-    /** Create a {@link TermuxTask}. */
+    /** Create a {@link TermuxTaskCompat}. */
     @Nullable
-    public TermuxTask createTermuxTask(String executablePath, String[] arguments, String stdin, String workingDirectory) {
+    public TermuxTaskCompat createTermuxTask(String executablePath, String[] arguments, String stdin, String workingDirectory) {
         return createTermuxTask(new ExecutionCommand(getNextExecutionId(), executablePath, arguments, stdin, workingDirectory, true, false));
     }
 
-    /** Create a {@link TermuxTask}. */
+    /** Create a {@link TermuxTaskCompat}. */
     @Nullable
-    public synchronized TermuxTask createTermuxTask(ExecutionCommand executionCommand) {
+    public synchronized TermuxTaskCompat createTermuxTask(ExecutionCommand executionCommand) {
         if (executionCommand == null) return null;
 
-        Logger.logDebug(LOG_TAG, "Creating \"" + executionCommand.getCommandIdAndLabelLogString() + "\" TermuxTask");
+        Logger.logDebug(LOG_TAG, "Creating \"" + executionCommand.getCommandIdAndLabelLogString() + "\" TermuxTaskCompat");
 
         if (!executionCommand.inBackground) {
             Logger.logDebug(LOG_TAG, "Ignoring a foreground execution command passed to createTermuxTask()");
@@ -739,9 +742,9 @@ public final class TermuxService extends Service implements TermuxTask.TermuxTas
         if (Logger.getLogLevel() >= Logger.LOG_LEVEL_VERBOSE)
             Logger.logVerboseExtended(LOG_TAG, executionCommand.toString());
 
-        TermuxTask newTermuxTask = TermuxTask.execute(this, executionCommand, this, new TermuxShellEnvironmentClient(), false);
+        TermuxTaskCompat newTermuxTask = TermuxTaskCompat.execute(this, executionCommand, this, new ShellEnvironmentCompat(new TermuxShellCommandShellEnvironment()), false);
         if (newTermuxTask == null) {
-            Logger.logError(LOG_TAG, "Failed to execute new TermuxTask command for:\n" + executionCommand.getCommandIdAndLabelLogString());
+            Logger.logError(LOG_TAG, "Failed to execute new TermuxTaskCompat command for:\n" + executionCommand.getCommandIdAndLabelLogString());
             // If the execution command was started for a plugin, then process the error
             if (executionCommand.isPluginExecutionCommand)
                 PluginUtils.processPluginExecutionCommandError(this, LOG_TAG, executionCommand, false);
@@ -766,14 +769,14 @@ public final class TermuxService extends Service implements TermuxTask.TermuxTas
         return newTermuxTask;
     }
 
-    /** Callback received when a {@link TermuxTask} finishes. */
+    /** Callback received when a {@link TermuxTaskCompat} finishes. */
     @Override
-    public void onTermuxTaskExited(final TermuxTask termuxTask) {
+    public void onTermuxTaskExited(final TermuxTaskCompat termuxTask) {
         mHandler.post(() -> {
             if (termuxTask != null) {
                 ExecutionCommand executionCommand = termuxTask.getExecutionCommand();
 
-                Logger.logVerbose(LOG_TAG, "The onTermuxTaskExited() callback called for \"" + executionCommand.getCommandIdAndLabelLogString() + "\" TermuxTask command");
+                Logger.logVerbose(LOG_TAG, "The onTermuxTaskExited() callback called for \"" + executionCommand.getCommandIdAndLabelLogString() + "\" TermuxTaskCompat command");
 
                 // If the execution command was started for a plugin, then process the results
                 if (executionCommand != null && executionCommand.isPluginExecutionCommand)
@@ -887,7 +890,7 @@ public final class TermuxService extends Service implements TermuxTask.TermuxTas
         // Otherwise if command was manually started by the user like by adding a new terminal session,
         // then no need to set stdout
         executionCommand.terminalTranscriptRows = getTerminalTranscriptRows();
-        TermuxSession newTermuxSession = TermuxSession.execute(this, executionCommand, getTermuxTerminalSessionClient(), this, new TermuxShellEnvironmentClient(), sessionName, executionCommand.isPluginExecutionCommand);
+        TermuxSession newTermuxSession = TermuxSessionCompat.execute(this, executionCommand, getTermuxTerminalSessionClient(), this, new ShellEnvironmentCompat(new TermuxShellCommandShellEnvironment()), sessionName, executionCommand.isPluginExecutionCommand);
         if (newTermuxSession == null) {
             Logger.logError(LOG_TAG, "Failed to execute new TermuxSession command for:\n" + executionCommand.getCommandIdAndLabelLogString());
             // If the execution command was started for a plugin, then process the error

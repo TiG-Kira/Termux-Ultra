@@ -6,6 +6,8 @@ import com.termux.shared.termux.shell.command.environment.TermuxShellCommandShel
 import com.termux.shared.termux.shell.TermuxShellUtils
 import com.termux.shared.shell.command.runner.app.AppShell
 import com.termux.shared.termux.TermuxConstants
+import com.termux.app.compat.ShellEnvironmentCompat
+import com.termux.app.compat.TermuxTaskCompat
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -684,9 +686,9 @@ object AiLocalModel {
             false
         )
 
-        val shellEnvClient = TermuxShellEnvironmentClient()
+        val shellEnvClient = ShellEnvironmentCompat(TermuxShellCommandShellEnvironment())
         val termuxTask = try {
-            TermuxTask.execute(
+            TermuxTaskCompat.execute(
                 context,
                 executionCommand,
                 null,

@@ -4,6 +4,8 @@ import android.content.Context
 import com.termux.shared.shell.command.ExecutionCommand
 import com.termux.shared.shell.ShellUtils
 import com.termux.shared.termux.shell.command.runner.terminal.TermuxSession
+import com.termux.app.compat.ShellEnvironmentCompat
+import com.termux.app.compat.TermuxSessionCompat
 import com.termux.shared.termux.shell.command.environment.TermuxShellCommandShellEnvironment
 import com.termux.shared.termux.TermuxConstants
 import com.termux.shared.termux.terminal.TermuxTerminalSessionClientBase
@@ -139,7 +141,7 @@ class PluginPersistentSession(
             val sessionId = "${pluginId}::${UUID.randomUUID().toString().take(8)}"
 
             val shellPath = TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/bash"
-            val envClient = TermuxShellEnvironmentClient()
+            val envClient = ShellEnvironmentCompat(TermuxShellCommandShellEnvironment())
             val wd = envClient.defaultWorkingDirectoryPath.ifEmpty { "/" }
 
             val command = ExecutionCommand(
@@ -162,7 +164,7 @@ class PluginPersistentSession(
                 PluginPersistentSessionRegistry.onSessionExited(exited.terminalSession)
             }
 
-            val termuxSession = TermuxSession.execute(
+            val termuxSession = TermuxSessionCompat.execute(
                 context,
                 command,
                 sessionClient,

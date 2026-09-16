@@ -6,6 +6,8 @@ import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.termux.shared.shell.command.ExecutionCommand
 import com.termux.shared.shell.command.runner.app.AppShell
+import com.termux.app.compat.ShellEnvironmentCompat
+import com.termux.app.compat.TermuxTaskCompat
 import com.termux.shared.termux.shell.command.environment.TermuxShellCommandShellEnvironment
 import com.termux.shared.termux.TermuxConstants
 import com.termux.shared.logger.Logger
@@ -202,21 +204,17 @@ object PluginManager {
             executionCommand.commandLabel = "Plugin Shell Command"
             executionCommand.backgroundCustomLogLevel = Logger.LOG_LEVEL_OFF
 
-            val termuxTask = TermuxTask.execute(
+            val termuxTask = TermuxTaskCompat.execute(
                 context,
                 executionCommand,
                 null,
-                TermuxShellEnvironmentClient(),
+                ShellEnvironmentCompat(TermuxShellCommandShellEnvironment()),
                 true
             )
 
-            if (termuxTask == null) {
+            if (termuxTask == null || termuxTask.getExecutionCommand().isStateFailed()) {
                 val errMsg = executionCommand.resultData.errorsList?.firstOrNull()?.message
                     ?: "命令执行失败: 无法启动 TermuxTask"
-                Result.failure(Exception(errMsg))
-            } else if (executionCommand.isStateFailed()) {
-                val errMsg = executionCommand.resultData.errorsList?.firstOrNull()?.message
-                    ?: "命令执行失败 (exit=${executionCommand.resultData.exitCode})"
                 Result.failure(Exception(errMsg))
             } else {
                 val stdout = executionCommand.resultData.stdout?.toString()?.trim() ?: ""

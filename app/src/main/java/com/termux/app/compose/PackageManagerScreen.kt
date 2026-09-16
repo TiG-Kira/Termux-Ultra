@@ -48,6 +48,8 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.res.stringResource
 import com.termux.shared.shell.command.ExecutionCommand
 import com.termux.shared.termux.shell.command.environment.TermuxShellCommandShellEnvironment
+import com.termux.app.compat.ShellEnvironmentCompat
+import com.termux.app.compat.TermuxTaskCompat
 import com.termux.shared.termux.shell.TermuxShellUtils
 import com.termux.shared.shell.command.runner.app.AppShell
 import com.termux.shared.termux.TermuxConstants
@@ -85,9 +87,9 @@ object AppShell {
                 arrayOf("-c", command),
                 null, null, true, false
             )
-            val client = TermuxShellEnvironmentClient()
+            val client = ShellEnvironmentCompat(TermuxShellCommandShellEnvironment())
             val task = try {
-                TermuxTask.execute(context, ec, null, client, false)
+                TermuxTaskCompat.execute(context, ec, null, client, false)
             } catch (e: Exception) {
                 return@withContext Pair(-1, e.message ?: "执行失败")
             }
@@ -125,9 +127,9 @@ object AppShell {
             arrayOf("-c", command),
             null, null, true, false
         )
-        val client = TermuxShellEnvironmentClient()
+        val client = ShellEnvironmentCompat(TermuxShellCommandShellEnvironment())
         val task = try {
-            TermuxTask.execute(context, ec, null, client, false)
+            TermuxTaskCompat.execute(context, ec, null, client, false)
         } catch (e: Exception) {
             return@withContext Pair(-1, e.message ?: "执行失败")
         }

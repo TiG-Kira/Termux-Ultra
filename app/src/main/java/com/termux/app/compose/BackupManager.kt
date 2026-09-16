@@ -36,7 +36,7 @@ object BackupManager {
     @Volatile
     private var restoreProcess: Process? = null
 
-    private val envClient = TermuxShellEnvironmentClient()
+    private val envClient = ShellEnvironmentCompat(TermuxShellCommandShellEnvironment())
 
     /** Build the Termux shell environment array for [Runtime.exec]. */
     private fun buildEnv(context: Context): Array<String> {

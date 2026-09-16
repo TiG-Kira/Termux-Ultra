@@ -48,7 +48,7 @@ object ComposeSessionBridge {
         executionCommand: ExecutionCommand,
         sessionName: String?
     ): TermuxSession? {
-        val envClient = TermuxShellEnvironmentClient()
+        val envClient = ShellEnvironmentCompat(TermuxShellCommandShellEnvironment())
 
         // 1) Java 镜像：复用 TermuxSession.execute 构建（未附着到 TerminalView 时不会拉起进程）
         val mirror = TermuxSession.execute(
