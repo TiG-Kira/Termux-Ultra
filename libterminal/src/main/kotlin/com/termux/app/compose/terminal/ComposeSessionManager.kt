@@ -4,7 +4,7 @@ import android.content.Context
 import com.termux.app.compose.terminal.engine.TerminalSession
 import com.termux.app.compose.terminal.process.ITerminalProcess
 import com.termux.app.compose.terminal.process.TermuxProcessBridge
-import com.termux.shared.shell.command.environment.AndroidShellEnvironment
+import com.termux.shared.termux.shell.command.environment.TermuxShellEnvironment
 import com.termux.shared.compat.ShellEnvironmentCompat
 import com.termux.shared.compat.TermuxTaskCompat
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -102,7 +102,7 @@ class ComposeSessionManager private constructor(private val context: Context) {
      * （不加载 ~/.profile，避免配置文件损坏导致会话无法启动）。
      */
     fun createDefaultSession(startImmediately: Boolean = true, isFailsafe: Boolean = false): TerminalSession {
-        val envClient = ShellEnvironmentCompat(AndroidShellEnvironment())
+        val envClient = ShellEnvironmentCompat(TermuxShellEnvironment())
         val prefs = context.getSharedPreferences("termux_preferences", Context.MODE_PRIVATE)
         val workingDir = prefs.getString("current_session_dir", null)
             ?: envClient.getDefaultWorkingDirectoryPath()
