@@ -17,7 +17,7 @@ import android.service.controls.templates.StatelessTemplate;
 import com.termux.shared.termux.settings.preferences.TermuxWidgetAppSharedPreferences;
 import com.termux.shared.termux.TermuxConstants;
 import com.termux.shared.termux.TermuxConstants.TERMUX_APP.TERMUX_SERVICE;
-import com.termux.shared.termux.TermuxConstants.TERMUX_WIDGET;
+import com.termux.shared.termux.TermuxConstants.TERMUX_WIDGET_APP;
 
 import org.reactivestreams.FlowAdapters;
 

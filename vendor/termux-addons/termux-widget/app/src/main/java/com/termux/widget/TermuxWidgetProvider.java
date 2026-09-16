@@ -25,7 +25,7 @@ import com.termux.shared.termux.settings.preferences.TermuxWidgetAppSharedPrefer
 import com.termux.shared.shell.ShellUtils;
 import com.termux.shared.termux.TermuxConstants;
 import com.termux.shared.termux.TermuxConstants.TERMUX_APP.TERMUX_SERVICE;
-import com.termux.shared.termux.TermuxConstants.TERMUX_WIDGET.TERMUX_WIDGET_PROVIDER;
+import com.termux.shared.termux.TermuxConstants.TERMUX_WIDGET_APP.TERMUX_WIDGET_PROVIDER;
 import com.termux.shared.termux.TermuxUtils;
 
 import java.io.File;
@@ -137,7 +137,7 @@ public final class TermuxWidgetProvider extends AppWidgetProvider {
     public static void handleTermuxShortcutExecutionIntent(Context context, Intent intent, String logTag) {
         if (context == null || intent == null) return;
         logTag = DataUtils.getDefaultIfNull(logTag, LOG_TAG);
-        String token = intent.getStringExtra(TermuxConstants.TERMUX_WIDGET.EXTRA_TOKEN_NAME);
+        String token = intent.getStringExtra(TermuxConstants.TERMUX_WIDGET_APP.EXTRA_TOKEN_NAME);
         if (token == null || !token.equals(TermuxWidgetAppSharedPreferences.getGeneratedToken(context))) {
             Logger.logWarn(logTag, "Invalid token \"" + token + "\" for intent:\n" + IntentUtils.getIntentString(intent));
             Toast.makeText(context, R.string.msg_bad_token, Toast.LENGTH_LONG).show();

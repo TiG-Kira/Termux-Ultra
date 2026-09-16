@@ -30,7 +30,7 @@ import com.termux.shared.termux.settings.preferences.TermuxWidgetAppSharedPrefer
 import com.termux.shared.shell.ShellUtils;
 import com.termux.shared.termux.TermuxConstants;
 import com.termux.shared.termux.TermuxConstants.TERMUX_APP.TERMUX_SERVICE;
-import com.termux.shared.termux.TermuxConstants.TERMUX_WIDGET;
+import com.termux.shared.termux.TermuxConstants.TERMUX_WIDGET_APP;
 import com.termux.shared.termux.TermuxUtils;
 
 import java.io.File;

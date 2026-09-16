@@ -7,7 +7,7 @@ import android.widget.RemoteViewsService;
 
 import com.termux.shared.file.FileUtils;
 import com.termux.shared.termux.TermuxConstants;
-import com.termux.shared.termux.TermuxConstants.TERMUX_WIDGET.TERMUX_WIDGET_PROVIDER;
+import com.termux.shared.termux.TermuxConstants.TERMUX_WIDGET_APP.TERMUX_WIDGET_PROVIDER;
 
 import java.io.File;
 import java.io.FileFilter;
