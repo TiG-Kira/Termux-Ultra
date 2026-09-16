@@ -1,15 +1,12 @@
-name: Build
+name: Build for Bump/2.x
 
 on:
   push:
     branches:
-      - main
-      - master
-      - 'github-releases/**'
+      - 'corebump/**'
   pull_request:
     branches:
-      - main
-      - master
+      - 'corebump/**'
 
 jobs:
   build:
