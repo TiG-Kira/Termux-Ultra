@@ -72,6 +72,8 @@
         <item name="android:background">?android:attr/windowBackground</item>
     </style>
     <!-- TU custom ReportActivity theme -->
-    <style name="Theme.AppCompat.TermuxReportActivity" parent="Theme.AppCompat.Light.DarkActionBar" />
+    <style name="Theme.AppCompat.TermuxReportActivity" parent="Theme.AppCompat.Light.NoActionBar">
+        <item name="colorPrimaryDark">#FF0000</item>
+    </style>
     <style name="Toolbar.Title" parent="TextAppearance.Widget.AppCompat.Toolbar.Title" />
 </resources>
