@@ -176,6 +176,14 @@ public class ExecutionCommand {
     public boolean isFailsafe;
 
     /**
+     * Set to {@code true} if the command should be run in background.
+     * This is a TU-compat field preserved from v0.118.3; upstream v0.119
+     * removed it in favour of Runner.APP_SHELL semantics but the intent extra
+     * TERMUX_SERVICE.EXTRA_BACKGROUND is still honoured at dispatch-time.
+     */
+    public boolean inBackground;
+
+    /**
      * The {@link ExecutionCommand} custom log level for background {@link AppShell}
      * commands. By default, @link com.termux.shared.shell.StreamGobbler} only logs stdout and
      * stderr if {@link Logger} `CURRENT_LOG_LEVEL` is >= {@link Logger#LOG_LEVEL_VERBOSE} and

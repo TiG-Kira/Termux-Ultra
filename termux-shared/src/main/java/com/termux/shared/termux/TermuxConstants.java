@@ -1205,6 +1205,10 @@ public final class TermuxConstants {
         /** Termux:API app launcher activity name. This is an `activity-alias` for {@link #TERMUX_API_MAIN_ACTIVITY_NAME} used for launchers with {@link Intent#CATEGORY_LAUNCHER}. */
         public static final String TERMUX_API_LAUNCHER_ACTIVITY_NAME = TERMUX_API_PACKAGE_NAME + ".activities.TermuxAPILauncherActivity"; // Default: "com.termux.api.activities.TermuxAPILauncherActivity"
 
+        /** @deprecated Kept for TU add-on compat. */
+        @Deprecated
+        public static final String TERMUX_API_ACTIVITY_NAME = TERMUX_API_MAIN_ACTIVITY_NAME;
+
     }
 
 
@@ -1276,6 +1280,10 @@ public final class TermuxConstants {
         /** Termux:Styling app launcher activity name. This is an `activity-alias` for {@link #TERMUX_STYLING_MAIN_ACTIVITY_NAME} used for launchers with {@link Intent#CATEGORY_LAUNCHER}. */
         public static final String TERMUX_STYLING_LAUNCHER_ACTIVITY_NAME = TERMUX_STYLING_PACKAGE_NAME + ".activities.TermuxStylingLauncherActivity"; // Default: "com.termux.styling.activities.TermuxStylingLauncherActivity"
 
+        /** @deprecated Kept for TU add-on compat. */
+        @Deprecated
+        public static final String TERMUX_STYLING_ACTIVITY_NAME = TERMUX_STYLING_MAIN_ACTIVITY_NAME;
+
     }
 
 
@@ -1292,6 +1300,10 @@ public final class TermuxConstants {
 
         /** Termux:Tasker app launcher activity name. This is an `activity-alias` for {@link #TERMUX_TASKER_MAIN_ACTIVITY_NAME} used for launchers with {@link Intent#CATEGORY_LAUNCHER}. */
         public static final String TERMUX_TASKER_LAUNCHER_ACTIVITY_NAME = TERMUX_TASKER_PACKAGE_NAME + ".activities.TermuxTaskerLauncherActivity"; // Default: "com.termux.tasker.activities.TermuxTaskerLauncherActivity"
+
+        /** @deprecated Kept for TU add-on compat. */
+        @Deprecated
+        public static final String TERMUX_TASKER_ACTIVITY_NAME = TERMUX_TASKER_MAIN_ACTIVITY_NAME;
 
     }
 
@@ -1313,6 +1325,10 @@ public final class TermuxConstants {
 
         /**  Intent {@code String} extra for the token of the Termux:Widget app shortcuts. */
         public static final String EXTRA_TOKEN_NAME = TERMUX_PACKAGE_NAME + ".shortcut.token"; // Default: "com.termux.shortcut.token"
+
+        /** @deprecated Use {@link #TERMUX_WIDGET_MAIN_ACTIVITY_NAME} instead. Kept for TU add-on compat. */
+        @Deprecated
+        public static final String TERMUX_WIDGET_ACTIVITY_NAME = TERMUX_WIDGET_MAIN_ACTIVITY_NAME;
 
 
         /**

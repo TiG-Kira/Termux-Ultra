@@ -189,7 +189,7 @@ public class TermuxCreateShortcutActivity extends AppCompatActivity {
         Intent executionIntent = new Intent(context, TermuxLaunchShortcutActivity.class);
         executionIntent.setAction(TERMUX_SERVICE.ACTION_SERVICE_EXECUTE); // Mandatory for pinned shortcuts
         executionIntent.setData(scriptUri);
-        executionIntent.putExtra(TERMUX_WIDGET.EXTRA_TOKEN_NAME, TermuxWidgetAppSharedPreferences.getGeneratedToken(context));
+        executionIntent.putExtra(TERMUX_WIDGET_APP.EXTRA_TOKEN_NAME, TermuxWidgetAppSharedPreferences.getGeneratedToken(context));
         return executionIntent;
     }
 

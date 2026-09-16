@@ -210,7 +210,7 @@ public class TermuxWidgetControlsProviderService extends ControlsProviderService
     }
 
     private void addShortcutFileExtrasToIntent(File file, Intent intent) {
-        intent.putExtra(TERMUX_WIDGET.EXTRA_TOKEN_NAME, TermuxWidgetAppSharedPreferences.getGeneratedToken(getBaseContext()));
+        intent.putExtra(TERMUX_WIDGET_APP.EXTRA_TOKEN_NAME, TermuxWidgetAppSharedPreferences.getGeneratedToken(getBaseContext()));
 
         Uri scriptUri = new Uri.Builder().scheme(TERMUX_SERVICE.URI_SCHEME_SERVICE_EXECUTE).path(file.getAbsolutePath()).build();
         intent.setData(scriptUri);
