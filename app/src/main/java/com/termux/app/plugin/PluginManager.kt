@@ -6,8 +6,8 @@ import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.termux.shared.shell.command.ExecutionCommand
 import com.termux.shared.shell.command.runner.app.AppShell
-import com.termux.app.compat.ShellEnvironmentCompat
-import com.termux.app.compat.TermuxTaskCompat
+import com.termux.shared.compat.ShellEnvironmentCompat
+import com.termux.shared.compat.TermuxTaskCompat
 import com.termux.shared.termux.shell.command.environment.TermuxShellCommandShellEnvironment
 import com.termux.shared.termux.TermuxConstants
 import com.termux.shared.logger.Logger

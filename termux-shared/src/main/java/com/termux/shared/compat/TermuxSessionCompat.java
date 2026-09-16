@@ -1,4 +1,4 @@
-package com.termux.app.compat;
+package com.termux.shared.compat;
 
 import android.content.Context;
 

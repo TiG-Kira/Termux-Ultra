@@ -7,8 +7,8 @@ import com.termux.shared.termux.shell.command.environment.TermuxShellCommandShel
 import com.termux.shared.termux.shell.TermuxShellUtils
 import com.termux.shared.shell.command.runner.app.AppShell
 import com.termux.shared.termux.TermuxConstants
-import com.termux.app.compat.ShellEnvironmentCompat
-import com.termux.app.compat.TermuxTaskCompat
+import com.termux.shared.compat.ShellEnvironmentCompat
+import com.termux.shared.compat.TermuxTaskCompat
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow

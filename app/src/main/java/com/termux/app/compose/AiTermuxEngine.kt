@@ -25,8 +25,8 @@ import com.termux.app.ssh.SshConnection
 import com.termux.app.ssh.SshConnectionManager
 import com.termux.app.vnc.VncConnection
 import com.termux.app.vnc.VncConnectionManager
-import com.termux.app.compat.ShellEnvironmentCompat
-import com.termux.app.compat.TermuxTaskCompat
+import com.termux.shared.compat.ShellEnvironmentCompat
+import com.termux.shared.compat.TermuxTaskCompat
 import com.gaurav.avnc.ui.vnc.VncActivity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay

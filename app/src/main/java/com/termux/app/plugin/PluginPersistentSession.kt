@@ -4,8 +4,8 @@ import android.content.Context
 import com.termux.shared.shell.command.ExecutionCommand
 import com.termux.shared.shell.ShellUtils
 import com.termux.shared.termux.shell.command.runner.terminal.TermuxSession
-import com.termux.app.compat.ShellEnvironmentCompat
-import com.termux.app.compat.TermuxSessionCompat
+import com.termux.shared.compat.ShellEnvironmentCompat
+import com.termux.shared.compat.TermuxSessionCompat
 import com.termux.shared.termux.shell.command.environment.TermuxShellCommandShellEnvironment
 import com.termux.shared.termux.TermuxConstants
 import com.termux.shared.termux.terminal.TermuxTerminalSessionClientBase

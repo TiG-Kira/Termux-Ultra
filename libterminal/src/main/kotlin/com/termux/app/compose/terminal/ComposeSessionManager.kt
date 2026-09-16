@@ -6,8 +6,8 @@ import com.termux.app.compose.terminal.process.ITerminalProcess
 import com.termux.app.compose.terminal.process.TermuxProcessBridge
 import com.termux.shared.termux.shell.command.environment.TermuxShellCommandShellEnvironment
 import com.termux.shared.termux.shell.TermuxShellUtils
-import com.termux.app.compat.ShellEnvironmentCompat
-import com.termux.app.compat.TermuxTaskCompat
+import com.termux.shared.compat.ShellEnvironmentCompat
+import com.termux.shared.compat.TermuxTaskCompat
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
