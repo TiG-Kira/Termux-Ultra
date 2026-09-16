@@ -14,10 +14,10 @@ import android.service.controls.actions.ControlAction;
 import android.service.controls.templates.ControlTemplate;
 import android.service.controls.templates.StatelessTemplate;
 
-import com.termux.shared.termux.settings.preferences.TermuxWidgetAppSharedPreferences;
+import com.termux.shared.settings.preferences.TermuxWidgetAppSharedPreferences;
 import com.termux.shared.termux.TermuxConstants;
 import com.termux.shared.termux.TermuxConstants.TERMUX_APP.TERMUX_SERVICE;
-import com.termux.shared.termux.TermuxConstants.TERMUX_WIDGET_APP;
+import com.termux.shared.termux.TermuxConstants.TERMUX_WIDGET;
 
 import org.reactivestreams.FlowAdapters;
 
@@ -210,7 +210,7 @@ public class TermuxWidgetControlsProviderService extends ControlsProviderService
     }
 
     private void addShortcutFileExtrasToIntent(File file, Intent intent) {
-        intent.putExtra(TERMUX_WIDGET_APP.EXTRA_TOKEN_NAME, TermuxWidgetAppSharedPreferences.getGeneratedToken(getBaseContext()));
+        intent.putExtra(TERMUX_WIDGET.EXTRA_TOKEN_NAME, TermuxWidgetAppSharedPreferences.getGeneratedToken(getBaseContext()));
 
         Uri scriptUri = new Uri.Builder().scheme(TERMUX_SERVICE.URI_SCHEME_SERVICE_EXECUTE).path(file.getAbsolutePath()).build();
         intent.setData(scriptUri);

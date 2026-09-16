@@ -7,7 +7,7 @@ import android.widget.TextView;
 import androidx.appcompat.app.AppCompatActivity;
 
 import com.termux.shared.logger.Logger;
-import com.termux.shared.android.PackageUtils;
+import com.termux.shared.packages.PackageUtils;
 import com.termux.shared.termux.TermuxConstants;
 import com.termux.widget.R;
 
@@ -39,7 +39,7 @@ public class TermuxWidgetActivity extends AppCompatActivity {
             // name (com.termux), not the legacy standalone widget package (com.termux.widget).
             // Use the activity's own package name so this works in both modes.
             PackageUtils.setComponentState(TermuxWidgetActivity.this,
-                    getPackageName(), TermuxConstants.TERMUX_WIDGET_APP.TERMUX_WIDGET_ACTIVITY_NAME,
+                    getPackageName(), TermuxConstants.TERMUX_WIDGET.TERMUX_WIDGET_ACTIVITY_NAME,
                     false, message, true);
         });
     }
