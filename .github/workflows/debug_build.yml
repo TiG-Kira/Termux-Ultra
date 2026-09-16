@@ -3,11 +3,15 @@ name: Build
 on:
   push:
     branches:
+      - main
       - master
       - 'github-releases/**'
+      - 'corebump/**'
   pull_request:
     branches:
+      - main
       - master
+      - 'corebump/**'
 
 jobs:
   build:
