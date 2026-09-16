@@ -3,7 +3,7 @@ package com.termux.terminal;
 /**
  * Native methods for creating and managing pseudoterminal subprocesses. C code is in jni/termux.c.
  */
-final class JNI {
+public final class JNI {
 
     static {
         System.loadLibrary("termux");
@@ -37,5 +37,22 @@ final class JNI {
 
     /** Close a file descriptor through the close(2) system call. */
     public static native void close(int fileDescriptor);
+
+    /**
+     * Set file permissions using chmod(2) system call.
+     *
+     * @param path The path to the file
+     * @param mode The permission mode (e.g., 0755)
+     * @return 0 on success, -1 on failure
+     */
+    public static native int chmod(String path, int mode);
+
+    /**
+     * Install native signal handlers for SIGSEGV, SIGABRT, SIGBUS, SIGFPE, SIGILL.
+     * The handler writes crash_log.md (async-signal-safe) and then best-effort
+     * calls back to Java via NativeCrashBridge to show an unrecoverable dialog.
+     * Safe to call multiple times — only registers once.
+     */
+    public static native void nativeSetupCrashHandler();
 
 }

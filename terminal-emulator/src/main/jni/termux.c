@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/ioctl.h>
+#include <sys/stat.h>
 #include <sys/wait.h>
 #include <termios.h>
 #include <unistd.h>
@@ -52,8 +53,11 @@ static int create_subprocess(JNIEnv* env,
     }
 
     // Enable UTF-8 mode and disable flow control to prevent Ctrl+S from locking up the display.
+    // Also explicitly enable ECHO|ICANON — Android /dev/ptmx default termios has ECHO disabled,
+    // which causes bash readline to not echo input and PS1 to not render.
     struct termios tios;
     tcgetattr(ptm, &tios);
+    tios.c_lflag |= (ECHO | ICANON | ISIG);
     tios.c_iflag |= IUTF8;
     tios.c_iflag &= ~(IXON | IXOFF);
     tcsetattr(ptm, TCSANOW, &tios);
@@ -79,6 +83,17 @@ static int create_subprocess(JNIEnv* env,
 
         int pts = open(devname, O_RDWR);
         if (pts < 0) exit(-1);
+
+        // Fix ECHO off bug: Android /dev/ptmx default termios has ECHO disabled.
+        // Must explicitly enable ECHO|ICANON on PTS before dup2 to stdin/stdout/stderr,
+        // otherwise bash readline won't echo input and PS1 won't render.
+        struct termios pts_tios;
+        if (tcgetattr(pts, &pts_tios) == 0) {
+            pts_tios.c_lflag |= (ECHO | ICANON | ISIG);
+            pts_tios.c_iflag |= IUTF8;
+            pts_tios.c_iflag &= ~(IXON | IXOFF);
+            tcsetattr(pts, TCSANOW, &pts_tios);
+        }
 
         dup2(pts, 0);
         dup2(pts, 1);
@@ -215,4 +230,15 @@ JNIEXPORT jint JNICALL Java_com_termux_terminal_JNI_waitFor(JNIEnv* TERMUX_UNUSE
 JNIEXPORT void JNICALL Java_com_termux_terminal_JNI_close(JNIEnv* TERMUX_UNUSED(env), jclass TERMUX_UNUSED(clazz), jint fileDescriptor)
 {
     close(fileDescriptor);
+}
+
+JNIEXPORT jint JNICALL Java_com_termux_terminal_JNI_chmod(JNIEnv* env, jclass TERMUX_UNUSED(clazz), jstring path, jint mode)
+{
+    char const* path_utf8 = (*env)->GetStringUTFChars(env, path, NULL);
+    if (!path_utf8) return -1;
+    
+    int result = chmod(path_utf8, mode);
+    (*env)->ReleaseStringUTFChars(env, path, path_utf8);
+    
+    return result;
 }

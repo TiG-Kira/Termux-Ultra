@@ -1,39 +1,44 @@
-# From https://gist.github.com/iainconnor/8605514
-# with the addition of the /captures below.
-/captures
-
-# Built application files
+# Gradle files
+.gradle/
 build/
-release/
-*.apk
-*.so
-.externalNativeBuild
-.cxx
-*.zip
 
 # Local configuration file (sdk path, etc)
 local.properties
 
-# Gradle generated files
-.gradle/
+# Log/OS Files
+*.log
 
-# Signing files
-.signing/
+# Android Studio generated files and folders
+captures/
+.externalNativeBuild/
+.cxx/
+*.apk
+output.json
 
-# Intellij
-.idea/
+# IntelliJ
 *.iml
+.idea/
+misc.xml
+deploymentTargetDropDown.xml
+render.experimental.xml
 
-# Vim
-*.swo
-*.swp
+# Keystore files
+*.jks
+*.keystore
 
-# OS-specific files
-.DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-.swp
-ehthumbs.db
-Thumbs.db
+# Google Services (e.g. APIs or Firebase)
+google-services.json
+
+# Android Profiling
+*.hprof
+
+
+memory
+memory.md
+.opensquilla
+.trae
+PROJECT_SUMMARY.md
+HANDOFF.md
+build_log.txt
+_deps2.txt
+_deps.txt

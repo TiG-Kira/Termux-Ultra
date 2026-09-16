@@ -1,0 +1,1976 @@
+package com.termux.app.compose
+
+import java.io.File
+
+import android.content.Context
+import android.content.Intent
+import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.view.WindowManager
+import com.termux.app.utils.SnackbarHelper
+import com.google.android.material.snackbar.Snackbar
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.biometric.BiometricManager
+import androidx.biometric.BiometricPrompt
+import androidx.biometric.auth.AuthPromptCallback
+import androidx.biometric.auth.startClass2BiometricOrCredentialAuthentication
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import top.yukonga.miuix.kmp.preference.CheckboxPreference
+import top.yukonga.miuix.kmp.basic.Text
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.fragment.app.Fragment
+import androidx.fragment.app.FragmentActivity
+import com.termux.R
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import top.yukonga.miuix.kmp.basic.Button
+import top.yukonga.miuix.kmp.basic.ButtonDefaults
+import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.theme.MiuixTheme
+
+/**
+ * 风险命令确认管理器。
+ *
+ * 负责：
+ * 1. 通过 [RiskCommandDetector] 检测命令是否为高危命令
+ * 2. 通过 WindowDialog 要求用户二次确认
+ * 3. 根据用户选择决定放行或拦截
+ * 4. 管理"高风险命令二次确认"开关状态
+ */
+object RiskConfirmManager {
+
+    const val PREFS_NAME = "termux_risk_confirm"
+    const val KEY_ENABLED = "risk_confirm_enabled"       // 迁移用：旧的布尔开关
+    const val KEY_PROTECTION_LEVEL = "protection_level"   // 新的保护级别 (Int)
+    const val KEY_PENDING_SESSION_HANDLE = "pending_session_handle"
+    const val KEY_PENDING_COMMAND = "pending_command"
+    const val KEY_PENDING_RESULT = "pending_result"
+    const val RESULT_CONFIRMED = "confirmed"
+    const val RESULT_DENIED = "denied"
+
+    const val KEY_AGENT_PENDING_ACTION = "agent_pending_action"
+    const val KEY_AGENT_PENDING_PARAMS = "agent_pending_params"
+    const val KEY_AGENT_PENDING_MESSAGE_ID = "agent_pending_message_id"
+    const val KEY_AGENT_PENDING_RESULT = "agent_pending_result"
+
+    /** 跳过风险确认的标志：Agent 流程已确认的命令不需要二次确认 */
+    @Volatile
+    private var skipRiskCheck = false
+
+    /** 设置跳过风险确认标志（Agent 流程已确认后调用） */
+    fun setSkipRiskCheck(skip: Boolean) {
+        skipRiskCheck = skip
+    }
+
+    /** 检查是否应跳过风险确认 */
+    fun shouldSkipRiskCheck(): Boolean = skipRiskCheck
+
+    /**
+     * 检查无限制模式是否激活。
+     * 无限制模式下：跳过所有风险确认，放开 Agent 全部限制。
+     */
+    fun isUnlimitedModeActive(context: Context): Boolean {
+        return AiTermuxPrefs.isUnlimitedModeActive(context)
+    }
+
+    /** 标记上一次命令是否为自动拦截（AUTO_BLOCK 模式） */
+    @Volatile
+    private var lastCommandAutoBlocked = false
+
+    /** 检查上一次命令是否为自动拦截 */
+    fun isLastCommandAutoBlocked(): Boolean = lastCommandAutoBlocked
+
+    /** 重置自动拦截标志 */
+    fun resetAutoBlockedFlag() {
+        lastCommandAutoBlocked = false
+    }
+
+    // ---- 性能优化：缓存防护等级，避免每次命令都读取 SharedPreferences ----
+    @Volatile
+    private var cachedProtectionLevel: ProtectionLevel? = null
+
+    /** 会话环境类型缓存（使用 WeakHashMap 避免内存泄漏） */
+    private val environmentCache = java.util.concurrent.ConcurrentHashMap<String, EnvironmentType>()
+
+    /** 清除指定会话的环境缓存 */
+    fun invalidateEnvironmentCache(sessionHandle: String) {
+        environmentCache.remove(sessionHandle)
+    }
+
+    /** 清除所有环境缓存 */
+    fun clearAllEnvironmentCache() {
+        environmentCache.clear()
+    }
+
+    /** 预加载缓存到内存（避免首次命令读取 SharedPreferences） */
+    fun preloadCache(context: Context) {
+        try {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val levelOrdinal = prefs.getInt(KEY_PROTECTION_LEVEL, ProtectionLevel.WARN_VERIFY.ordinal)
+            cachedProtectionLevel = ProtectionLevel.entries.getOrElse(levelOrdinal) { ProtectionLevel.WARN_VERIFY }
+        } catch (_: Exception) {
+            // 忽略异常，保持缓存为 null
+        }
+    }
+
+    // ---- Snackbar 事件流 ----
+    data class SnackbarEvent(val message: String, val duration: Int = Snackbar.LENGTH_LONG)
+    // SharedFlow(replay=0): 活跃 subscriber 实时收到，新 subscriber 不收历史
+    // 仅终端详情页收集，主页不收集
+    private val _snackbarEvents = MutableSharedFlow<SnackbarEvent>(
+        replay = 0,
+        extraBufferCapacity = 32
+    )
+    val snackbarEvents: SharedFlow<SnackbarEvent> = _snackbarEvents
+
+    /** 发送 Snackbar 事件到所有活跃 collector。 */
+    fun emitSnackbar(message: String, duration: Int = Snackbar.LENGTH_LONG) {
+        _snackbarEvents.tryEmit(SnackbarEvent(message, duration))
+    }
+
+    // ---- 主页汇总 Snackbar（退出终端页时发送，显示统计信息） ----
+    // 使用 replay=1 确保新订阅者（主页）激活后能收到最后一个事件
+    data class SummarySnackbarEvent(
+        val message: String,
+        val duration: Int = Snackbar.LENGTH_LONG
+    )
+    private val _summarySnackbarEvents = MutableSharedFlow<SummarySnackbarEvent>(
+        replay = 1,
+        extraBufferCapacity = 8
+    )
+    val summarySnackbarEvents: SharedFlow<SummarySnackbarEvent> = _summarySnackbarEvents
+
+    /** 发送汇总 Snackbar 到主页（退出终端页时调用） */
+    fun emitSummarySnackbar(message: String, duration: Int = Snackbar.LENGTH_LONG) {
+        _summarySnackbarEvents.tryEmit(SummarySnackbarEvent(message, duration))
+    }
+
+    // ---- 危险命令计数（统计用） ----
+    private var dangerCommandCount: Int = 0
+    private var lastProtectionLevel: ProtectionLevel = ProtectionLevel.OFF
+
+    /** 增加危险命令计数，返回当前计数 */
+    fun incrementDangerCount(): Int {
+        dangerCommandCount++
+        return dangerCommandCount
+    }
+
+    /** 获取当前危险命令计数 */
+    fun getDangerCount(): Int = dangerCommandCount
+
+    /** 重置危险命令计数 */
+    fun resetDangerCount() {
+        dangerCommandCount = 0
+    }
+
+    /** 设置最后使用的保护级别 */
+    fun setLastProtectionLevel(level: ProtectionLevel) {
+        lastProtectionLevel = level
+    }
+
+    /** 获取最后使用的保护级别 */
+    fun getLastProtectionLevel(): ProtectionLevel = lastProtectionLevel
+
+    /**
+     * 检测设备是否拥有 ROOT 访问权限。
+     * 通过尝试执行 "su -c echo 1" 并检查输出判断。
+     *
+     * @param context Context
+     * @return true 表示设备已 root 且可用 su 命令
+     */
+    fun hasRootAccess(context: Context): Boolean {
+        return try {
+            val process = Runtime.getRuntime().exec(arrayOf("su", "-c", "echo", "1"))
+            val result = process.inputStream.bufferedReader().readText().trim()
+            process.waitFor()
+            result == "1"
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    const val ACTION_RISK_RESULT = "com.termux.app.RISK_RESULT"
+    const val EXTRA_RISK_RESULT = "extra_risk_result"
+    const val EXTRA_SESSION_HANDLE = "extra_session_handle"
+
+    /** 环境类型 */
+    enum class EnvironmentType {
+        NATIVE,      // 原生 Termux
+        CONTAINER,   // proot 容器
+        VM,          // 虚拟机
+        SSH          // SSH 远程连接
+    }
+
+    /** 保护级别 */
+    enum class ProtectionLevel(val displayName: String, val description: String) {
+        OFF("关闭", "不检测危险命令"),
+        WARN_ONLY("仅提示", "Snackbar 提示但不拦截"),
+        WARN_VERIFY("警告并验证", "弹窗 + 倒计时 + 生物认证"),
+        AUTO_BLOCK("自动拦截", "直接拒绝执行危险命令")
+    }
+
+    /** 弹窗状态 */
+    data class DialogState(
+        val command: String,
+        val riskDescription: String,
+        val riskType: String,
+        val environmentType: EnvironmentType = EnvironmentType.NATIVE,
+        val isSshPowerOperation: Boolean = false,
+        /** 是否为 Windows 磁盘级命令（SSH 连接 Windows 时使用特殊警告文案） */
+        val isWindowsDiskCommand: Boolean = false
+    )
+
+    internal val _dialogState = MutableStateFlow<DialogState?>(null)
+    val dialogState: StateFlow<DialogState?> = _dialogState.asStateFlow()
+
+    /** 倒计时（秒），60秒自动拒绝 */
+    private val _countdown = MutableStateFlow(60)
+    val countdown: StateFlow<Int> = _countdown.asStateFlow()
+
+    /** 倒计时控制 */
+    private var countdownJob: kotlinx.coroutines.Job? = null
+    internal val countdownScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+
+    // ===== Agent loading Dialog 状态 =====
+    // 显示一个全局 loading 弹窗，提示"正在询问 Agent..."
+    private val _agentLoadingVisible = kotlinx.coroutines.flow.MutableStateFlow(false)
+    val agentLoadingVisible: kotlinx.coroutines.flow.StateFlow<Boolean> = _agentLoadingVisible
+    private val _agentLoadingText = kotlinx.coroutines.flow.MutableStateFlow("")
+    val agentLoadingText: kotlinx.coroutines.flow.StateFlow<String> = _agentLoadingText
+
+    private fun showAgentLoadingDialog(context: Context, command: String) {
+        _agentLoadingText.value = "正在询问 Agent 判定脚本安全性..."
+        _agentLoadingVisible.value = true
+        android.util.Log.i("RiskConfirmManager", "显示 Agent loading dialog")
+    }
+
+    private fun hideAgentLoadingDialog() {
+        _agentLoadingVisible.value = false
+        android.util.Log.i("RiskConfirmManager", "隐藏 Agent loading dialog")
+    }
+
+    /** 显示"安全检测中"加载弹窗（SecuritySocketServer 脚本判定期间调用） */
+    fun showAgentLoading(text: String? = null) {
+        _agentLoadingText.value = text ?: "正在检测脚本安全性..."
+        _agentLoadingVisible.value = true
+    }
+
+    /** 隐藏"安全检测中"加载弹窗 */
+    fun hideAgentLoading() {
+        _agentLoadingVisible.value = false
+    }
+
+    /**
+     * 脚本判定结果处理（主线程调用）。
+     * - Agent 开：只看 Agent verdict
+     * - Agent 关：做本地 detectScript
+     */
+    private fun processScriptJudgeResult(
+        context: Context,
+        adapter: RiskSessionAdapter,
+        command: String,
+        scriptPath: String,
+        agentEnabled: Boolean,
+        agentResult: AgentScriptJudge.JudgeResult?
+    ) {
+        val isSafe: Boolean
+        val denyReason: String?
+
+        if (agentEnabled && agentResult != null && agentResult.agentResponded) {
+            // Agent 结果
+            isSafe = agentResult.verdict == AgentScriptJudge.Verdict.SAFE
+            denyReason = if (isSafe) null else agentResult.reason
+            android.util.Log.i("RiskConfirmManager", "Agent verdict=${agentResult.verdict}, safe=$isSafe")
+        } else {
+            // Agent 关闭或没回复 → 本地检测脚本
+            val localDetections = try {
+                val content = java.io.File(scriptPath).readText(Charsets.UTF_8).take(50 * 1024)
+                val expanded = RiskCommandDetector.expandShellVarsPublic(content)
+                RiskCommandDetector.detectScript(expanded)
+            } catch (e: Exception) {
+                android.util.Log.w("RiskConfirmManager", "本地脚本检测异常: ${e.message}")
+                emptyList()
+            }
+            isSafe = localDetections.isEmpty()
+            denyReason = if (isSafe) null else (localDetections.firstOrNull()?.lineContent?.take(100) ?: "本地检测发现危险模式")
+            android.util.Log.i("RiskConfirmManager", "本地检测: detections=${localDetections.size}, safe=$isSafe")
+        }
+
+        android.util.Log.i("RiskConfirmManager", "[RESULT] agentEnabled=$agentEnabled, agentResponded=${agentResult?.agentResponded}, isSafe=$isSafe, reason=$denyReason")
+        if (isSafe) {
+            android.util.Log.i("RiskConfirmManager", "[RESULT] → confirmPendingCommand 放行")
+            adapter.confirmPendingCommand()
+        } else {
+            android.util.Log.i("RiskConfirmManager", "[RESULT] → denyPendingCommand 拦截, reason=$denyReason")
+            // 用 Snackbar 提示原因，然后 deny
+            denyWithReason(context, adapter, command, denyReason)
+        }
+    }
+
+    private fun denyWithReason(
+        context: Context,
+        adapter: RiskSessionAdapter,
+        command: String,
+        reason: String?
+    ) {
+        val msg = reason ?: "脚本被拦截：检测到危险操作"
+        emitSnackbar(msg, android.widget.Toast.LENGTH_LONG)
+        // 然后 denyPendingCommand 会向终端输出 Permission Denied
+        adapter.denyPendingCommand()
+    }
+
+    /** 自动确认等待时限(秒)：倒计时、auto-deny、latch await 三者一致。
+     * 超过此时限（弹窗异常/未及时点击）自动按 DENY 返回并写响应，
+     * 绝不让 shell 长时间卡死（此前 60s/90s 不一致导致“超90s才恢复/一直不恢复”）。 */
+    private const val CONFIRM_WAIT_SECONDS = 25
+
+    /** 开始倒计时 */
+    internal fun startCountdown() {
+        stopCountdown()
+        _countdown.value = CONFIRM_WAIT_SECONDS
+        countdownJob = countdownScope.launch {
+            for (i in CONFIRM_WAIT_SECONDS downTo 1) {
+                _countdown.value = i
+                delay(1000)
+            }
+        }
+    }
+
+    /** 停止倒计时 */
+    internal fun stopCountdown() {
+        countdownJob?.cancel()
+        countdownJob = null
+    }
+
+    /** 挂起的确认请求（用于协程调用） */
+    private val pendingRequests = mutableMapOf<String, (Boolean) -> Unit>()
+
+    /** 阻塞式确认请求（用于 Service/Java 调用） */
+    private var blockingRequest: ((Boolean) -> Unit)? = null
+    private var blockingRequestActive = false
+
+    /** 待处理的终端会话（用于拦截用户输入的高危命令，直接回调模式） */
+    private var pendingTerminalSession: com.termux.terminal.TerminalSession? = null
+
+    /** "关闭二次确认" 警告弹窗状态 */
+    data class DisableWarningState(
+        val show: Boolean = false,
+        val targetLevel: ProtectionLevel = ProtectionLevel.OFF
+    )
+    private val _disableWarningState = MutableStateFlow(DisableWarningState())
+    val disableWarningState: StateFlow<DisableWarningState> = _disableWarningState.asStateFlow()
+
+    /** 迁移旧的布尔开关到新的保护级别系统 */
+    private fun migrateIfNeeded(context: Context) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        // 如果 KEY_PROTECTION_LEVEL 不存在但 KEY_ENABLED 存在，执行迁移
+        if (!prefs.contains(KEY_PROTECTION_LEVEL) && prefs.contains(KEY_ENABLED)) {
+            val oldEnabled = prefs.getBoolean(KEY_ENABLED, true)
+            val newLevel = if (oldEnabled) {
+                ProtectionLevel.WARN_VERIFY.ordinal  // 2
+            } else {
+                ProtectionLevel.OFF.ordinal             // 0
+            }
+            prefs.edit()
+                .putInt(KEY_PROTECTION_LEVEL, newLevel)
+                .apply()
+        }
+    }
+
+    /** 获取当前保护级别（优先从缓存读取） */
+    fun getProtectionLevel(context: Context): ProtectionLevel {
+        cachedProtectionLevel?.let { return it }
+        migrateIfNeeded(context)
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val ordinal = prefs.getInt(KEY_PROTECTION_LEVEL, ProtectionLevel.WARN_VERIFY.ordinal)
+        val level = ProtectionLevel.entries.getOrElse(ordinal) { ProtectionLevel.WARN_VERIFY }
+        cachedProtectionLevel = level
+        return level
+    }
+
+        /** 设置保护级别（同时更新缓存，并通知 SettingsScreen 刷新） */
+    fun setProtectionLevel(context: Context, level: ProtectionLevel) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit()
+            .putInt(KEY_PROTECTION_LEVEL, level.ordinal)
+            .apply()
+        cachedProtectionLevel = level
+        _disableWarningState.value = DisableWarningState()
+        applySecurityConfiguration(context, level == ProtectionLevel.OFF)
+    }
+
+    /**
+     * 根据最新防护等级实时重载 shell 安全配置（hook 部署 + TCP 服务器启停）。
+     * 仅在 TermuxService 已启动时生效；前台服务未运行时无需干预。
+     */
+    private fun applySecurityConfiguration(context: Context, remove: Boolean) {
+        if (com.termux.app.TermuxService.serviceStartTimeMs <= 0L) return
+        val appContext = context.applicationContext
+        if (remove) {
+            com.termux.app.TermuxService.deploySecurityHook(appContext, true)
+            com.termux.app.compose.SecuritySocketServer.stop()
+        } else {
+            com.termux.app.compose.SecuritySocketServer.start(appContext)
+            com.termux.app.TermuxService.deploySecurityHook(appContext, false)
+        }
+    }
+
+    /** @Deprecated 请使用 getProtectionLevel() 代替 */
+    @Deprecated("Use getProtectionLevel() instead", ReplaceWith("getProtectionLevel(context)"))
+    fun isEnabled(context: Context): Boolean {
+        return getProtectionLevel(context) != ProtectionLevel.OFF
+    }
+
+    /** @Deprecated 请使用 setProtectionLevel() 代替 */
+    @Deprecated("Use setProtectionLevel() instead", ReplaceWith("setProtectionLevel(context, level)"))
+    fun setEnabled(context: Context, enabled: Boolean) {
+        val level = if (enabled) ProtectionLevel.WARN_VERIFY else ProtectionLevel.OFF
+        setProtectionLevel(context, level)
+    }
+
+    /** 清除待处理的命令状态（公开方法，供 TermuxActivity 在处理完 Intent 结果后调用） */
+    fun clearPendingState(context: Context) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit()
+            .remove(KEY_PENDING_SESSION_HANDLE)
+            .remove(KEY_PENDING_COMMAND)
+            .remove(KEY_PENDING_RESULT)
+            .apply()
+    }
+
+    /** 保存 Agent 待确认的操作状态到 SharedPreferences */
+    fun saveAgentPendingState(
+        context: Context,
+        skillType: String,
+        params: String,
+        messageId: String
+    ) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit()
+            .putString(KEY_AGENT_PENDING_ACTION, skillType)
+            .putString(KEY_AGENT_PENDING_PARAMS, params)
+            .putString(KEY_AGENT_PENDING_MESSAGE_ID, messageId)
+            .remove(KEY_AGENT_PENDING_RESULT)
+            .apply()
+    }
+
+    /** 检查是否有 Agent 待处理的确认结果 */
+    fun hasAgentPendingResult(context: Context): Boolean {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        return prefs.getString(KEY_AGENT_PENDING_RESULT, null) != null
+    }
+
+    /** Agent 待处理结果数据类 */
+    data class AgentPendingResult(
+        val action: String,
+        val params: String,
+        val result: String,
+        val messageId: String
+    )
+
+    /** 获取并消费 Agent 待处理的确认结果 */
+    fun consumeAgentPendingResult(context: Context): AgentPendingResult? {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val action = prefs.getString(KEY_AGENT_PENDING_ACTION, null)
+        val params = prefs.getString(KEY_AGENT_PENDING_PARAMS, null)
+        val result = prefs.getString(KEY_AGENT_PENDING_RESULT, null)
+        val messageId = prefs.getString(KEY_AGENT_PENDING_MESSAGE_ID, null)
+        if (action != null && result != null && messageId != null) {
+            prefs.edit()
+                .remove(KEY_AGENT_PENDING_ACTION)
+                .remove(KEY_AGENT_PENDING_PARAMS)
+                .remove(KEY_AGENT_PENDING_MESSAGE_ID)
+                .remove(KEY_AGENT_PENDING_RESULT)
+                .apply()
+            return AgentPendingResult(action, params ?: "", result, messageId)
+        }
+        return null
+    }
+
+    /** 清除 Agent 待处理状态 */
+    fun clearAgentPendingState(context: Context) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit()
+            .remove(KEY_AGENT_PENDING_ACTION)
+            .remove(KEY_AGENT_PENDING_PARAMS)
+            .remove(KEY_AGENT_PENDING_MESSAGE_ID)
+            .remove(KEY_AGENT_PENDING_RESULT)
+            .apply()
+    }
+
+    /** 保存待确认的命令状态到 SharedPreferences */
+    private fun savePendingState(context: Context, sessionHandle: String, command: String) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit()
+            .putString(KEY_PENDING_SESSION_HANDLE, sessionHandle)
+            .putString(KEY_PENDING_COMMAND, command)
+            .remove(KEY_PENDING_RESULT)
+            .apply()
+    }
+
+    /**
+     * 由 TermuxActivity 调用，检查并消费待处理的风险确认结果。
+     *
+     * @param context Context
+     * @return android.util.Pair(sessionHandle, result) 或 null 表示无待处理结果
+     */
+    fun consumePendingResult(context: Context): android.util.Pair<String, String>? {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val handle = prefs.getString(KEY_PENDING_SESSION_HANDLE, null)
+        val result = prefs.getString(KEY_PENDING_RESULT, null)
+        if (handle != null && result != null) {
+            clearPendingState(context)
+            return android.util.Pair(handle, result)
+        }
+        return null
+    }
+
+    /**
+     * 请求危险命令确认（挂起函数，等待用户在弹窗中操作后返回）。
+     * 用于协程场景（如 SkillExecutor）。
+     *
+     * @param context 上下文
+     * @param command 待执行的命令
+     * @param inNativeTermux 是否运行在原生 Termux 环境
+     * @param environmentType 环境类型，默认为原生环境
+     * @return true = 用户确认允许执行，false = 用户拒绝或未开启确认
+     */
+    @JvmOverloads
+    suspend fun requestConfirmation(
+        context: Context,
+        command: String,
+        inNativeTermux: Boolean = true,
+        environmentType: EnvironmentType = EnvironmentType.NATIVE
+    ): Boolean {
+        // 无限制模式：直接放行所有命令
+        if (isUnlimitedModeActive(context)) return true
+
+        val level = getProtectionLevel(context)
+
+        // OFF: 直接放行
+        if (level == ProtectionLevel.OFF) return true
+
+        val detection = RiskCommandDetector.detect(command, inNativeTermux)
+        if (!detection.isDangerous) return true
+
+        // --- SSH 会话优化：大部分命令仅提示不弹窗 ---
+        if (environmentType == EnvironmentType.SSH && level == ProtectionLevel.WARN_VERIFY) {
+            when (detection.riskType) {
+                RiskCommandDetector.RiskType.SHUTDOWN_REBOOT,
+                RiskCommandDetector.RiskType.FORMAT,
+                RiskCommandDetector.RiskType.RM_RF_ROOT -> {
+                    // 这些命令在远程服务器上也很危险，继续弹窗流程
+                }
+                else -> {
+                    // 其他命令仅 Snackbar 提示，放行
+                    Handler(Looper.getMainLooper()).post {
+                        SnackbarHelper.show(
+                            context,
+                            "SSH远程: ${detection.description}",
+                            Snackbar.LENGTH_SHORT
+                        )
+                    }
+                    return true
+                }
+            }
+        }
+
+        // WARN_ONLY: Snackbar 提示但放行
+        if (level == ProtectionLevel.WARN_ONLY) {
+            Handler(Looper.getMainLooper()).post {
+                SnackbarHelper.show(
+                    context,
+                    detection.description,
+                    Snackbar.LENGTH_LONG
+                )
+            }
+            return true
+        }
+
+        // AUTO_BLOCK: 直接拦截
+        if (level == ProtectionLevel.AUTO_BLOCK) {
+            Handler(Looper.getMainLooper()).post {
+                SnackbarHelper.show(
+                    context,
+                    "Access Denied(权限拒绝)",
+                    Snackbar.LENGTH_LONG
+                )
+            }
+            return false
+        }
+
+        // WARN_VERIFY: 完整弹窗验证流程
+        val activity = context as? ComponentActivity
+        val requestId = System.currentTimeMillis().toString()
+
+        _dialogState.value = DialogState(
+            command = command,
+            riskDescription = detection.description,
+            riskType = detection.riskType?.displayName ?: "高危操作",
+            environmentType = environmentType
+        )
+
+        startCountdown()
+
+        return try {
+            kotlinx.coroutines.suspendCancellableCoroutine { continuation ->
+                pendingRequests[requestId] = { confirmed ->
+                    _dialogState.value = null
+                    stopCountdown()
+                    if (continuation.isActive) {
+                        continuation.resumeWith(Result.success(confirmed))
+                    }
+                }
+
+                val timeoutRunnable = Runnable {
+                    if (pendingRequests.containsKey(requestId)) {
+                        pendingRequests[requestId]?.invoke(false)
+                        pendingRequests.remove(requestId)
+                    }
+                }
+                activity?.window?.decorView?.postDelayed(timeoutRunnable, 60000L)
+            }
+        } catch (e: Exception) {
+            _dialogState.value = null
+            stopCountdown()
+            false
+        }
+    }
+
+    /**
+     * 非协程式阻塞请求确认。
+     * 用于 TermuxService 等非协程环境。
+     *
+     * 调用规则：必须在后台线程调用，内部会将对话框显示 post 到主线程。
+     * 如果在主线程调用，会自动切换到后台线程执行，避免 ANR。
+     *
+     * @param context Context
+     * @param command 待检测的命令
+     * @param environmentType 环境类型，默认为原生环境
+     * @return true = 允许执行，false = 拒绝执行或非高危命令
+     */
+    @JvmOverloads
+    fun requestConfirmationBlocking(
+        context: Context,
+        command: String,
+        environmentType: EnvironmentType = EnvironmentType.NATIVE
+    ): Boolean {
+        // 无限制模式：直接放行所有命令
+        if (isUnlimitedModeActive(context)) return true
+
+        val level = getProtectionLevel(context)
+
+        // OFF: 直接放行
+        if (level == ProtectionLevel.OFF) return true
+
+        val detection = RiskCommandDetector.detect(command)
+        if (!detection.isDangerous) return true
+
+        // --- SSH 会话优化：大部分命令仅提示不弹窗 ---
+        if (environmentType == EnvironmentType.SSH && level == ProtectionLevel.WARN_VERIFY) {
+            when (detection.riskType) {
+                RiskCommandDetector.RiskType.SHUTDOWN_REBOOT,
+                RiskCommandDetector.RiskType.FORMAT,
+                RiskCommandDetector.RiskType.RM_RF_ROOT -> {
+                    // 这些命令在远程服务器上也很危险，继续弹窗流程
+                }
+                else -> {
+                    // 其他命令仅 Snackbar 提示，放行
+                    Handler(Looper.getMainLooper()).post {
+                        SnackbarHelper.show(
+                            context,
+                            "SSH远程: ${detection.description}",
+                            Snackbar.LENGTH_SHORT
+                        )
+                    }
+                    return true
+                }
+            }
+        }
+
+        // WARN_ONLY: Snackbar 提示但放行
+        if (level == ProtectionLevel.WARN_ONLY) {
+            Handler(Looper.getMainLooper()).post {
+                SnackbarHelper.show(
+                    context,
+                    detection.description,
+                    Snackbar.LENGTH_LONG
+                )
+            }
+            return true
+        }
+
+        // AUTO_BLOCK: 直接拦截
+        if (level == ProtectionLevel.AUTO_BLOCK) {
+            Handler(Looper.getMainLooper()).post {
+                SnackbarHelper.show(
+                    context,
+                    "Access Denied(权限拒绝)",
+                    Snackbar.LENGTH_LONG
+                )
+            }
+            return false
+        }
+
+        // WARN_VERIFY: 完整弹窗验证流程
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            val result = arrayOf(false)
+            val latch = CountDownLatch(1)
+            CoroutineScope(Dispatchers.Default).launch {
+                result[0] = doRequestConfirmationBlocking(context, command, detection, environmentType)
+                latch.countDown()
+            }
+            try {
+                latch.await(CONFIRM_WAIT_SECONDS.toLong(), TimeUnit.SECONDS)
+            } catch (_: InterruptedException) {
+                return false
+            }
+            return result[0]
+        }
+
+        return doRequestConfirmationBlocking(context, command, detection, environmentType)
+    }
+
+    private fun doRequestConfirmationBlocking(
+        context: Context,
+        command: String,
+        detection: RiskCommandDetector.DetectionResult,
+        environmentType: EnvironmentType = EnvironmentType.NATIVE
+    ): Boolean {
+        return doDialogConfirmationBlocking(
+            context, command,
+            detection.description,
+            detection.riskType?.displayName ?: "高危操作",
+            environmentType
+        )
+    }
+
+    /**
+     * 检测结果已知时的阻塞式确认（供 SecuritySocketServer 的 CHECK_CMD / CHECK_SCRIPT 使用）。
+     *
+     * 不重新检测命令，直接按增强模式处理：
+     *   OFF         → 直接放行（PASS）
+     *   WARN_ONLY   → Snackbar 提示危险原因，放行（PASS）
+     *   AUTO_BLOCK  → Snackbar「已自动拒绝: 原因」，拒绝（DENY）
+     *   WARN_VERIFY → 弹二次确认框（附原因），用户选择执行则放行（PASS），否则拒绝（DENY）
+     *
+     * @return true = 放行（PASS），false = 拒绝（DENY）
+     */
+    @JvmOverloads
+    fun requestDetectedConfirmationBlocking(
+        context: Context,
+        command: String,
+        reason: String,
+        riskType: String? = null,
+        environmentType: EnvironmentType = EnvironmentType.NATIVE
+    ): Boolean {
+        // 注意：此处【不再】受 isUnlimitedModeActive（AI 无限制模式）影响。
+        // 该函数只被 SecuritySocketServer 的 CHECK_CMD / CHECK_SCRIPT 调用，属于 shell
+        // 命令/脚本安全拦截。若被无限制模式绕过，则 su、危险脚本等都会被无条件放行（pass），
+        // 不弹二次确认 → VorteX Guard Engine失效。因此这里严格以防护等级为准。
+
+        val level = getProtectionLevel(context)
+        setLastProtectionLevel(level)
+
+        // OFF: 直接放行
+        if (level == ProtectionLevel.OFF) return true
+
+        return when (level) {
+            // WARN_ONLY: Snackbar 提示危险原因后放行
+            ProtectionLevel.WARN_ONLY -> {
+                Handler(Looper.getMainLooper()).post {
+                    emitSnackbar(reason, Snackbar.LENGTH_LONG)
+                }
+                true
+            }
+            // AUTO_BLOCK: Snackbar 提示已自动拒绝后拦截
+            ProtectionLevel.AUTO_BLOCK -> {
+                lastCommandAutoBlocked = true
+                Handler(Looper.getMainLooper()).post {
+                    emitSnackbar("已自动拒绝: $reason", Snackbar.LENGTH_LONG)
+                }
+                false
+            }
+            // WARN_VERIFY: 弹二次确认框，等待用户选择
+            ProtectionLevel.WARN_VERIFY -> {
+                if (Looper.myLooper() == Looper.getMainLooper()) {
+                    val result = arrayOf(false)
+                    val latch = CountDownLatch(1)
+                    CoroutineScope(Dispatchers.Default).launch {
+                        result[0] = doDialogConfirmationBlocking(
+                            context, command, reason, riskType ?: "高危操作", environmentType
+                        )
+                        latch.countDown()
+                    }
+                    try {
+                        latch.await(CONFIRM_WAIT_SECONDS.toLong(), TimeUnit.SECONDS)
+                    } catch (_: InterruptedException) {
+                        return false
+                    }
+                    result[0]
+                } else {
+                    doDialogConfirmationBlocking(
+                        context, command, reason, riskType ?: "高危操作", environmentType
+                    )
+                }
+            }
+            ProtectionLevel.OFF -> true
+        }
+    }
+
+    /**
+     * 弹窗确认流程（阻塞等待用户选择，WARN_VERIFY 使用）。
+     */
+    private fun doDialogConfirmationBlocking(
+        context: Context,
+        command: String,
+        reason: String,
+        riskType: String,
+        environmentType: EnvironmentType = EnvironmentType.NATIVE
+    ): Boolean {
+        if (blockingRequestActive) {
+            Handler(Looper.getMainLooper()).post {
+                SnackbarHelper.show(context, "Access Denied(权限拒绝)", Snackbar.LENGTH_LONG)
+            }
+            return false
+        }
+
+        val result = arrayOf(false)
+        val latch = CountDownLatch(1)
+        val handler = Handler(Looper.getMainLooper())
+
+        blockingRequestActive = true
+        handler.post {
+            _dialogState.value = DialogState(
+                command = command,
+                riskDescription = reason,
+                riskType = riskType,
+                environmentType = environmentType
+            )
+            startCountdown()
+            blockingRequest = { confirmed ->
+                result[0] = confirmed
+                _dialogState.value = null
+                stopCountdown()
+                blockingRequest = null
+                blockingRequestActive = false
+                latch.countDown()
+            }
+
+            handler.postDelayed({
+                if (blockingRequestActive && blockingRequest != null) {
+                    blockingRequest?.invoke(false)
+                    blockingRequest = null
+                    blockingRequestActive = false
+                    _dialogState.value = null
+                    stopCountdown()
+                    latch.countDown()
+                }
+            }, CONFIRM_WAIT_SECONDS * 1000L)
+        }
+
+        try {
+            latch.await(CONFIRM_WAIT_SECONDS.toLong(), TimeUnit.SECONDS)
+        } catch (_: InterruptedException) {
+            return false
+        }
+
+        return result[0]
+    }
+
+    /** 用户点击"确认执行" */
+    internal fun confirm(context: Context) {
+        stopCountdown()
+        // 优先处理阻塞式请求(SecuritySocketServer 的 shell 拦截)。必须即时释放 latch，
+        // 否则 shell 会一直等待 server 响应而卡死。此前该分支排在 Agent/session 之后，
+        // 会被残留的 pendingAction/handle 截住——弹窗被清掉却不释放 latch，
+        // 导致"点了没反应→只能等超时→超过90秒才恢复/一直不恢复"。
+        if (blockingRequest != null) {
+            blockingRequest?.invoke(true)
+            blockingRequest = null
+            blockingRequestActive = false
+            _dialogState.value = null
+            return
+        }
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        // 先处理 Agent 流程（无 session handle 但有 agent pending action）
+        val agentAction = prefs.getString(KEY_AGENT_PENDING_ACTION, null)
+        if (agentAction != null) {
+            prefs.edit().putString(KEY_AGENT_PENDING_RESULT, RESULT_CONFIRMED).apply()
+            _dialogState.value = null
+            navigateBackToAgent(context)
+            return
+        }
+        // 再处理终端会话的跳转模式
+        val sessionHandle = prefs.getString(KEY_PENDING_SESSION_HANDLE, null)
+        if (sessionHandle != null) {
+            prefs.edit().putString(KEY_PENDING_RESULT, RESULT_CONFIRMED).apply()
+            _dialogState.value = null
+            navigateBackToTermux(context, sessionHandle, RESULT_CONFIRMED)
+            return
+        }
+        // 再处理直接回调模式
+        if (pendingTerminalSession != null) {
+            pendingTerminalSession?.confirmPendingCommand()
+            pendingTerminalSession = null
+            _dialogState.value = null
+            return
+        }
+        // 再处理阻塞式请求
+        if (blockingRequest != null) {
+            blockingRequest?.invoke(true)
+            blockingRequest = null
+            blockingRequestActive = false
+            _dialogState.value = null
+            return
+        }
+        // 最后处理协程请求
+        val requestId = pendingRequests.keys.lastOrNull()
+        if (requestId != null) {
+            pendingRequests[requestId]?.invoke(true)
+            pendingRequests.remove(requestId)
+            _dialogState.value = null
+        }
+    }
+
+    /** 用户点击"取消" */
+    internal fun cancel(context: Context) {
+        stopCountdown()
+        if (blockingRequest != null) {
+            blockingRequest?.invoke(false)
+            blockingRequest = null
+            blockingRequestActive = false
+            _dialogState.value = null
+            return
+        }
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        // 先处理 Agent 流程
+        val agentAction = prefs.getString(KEY_AGENT_PENDING_ACTION, null)
+        if (agentAction != null) {
+            prefs.edit().putString(KEY_AGENT_PENDING_RESULT, RESULT_DENIED).apply()
+            _dialogState.value = null
+            navigateBackToAgent(context)
+            return
+        }
+        // 再处理终端会话的跳转模式
+        val sessionHandle = prefs.getString(KEY_PENDING_SESSION_HANDLE, null)
+        if (sessionHandle != null) {
+            prefs.edit().putString(KEY_PENDING_RESULT, RESULT_DENIED).apply()
+            _dialogState.value = null
+            navigateBackToTermux(context, sessionHandle, RESULT_DENIED)
+            return
+        }
+        // 再处理直接回调模式
+        if (pendingTerminalSession != null) {
+            pendingTerminalSession?.denyPendingCommand()
+            pendingTerminalSession = null
+            _dialogState.value = null
+            return
+        }
+        if (blockingRequest != null) {
+            blockingRequest?.invoke(false)
+            blockingRequest = null
+            blockingRequestActive = false
+            _dialogState.value = null
+            return
+        }
+        val requestId = pendingRequests.keys.lastOrNull()
+        if (requestId != null) {
+            pendingRequests[requestId]?.invoke(false)
+            pendingRequests.remove(requestId)
+            _dialogState.value = null
+        }
+    }
+
+    /** 导航回 AiTermuxActivity */
+    private fun navigateBackToAgent(context: Context) {
+        val intent = Intent(context, com.termux.app.activities.AiTermuxActivity::class.java)
+        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
+        context.startActivity(intent)
+    }
+
+    /** 导航回 TermuxActivity 并传递结果 */
+    private fun navigateBackToTermux(context: Context, sessionHandle: String, result: String) {
+        val intent = Intent(context, com.termux.app.TermuxActivity::class.java)
+        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
+        intent.putExtra(EXTRA_RISK_RESULT, result)
+        intent.putExtra(EXTRA_SESSION_HANDLE, sessionHandle)
+        context.startActivity(intent)
+    }
+
+    /**
+     * 终端会话风险检测适配器：屏蔽 Java 核心（com.termux.terminal.TerminalSession）
+     * 与 Compose 核心（libterminal TerminalSession）的实现差异，
+     * 供VorteX Guard Engine对两种内核使用同一套检测/确认流程。
+     */
+    private interface RiskSessionAdapter {
+        /** 会话唯一句柄（确认结果返回时按此找回会话） */
+        val sessionHandle: String
+
+        val shellPath: String?
+
+        val sessionName: String?
+
+        val args: Array<out String>?
+
+        fun confirmPendingCommand()
+
+        fun denyPendingCommand()
+    }
+
+    /** Java 核心会话适配器 */
+    private class JavaSessionAdapter(val session: com.termux.terminal.TerminalSession) : RiskSessionAdapter {
+        override val sessionHandle: String get() = session.mHandle
+        override val shellPath: String? get() = session.shellPath
+        override val sessionName: String? get() = session.mSessionName
+        override val args: Array<out String>? get() = session.args
+        override fun confirmPendingCommand() = session.confirmPendingCommand()
+        override fun denyPendingCommand() = session.denyPendingCommand()
+    }
+
+    /** Compose 核心会话适配器 */
+    private class ComposeSessionAdapter(
+        val session: com.termux.app.compose.terminal.engine.TerminalSession
+    ) : RiskSessionAdapter {
+        override val sessionHandle: String get() = session.handle
+        override val shellPath: String? get() = session.shellPath
+        override val sessionName: String? get() = session.sessionName.value
+        override val args: Array<out String>? get() = session.args
+        override fun confirmPendingCommand() = session.confirmPendingCommand()
+        override fun denyPendingCommand() = session.denyPendingCommand()
+    }
+
+    /** 待确认的 Compose 核心会话（确认结果返回时按 handle 恢复，Java 会话由 TermuxActivity 按句柄查找） */
+    private var pendingComposeSession: com.termux.app.compose.terminal.engine.TerminalSession? = null
+
+    /**
+     * 处理终端会话中用户输入的高危命令。
+     * 由 TerminalSession.InputInterceptor 调用。
+     *
+     * 流程：检测高危 → 保存状态 → 跳转主页 → 主页弹窗 → 用户确认/取消 → 返回执行
+     *
+     * 特殊逻辑：
+     * - su/sudo 在非原生 Termux 环境（容器/VM/SSH）中：只 Snackbar 提醒，放行不拦截
+     * - su/sudo 在原生 Termux 环境中：完整拦截 + 弹窗
+     * - 其他高危命令：无论环境如何均拦截
+     *
+     * @param context Context
+     * @param session TerminalSession
+     * @param command 用户输入的命令
+     * @return true 表示命令已被拦截处理，false 表示非高危命令
+     */
+    fun handleTerminalCommand(context: Context, session: com.termux.terminal.TerminalSession, command: String): Boolean {
+        return handleTerminalCommandInternal(context, JavaSessionAdapter(session), command)
+    }
+
+    /**
+     * 处理 Compose 核心会话中用户输入的高危命令。
+     * 由 libterminal TerminalSession.InputInterceptor 调用，
+     * 与 Java 核心走同一套 [handleTerminalCommandInternal] 检测/确认流程。
+     */
+    fun handleComposeTerminalCommand(
+        context: Context,
+        session: com.termux.app.compose.terminal.engine.TerminalSession,
+        command: String
+    ): Boolean {
+        return handleTerminalCommandInternal(context, ComposeSessionAdapter(session), command)
+    }
+
+    private fun handleTerminalCommandInternal(
+        context: Context,
+        adapter: RiskSessionAdapter,
+        command: String
+    ): Boolean {
+        // 无限制模式：仅对 Agent 命令放行（shouldSkipRiskCheck 为 true），用户手敲命令仍按保护级别检查
+        if (isUnlimitedModeActive(context) && shouldSkipRiskCheck()) return false
+
+        val level = getProtectionLevel(context)
+        setLastProtectionLevel(level)
+
+        val trimmed = command.trim()
+
+        // ===== 脚本执行前置判定（独立于 ProtectionLevel） =====
+        // 只要是脚本执行就拦截 + 弹窗 + 异步判定。
+        // Agent 开 → 只靠 Agent；Agent 关 → 只靠本地检测。
+        // 判定完成后：通过 → 放行；不通过 → deny。
+        val scriptPath = extractScriptPath(command)
+        val isScriptExecution = scriptPath != null
+        android.util.Log.i("RiskConfirmManager", "[SCRIPT] command=${command.take(80)} -> scriptPath=$scriptPath, isScript=$isScriptExecution")
+
+        if (isScriptExecution) {
+            android.util.Log.i("RiskConfirmManager", "脚本执行拦截: path=$scriptPath, command=${command.take(80)}")
+            // 立即拦截命令（buffer 在 TerminalSession.pending）
+            showAgentLoadingDialog(context, command)
+            // 后台协程执行判定（IO 线程，不阻塞主线程）
+            countdownScope.launch(Dispatchers.IO) {
+                val agentEnabled = AgentScriptJudge.isAvailable(context)
+                val agentResult = try {
+                    if (agentEnabled) {
+                        AgentScriptJudge.judge(context, scriptPath!!)
+                    } else {
+                        // Agent 关闭：直接本地检测
+                        null
+                    }
+                } catch (e: Throwable) {
+                    android.util.Log.e("RiskConfirmManager", "脚本判定异常: ${e.message}")
+                    null
+                }
+                android.util.Log.i("RiskConfirmManager",
+                    "脚本判定完成: agentEnabled=$agentEnabled, verdict=${agentResult?.verdict}, responded=${agentResult?.agentResponded}")
+                // 回到主线程处理结果
+                kotlinx.coroutines.withContext(Dispatchers.Main) {
+                    hideAgentLoadingDialog()
+                    processScriptJudgeResult(context, adapter, command, scriptPath!!, agentEnabled, agentResult)
+                }
+            }
+            return true
+        }
+
+        // OFF: 非脚本命令直接放行
+        if (level == ProtectionLevel.OFF) return false
+
+        // 先用原生环境模式检测（su/sudo 会被标记为危险）
+        val nativeDetection = RiskCommandDetector.detect(command, inNativeTermux = true)
+
+        // ===== 非脚本命令：原有同步逻辑 =====
+        if (!nativeDetection.isDangerous) return false
+
+        // 记录危险命令计数
+        incrementDangerCount()
+
+        // 检测当前环境（带缓存）
+        val envType = detectEnvironment(context, adapter)
+
+        // --- SSH 会话快速路径优化 ---
+        // SSH 会话中，危险操作实际发生在远程设备，本地防护意义有限
+        // 对于非破坏性命令（su/sudo 等），直接放行
+        if (envType == EnvironmentType.SSH) {
+            // su/sudo 在 SSH 中：仅 Snackbar 提醒，放行
+            if (nativeDetection.riskType == RiskCommandDetector.RiskType.SU_SUDO) {
+                Handler(Looper.getMainLooper()).post {
+                    SnackbarHelper.show(
+                        context,
+                        "检测到容器/SSH/虚拟机环境内提权，请注意使用安全",
+                        Snackbar.LENGTH_SHORT
+                    )
+                }
+                return false
+            }
+
+            // WARN_ONLY 级别：所有危险命令仅提示，放行
+            if (level == ProtectionLevel.WARN_ONLY) {
+                emitSnackbar(nativeDetection.description, Snackbar.LENGTH_SHORT)
+                return false
+            }
+
+            // WARN_VERIFY 级别：SSH 会话中大部分危险命令仅 Snackbar 提示
+            // SHUTDOWN_REBOOT 和 FORMAT 仍需弹窗（可能影响远程服务器可用性）
+            if (level == ProtectionLevel.WARN_VERIFY) {
+                when (nativeDetection.riskType) {
+                    RiskCommandDetector.RiskType.SHUTDOWN_REBOOT,
+                    RiskCommandDetector.RiskType.FORMAT,
+                    RiskCommandDetector.RiskType.RM_RF_ROOT -> {
+                        // 这些命令在远程服务器上也很危险，继续拦截流程
+                        return handleDangerousCommand(context, adapter, command, nativeDetection, envType)
+                    }
+                    else -> {
+                        // 其他命令仅 Snackbar 提示，放行
+                        val msg = "SSH远程: ${nativeDetection.description}"
+                        emitSnackbar(msg, Snackbar.LENGTH_SHORT)
+                        return false
+                    }
+                }
+            }
+
+            // AUTO_BLOCK 级别：SSH 会话中也直接拦截
+            if (level == ProtectionLevel.AUTO_BLOCK) {
+                lastCommandAutoBlocked = true
+                val msg = "危险操作被拒绝: ${nativeDetection.description}"
+                emitSnackbar(msg, Snackbar.LENGTH_LONG)
+                return true
+            }
+        }
+
+        // --- 非 SSH 环境（原生/容器/虚拟机）按原逻辑处理 ---
+
+        // WARN_ONLY: Snackbar 提示但不拦截，显示危险命令的具体描述
+        if (level == ProtectionLevel.WARN_ONLY) {
+            val msg = nativeDetection.description
+            emitSnackbar(msg, Snackbar.LENGTH_LONG)
+            return false
+        }
+
+        // AUTO_BLOCK: 直接拦截，显示拒绝原因
+        if (level == ProtectionLevel.AUTO_BLOCK) {
+            lastCommandAutoBlocked = true
+            val msg = "危险操作被拒绝: ${nativeDetection.description}"
+            emitSnackbar(msg, Snackbar.LENGTH_LONG)
+            return true
+        }
+
+        // WARN_VERIFY: 完整拦截 + 弹窗验证流程
+        // 如果是 su/sudo，检查是否在原生 Termux 环境
+        if (nativeDetection.riskType == RiskCommandDetector.RiskType.SU_SUDO) {
+            // 检查是否包装了其他危险命令（如 sudo shutdown、sudo poweroff 等）
+            val wrappedCommand = extractWrappedCommand(trimmed)
+            if (wrappedCommand != null) {
+                val wrappedDetection = RiskCommandDetector.detect(wrappedCommand)
+                if (wrappedDetection.isDangerous && wrappedDetection.riskType != RiskCommandDetector.RiskType.SU_SUDO) {
+                    // 包装的命令更危险，按包装命令的类型处理
+                    return handleDangerousCommand(context, adapter, command, wrappedDetection, envType)
+                }
+            }
+
+            if (envType != EnvironmentType.NATIVE) {
+                // 非原生环境：Snackbar 提醒后放行
+                Handler(Looper.getMainLooper()).post {
+                    SnackbarHelper.show(
+                        context,
+                        "检测到容器/SSH/虚拟机环境内提权，请注意使用安全",
+                        Snackbar.LENGTH_LONG
+                    )
+                }
+                return false
+            }
+        }
+
+        // 其他高危命令或原生环境下的 su/sudo：正常拦截流程
+        return handleDangerousCommand(context, adapter, command, nativeDetection, envType)
+    }
+
+    /**
+     * 从 su/sudo 命令中提取被包装的子命令。
+     * 例如："sudo shutdown -h now" → "shutdown -h now"
+     *       "su -c 'poweroff'" → "poweroff"
+     *       "su -c reboot" → "reboot"
+     */
+    private fun extractWrappedCommand(command: String): String? {
+        val trimmed = command.trim()
+
+        // 匹配 sudo <command> 或 su -c <command> 或 su -c '<command>'
+        val sudoPattern = Regex("""^\s*sudo\s+(.*)""", RegexOption.DOT_MATCHES_ALL)
+        val sudoMatch = sudoPattern.find(trimmed)
+        if (sudoMatch != null) {
+            return sudoMatch.groupValues[1].trim()
+        }
+
+        val suPattern = Regex("""^\s*su\s+-c\s+['"]?(.+?)['"]?\s*$""", RegexOption.DOT_MATCHES_ALL)
+        val suMatch = suPattern.find(trimmed)
+        if (suMatch != null) {
+            return suMatch.groupValues[1].trim()
+        }
+
+        return null
+    }
+
+    /**
+     * 处理高危命令拦截的通用流程。
+     */
+    private fun handleDangerousCommand(
+        context: Context,
+        adapter: RiskSessionAdapter,
+        command: String,
+        detection: RiskCommandDetector.DetectionResult,
+        envType: EnvironmentType,
+        agentReason: String? = null
+    ): Boolean {
+
+        // Compose 核心会话：记录引用，确认结果返回时按 handle 恢复
+        if (adapter is ComposeSessionAdapter) {
+            pendingComposeSession = adapter.session
+        }
+        // SHUTDOWN_REBOOT 类型：原生环境和 SSH 环境都拦截
+        if (detection.riskType == RiskCommandDetector.RiskType.SHUTDOWN_REBOOT) {
+            // SSH 环境下，对 init 命令额外检查只拦截 init 0 和 init 6
+            if (envType == EnvironmentType.SSH) {
+                val trimmed = command.trim()
+                if (trimmed.matches(Regex("""\s*init\s+.*""", RegexOption.IGNORE_CASE))) {
+                    if (!trimmed.matches(Regex("""\s*init\s+[06]\s*""", RegexOption.IGNORE_CASE))) {
+                        // 不是 init 0 或 init 6，放行
+                        return false
+                    }
+                }
+            }
+            // SSH 电源操作，设置特殊弹窗状态
+            savePendingState(context, adapter.sessionHandle, command)
+            startCountdown()
+            _dialogState.value = DialogState(
+                command = command,
+                riskDescription = agentReason ?: detection.description,
+                riskType = detection.riskType?.displayName ?: "高危操作",
+                environmentType = envType,
+                isSshPowerOperation = true
+            )
+            // 60 秒超时自动拒绝并恢复会话
+            Handler(Looper.getMainLooper()).postDelayed({
+                val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                val handle = prefs.getString(KEY_PENDING_SESSION_HANDLE, null)
+                val result = prefs.getString(KEY_PENDING_RESULT, null)
+                if (handle != null && result == null) {
+                    prefs.edit().putString(KEY_PENDING_RESULT, RESULT_DENIED).apply()
+                    _dialogState.value = null
+                    stopCountdown()
+                    // 超时走取消逻辑，恢复会话
+                    navigateBackToTermux(context, handle, RESULT_DENIED)
+                }
+            }, 60000L)
+            // 跳转到主页 Activity
+            val intent = Intent(context, com.termux.app.MainActivity::class.java)
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            context.startActivity(intent)
+            return true
+        }
+
+        // 其他高危命令：拦截流程
+        // 保存待处理状态到 SharedPreferences
+        savePendingState(context, adapter.sessionHandle, command)
+
+        // 启动倒计时
+        startCountdown()
+
+        // 设置弹窗状态（MainActivity 中的 RiskConfirmDialogHost 会观察到并显示）
+        val dialogState = DialogState(
+            command = command,
+            riskDescription = agentReason ?: detection.description,
+            riskType = detection.riskType?.displayName ?: "高危操作",
+            environmentType = envType,
+            isWindowsDiskCommand = detection.isWindowsDiskCommand
+        )
+        _dialogState.value = dialogState
+        
+        // 记录日志帮助调试
+        android.util.Log.i("RiskConfirmManager", "Dialog state set: command=$command, envType=$envType, riskType=${detection.riskType}")
+        android.util.Log.i("RiskConfirmManager", "Starting MainActivity to show dialog...")
+
+        // 60 秒超时自动拒绝并恢复会话
+        Handler(Looper.getMainLooper()).postDelayed({
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val handle = prefs.getString(KEY_PENDING_SESSION_HANDLE, null)
+            val result = prefs.getString(KEY_PENDING_RESULT, null)
+            if (handle != null && result == null) {
+                // 超时未处理，自动拒绝
+                prefs.edit().putString(KEY_PENDING_RESULT, RESULT_DENIED).apply()
+                _dialogState.value = null
+                stopCountdown()
+                // 超时走取消逻辑，恢复会话
+                navigateBackToTermux(context, handle, RESULT_DENIED)
+            }
+        }, 60000L)
+
+        // 跳转到主页 Activity，主页的 RiskConfirmDialogHost 会显示弹窗
+        val intent = Intent(context, com.termux.app.MainActivity::class.java)
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        context.startActivity(intent)
+
+        return true
+    }
+
+    /**
+     * 检测当前终端会话的运行环境（带缓存优化）。
+     *
+     * @param context Context
+     * @param session TerminalSession
+     * @return 环境类型
+     */
+    private fun detectEnvironment(
+        context: Context,
+        adapter: RiskSessionAdapter
+    ): EnvironmentType {
+        val sessionHandle = adapter.sessionHandle
+
+        // 先从缓存读取
+        environmentCache[sessionHandle]?.let { return it }
+
+        val shellPath = adapter.shellPath ?: ""
+        val sessionName = adapter.sessionName ?: ""
+
+        // 检查 shell 路径是否指向容器
+        val containerIndicators = listOf("proot", "/rootfs/", "/container/")
+        for (indicator in containerIndicators) {
+            if (shellPath.contains(indicator, ignoreCase = true)) {
+                environmentCache[sessionHandle] = EnvironmentType.CONTAINER
+                return EnvironmentType.CONTAINER
+            }
+        }
+
+        // 检查 shell 路径是否指向虚拟机
+        val vmIndicators = listOf("qemu", "/vm/", "/guest/")
+        for (indicator in vmIndicators) {
+            if (shellPath.contains(indicator, ignoreCase = true)) {
+                environmentCache[sessionHandle] = EnvironmentType.VM
+                return EnvironmentType.VM
+            }
+        }
+
+        // 检查会话名称是否包含 SSH 标识
+        val sshIndicators = listOf("ssh", "scp", "sftp", "remote", "SSH-")
+        for (indicator in sshIndicators) {
+            if (sessionName.contains(indicator, ignoreCase = true)) {
+                environmentCache[sessionHandle] = EnvironmentType.SSH
+                return EnvironmentType.SSH
+            }
+        }
+
+        // 检查会话参数是否包含 SSH 命令（通过远程页面创建的 SSH 会话）
+        val args = adapter.args
+        if (args != null) {
+            for (arg in args) {
+                if (arg != null && arg.contains("ssh", ignoreCase = true)) {
+                    environmentCache[sessionHandle] = EnvironmentType.SSH
+                    return EnvironmentType.SSH
+                }
+            }
+        }
+
+        // 默认视为原生 Termux 环境
+        environmentCache[sessionHandle] = EnvironmentType.NATIVE
+        return EnvironmentType.NATIVE
+    }
+
+    /** 判断是否为原生 Termux 环境 */
+    private fun isNativeTermuxEnvironment(
+        context: Context,
+        adapter: RiskSessionAdapter
+    ): Boolean = detectEnvironment(context, adapter) == EnvironmentType.NATIVE
+
+    /**
+     * 消费 Compose 核心会话的待确认结果。
+     * TermuxActivity 按 handle 找不到 Java 会话时调用此方法恢复 Compose 会话的
+     * 确认流程（确认 → 放行 Enter；拒绝 → 输出拒绝信息并清行）。
+     *
+     * @return true 表示已按 Compose 会话处理
+     */
+    fun consumePendingComposeSession(handle: String, result: String): Boolean {
+        val session = pendingComposeSession ?: return false
+        if (session.handle != handle) return false
+        pendingComposeSession = null
+        if (RESULT_CONFIRMED.equals(result)) {
+            session.confirmPendingCommand()
+        } else if (RESULT_DENIED.equals(result)) {
+            session.denyPendingCommand()
+        }
+        return true
+    }
+
+    /** 显示"关闭二次确认"的警告弹窗（使用主页授权遮罩覆盖方式） */
+    fun showDisableWarning(context: Context, targetLevel: ProtectionLevel = ProtectionLevel.OFF) {
+        _disableWarningState.value = DisableWarningState(show = true, targetLevel = targetLevel)
+        // 跳转到主页 Activity，主页的 DisableWarningMask 会显示遮罩弹窗
+        val intent = Intent(context, com.termux.app.MainActivity::class.java)
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        context.startActivity(intent)
+    }
+
+    /** 关闭"关闭二次确认"的警告弹窗（保留用于兼容） */
+    fun hideDisableWarning() {
+        _disableWarningState.value = DisableWarningState()
+    }
+
+    /** 用户确认降级防护级别 */
+    fun confirmDisable(context: Context) {
+        val targetLevel = _disableWarningState.value.targetLevel
+        setProtectionLevel(context, targetLevel)
+        hideDisableWarning()
+    }
+/**
+     * 从 shell 命令里提取脚本文件路径。
+     * 识别: bash xxx.sh, sh -c xxx, source xxx, . xxx, 直接执行 .sh 文件 等
+     */
+    fun extractScriptPath(command: String): String? {
+        val trimmed = command.trim()
+        // 1. shell 前缀（bash xxx, sh -c xxx, zsh xxx, fish xxx, dash xxx）
+        val shellRegex = Regex("""(?:bash|sh|zsh|fish|dash)\s+(?:-c\s+)?['"]?(\S+?)['"]?(?:\s|$)""")
+        shellRegex.find(trimmed)?.let { m ->
+            val path = m.groupValues[1].trimEnd(';', '&', '|')
+            if (path.isNotBlank()) return path
+        }
+        // 2. source / . 前缀（source xxx, . xxx）
+        val sourceRegex = Regex("""(?:source|(?<!\w)\.(?!\w))\s+['"]?(\S+?)['"]?(?:\s|$)""")
+        sourceRegex.find(trimmed)?.let { m ->
+            val path = m.groupValues[1].trimEnd(';', '&', '|')
+            if (path.isNotBlank()) return path
+        }
+        // 3. 直接执行带扩展名的 shell 脚本（./install.sh, /path/to/deploy.sh, ./setup.bash）
+        //    只识别 sh/bash/zsh/ksh/dash/fish 后缀；py/pl/rb/js 等非 sh 文件不走 Agent，走本地检测
+        val directRegex = Regex("""^['"]?(\.?/\S+\.(?:sh|bash|zsh|ksh|dash|fish))['"]?(?:\s|$)""")
+        directRegex.find(trimmed)?.let { m ->
+            return m.groupValues[1].trimEnd(';', '&', '|')
+        }
+        // 4. 直接执行相对路径（./setup, ./deploy）
+        //    绝对路径（/data/.../binary）可能是普通程序，不识别为脚本 → 走本地检测
+        val directExecRegex = Regex("""^['"]?(\./\S+?)['"]?(?:\s|$)""")
+        directExecRegex.find(trimmed)?.let { m ->
+            val path = m.groupValues[1].trimEnd(';', '&', '|')
+            if (path.startsWith("./")) return path
+        }
+        return null
+    }
+}
+
+/**
+ * 风险确认 WindowDialog 宿主。
+ *
+ * 放置在 Activity 的 Compose 树顶层，通过观察 RiskConfirmManager.dialogState
+ * 来渲染弹窗。必须保持 Activity 存活。
+ *
+ * @param snackbarHostState Snackbar 宿主状态，用于显示 Snackbar
+ * @param collectSnackbar 是否收集并显示 RiskConfirmManager 的 Snackbar 事件。
+ *        主页设为 false（由终端页独占显示），终端页设为 true。
+ * @param collectSnackbarEvents 主开关：是否收集 Snackbar 事件（详情/汇总）。
+ *        设为 false 时完全跳过 Snackbar 事件收集，仅处理弹窗状态。
+ *        用于 MainActivity 级别宿主（避免在主页重复显示终端页的 Snackbar）。
+ */
+@Composable
+fun RiskConfirmDialogHost(
+    snackbarHostState: top.yukonga.miuix.kmp.basic.SnackbarHostState? = null,
+    collectSnackbar: Boolean = true,
+    collectSnackbarEvents: Boolean = true
+) {
+    val dialogState by RiskConfirmManager.dialogState.collectAsState()
+    val countdown by RiskConfirmManager.countdown.collectAsState()
+    val agentLoading by RiskConfirmManager.agentLoadingVisible.collectAsState()
+    val agentLoadingText by RiskConfirmManager.agentLoadingText.collectAsState()
+    var checkboxChecked by remember { mutableStateOf(false) }
+
+    LaunchedEffect(dialogState) {
+        if (dialogState == null) {
+            checkboxChecked = false
+        }
+    }
+
+    val context = LocalContext.current
+    val snackbarScope = rememberCoroutineScope()
+    val showBlockedMessage: () -> Unit = {
+        val msg = "请手动点击按钮完成操作，第三方无障碍服务无法执行此操作"
+        if (snackbarHostState != null) {
+            snackbarScope.launch {
+                snackbarHostState.showSnackbar(
+                    message = msg,
+                    duration = top.yukonga.miuix.kmp.basic.SnackbarDuration.Long
+                )
+            }
+        } else {
+            SnackbarHelper.show(context, msg, Snackbar.LENGTH_LONG)
+        }
+    }
+
+    // 仅在 collectSnackbarEvents=true 时收集 Snackbar 事件
+    // collectSnackbar=true → 收集详情 Snackbar（终端页）
+    // collectSnackbar=false → 收集汇总 Snackbar（主页）
+    if (collectSnackbarEvents) {
+        if (collectSnackbar) {
+            LaunchedEffect(Unit) {
+                RiskConfirmManager.snackbarEvents.collect { event ->
+                    val duration = if (event.duration >= Snackbar.LENGTH_LONG) {
+                        top.yukonga.miuix.kmp.basic.SnackbarDuration.Long
+                    } else {
+                        top.yukonga.miuix.kmp.basic.SnackbarDuration.Short
+                    }
+                    if (snackbarHostState != null) {
+                        snackbarScope.launch {
+                            snackbarHostState.showSnackbar(
+                                message = event.message,
+                                duration = duration
+                            )
+                        }
+                    } else {
+                        SnackbarHelper.show(context, event.message, event.duration)
+                    }
+                }
+            }
+        } else {
+            // 主页：收集汇总 Snackbar（退出终端页时显示统计信息）
+            LaunchedEffect(Unit) {
+                RiskConfirmManager.summarySnackbarEvents.collect { event ->
+                    val duration = if (event.duration >= Snackbar.LENGTH_LONG) {
+                        top.yukonga.miuix.kmp.basic.SnackbarDuration.Long
+                    } else {
+                        top.yukonga.miuix.kmp.basic.SnackbarDuration.Short
+                    }
+                    if (snackbarHostState != null) {
+                        snackbarScope.launch {
+                            snackbarHostState.showSnackbar(
+                                message = event.message,
+                                duration = duration
+                            )
+                        }
+                    } else {
+                        SnackbarHelper.show(context, event.message, event.duration)
+                    }
+                }
+            }
+        }
+    }
+
+    val thirdPartyBlocked = rememberThirdPartyBlocked(context)
+
+    val activity = context as? ComponentActivity
+    val window = activity?.window
+
+    LaunchedEffect(dialogState != null) {
+        if (dialogState != null) {
+            window?.setFlags(
+                WindowManager.LayoutParams.FLAG_SECURE,
+                WindowManager.LayoutParams.FLAG_SECURE
+            )
+        } else {
+            window?.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        }
+    }
+
+    // ===== 统一弹窗宿主：Agent Loading 与风险确认合并为【单个】WindowDialog =====
+    // 关键：同一时间只允许存在一个 DialogWindow。此前 Loading 与确认各开一个
+    // WindowDialog，Loading 关闭动画与新确认窗叠加时 z-order 冲突，导致确认弹窗
+    // 渲染不出来（用户看到"检测弹窗消失但没有二次确认"，随后 latch 等待 → shell 卡死）。
+    val state = dialogState
+    val isSshPower = state?.isSshPowerOperation == true
+    val showDialog = agentLoading || state != null
+
+    val dialogTitle: String = when {
+        isSshPower -> "远程电源操作确认"
+        state != null -> when (state.environmentType) {
+            RiskConfirmManager.EnvironmentType.NATIVE -> "即将执行风险命令"
+            RiskConfirmManager.EnvironmentType.CONTAINER -> "高危命令 - 容器环境"
+            RiskConfirmManager.EnvironmentType.VM -> "高危命令 - 虚拟机环境"
+            RiskConfirmManager.EnvironmentType.SSH -> "高危命令 - 远程系统 (SSH)"
+        }
+        else -> "安全检测中"
+    }
+    val envWarning: String? = when (state?.environmentType) {
+        null -> null
+        RiskConfirmManager.EnvironmentType.NATIVE -> null
+        RiskConfirmManager.EnvironmentType.CONTAINER -> "此命令正在容器环境中执行，可能会对容器系统造成不可逆的损害，包括但不限于：容器数据丢失、容器系统损坏、容器无法重新启动等。请在执行前仔细评估此命令的必要性和安全性。"
+        RiskConfirmManager.EnvironmentType.VM -> "此命令正在虚拟机环境中执行，可能会对虚拟机系统造成不可逆的损害，包括但不限于：虚拟机数据丢失、虚拟机系统损坏、虚拟机无法启动等。请在执行前仔细评估此命令的必要性和安全性。"
+        RiskConfirmManager.EnvironmentType.SSH -> {
+            val isDiskCommand = state?.riskType in listOf("dd 磁盘写入", "格式化/分区")
+            if (isDiskCommand) {
+                if (state?.isWindowsDiskCommand == true) {
+                    "此磁盘级命令将在通过 SSH 连接的远程 Windows 系统上执行。format、diskpart、bcdedit 等操作可格式化分区、擦除磁盘分区表、修改或删除系统启动配置。diskpart 的 clean / clean all 指令会清除磁盘全部分区信息，clean-all 将覆写磁盘全部扇区，数据几乎无法恢复。错误指定磁盘号、盘符会造成整块磁盘数据丢失；即使系统正在运行，管理员权限仍可摧毁非系统卷数据。如果远程系统为生产环境，执行此命令将造成大规模数据丢失、业务中断甚至系统无法启动，并可能带来法律风险。请在执行前仔细核对磁盘编号、盘符，评估执行必要性。"
+                } else {
+                    "此磁盘级命令将在通过 SSH 连接的远程系统上执行。dd、mkfs、fdisk 和 parted 等操作可能会覆盖原始磁盘、破坏分区表并永久擦除所有数据。错误指定设备路径可能导致远程主机完全无法启动，且损坏的数据几乎无法恢复。如果远程系统为生产环境，执行此命令可能导致服务中断、大规模数据丢失，甚至带来法律风险。请在执行前仔细检查目标设备路径并评估执行的必要性。"
+                }
+            } else {
+                "此命令正在通过 SSH 连接的远程系统上执行，可能会对远程系统造成不可逆的损害，包括但不限于：远程数据丢失、远程系统损坏、服务中断等。如果远程系统为生产环境，执行此命令可能导致服务中断、数据丢失，甚至带来法律风险。请在执行前仔细评估此命令的必要性和安全性。"
+            }
+        }
+        else -> null
+    }
+    val dialogSummary: String = when {
+        isSshPower -> "您即将对通过 SSH 连接的远程系统执行关机或重新启动。\n\n您确认后，远程主机将终止全部正在运行的程序与服务并断开 SSH 会话。如您选择关机，如果没有相关人员物理接触此远程设备或此设备不具备网络开机能力，系统将要持续离线，您无法通过远程方式恢复运行。\n\n若此环境为生产环境，此操作会造成服务中断与可能的业务损失。\n\n请确认您确实需要执行电源操作再继续！"
+        state != null -> buildString {
+            append(state.riskDescription)
+            if (envWarning != null) {
+                append("\n\n")
+                append(envWarning)
+            }
+            append("\n\n")
+            append("该命令可能造成不可恢复的数据丢失、系统损坏或安全问题。您执行高危命令所造成的任何后果，本应用不承担任何责任，且不受理因高危操作产生的 Issue。")
+        }
+        else -> agentLoadingText.ifBlank { "正在检测脚本安全性..." }
+    }
+
+    if (state != null) {
+        LaunchedEffect(state.command) {
+            checkboxChecked = false
+        }
+    }
+
+    // 用 key 强制 content 分支变化（Loading ↔ 确认）时重建整个 Dialog，
+    // 避免同一个 WindowDialog 内 content 切换时残留"安全检测中"内容、确认帧渲染不出来。
+    key(agentLoading, state?.command, isSshPower) {
+    top.yukonga.miuix.kmp.window.WindowDialog(
+        show = showDialog,
+        onDismissRequest = {},
+        title = dialogTitle,
+        summary = dialogSummary,
+        content = {
+            when {
+                isSshPower && state != null -> {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .physicalTouchDetector()
+                            .accessibilityGuard(thirdPartyBlocked)
+                            .padding(top = 4.dp),
+                        horizontalAlignment = Alignment.Start
+                    ) {
+                        Text(
+                            text = "命令" + ":",
+                            style = androidx.compose.ui.text.TextStyle(
+                                fontSize = 13.sp,
+                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                            )
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        top.yukonga.miuix.kmp.basic.Card(
+                            modifier = Modifier
+                                .background(MiuixTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                                .clip(RoundedCornerShape(8.dp))
+                        ) {
+                            Text(
+                                text = state.command,
+                                modifier = Modifier.padding(8.dp),
+                                style = androidx.compose.ui.text.TextStyle(
+                                    fontSize = 13.sp,
+                                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                    color = MiuixTheme.colorScheme.onSurface
+                                ),
+                                maxLines = 3
+                            )
+                        }
+
+                        Spacer(Modifier.height(16.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(20.dp)
+                        ) {
+                            Button(
+                                onClick = guardedOnClick(context, thirdPartyBlocked, showBlockedMessage) {
+                                    RiskConfirmManager.cancel(context)
+                                },
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.buttonColors(
+                                    color = Color.Transparent
+                                )
+                            ) {
+                                Text(
+                                    text = "${"否"}(${countdown}s)",
+                                    color = MiuixTheme.colorScheme.onSurface,
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                            Button(
+                                onClick = guardedOnClick(context, thirdPartyBlocked, showBlockedMessage) {
+                                    RiskConfirmManager.confirm(context)
+                                },
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.buttonColors(
+                                    color = Color(0xFFD32F2F)
+                                )
+                            ) {
+                                Text(
+                                    text = "是，关机/重启",
+                                    color = Color.White,
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
+                    }
+                }
+                state != null -> {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .physicalTouchDetector()
+                            .accessibilityGuard(thirdPartyBlocked)
+                            .padding(top = 4.dp),
+                        horizontalAlignment = Alignment.Start
+                    ) {
+                        Text(
+                            text = "命令" + ":",
+                            style = androidx.compose.ui.text.TextStyle(
+                                fontSize = 13.sp,
+                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                            )
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        top.yukonga.miuix.kmp.basic.Card(
+                            modifier = Modifier
+                                .background(MiuixTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                                .clip(RoundedCornerShape(8.dp))
+                        ) {
+                            Text(
+                                text = state.command,
+                                modifier = Modifier.padding(8.dp),
+                                style = androidx.compose.ui.text.TextStyle(
+                                    fontSize = 13.sp,
+                                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                    color = MiuixTheme.colorScheme.onSurface
+                                ),
+                                maxLines = 3
+                            )
+                        }
+
+                        Spacer(Modifier.height(12.dp))
+
+                        Text(
+                            text = "警告：这是一项高危操作，可能导致不可逆的后果。",
+                            style = androidx.compose.ui.text.TextStyle(
+                                fontSize = 12.sp,
+                                color = MiuixTheme.colorScheme.error,
+                                fontWeight = FontWeight.Medium
+                            )
+                        )
+
+                        Spacer(Modifier.height(12.dp))
+
+                        CheckboxPreference(
+                            title = "我自愿承担执行此命令的全部风险，继续执行",
+                            checked = checkboxChecked,
+                            onCheckedChange = { checkboxChecked = it },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        Spacer(Modifier.height(16.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(20.dp)
+                        ) {
+                            Button(
+                                onClick = guardedOnClick(context, thirdPartyBlocked, showBlockedMessage) {
+                                    RiskConfirmManager.cancel(context)
+                                },
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.buttonColors(
+                                    color = Color.Transparent
+                                )
+                            ) {
+                                Text(
+                                    text = "${"取消"}(${countdown}s)",
+                                    color = MiuixTheme.colorScheme.onSurface,
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                            Button(
+                                onClick = guardedOnClick(context, thirdPartyBlocked, showBlockedMessage) {
+                                    RiskConfirmManager.confirm(context)
+                                },
+                                enabled = checkboxChecked,
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.buttonColors(
+                                    color = if (checkboxChecked) Color(0xFFD32F2F) else Color(0xFFBDBDBD)
+                                )
+                            ) {
+                                Text(
+                                    text = "继续执行",
+                                    color = Color.White,
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
+                    }
+                }
+                else -> {
+                    androidx.compose.foundation.layout.Column(
+                        modifier = androidx.compose.ui.Modifier
+                            .fillMaxWidth()
+                            .then(androidx.compose.ui.Modifier.padding(top = 8.dp)),
+                        horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally
+                    ) {
+                        androidx.compose.material3.CircularProgressIndicator(
+                            modifier = androidx.compose.ui.Modifier.size(36.dp),
+                            strokeWidth = 3.dp
+                        )
+                    }
+                }
+            }
+        }
+    )
+    } // key(...) 闭合：强制 content 分支变化时重建 Dialog
+}
+
+fun hasBiometricAuthentication(activity: ComponentActivity): Boolean {
+    val biometricManager = BiometricManager.from(activity)
+    val canAuthenticate = biometricManager.canAuthenticate(
+        BiometricManager.Authenticators.BIOMETRIC_WEAK or BiometricManager.Authenticators.DEVICE_CREDENTIAL
+    )
+    return canAuthenticate == BiometricManager.BIOMETRIC_SUCCESS
+
+}
+/**
+ * 启动生物识别验证。
+ * 如果设备未设置任何生物验证或屏幕锁，则跳过验证并提示用户。
+ * 使用 startClass2BiometricOrCredentialAuthentication 兼容 FragmentActivity。
+ */
+fun launchBiometricAuth(
+    activity: FragmentActivity,
+    onResult: (Boolean) -> Unit
+) {
+    if (!hasBiometricAuthentication(activity)) {
+        SnackbarHelper.show(
+            activity,
+            "设备未设置生物验证或屏幕锁。已跳过验证。建议在系统设置中设置屏幕锁（PIN/图案）或生物验证以获得更好的安全性。",
+            Snackbar.LENGTH_LONG
+        )
+        onResult(true)
+        return
+    }
+
+    val title = "请验证您的身份以继续"
+    val subtitle = "确认调整"
+
+    RiskConfirmManager.countdownScope.launch {
+        try {
+            activity.startClass2BiometricOrCredentialAuthentication(
+                title = title,
+                subtitle = subtitle,
+                confirmationRequired = false,
+                callback = object : AuthPromptCallback() {
+                    override fun onAuthenticationSucceeded(
+                        activity: FragmentActivity?,
+                        result: BiometricPrompt.AuthenticationResult
+                    ) {
+                        onResult(true)
+                    }
+
+                    override fun onAuthenticationError(
+                        activity: FragmentActivity?,
+                        errorCode: Int,
+                        errString: CharSequence
+                    ) {
+                        onResult(false)
+                    }
+
+                    override fun onAuthenticationFailed(activity: FragmentActivity?) {
+                    }
+                }
+            )
+        } catch (e: Exception) {
+            onResult(false)
+        }
+    }
+}
+
+/**
+ * 在 TermuxActivity 等传统 View 系统中初始化 RiskConfirmDialogHost
+ */
+fun setupRiskConfirmDialogHost(composeView: androidx.compose.ui.platform.ComposeView) {
+    composeView.setContent {
+        com.termux.app.compose.KiTerminalTheme {
+            RiskConfirmDialogHost()
+        }
+    }
+}

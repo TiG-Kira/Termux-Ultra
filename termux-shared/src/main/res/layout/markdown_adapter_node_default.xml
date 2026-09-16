@@ -11,6 +11,5 @@
     android:paddingTop="8dip"
     android:paddingBottom="8dip"
     android:textAppearance="?android:attr/textAppearanceMedium"
-    android:textColor="?android:attr/textColorPrimary"
-    android:textColorLink="?android:attr/textColorLink"
+    android:textColor="#000"
     android:textSize="12sp" />

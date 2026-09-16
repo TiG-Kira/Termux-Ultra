@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-feature
+        android:name="android.hardware.touchscreen"
+        android:required="false" />
+
+    <application>
+
+        <!-- App widget provider. Disabled by default; enabled when Termux:Widget is toggled on. -->
+        <receiver
+            android:name=".TermuxWidgetProvider"
+            android:label="@string/title_shortcut_widget_name"
+            android:enabled="false"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/termux_appwidget_info" />
+        </receiver>
+
+        <receiver android:name=".TermuxWidgetControlExecutorReceiver"
+            android:enabled="false"
+            android:exported="false" />
+
+        <activity
+            android:name=".activities.TermuxWidgetActivity"
+            android:theme="@style/Theme.MaterialComponents.DayNight.TermuxPrimaryActivity"
+            android:enabled="false"
+            android:exported="false" />
+
+        <activity
+            android:name=".TermuxCreateShortcutActivity"
+            android:label="@string/title_single_shortcut_name"
+            android:enabled="false"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.CREATE_SHORTCUT" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
+        <activity
+            android:name=".TermuxLaunchShortcutActivity"
+            android:noHistory="true"
+            android:theme="@android:style/Theme.NoDisplay"
+            android:enabled="false"
+            android:exported="true"/>
+
+        <service
+            android:name=".TermuxWidgetService"
+            android:exported="false"
+            android:permission="android.permission.BIND_REMOTEVIEWS"
+            android:enabled="false" />
+
+        <service
+            android:name=".TermuxWidgetControlsProviderService"
+            android:label="@string/title_termux_shortcuts"
+            android:permission="android.permission.BIND_CONTROLS"
+            android:enabled="false">
+            <intent-filter>
+                <action android:name="android.service.controls.ControlsProviderService" />
+            </intent-filter>
+        </service>
+
+    </application>
+
+</manifest>

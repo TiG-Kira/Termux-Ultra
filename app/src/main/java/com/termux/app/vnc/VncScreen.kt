@@ -1,0 +1,455 @@
+package com.termux.app.vnc
+
+import android.content.Context
+import android.content.Intent
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.shape.RoundedCornerShape
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.util.UUID
+import com.termux.R
+import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.Icon
+import top.yukonga.miuix.kmp.basic.IconButton
+import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.basic.TextButton
+import top.yukonga.miuix.kmp.basic.ButtonDefaults
+import top.yukonga.miuix.kmp.basic.TextField
+import top.yukonga.miuix.kmp.overlay.OverlayDialog
+import top.yukonga.miuix.kmp.theme.MiuixTheme
+
+@Composable
+fun VncScreen(
+    connections: MutableList<VncConnection>,
+    addRequested: Boolean,
+    onAddRequestedConsumed: () -> Unit,
+    scanRequested: Boolean,
+    onScanRequestedConsumed: () -> Unit,
+    onScanStart: () -> Unit = {},
+    onScanEnd: () -> Unit = {},
+    nestedScrollConnection: androidx.compose.ui.input.nestedscroll.NestedScrollConnection? = null,
+    navBarBottomPadding: androidx.compose.ui.unit.Dp = 0.dp
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val showAddDialog = remember { mutableStateOf(false) }
+    val showEditDialog = remember { mutableStateOf(false) }
+    val editingConnection = remember { mutableStateOf<VncConnection?>(null) }
+
+    LaunchedEffect(scanRequested) {
+        if (scanRequested) {
+            onScanStart()
+            scope.launch(Dispatchers.IO) {
+                scanTermuxVnc(context, connections)
+                withContext(Dispatchers.Main) {
+                    onScanEnd()
+                }
+            }
+            onScanRequestedConsumed()
+        }
+    }
+
+    if (addRequested && !showAddDialog.value) {
+        showAddDialog.value = true
+        onAddRequestedConsumed()
+    }
+
+    LazyColumn(
+        contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = navBarBottomPadding + 16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = Modifier
+            .fillMaxSize()
+            .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
+            .let {
+                if (nestedScrollConnection != null) {
+                    it.nestedScroll(nestedScrollConnection)
+                } else {
+                    it
+                }
+            }
+    ) {
+        if (connections.isEmpty()) {
+            item {
+                EmptyConnectionsState(
+                    iconRes = R.drawable.ic_vnc,
+                    message = "没有 VNC 连接"
+                )
+            }
+        } else {
+            items(connections) { conn ->
+                VncConnectionCard(
+                    connection = conn,
+                    onConnect = { connectToVnc(context, conn) },
+                    onEdit = {
+                        editingConnection.value = conn
+                        showEditDialog.value = true
+                    },
+                    onDelete = {
+                        deleteConnection(context, conn, connections)
+                    }
+                )
+            }
+        }
+    }
+
+    if (showAddDialog.value) {
+        VncEditDialog(
+            connection = null,
+            onSave = { conn ->
+                saveConnection(context, conn, connections)
+                showAddDialog.value = false
+            },
+            onDismiss = { showAddDialog.value = false }
+        )
+    }
+
+    if (showEditDialog.value && editingConnection.value != null) {
+        VncEditDialog(
+            connection = editingConnection.value,
+            onSave = { conn ->
+                saveConnection(context, conn, connections)
+                showEditDialog.value = false
+            },
+            onDismiss = { showEditDialog.value = false }
+        )
+    }
+}
+
+@Composable
+fun VncConnectionCard(
+    connection: VncConnection,
+    onConnect: () -> Unit,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .clickable { onConnect() }
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(MiuixTheme.colorScheme.primary.copy(alpha = 0.12f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_vnc),
+                    contentDescription = null,
+                    modifier = Modifier.size(24.dp),
+                    tint = MiuixTheme.colorScheme.primary
+                )
+            }
+
+            Spacer(Modifier.width(14.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = connection.name,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MiuixTheme.colorScheme.onSurface,
+                    lineHeight = 22.sp
+                )
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = "${connection.host}:${connection.port}",
+                    fontSize = 13.sp,
+                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                    lineHeight = 18.sp
+                )
+                if (connection.isFromTermux) {
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = "来自 Termux",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = MiuixTheme.colorScheme.primary
+                    )
+                }
+            }
+
+            if (!connection.isFromTermux) {
+                Row {
+                    IconButton(onClick = { onEdit() }) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_edit),
+                            contentDescription = stringResource(R.string.action_file_received_edit),
+                            tint = MiuixTheme.colorScheme.onSurface
+                        )
+                    }
+                    IconButton(onClick = { onDelete() }) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_delete),
+                            contentDescription = stringResource(R.string.delete),
+                            tint = MiuixTheme.colorScheme.onSurface
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun EmptyConnectionsState(iconRes: Int, message: String) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 120.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Box(
+            modifier = Modifier
+                .size(72.dp)
+                .clip(RoundedCornerShape(24.dp))
+                .background(MiuixTheme.colorScheme.surfaceVariant),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                painter = painterResource(iconRes),
+                contentDescription = null,
+                modifier = Modifier.size(36.dp).alpha(0.6f),
+                tint = MiuixTheme.colorScheme.onSurfaceVariantSummary
+            )
+        }
+        Spacer(Modifier.height(16.dp))
+        Text(
+            text = message,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Medium,
+            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+            lineHeight = 22.sp
+        )
+    }
+}
+
+@Composable
+fun VncEditDialog(
+    connection: VncConnection?,
+    onSave: (VncConnection) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val isEdit = connection != null
+    val name = remember { mutableStateOf(connection?.name ?: "") }
+    val host = remember { mutableStateOf(connection?.host ?: "") }
+    val port = remember { mutableStateOf((connection?.port ?: 5900).toString()) }
+    val password = remember { mutableStateOf(connection?.password ?: "") }
+    val showDialog = remember { mutableStateOf(true) }
+
+    OverlayDialog(
+        show = showDialog.value,
+        onDismissRequest = {
+            showDialog.value = false
+            onDismiss()
+        },
+        title = if (isEdit) "编辑连接" else "添加连接",
+        content = {
+            Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                TextField(
+                    value = name.value,
+                    onValueChange = { name.value = it },
+                    label = stringResource(R.string.ssh_field_name)
+                )
+
+                TextField(
+                    value = host.value,
+                    onValueChange = { host.value = it },
+                    label = stringResource(R.string.ssh_field_host)
+                )
+
+                TextField(
+                    value = port.value,
+                    onValueChange = { port.value = it },
+                    label = stringResource(R.string.ssh_field_port)
+                )
+
+                TextField(
+                    value = password.value,
+                    onValueChange = { password.value = it },
+                    label = stringResource(R.string.vnc_password_caption)
+                )
+
+                Spacer(Modifier.height(12.dp))
+
+                Row(
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    TextButton(
+                        text = stringResource(R.string.cancel),
+                        onClick = {
+                            showDialog.value = false
+                            onDismiss()
+                        },
+                        modifier = Modifier.weight(1f)
+                    )
+                    Spacer(Modifier.width(20.dp))
+                    TextButton(
+                        text = stringResource(R.string.save),
+                        onClick = {
+                            val conn = VncConnection(
+                                id = connection?.id ?: UUID.randomUUID().toString(),
+                                name = name.value,
+                                host = host.value,
+                                port = port.value.toIntOrNull() ?: 5900,
+                                password = password.value
+                            )
+                            showDialog.value = false
+                            onSave(conn)
+                        },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.textButtonColorsPrimary()
+                    )
+                }
+            }
+        }
+    )
+}
+
+private fun loadConnections(context: Context, connections: MutableList<VncConnection>) {
+    val manager = VncConnectionManager(context)
+    connections.clear()
+    connections.addAll(manager.getConnections())
+}
+
+private fun saveConnection(context: Context, connection: VncConnection, connections: MutableList<VncConnection>) {
+    val manager = VncConnectionManager(context)
+    manager.saveConnection(connection)
+    val index = connections.indexOfFirst { it.id == connection.id }
+    if (index >= 0) {
+        connections[index] = connection
+    } else {
+        connections.add(connection)
+    }
+}
+
+private fun deleteConnection(context: Context, connection: VncConnection, connections: MutableList<VncConnection>) {
+    val manager = VncConnectionManager(context)
+    manager.deleteConnection(connection.id)
+    connections.remove(connection)
+}
+
+private fun isVncPort(port: Int): Boolean {
+    return try {
+        val socket = java.net.Socket()
+        socket.connect(java.net.InetSocketAddress("127.0.0.1", port), 200)
+        socket.soTimeout = 500
+        val input = socket.getInputStream()
+        val output = socket.getOutputStream()
+        val buffer = ByteArray(12)
+        var totalRead = 0
+        val startTime = System.currentTimeMillis()
+        while (totalRead < 12 && System.currentTimeMillis() - startTime < 1000) {
+            val read = input.read(buffer, totalRead, 12 - totalRead)
+            if (read == -1) break
+            totalRead += read
+        }
+        socket.close()
+        if (totalRead >= 12) {
+            val banner = String(buffer, 0, totalRead)
+            banner.startsWith("RFB ")
+        } else {
+            false
+        }
+    } catch (_: Exception) {
+        false
+    }
+}
+
+private fun scanTermuxVnc(context: Context, connections: MutableList<VncConnection>) {
+    val manager = VncConnectionManager(context)
+    manager.deleteTermuxConnections()
+    val iterator = connections.iterator()
+    while (iterator.hasNext()) {
+        if (iterator.next().isFromTermux) {
+            iterator.remove()
+        }
+    }
+    val portsToScan = mutableListOf<Int>()
+    portsToScan.add(0)
+    for (port in 5900..5999) {
+        portsToScan.add(port)
+    }
+    for (port in 5500..5509) {
+        portsToScan.add(port)
+    }
+    for (port in 5800..5899) {
+        portsToScan.add(port)
+    }
+    for (port in portsToScan) {
+        if (isVncPort(port)) {
+            val sessionName = "Termux VNC :$port"
+            val existing = connections.find { it.host == "127.0.0.1" && it.port == port }
+            if (existing == null) {
+                val conn = VncConnection(
+                    id = UUID.randomUUID().toString(),
+                    name = sessionName,
+                    host = "127.0.0.1",
+                    port = port,
+                    password = "",
+                    isFromTermux = true,
+                    sessionName = sessionName
+                )
+                connections.add(conn)
+                manager.saveConnection(conn)
+            }
+        }
+    }
+}
+
+internal const val EXTRA_QEMU_AUDIO_MODE = "com.termux.app.vnc.QEMU_AUDIO_MODE"
+
+fun connectToVnc(context: Context, connection: VncConnection) {
+    val serviceIntent = Intent(context, com.termux.app.TermuxService::class.java)
+    context.startService(serviceIntent)
+
+    val profile = com.gaurav.avnc.model.ServerProfile(
+        name = connection.name,
+        host = connection.host,
+        port = connection.port,
+        password = connection.password
+    )
+    val vncIntent = Intent(context, com.gaurav.avnc.ui.vnc.VncActivity::class.java)
+    vncIntent.putExtra("com.gaurav.avnc.server_profile", profile)
+
+    // 如果 VNC 端口正好匹配某个已保存 QEMU 虚拟机的 vncPort，则将该虚拟机的音频模式传入
+    // 用于 VncActivity 决定是否跟随页面生命周期启停 PulseAudio 播放
+    if (connection.host == "127.0.0.1" || connection.host.equals("localhost", ignoreCase = true)) {
+        runCatching {
+            val vms = com.termux.app.compose.QemuVmManager.loadVms(context)
+            val matched = vms.firstOrNull { it.vncPort == connection.port }
+            if (matched != null) {
+                vncIntent.putExtra(EXTRA_QEMU_AUDIO_MODE, matched.effectiveAudioMode)
+            }
+        }
+    }
+
+    context.startActivity(vncIntent)
+}

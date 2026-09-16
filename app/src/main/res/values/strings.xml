@@ -1,246 +1,1302 @@
 <?xml version="1.0" encoding="utf-8"?>
-
-<!DOCTYPE resources [
-    <!ENTITY TERMUX_PACKAGE_NAME "com.termux">
-    <!ENTITY TERMUX_APP_NAME "Termux">
-    <!ENTITY TERMUX_API_APP_NAME "Termux:API">
-    <!ENTITY TERMUX_BOOT_APP_NAME "Termux:Boot">
-    <!ENTITY TERMUX_FLOAT_APP_NAME "Termux:Float">
-    <!ENTITY TERMUX_STYLING_APP_NAME "Termux:Styling">
-    <!ENTITY TERMUX_TASKER_APP_NAME "Termux:Tasker">
-    <!ENTITY TERMUX_WIDGET_APP_NAME "Termux:Widget">
-    ]>
-
 <resources>
+    <string name="app_name">Termux Ultra</string>
+    <string name="application_name">Termux Ultra</string>
+    <string name="shared_user_label">Termux Ultra</string>
+    <string name="title_activity_termux_settings">Terminal Settings</string>
 
-    <string name="application_name">&TERMUX_APP_NAME;</string>
-    <string name="shared_user_label">&TERMUX_APP_NAME; user</string>
+    <string name="oobe_title">Welcome to Termux Ultra</string>
+    <string name="oobe_description">To use Termux Ultra, you need to grant the necessary permissions.\nThis will allow the app to access files and function properly.</string>
+    <string name="oobe_permission_progress">Permission progress:</string>
+    <string name="oobe_permission_all_granted">All permissions granted!</string>
+    <string name="oobe_grant_permissions">Grant Permissions</string>
+    <string name="oobe_manage_storage">Manage External Storage</string>
+    <string name="oobe_next">Next</string>
+    <string name="oobe_permission_required">Please grant all required permissions first</string>
 
+    <string name="nav_terminal">Terminal</string>
+    <string name="nav_files">Files</string>
+    <string name="nav_settings">Settings</string>
+    <string name="nav_overview">Overview</string>
 
+    <string name="terminal_list_title">Terminal Sessions</string>
+    <string name="new_terminal">New Terminal</string>
+    <string name="no_terminal">No terminals running</string>
+    <string name="terminal_1">Terminal 1</string>
+    <string name="close_terminal">Close Terminal</string>
+    <string name="search">Search</string>
+    <string name="language_restart_title">Restart Required</string>
 
-    <!-- Termux RUN_COMMAND permission -->
-    <string name="permission_run_command_label">Run commands in &TERMUX_APP_NAME; environment</string>
-    <string name="permission_run_command_description">execute arbitrary commands within &TERMUX_APP_NAME;
-        environment and access files</string>
+    <string name="file_manager_title">File Manager</string>
+    <string name="file_manager_description">File management feature</string>
 
+    <string name="settings_title">Settings</string>
+    <string name="backup">Backup</string>
+    <string name="backup_description">Backup Termux data to external storage</string>
+    <string name="restore">Restore</string>
+    <string name="restore_description">Restore from backup files</string>
+    <string name="backup_success">Backup successful! File saved to: %1$s</string>
+    <string name="backup_failed">Backup failed</string>
+    <string name="restore_success">Restore successful</string>
+    <string name="restore_failed">Restore failed</string>
+    <string name="no_backup_files">No backup files found</string>
+    <string name="restore_confirm_message">Are you sure you want to restore from this backup? Existing files will be overwritten.</string>
+    <string name="result">Result</string>
+    <string name="language">Language</string>
+    <string name="english">English</string>
+    <string name="chinese">Chinese (Simplified)</string>
 
+    <string name="device_model">Device Model</string>
+    <string name="android_version">Android Version</string>
+    <string name="kernel_version">Kernel Version</string>
+    <string name="developer_name">Kira</string>
+    <string name="developer_username">@TiG-Kira</string>
+    <string name="open_source_projects">Open Source Projects</string>
+    <string name="check_update">Check Update</string>
+    <string name="about_content">Termux Ultra is a terminal emulator for Android, based on Termux. It provides a modern UI with Miuix design components.</string>
 
-    <!-- Termux Bootstrap Packages Installation -->
-    <string name="bootstrap_installer_body">Installing bootstrap packages…</string>
-    <string name="bootstrap_error_title">&TERMUX_APP_NAME; Bootstrap Error</string>
-    <string name="bootstrap_error_body">&TERMUX_APP_NAME; was unable to install the bootstrap packages.</string>
+    <string name="permission_run_command_description">Allows running commands in the terminal</string>
+    <string name="permission_run_command_label">Run Command</string>
+
+    <string name="bootstrap_error_title">Bootstrap Error</string>
+    <string name="bootstrap_error_body">An error occurred while setting up the terminal environment.</string>
+    <string name="bootstrap_error_not_primary_user_message">Termux can only be run as the primary user.</string>
     <string name="bootstrap_error_abort">Abort</string>
-    <string name="bootstrap_error_try_again">Try again</string>
-    <string name="bootstrap_error_apk_bootstrap_variant_min_sdk_incompatible">The APK bootstrap variant %1$s
-        of currently installed &TERMUX_APP_NAME; app is not compatible with the Android version %2$s
-        (sdk `%3$d`) of the device and it requires minimum Android version %4$s (sdk `%5$d`).
-        \n\nUninstall the &TERMUX_APP_NAME; app and reinstall the correct APK build variant.</string>
-    <string name="bootstrap_error_apk_bootstrap_variant_max_sdk_incompatible">The APK bootstrap variant %1$s
-        of currently installed &TERMUX_APP_NAME; app is not compatible with the Android version %2$s
-        (sdk `%3$d`) of the device and it requires maximum Android version %4$s (sdk `%5$d`).
-        \n\nUninstall the &TERMUX_APP_NAME; app and reinstall the correct APK build variant.</string>
-    <string name="bootstrap_error_not_primary_user_message">&TERMUX_APP_NAME; can only be run as the primary user.
-        \nBootstrap binaries compiled for &TERMUX_APP_NAME; have hardcoded $PREFIX path and cannot be installed
-        under any path other than:\n%1$s.</string>
-    <string name="bootstrap_error_installed_on_portable_sd">&TERMUX_APP_NAME; cannot be installed on
-        portable/external/removable sd card on your device.
-        \nBootstrap binaries compiled for &TERMUX_APP_NAME; have hardcoded $PREFIX path and cannot be installed
-        under any path other than:\n%1$s.</string>
+    <string name="bootstrap_error_try_again">Try Again</string>
+    <string name="bootstrap_installer_body">Installing...</string>
 
-
-
-    <!-- Terminal Sidebar and Shortcuts -->
-    <string name="action_new_session">New session</string>
-    <string name="action_new_session_failsafe">Failsafe</string>
-    <string name="title_max_terminals_reached">Max terminals reached</string>
-    <string name="msg_max_terminals_reached">Close down existing ones before creating new.</string>
-
-    <string name="title_rename_session">Set session name</string>
-    <string name="action_rename_session_confirm">Set</string>
-    <string name="title_create_named_session">New named session</string>
-    <string name="action_create_named_session_confirm">Create</string>
-
-    <string name="action_toggle_soft_keyboard">Keyboard</string>
-
-    <string name="msg_enabling_terminal_toolbar">Enabling Terminal Toolbar</string>
-    <string name="msg_disabling_terminal_toolbar">Disabling Terminal Toolbar</string>
-
-
-
-    <!-- Terminal Popup -->
-    <string name="action_select_url">Select URL</string>
-    <string name="title_select_url_dialog">Click URL to copy or long press to open</string>
-    <string name="title_select_url_none_found">No URL found in the terminal.</string>
-    <string name="msg_select_url_copied_to_clipboard">URL copied to clipboard</string>
-
-    <string name="action_share_transcript">Share transcript</string>
-    <string name="title_share_transcript">Terminal transcript</string>
-    <string name="title_share_transcript_with">Send transcript to:</string>
-
-    <string name="action_share_selected_text">Share selected text</string>
-    <string name="title_share_selected_text">Terminal Text</string>
-    <string name="title_share_selected_text_with">Send selected text to:</string>
-
-    <string name="action_autofill_username">Autofill username</string>
-    <string name="action_autofill_password">Autofill password</string>
-
-    <string name="action_reset_terminal">Reset</string>
+    <string name="msg_enabling_terminal_toolbar">Enabling terminal toolbar</string>
+    <string name="msg_disabling_terminal_toolbar">Disabling terminal toolbar</string>
     <string name="msg_terminal_reset">Terminal reset</string>
 
-    <string name="action_kill_process">Kill process (%d)</string>
-    <string name="title_confirm_kill_process">Really kill this session?</string>
-
-    <string name="action_style_terminal">Style</string>
+    <string name="action_select_url">Select URL</string>
+    <string name="action_share_transcript">Share transcript</string>
+    <string name="action_share_selected_text">Share selected text</string>
+    <string name="action_autofill_username">Autofill username</string>
+    <string name="action_autofill_password">Autofill password</string>
+    <string name="action_reset_terminal">Reset terminal</string>
+    <string name="action_kill_process">Kill process (PID: %d)</string>
+    <string name="action_style_terminal">Style terminal</string>
     <string name="action_toggle_keep_screen_on">Keep screen on</string>
-    <string name="action_open_help">Help</string>
-    <string name="action_open_settings">Settings</string>
+    <string name="action_open_help">Open help</string>
+    <string name="action_open_settings">Open settings</string>
+    <string name="action_report_issue">Report issue</string>
+    <string name="action_new_session">New session</string>
+    <string name="action_toggle_soft_keyboard">Toggle soft keyboard</string>
+    <string name="title_create_named_session">Create named session</string>
+    <string name="action_create_named_session_confirm">Create</string>
+    <string name="action_new_session_failsafe">Failsafe</string>
 
-    <string name="action_report_issue">Report Issue</string>
-    <string name="msg_generating_report">Generating Report</string>
-    <string name="msg_add_termux_debug_info">Add termux debug info to report?</string>
+    <string name="title_confirm_kill_process">Confirm kill process</string>
 
-    <string name="error_styling_not_installed">The &TERMUX_STYLING_APP_NAME; Plugin App is not installed.</string>
+    <string name="error_styling_not_installed">Styling add-on is not installed</string>
     <string name="action_styling_install">Install</string>
 
+    <string name="termux_preferences_title">Terminal</string>
+    <string name="termux_preferences_summary">Terminal settings</string>
+    <string name="termux_api_preferences_title">Termux:API</string>
+    <string name="termux_api_preferences_summary">Termux:API settings</string>
+    <string name="termux_float_preferences_title">Termux:Float</string>
+    <string name="termux_float_preferences_summary">Termux:Float settings</string>
+    <string name="termux_tasker_preferences_title">Termux:Tasker</string>
+    <string name="termux_tasker_preferences_summary">Termux:Tasker settings</string>
+    <string name="termux_widget_preferences_title">Termux:Widget</string>
+    <string name="termux_widget_preferences_summary">Termux:Widget settings</string>
 
+    <string name="termux_native_about_title">Termux Report</string>
+    <string name="termux_native_about_summary">View the complete report about this device and Termux generated by Termux</string>
 
-    <!-- Termux Notifications -->
-    <string name="notification_action_exit">Exit</string>
-    <string name="notification_action_wake_lock">Acquire wakelock</string>
-    <string name="notification_action_wake_unlock">Release wakelock</string>
-
-
-
-    <!-- TermuxService -->
-    <string name="error_display_over_other_apps_permission_not_granted_to_start_terminal">&TERMUX_APP_NAME; requires
-        \"Display over other apps\" permission to start terminal sessions from background on Android >= 10.
-        Grants it from Settings -> Apps -> &TERMUX_APP_NAME; -> Advanced</string>
-    <string name="error_termux_service_invalid_execution_command_runner">Invalid execution command runner to TermuxService: `%1$s`</string>
-    <string name="error_termux_service_unsupported_execution_command_runner">Unsupported execution command runner to TermuxService: `%1$s`</string>
-    <string name="error_termux_service_unsupported_execution_command_shell_create_mode">Unsupported execution command shell create mode to TermuxService: `%1$s`</string>
-    <string name="error_termux_service_execution_command_shell_name_unset">Shell name not set but `%1$s` shell create mode passed</string>
-
-
-
-    <!-- Termux RunCommandService -->
-    <string name="error_run_command_service_invalid_intent_action">Invalid intent action to RunCommandService: `%1$s`</string>
-    <string name="error_run_command_service_invalid_execution_command_runner">Invalid execution command runner to RunCommandService: `%1$s`</string>
-    <string name="error_run_command_service_mandatory_extra_missing">Mandatory extra missing to RunCommandService: \"%1$s\"</string>
-    <string name="error_run_command_service_api_help">Visit %1$s for more info on RUN_COMMAND Intent usage.</string>
-
-
-
-    <!-- Termux File Receiver -->
-    <string name="title_file_received">Save file in ~/downloads/</string>
-    <string name="action_file_received_edit">Edit</string>
-    <string name="action_file_received_open_directory">Open directory</string>
-
-
-
-    <!-- Miscellaneous -->
-    <string name="error_termux_service_start_failed_general">Failed to start TermuxService. Check logcat for exception message.</string>
-    <string name="error_termux_service_start_failed_bg">Failed to start TermuxService while app is in background due to android bg restrictions.</string>
-
-
-
-    <!-- Termux Settings -->
-    <string name="title_activity_termux_settings">&TERMUX_APP_NAME; Settings</string>
-
-    <!-- Termux App Preferences -->
-    <string name="termux_preferences_title">&TERMUX_APP_NAME;</string>
-    <string name="termux_preferences_summary">Preferences for &TERMUX_APP_NAME; app</string>
-
-        <!-- Debugging Preferences -->
-        <string name="termux_debugging_preferences_title">Debugging</string>
-        <string name="termux_debugging_preferences_summary">Preferences for debugging</string>
-
-            <!-- Logging Category -->
-            <string name="termux_logging_header">Logging</string>
-
-                <!-- Log Level -->
-                <string name="termux_log_level_title">Log Level</string>
-
-                <!-- Terminal View Key Logging -->
-                <string name="termux_terminal_view_key_logging_enabled_title">Terminal View Key Logging</string>
-                <string name="termux_terminal_view_key_logging_enabled_off">Logs will not have entries for terminal view keys. (Default)</string>
-                <string name="termux_terminal_view_key_logging_enabled_on">Logcat logs will have entries for terminal view keys.
-                    These are very verbose and should be disabled under normal circumstances or will cause performance issues.</string>
-
-                <!-- Plugin Error Notifications -->
-                <string name="termux_plugin_error_notifications_enabled_title">Plugin Error Notifications</string>
-                <string name="termux_plugin_error_notifications_enabled_off">Disable flashes and notifications for plugin errors.</string>
-                <string name="termux_plugin_error_notifications_enabled_on">Show flashes and notifications for plugin errors. (Default)</string>
-
-                <!-- Crash Report Notifications -->
-                <string name="termux_crash_report_notifications_enabled_title">Crash Report Notifications</string>
-                <string name="termux_crash_report_notifications_enabled_off">Disable notifications for crash reports.</string>
-                <string name="termux_crash_report_notifications_enabled_on">Show notifications for crash reports. (Default)</string>
-
-
-        <!-- Terminal IO Preferences -->
-        <string name="termux_terminal_io_preferences_title">Terminal I/O</string>
-        <string name="termux_terminal_io_preferences_summary">Preferences for terminal I/O</string>
-
-            <!-- Keyboard Category -->
-            <string name="termux_keyboard_header">Keyboard</string>
-
-                <!-- Soft Keyboard -->
-                <string name="termux_soft_keyboard_enabled_title">Soft Keyboard Enabled</string>
-                <string name="termux_soft_keyboard_enabled_off">Soft keyboard will be disabled.</string>
-                <string name="termux_soft_keyboard_enabled_on">Soft keyboard will be enabled. (Default)</string>
-
-                <!-- Soft Keyboard Only If No Hardware-->
-                <string name="termux_soft_keyboard_enabled_only_if_no_hardware_title">Soft Keyboard Only If No Hardware</string>
-                <string name="termux_soft_keyboard_enabled_only_if_no_hardware_off">Soft keyboard will be enabled even if
-                    hardware keyboard is connected. (Default)</string>
-                <string name="termux_soft_keyboard_enabled_only_if_no_hardware_on">Soft keyboard will be enabled only if
-                    no hardware keyboard is connected.</string>
-
-
-        <!-- Terminal View Preferences -->
-        <string name="termux_terminal_view_preferences_title">Terminal View</string>
-        <string name="termux_terminal_view_preferences_summary">Preferences for terminal view</string>
-
-            <!-- View Category -->
-            <string name="termux_terminal_view_view_header">View</string>
-
-                <!-- Terminal View Margin Adjustment -->
-                <string name="termux_terminal_view_terminal_margin_adjustment_title">Terminal Margin Adjustment</string>
-                <string name="termux_terminal_view_terminal_margin_adjustment_off">Terminal margin adjustment will be disabled.</string>
-                <string name="termux_terminal_view_terminal_margin_adjustment_on">Terminal margin adjustment will be enabled.
-                    It should be enabled to try to fix the issue where soft keyboard covers part of extra keys/terminal view.
-                    If it causes screen flickering on your devices, then disable it. (Default)</string>
-
-
-
-    <!-- Termux:API App Preferences -->
-    <string name="termux_api_preferences_title">&TERMUX_API_APP_NAME;</string>
-    <string name="termux_api_preferences_summary">Preferences for &TERMUX_API_APP_NAME; app</string>
-
-
-
-    <!-- Termux:Float App Preferences -->
-    <string name="termux_float_preferences_title">&TERMUX_FLOAT_APP_NAME;</string>
-    <string name="termux_float_preferences_summary">Preferences for &TERMUX_FLOAT_APP_NAME; app</string>
-
-
-
-    <!-- Termux:Tasker App Preferences -->
-    <string name="termux_tasker_preferences_title">&TERMUX_TASKER_APP_NAME;</string>
-    <string name="termux_tasker_preferences_summary">Preferences for &TERMUX_TASKER_APP_NAME; app</string>
-
-
-
-    <!-- Termux:Widget App Preferences -->
-    <string name="termux_widget_preferences_title">&TERMUX_WIDGET_APP_NAME;</string>
-    <string name="termux_widget_preferences_summary">Preferences for &TERMUX_WIDGET_APP_NAME; app</string>
-
-
-
-    <!-- About Preference -->
     <string name="about_preference_title">About</string>
-
-    <!-- Donate Preference -->
     <string name="donate_preference_title">Donate</string>
 
+    <string name="termux_debugging_preferences_title">Debugging</string>
+    <string name="termux_debugging_preferences_summary">Debugging settings</string>
+    <string name="termux_terminal_io_preferences_title">Terminal I/O</string>
+    <string name="termux_terminal_view_preferences_title">Terminal View</string>
+    <string name="keep_alive_warning_title">Note on Session Keep-Alive</string>
+    <string name="keep_alive_warning_message">On Android 12 and above, Termux sessions may be frequently killed by the system scheduler. Try using tmux to keep them alive (available on the Resources page). If tmux does not work, you may need to find other ways to keep the terminal alive.</string>
+    <string name="tmux_resource_title">tmux</string>
+    <string name="tmux_resource_description">Keep containers and other projects alive</string>
+    <string name="tmux_not_installed">Please install tmux first</string>
+    <string name="tmux_install_hint">tmux must be installed before performing this action. Please install it from the Resources page.</string>
+    <string name="termux_logging_header">Logging</string>
+    <string name="termux_log_level_title">Log level</string>
+    <string name="log_level_desc">Adjust the Termux log output level. More detailed logs help analyze issues.</string>
+    <string name="termux_terminal_view_key_logging_enabled_off">Key logging enabled</string>
+
+    <string name="copy_text">Copy</string>
+    <string name="paste_text">Paste</string>
+    <string name="text_selection_more">More</string>
+    <string name="cut_text">Cut</string>
+
+    <string name="termux_terminal_view_key_logging_enabled_title">Key logging enabled</string>
+    <string name="terminal_key_logging_desc">Log keyboard-related events</string>
+    <string name="termux_terminal_view_key_logging_enabled_on">Enabled</string>
+    <string name="termux_plugin_error_notifications_enabled_title">Plugin error notifications</string>
+    <string name="termux_plugin_error_notifications_enabled_on">Enabled</string>
+    <string name="termux_plugin_error_notifications_enabled_off">Disabled</string>
+    <string name="termux_crash_report_notifications_enabled_title">Crash report notifications</string>
+    <string name="termux_crash_report_notifications_enabled_on">Enabled</string>
+    <string name="termux_crash_report_notifications_enabled_off">Disabled</string>
+    <string name="termux_terminal_io_preferences_summary">Terminal I/O settings</string>
+    <string name="termux_terminal_view_preferences_summary">Terminal view settings</string>
+    <string name="termux_keyboard_header">Keyboard</string>
+    <string name="termux_soft_keyboard_enabled_title">Soft keyboard enabled</string>
+    <string name="termux_soft_keyboard_enabled_on">Enabled</string>
+    <string name="termux_soft_keyboard_enabled_off">Disabled</string>
+    <string name="termux_soft_keyboard_enabled_only_if_no_hardware_title">Disable soft keyboard when using a physical keyboard</string>
+    <string name="soft_keyboard_only_if_no_hardware_desc">Automatically disable the soft keyboard when a physical keyboard is detected</string>
+    <string name="termux_soft_keyboard_enabled_only_if_no_hardware_on">Enabled</string>
+    <string name="termux_soft_keyboard_enabled_only_if_no_hardware_off">Disabled</string>
+    <string name="termux_terminal_view_view_header">View</string>
+    <string name="termux_terminal_view_terminal_margin_adjustment_title">Terminal margin adjustment</string>
+    <string name="terminal_margin_adjustment_desc">Optimize terminal margins</string>
+    <string name="termux_terminal_view_terminal_margin_adjustment_on">Enabled</string>
+    <string name="termux_terminal_view_terminal_margin_adjustment_off">Disabled</string>
+
+    <string name="terminal">Terminal</string>
+    <string name="vnc">VNC</string>
+    <string name="remote">Remote</string>
+    <string name="vnc_description">Enable VNC remote desktop</string>
+    <string name="vnc_restart_required">Takes effect after app restart</string>
+    <string name="restart_required">Restart required</string>
+    <string name="restart_now">Restart now</string>
+    <string name="restart_later">Restart later</string>
+    <string name="restart_message">Restart the app for VNC setting changes to take effect.</string>
+
+    <string name="error_display_over_other_apps_permission_not_granted">Display over other apps permission not granted</string>
+    <string name="notification_action_exit">End Session</string>
+    <string name="notification_action_quit">Quit App</string>
+    <string name="notification_action_wake_unlock">Wake unlock</string>
+    <string name="notification_action_wake_lock">Wake lock</string>
+    <string name="notification_running_terminals">Running %d sessions</string>
+    <string name="notification_no_terminals_running">No session running</string>
+    <string name="notification_task">task</string>
+    <string name="notification_tasks">tasks</string>
+    <string name="notification_wake_lock_held">wake lock held</string>
+    <string name="title_rename_session">Rename session</string>
+    <string name="action_rename_session_confirm">Rename</string>
+    <string name="title_max_terminals_reached">Max terminals reached</string>
+    <string name="msg_max_terminals_reached">Maximum number of terminals reached</string>
+    <string name="title_share_transcript">Share transcript</string>
+    <string name="title_share_transcript_with">Share transcript with</string>
+    <string name="title_share_selected_text">Share selected text</string>
+    <string name="title_share_selected_text_with">Share selected text with</string>
+    <string name="title_select_url_none_found">No URL found</string>
+    <string name="title_select_url_dialog">Select URL</string>
+    <string name="msg_select_url_copied_to_clipboard">URL copied to clipboard</string>
+    <string name="msg_add_termux_debug_info">Add Termux debug info?</string>
+    <string name="action_yes">Yes</string>
+    <string name="action_no">No</string>
+    <string name="msg_generating_report">Generating report...</string>
+    <string name="error_run_command_service_api_help">%1$s</string>
+    <string name="error_run_command_service_invalid_intent_action">Invalid intent action: %1$s</string>
+    <string name="error_run_command_service_mandatory_extra_missing">Mandatory extra missing: %1$s</string>
+    <string name="title_file_received">File received</string>
+    <string name="action_file_received_edit">Edit</string>
+    <string name="action_file_received_open_directory">Open directory</string>
+    <string name="error_allow_external_apps_ungranted">Permission to allow external apps not granted for %1$s</string>
+
+    <string name="back">Back</string>
+    <string name="cancel">Cancel</string>
+    <string name="ok">OK</string>
+    <string name="delete">Delete</string>
+    <string name="edit">Edit</string>
+    <string name="save">Save</string>
+    <string name="stop">Stop</string>
+    <string name="rename">Rename</string>
+    <string name="rename_terminal">Rename Terminal</string>
+    <string name="terminal_name">Terminal Name</string>
+    <string name="terminal_sessions">Terminal Sessions</string>
+    <string name="terminal_new_session">New Session</string>
+    <string name="terminal_new_safe_session">New Safe Mode Session</string>
+    <string name="current_session">Current Session</string>
+    <string name="terminal_default_name">Terminal</string>
+    <string name="files_title">Files</string>
+    <string name="terminal_title">Terminal</string>
+    <string name="files">Files</string>
+    <string name="settings">Settings</string>
+    <string name="about_title">About</string>
+    <string name="device_info">Device Info</string>
+    <string name="developer">Developer</string>
+    <string name="open_source">Open Source</string>
+    <string name="new_file">New File</string>
+    <string name="file_name">File Name</string>
+    <string name="folder">Folder</string>
+    <string name="empty_folder">Empty Folder</string>
+    <string name="app_settings">App</string>
+    <string name="terminal_settings">Terminal</string>
+    <string name="add_on_settings">Add-ons</string>
+    <string name="help_settings">Help</string>
+    <string name="terminal_settings_description">Terminal configuration</string>
+    <string name="appearance_title">Appearance</string>
+    <string name="appearance_settings_description">Visual appearance settings</string>
+    <string name="style_title">Style</string>
+    <string name="style_settings_description">Terminal styling</string>
+    <string name="terminal_view_title">Terminal View</string>
+    <string name="terminal_view_settings_description">Terminal view settings</string>
+    <string name="termux_api">Termux:API</string>
+    <string name="termux_api_description">API access</string>
+    <string name="termux_float">Termux:Float</string>
+    <string name="termux_float_description">Floating terminal</string>
+    <string name="termux_tasker">Termux:Tasker</string>
+    <string name="termux_tasker_description">Tasker integration</string>
+    <string name="termux_widget">Termux:Widget</string>
+    <string name="termux_widget_description">Home screen widgets</string>
+    <string name="donate">Donate</string>
+    <string name="language_description">Change app language</string>
+    <string name="about_description">About Termux Ultra</string>
+    <string name="clear_history">Clear History</string>
+    <string name="clear_history_description">Clear terminal history</string>
+    <string name="reset_settings">Reset Settings</string>
+    <string name="reset_settings_description">Reset all settings to default</string>
+    <string name="update">Update</string>
+    <string name="update_description">Check for updates</string>
+    <string name="help">Help</string>
+    <string name="help_description">Get help and support</string>
+    <string name="feedback">Feedback</string>
+    <string name="feedback_description">Send feedback</string>
+    <string name="version">Version 0.1.0</string>
+    <string name="build">Build 1</string>
+    <string name="author">Author: Kira</string>
+    <string name="license">License: GPL-3.0</string>
+    <string name="termux_ultra_version">Termux Ultra Version</string>
+    <string name="based_on_termux_version">Based on Termux version</string>
+    <string name="items">items</string>
+    <string name="termux_settings">Terminal Settings</string>
+    <string name="termux_settings_description">Open terminal settings</string>
+    <string name="copy">Copy</string>
+    <string name="cut">Cut</string>
+    <string name="paste">Paste</string>
+    <string name="delete_confirm">Delete</string>
+    <string name="delete_confirm_title">Confirm Delete</string>
+    <string name="delete_confirm_message">Are you sure you want to delete this item?</string>
+    <string name="file_size">Size</string>
+    <string name="file_date">Date Modified</string>
+    <string name="confirm">Confirm</string>
+    <string name="resources">Feature</string>
+    <string name="resource_termux_setup">Termux Setup</string>
+    <string name="resource_termux_setup_desc">Configure Termux environment</string>
+    <string name="resource_minecraft_server">Minecraft Server</string>
+    <string name="resource_minecraft_server_desc">Setup Minecraft Bedrock server</string>
+    <string name="resource_linux_server">Linux Server</string>
+    <string name="resource_linux_server_desc">Install LAMP stack</string>
+    <string name="resource_web_server">Web Server</string>
+    <string name="resource_web_server_desc">Setup Nginx web server</string>
+    <string name="resource_node_js">Node.js</string>
+    <string name="resource_node_js_desc">Install Node.js and npm</string>
+    <string name="resource_python_env">Python Environment</string>
+    <string name="resource_python_env_desc">Setup Python with Poetry</string>
+    <string name="info">Info</string>
+    <string name="execute">Execute</string>
+    <string name="terminal_welcome_title">Welcome</string>
+    <string name="terminal_welcome_message">This is your first time on the Terminal page. Please create a new session and open it to complete the Termux setup.</string>
+    <string name="files_warning_message">Handle files with care. Improper operations may affect files outside the Termux container.</string>
+    <string name="termux_report">Termux Report</string>
+    <string name="new_version_found">New Version Found</string>
+    <string name="up_to_date">Up to Date</string>
+    <string name="current_version">Current Version</string>
+    <string name="latest_version">Latest Version</string>
+    <string name="developer_avatar">Developer Avatar</string>
+    <string name="arrow">Arrow</string>
+
+    <string name="memory_warning_title">Memory Usage Warning</string>
+    <string name="memory_warning_message">Processes in the session are consuming too much memory. Please save all work immediately and reduce memory-intensive processes to prevent abnormal termination.</string>
+    <string name="memory_kill_title">Memory Limit Reached</string>
+    <string name="memory_kill_message">Process memory usage has reached the system limit. Termux has frozen the session to prevent data loss.</string>
+    <string name="service_status_normal">Terminal Status Normal</string>
+    <string name="service_status_normal_desc">Termux service detection will continuously check terminal running status. Wake lock is currently disabled, session background persistence capability is weak. If you need stronger background persistence, please enable wake lock.</string>
+    <string name="service_status_wake_lock">Wake Lock Enabled</string>
+    <string name="service_status_wake_lock_desc">Termux service detection will continuously check terminal running status.</string>
+    <string name="service_status_stopped">Service Not Running</string>
+    <string name="service_status_stopped_desc">Termux service is not running. Please create a new session to start the service. If the service was stopped unexpectedly, you may lose unsaved changes.</string>
+    <string name="service_status_killed">Session Killed by System</string>
+    <string name="service_status_killed_desc">Detected that %1$s was closed by system, unsaved changes in this session will be lost.</string>
+    <string name="shell_script_warning">Please run scripts with caution. First check if the script contains dangerous operations targeting your device, especially when executing scripts with ROOT privileges. Executing dangerous scripts may cause kernel panic or device boot failure. Remember: with great power comes great responsibility. Neither the original Termux author nor Termux Ultra developers are responsible for hardware or software damage or data loss caused by users executing unknown scripts.</string>
+    <string name="copy_exec_command">Copy Execution Command</string>
+    <string name="session_frozen">Session Frozen</string>
+    <string name="session_thaw">Thaw Session</string>
+    <string name="select_open_method">Select open method:</string>
+    <string name="view_content">View Content (cat)</string>
+    <string name="edit_file">Edit (vi)</string>
+    <string name="execute_bash">Execute (bash)</string>
+    <string name="copy_path">Copy Path</string>
+    <string name="execute_script">Execute Script</string>
+    <string name="file_info_path">Path</string>
+    <string name="file_info_ext">Extension</string>
+    <string name="file_info_type">Type</string>
+    <string name="file_info_size">Size</string>
+    <string name="file_info_permissions">Permissions</string>
+    <string name="file_info_modified">Modified</string>
+    <string name="file_type_shell">Shell Script</string>
+    <string name="file_type_text">Text File</string>
+    <string name="file_type_binary">Binary File</string>
+    <string name="file_type_unknown">File</string>
+
+    <string name="vnc_address_caption">Address</string>
+    <string name="vnc_alt_check">Alt</string>
+    <string name="vnc_arrow_down">Down Arrow</string>
+    <string name="vnc_arrow_left">Left Arrow</string>
+    <string name="vnc_arrow_right">Right Arrow</string>
+    <string name="vnc_arrow_up">Up Arrow</string>
+    <string name="vnc_button_send_text">Send Text</string>
+    <string name="vnc_center_mouse">Mouse @</string>
+    <string name="vnc_close">Close</string>
+    <string name="vnc_color_format_caption">Color Format</string>
+    <string name="vnc_color_mode">Color Mode</string>
+    <string name="vnc_connect_button">Connect</string>
+    <string name="vnc_connection_caption">Connection</string>
+    <string name="vnc_control_check">Ctrl</string>
+    <string name="vnc_copy_list_button">Copy List</string>
+    <string name="vnc_ctrl_alt_del">Ctrl-Alt-Del</string>
+    <string name="vnc_delete_connection">Delete Connection</string>
+    <string name="vnc_delete_key">Delete Selected Key</string>
+    <string name="vnc_delete_key_list">Delete Key List</string>
+    <string name="vnc_disconnect">Disconnect</string>
+    <string name="vnc_enter_text_title">Enter Text to Send</string>
+    <string name="vnc_enter_text">Send text</string>
+    <string name="vnc_fit_to_screen">Fit to Screen</string>
+    <string name="vnc_force_full_check">Force full-screen bitmap</string>
+    <string name="vnc_info">Info</string>
+    <string name="vnc_intro_text">If you need help, please check the &lt;a href="http://code.google.com/p/android-vnc-viewer/wiki/Documentation"&gt;manual&lt;/a&gt; (press phone\'s Menu button to access manual and other menu items), or the &lt;a href="http://code.google.com/p/android-vnc-viewer/wiki/faq"&gt;FAQ&lt;/a&gt;.&lt;br&gt;</string>
+    <string name="vnc_intro_title">Welcome</string>
+    <string name="vnc_intro_version_text">&lt;br&gt;--Pinch zoom for 2.0+ phones in gesture modes&lt;br&gt;--Fix sending uppercase from physical keyboard&lt;br&gt;--Crash bug fixes</string>
+    <string name="vnc_input_mode">Input Mode</string>
+    <string name="vnc_input_mode_fit_to_screen">No Pan; Trackball Mouse</string>
+    <string name="vnc_input_mode_mouse">Mouse Pointer Control Mode</string>
+    <string name="vnc_input_mode_panning">Desktop Panning Mode</string>
+    <string name="vnc_input_mode_touchpad_pan_trackball_mouse">Touch Pan; Trackball Mouse</string>
+    <string name="vnc_input_mode_dpad_pan_touchpad_mouse">Touch Mouse; D-Pad Pan</string>
+    <string name="vnc_input_mode_touch_pan_zoom_mouse">Touch Mouse Pan and Zoom</string>
+    <string name="vnc_input_mode_touchpad">Touchpad</string>
+    <string name="vnc_keep_password_button">Keep</string>
+    <string name="vnc_intro_dont_show">Don\'t show again</string>
+    <string name="vnc_keys_caption">Keys</string>
+    <string name="vnc_list_caption">List</string>
+    <string name="vnc_list_name_caption">List Name</string>
+    <string name="vnc_local_mouse_check">Local mouse pointer</string>
+    <string name="vnc_meta_key_title">Send Special Keys</string>
+    <string name="vnc_mouse_follow_pan">Mouse follow pan</string>
+    <string name="vnc_new_list_button">New List</string>
+    <string name="vnc_nickname_caption">Nickname</string>
+    <string name="vnc_one_to_one">1:1</string>
+    <string name="vnc_open_doc">Manual/Wiki</string>
+    <string name="vnc_pan_follow_mouse">Pan Follows Mouse</string>
+    <string name="vnc_password_caption">Password</string>
+    <string name="vnc_port_caption">Port</string>
+    <string name="vnc_repeater_button">Repeater</string>
+    <string name="vnc_repeater_caption">Enter repeater address only when using an UltraVNC-type repeater</string>
+    <string name="vnc_repeater_clear">Don\'t use repeater</string>
+    <string name="vnc_repeater_dialog_title">Repeater Information</string>
+    <string name="vnc_repeater_empty_text">No repeater</string>
+    <string name="vnc_repeater_save">Use this repeater address</string>
+    <string name="vnc_error_title">Error!</string>
+    <string name="vnc_error_connection_failed">VNC connection failed!</string>
+    <string name="vnc_error_authentication_failed">VNC authentication failed!</string>
+    <string name="vnc_error_connection_aborted">VNC connection aborted!</string>
+    <string name="vnc_enter_password">Please enter VNC password:</string>
+    <string name="vnc_connecting">Connecting...</string>
+    <string name="vnc_connecting_handshake">Establishing handshake.\nPlease wait...</string>
+    <string name="vnc_connecting_download">Downloading first frame.\nPlease wait...</string>
+    <string name="vnc_save_as_copy">Save as Copy</string>
+    <string name="vnc_scaling">Scaling</string>
+    <string name="vnc_scaling_zoomable">Zoomable</string>
+    <string name="vnc_send_button">Send</string>
+    <string name="vnc_send_key_again">Send Key Again</string>
+    <string name="vnc_shift_check">Shift</string>
+    <string name="vnc_shortcut_label">VNC Connection</string>
+    <string name="vnc_special_keys">Send Keys</string>
+    <string name="vnc_settings_title">VNC Settings</string>
+    <string name="vnc_settings_description">VNC viewer settings</string>
+    <string name="vnc_settings">VNC Settings</string>
+    <string name="vnc_settings_desc">Configure VNC connection and display settings</string>
+    <string name="ssh">SSH</string>
+    <string name="appearance">Appearance</string>
+    <string name="backup_category">Backup &amp; Restore</string>
+    <string name="system_category">System</string>
+    <string name="language_restart_message">Language changes will take effect after the app is restarted.</string>
+
+    <!-- Navigation Bar Style -->
+    <string name="navigation_bar_style">Navigation Bar</string>
+    <string name="navigation_bar_style_description">Choose navigation bar style</string>
+    <string name="navigation_bar_default">Default</string>
+    <string name="navigation_bar_floating">Floating</string>
+    <string name="navigation_bar_liquid_glass">Glass</string>
+    <string name="navigation_bar_os4">Soft Light</string>
+    <string name="navigation_bar_restart_message">Navigation bar style changes will take effect after the app is restarted.</string>
+    <string name="glass_nav_bar_fallback_toast">Glass navigation bar failed to render on this device. Automatically switched to the default navigation bar style.</string>
+
+    <!-- PullToRefresh -->
+    <string name="pull_down_to_refresh">Pull down to refresh</string>
+    <string name="release_to_refresh">Release to refresh</string>
+    <string name="refreshing">Refreshing...</string>
+    <string name="refresh_successful">Refreshed successfully</string>
+
+    <!-- Search -->
+    <string name="search_hint_input">Enter a title to search</string>
+    <string name="search_no_result">Not found</string>
+
+    <!-- SSH connection UI -->
+    <string name="ssh_action_edit">Edit</string>
+    <string name="ssh_action_delete">Delete</string>
+    <string name="ssh_edit_connection">Edit Connection</string>
+    <string name="ssh_add_connection">Add Connection</string>
+    <string name="ssh_field_name">Name</string>
+    <string name="ssh_field_host">Host</string>
+    <string name="ssh_field_port">Port</string>
+    <string name="ssh_field_username">Username</string>
+    <string name="ssh_field_password_optional">Password (optional)</string>
+    <string name="ssh_save">Save</string>
+
+    <!-- SSH connection type dialog -->
+    <string name="ssh_select_connection_type">Select Connection Type</string>
+    <string name="ssh_type_openpilot_comma">OpenPilot / Comma Device</string>
+    <string name="ssh_type_local">Local Machine</string>
+    <string name="ssh_type_other">Other Device</string>
+    <string name="ssh_type_openpilot_comma_desc">Connect to OpenPilot or Comma device</string>
+    <string name="ssh_type_local_desc">Connect to localhost</string>
+    <string name="ssh_type_other_desc">Connect to any SSH server</string>
+
+    <!-- SSH OpenPilot/Comma dialog -->
+    <string name="ssh_device_type_title">Device Type</string>
+    <string name="ssh_device_openpilot">OpenPilot</string>
+    <string name="ssh_device_comma">Comma</string>
+    <string name="ssh_connection_method_title">Connection Method</string>
+    <string name="ssh_method_device_ip">Use Device IP Address</string>
+    <string name="ssh_method_dongle_id">Use Dongle ID</string>
+    <string name="ssh_comma_dongle_warning">Using Dongle ID requires a Comma Prime subscription.</string>
+    <string name="ssh_field_dongle_id">Dongle ID</string>
+    <string name="ssh_field_github_username">GitHub Username</string>
+    <string name="ssh_field_private_key_path">SSH Private Key Path</string>
+    <string name="ssh_field_device_ip">Device IP Address</string>
+    <string name="ssh_hint_device_ip">e.g. 192.168.1.100</string>
+    <string name="ssh_hint_dongle_id">16-character dongle ID</string>
+    <string name="ssh_hint_private_key">Path to SSH private key on device</string>
+    <string name="ssh_default_user_openpilot">root</string>
+    <string name="ssh_default_user_comma">comma</string>
+    <string name="ssh_default_user_local">root</string>
+
+    <!-- SSH private key management -->
+    <string name="ssh_private_key_select">Select Key File</string>
+    <string name="ssh_private_key_create">Create New Key</string>
+    <string name="ssh_private_key_creating">Creating private key...</string>
+    <string name="ssh_private_key_created">Private key created</string>
+    <string name="ssh_private_key_create_failed">Failed to create key</string>
+    <string name="ssh_private_key_path_hint">No key selected</string>
+    <string name="ssh_private_key_select_file">Select file</string>
+    <string name="ssh_private_key_create_key">Create new key</string>
+    <string name="ssh_keygen_comment">Generated by Termux Ultra</string>
+    <string name="ssh_keygen_bits">4096</string>
+
+    <!-- SSH tags -->
+    <string name="ssh_tag_openpilot">OpenPilot</string>
+    <string name="ssh_tag_comma">Comma</string>
+    <string name="ssh_tag_local">Local</string>
+    <string name="ssh_tag_other">Other</string>
+
+    <!-- SSH local dialog -->
+    <string name="ssh_local_desc">Connect to localhost</string>
+
+    <!-- Resource Center -->
+    <string name="resources_center">Feature Center</string>
+    <string name="feature_center_desc">Explore Infinite Possibilities</string>
+    <string name="overview_feature_center_label">Feature Center</string>
+    <string name="utility_center">Utility Center</string>
+    <string name="third_party_center">Third-Party Center</string>
+    <string name="utility_center_desc">Officially maintained tools: QEMU with VNC, Debian QEMU, Ubuntu container, tmux, QEMU installation, etc.</string>
+    <string name="third_party_center_desc">Script resources maintained by third-party developers. You can add, delete, and modify them. Assess risks before use.</string>
+    <string name="click_to_enter">Tap to enter</string>
+    <string name="resource_center_warning">Utility Center features are maintained by Termux Ultra officially; Third-Party Center scripts are maintained by third-party developers. Please assess security risks before use.</string>
+    <string name="resource_quick_entry">Quick Entry</string>
+    <string name="resource_tips">Tips</string>
+    <string name="resource_center_welcome_subtitle">Explore New Possibilities with Termux</string>
+    <string name="resource_center_welcome_desc">Official tools and third-party scripts. Choose as needed and use safely.</string>
+    <string name="enter">Enter</string>
+    <string name="official_maintained_short">Official</string>
+    <string name="third_party_maintained_short">Community</string>
+    <string name="official_maintained">Officially maintained utilities</string>
+    <string name="official_maintained_desc">The following tools are maintained by the Termux Ultra team, ensuring availability and compatibility.</string>
+    <string name="third_party_maintained">Maintained by third-party developers</string>
+    <string name="third_party_maintained_desc">The following resources are provided by third-party developers. Termux Ultra is not responsible for their content or security. Please assess risks before use.</string>
+    <string name="no_third_party_resources">No third-party resources added yet</string>
+    <string name="add_custom_script">Tap the + button in the top right to add a custom script</string>
+    <string name="delete_resource">Delete Resource</string>
+    <string name="delete_resource_confirm">Are you sure you want to delete \"%1$s\"? This action cannot be undone (related files will not be deleted).</string>
+    <string name="add_third_party_resource">Add Third-Party Resource</string>
+    <string name="edit_third_party_resource">Edit Third-Party Resource</string>
+    <string name="resource_name">Name</string>
+    <string name="resource_description_optional">Description (optional)</string>
+    <string name="resource_script">Script content (will be executed in bash -c)</string>
+    <string name="resource_reference_link">Reference link (optional)</string>
+    <string name="resource_script_label">Script: %1$s</string>
+    <string name="execute_resource">Execute</string>
+    <string name="added_resource_toast">Added %1$s</string>
+    <string name="copy_resource">Copy</string>
+    <string name="copy_to_clipboard_toast">Command copied to clipboard</string>
+    <string name="need_container_first">Please install Ubuntu container first!</string>
+    <string name="view_reference">Info</string>
+    <string name="advanced_options">Advanced Options</string>
+    <string name="option_need_container">Requires Linux container</string>
+    <string name="option_copy_to_clipboard">Copy to clipboard instead of executing</string>
+    <string name="resource_moe">TMOE Linux Manager</string>
+    <string name="resource_moe_desc">TMOE Linux manager, one-click setup of chroot/PRoot containers and various Linux distros</string>
+    <string name="resource_lightpanel">Lightpanel</string>
+    <string name="resource_lightpanel_desc">Ultra-light server management panel for lightweight Linux devices. Single binary, zero dependencies, no Docker. Supports app store, process guard, log management, system monitoring. Fits OpenWrt, Termux, ARM devices.</string>
+    <string name="tmux_help_title">Tmux Usage</string>
+    <string name="tmux_help_new">Create session: tmux new -s my_task (replace my_task with your task name)</string>
+    <string name="tmux_help_detach">Detach to background: press Ctrl+B, then D. The window can be closed; the script keeps running in background.</string>
+    <string name="tmux_help_attach">Reattach to session: tmux attach -t my_task</string>
+    <string name="collapse">Collapse</string>
+    <string name="select_execution_method">Select execution method</string>
+    <string name="execute_in_new_session">Execute in new session</string>
+    <string name="execute_in_tmux">Execute in tmux</string>
+    <string name="execute_in_running_session">Execute in running session:</string>
+    <string name="copy_to_session">Copy to \"%1$s\"</string>
+
+    <!-- Backup & Restore progress (uses termux-backup / termux-restore) -->
+    <string name="backup_notification_channel_name">Backup progress</string>
+    <string name="backup_notification_channel_desc">Shows backup and restore progress</string>
+    <string name="backup_in_progress">Backing up</string>
+    <string name="restore_in_progress">Restoring</string>
+    <string name="backup_complete">Backup complete</string>
+    <string name="backup_cancelled">Backup cancelled</string>
+    <string name="restore_complete">Restore complete</string>
+    <string name="restore_failed_error">An error occurred during restore</string>
+    <string name="cancel_action">Cancel</string>
+    <string name="initializing">Initializing...</string>
+    <string name="backed_up_size">Backed up: %1$d MB</string>
+    <string name="restored_size">Restored: %1$d MB</string>
+    <string name="backup_view_progress_toast">Backing up, check the notification bar for progress</string>
+    <string name="restore_view_progress_toast">Restoring, check the notification bar for progress</string>
+    <string name="restore_restart_hint">Restore finished. Please restart the app.</string>
+
+    <!-- Integrated Termux tools -->
+    <string name="integrated_tools_category">Integrated Tools</string>
+    <string name="integrated_tools_summary">Enable built-in Termux add-on tools so you don\'t need to install separate apps</string>
+    <string name="termux_api_tool">Termux:API</string>
+    <string name="termux_api_tool_summary">Access Android device features (battery, camera, sensors, notifications, etc.) from the terminal</string>
+    <string name="termux_boot_tool">Termux:Boot</string>
+    <string name="termux_boot_tool_summary">Run scripts automatically on device boot</string>
+    <string name="termux_styling_tool">Termux:Styling</string>
+    <string name="termux_styling_tool_summary">Customize terminal color schemes and fonts</string>
+    <string name="termux_tasker_tool">Termux:Tasker</string>
+    <string name="termux_tasker_tool_summary">Run Termux commands from Tasker</string>
+    <string name="termux_widget_tool">Termux:Widget</string>
+    <string name="termux_widget_tool_summary">Add shortcut widgets to run scripts from the home screen</string>
+
+    <!-- Tool configuration entries (shown when the corresponding tool is enabled) -->
+    <string name="tool_config_category">Tool Configuration</string>
+    <string name="termux_styling_config">Colors &amp; Fonts</string>
+    <string name="termux_styling_config_summary">Choose terminal color scheme and font</string>
+    <string name="termux_tasker_config">Tasker Plugin</string>
+    <string name="termux_tasker_config_summary">Edit Tasker command configurations</string>
+    <string name="termux_widget_config">Shortcuts &amp; Widgets</string>
+    <string name="termux_widget_config_summary">Manage home screen shortcuts and widgets</string>
+    <string name="termux_api_help">API Usage Guide</string>
+    <string name="termux_api_help_summary">View common Termux:API commands</string>
+    <string name="termux_boot_help">Boot Startup Guide</string>
+    <string name="termux_boot_help_summary">Learn how to add boot scripts</string>
+    <string name="termux_api_help_content">Termux:API provides commands to access Android features from the terminal. Common commands:\n\n•termux-battery-status •battery info\n•termux-camera-photo •take a photo\n•termux-clipboard-get / termux-clipboard-set •clipboard\n•termux-notification •post a notification\n•termux-toast •show a toast\n•termux-vibrate •vibrate device\n•termux-location •get GPS location\n•termux-sms-list / termux-sms-send •SMS\n•termux-tts-speak •text to speech\n•termux-wifi-connectioninfo •WiFi info\n\nInstall the termux-api package first:\npkg install termux-api</string>
+    <string name="termux_boot_help_content">Termux:Boot runs scripts automatically when the device starts.\n\nTo add a boot script:\n\n1. Create the directory:\n   mkdir -p ~/.termux/boot\n2. Place executable scripts in ~/.termux/boot/\n3. Scripts run in sorted order on boot.\n\nExample (~/.termux/boot/start-ssh):\n   #!/data/data/com.termux/files/usr/bin/sh\n   termux-wake-lock\n   sshd</string>
+    <string name="feature_not_enabled_title">Feature not enabled</string>
+    <string name="feature_not_enabled_message">\"%1$s\" is not enabled. Go to Settings to enable it?</string>
+    <string name="go_to_settings">Go to Settings</string>
+
+    <!-- Official standalone APK conflict detection -->
+    <string name="standalone_plugin_installed_title">Official plugin installed</string>
+    <string name="standalone_plugin_installed_message">The official standalone \"%1$s\" plugin (package %2$s) is already installed on this device. It is not recommended to install the standalone plugin separately; please use the one built into this app instead.</string>
+    <string name="standalone_plugin_installed_summary">Replaced by the official standalone plugin</string>
+
+    <!-- Low Android version optimization -->
+    <string name="low_android_warning_title">Termux May Be Running on an Older Device</string>
+    <string name="low_android_warning_message">Your Android version is outdated. Some features are disabled automatically •they either require unavailable APIs or may cause heavy performance overhead on older devices. You may force‑nable at your own risk; no support will be provided.</string>
+    <string name="low_android_version_info">Current Android: %1$s (SDK %2$d)</string>
+    <string name="low_android_feature_disabled">Requires %1$s or above</string>
+    <string name="low_android_terminal_mode_title">Locked to terminal mode</string>
+    <string name="low_android_terminal_mode_message">An error occurred during startup, possibly due to your Android version. The app has been downgraded and locked to terminal mode.</string>
+    <string name="low_android_exit_message">Android version is too low. The app cannot run. Please update Android and try again.</string>
+    <string name="low_android_runtime_disabled_page">The \"%1$s\" page has been disabled due to compatibility issues. (Android %2$s, SDK %3$d)</string>
+    <string name="feature_disabled_by_android_version">This feature requires %1$s or above. Please update your Android system.</string>
+
+    <!-- Low Android force-enable warnings -->
+    <string name="force_enable_dialog_title">Performance Warning for Older Devices</string>
+    <string name="force_enable_dialog_message">You are enabling \"%3$s\" on Android %1$s (SDK %2$d). It is recommended to use this feature on %4$s or above.\n\nThis feature is designed for newer-generation devices. Although the system APIs are available, older hardware has limited memory and processing capacity. Enabling it may impose a significant burden on your device.\n\nForce-enabling may result in:\n\n•Noticeable UI stuttering and frame drops\n•High CPU/RAM usage and device overheating\n•App or system process termination due to insufficient memory\n•Background apps being more readily reclaimed by the system\n\nProceed at your own risk. Issues arising from enabling this feature on older devices are not eligible for technical support.</string>
+    <string name="force_enable_anyway">Enable Anyway</string>
+    <string name="force_enable_do_not">Cancel</string>
+
+    <!-- Critical API-incompatibility warning (pure API not supported) -->
+    <string name="critical_force_enable_dialog_title">• Incompatible with Current System</string>
+    <string name="critical_force_enable_dialog_message">You are attempting to use \"%3$s\" on Android %1$s (SDK %2$d). This feature requires %4$s or above.\n\nThis is a pure API-level incompatibility •the required rendering APIs do not exist on your current system. Force-enabling is very likely to cause:\n\n•Immediate crash or black screen\n•Severe rendering distortion\n•System UI instability\n•Memory or GPU resource leaks causing device lag or overheating\n•It may appear to work briefly before failures occur\n•(Rare) Incompatible components may leak Surface / graphics handles, causing rendering failures across other apps\n\nContinue at your own risk. No support will be provided.</string>
+    <string name="critical_force_enable_confirm_text">I understand the risks, force-enable</string>
+    <string name="critical_force_enable_action_continue">Continue</string>
+    <string name="critical_force_enable_cancel">Abort</string>
+
+    <!-- Terminal card: red warning after force-enabled -->
+    <string name="low_android_force_enabled_title">Some Features Force-Enabled</string>
+    <string name="low_android_force_enabled_desc">Android %1$s, SDK %2$d. You have force-enabled:\n%3$s\n\nThis may cause crashes, lags or instability. Risk borne by you.</string>
+
+    <!-- Terminal card: disable force-enabled features -->
+    <string name="low_android_force_disable_button">Disable Force-Enabled</string>
+    <string name="low_android_force_disable_dialog_title">Disable Force-Enabled Features</string>
+    <string name="low_android_force_disable_dialog_message">This will re-disable the features you force-enabled on this low Android version. Any of these features currently in use may stop working.\n\nAre you sure you want to disable them?</string>
+    <string name="low_android_force_disable_confirm">Disable</string>
+    <string name="low_android_force_disable_cancel">Cancel</string>
+
+    <!-- AI Termux Developer Mode -->
+    <string name="ai_developer_mode">Developer Mode</string>
+    <string name="ai_developer_mode_desc">Edit System Prompt, manage custom skills, view full conversation history</string>
+    <string name="ai_edit_system_prompt">Edit System Prompt</string>
+    <string name="ai_edit_system_prompt_desc">Customize AI system instructions (advanced, use with caution)</string>
+    <string name="ai_custom_skills">Custom Skills</string>
+    <string name="ai_custom_skills_desc">Create and manage custom skill cards (official skills are read-only)</string>
+    <string name="ai_full_history">Full Conversation History</string>
+    <string name="ai_full_history_desc">View full conversation including System prompts</string>
+    <string name="ai_no_custom_skills">No custom skills yet</string>
+    <string name="ai_no_chat_history">No conversation history</string>
+    <string name="ai_add_skill">Add Skill</string>
+    <string name="ai_edit_skill">Edit Skill</string>
+    <string name="ai_skill_name">Skill Name</string>
+    <string name="ai_skill_description">Skill Description</string>
+    <string name="ai_skill_json">Skill JSON Definition</string>
+    <string name="ai_skill_prompt">Additional System Prompt</string>
+    <string name="ai_copy_all">Copy All</string>
+    <string name="ai_system_prompt_warning">Use with caution - incorrect configuration may cause abnormal AI behavior.</string>
+
+    <!-- Update checker & APK downloader -->
+    <string name="check_updates">Check for Updates</string>
+    <string name="new_version_available">New version available</string>
+    <string name="enable_beta_update">Get Beta Versions</string>
+    <string name="enable_beta_update_desc">Include pre-release versions when checking for updates</string>
+    <string name="beta_version_available">Beta version available</string>
+    <string name="beta_warning_title">Enable Beta Updates?</string>
+    <string name="beta_warning_message">Beta releases feature work-in-progress, experimental changes, and unfinished features. You may encounter crashes, instability, and data loss. Please do not use Beta versions in production environments. Report any issues on GitHub.</string>
+    <string name="beta_warning_confirm">Enable</string>
+    <string name="beta_warning_cancel">Cancel</string>
+    <string name="update_log">Update Log</string>
+    <string name="later">Later</string>
+    <string name="manual">Manual</string>
+    <string name="download">Download</string>
+    <string name="downloading">Downloading...</string>
+    <string name="is_latest">Already the latest version. Version:</string>
+    <string name="download_failed">Download failed</string>
+    <string name="install_failed">Install failed</string>
+    <string name="response_body_empty">Response body is empty</string>
+    <string name="apk_download_failed">APK file download failed</string>
+    <string name="request_install_permission_failed">Failed to request install permission</string>
+    <string name="download_failed_with_code">Download failed: %1$d</string>
+    <string name="beta_version">Beta</string>
+    <string name="internal_version">Internal Build</string>
+
+    <!-- Risk command confirmation dialog -->
+    <string name="risk_command_dialog_title">High Risk Command About To Be Executed</string>
+    <string name="risk_command_dialog_disclaimer">This command may cause irreversible data loss, system damage, or security issues. We are not responsible for any consequences caused by your execution of high-risk commands, and we do not accept issues arising from high-risk operations.</string>
+    <string name="risk_command_label">Command</string>
+    <string name="risk_command_warning">Warning: This is a high-risk operation that may cause irreversible consequences.</string>
+    <string name="risk_command_confirm_checkbox">I voluntarily bear all risks of executing this command and confirm to proceed.</string>
+    <string name="risk_command_continue">Continue Execution</string>
+    <string name="access_denied">Access Denied</string>
+    <string name="risk_command_container_sudo_warning">Su/sudo detected in container/SSH/VM environment. Please use with caution.</string>
+    <!-- Environment-specific risk warnings -->
+    <string name="risk_command_env_container_title">High Risk Command - Container Environment</string>
+    <string name="risk_command_env_container_warning">This command is being executed inside a container environment and may cause irreversible damage to the container system, including but not limited to: container data loss, container system corruption, inability to restart the container, etc. Please carefully evaluate the necessity and safety of this command before execution.</string>
+    <string name="risk_command_env_vm_title">High Risk Command - Virtual Machine Environment</string>
+    <string name="risk_command_env_vm_warning">This command is being executed inside a virtual machine environment and may cause irreversible damage to the virtual machine system, including but not limited to: virtual machine data loss, virtual machine system corruption, inability to start the virtual machine, etc. Please carefully evaluate the necessity and safety of this command before execution.</string>
+    <string name="risk_command_env_ssh_title">High Risk Command - Remote System (SSH)</string>
+    <string name="risk_command_env_ssh_warning">This command is being executed on a remote system connected via SSH, which may cause irreversible damage to the remote system, including but not limited to: remote data loss, remote system corruption, service interruption, etc. If the remote system is a production environment, executing this command may result in service interruption, data loss, or even legal liability. Please carefully evaluate the necessity and safety of this command before execution.</string>
+    <string name="risk_command_env_ssh_disk_warning">This disk-level command will run on a remote system connected via SSH. Operations such as dd, mkfs, fdisk and parted may overwrite raw disks, destroy partition tables and erase all data permanently. Mis-specifying a device path can brick the whole remote host, and damaged data is almost unrecoverable. If the remote system is a production environment, executing this command may result in service interruption, massive data loss, or even legal liability. Please double-check target device path and evaluate necessity before execution.</string>
+    <string name="risk_command_env_ssh_disk_windows_warning">This disk-level command will run on a remote Windows system connected via SSH. Operations such as format, diskpart, and bcdedit can format partitions, wipe disk partition tables, modify or delete system boot configurations. diskpart\'s clean / clean all commands will erase all partition information on the disk, and clean-all will overwrite all sectors on the disk, making data almost unrecoverable. Specifying a wrong disk number or drive letter can cause data loss on the entire disk; even while the system is running, administrator privileges can destroy data on non-system volumes. If the remote system is a production environment, executing this command will cause massive data loss, business interruption, and even prevent the system from booting, with potential legal consequences. Please carefully verify disk numbers and drive letters before execution.</string>
+    <!-- SSH power operation dialog -->
+    <string name="risk_command_ssh_power_title">Remote Power Operation Confirmation</string>
+    <string name="risk_command_ssh_power_warning">You are about to shut down or restart a remote system connected via SSH.\n\nAfter you confirm, the remote host will terminate all running programs and services and the SSH session will be disconnected. If you choose to shut down, and there is no one physically present at the remote device or the device does not have Wake-on-LAN capability, the system will remain offline and you will not be able to restore it remotely.\n\nIf this is a production environment, this operation will cause service interruption and potential business losses.\n\nPlease confirm that you really need to perform a power operation before proceeding!</string>
+    <string name="risk_command_ssh_power_confirm_yes">Yes, shut down / restart</string>
+    <string name="risk_command_ssh_power_confirm_no">No</string>
+    <string name="risk_command_disable_title">Adjust VorteX Guard Engine Mode?</string>
+    <string name="risk_command_disable_off_message">Disabling this means high-risk commands will be executed without secondary confirmation. You will lose the safety net that prevents accidental data loss or system damage. We strongly recommend keeping this enabled. By continuing, you acknowledge that you understand the risks and agree that we are not responsible for any consequences.</string>
+    <string name="risk_command_disable_warn_message">Downgrading to warn-only mode means high-risk commands will only show a Snackbar notification but will not be blocked. You could still accidentally execute dangerous commands. By continuing, you acknowledge the risks.</string>
+    <string name="risk_command_disable_off_checkbox">I understand the risks and confirm to disable VorteX Guard Engine Mode; it can be re-enabled in Settings</string>
+    <string name="risk_command_disable_warn_checkbox">I understand the risks and confirm to downgrade to warn-only mode; it can be adjusted in Settings</string>
+    <string name="risk_command_disable_confirm">Confirm Adjustment</string>
+    <string name="risk_command_biometric_prompt">Please verify your identity to continue</string>
+    <string name="risk_confirm_toggle_title">High-Risk Command Secondary Confirmation</string>
+    <string name="risk_confirm_toggle_summary">Displays a confirmation dialog before executing high-risk commands (dd, su/sudo, mkfs, rm -rf /, etc.) to prevent accidental data loss</string>
+    <string name="risk_command_biometric_not_set">Biometric verification not set up on this device. Skipped verification. It is recommended to set up screen lock (PIN/pattern) or biometric authentication in system settings for better security.</string>
+    <string name="authorization_required_title">Your authorization is required to continue</string>
+    <string name="authorization_title">Authorization</string>
+    <string name="authorization_subtitle">Sensitive operation requires your authorization to continue</string>
+    <string name="accessibility_guard_blocked_toast">Please tap the button manually to complete this operation. Third-party accessibility services are not allowed to handle this action.</string>
+
+    <!-- Crash Report -->
+    <string name="title_crash_report">Crash Report</string>
+    <string name="crash_report_warning">This report contains information about your device and the Termux Ultra app that can help diagnose issues. Share it only with trusted parties.</string>
+    <string name="copy_report">Copy Report</string>
+    <string name="copy_report_summary">Copy the full report to clipboard</string>
+    <string name="report_copied">Report copied to clipboard</string>
+    <string name="share">Share</string>
+    <string name="share_report">Share Report</string>
+    <string name="share_report_summary">Share the crash report via email or messaging apps</string>
+
+    <!-- Styling -->
+    <string name="title_styling">Styling</string>
+    <string name="styling_header">Appearance</string>
+    <string name="choose_color">Choose Color</string>
+    <string name="choose_font">Choose Font</string>
+    <string name="no_license_available">No license information available for this style.</string>
+    <string name="writing_failed">Failed to install file:\n\n</string>
+
+    <!-- Tasker -->
+    <string name="title_tasker_settings">Tasker Settings</string>
+    <string name="tasker_executable_header">Executable</string>
+    <string name="tasker_arguments_header">Arguments</string>
+    <string name="tasker_working_directory_header">Working Directory</string>
+    <string name="tasker_options_header">Options</string>
+    <string name="executable_path_hint">Executable (file in ~/.termux/tasker/ or absolute path to executable)</string>
+    <string name="arguments_hint">Arguments</string>
+    <string name="working_directory_path_hint">Working directory path</string>
+    <string name="execute_in_terminal">Execute in a terminal session</string>
+    <string name="executable_required">Executable required.</string>
+    <string name="termux_app_not_installed_or_disabled_warning">The Termux app is not installed or is disabled. It is required by the Termux:Tasker plugin app to run plugin commands.</string>
+
+    <!-- Widget -->
+    <string name="title_widget_settings">Shortcuts &amp; Widgets Settings</string>
+    <string name="plugin_info">Termux:Widget is a plugin app for the Termux app. Check Termux app github %1$s and Termux:Widget app github %2$s for more info.</string>
+    <string name="msg_disable_launcher_icon_details">The Termux:Widget app does not require a launcher icon/activity to function. You can optionally disable it if you want and can enable it again by reinstalling the app or from the Termux app settings.</string>
+    <string name="action_disable_launcher_icon">Disable Launcher Icon</string>
+    <string name="msg_disabling_launcher_icon">Disabling launcher icon for %1$s</string>
+    <string name="launcher_icon_disabled">Launcher icon has been disabled</string>
+    <string name="disable_launcher_icon_title">Disable Launcher Icon?</string>
+    <string name="disable_launcher_icon_message">The Termux:Widget app does not require a launcher icon to function. Are you sure you want to disable it? You can re-enable it later from the app settings.</string>
+
+    <!-- Protection Level -->
+    <string name="protection_level_title">VorteX Guard Engine Mode</string>
+    <string name="protection_level_summary">Current: %1$s •%2$s</string>
+    <string name="protection_level_dialog_summary">Choose how aggressively dangerous commands are handled. Higher levels provide stronger safety but may interrupt your workflow more.</string>
+    <string name="protection_level_off">Off</string>
+    <string name="protection_level_off_desc">No detection, all commands pass through</string>
+    <string name="protection_level_warn_only">Warn Only</string>
+    <string name="protection_level_warn_only_desc">Snackbar notification only, commands not blocked</string>
+    <string name="protection_level_warn_verify">Warn &amp; Verify</string>
+    <string name="protection_level_warn_verify_desc">Full dialog + countdown + biometric verification</string>
+    <string name="protection_level_auto_block">Auto Block</string>
+    <string name="protection_level_auto_block_desc">Directly block execution of dangerous commands</string>
+
+    <!-- Script Detection -->
+    <string name="script_detection_title">Script Safety Check</string>
+    <string name="script_detection_message">The script contains %1$d dangerous command(s). Review before executing.</string>
+    <string name="script_detection_view">View Script</string>
+    <string name="script_detection_edit">Edit Script</string>
+    <string name="script_detection_continue">Execute Anyway</string>
+    <string name="script_detection_cancel">Cancel</string>
+    <string name="script_detection_line_prefix">Line %1$d</string>
+
+    <!-- ROOT Protection -->
+    <string name="root_protection_title">ROOT Protection</string>
+    <string name="root_protection_summary">VorteX Guard Engine for ROOT users</string>
+    <string name="root_status_detected">ROOT detected - VorteX Guard Engine enabled</string>
+    <string name="root_status_not_detected">ROOT not detected</string>
+    <string name="root_warning_title">ROOT Environment Detected</string>
+    <string name="root_warning_message">ROOT access has been detected on this device. For your safety, Termux Ultra automatically enables maximum protection (Level 3 - Auto Block) when running in ROOT environments. This prevents accidental system damage. You can adjust this in Settings if needed.</string>
+    <string name="root_manage_title">ROOT Management</string>
+    <string name="root_manage_grant_root">Grant ROOT Permission</string>
+    <string name="root_manage_loose_mode">Loose Mode (Disable auto-block)</string>
+
+    <!-- Card Layout -->
+    <string name="card_layout_title">Card Layout</string>
+    <string name="card_layout_summary">Choose how function cards are arranged on the home page</string>
+    <string name="card_layout_vertical">Vertical (List)</string>
+    <string name="card_layout_horizontal">Horizontal (Swipe)</string>
+
+    <!-- Terminal -->
+    <string name="termux_core_version">0.118.3</string>
+    <string name="terminal_new_session_with_handle">New Session [%1$s]</string>
+    <string name="terminal_session_ended">Session ended</string>
+    <string name="terminal_session_ended_with_code">Session ended (exit code: %1$d)</string>
+
+    <!-- Overview Page -->
+    <string name="overview">Overview</string>
+    <string name="overview_title">Dashboard</string>
+    <string name="overview_edit_mode">Edit Mode</string>
+    <string name="overview_done">Done</string>
+    <string name="overview_card_tips">Tips &amp; Agent</string>
+    <string name="overview_card_sessions">Sessions</string>
+    <string name="overview_card_cpu">Termux CPU Usage</string>
+    <string name="overview_card_gpu">Termux GPU Usage</string>
+    <string name="overview_card_memory">Memory Usage</string>
+    <string name="overview_card_processes">Processes</string>
+    <string name="overview_card_stop_all">Stop All</string>
+    <string name="overview_running">Running</string>
+    <string name="overview_stopped">Stopped</string>
+    <string name="overview_no_sessions">No active sessions</string>
+    <string name="overview_no_processes">No processes</string>
+    <string name="overview_process_name">Process</string>
+    <string name="overview_process_cpu">CPU %</string>
+    <string name="overview_frozen_tag">Frozen</string>
+    <string name="overview_frozen_processes">Frozen Processes</string>
+    <string name="overview_frozen_count" formatted="true">%d frozen</string>
+    <string name="overview_frozen_more" formatted="true">%d more</string>
+    <string name="overview_process_mem">MEM</string>
+    <string name="overview_stop_all_confirm">Are you sure you want to stop all sessions?</string>
+    <string name="overview_stop_all_success">All sessions stopped</string>
+    <string name="overview_card_size_small">Square</string>
+    <string name="overview_card_size_wide">Wide</string>
+    <string name="overview_card_visible">Visible</string>
+    <string name="overview_card_hidden">Hidden</string>
+    <string name="overview_no_cpu_data">CPU data unavailable</string>
+    <string name="overview_no_gpu_data">GPU data unavailable</string>
+    <string name="overview_gpu_peak">Historical peak</string>
+    <string name="overview_cpu_temp">Temperature: %1$.0f°C</string>
+    <string name="overview_memory_used">Used: %1$s</string>
+    <string name="overview_cpu_cores">Cores: %1$d</string>
+    <string name="overview_ai_termux_desc">AI Agent, simplifying complex Termux operations</string>
+    <string name="overview_tips_desc">Helpful tips and quick entries</string>
+    <string name="overview_card_settings">Card Settings</string>
+    <string name="overview_card_position">Position</string>
+    <string name="overview_card_size">Size</string>
+    <string name="overview_card_enabled">Show on dashboard</string>
+    <string name="overview_add_card">Add Card</string>
+    <string name="overview_already_added">Already added</string>
+    <string name="overview_move_up">Move Up</string>
+    <string name="overview_move_down">Move Down</string>
+
+    <!-- New overview card design strings -->
+    <string name="overview_load_low">Low</string>
+    <string name="overview_load_medium">Medium</string>
+    <string name="overview_load_high">High</string>
+    <string name="overview_load">Load</string>
+    <string name="overview_usage_rate">Usage: %1$.0f%%</string>
+    <string name="overview_gpu_peak_hint">Historical peak</string>
+    <string name="overview_processes">Processes</string>
+    <string name="overview_background">Background</string>
+    <string name="overview_sleeping">Sleeping</string>
+    <string name="overview_process_status">Status</string>
+    <string name="overview_stop_all_subtitle">%1$d active sessions</string>
+    <string name="overview_active">Active</string>
+    <string name="overview_chip_shortcuts">Utilities</string>
+    <string name="overview_chip_plugins">Third-Party</string>
+    <string name="overview_chip_themes">Plugin Center</string>
+    <string name="overview_resource_action_desc">%1$s</string>
+    <string name="overview_tap_to_select">Tap to select</string>
+    <string name="overview_delete_card">Delete Card</string>
+    <string name="overview_tips_agent_vertical_hint">This card only supports wide layout in vertical mode</string>
+    <string name="overview_resource_action">Feature Shortcut</string>
+    <string name="overview_select_action">Click to select action</string>
+    <string name="overview_select_action_title">Select Action</string>
+    <string name="overview_no_actions">No actions available</string>
+    <string name="overview_utility_center">Utility Center</string>
+    <string name="overview_third_party_center">Third-Party Center</string>
+    <string name="overview_system_function">System Function</string>
+    <string name="overview_can_add_multiple">Can add multiple</string>
+
+    <!-- Process List Detail -->
+    <string name="process_list_title">Process List</string>
+    <string name="process_cpu_usage">CPU Usage</string>
+    <string name="process_cpu_desc">All processes</string>
+    <string name="process_gpu_usage">GPU Usage</string>
+    <string name="process_gpu_desc">GPU load</string>
+    <string name="process_list_all">All Processes</string>
+    <string name="process_loading">Loading processes…</string>
+    <string name="process_no_processes">No active processes</string>
+    <string name="process_pid_label">PID</string>
+    <string name="process_user_label">User</string>
+    <string name="process_sleeping">Sleeping</string>
+    <string name="process_running">Running</string>
+    <string name="process_stopped">Stopped</string>
+    <string name="process_zombie">Zombie</string>
+
+    <!-- Plugin System -->
+    <string name="plugin_center">Plugin Center</string>
+    <string name="plugin_center_desc">Plugin system to extend Termux Ultra features</string>
+    <string name="plugin_manage">Manage Plugins</string>
+    <string name="plugin_install">Install Plugin</string>
+    <string name="plugin_install_desc">Install plugins from .tup or .zip files</string>
+    <string name="plugin_no_plugins">No plugins installed yet</string>
+    <string name="plugin_install_success">Plugin \'%1$s\' installed successfully</string>
+    <string name="plugin_install_failed">Plugin installation failed: %1$s</string>
+    <string name="plugin_enable">Enable</string>
+    <string name="plugin_disable">Disable</string>
+    <string name="plugin_uninstall">Uninstall</string>
+    <string name="plugin_uninstall_confirm">Are you sure you want to uninstall \'%1$s\'? This action cannot be undone.</string>
+    <string name="plugin_permissions">Permissions</string>
+    <string name="plugin_permissions_required">Required Permissions</string>
+    <string name="plugin_permissions_granted">Granted Permissions</string>
+    <string name="plugin_permission_root">ROOT Execution</string>
+    <string name="plugin_permission_root_desc">Allow plugins to execute commands with ROOT privileges</string>
+    <string name="plugin_permission_session">Terminal Session Access</string>
+    <string name="plugin_permission_session_desc">Allow plugins to execute commands in Termux terminal sessions</string>
+    <string name="plugin_permission_fs_read">Filesystem Read</string>
+    <string name="plugin_permission_fs_read_desc">Allow plugins to read files in the Termux environment</string>
+    <string name="plugin_permission_fs_write">Filesystem Write</string>
+    <string name="plugin_permission_fs_write_desc">Allow plugins to write files in the Termux environment</string>
+    <string name="plugin_permission_agent">Modify Agent</string>
+    <string name="plugin_permission_agent_desc">Allow plugins to modify Termux Agent\'s System Prompt and skill cards</string>
+    <string name="plugin_permission_h5">H5 WebView</string>
+    <string name="plugin_permission_h5_desc">Allow plugins to display H5 webpages within the app</string>
+    <string name="plugin_permission_bridge">Cross-App Bridge</string>
+    <string name="plugin_permission_bridge_desc">Allow plugins to interact with other apps via Intent/Broadcast</string>
+    <string name="plugin_permission_internet">Internet Access</string>
+    <string name="plugin_permission_internet_desc">Allow plugins to make network requests</string>
+    <string name="plugin_risk_low">Low Risk</string>
+    <string name="plugin_risk_medium">Medium Risk</string>
+    <string name="plugin_risk_high">High Risk</string>
+    <string name="plugin_state_installed">Installed</string>
+    <string name="plugin_state_enabled">Enabled</string>
+    <string name="plugin_state_disabled">Disabled</string>
+    <string name="plugin_state_corrupted">Corrupted</string>
+    <string name="plugin_state_needs_permission">Needs Permission</string>
+    <string name="plugin_version">Version</string>
+    <string name="plugin_author">Author</string>
+    <string name="plugin_description">Description</string>
+    <string name="plugin_h5_home">Plugin Home</string>
+    <string name="plugin_h5_pages">H5 Pages</string>
+    <string name="plugin_skill_card">Skill Card</string>
+    <string name="plugin_sys_prompt">System Prompt</string>
+    <string name="plugin_entry_resource">Feature Card</string>
+    <string name="plugin_warning_high_permission">This plugin requests high-risk permissions. Please review carefully before granting.</string>
+    <string name="plugin_dialog_permission_title">Grant Plugin Permissions?</string>
+    <string name="plugin_dialog_permission_message">Plugin \'%1$s\' requests the following permissions. Please review and grant to enable the plugin.</string>
+    <string name="plugin_dialog_confirm">Authorize &amp; Enable</string>
+    <string name="plugin_dialog_cancel">Cancel</string>
+    <string name="plugin_dialog_overwrite_title">• System Prompt Overwrite Warning</string>
+    <string name="plugin_dialog_overwrite_message">Plugin \'%1$s\' uses OVERWRITE mode, which will completely replace the current System Prompt content. This may significantly change Agent behavior.\n\nAre you sure you want to continue?</string>
+    <string name="plugin_dialog_overwrite_confirm">I understand, confirm overwrite</string>
+    <string name="plugin_dialog_overwrite_cancel">Cancel</string>
+
+    <!-- Storage -->
+    <string name="storage_title">Storage</string>
+    <string name="storage_description">Manage Termux Ultra storage usage</string>
+    <string name="storage_usage_format">%1$s uses %2$.1f%%</string>
+    <string name="storage_total_usage">Total Usage</string>
+    <string name="storage_total_space">Device Storage</string>
+    <string name="storage_free_space">Available Space</string>
+    <string name="storage_category_app_framework">App Framework</string>
+    <string name="storage_category_app_framework_desc">Termux runtime and dependencies</string>
+    <string name="storage_category_filesystem">Termux App Container</string>
+    <string name="storage_category_filesystem_desc">Termux prefix, system packages and config files</string>
+    <string name="storage_category_user_docs">User Documents</string>
+    <string name="storage_category_user_docs_desc">Files and documents stored by the user</string>
+    <string name="storage_category_containers">Containers</string>
+    <string name="storage_category_containers_desc">Docker, LXC and other container data</string>
+    <string name="storage_category_vm">VM Files</string>
+    <string name="storage_category_vm_desc">QEMU VM images and files</string>
+    <string name="storage_category_other">Others</string>
+    <string name="storage_category_other_desc">Cache, temp files, etc.</string>
+    <string name="storage_category_local_model">Local LLM</string>
+    <string name="storage_category_local_model_desc">On-device AI model files</string>
+    <string name="storage_local_model_detail_title">Local LLM</string>
+    <string name="storage_local_model_name">Model</string>
+    <string name="storage_local_model_occupancy">Size</string>
+    <string name="storage_local_model_location">Location</string>
+    <string name="storage_local_model_not_installed">No local LLM downloaded yet</string>
+    <string name="storage_local_model_downloaded_at">Downloaded At</string>
+    <string name="storage_local_model_delete">Delete Local LLM</string>
+    <string name="storage_local_model_delete_confirm_summary">The downloaded local LLM files will be deleted and Termux Agent will be reset to unconfigured. Are you sure?</string>
+    <string name="storage_local_model_deleted">Local LLM deleted, Agent reset to unconfigured</string>
+    <string name="storage_scanning">Scanning storage...</string>
+    <string name="storage_scan_complete">Scan complete</string>
+    <string name="storage_refresh">Refresh</string>
+    <string name="storage_one_click_clean">One-Tap Clean</string>
+    <string name="storage_cleanable_found">Found %1$s of cleanable data</string>
+    <string name="storage_no_cleanable">Nothing to clean</string>
+    <string name="storage_clean_confirm_title">Confirm Clean</string>
+    <string name="storage_clean_confirm_summary">Will delete cleanable data of the following %1$d categories, totaling %2$s. This cannot be undone.</string>
+    <string name="storage_clean_confirm">Confirm Clean</string>
+    <string name="storage_clean_cancel">Cancel</string>
+    <string name="storage_clean_success">Cleanup complete, freed %1$s</string>
+    <string name="storage_clean_failed">Clean failed: %1$s</string>
+    <string name="storage_clean_cache">Cache</string>
+    <string name="storage_clean_cache_desc">App cache data</string>
+    <string name="storage_clean_temp">Temp Files</string>
+    <string name="storage_clean_temp_desc">Temporary download and processing files</string>
+    <string name="storage_clean_logs">Logs</string>
+    <string name="storage_clean_logs_desc">Runtime logs and crash reports</string>
+    <string name="storage_clean_backup">Old Backups</string>
+    <string name="storage_clean_backup_desc">Expired Termux backup files</string>
+    <string name="storage_clean_empty">Empty Directories</string>
+    <string name="storage_clean_empty_desc">Empty folders with no content</string>
+    <string name="storage_clean_thumbnails">Thumbnail Cache</string>
+    <string name="storage_clean_thumbnails_desc">Thumbnails generated by the file manager</string>
+    <string name="storage_size_bytes">%1$.0f B</string>
+    <string name="storage_size_kb">%1$.1f KB</string>
+    <string name="storage_size_mb">%1$.1f MB</string>
+    <string name="storage_size_gb">%1$.2f GB</string>
+    <string name="storage_category_estimate_note">Category usage is estimated by logical file size and may differ from system statistics</string>
+
+    <!-- Log Management -->
+    <string name="log_management">Log Management</string>
+    <string name="log_management_desc">View and manage application logs</string>
+    <string name="clear_logs">Clear</string>
+    <string name="confirm_clear_logs">Clear Logs</string>
+    <string name="confirm_clear_logs_message">Are you sure you want to clear all logs? This action cannot be undone.</string>
+
+    <string name="no_logs">No logs available</string>
+    <string name="all">All</string>
+    <string name="log_level_info">Info</string>
+    <string name="log_level_warning">Warning</string>
+    <string name="log_level_exception">Exception</string>
+    <string name="logs_cleared">Logs cleared</string>
+    <string name="no_logs_to_clear">No logs to clear</string>
+
+    <!-- Crash Dialog -->
+    <string name="crash_post_title">Error Detected</string>
+    <string name="crash_post_message">An error occurred and the app crashed during the last run. Details below.</string>
+    <string name="crash_dialog_title">Application Error</string>
+    <string name="crash_dialog_message">An error occurred. The application will attempt to recover.\n\nError details:\n%1$s</string>
+    <string name="crash_dialog_severe_title">Critical Error</string>
+    <string name="crash_dialog_severe_message">A critical error occurred. The application cannot recover automatically.\n\nError details:\n%1$s</string>
+    <string name="view_crash_report">View Crash Report</string>
+    <string name="view_logs">View Logs</string>
+    <string name="use_fallback_mode">Use Fallback Mode</string>
+    <string name="close_app">Close App</string>
+
+    <string name="overview_cpu_label">CPU</string>
+    <string name="overview_gpu_label">GPU</string>
+    <string name="unrestricted_mode_warning">When enabled:\n• All commands run without confirmation, Agent can execute directly\n• Any SSH connection to remote hosts is allowed\n• ROOT devices automatically use su for privilege escalation\n• All System security rule constraints will be bypassed\n\nThis operation is extremely risky. Make sure your device is used in a trusted environment.</string>
+    <string name="about_license">Termux Ultra is licensed under GPL 3.0 and MIT.\nThe Termux team owns the copyright of the Termux Ultra terminal module. The VNC module copyright ©2020 Gaurav Ujjwal. Thanks to open source contributors.</string>
+    <string name="agent_permissions_examples">GET_CURRENT_SESSION, CLIPBOARD_READ, CLIPBOARD_WRITE, FILE_READ, FILE_WRITE, FILE_DELETE, etc.</string>
+    <string name="fallback_desc">When the local LLM call fails or does not respond and this switch is on, the error reason is shown first, then it automatically falls back to this online model. Parameters follow the standard OpenAI-compatible API.</string>
+    <string name="session_dynamic_number">%1$s</string>
+    <string name="custom_prompt_pick_md">Select a .md file as the custom System Prompt.\nThis file will fully replace the official default System Prompt.</string>
+    <string name="custom_extra_instructions_desc">Add extra system instructions appended after the official System Prompt.\nModify with care; wrong configuration may cause abnormal AI behavior.</string>
+    <string name="runtime_core_switch_desc">Switching the engine changes available features. Switching will close all sessions. Please save your data first.</string>
+    <string name="chat_history_full_desc">Full conversation history including the System prompt. Only the latest 100 messages saved by Termux Agent are shown.</string>
+    <string name="training_online_full_auto">Online fully automatic · Backup online LLM configured: question generation + grading + scoring + lessons appended to System Prompt (recommended)</string>
+    <string name="unrestricted_mode_desc">Remove all security limits, allowing the Agent to run arbitrary commands, SSH connections, ROOT escalation, etc. Requires biometric re-verification</string>
+    <string name="model_name_hint">Model name (e.g. deepseek-chat / gpt-4o-mini / qwen-plus)</string>
+    <string name="impl_example_prefix">Example: %1$s</string>
+    <string name="api_base_url_hint">API Base URL (e.g. https://api.deepseek.com/v1)</string>
+    <string name="restore_official_prompt_confirm">Switch back to the official default System Prompt?\nYour custom file will no longer be used.</string>
+    <string name="whitelist_warning">⚠️ Only check skills you fully trust. Auto execution means AI can trigger actions directly, skipping manual confirmation.</string>
+    <string name="custom_skill_manage_desc">Manage user-defined skill cards. Official skills are read-only; you can only add, edit and delete skills you created.</string>
+    <string name="fallback_enabled_desc">Enabled: all limits removed, arbitrary commands and SSH allowed, ROOT devices auto-escalate</string>
+    <string name="skill_impl_detail_hint">Describe how the skill works in detail; it is injected into the System Prompt to guide the AI</string>
+    <string name="root_auto_su_desc">When ROOT is detected, the Agent automatically runs commands with su, no manual confirmation</string>
+    <string name="developer_mode_desc">Allows editing the System Prompt, managing custom skills and viewing the full chat history</string>
+    <string name="custom_skill_create_desc">Create a custom skill callable by the AI. The skill is injected as part of the system instructions.</string>
+    <string name="training_manual_mode">Manual mode · User grades manually with heuristic reference scores and suggestions (no online model)</string>
+    <string name="kill_process_pid">Kill process (PID %1$s)</string>
+    <string name="agent_entry_card_desc">When enabled, shows the Termux Agent entry card and related settings on the terminal page</string>
+    <string name="load_prompt_from_file">Load System Prompt from file (.md supported)</string>
+    <string name="whitelist_select_desc">Choose skills allowed to run automatically. The trust whitelist turns off when nothing is selected.</string>
+    <string name="unrestricted_mode_banner">This mode completely removes all security limits of Termux Agent</string>
+    <string name="fallback_off_desc">When off, only the local LLM is used and errors are returned directly (no auto fallback)</string>
+    <string name="fallback_enabled_ready">Enabled: automatically falls back to the backup online model when local inference fails</string>
+    <string name="custom_prompt_hint">Enter custom System Prompt content here...</string>
+    <string name="capture_output_desc">CAPTURE_OUTPUT — run a command and capture its output</string>
+    <string name="exit_code_session">Exit code: %1$s</string>
+    <string name="exit_code_info">Exit code: %1$s</string>
+    <string name="exit_code_short">Exit code: %1$s</string>
+    <string name="exit_code_dead">Exit code: N</string>
+    <string name="clear_agent_history_desc">Clear all chat history of the current Termux Agent</string>
+    <string name="skill_invocation_desc">Invocation (the skillType JSON the AI outputs)</string>
+    <string name="session_display_number">Session %1$s</string>
+    <string name="overview_horizontal_cards_desc">When enabled, tip/status cards on the Overview page are shown in horizontal swipe layout</string>
+    <string name="custom_skill_create_manage">Create and manage user-defined skill cards (official skills are read-only)</string>
+    <string name="view_full_history_desc">View the full conversation history including the System prompt</string>
+    <string name="back_to_config_desc">Go back to the config page to change API Key, model, etc.</string>
+    <string name="unrestricted_opened">Agent unrestricted mode enabled, no manual configuration needed</string>
+    <string name="root_exec_agent">Run Agent features with Root privileges</string>
+    <string name="custom_prompt_loaded">Custom System Prompt loaded</string>
+    <string name="read_file_failed">Failed to read file: %1$s</string>
+    <string name="api_key_hint">API Key (starts with sk-)</string>
+    <string name="switched_official_prompt">Switched back to the official System Prompt</string>
+    <string name="use_custom_prompt">Use custom System Prompt</string>
+    <string name="clear_chat_confirm">The current conversation will be cleared and cannot be recovered. Continue?</string>
+    <string name="auto_exec_skills_note">The following skills run automatically by default without the whitelist:</string>
+    <string name="select_prompt_file">Select System Prompt file</string>
+    <string name="use_official_prompt">Use official System Prompt</string>
+    <string name="restore_official_prompt">Restore official System Prompt</string>
+    <string name="session_fallback_number">Session %1$s</string>
+    <string name="copied_command">Copied: %1$s</string>
+    <string name="new_session_handle">New Session [%1$s]</string>
+    <string name="last_command">Last command: %1$s</string>
+    <string name="whitelist_off">No skills selected, trust whitelist is off</string>
+    <string name="edit_system_prompt">Edit System Prompt</string>
+    <string name="no_custom_skills">No custom skills yet. Tap the button below to add one</string>
+    <string name="confirm_unrestricted">I understand the risks. Enable unrestricted mode</string>
+    <string name="session_count_plus">Session %1$s</string>
+    <string name="chat_history_header">=== Chat History ===</string>
+    <string name="enable_soft_keyboard_no_hw">Disable soft keyboard when using a physical keyboard</string>
+    <string name="file_picker_choice">Choose which file picker to use:</string>
+    <string name="font_size_desc">Change terminal console font size</string>
+    <string name="api_key_empty">API Key is empty</string>
+    <string name="impl_notes_hint">Implementation notes (optional)</string>
+    <string name="scrollback_desc">Change terminal scrollback lines</string>
+    <string name="configure_backup_llm">Configure backup online LLM</string>
+    <string name="termux_builtin">Termux built-in</string>
+    <string name="horizontal_tip_layout">Horizontal tip card layout</string>
+    <string name="configure_backup_params">Configure Backup Online Params</string>
+    <string name="shell_command">Shell command</string>
+    <string name="skill_name_hint">Skill name (required)</string>
+    <string name="new_failsafe_session">New failsafe session</string>
+    <string name="lines_10000">10000 lines</string>
+    <string name="lines_50000">50000 lines</string>
+    <string name="lines_1000">1000 lines</string>
+    <string name="lines_5000">5000 lines</string>
+    <string name="reconfigure_ai">Reconfigure AI</string>
+    <string name="backup_online_llm">Backup online LLM</string>
+    <string name="clear_chat_title">Clear chat history?</string>
+    <string name="add_custom_skill">Add custom skill</string>
+    <string name="enable_unrestricted">Enable unrestricted mode</string>
+    <string name="keep_screen_on_enabled">Keep screen on enabled</string>
+    <string name="keep_screen_on_disabled">Keep screen on disabled</string>
+    <string name="file_empty">File is empty</string>
+    <string name="terminal_runtime_core">Terminal engine</string>
+    <string name="core_name_classic">Classic</string>
+    <string name="core_name_nova">Nova</string>
+    <string name="terminal_margin_adjustment">Terminal margin adjustment</string>
+    <string name="terminal_key_logging">Terminal key logging</string>
+    <string name="train_local_model">Train local model</string>
+    <string name="clear_chat_history">Clear chat history</string>
+    <string name="full_chat_history">Full chat history</string>
+    <string name="no_chat_history">No chat history yet</string>
+    <string name="disable_keep_screen_on">Disable keep screen on</string>
+    <string name="keep_screen_on">Keep screen on</string>
+    <string name="share_session_dump">Share session dump</string>
+    <string name="enable_softkeyboard">Enable soft keyboard</string>
+    <string name="scrollback_buffer">Scrollback buffer</string>
+    <string name="trust_whitelist">Trust whitelist</string>
+    <string name="not_set">(not set)</string>
+    <string name="developer_mode">Developer mode</string>
+    <string name="custom_skills">Custom skills</string>
+    <string name="unrestricted_mode">Unrestricted mode</string>
+    <string name="system_picker">System picker</string>
+    <string name="tab_system">⚙️ System</string>
+    <string name="session_ended">Session ended</string>
+    <string name="terminal_reset">Terminal reset</string>
+    <string name="process_killed">Process killed</string>
+    <string name="sessions_closed">Sessions closed</string>
+    <string name="process_not_running">Process not running</string>
+    <string name="toggle_soft_keyboard">Toggle soft keyboard</string>
+    <string name="rename_session">Rename session</string>
+    <string name="log_level">Log level</string>
+    <string name="font_size">Font size</string>
+    <string name="cursor_blink">Cursor blink</string>
+    <string name="security_settings">Security settings</string>
+    <string name="reset_default">Reset to default</string>
+    <string name="confirm_restore">Confirm restore</string>
+    <string name="add_skill">Add skill</string>
+    <string name="open_page">Open page</string>
+    <string name="send_broadcast">Send broadcast</string>
+    <string name="edit_skill">Edit skill</string>
+    <string name="skill_description">Skill description</string>
+    <string name="implementation">Implementation</string>
+    <string name="tab_user">👤 User</string>
+    <string name="copy_all">Copy all</string>
+    <string name="confirm_enable">Confirm enable</string>
+    <string name="share_session">Share session</string>
+    <string name="new_session">New session</string>
+    <string name="session_list">Session list</string>
+    <string name="uninitialized">Uninitialized</string>
+    <string name="reset_terminal">Reset terminal</string>
+    <string name="app_settings_entry">App settings</string>
+    <string name="system_permissions">System permissions</string>
+    <string name="session_name">Session name</string>
+    <string name="dead_card">Dead card</string>
+    <string name="out_of_memory">Out of memory</string>
+    <string name="force_enable">Force enable</string>
+    <string name="enabled">Enabled</string>
+    <string name="disabled">Disabled</string>
+    <string name="custom">Custom</string>
+    <string name="empty">(empty)</string>
+    <string name="new_session_short">New session</string>
+    <string name="ended">Ended</string>
+    <string name="attention">Attention</string>
+    <string name="running">Running</string>
+    <string name="stopped">Stopped</string>
+    <string name="terminated">Terminated</string>
+    <string name="off">Off</string>
+    <string name="normal">Normal</string>
+    <string name="debug">Debug</string>
+    <string name="verbose">Verbose</string>
+    <string name="clear">Clear</string>
+    <string name="messages">Messages</string>
+    <string name="command">Command</string>
+    <string name="active">Active</string>
+    <string name="dismiss">Dismiss</string>
+    <string name="whitelist_count_selected">%1$s skills selected for auto execution</string>
+    <string name="session_exit_code_label">Session ended (exit code: %1$s)</string>
+    <string name="switched_core_selected">Switched to %1$s, all sessions closed</string>
+    <string name="model_url_key">Model: %1$s | URL: %2$s | Key: %3$s</string>
+    <string name="card_ended_code">Ended · exit code %1$s</string>
+    <string name="custom_file">custom file</string>
+    <string name="libterminal_core_info">Nova Engine (LibTerminal) Core Version: %1$s</string>
+    <string name="currently_using_source">Currently using: %1$s. Tap to switch back to the official default System Prompt</string>
+    <string name="temperature_current">Temperature: current %1$.2f  (0 = strict, 1 = creative)</string>
+    <string name="fallback_not_configured">Enabled: ⚠️ Tap \\"Configure Backup Online Params\\" below to complete API Key/URL/Model first</string>
+    <string name="tile_launch_terminal">Launch Terminal</string>
+    <string name="tile_toggle">Toggle</string>
+    <string name="permissions_required">Termux Ultra needs the following permissions</string>
+    <string name="common_success">Success</string>
+    <string name="common_failed">Failed</string>
+    <string name="common_loading">Loading...</string>
+    <string name="common_processing">Processing...</string>
+    <string name="common_copying">Copying...</string>
+    <string name="common_deleting">Deleting...</string>
+    <string name="common_moving">Moving...</string>
+    <string name="common_stop">Stop</string>
+    <string name="common_start">Start</string>
+    <string name="common_refresh">Refresh</string>
+    <string name="common_configure">Configure</string>
+    <string name="common_auto_execute">Auto Execute Command</string>
+    <string name="common_new">New</string>
+    <string name="common_creating_file">Creating file...</string>
+    <string name="common_creating_folder">Creating folder...</string>
+    <string name="common_select_all">Select All</string>
+    <string name="common_empty">Empty</string>
+    <string name="quick_entry">Quick Entry</string>
+    <string name="migration_complete">Migration Complete</string>
+    <string name="one_click_migration">One-click Migration</string>
+    <string name="script_detection">Script Security Check</string>
+    <string name="waiting_confirm">Waiting for confirmation...</string>
+    <string name="confirm_failed">Confirmation failed, user cancelled</string>
+    <string name="user_cancelled_dangerous">User cancelled dangerous operation</string>
+    <string name="snackbar_hint_no_block">Snackbar hint, no block</string>
+    <string name="license_agreement">License Agreement</string>
+    <string name="termux_ultra_eula">Termux Ultra End User License Agreement</string>
+    <string name="i_agree_license">I have read and agree to the license terms</string>
+    <string name="auto_execute_new_session">Auto-execute in New Session</string>
+    <string name="edit_welcome_motd">Edit Welcome Text (motd)</string>
+    <string name="editor_tools">Editor Tools</string>
+    <string name="notification_permission">Notification Permission</string>
+    <string name="storage_breakdown">Storage Breakdown</string>
+    <string name="cleanable_items">Cleanable Items</string>
+    <string name="clean_result">Clean Result</string>
+    <string name="task_list">Task List</string>
+    <string name="task_completed">Task Completed</string>
+    <string name="task_failed">Task Execution Failed</string>
+    <string name="scheduled_task">Scheduled Task</string>
+    <string name="resume_background">Resume Background</string>
+    <string name="no_current_task">No current tasks</string>
+    <string name="recent_tasks">Recent Tasks</string>
+    <string name="recent_completed">Recently Completed</string>
+    <string name="unsaved_changes">Unsaved Changes</string>
+    <string name="no_matching_tasks">No matching tasks</string>
+    <string name="path_migration">Path Migration</string>
+    <string name="cannot_open_link">Cannot open link</string>
+    <string name="no_network">No network, check settings</string>
+    <string name="upgrade_complete">Upgrade Complete</string>
+    <string name="upgrade_all_packages">Upgrade All Packages</string>
+    <string name="refresh_sources">Refresh Sources</string>
+    <string name="index_update_failed">Index update failed, check network</string>
+    <string name="pkg_manager_busy">Package manager is busy</string>
+    <string name="dangerous_action_confirm">Dangerous Operation, Confirm Required</string>
+    <string name="prefs_about_cat_devs">开发者与贡献者</string>
+    <string name="prefs_about_cat_device">设备信息</string>
+    <string name="prefs_about_cat_update">更新</string>
+    <string name="prefs_about_cat_version">版本信息</string>
+    <string name="prefs_about_cat_legal">开源与许可</string>
+    <string name="check_updates_summary">检查 GitHub 是否有新版本发布</string>
+    <string name="libterminal_core_title">新星引擎核心</string>
+    <string name="prefs_about_github">Termux Ultra GitHub</string>
+    <string name="prefs_about_github_desc">访问 Termux Ultra 源代码仓库</string>
+    <string name="prefs_about_termux_original">Termux 原版项目</string>
+    <string name="prefs_about_termux_original_desc">查看 Termux 上游原版项目</string>
+    <string name="contributor_1_name">awkoo</string>
+    <string name="contributor_1_username">@awkox</string>
+    <string name="contributor_awkoo_name">awkoo</string>
+    <string name="about_contributors_section">贡献者</string>
+    <string name="checking_updates">检查更新中...</string>
+    <string name="about_check_updates_desc">点击检查最新 Termux Ultra 更新</string>
+    <string name="provision_back">返回</string>
+    <string name="provision_skip">跳过</string>
 </resources>
+

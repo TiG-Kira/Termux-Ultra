@@ -7,6 +7,11 @@
     android:orientation="vertical"
     android:fitsSystemWindows="true">
 
+    <androidx.compose.ui.platform.ComposeView
+        android:id="@+id/terminal_toolbar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content" />
+
     <RelativeLayout
         android:id="@+id/activity_termux_root_relative_layout"
         android:layout_width="match_parent"
@@ -38,12 +43,12 @@
                 android:layout_width="240dp"
                 android:layout_height="match_parent"
                 android:layout_gravity="start"
+                android:background="@android:color/white"
                 android:choiceMode="singleChoice"
                 android:divider="@android:color/transparent"
                 android:dividerHeight="0dp"
                 android:descendantFocusability="blocksDescendants"
-                android:orientation="vertical"
-                android:background="?attr/termuxActivityDrawerBackground">
+                android:orientation="vertical">
 
                 <LinearLayout
                     android:layout_width="match_parent"
@@ -55,8 +60,7 @@
                         android:layout_height="40dp"
                         android:src="@drawable/ic_settings"
                         android:background="@null"
-                        android:contentDescription="@string/action_open_settings"
-                        app:tint="?attr/termuxActivityDrawerImageTint" />
+                        android:contentDescription="@string/action_open_settings" />
                 </LinearLayout>
 
                 <ListView
@@ -74,7 +78,7 @@
                     android:layout_height="wrap_content"
                     android:orientation="horizontal">
 
-                    <com.google.android.material.button.MaterialButton
+                    <Button
                         android:id="@+id/toggle_keyboard_button"
                         style="?android:attr/buttonBarButtonStyle"
                         android:layout_width="match_parent"
@@ -82,7 +86,7 @@
                         android:layout_weight="1"
                         android:text="@string/action_toggle_soft_keyboard" />
 
-                    <com.google.android.material.button.MaterialButton
+                    <Button
                         android:id="@+id/new_session_button"
                         style="?android:attr/buttonBarButtonStyle"
                         android:layout_width="match_parent"

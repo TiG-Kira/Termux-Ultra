@@ -1,3 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <color name="primary">#6200EE</color>
+    <color name="primary_dark">#3700B3</color>
+    <color name="accent">#03DAC6</color>
+    <color name="white">#FFFFFF</color>
+    <color name="black">#000000</color>
+    <color name="gray">#666666</color>
+    <color name="light_gray">#EEEEEE</color>
+    <color name="green">#4CAF50</color>
+    <color name="background">#FFFFFF</color>
+    <color name="icon_color">#000000</color>
+    <!-- HyperCeiler-style window background for splash/OOBE/main (light) -->
+    <color name="hyper_surface">#F7F7F7</color>
 </resources>

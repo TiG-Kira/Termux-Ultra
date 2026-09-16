@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Termux:Styling</string>
+    <string name="color_prompt">选择颜色</string>
+    <string name="font_prompt">选择字体</string>
+    <string name="writing_failed">安装文件失败：\n\n</string>
+</resources>

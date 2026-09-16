@@ -5,56 +5,74 @@ import android.app.Notification;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
+import android.app.job.JobInfo;
+import android.app.job.JobScheduler;
+import android.app.AlarmManager;
+import android.content.ActivityNotFoundException;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.res.Resources;
+import android.net.Uri;
 import android.net.wifi.WifiManager;
 import android.os.Binder;
 import android.os.Build;
+import android.os.Bundle;
 import android.os.Handler;
+import android.os.HandlerThread;
 import android.os.IBinder;
+import android.os.Looper;
+import android.os.Process;
 import android.os.PowerManager;
+import android.os.SystemClock;
+import android.provider.Settings;
+import android.widget.ArrayAdapter;
+import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.R;
-import com.termux.app.event.SystemEventReceiver;
+import com.termux.app.settings.properties.TermuxAppSharedProperties;
 import com.termux.app.terminal.TermuxTerminalSessionActivityClient;
-import com.termux.app.terminal.TermuxTerminalSessionServiceClient;
+import com.termux.app.receiver.MemoryBroadcastReceiver;
+import com.termux.app.utils.DomesticOSDetector;
 import com.termux.shared.termux.plugins.TermuxPluginUtils;
 import com.termux.shared.data.IntentUtils;
-import com.termux.shared.net.uri.UriUtils;
 import com.termux.shared.errors.Errno;
 import com.termux.shared.shell.ShellUtils;
-import com.termux.shared.shell.command.runner.app.AppShell;
-import com.termux.shared.termux.settings.properties.TermuxAppSharedProperties;
-import com.termux.shared.termux.shell.command.environment.TermuxShellEnvironment;
+import com.termux.shared.termux.shell.command.environment.TermuxShellCommandShellEnvironment;
 import com.termux.shared.termux.shell.TermuxShellUtils;
 import com.termux.shared.termux.TermuxConstants;
 import com.termux.shared.termux.TermuxConstants.TERMUX_APP.TERMUX_ACTIVITY;
 import com.termux.shared.termux.TermuxConstants.TERMUX_APP.TERMUX_SERVICE;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
-import com.termux.shared.termux.shell.TermuxShellManager;
 import com.termux.shared.termux.shell.command.runner.terminal.TermuxSession;
 import com.termux.shared.termux.terminal.TermuxTerminalSessionClientBase;
 import com.termux.shared.logger.Logger;
+import com.termux.app.compose.LiveUpdateState;
 import com.termux.shared.notification.NotificationUtils;
 import com.termux.shared.android.PermissionUtils;
 import com.termux.shared.data.DataUtils;
 import com.termux.shared.shell.command.ExecutionCommand;
-import com.termux.shared.shell.command.ExecutionCommand.Runner;
-import com.termux.shared.shell.command.ExecutionCommand.ShellCreateMode;
+import com.termux.shared.shell.command.runner.app.AppShell;
 import com.termux.terminal.TerminalEmulator;
 import com.termux.terminal.TerminalSession;
 import com.termux.terminal.TerminalSessionClient;
 
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.ObjectOutputStream;
+import java.io.ObjectInputStream;
+import java.io.FileInputStream;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * A service holding a list of {@link TermuxSession} in {@link TermuxShellManager#mTermuxSessions} and background {@link AppShell}
- * in {@link TermuxShellManager#mTermuxTasks}, showing a foreground notification while running so that it is not terminated.
+ * A service holding a list of {@link TermuxSession} in {@link #mTermuxSessions} and background {@link TermuxTask}
+ * in {@link #mTermuxTasks}, showing a foreground notification while running so that it is not terminated.
  * The user interacts with the session through {@link TermuxActivity}, but this service may outlive
  * the activity when the user or the system disposes of the activity. In that case the user may
  * restart {@link TermuxActivity} later to yet again access the sessions.
@@ -65,38 +83,50 @@ import java.util.List;
  * Optionally may hold a wake and a wifi lock, in which case that is shown in the notification - see
  * {@link #buildNotification()}.
  */
-public final class TermuxService extends Service implements AppShell.AppShellClient, TermuxSession.TermuxSessionClient {
+public final class TermuxService extends Service implements TermuxTask.TermuxTaskClient, TermuxSession.TermuxSessionClient {
+
+    private static int EXECUTION_ID = 1000;
+
+    /** Service process start time (elapsedRealtime ms) for uptime display. */
+    public static long serviceStartTimeMs = 0;
 
     /** This service is only bound from inside the same process and never uses IPC. */
-    class LocalBinder extends Binder {
+    public class LocalBinder extends Binder {
         public final TermuxService service = TermuxService.this;
     }
 
     private final IBinder mBinder = new LocalBinder();
 
-    private final Handler mHandler = new Handler();
+    private final Handler mHandler = new Handler(Looper.getMainLooper());
 
+    /**
+     * The foreground TermuxSessions which this service manages.
+     * Note that this list is observed by {@link TermuxActivity#mTermuxSessionListViewController},
+     * so any changes must be made on the UI thread and followed by a call to
+     * {@link ArrayAdapter#notifyDataSetChanged()} }.
+     */
+    final List<TermuxSession> mTermuxSessions = new ArrayList<>();
+
+    /**
+     * The background TermuxTasks which this service manages.
+     */
+    final List<TermuxTask> mTermuxTasks = new ArrayList<>();
+
+    /**
+     * The pending plugin ExecutionCommands that have yet to be processed by this service.
+     */
+    final List<ExecutionCommand> mPendingPluginExecutionCommands = new ArrayList<>();
 
     /** The full implementation of the {@link TerminalSessionClient} interface to be used by {@link TerminalSession}
      * that holds activity references for activity related functions.
      * Note that the service may often outlive the activity, so need to clear this reference.
      */
-    private TermuxTerminalSessionActivityClient mTermuxTerminalSessionActivityClient;
+    TermuxTerminalSessionClient mTermuxTerminalSessionClient;
 
     /** The basic implementation of the {@link TerminalSessionClient} interface to be used by {@link TerminalSession}
-     * that does not hold activity references and only a service reference.
+     * that does not hold activity references.
      */
-    private final TermuxTerminalSessionServiceClient mTermuxTerminalSessionServiceClient = new TermuxTerminalSessionServiceClient(this);
-
-    /**
-     * Termux app shared properties manager, loaded from termux.properties
-     */
-    private TermuxAppSharedProperties mProperties;
-
-    /**
-     * Termux app shell manager
-     */
-    private TermuxShellManager mShellManager;
+    final TermuxTerminalSessionClientBase mTermuxTerminalSessionClientBase = new TermuxTerminalSessionClientBase();
 
     /** The wake lock and wifi lock are always acquired and released together. */
     private PowerManager.WakeLock mWakeLock;
@@ -105,21 +135,110 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
     /** If the user has executed the {@link TERMUX_SERVICE#ACTION_STOP_SERVICE} intent. */
     boolean mWantsToStop = false;
 
+    /** If "end all sessions" has been clicked and all sessions/tasks were killed.
+     *  While true and no sessions are running, notification is downgraded to a normal
+     *  (non-LiveUpdate) format with text "终端会话已清理(已无会话运行)。".
+     *  Reset to false when a new session/task is created. */
+    boolean mAllSessionsCleared = false;
+
+    public Integer mTerminalTranscriptRows;
+
     private static final String LOG_TAG = "TermuxService";
+
+    /** 停止 Termux Agent 的 Intent Action（通知按钮 → Service → broadcast → Activity）。 */
+    public static final String ACTION_STOP_AGENT = "com.termux.app.ACTION_STOP_AGENT";
+
+    private MemoryBroadcastReceiver mMemoryBroadcastReceiver;
+    private boolean mIsMemoryWarningActive = false;
+    private boolean mIsMemoryKillActive = false;
+    private boolean mAreSessionsFrozen = false;
+    private String mKilledSessionName = null;
+
+    /**
+     * 已结束（被杀死/自然退出）的会话信息队列。
+     *
+     * 当 [onTermuxSessionExited] 触发时，会话会立即从 [mTermuxSessions] 移除，
+     * UI 层来不及捕获退出代码。这里在移除前把会话名 + 退出代码 + 时间戳记录下来，
+     * 供 TerminalListScreen 拉取并以"死亡卡片"形式展示（红色标题 + 退出代码小字），
+     * 直到用户手动消除。
+     *
+     * 死亡会话不计入 [mTermuxSessions]，因此 LiveUpdate 通知中的会话数量自动排除。
+     */
+    private final List<DeadSessionInfo> mDeadSessionInfos = new ArrayList<>();
+
+    /** LiveUpdateState 变化监听器：Kotlin 层状态变化时触发 updateNotification()。 */
+    private final LiveUpdateState.OnChangeListener mLiveUpdateListener = () -> {
+        try { updateNotification(); }
+        catch (Throwable t) { Logger.logDebug(LOG_TAG, "LiveUpdateState listener failed: " + t.getMessage()); }
+    };
+
+    /** 已结束会话的信息载体（name + exitCode + exitedAt）。 */
+    public static class DeadSessionInfo {
+        public final String sessionName;
+        public final int exitCode;
+        public final long exitedAt;
+
+        public DeadSessionInfo(String sessionName, int exitCode, long exitedAt) {
+            this.sessionName = sessionName;
+            this.exitCode = exitCode;
+            this.exitedAt = exitedAt;
+        }
+    }
+
+    private Handler mMemoryCheckHandler;
+    private Runnable mMemoryCheckRunnable;
+    private static final long MEMORY_CHECK_INTERVAL = 5000;
+
+    private static final String FROZEN_SESSIONS_DIR = "frozen_sessions";
 
     @Override
     public void onCreate() {
         Logger.logVerbose(LOG_TAG, "onCreate");
-
-        // Get Termux app SharedProperties without loading from disk since TermuxApplication handles
-        // load and TermuxActivity handles reloads
-        mProperties = TermuxAppSharedProperties.getProperties();
-
-        mShellManager = TermuxShellManager.getShellManager();
-
+        serviceStartTimeMs = android.os.SystemClock.elapsedRealtime();
+        Process.setThreadPriority(Process.THREAD_PRIORITY_FOREGROUND);
         runStartForeground();
+        registerMemoryBroadcastReceiver();
 
-        SystemEventReceiver.registerPackageUpdateEvents(this);
+        // 预加载VorteX Guard Engine缓存，避免首次命令读取 SharedPreferences 造成延迟
+        com.termux.app.compose.RiskConfirmManager.INSTANCE.preloadCache(this);
+
+        // 只在VorteX Guard Engine非 OFF 时启动 server + 部署 hook
+        com.termux.app.compose.RiskConfirmManager.ProtectionLevel level =
+                com.termux.app.compose.RiskConfirmManager.INSTANCE.getProtectionLevel(this);
+        if (level != com.termux.app.compose.RiskConfirmManager.ProtectionLevel.OFF) {
+            // 启动 Shell 安全检测 Socket Server（用于 hook 拦截 shell 层所有命令执行）
+            com.termux.app.compose.SecuritySocketServer.INSTANCE.start(this);
+            // 部署 shell hook 脚本到 Termux home
+            TermuxService.deploySecurityHook(this, false);
+            Logger.logDebug(LOG_TAG, "Security hook deployed (level=" + level + ")");
+        } else {
+            // VorteX Guard Engine OFF → 清理旧 hook 注入（删 port 文件 + 删 source 行）
+            TermuxService.deploySecurityHook(this, true);
+            com.termux.app.compose.SecuritySocketServer.INSTANCE.stop();
+            Logger.logDebug(LOG_TAG, "Security hook skipped (level=OFF)");
+        }
+
+        // 按运行核心设置项同步镜像写转发状态（Kotlin+Compose 时启用，Java+NDK 时禁用）
+        com.termux.terminal.TerminalSession.setComposeForwardingEnabled(
+            com.termux.app.compose.TerminalRuntimeCore.isComposeMode(this));
+
+        // Compose 会话创建/关闭时刷新前台通知，保证 LiveUpdate 通知中的会话数量
+        // 对 Compose 直建的会话（主页/终端页新建）也保持准确
+        com.termux.app.compose.terminal.ComposeSessionManager.setOnSessionsChanged(() -> {
+            try {
+                updateNotification();
+            } catch (Throwable t) {
+                Logger.logDebug(LOG_TAG, "Failed to update notification on Compose session change: " + t.getMessage());
+            }
+            return kotlin.Unit.INSTANCE;
+        });
+
+        // 注册 LiveUpdateState 监听器（Kotlin 层包管理/Agent 状态变化时刷新通知）
+        LiveUpdateState.addListener(mLiveUpdateListener);
+
+        // 注：不再注册 InputInterceptor。命令/脚本拦截已完全由
+        // shell hook（trap DEBUG + PROMPT_COMMAND 延迟启用）+ SecuritySocketServer TCP 接管。
+        // 100% 覆盖手动输入、历史命令、脚本执行等所有路径。
     }
 
     @SuppressLint("Wakelock")
@@ -130,17 +249,51 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
         // Run again in case service is already started and onCreate() is not called
         runStartForeground();
 
-        String action = null;
-        if (intent != null) {
-            Logger.logVerboseExtended(LOG_TAG, "Intent Received:\n" + IntentUtils.getIntentString(intent));
-            action = intent.getAction();
+        if (intent == null) {
+            Logger.logDebug(LOG_TAG, "onStartCommand called with null intent");
+            return START_STICKY;
         }
+
+        String action = intent.getAction();
 
         if (action != null) {
             switch (action) {
+                case ACTION_STOP_AGENT: {
+                    Logger.logDebug(LOG_TAG, "ACTION_STOP_AGENT: stopping agent");
+                    LiveUpdateState.agentStop();
+                    try {
+                        Intent stopIntent = new Intent(ACTION_STOP_AGENT);
+                        stopIntent.setPackage(getPackageName());
+                        sendBroadcast(stopIntent);
+                    } catch (Throwable t) {
+                        Logger.logDebug(LOG_TAG, "Failed to broadcast STOP_AGENT: " + t.getMessage());
+                    }
+                    break;
+                }
                 case TERMUX_SERVICE.ACTION_STOP_SERVICE:
                     Logger.logDebug(LOG_TAG, "ACTION_STOP_SERVICE intent received");
                     actionStopService();
+                    break;
+                case TERMUX_SERVICE.ACTION_STOP_SERVICE_FORCE:
+                    Logger.logDebug(LOG_TAG, "ACTION_STOP_SERVICE_FORCE intent received (skip data-loss checks, already confirmed by user)");
+                    actionStopServiceForce();
+                    break;
+                case TERMUX_SERVICE.ACTION_QUIT_APP:
+                    Logger.logDebug(LOG_TAG, "ACTION_QUIT_APP intent received");
+                    actionQuitApp();
+                    break;
+                case TERMUX_SERVICE.ACTION_QUIT_APP_FORCE:
+                    Logger.logDebug(LOG_TAG, "ACTION_QUIT_APP_FORCE intent received (skip data-loss checks, already confirmed by user)");
+                    actionQuitAppForce();
+                    break;
+                case TERMUX_SERVICE.ACTION_KILL_SESSIONS:
+                    Logger.logDebug(LOG_TAG, "ACTION_KILL_SESSIONS intent received (switching runtime core)");
+                    killAllTermuxExecutionCommands();
+                    // 切换运行核心：显式清空所有会话（含 Compose 镜像会话——无真实进程，
+                    // 结束后不会触发 onSessionFinished 回调，需手动移除并刷新会话列表）
+                    removeAllTermuxSessions();
+                    runStopForeground();
+                    updateNotification();
                     break;
                 case TERMUX_SERVICE.ACTION_WAKE_LOCK:
                     Logger.logDebug(LOG_TAG, "ACTION_WAKE_LOCK intent received");
@@ -154,6 +307,18 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
                     Logger.logDebug(LOG_TAG, "ACTION_SERVICE_EXECUTE intent received");
                     actionServiceExecute(intent);
                     break;
+                case TERMUX_SERVICE.ACTION_MEMORY_WARNING:
+                    Logger.logDebug(LOG_TAG, "ACTION_MEMORY_WARNING intent received");
+                    actionMemoryWarning();
+                    break;
+                case TERMUX_SERVICE.ACTION_MEMORY_KILL:
+                    Logger.logDebug(LOG_TAG, "ACTION_MEMORY_KILL intent received");
+                    actionMemoryKill();
+                    break;
+                case TERMUX_SERVICE.ACTION_THAW_SESSION:
+                    Logger.logDebug(LOG_TAG, "ACTION_THAW_SESSION intent received");
+                    actionThawSessions();
+                    break;
                 default:
                     Logger.logError(LOG_TAG, "Invalid action: \"" + action + "\"");
                     break;
@@ -162,24 +327,52 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
 
         // If this service really do get killed, there is no point restarting it automatically - let the user do on next
         // start of {@link Term):
-        return Service.START_NOT_STICKY;
+        return Service.START_STICKY;
     }
 
     @Override
     public void onDestroy() {
-        Logger.logVerbose(LOG_TAG, "onDestroy");
+        Logger.logVerbose(LOG_TAG, "onDestroy - mWantsToStop=" + mWantsToStop);
 
         TermuxShellUtils.clearTermuxTMPDIR(true);
 
-        actionReleaseWakeLock(false);
-        if (!mWantsToStop)
+        if (mWantsToStop) {
+            actionReleaseWakeLock(false);
             killAllTermuxExecutionCommands();
+            runStopForeground();
+        }
 
-        TermuxShellManager.onAppExit(this);
+        // 停止 Shell 安全检测 Socket Server
+        com.termux.app.compose.SecuritySocketServer.INSTANCE.stop();
 
-        SystemEventReceiver.unregisterPackageUpdateEvents(this);
+        // 注销 LiveUpdateState 监听器
+        LiveUpdateState.removeListener(mLiveUpdateListener);
 
-        runStopForeground();
+        unregisterMemoryBroadcastReceiver();
+        stopMemoryCheck();
+    }
+
+    @Override
+    public void onTaskRemoved(Intent rootIntent) {
+        Logger.logVerbose(LOG_TAG, "onTaskRemoved");
+        super.onTaskRemoved(rootIntent);
+        
+        if (mTermuxSessions.size() > 0) {
+            runStartForeground();
+            
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                Handler handler = new Handler(Looper.getMainLooper());
+                handler.postDelayed(() -> {
+                    Intent restartIntent = new Intent(this, TermuxService.class);
+                    restartIntent.setAction(TERMUX_SERVICE.ACTION_SERVICE_EXECUTE);
+                    try {
+                        startForegroundService(restartIntent);
+                    } catch (Exception e) {
+                        Logger.logStackTraceWithMessage(LOG_TAG, "Failed to restart service after task removed", e);
+                    }
+                }, 1000);
+            }
+        }
     }
 
     @Override
@@ -195,7 +388,7 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
         // Since we cannot rely on {@link TermuxActivity.onDestroy()} to always complete,
         // we unset clients here as well if it failed, so that we do not leave service and session
         // clients with references to the activity.
-        if (mTermuxTerminalSessionActivityClient != null)
+        if (mTermuxTerminalSessionClient != null)
             unsetTermuxTerminalSessionClient();
         return false;
     }
@@ -218,11 +411,91 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
         stopSelf();
     }
 
-    /** Process action to stop service. */
+    /** Process action to stop service.
+     *  If QEMU VMs or proot containers are detected running, this will NOT kill sessions directly;
+     *  instead it launches MainActivity with EXTRA_TRIGGER_STOP_SERVICE so that a data-loss
+     *  warning OverlayDialog can be shown and user must confirm. Once confirmed the activity
+     *  sends ACTION_STOP_SERVICE_FORCE, handled by {@link #actionStopServiceForce()}.
+     *  If no VMs/containers are running, sessions are killed immediately and MainActivity
+     *  is brought to the foreground so the user sees the refreshed terminal page. */
     private void actionStopService() {
+        // Detect running QEMU / proot containers
+        com.termux.app.compose.ProcessDetector.DetectionResult detection =
+                com.termux.app.compose.ProcessDetector.detectAllBlocking(this);
+        boolean hasDangerousProcesses = detection.getQemuCount() > 0 || detection.getContainerRunning();
+
+        if (hasDangerousProcesses) {
+            // 有容器/虚拟机运行：直接启动 AlertDialogActivity 显示 WindowDialog 警告
+            Logger.logDebug(LOG_TAG, "QEMU or proot container running; launching AlertDialogActivity for stop confirmation (qemu=" + detection.getQemuCount() + ", container=" + detection.getContainerRunning() + ")");
+            com.termux.app.compose.StopConfirmDialog.startWithDetection(
+                    this, false, detection.getQemuCount(), detection.getContainerRunning());
+            return;
+        }
+
+        // No dangerous processes: bring MainActivity to foreground, then kill sessions and refresh
+        Logger.logDebug(LOG_TAG, "No dangerous processes; launching MainActivity and killing sessions");
+        Intent mainIntent = new Intent(this, com.termux.app.MainActivity.class);
+        mainIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        try { startActivity(mainIntent); } catch (Exception e) {
+            Logger.logStackTraceWithMessage(LOG_TAG, "Failed to launch MainActivity", e);
+        }
+
+        actionStopServiceForce();
+    }
+
+    /** Process action to quit the entire app.
+     *  If QEMU VMs or proot containers are detected running, launches MainActivity with
+     *  EXTRA_TRIGGER_QUIT_APP so that a data-loss warning OverlayDialog can be shown.
+     *  Once confirmed, the activity sends ACTION_QUIT_APP_FORCE.
+     *  If no VMs/containers are running, the app exits immediately. */
+    private void actionQuitApp() {
+        // Detect running QEMU / proot containers
+        com.termux.app.compose.ProcessDetector.DetectionResult detection =
+                com.termux.app.compose.ProcessDetector.detectAllBlocking(this);
+        boolean hasDangerousProcesses = detection.getQemuCount() > 0 || detection.getContainerRunning();
+
+        if (hasDangerousProcesses) {
+            // 有容器/虚拟机运行：直接启动 AlertDialogActivity 显示 WindowDialog 警告
+            Logger.logDebug(LOG_TAG, "QEMU or proot container running; launching AlertDialogActivity for quit confirmation (qemu=" + detection.getQemuCount() + ", container=" + detection.getContainerRunning() + ")");
+            com.termux.app.compose.StopConfirmDialog.startWithDetection(
+                    this, true, detection.getQemuCount(), detection.getContainerRunning());
+            return;
+        }
+
+        // No dangerous processes: directly exit
+        actionQuitAppForce();
+    }
+
+    /** Force quit the entire app without any further data-loss checks.
+     *  Kills all sessions, stops foreground service, and terminates the process. */
+    private void actionQuitAppForce() {
         mWantsToStop = true;
         killAllTermuxExecutionCommands();
-        requestStopService();
+        runStopForeground();
+        stopSelf();
+        android.os.Process.killProcess(android.os.Process.myPid());
+    }
+
+    /** Force stop service without any further data-loss checks. Called after TermuxActivity
+     *  has already warned the user (if QEMU/container running) and user confirmed "继续". */
+    private void actionStopServiceForce() {
+        mWantsToStop = false;
+        killAllTermuxExecutionCommands();
+
+        int remainingSessions = getTermuxSessionsSize();
+        int remainingTasks = mTermuxTasks.size();
+        if (remainingSessions == 0 && remainingTasks == 0) {
+            // Mark "sessions cleaned" state so notification downgrades (requirement 1)
+            mAllSessionsCleared = true;
+        }
+
+        updateNotification();
+
+        // 结束反馈：toast 通知用户已结束所有会话
+        final String toastMsg = "已结束所有会话";
+        new Handler(Looper.getMainLooper()).post(() ->
+            android.widget.Toast.makeText(TermuxService.this, toastMsg, android.widget.Toast.LENGTH_SHORT).show()
+        );
     }
 
     /** Kill all TermuxSessions and TermuxTasks by sending SIGKILL to their processes.
@@ -263,36 +536,28 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
     private synchronized void killAllTermuxExecutionCommands() {
         boolean processResult;
 
-        Logger.logDebug(LOG_TAG, "Killing TermuxSessions=" + mShellManager.mTermuxSessions.size() +
-            ", TermuxTasks=" + mShellManager.mTermuxTasks.size() +
-            ", PendingPluginExecutionCommands=" + mShellManager.mPendingPluginExecutionCommands.size());
+        Logger.logDebug(LOG_TAG, "Killing TermuxSessions=" + mTermuxSessions.size() + ", TermuxTasks=" + mTermuxTasks.size() + ", PendingPluginExecutionCommands=" + mPendingPluginExecutionCommands.size());
 
-        List<TermuxSession> termuxSessions = new ArrayList<>(mShellManager.mTermuxSessions);
-        List<AppShell> termuxTasks = new ArrayList<>(mShellManager.mTermuxTasks);
-        List<ExecutionCommand> pendingPluginExecutionCommands = new ArrayList<>(mShellManager.mPendingPluginExecutionCommands);
-
+        List<TermuxSession> termuxSessions = new ArrayList<>(mTermuxSessions);
         for (int i = 0; i < termuxSessions.size(); i++) {
             ExecutionCommand executionCommand = termuxSessions.get(i).getExecutionCommand();
             processResult = mWantsToStop || executionCommand.isPluginExecutionCommandWithPendingResult();
             termuxSessions.get(i).killIfExecuting(this, processResult);
-            if (!processResult)
-                mShellManager.mTermuxSessions.remove(termuxSessions.get(i));
         }
 
-
+        List<TermuxTask> termuxTasks = new ArrayList<>(mTermuxTasks);
         for (int i = 0; i < termuxTasks.size(); i++) {
             ExecutionCommand executionCommand = termuxTasks.get(i).getExecutionCommand();
             if (executionCommand.isPluginExecutionCommandWithPendingResult())
                 termuxTasks.get(i).killIfExecuting(this, true);
-            else
-                mShellManager.mTermuxTasks.remove(termuxTasks.get(i));
         }
 
+        List<ExecutionCommand> pendingPluginExecutionCommands = new ArrayList<>(mPendingPluginExecutionCommands);
         for (int i = 0; i < pendingPluginExecutionCommands.size(); i++) {
             ExecutionCommand executionCommand = pendingPluginExecutionCommands.get(i);
             if (!executionCommand.shouldNotProcessResults() && executionCommand.isPluginExecutionCommandWithPendingResult()) {
                 if (executionCommand.setStateFailed(Errno.ERRNO_CANCELLED.getCode(), this.getString(com.termux.shared.R.string.error_execution_cancelled))) {
-                    TermuxPluginUtils.processPluginExecutionCommandResult(this, LOG_TAG, executionCommand);
+                    PluginUtils.processPluginExecutionCommandResult(this, LOG_TAG, executionCommand);
                 }
             }
         }
@@ -319,9 +584,21 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
         mWifiLock = wm.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, TermuxConstants.TERMUX_APP_NAME.toLowerCase());
         mWifiLock.acquire();
 
-        if (!PermissionUtils.checkIfBatteryOptimizationsDisabled(this)) {
-            PermissionUtils.requestDisableBatteryOptimizations(this);
+        String packageName = getPackageName();
+        if (!pm.isIgnoringBatteryOptimizations(packageName)) {
+            Intent whitelist = new Intent();
+            whitelist.setAction(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
+            whitelist.setData(Uri.parse("package:" + packageName));
+            whitelist.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+
+            try {
+                startActivity(whitelist);
+            } catch (ActivityNotFoundException e) {
+                Logger.logStackTraceWithMessage(LOG_TAG, "Failed to call ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS", e);
+            }
         }
+
+        startKeepAliveStrategies();
 
         updateNotification();
 
@@ -348,6 +625,8 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
             mWifiLock = null;
         }
 
+        stopKeepAliveStrategies();
+
         if (updateNotification)
             updateNotification();
 
@@ -362,41 +641,27 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
             return;
         }
 
-        ExecutionCommand executionCommand = new ExecutionCommand(TermuxShellManager.getNextShellId());
+        ExecutionCommand executionCommand = new ExecutionCommand(getNextExecutionId());
 
         executionCommand.executableUri = intent.getData();
-        executionCommand.isPluginExecutionCommand = true;
-
-        // If EXTRA_RUNNER is passed, use that, otherwise check EXTRA_BACKGROUND and default to Runner.TERMINAL_SESSION
-        executionCommand.runner = IntentUtils.getStringExtraIfSet(intent, TERMUX_SERVICE.EXTRA_RUNNER,
-            (intent.getBooleanExtra(TERMUX_SERVICE.EXTRA_BACKGROUND, false) ? Runner.APP_SHELL.getName() : Runner.TERMINAL_SESSION.getName()));
-        if (Runner.runnerOf(executionCommand.runner) == null) {
-            String errmsg = this.getString(R.string.error_termux_service_invalid_execution_command_runner, executionCommand.runner);
-            executionCommand.setStateFailed(Errno.ERRNO_FAILED.getCode(), errmsg);
-            TermuxPluginUtils.processPluginExecutionCommandError(this, LOG_TAG, executionCommand, false);
-            return;
-        }
+        executionCommand.inBackground = intent.getBooleanExtra(TERMUX_SERVICE.EXTRA_BACKGROUND, false);
 
         if (executionCommand.executableUri != null) {
-            Logger.logVerbose(LOG_TAG, "uri: \"" + executionCommand.executableUri + "\", path: \"" + executionCommand.executableUri.getPath() + "\", fragment: \"" + executionCommand.executableUri.getFragment() + "\"");
-
-            // Get full path including fragment (anything after last "#")
-            executionCommand.executable = UriUtils.getUriFilePathWithFragment(executionCommand.executableUri);
+            executionCommand.executable = executionCommand.executableUri.getPath();
             executionCommand.arguments = IntentUtils.getStringArrayExtraIfSet(intent, TERMUX_SERVICE.EXTRA_ARGUMENTS, null);
-            if (Runner.APP_SHELL.equalsRunner(executionCommand.runner))
+            if (executionCommand.inBackground)
                 executionCommand.stdin = IntentUtils.getStringExtraIfSet(intent, TERMUX_SERVICE.EXTRA_STDIN, null);
-            executionCommand.backgroundCustomLogLevel = IntentUtils.getIntegerExtraIfSet(intent, TERMUX_SERVICE.EXTRA_BACKGROUND_CUSTOM_LOG_LEVEL, null);
+                executionCommand.backgroundCustomLogLevel = IntentUtils.getIntegerExtraIfSet(intent, TERMUX_SERVICE.EXTRA_BACKGROUND_CUSTOM_LOG_LEVEL, null);
         }
 
         executionCommand.workingDirectory = IntentUtils.getStringExtraIfSet(intent, TERMUX_SERVICE.EXTRA_WORKDIR, null);
         executionCommand.isFailsafe = intent.getBooleanExtra(TERMUX_ACTIVITY.EXTRA_FAILSAFE_SESSION, false);
         executionCommand.sessionAction = intent.getStringExtra(TERMUX_SERVICE.EXTRA_SESSION_ACTION);
-        executionCommand.shellName = IntentUtils.getStringExtraIfSet(intent, TERMUX_SERVICE.EXTRA_SHELL_NAME, null);
-        executionCommand.shellCreateMode = IntentUtils.getStringExtraIfSet(intent, TERMUX_SERVICE.EXTRA_SHELL_CREATE_MODE, null);
         executionCommand.commandLabel = IntentUtils.getStringExtraIfSet(intent, TERMUX_SERVICE.EXTRA_COMMAND_LABEL, "Execution Intent Command");
         executionCommand.commandDescription = IntentUtils.getStringExtraIfSet(intent, TERMUX_SERVICE.EXTRA_COMMAND_DESCRIPTION, null);
         executionCommand.commandHelp = IntentUtils.getStringExtraIfSet(intent, TERMUX_SERVICE.EXTRA_COMMAND_HELP, null);
         executionCommand.pluginAPIHelp = IntentUtils.getStringExtraIfSet(intent, TERMUX_SERVICE.EXTRA_PLUGIN_API_HELP, null);
+        executionCommand.isPluginExecutionCommand = true;
         executionCommand.resultConfig.resultPendingIntent = intent.getParcelableExtra(TERMUX_SERVICE.EXTRA_PENDING_INTENT);
         executionCommand.resultConfig.resultDirectoryPath = IntentUtils.getStringExtraIfSet(intent, TERMUX_SERVICE.EXTRA_RESULT_DIRECTORY, null);
         if (executionCommand.resultConfig.resultDirectoryPath != null) {
@@ -407,20 +672,21 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
             executionCommand.resultConfig.resultFilesSuffix = IntentUtils.getStringExtraIfSet(intent, TERMUX_SERVICE.EXTRA_RESULT_FILES_SUFFIX, null);
         }
 
-        if (executionCommand.shellCreateMode == null)
-            executionCommand.shellCreateMode = ShellCreateMode.ALWAYS.getMode();
+        // Guard: ignore ACTION_SERVICE_EXECUTE intents with no executable data.
+        // These are sent by keep-alive mechanisms (AlarmManager, JobScheduler, onTaskRemoved)
+        // and should NOT create new Termux sessions.
+        if (executionCommand.executableUri == null && executionCommand.executable == null) {
+            Logger.logDebug(LOG_TAG, "Ignoring ACTION_SERVICE_EXECUTE intent with no executable data (likely keep-alive/restart)");
+            return;
+        }
 
         // Add the execution command to pending plugin execution commands list
-        mShellManager.mPendingPluginExecutionCommands.add(executionCommand);
+        mPendingPluginExecutionCommands.add(executionCommand);
 
-        if (Runner.APP_SHELL.equalsRunner(executionCommand.runner))
+        if (executionCommand.inBackground) {
             executeTermuxTaskCommand(executionCommand);
-        else if (Runner.TERMINAL_SESSION.equalsRunner(executionCommand.runner))
+        } else {
             executeTermuxSessionCommand(executionCommand);
-        else {
-            String errmsg = getString(R.string.error_termux_service_unsupported_execution_command_runner, executionCommand.runner);
-            executionCommand.setStateFailed(Errno.ERRNO_FAILED.getCode(), errmsg);
-            TermuxPluginUtils.processPluginExecutionCommandError(this, LOG_TAG, executionCommand, false);
         }
     }
 
@@ -428,84 +694,81 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
 
 
 
-    /** Execute a shell command in background TermuxTask. */
+    /** Execute a shell command in background {@link TermuxTask}. */
     private void executeTermuxTaskCommand(ExecutionCommand executionCommand) {
         if (executionCommand == null) return;
 
         Logger.logDebug(LOG_TAG, "Executing background \"" + executionCommand.getCommandIdAndLabelLogString() + "\" TermuxTask command");
 
-        // Transform executable path to shell/session name, e.g. "/bin/do-something.sh" => "do-something.sh".
-        if (executionCommand.shellName == null && executionCommand.executable != null)
-            executionCommand.shellName = ShellUtils.getExecutableBasename(executionCommand.executable);
-
-        AppShell newTermuxTask = null;
-        ShellCreateMode shellCreateMode = processShellCreateMode(executionCommand);
-        if (shellCreateMode == null) return;
-        if (ShellCreateMode.NO_SHELL_WITH_NAME.equals(shellCreateMode)) {
-            newTermuxTask = getTermuxTaskForShellName(executionCommand.shellName);
-            if (newTermuxTask != null)
-                Logger.logVerbose(LOG_TAG, "Existing TermuxTask with \"" + executionCommand.shellName + "\" shell name found for shell create mode \"" + shellCreateMode.getMode() + "\"");
-            else
-                Logger.logVerbose(LOG_TAG, "No existing TermuxTask with \"" + executionCommand.shellName + "\" shell name found for shell create mode \"" + shellCreateMode.getMode() + "\"");
-        }
-
-        if (newTermuxTask == null)
-            newTermuxTask = createTermuxTask(executionCommand);
+        TermuxTask newTermuxTask = createTermuxTask(executionCommand);
     }
 
-    /** Create a TermuxTask. */
+    /** Create a {@link TermuxTask}. */
     @Nullable
-    public AppShell createTermuxTask(String executablePath, String[] arguments, String stdin, String workingDirectory) {
-        return createTermuxTask(new ExecutionCommand(TermuxShellManager.getNextShellId(), executablePath,
-            arguments, stdin, workingDirectory, Runner.APP_SHELL.getName(), false));
+    public TermuxTask createTermuxTask(String executablePath, String[] arguments, String stdin, String workingDirectory) {
+        return createTermuxTask(new ExecutionCommand(getNextExecutionId(), executablePath, arguments, stdin, workingDirectory, true, false));
     }
 
-    /** Create a TermuxTask. */
+    /** Create a {@link TermuxTask}. */
     @Nullable
-    public synchronized AppShell createTermuxTask(ExecutionCommand executionCommand) {
+    public synchronized TermuxTask createTermuxTask(ExecutionCommand executionCommand) {
         if (executionCommand == null) return null;
 
         Logger.logDebug(LOG_TAG, "Creating \"" + executionCommand.getCommandIdAndLabelLogString() + "\" TermuxTask");
 
-        if (!Runner.APP_SHELL.equalsRunner(executionCommand.runner)) {
-            Logger.logDebug(LOG_TAG, "Ignoring wrong runner \"" + executionCommand.runner + "\" command passed to createTermuxTask()");
+        if (!executionCommand.inBackground) {
+            Logger.logDebug(LOG_TAG, "Ignoring a foreground execution command passed to createTermuxTask()");
             return null;
         }
 
-        executionCommand.setShellCommandShellEnvironment = true;
+        // 高危命令检测：显示弹窗二次确认
+        if (isRiskConfirmationEnabled()) {
+            String cmdStr = extractCommandString(executionCommand);
+            if (cmdStr != null && com.termux.app.compose.RiskCommandDetector.INSTANCE.isDangerous(cmdStr)) {
+                Logger.logWarn(LOG_TAG, "High-risk task command detected, requesting confirmation: " + cmdStr);
+                boolean confirmed = com.termux.app.compose.RiskConfirmManager.INSTANCE
+                    .requestConfirmationBlocking(this, cmdStr);
+                if (!confirmed) {
+                    Logger.logWarn(LOG_TAG, "Blocked high-risk task command: " + cmdStr);
+                    Toast.makeText(this, R.string.access_denied, Toast.LENGTH_LONG).show();
+                    return null;
+                }
+            }
+        }
 
         if (Logger.getLogLevel() >= Logger.LOG_LEVEL_VERBOSE)
             Logger.logVerboseExtended(LOG_TAG, executionCommand.toString());
 
-        AppShell newTermuxTask = AppShell.execute(this, executionCommand, this,
-            new TermuxShellEnvironment(), null,false);
+        TermuxTask newTermuxTask = TermuxTask.execute(this, executionCommand, this, new TermuxShellEnvironmentClient(), false);
         if (newTermuxTask == null) {
             Logger.logError(LOG_TAG, "Failed to execute new TermuxTask command for:\n" + executionCommand.getCommandIdAndLabelLogString());
             // If the execution command was started for a plugin, then process the error
             if (executionCommand.isPluginExecutionCommand)
-                TermuxPluginUtils.processPluginExecutionCommandError(this, LOG_TAG, executionCommand, false);
-            else {
-                Logger.logError(LOG_TAG, "Set log level to debug or higher to see error in logs");
-                Logger.logErrorPrivateExtended(LOG_TAG, executionCommand.toString());
-            }
+                PluginUtils.processPluginExecutionCommandError(this, LOG_TAG, executionCommand, false);
+            else
+                Logger.logErrorExtended(LOG_TAG, executionCommand.toString());
             return null;
         }
 
-        mShellManager.mTermuxTasks.add(newTermuxTask);
+        mTermuxTasks.add(newTermuxTask);
 
         // Remove the execution command from the pending plugin execution commands list since it has
         // now been processed
         if (executionCommand.isPluginExecutionCommand)
-            mShellManager.mPendingPluginExecutionCommands.remove(executionCommand);
+            mPendingPluginExecutionCommands.remove(executionCommand);
+
+        // A new background task was created => leave the "sessions cleaned" state so
+        // notification priority and format are restored to LiveUpdate style
+        mAllSessionsCleared = false;
 
         updateNotification();
 
         return newTermuxTask;
     }
 
-    /** Callback received when a TermuxTask finishes. */
+    /** Callback received when a {@link TermuxTask} finishes. */
     @Override
-    public void onAppShellExited(final AppShell termuxTask) {
+    public void onTermuxTaskExited(final TermuxTask termuxTask) {
         mHandler.post(() -> {
             if (termuxTask != null) {
                 ExecutionCommand executionCommand = termuxTask.getExecutionCommand();
@@ -514,9 +777,9 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
 
                 // If the execution command was started for a plugin, then process the results
                 if (executionCommand != null && executionCommand.isPluginExecutionCommand)
-                    TermuxPluginUtils.processPluginExecutionCommandResult(this, LOG_TAG, executionCommand);
+                    PluginUtils.processPluginExecutionCommandResult(this, LOG_TAG, executionCommand);
 
-                mShellManager.mTermuxTasks.remove(termuxTask);
+                mTermuxTasks.remove(termuxTask);
             }
 
             updateNotification();
@@ -533,23 +796,14 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
 
         Logger.logDebug(LOG_TAG, "Executing foreground \"" + executionCommand.getCommandIdAndLabelLogString() + "\" TermuxSession command");
 
-        // Transform executable path to shell/session name, e.g. "/bin/do-something.sh" => "do-something.sh".
-        if (executionCommand.shellName == null && executionCommand.executable != null)
-            executionCommand.shellName = ShellUtils.getExecutableBasename(executionCommand.executable);
+        String sessionName = null;
 
-        TermuxSession newTermuxSession = null;
-        ShellCreateMode shellCreateMode = processShellCreateMode(executionCommand);
-        if (shellCreateMode == null) return;
-        if (ShellCreateMode.NO_SHELL_WITH_NAME.equals(shellCreateMode)) {
-            newTermuxSession = getTermuxSessionForShellName(executionCommand.shellName);
-            if (newTermuxSession != null)
-                Logger.logVerbose(LOG_TAG, "Existing TermuxSession with \"" + executionCommand.shellName + "\" shell name found for shell create mode \"" + shellCreateMode.getMode() + "\"");
-            else
-                Logger.logVerbose(LOG_TAG, "No existing TermuxSession with \"" + executionCommand.shellName + "\" shell name found for shell create mode \"" + shellCreateMode.getMode() + "\"");
+        // Transform executable path to session name, e.g. "/bin/do-something.sh" => "do something.sh".
+        if (executionCommand.executable != null) {
+            sessionName = ShellUtils.getExecutableBasename(executionCommand.executable).replace('-', ' ');
         }
 
-        if (newTermuxSession == null)
-            newTermuxSession = createTermuxSession(executionCommand);
+        TermuxSession newTermuxSession = createTermuxSession(executionCommand, sessionName);
         if (newTermuxSession == null) return;
 
         handleSessionAction(DataUtils.getIntFromString(executionCommand.sessionAction,
@@ -559,80 +813,236 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
 
     /**
      * Create a {@link TermuxSession}.
-     * Currently called by {@link TermuxTerminalSessionActivityClient#addNewSession(boolean, String)} to add a new {@link TermuxSession}.
+     * Currently called by {@link TermuxTerminalSessionClient#addNewSession(boolean, String)} to add a new {@link TermuxSession}.
      */
     @Nullable
-    public TermuxSession createTermuxSession(String executablePath, String[] arguments, String stdin,
-                                             String workingDirectory, boolean isFailSafe, String sessionName) {
-        ExecutionCommand executionCommand = new ExecutionCommand(TermuxShellManager.getNextShellId(),
-            executablePath, arguments, stdin, workingDirectory, Runner.TERMINAL_SESSION.getName(), isFailSafe);
-        executionCommand.shellName = sessionName;
-        return createTermuxSession(executionCommand);
+    public TermuxSession createTermuxSession(String executablePath, String[] arguments, String stdin, String workingDirectory, boolean isFailSafe, String sessionName) {
+        return createTermuxSession(new ExecutionCommand(getNextExecutionId(), executablePath, arguments, stdin, workingDirectory, false, isFailSafe), sessionName);
     }
 
     /** Create a {@link TermuxSession}. */
     @Nullable
-    public synchronized TermuxSession createTermuxSession(ExecutionCommand executionCommand) {
+    public synchronized TermuxSession createTermuxSession(ExecutionCommand executionCommand, String sessionName) {
         if (executionCommand == null) return null;
 
         Logger.logDebug(LOG_TAG, "Creating \"" + executionCommand.getCommandIdAndLabelLogString() + "\" TermuxSession");
 
-        if (!Runner.TERMINAL_SESSION.equalsRunner(executionCommand.runner)) {
-            Logger.logDebug(LOG_TAG, "Ignoring wrong runner \"" + executionCommand.runner + "\" command passed to createTermuxSession()");
+        if (executionCommand.inBackground) {
+            Logger.logDebug(LOG_TAG, "Ignoring a background execution command passed to createTermuxSession()");
             return null;
         }
 
-        executionCommand.setShellCommandShellEnvironment = true;
-        executionCommand.terminalTranscriptRows = mProperties.getTerminalTranscriptRows();
+        // 高危命令检测：显示弹窗二次确认
+        if (isRiskConfirmationEnabled()) {
+            String cmdStr = extractCommandString(executionCommand);
+            if (cmdStr != null && com.termux.app.compose.RiskCommandDetector.INSTANCE.isDangerous(cmdStr)) {
+                Logger.logWarn(LOG_TAG, "High-risk command detected, requesting confirmation: " + cmdStr);
+                boolean confirmed = com.termux.app.compose.RiskConfirmManager.INSTANCE
+                    .requestConfirmationBlocking(this, cmdStr);
+                if (!confirmed) {
+                    Logger.logWarn(LOG_TAG, "Blocked high-risk command: " + cmdStr);
+                    Toast.makeText(this, R.string.access_denied, Toast.LENGTH_LONG).show();
+                    return null;
+                }
+            }
+        }
 
         if (Logger.getLogLevel() >= Logger.LOG_LEVEL_VERBOSE)
             Logger.logVerboseExtended(LOG_TAG, executionCommand.toString());
 
+        // Compose 模式：会话由 ComposeSessionManager 管理。这里通过镜像句柄保持 Java 接口
+        // 完全兼容——第三方页面（资源中心/工具中心等）无需改动即可直接调用创建/写入/切换。
+        if (com.termux.app.compose.TerminalRuntimeCore.isComposeMode(this)) {
+            TermuxSession composeMirror = com.termux.app.compose.ComposeSessionBridge.INSTANCE
+                .createComposeMirrorSession(this, executionCommand, sessionName);
+            if (composeMirror == null) {
+                Logger.logError(LOG_TAG, "Failed to create Compose mirror TermuxSession for:\n" + executionCommand.getCommandIdAndLabelLogString());
+                return null;
+            }
+            mTermuxSessions.add(composeMirror);
+
+            // Remove the execution command from the pending plugin execution commands list since it has
+            // now been processed
+            if (executionCommand.isPluginExecutionCommand)
+                mPendingPluginExecutionCommands.remove(executionCommand);
+
+            mAllSessionsCleared = false;
+
+            // Notify UI that sessions list has been updated
+            if (mTermuxTerminalSessionClient != null)
+                mTermuxTerminalSessionClient.termuxSessionListNotifyUpdated();
+
+            // Auto acquire WakeLock if session is running a server/listening program (VNC, SSH, etc.)
+            if (isServerProgram(executionCommand)) {
+                actionAcquireWakeLock();
+            }
+
+            updateNotification();
+            TermuxActivity.updateTermuxActivityStyling(this);
+
+            return composeMirror;
+        }
+
         // If the execution command was started for a plugin, only then will the stdout be set
         // Otherwise if command was manually started by the user like by adding a new terminal session,
         // then no need to set stdout
-        TermuxSession newTermuxSession = TermuxSession.execute(this, executionCommand, getTermuxTerminalSessionClient(),
-            this, new TermuxShellEnvironment(), null, executionCommand.isPluginExecutionCommand);
+        executionCommand.terminalTranscriptRows = getTerminalTranscriptRows();
+        TermuxSession newTermuxSession = TermuxSession.execute(this, executionCommand, getTermuxTerminalSessionClient(), this, new TermuxShellEnvironmentClient(), sessionName, executionCommand.isPluginExecutionCommand);
         if (newTermuxSession == null) {
             Logger.logError(LOG_TAG, "Failed to execute new TermuxSession command for:\n" + executionCommand.getCommandIdAndLabelLogString());
             // If the execution command was started for a plugin, then process the error
             if (executionCommand.isPluginExecutionCommand)
-                TermuxPluginUtils.processPluginExecutionCommandError(this, LOG_TAG, executionCommand, false);
-            else {
-                Logger.logError(LOG_TAG, "Set log level to debug or higher to see error in logs");
-                Logger.logErrorPrivateExtended(LOG_TAG, executionCommand.toString());
-            }
+                PluginUtils.processPluginExecutionCommandError(this, LOG_TAG, executionCommand, false);
+            else
+                Logger.logErrorExtended(LOG_TAG, executionCommand.toString());
             return null;
         }
 
-        mShellManager.mTermuxSessions.add(newTermuxSession);
+        mTermuxSessions.add(newTermuxSession);
+
+        // ===== 新会话自动执行命令（经典引擎）=====
+        try {
+            android.content.SharedPreferences prefs = getSharedPreferences("termux_preferences", MODE_PRIVATE);
+            String autoCmd = prefs.getString("auto_start_command", "");
+            Logger.logDebug(LOG_TAG, "[AutoStart] 读取到 auto_start_command: '" + autoCmd + "' (长度=" + (autoCmd == null ? 0 : autoCmd.length()) + ")");
+            if (autoCmd != null && !autoCmd.isEmpty()) {
+                String finalCmd = autoCmd.endsWith("\n") ? autoCmd : autoCmd + "\n";
+                Logger.logDebug(LOG_TAG, "[AutoStart] 等待 shell 就绪后写入: '" + autoCmd + "'");
+                Runnable autoStartTask = new Runnable() {
+                    int retries = 0;
+                    @Override
+                    public void run() {
+                        try {
+                            TerminalSession ts = newTermuxSession.getTerminalSession();
+                            if (ts == null) {
+                                Logger.logError(LOG_TAG, "[AutoStart] TerminalSession 为 null！");
+                                return;
+                            }
+                            int shellPid = ts.getShellPid();
+                            Logger.logDebug(LOG_TAG, "[AutoStart] 轮询 shellPid=" + shellPid + " (第" + (retries + 1) + "次)");
+                            if (shellPid > 0) {
+                                ts.write(finalCmd.getBytes(), 0, finalCmd.length());
+                                Logger.logDebug(LOG_TAG, "[AutoStart] 已写入 " + finalCmd.length() + " bytes");
+                            } else if (retries < 30) {
+                                retries++;
+                                new Handler(Looper.getMainLooper()).postDelayed(this, 200);
+                            } else {
+                                Logger.logError(LOG_TAG, "[AutoStart] 超时（30次重试），shellPid 仍为 0，放弃自动执行");
+                            }
+                        } catch (Exception e) {
+                            Logger.logError(LOG_TAG, "[AutoStart] 写入失败: " + e.getMessage());
+                        }
+                    }
+                };
+                new Handler(Looper.getMainLooper()).postDelayed(autoStartTask, 300);
+            }
+        } catch (Exception e) {
+            Logger.logError(LOG_TAG, "[AutoStart] 异常: " + e.getMessage());
+        }
 
         // Remove the execution command from the pending plugin execution commands list since it has
         // now been processed
         if (executionCommand.isPluginExecutionCommand)
-            mShellManager.mPendingPluginExecutionCommands.remove(executionCommand);
+            mPendingPluginExecutionCommands.remove(executionCommand);
+
+        // A new foreground session was created => restore LiveUpdate notification format
+        mAllSessionsCleared = false;
 
         // Notify {@link TermuxSessionsListViewController} that sessions list has been updated if
         // activity in is foreground
-        if (mTermuxTerminalSessionActivityClient != null)
-            mTermuxTerminalSessionActivityClient.termuxSessionListNotifyUpdated();
+        if (mTermuxTerminalSessionClient != null)
+            mTermuxTerminalSessionClient.termuxSessionListNotifyUpdated();
+
+        // Auto acquire WakeLock if session is running a server/listening program (VNC, SSH, etc.)
+        if (isServerProgram(executionCommand)) {
+            actionAcquireWakeLock();
+        }
 
         updateNotification();
-
-        // No need to recreate the activity since it likely just started and theme should already have applied
-        TermuxActivity.updateTermuxActivityStyling(this, false);
+        TermuxActivity.updateTermuxActivityStyling(this);
 
         return newTermuxSession;
     }
 
     /** Remove a TermuxSession. */
-    public synchronized int removeTermuxSession(TerminalSession sessionToRemove) {
+    
+    /**
+     * 注册一个插件创建的 TermuxSession 到服务管理。
+     *
+     * 插件持久化会话也需要进入 mTermuxSessions，这样终端页面能看到并管理它，
+     * 通知栏计数也能正确包含。commandLabel 前缀为 "PluginSession:" 供 UI 区分。
+     */
+    public synchronized void registerPluginSession(@NonNull final TermuxSession session) {
+        if (session == null) return;
+        if (!session.getExecutionCommand().commandLabel.startsWith("PluginSession:")) {
+            Logger.logWarn(LOG_TAG, "registerPluginSession 收到的会话 commandLabel 不以 PluginSession: 开头，可能不是插件会话");
+        }
+        session.setSource(TermuxSession.SessionSource.PLUGIN);
+        mTermuxSessions.add(session);
+        Logger.logDebug(LOG_TAG, "registerPluginSession: 已添加插件会话 " + session.getTerminalSession().mSessionName + " (total=" + mTermuxSessions.size() + ")");
+
+        // 通知 UI
+        if (mTermuxTerminalSessionClient != null)
+            mTermuxTerminalSessionClient.termuxSessionListNotifyUpdated();
+
+        // 插件持久化会话是一个普通 shell（login shell），设置 emulator 尺寸
+        TerminalSession terminal = session.getTerminalSession();
+        if (terminal.getEmulator() == null && terminal.getShellPid() > 0) {
+            terminal.updateSize(80, 24, 0, 0);
+        }
+
+        updateNotification();
+        TermuxActivity.updateTermuxActivityStyling(this);
+    }
+
+public synchronized int removeTermuxSession(TerminalSession sessionToRemove) {
         int index = getIndexOfSession(sessionToRemove);
 
-        if (index >= 0)
-            mShellManager.mTermuxSessions.get(index).finish();
+        if (index >= 0) {
+            // Compose 模式镜像：同时结束并注销对应的 Compose 会话
+            com.termux.app.compose.ComposeSessionBridge.INSTANCE.removeByJavaMirror(sessionToRemove);
+            mTermuxSessions.get(index).getTerminalSession().finishIfRunning();
+            mTermuxSessions.remove(index);
+            // 清理环境缓存
+            if (sessionToRemove.mHandle != null) {
+                com.termux.app.compose.RiskConfirmManager.INSTANCE.invalidateEnvironmentCache(sessionToRemove.mHandle);
+            }
+        }
 
+        updateNotification();
         return index;
+    }
+
+    /** Force remove a TermuxSession from the list immediately. */
+    public synchronized void forceRemoveTermuxSession(TermuxSession sessionToRemove) {
+        int index = -1;
+        for (int i = 0; i < mTermuxSessions.size(); i++) {
+            if (mTermuxSessions.get(i).getTerminalSession() == sessionToRemove.getTerminalSession()) {
+                index = i;
+                break;
+            }
+        }
+        if (index >= 0) {
+            TermuxSession session = mTermuxSessions.get(index);
+            String sessionName = session.getTerminalSession().mSessionName;
+            if (sessionName == null || sessionName.isEmpty()) {
+                sessionName = getString(R.string.terminal);
+            }
+            // Compose 模式镜像：同时结束并注销对应的 Compose 会话
+            com.termux.app.compose.ComposeSessionBridge.INSTANCE.removeByJavaMirror(session.getTerminalSession());
+            session.getTerminalSession().finishIfRunning();
+            mTermuxSessions.remove(index);
+            // 清理环境缓存
+            TerminalSession terminalSession = sessionToRemove.getTerminalSession();
+            if (terminalSession != null && terminalSession.mHandle != null) {
+                com.termux.app.compose.RiskConfirmManager.INSTANCE.invalidateEnvironmentCache(terminalSession.mHandle);
+            }
+            final String finalSessionName = sessionName;
+            new Handler(getMainLooper()).post(() ->
+                Toast.makeText(TermuxService.this, finalSessionName + " 已停止，返回代码: 137", Toast.LENGTH_SHORT).show()
+            );
+        }
+        updateNotification();
     }
 
     /** Callback received when a {@link TermuxSession} finishes. */
@@ -643,42 +1053,74 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
 
             Logger.logVerbose(LOG_TAG, "The onTermuxSessionExited() callback called for \"" + executionCommand.getCommandIdAndLabelLogString() + "\" TermuxSession command");
 
+            int exitCode = termuxSession.getTerminalSession().getExitStatus();
+            String sessionName = termuxSession.getTerminalSession().mSessionName;
+            if (sessionName == null || sessionName.isEmpty()) {
+                sessionName = getString(R.string.terminal);
+            }
+
+            // 记录到死亡会话队列，供 TerminalListScreen 以"死亡卡片"形式展示
+            // （红色标题 + 退出代码小字 + 手动消除按钮）
+            mDeadSessionInfos.add(new DeadSessionInfo(sessionName, exitCode, System.currentTimeMillis()));
+
+            if (exitCode == 137 && !mIsMemoryKillActive && !MemoryBroadcastReceiver.isMemoryKillReceived()) {
+                mKilledSessionName = sessionName;
+                Logger.logDebug(LOG_TAG, "Session killed by system: " + sessionName);
+            }
+
             // If the execution command was started for a plugin, then process the results
             if (executionCommand != null && executionCommand.isPluginExecutionCommand)
-                TermuxPluginUtils.processPluginExecutionCommandResult(this, LOG_TAG, executionCommand);
+                PluginUtils.processPluginExecutionCommandResult(this, LOG_TAG, executionCommand);
 
-            mShellManager.mTermuxSessions.remove(termuxSession);
+            mTermuxSessions.remove(termuxSession);
+
+            // 清理环境缓存
+            String handle = termuxSession.getTerminalSession().mHandle;
+            if (handle != null) {
+                com.termux.app.compose.RiskConfirmManager.INSTANCE.invalidateEnvironmentCache(handle);
+            }
 
             // Notify {@link TermuxSessionsListViewController} that sessions list has been updated if
             // activity in is foreground
-            if (mTermuxTerminalSessionActivityClient != null)
-                mTermuxTerminalSessionActivityClient.termuxSessionListNotifyUpdated();
+            if (mTermuxTerminalSessionClient != null)
+                mTermuxTerminalSessionClient.termuxSessionListNotifyUpdated();
         }
 
         updateNotification();
     }
 
-
-
-
-
-    private ShellCreateMode processShellCreateMode(@NonNull ExecutionCommand executionCommand) {
-        if (ShellCreateMode.ALWAYS.equalsMode(executionCommand.shellCreateMode))
-            return ShellCreateMode.ALWAYS; // Default
-        else if (ShellCreateMode.NO_SHELL_WITH_NAME.equalsMode(executionCommand.shellCreateMode))
-            if (DataUtils.isNullOrEmpty(executionCommand.shellName)) {
-                TermuxPluginUtils.setAndProcessPluginExecutionCommandError(this, LOG_TAG, executionCommand, false,
-                    getString(R.string.error_termux_service_execution_command_shell_name_unset, executionCommand.shellCreateMode));
-                return null;
-            } else {
-               return ShellCreateMode.NO_SHELL_WITH_NAME;
-            }
-        else {
-            TermuxPluginUtils.setAndProcessPluginExecutionCommandError(this, LOG_TAG, executionCommand, false,
-                getString(R.string.error_termux_service_unsupported_execution_command_shell_create_mode, executionCommand.shellCreateMode));
-            return null;
-        }
+    /** 获取已结束会话信息列表（供 TerminalListScreen 渲染死亡卡片）。 */
+    public synchronized List<DeadSessionInfo> getDeadSessionInfos() {
+        return new ArrayList<>(mDeadSessionInfos);
     }
+
+    /** 用户手动消除某个死亡会话卡片时调用。 */
+    public synchronized void clearDeadSessionInfo(String sessionName, long exitedAt) {
+        mDeadSessionInfos.removeIf(info ->
+            info.sessionName.equals(sessionName) && info.exitedAt == exitedAt);
+    }
+
+    /** 清除所有死亡会话信息（例如用户点击"全部清除"）。 */
+    public synchronized void clearAllDeadSessionInfos() {
+        mDeadSessionInfos.clear();
+    }
+
+    /** Get the terminal transcript rows to be used for new {@link TermuxSession}. */
+    public Integer getTerminalTranscriptRows() {
+        if (mTerminalTranscriptRows == null)
+            setTerminalTranscriptRows();
+        return mTerminalTranscriptRows;
+    }
+
+    public void setTerminalTranscriptRows() {
+        // TermuxService only uses this termux property currently, so no need to load them all into
+        // an internal values map like TermuxActivity does
+        mTerminalTranscriptRows = TermuxAppSharedProperties.getTerminalTranscriptRows(this);
+    }
+
+
+
+
 
     /** Process session action for new session. */
     private void handleSessionAction(int sessionAction, TerminalSession newTerminalSession) {
@@ -687,8 +1129,8 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
         switch (sessionAction) {
             case TERMUX_SERVICE.VALUE_EXTRA_SESSION_ACTION_SWITCH_TO_NEW_SESSION_AND_OPEN_ACTIVITY:
                 setCurrentStoredTerminalSession(newTerminalSession);
-                if (mTermuxTerminalSessionActivityClient != null)
-                    mTermuxTerminalSessionActivityClient.setCurrentSession(newTerminalSession);
+                if (mTermuxTerminalSessionClient != null)
+                    mTermuxTerminalSessionClient.setCurrentSession(newTerminalSession);
                 startTermuxActivity();
                 break;
             case TERMUX_SERVICE.VALUE_EXTRA_SESSION_ACTION_KEEP_CURRENT_SESSION_AND_OPEN_ACTIVITY:
@@ -698,8 +1140,8 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
                 break;
             case TERMUX_SERVICE.VALUE_EXTRA_SESSION_ACTION_SWITCH_TO_NEW_SESSION_AND_DONT_OPEN_ACTIVITY:
                 setCurrentStoredTerminalSession(newTerminalSession);
-                if (mTermuxTerminalSessionActivityClient != null)
-                    mTermuxTerminalSessionActivityClient.setCurrentSession(newTerminalSession);
+                if (mTermuxTerminalSessionClient != null)
+                    mTermuxTerminalSessionClient.setCurrentSession(newTerminalSession);
                 break;
             case TERMUX_SERVICE.VALUE_EXTRA_SESSION_ACTION_KEEP_CURRENT_SESSION_AND_DONT_OPEN_ACTIVITY:
                 if (getTermuxSessionsSize() == 1)
@@ -722,8 +1164,8 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
         } else {
             TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(this);
             if (preferences == null) return;
-            if (preferences.arePluginErrorNotificationsEnabled(false))
-                Logger.showToast(this, this.getString(R.string.error_display_over_other_apps_permission_not_granted_to_start_terminal), true);
+            if (preferences.arePluginErrorNotificationsEnabled())
+                Logger.showToast(this, this.getString(R.string.error_display_over_other_apps_permission_not_granted), true);
         }
     }
 
@@ -733,35 +1175,35 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
 
     /** If {@link TermuxActivity} has not bound to the {@link TermuxService} yet or is destroyed, then
      * interface functions requiring the activity should not be available to the terminal sessions,
-     * so we just return the {@link #mTermuxTerminalSessionServiceClient}. Once {@link TermuxActivity} bind
+     * so we just return the {@link #mTermuxTerminalSessionClientBase}. Once {@link TermuxActivity} bind
      * callback is received, it should call {@link #setTermuxTerminalSessionClient} to set the
-     * {@link TermuxService#mTermuxTerminalSessionActivityClient} so that further terminal sessions are directly
-     * passed the {@link TermuxTerminalSessionActivityClient} object which fully implements the
+     * {@link TermuxService#mTermuxTerminalSessionClient} so that further terminal sessions are directly
+     * passed the {@link TermuxTerminalSessionClient} object which fully implements the
      * {@link TerminalSessionClient} interface.
      *
-     * @return Returns the {@link TermuxTerminalSessionActivityClient} if {@link TermuxActivity} has bound with
-     * {@link TermuxService}, otherwise {@link TermuxTerminalSessionServiceClient}.
+     * @return Returns the {@link TermuxTerminalSessionClient} if {@link TermuxActivity} has bound with
+     * {@link TermuxService}, otherwise {@link TermuxTerminalSessionClientBase}.
      */
     public synchronized TermuxTerminalSessionClientBase getTermuxTerminalSessionClient() {
-        if (mTermuxTerminalSessionActivityClient != null)
-            return mTermuxTerminalSessionActivityClient;
+        if (mTermuxTerminalSessionClient != null)
+            return mTermuxTerminalSessionClient;
         else
-            return mTermuxTerminalSessionServiceClient;
+            return mTermuxTerminalSessionClientBase;
     }
 
     /** This should be called when {@link TermuxActivity#onServiceConnected} is called to set the
-     * {@link TermuxService#mTermuxTerminalSessionActivityClient} variable and update the {@link TerminalSession}
-     * and {@link TerminalEmulator} clients in case they were passed {@link TermuxTerminalSessionServiceClient}
+     * {@link TermuxService#mTermuxTerminalSessionClient} variable and update the {@link TerminalSession}
+     * and {@link TerminalEmulator} clients in case they were passed {@link TermuxTerminalSessionClientBase}
      * earlier.
      *
-     * @param termuxTerminalSessionActivityClient The {@link TermuxTerminalSessionActivityClient} object that fully
+     * @param termuxTerminalSessionClient The {@link TermuxTerminalSessionClient} object that fully
      * implements the {@link TerminalSessionClient} interface.
      */
-    public synchronized void setTermuxTerminalSessionClient(TermuxTerminalSessionActivityClient termuxTerminalSessionActivityClient) {
-        mTermuxTerminalSessionActivityClient = termuxTerminalSessionActivityClient;
+    public synchronized void setTermuxTerminalSessionClient(TermuxTerminalSessionClient termuxTerminalSessionClient) {
+        mTermuxTerminalSessionClient = termuxTerminalSessionClient;
 
-        for (int i = 0; i < mShellManager.mTermuxSessions.size(); i++)
-            mShellManager.mTermuxSessions.get(i).getTerminalSession().updateTerminalSessionClient(mTermuxTerminalSessionActivityClient);
+        for (int i = 0; i < mTermuxSessions.size(); i++)
+            mTermuxSessions.get(i).getTerminalSession().updateTerminalSessionClient(mTermuxTerminalSessionClient);
     }
 
     /** This should be called when {@link TermuxActivity} has been destroyed and in {@link #onUnbind(Intent)}
@@ -769,75 +1211,233 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
      * clients do not hold an activity references.
      */
     public synchronized void unsetTermuxTerminalSessionClient() {
-        for (int i = 0; i < mShellManager.mTermuxSessions.size(); i++)
-            mShellManager.mTermuxSessions.get(i).getTerminalSession().updateTerminalSessionClient(mTermuxTerminalSessionServiceClient);
+        for (int i = 0; i < mTermuxSessions.size(); i++)
+            mTermuxSessions.get(i).getTerminalSession().updateTerminalSessionClient(mTermuxTerminalSessionClientBase);
 
-        mTermuxTerminalSessionActivityClient = null;
+        mTermuxTerminalSessionClient = null;
     }
 
 
 
 
 
+    /**
+     * 构建前台服务通知。
+     *
+     * 三档优先级（越靠前越优先）：
+     *   1) LiveUpdateState.hasPkg()  → 包管理器操作中
+     *   2) LiveUpdateState.hasAgent() → Agent 正在执行
+     *   3) 终端会话（现有逻辑兜底）
+     */
     private Notification buildNotification() {
         Resources res = getResources();
 
-        // Set pending intent to be launched when notification is clicked
         Intent notificationIntent = TermuxActivity.newInstance(this);
-        PendingIntent contentIntent = PendingIntent.getActivity(this, 0, notificationIntent, 0);
+        int pendingIntentFlags = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ? PendingIntent.FLAG_IMMUTABLE : 0;
+        PendingIntent contentIntent = PendingIntent.getActivity(this, 0, notificationIntent, pendingIntentFlags);
 
-
-        // Set notification text
-        int sessionCount = getTermuxSessionsSize();
-        int taskCount = mShellManager.mTermuxTasks.size();
-        String notificationText = sessionCount + " session" + (sessionCount == 1 ? "" : "s");
-        if (taskCount > 0) {
-            notificationText += ", " + taskCount + " task" + (taskCount == 1 ? "" : "s");
+        // ===== 档 1：包管理器操作 =====
+        LiveUpdateState.PkgState pkgState = LiveUpdateState.getPkgStateSnapshot();
+        if (pkgState != null && !pkgState.getFinished()) {
+            return buildPkgNotification(pkgState, contentIntent, pendingIntentFlags);
         }
 
-        final boolean wakeLockHeld = mWakeLock != null;
-        if (wakeLockHeld) notificationText += " (wake lock held)";
+        // ===== 档 2：Agent 执行中 =====
+        if (LiveUpdateState.hasAgent()) {
+            return buildAgentNotification(contentIntent, pendingIntentFlags);
+        }
 
+        // ===== 档 3：终端会话 =====
+        return buildTerminalNotification(res, contentIntent, pendingIntentFlags);
+    }
 
-        // Set notification priority
-        // If holding a wake or wifi lock consider the notification of high priority since it's using power,
-        // otherwise use a low priority
-        int priority = (wakeLockHeld) ? Notification.PRIORITY_HIGH : Notification.PRIORITY_LOW;
+    /** 档 1：包管理器进度通知（带 ProgressStyle + 药丸"操作进行:XX%"）。 */
+    private Notification buildPkgNotification(LiveUpdateState.PkgState pkg, PendingIntent contentIntent, int piFlags) {
+        Resources res = getResources();
+        Notification.Builder builder = (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+            ? new Notification.Builder(this, TermuxConstants.TERMUX_APP_NOTIFICATION_CHANNEL_ID)
+            : new Notification.Builder(this);
 
+        String title = "正在执行软件包更改";
+        String body;
+        switch (pkg.getOperation()) {
+            case INSTALL:  body = "Termux 正在安装软件包: " + pkg.getPackageName(); break;
+            case UNINSTALL: body = "Termux 正在卸载软件包: " + pkg.getPackageName(); break;
+            case UPGRADE:  body = "正在升级已安装的软件包"; break;
+            case UPDATE:
+            default:       body = "正在刷新软件包列表"; break;
+        }
 
-        // Build the notification
-        Notification.Builder builder =  NotificationUtils.geNotificationBuilder(this,
-            TermuxConstants.TERMUX_APP_NOTIFICATION_CHANNEL_ID, priority,
-            TermuxConstants.TERMUX_APP_NAME, notificationText, null,
-            contentIntent, null, NotificationUtils.NOTIFICATION_MODE_SILENT);
-        if (builder == null)  return null;
-
-        // No need to show a timestamp:
+        builder.setContentTitle(title);
+        builder.setContentText(body);
+        builder.setContentIntent(contentIntent);
         builder.setShowWhen(false);
-
-        // Set notification icon
         builder.setSmallIcon(R.drawable.ic_service_notification);
+        builder.setOngoing(true);
+        builder.setPriority(Notification.PRIORITY_HIGH);
+        builder.setStyle(new Notification.BigTextStyle().bigText(body));
 
-        // Set background color for small notification icon
-        builder.setColor(0xFF607D8B);
+        // 进度条
+        if (pkg.getProgress() > 0) {
+            builder.setProgress(100, pkg.getProgress(), false);
+        } else {
+            builder.setProgress(0, 0, true);  // indeterminate
+        }
 
-        // TermuxSessions are always ongoing
+        // LiveUpdate 上岛 + 药丸
+        if (Build.VERSION.SDK_INT >= 36) {
+            try {
+                Bundle extras = new Bundle();
+                extras.putBoolean(Notification.EXTRA_REQUEST_PROMOTED_ONGOING, true);
+                builder.addExtras(extras);
+                if (pkg.getProgress() > 0) {
+                    builder.setShortCriticalText("操作进行:" + pkg.getProgress() + "%");
+                } else {
+                    builder.setShortCriticalText("操作进行中");
+                }
+            } catch (Throwable ignored) {}
+        }
+        return builder.build();
+    }
+
+    /** 档 2：Agent 执行通知（药丸"思考中" + 停止按钮）。 */
+    private Notification buildAgentNotification(PendingIntent contentIntent, int piFlags) {
+        Notification.Builder builder = (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+            ? new Notification.Builder(this, TermuxConstants.TERMUX_APP_NOTIFICATION_CHANNEL_ID)
+            : new Notification.Builder(this);
+
+        builder.setContentTitle("Termux Agent");
+        builder.setContentText("Agent 正在执行任务");
+        builder.setContentIntent(contentIntent);
+        builder.setShowWhen(false);
+        builder.setSmallIcon(R.drawable.ic_service_notification);
+        builder.setOngoing(true);
+        builder.setPriority(Notification.PRIORITY_HIGH);
+        builder.setStyle(new Notification.BigTextStyle().bigText("Agent 正在执行任务"));
+
+        // 停止按钮
+        Intent stopIntent = new Intent(this, TermuxService.class).setAction(ACTION_STOP_AGENT);
+        builder.addAction(android.R.drawable.ic_media_pause, getString(R.string.common_stop),
+            PendingIntent.getService(this, 1001, stopIntent, PendingIntent.FLAG_UPDATE_CURRENT | piFlags));
+
+        if (Build.VERSION.SDK_INT >= 36) {
+            try {
+                Bundle extras = new Bundle();
+                extras.putBoolean(Notification.EXTRA_REQUEST_PROMOTED_ONGOING, true);
+                builder.addExtras(extras);
+                builder.setShortCriticalText("思考中");
+            } catch (Throwable ignored) {}
+        }
+        return builder.build();
+    }
+
+    /** 档 3：终端会话通知（兜底）。 */
+    private Notification buildTerminalNotification(Resources res, PendingIntent contentIntent, int piFlags) {
+        int sessionCount = getTermuxSessionsSize();
+        if (com.termux.app.compose.TerminalRuntimeCore.isComposeMode(this)) {
+            try {
+                sessionCount = com.termux.app.compose.terminal.ComposeSessionManager
+                    .getInstance(this).getSessions().getValue().size();
+            } catch (Throwable t) {
+                Logger.logDebug(LOG_TAG, "Failed to count Compose sessions: " + t.getMessage());
+            }
+        }
+        int taskCount = mTermuxTasks.size();
+
+        if (mAllSessionsCleared && (sessionCount > 0 || taskCount > 0)) {
+            mAllSessionsCleared = false;
+        }
+
+        com.termux.app.compose.ProcessDetector.DetectionResult detection = null;
+        if (sessionCount > 0 || taskCount > 0) {
+            detection = com.termux.app.compose.ProcessDetector.detectAllBlocking(this);
+        }
+        final int qemuCount  = (detection == null) ? 0 : detection.getQemuCount();
+        final boolean containerRunning = (detection != null) && detection.getContainerRunning();
+
+        final boolean wakeLockHeld = mWakeLock != null;
+        boolean sessionsCleared = mAllSessionsCleared && sessionCount == 0 && taskCount == 0;
+
+        // --- 标题 ---
+        String title;
+        if (qemuCount > 0) {
+            title = qemuCount + " 个虚拟机会话";
+        } else if (containerRunning) {
+            title = sessionCount + " 个会话(含容器)";
+        } else {
+            title = sessionCount + " 个会话";
+        }
+
+        // --- 内容 ---
+        String body;
+        if (sessionsCleared) {
+            body = "终端会话已清理(已无会话运行)。";
+        } else if (sessionCount == 0 && taskCount == 0) {
+            body = res.getString(R.string.notification_no_terminals_running);
+        } else if (containerRunning) {
+            body = "Termux 内有容器正在运行";
+        } else {
+            body = "Termux 正在运行中";
+        }
+        if (!sessionsCleared && taskCount > 0) {
+            body += "，" + taskCount + " 个任务";
+        }
+        if (wakeLockHeld && !sessionsCleared) {
+            body += " (" + res.getString(R.string.notification_wake_lock_held) + ")";
+        }
+
+        int priority = sessionsCleared ? Notification.PRIORITY_LOW :
+            (wakeLockHeld ? Notification.PRIORITY_HIGH : Notification.PRIORITY_LOW);
+
+        Notification.Builder builder = (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+            ? new Notification.Builder(this, TermuxConstants.TERMUX_APP_NOTIFICATION_CHANNEL_ID)
+            : new Notification.Builder(this);
+
+        builder.setContentTitle(title);
+        builder.setContentText(body);
+        builder.setContentIntent(contentIntent);
+        builder.setPriority(priority);
+        builder.setShowWhen(false);
+        builder.setSmallIcon(R.drawable.ic_service_notification);
         builder.setOngoing(true);
 
+        // 按钮
+        Intent stopIntent = new Intent(this, TermuxService.class).setAction(TERMUX_SERVICE.ACTION_STOP_SERVICE);
+        builder.addAction(android.R.drawable.ic_delete, res.getString(R.string.notification_action_exit),
+            PendingIntent.getService(this, 1, stopIntent, PendingIntent.FLAG_UPDATE_CURRENT | piFlags));
 
-        // Set Exit button action
-        Intent exitIntent = new Intent(this, TermuxService.class).setAction(TERMUX_SERVICE.ACTION_STOP_SERVICE);
-        builder.addAction(android.R.drawable.ic_delete, res.getString(R.string.notification_action_exit), PendingIntent.getService(this, 0, exitIntent, 0));
+        Intent quitIntent = new Intent(this, TermuxService.class).setAction(TERMUX_SERVICE.ACTION_QUIT_APP);
+        builder.addAction(android.R.drawable.ic_menu_close_clear_cancel, res.getString(R.string.notification_action_quit),
+            PendingIntent.getService(this, 2, quitIntent, PendingIntent.FLAG_UPDATE_CURRENT | piFlags));
 
-
-        // Set Wakelock button actions
         String newWakeAction = wakeLockHeld ? TERMUX_SERVICE.ACTION_WAKE_UNLOCK : TERMUX_SERVICE.ACTION_WAKE_LOCK;
         Intent toggleWakeLockIntent = new Intent(this, TermuxService.class).setAction(newWakeAction);
         String actionTitle = res.getString(wakeLockHeld ? R.string.notification_action_wake_unlock : R.string.notification_action_wake_lock);
         int actionIcon = wakeLockHeld ? android.R.drawable.ic_lock_idle_lock : android.R.drawable.ic_lock_lock;
-        builder.addAction(actionIcon, actionTitle, PendingIntent.getService(this, 0, toggleWakeLockIntent, 0));
+        builder.addAction(actionIcon, actionTitle,
+            PendingIntent.getService(this, 0, toggleWakeLockIntent, PendingIntent.FLAG_UPDATE_CURRENT | piFlags));
 
-
+        // LiveUpdate 上岛
+        if (Build.VERSION.SDK_INT >= 36) {
+            try {
+                if (!sessionsCleared && (sessionCount > 0 || qemuCount > 0 || containerRunning)) {
+                    builder.setPriority(Notification.PRIORITY_HIGH);
+                    builder.setStyle(new Notification.BigTextStyle().bigText(body));
+                    Bundle extras = new Bundle();
+                    extras.putBoolean(Notification.EXTRA_REQUEST_PROMOTED_ONGOING, true);
+                    builder.addExtras(extras);
+                    if (qemuCount > 0) {
+                        builder.setShortCriticalText(qemuCount + " 个虚拟机会话");
+                    } else if (containerRunning) {
+                        builder.setShortCriticalText(sessionCount + " 个会话(含容器)");
+                    } else {
+                        builder.setShortCriticalText(sessionCount + " 个会话");
+                    }
+                }
+            } catch (Throwable e) {
+                Logger.logDebug(LOG_TAG, "Failed to set LiveUpdate properties: " + e.getMessage());
+            }
+        }
         return builder.build();
     }
 
@@ -845,72 +1445,109 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return;
 
         NotificationUtils.setupNotificationChannel(this, TermuxConstants.TERMUX_APP_NOTIFICATION_CHANNEL_ID,
-            TermuxConstants.TERMUX_APP_NOTIFICATION_CHANNEL_NAME, NotificationManager.IMPORTANCE_LOW);
+            TermuxConstants.TERMUX_APP_NOTIFICATION_CHANNEL_NAME, NotificationManager.IMPORTANCE_DEFAULT);
     }
 
     /** Update the shown foreground service notification after making any changes that affect it. */
     private synchronized void updateNotification() {
-        if (mWakeLock == null && mShellManager.mTermuxSessions.isEmpty() && mShellManager.mTermuxTasks.isEmpty()) {
-            // Exit if we are updating after the user disabled all locks with no sessions or tasks running.
-            requestStopService();
-        } else {
-            ((NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE)).notify(TermuxConstants.TERMUX_APP_NOTIFICATION_ID, buildNotification());
-        }
+        Notification notification = buildNotification();
+        ((NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE)).notify(TermuxConstants.TERMUX_APP_NOTIFICATION_ID, notification);
     }
 
 
 
 
 
-    private void setCurrentStoredTerminalSession(TerminalSession terminalSession) {
-        if (terminalSession == null) return;
+    private void setCurrentStoredTerminalSession(TerminalSession session) {
+        if (session == null) return;
         // Make the newly created session the current one to be displayed
         TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(this);
         if (preferences == null) return;
-        preferences.setCurrentSession(terminalSession.mHandle);
+        preferences.setCurrentSession(session.mHandle);
     }
 
-    public synchronized boolean isTermuxSessionsEmpty() {
-        return mShellManager.mTermuxSessions.isEmpty();
+    public synchronized boolean isWakeLockHeld() {
+        return mWakeLock != null;
     }
 
     public synchronized int getTermuxSessionsSize() {
-        return mShellManager.mTermuxSessions.size();
+        return mTermuxSessions.size();
     }
 
     public synchronized List<TermuxSession> getTermuxSessions() {
-        return mShellManager.mTermuxSessions;
+        return mTermuxSessions;
+    }
+
+    /** Update the session list with a new ordered list. */
+    public synchronized void updateSessionList(List<TermuxSession> newSessions) {
+        mTermuxSessions.clear();
+        mTermuxSessions.addAll(newSessions);
+        if (mTermuxTerminalSessionClient != null)
+            mTermuxTerminalSessionClient.termuxSessionListNotifyUpdated();
+        updateNotification();
+    }
+
+    /**
+     * 清空所有会话与任务并刷新会话列表（切换运行核心时使用）。
+     * 含 Compose 镜像会话——无真实进程，结束后不会触发 onSessionFinished 回调，
+     * 必须手动从列表移除，否则切换回 Java 核心后会残留无效的会话卡片。
+     */
+    public synchronized void removeAllTermuxSessions() {
+        for (TermuxSession session : new ArrayList<>(mTermuxSessions)) {
+            try {
+                session.getTerminalSession().finishIfRunning();
+            } catch (Exception e) {
+                Logger.logStackTraceWithMessage(LOG_TAG, "Failed to finish session while clearing all sessions", e);
+            }
+        }
+        mTermuxSessions.clear();
+        mTermuxTasks.clear();
+        if (mTermuxTerminalSessionClient != null)
+            mTermuxTerminalSessionClient.termuxSessionListNotifyUpdated();
+        updateNotification();
     }
 
     @Nullable
     public synchronized TermuxSession getTermuxSession(int index) {
-        if (index >= 0 && index < mShellManager.mTermuxSessions.size())
-            return mShellManager.mTermuxSessions.get(index);
+        if (index >= 0 && index < mTermuxSessions.size())
+            return mTermuxSessions.get(index);
         else
             return null;
     }
 
-    @Nullable
-    public synchronized TermuxSession getTermuxSessionForTerminalSession(TerminalSession terminalSession) {
-        if (terminalSession == null) return null;
+    public synchronized TermuxSession getLastTermuxSession() {
+        return mTermuxSessions.isEmpty() ? null : mTermuxSessions.get(mTermuxSessions.size() - 1);
+    }
 
-        for (int i = 0; i < mShellManager.mTermuxSessions.size(); i++) {
-            if (mShellManager.mTermuxSessions.get(i).getTerminalSession().equals(terminalSession))
-                return mShellManager.mTermuxSessions.get(i);
+    /**
+     * 上一次进入的会话（存储的当前会话，否则最后一个会话），供主页终端列表高亮显示。
+     * 语义与 {@link TermuxTerminalSessionClient#getCurrentStoredSessionOrLast()} 一致，
+     * 返回值映射回列表中的 {@link TermuxSession}。
+     */
+    public synchronized TermuxSession getLastEnteredTermuxSession() {
+        TerminalSession terminalSession = null;
+        // 直接读取持久化的当前会话句柄：终端控制台（TermuxActivity）返回主页后其会话客户端
+        // 已被 unset（mTermuxTerminalSessionClient == null），不能依赖客户端实例，
+        // 否则返回主页后高亮会丢失。语义与 getCurrentStoredSessionOrLast() 一致。
+        TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(this);
+        if (preferences != null) {
+            String storedHandle = preferences.getCurrentSession();
+            if (storedHandle != null)
+                terminalSession = getTerminalSessionForHandle(storedHandle);
         }
-
+        if (terminalSession == null && !mTermuxSessions.isEmpty())
+            terminalSession = mTermuxSessions.get(mTermuxSessions.size() - 1).getTerminalSession();
+        if (terminalSession == null) return null;
+        for (TermuxSession session : mTermuxSessions) {
+            if (session.getTerminalSession() == terminalSession)
+                return session;
+        }
         return null;
     }
 
-    public synchronized TermuxSession getLastTermuxSession() {
-        return mShellManager.mTermuxSessions.isEmpty() ? null : mShellManager.mTermuxSessions.get(mShellManager.mTermuxSessions.size() - 1);
-    }
-
     public synchronized int getIndexOfSession(TerminalSession terminalSession) {
-        if (terminalSession == null) return -1;
-
-        for (int i = 0; i < mShellManager.mTermuxSessions.size(); i++) {
-            if (mShellManager.mTermuxSessions.get(i).getTerminalSession().equals(terminalSession))
+        for (int i = 0; i < mTermuxSessions.size(); i++) {
+            if (mTermuxSessions.get(i).getTerminalSession().equals(terminalSession))
                 return i;
         }
         return -1;
@@ -918,42 +1555,500 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
 
     public synchronized TerminalSession getTerminalSessionForHandle(String sessionHandle) {
         TerminalSession terminalSession;
-        for (int i = 0, len = mShellManager.mTermuxSessions.size(); i < len; i++) {
-            terminalSession = mShellManager.mTermuxSessions.get(i).getTerminalSession();
+        for (int i = 0, len = mTermuxSessions.size(); i < len; i++) {
+            terminalSession = mTermuxSessions.get(i).getTerminalSession();
             if (terminalSession.mHandle.equals(sessionHandle))
                 return terminalSession;
         }
         return null;
     }
 
-    public synchronized AppShell getTermuxTaskForShellName(String name) {
-        if (DataUtils.isNullOrEmpty(name)) return null;
-        AppShell appShell;
-        for (int i = 0, len = mShellManager.mTermuxTasks.size(); i < len; i++) {
-            appShell = mShellManager.mTermuxTasks.get(i);
-            String shellName = appShell.getExecutionCommand().shellName;
-            if (shellName != null && shellName.equals(name))
-                return appShell;
-        }
-        return null;
+
+
+    private void startKeepAliveStrategies() {
+        scheduleJobScheduler();
+        scheduleAlarmManager();
+        startKeepAliveHandler();
     }
 
-    public synchronized TermuxSession getTermuxSessionForShellName(String name) {
-        if (DataUtils.isNullOrEmpty(name)) return null;
-        TermuxSession termuxSession;
-        for (int i = 0, len = mShellManager.mTermuxSessions.size(); i < len; i++) {
-            termuxSession = mShellManager.mTermuxSessions.get(i);
-            String shellName = termuxSession.getExecutionCommand().shellName;
-            if (shellName != null && shellName.equals(name))
-                return termuxSession;
-        }
-        return null;
+    private void stopKeepAliveStrategies() {
+        cancelJobScheduler();
+        cancelAlarmManager();
+        stopKeepAliveHandler();
     }
 
+    private int mJobId = 1001;
 
+    private void scheduleJobScheduler() {
+        try {
+            JobScheduler jobScheduler = (JobScheduler) getSystemService(Context.JOB_SCHEDULER_SERVICE);
+            JobInfo.Builder builder = new JobInfo.Builder(mJobId, new ComponentName(this, TermuxService.class));
+            builder.setPeriodic(60 * 1000);
+            builder.setPersisted(true);
+            builder.setRequiredNetworkType(JobInfo.NETWORK_TYPE_NONE);
+            jobScheduler.schedule(builder.build());
+        } catch (Exception e) {
+            Logger.logStackTraceWithMessage(LOG_TAG, "Failed to schedule JobScheduler", e);
+        }
+    }
+
+    private void cancelJobScheduler() {
+        try {
+            JobScheduler jobScheduler = (JobScheduler) getSystemService(Context.JOB_SCHEDULER_SERVICE);
+            jobScheduler.cancel(mJobId);
+        } catch (Exception e) {
+            Logger.logStackTraceWithMessage(LOG_TAG, "Failed to cancel JobScheduler", e);
+        }
+    }
+
+    private void scheduleAlarmManager() {
+        try {
+            AlarmManager alarmManager = (AlarmManager) getSystemService(Context.ALARM_SERVICE);
+            Intent intent = new Intent(this, TermuxService.class);
+            intent.setAction(TERMUX_SERVICE.ACTION_SERVICE_EXECUTE);
+            int flags = Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ? PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE : PendingIntent.FLAG_UPDATE_CURRENT;
+            PendingIntent pendingIntent = PendingIntent.getService(this, 0, intent, flags);
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                alarmManager.setExactAndAllowWhileIdle(
+                        AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                        SystemClock.elapsedRealtime() + 60 * 1000,
+                        pendingIntent
+                );
+            } else {
+                alarmManager.setRepeating(
+                        AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                        SystemClock.elapsedRealtime() + 60 * 1000,
+                        60 * 1000,
+                        pendingIntent
+                );
+            }
+        } catch (Exception e) {
+            Logger.logStackTraceWithMessage(LOG_TAG, "Failed to schedule AlarmManager", e);
+        }
+    }
+
+    private void cancelAlarmManager() {
+        try {
+            AlarmManager alarmManager = (AlarmManager) getSystemService(Context.ALARM_SERVICE);
+            Intent intent = new Intent(this, TermuxService.class);
+            intent.setAction(TERMUX_SERVICE.ACTION_SERVICE_EXECUTE);
+            int flags = Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ? PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE : PendingIntent.FLAG_UPDATE_CURRENT;
+            PendingIntent pendingIntent = PendingIntent.getService(this, 0, intent, flags);
+            alarmManager.cancel(pendingIntent);
+        } catch (Exception e) {
+            Logger.logStackTraceWithMessage(LOG_TAG, "Failed to cancel AlarmManager", e);
+        }
+    }
+
+    private Handler mKeepAliveHandler;
+    private Runnable mKeepAliveRunnable;
+
+    private void startKeepAliveHandler() {
+        HandlerThread handlerThread = new HandlerThread("TermuxKeepAlive");
+        handlerThread.start();
+        mKeepAliveHandler = new Handler(handlerThread.getLooper());
+
+        mKeepAliveRunnable = () -> {
+            if (mWakeLock != null) {
+                runStartForeground();
+                mKeepAliveHandler.postDelayed(mKeepAliveRunnable, 30 * 1000);
+            }
+        };
+
+        mKeepAliveHandler.postDelayed(mKeepAliveRunnable, 30 * 1000);
+    }
+
+    private void stopKeepAliveHandler() {
+        if (mKeepAliveHandler != null) {
+            mKeepAliveHandler.removeCallbacks(mKeepAliveRunnable);
+            mKeepAliveHandler.getLooper().quitSafely();
+            mKeepAliveHandler = null;
+        }
+    }
+
+    public static synchronized int getNextExecutionId() {
+        return EXECUTION_ID++;
+    }
 
     public boolean wantsToStop() {
         return mWantsToStop;
+    }
+
+    /** Check if the execution command is running a server/listening program. */
+    private boolean isServerProgram(ExecutionCommand executionCommand) {
+        if (executionCommand == null) return false;
+
+        String commandStr = executionCommand.executable;
+        if (commandStr != null && isServerCommand(commandStr)) {
+            return true;
+        }
+
+        String[] args = executionCommand.arguments;
+        if (args != null) {
+            for (String arg : args) {
+                if (isServerCommand(arg)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /** Check if a string contains server/listening program keywords. */
+    private boolean isServerCommand(String str) {
+        if (str == null) return false;
+        String lowerStr = str.toLowerCase();
+        return lowerStr.contains("vnc") ||
+               lowerStr.contains("ssh") ||
+               lowerStr.contains("server") ||
+               lowerStr.contains("listen") ||
+               lowerStr.contains("bind") ||
+               lowerStr.contains("port") ||
+               lowerStr.contains("x11") ||
+               lowerStr.contains("rdp") ||
+               lowerStr.contains("httpd") ||
+               lowerStr.contains("nginx") ||
+               lowerStr.contains("apache") ||
+               lowerStr.contains("mysql") ||
+               lowerStr.contains("postgres") ||
+               lowerStr.contains("redis") ||
+               lowerStr.contains("sshd") ||
+               lowerStr.contains("telnet") ||
+               lowerStr.contains("ftp") ||
+               lowerStr.contains("sftp");
+    }
+
+    private void registerMemoryBroadcastReceiver() {
+        if (!DomesticOSDetector.isDomesticOS()) {
+            Logger.logDebug(LOG_TAG, "Not a domestic OS, skipping memory broadcast receiver registration");
+            return;
+        }
+
+        mMemoryBroadcastReceiver = new MemoryBroadcastReceiver();
+        IntentFilter filter = new IntentFilter();
+        filter.addAction(MemoryBroadcastReceiver.ACTION_MEMORY_TRIM);
+        filter.addAction(MemoryBroadcastReceiver.ACTION_MEMORY_KILL);
+        filter.addAction(MemoryBroadcastReceiver.ACTION_XIAOMI_MEMORY_TRIM);
+        filter.addAction(MemoryBroadcastReceiver.ACTION_XIAOMI_MEMORY_KILL);
+        filter.addAction(MemoryBroadcastReceiver.ACTION_OPPO_MEMORY_TRIM);
+        filter.addAction(MemoryBroadcastReceiver.ACTION_OPPO_MEMORY_KILL);
+        filter.addAction(MemoryBroadcastReceiver.ACTION_VIVO_MEMORY_TRIM);
+        filter.addAction(MemoryBroadcastReceiver.ACTION_VIVO_MEMORY_KILL);
+        filter.addAction(MemoryBroadcastReceiver.ACTION_HONOR_MEMORY_TRIM);
+        filter.addAction(MemoryBroadcastReceiver.ACTION_HONOR_MEMORY_KILL);
+        registerReceiver(mMemoryBroadcastReceiver, filter);
+        Logger.logDebug(LOG_TAG, "Memory broadcast receiver registered");
+    }
+
+    private void unregisterMemoryBroadcastReceiver() {
+        if (mMemoryBroadcastReceiver != null) {
+            try {
+                unregisterReceiver(mMemoryBroadcastReceiver);
+            } catch (Exception e) {
+                Logger.logStackTraceWithMessage(LOG_TAG, "Failed to unregister memory broadcast receiver", e);
+            }
+            mMemoryBroadcastReceiver = null;
+        }
+    }
+
+    private void actionMemoryWarning() {
+        if (!DomesticOSDetector.isDomesticOS()) return;
+
+        mIsMemoryWarningActive = true;
+        mIsMemoryKillActive = false;
+        showMemoryWarningNotification();
+        startMemoryCheck();
+    }
+
+    private void actionMemoryKill() {
+        if (!DomesticOSDetector.isDomesticOS()) return;
+
+        mIsMemoryKillActive = true;
+        mIsMemoryWarningActive = false;
+        stopMemoryCheck();
+        freezeAllSessions();
+        showMemoryKillNotification();
+    }
+
+    private void actionThawSessions() {
+        thawAllSessions();
+    }
+
+    private void showMemoryWarningNotification() {
+        Notification.Builder builder = NotificationUtils.geNotificationBuilder(this,
+            TermuxConstants.TERMUX_APP_NOTIFICATION_CHANNEL_ID, Notification.PRIORITY_HIGH,
+            getString(R.string.memory_warning_title), getString(R.string.memory_warning_message), null,
+            PendingIntent.getActivity(this, 0, TermuxActivity.newInstance(this),
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ? PendingIntent.FLAG_IMMUTABLE : 0),
+            null, NotificationUtils.NOTIFICATION_MODE_ALL);
+        if (builder != null) {
+            builder.setSmallIcon(R.drawable.ic_service_notification);
+            ((NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE))
+                .notify(TermuxConstants.TERMUX_APP_NOTIFICATION_ID + 1, builder.build());
+        }
+    }
+
+    private void showMemoryKillNotification() {
+        Notification.Builder builder = NotificationUtils.geNotificationBuilder(this,
+            TermuxConstants.TERMUX_APP_NOTIFICATION_CHANNEL_ID, Notification.PRIORITY_HIGH,
+            getString(R.string.memory_kill_title), getString(R.string.memory_kill_message), null,
+            PendingIntent.getActivity(this, 0, TermuxActivity.newInstance(this),
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ? PendingIntent.FLAG_IMMUTABLE : 0),
+            null, NotificationUtils.NOTIFICATION_MODE_ALL);
+        if (builder != null) {
+            builder.setSmallIcon(R.drawable.ic_service_notification);
+            ((NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE))
+                .notify(TermuxConstants.TERMUX_APP_NOTIFICATION_ID + 2, builder.build());
+        }
+    }
+
+    private void startMemoryCheck() {
+        stopMemoryCheck();
+
+        HandlerThread handlerThread = new HandlerThread("TermuxMemoryCheck");
+        handlerThread.start();
+        mMemoryCheckHandler = new Handler(handlerThread.getLooper());
+
+        mMemoryCheckRunnable = new Runnable() {
+            @Override
+            public void run() {
+                if (mIsMemoryWarningActive) {
+                    long memoryUsage = getCurrentMemoryUsage();
+                    if (memoryUsage < getMemoryThreshold()) {
+                        mIsMemoryWarningActive = false;
+                        MemoryBroadcastReceiver.resetMemoryWarning();
+                        stopMemoryCheck();
+                    }
+                }
+                if (mMemoryCheckHandler != null) {
+                    mMemoryCheckHandler.postDelayed(this, MEMORY_CHECK_INTERVAL);
+                }
+            }
+        };
+
+        mMemoryCheckHandler.postDelayed(mMemoryCheckRunnable, MEMORY_CHECK_INTERVAL);
+    }
+
+    private void stopMemoryCheck() {
+        if (mMemoryCheckHandler != null) {
+            mMemoryCheckHandler.removeCallbacks(mMemoryCheckRunnable);
+            mMemoryCheckHandler.getLooper().quitSafely();
+            mMemoryCheckHandler = null;
+        }
+    }
+
+    private long getCurrentMemoryUsage() {
+        Runtime runtime = Runtime.getRuntime();
+        return runtime.totalMemory() - runtime.freeMemory();
+    }
+
+    private long getMemoryThreshold() {
+        Runtime runtime = Runtime.getRuntime();
+        return (long) (runtime.maxMemory() * 0.7);
+    }
+
+    private synchronized void freezeAllSessions() {
+        if (mAreSessionsFrozen) return;
+
+        Logger.logDebug(LOG_TAG, "Freezing all Termux sessions");
+        mAreSessionsFrozen = true;
+
+        File frozenDir = new File(getFilesDir(), FROZEN_SESSIONS_DIR);
+        if (!frozenDir.exists()) {
+            frozenDir.mkdirs();
+        }
+
+        for (TermuxSession session : mTermuxSessions) {
+            freezeSession(session);
+        }
+
+        mTermuxSessions.clear();
+        updateNotification();
+    }
+
+    private void freezeSession(TermuxSession session) {
+        try {
+            String sessionName = session.getTerminalSession().mSessionName;
+            if (sessionName == null || sessionName.isEmpty()) {
+                sessionName = "terminal";
+            }
+
+            File freezeFile = new File(getFilesDir(), FROZEN_SESSIONS_DIR + "/" + sessionName + ".frozen");
+            ObjectOutputStream oos = new ObjectOutputStream(new FileOutputStream(freezeFile));
+            oos.writeObject(session);
+            oos.close();
+
+            session.getTerminalSession().finishIfRunning();
+            Logger.logDebug(LOG_TAG, "Frozen session: " + sessionName);
+        } catch (IOException e) {
+            Logger.logStackTraceWithMessage(LOG_TAG, "Failed to freeze session", e);
+        }
+    }
+
+    private synchronized void thawAllSessions() {
+        if (!mAreSessionsFrozen) return;
+
+        Logger.logDebug(LOG_TAG, "Thawing all frozen Termux sessions");
+        mAreSessionsFrozen = false;
+        mIsMemoryKillActive = false;
+        MemoryBroadcastReceiver.resetMemoryKill();
+
+        File frozenDir = new File(getFilesDir(), FROZEN_SESSIONS_DIR);
+        if (!frozenDir.exists()) {
+            return;
+        }
+
+        File[] frozenFiles = frozenDir.listFiles();
+        if (frozenFiles != null) {
+            for (File freezeFile : frozenFiles) {
+                thawSession(freezeFile);
+                freezeFile.delete();
+            }
+        }
+
+        updateNotification();
+    }
+
+    private void thawSession(File freezeFile) {
+        try {
+            ObjectInputStream ois = new ObjectInputStream(new FileInputStream(freezeFile));
+            TermuxSession session = (TermuxSession) ois.readObject();
+            ois.close();
+
+            mTermuxSessions.add(session);
+            Logger.logDebug(LOG_TAG, "Thawed session: " + session.getTerminalSession().mSessionName);
+        } catch (IOException | ClassNotFoundException e) {
+            Logger.logStackTraceWithMessage(LOG_TAG, "Failed to thaw session", e);
+        }
+    }
+
+    public boolean isMemoryWarningActive() {
+        return mIsMemoryWarningActive;
+    }
+
+    public boolean isMemoryKillActive() {
+        return mIsMemoryKillActive;
+    }
+
+    public boolean areSessionsFrozen() {
+        return mAreSessionsFrozen;
+    }
+
+    public String getKilledSessionName() {
+        return mKilledSessionName;
+    }
+
+    public void setKilledSessionName(String name) {
+        mKilledSessionName = name;
+    }
+
+    public void clearKilledSessionName() {
+        mKilledSessionName = null;
+    }
+
+    /** Check if high-risk command confirmation is enabled in preferences (uses cached value for performance). */
+    private boolean isRiskConfirmationEnabled() {
+        try {
+            // 使用 RiskConfirmManager 的缓存方法，避免直接读取 SharedPreferences
+            com.termux.app.compose.RiskConfirmManager.ProtectionLevel level = 
+                com.termux.app.compose.RiskConfirmManager.INSTANCE.getProtectionLevel(this);
+            return level != com.termux.app.compose.RiskConfirmManager.ProtectionLevel.OFF;
+        } catch (Exception e) {
+            return true;
+        }
+    }
+
+    /** Extract the actual command string from an ExecutionCommand for risk detection. */
+    private String extractCommandString(ExecutionCommand executionCommand) {
+        if (executionCommand == null) return null;
+
+        String executable = executionCommand.executable;
+        String[] args = executionCommand.arguments;
+
+        if (executable == null) return null;
+
+        // If executable is a shell with "-c" argument, the actual command is in args[1]
+        if (args != null && args.length >= 2 && "-c".equals(args[0])) {
+            return args[1];
+        }
+
+        // Otherwise, return the executable path itself
+        return executable;
+    }
+
+
+    /**
+     * 部署或清理 shell 安全检测 hook。
+     * @param remove true=VorteX Guard Engine OFF → 删 port 文件 + 删 profile 注入，让 shell hook 完全跳过
+     *               false=正常部署 → 拷贝 hook 脚本 + 注入 source 行
+     */
+    public static void deploySecurityHook(android.content.Context ctx, boolean remove) {
+        try {
+            String home = ctx.getFilesDir().getParent() + "/files/home";
+            java.io.File homeDir = new java.io.File(home);
+            if (!homeDir.exists()) homeDir.mkdirs();
+
+            // port 文件：无论 remove/deploy，先处理
+            java.io.File sockDir = new java.io.File(ctx.getFilesDir().getParent() + "/files/sock");
+            java.io.File portFile = new java.io.File(sockDir, "termux-security.port");
+            if (remove) {
+                // OFF → 删 port 文件 → hook 的 DEBUG trap 里 [ -f "$PORT_FILE" ] 失败 → return 0
+                if (portFile.exists()) portFile.delete();
+            }
+
+            String marker = "# >>> termux-security-hook >>>";
+            String hookLine = "source ~/.termux-security-hook.sh";
+            String markerEnd = "# <<< termux-security-hook <<<";
+            String[] profiles = {".bashrc", ".zshrc", ".profile"};
+
+            for (String profileName : profiles) {
+                java.io.File pf = new java.io.File(homeDir, profileName);
+                if (!pf.exists()) {
+                    if (remove) continue;  // OFF 时不创建空 profile
+                    pf.createNewFile();
+                }
+                String content = new String(java.nio.file.Files.readAllBytes(pf.toPath()), java.nio.charset.StandardCharsets.UTF_8);
+                // 清旧注入
+                content = content.replaceAll("(?m)^.*termux-security-hook.*\\n?", "");
+                content = content.replaceAll("(?m)^#.*termux-security.*\\n?", "");
+                content = content.replaceAll("(?m)^source.*\\.termux-security.*\\n?", "");
+                content = content.replaceAll("\\n{3,}", "\n\n");
+
+                if (remove) {
+                    // OFF → 完全不注入
+                    java.nio.file.Files.write(pf.toPath(), content.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                } else {
+                    // 非 OFF → 拷贝 hook 脚本（统一转 LF，防 CRLF 导致 bash 语法错误）
+                    java.io.File hookFile = new java.io.File(homeDir, ".termux-security-hook.sh");
+                    if (hookFile.exists()) hookFile.delete();
+                    java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+                    try (java.io.InputStream is = ctx.getAssets().open("termux-security-hook.sh")) {
+                        byte[] buf = new byte[8192];
+                        int n;
+                        while ((n = is.read(buf)) > 0) baos.write(buf, 0, n);
+                    }
+                    String hookContent = new String(baos.toByteArray(), java.nio.charset.StandardCharsets.UTF_8)
+                            .replace("\r\n", "\n").replace("\r", "\n");
+                    try (java.io.FileOutputStream fos = new java.io.FileOutputStream(hookFile, false)) {
+                        fos.write(hookContent.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                    }
+                    hookFile.setReadable(true, false);
+                    hookFile.setExecutable(true, false);
+
+                    if (!content.contains(marker)) {
+                        String inject = "\n" + marker + "\n" + hookLine + "\n" + markerEnd + "\n";
+                        java.nio.file.Files.write(pf.toPath(), (content + inject).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                    } else {
+                        java.nio.file.Files.write(pf.toPath(), content.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                    }
+                }
+            }
+            Logger.logDebug(LOG_TAG, "deploySecurityHook remove=" + remove);
+        } catch (Throwable t) {
+            Logger.logDebug(LOG_TAG, "deploySecurityHook failed: " + t.getMessage());
+        }
     }
 
 }

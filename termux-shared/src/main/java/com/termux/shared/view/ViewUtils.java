@@ -6,14 +6,12 @@ import android.content.ContextWrapper;
 import android.content.res.Configuration;
 import android.graphics.Point;
 import android.graphics.Rect;
-import android.os.Build;
 import android.util.TypedValue;
 import android.view.View;
 import android.view.ViewGroup;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.appcompat.app.ActionBar;
 import androidx.appcompat.app.AppCompatActivity;
 
 import com.termux.shared.logger.Logger;
@@ -79,13 +77,13 @@ public class ViewUtils {
         boolean isInMultiWindowMode = false;
         Context context = view.getContext();
         if (context instanceof AppCompatActivity) {
-            ActionBar actionBar = ((AppCompatActivity) context).getSupportActionBar();
+            androidx.appcompat.app.ActionBar actionBar = ((AppCompatActivity) context).getSupportActionBar();
             if (actionBar != null) actionBarHeight = actionBar.getHeight();
-            isInMultiWindowMode = (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) && ((AppCompatActivity) context).isInMultiWindowMode();
+            isInMultiWindowMode = ((AppCompatActivity) context).isInMultiWindowMode();
         } else if (context instanceof Activity) {
             android.app.ActionBar actionBar = ((Activity) context).getActionBar();
             if (actionBar != null) actionBarHeight = actionBar.getHeight();
-            isInMultiWindowMode = (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) && ((Activity) context).isInMultiWindowMode();
+            isInMultiWindowMode = ((Activity) context).isInMultiWindowMode();
         }
 
         int displayOrientation = getDisplayOrientation(context);
@@ -182,16 +180,18 @@ public class ViewUtils {
      *                     and can be smaller than physical display size in multi-window mode.
      * @return Returns the display size as {@link Point}.
      */
+    @SuppressWarnings("deprecation")
     public static Point getDisplaySize( @NonNull Context context, boolean activitySize) {
-        // android.view.WindowManager.getDefaultDisplay() and Display.getSize() are deprecated in
-        // API 30 and give wrong values in API 30 for activitySize=false in multi-window
-        androidx.window.WindowManager windowManager = new androidx.window.WindowManager(context);
-        androidx.window.WindowMetrics windowMetrics;
-        if (activitySize)
-            windowMetrics = windowManager.getCurrentWindowMetrics();
-        else
-            windowMetrics = windowManager.getMaximumWindowMetrics();
-        return new Point(windowMetrics.getBounds().width(), windowMetrics.getBounds().height());
+        Point size = new Point();
+        if (activitySize && context instanceof Activity) {
+            android.view.Display display = ((Activity) context).getWindowManager().getDefaultDisplay();
+            display.getSize(size);
+        } else {
+            android.util.DisplayMetrics metrics = context.getResources().getDisplayMetrics();
+            size.x = metrics.widthPixels;
+            size.y = metrics.heightPixels;
+        }
+        return size;
     }
 
     /** Convert {@link Rect} to {@link String}. */
@@ -218,22 +218,15 @@ public class ViewUtils {
         return null;
     }
 
-
     /** Convert value in device independent pixels (dp) to pixels (px) units. */
-    public static float dpToPx(Context context, float dp) {
-        return TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, dp, context.getResources().getDisplayMetrics());
-    }
-
-    /** Convert value in pixels (px) to device independent pixels (dp) units. */
-    public static float pxToDp(Context context, float px) {
-        return px / context.getResources().getDisplayMetrics().density;
+    public static int dpToPx(Context context, int dp) {
+        return (int) TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, dp, context.getResources().getDisplayMetrics());
     }
 
 
     public static void setLayoutMarginsInDp(@NonNull View view, int left, int top, int right, int bottom) {
         Context context = view.getContext();
-        setLayoutMarginsInPixels(view, (int) dpToPx(context, left), (int) dpToPx(context, top),
-            (int) dpToPx(context, right), (int) dpToPx(context, bottom));
+        setLayoutMarginsInPixels(view, dpToPx(context, left), dpToPx(context, top), dpToPx(context, right), dpToPx(context, bottom));
     }
 
     public static void setLayoutMarginsInPixels(@NonNull View view, int left, int top, int right, int bottom) {

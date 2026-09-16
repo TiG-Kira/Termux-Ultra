@@ -4,14 +4,12 @@ import android.app.Activity;
 import android.content.Context;
 import android.content.res.Configuration;
 import android.inputmethodservice.InputMethodService;
-import android.os.Build;
 import android.view.View;
 import android.view.WindowInsets;
 import android.view.WindowManager;
 import android.view.inputmethod.InputMethodManager;
 
 import androidx.annotation.NonNull;
-import androidx.annotation.RequiresApi;
 import androidx.core.view.WindowInsetsCompat;
 
 import com.termux.shared.logger.Logger;
@@ -66,9 +64,11 @@ public class KeyboardUtils {
      */
     public static void showSoftKeyboard(final Context context, final View view) {
         if (context == null || view == null) return;
-        InputMethodManager inputMethodManager = (InputMethodManager) context.getSystemService(Context.INPUT_METHOD_SERVICE);
-        if (inputMethodManager != null)
-            inputMethodManager.showSoftInput(view, 0);
+        view.postDelayed(() -> {
+            InputMethodManager inputMethodManager = (InputMethodManager) context.getSystemService(Context.INPUT_METHOD_SERVICE);
+            if (inputMethodManager != null)
+                inputMethodManager.showSoftInput(view, InputMethodManager.SHOW_IMPLICIT);
+        }, 100);
     }
 
     public static void hideSoftKeyboard(final Context context, final View view) {
@@ -120,7 +120,6 @@ public class KeyboardUtils {
      * @param activity The Activity of the root view for which the visibility should be checked.
      * @return Returns {@code true} if soft keyboard is visible, otherwise {@code false}.
      */
-    @RequiresApi(api = Build.VERSION_CODES.M)
     public static boolean isSoftKeyboardVisible(final Activity activity) {
         if (activity != null && activity.getWindow() != null) {
             WindowInsets insets = activity.getWindow().getDecorView().getRootWindowInsets();

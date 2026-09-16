@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- The app_name is the name of the app that is visible when listing installed apps.
+         It's also used by plugin caller app as plugin name like in Tasker in "Select Action Category" > "Plugin" dialog, so keep this one short -->
+    <string name="app_name">Termux:Tasker</string>
+    <string name="title_tasker_settings">Tasker 设置</string>
+    <string name="plugin_name">Termux</string>
+    <string name="executable_path_hint">可执行文件（~/.termux/tasker/ 中的文件或可执行文件的绝对路径）</string>
+    <string name="arguments_hint">参数</string>
+    <string name="working_directory_path_hint">工作目录路径</string>
+    <string name="execute_in_terminal">在终端会话中执行</string>
+    <string name="executable_absolute_path">可执行文件绝对路径：「%1$s」</string>
+    <string name="working_directory_absolute_path">工作目录绝对路径：「%1$s」</string>
+
+    <string name="help">访问 https://github.com/termux/termux-tasker 了解插件使用方法。</string>
+
+    <string name="unknown_app">（未知）</string>
+    <string name="executable_required">需要可执行文件。</string>
+    <string name="null_or_empty_executable">可执行文件为空。</string>
+    <string name="null_or_empty_directory">目录为空。</string>
+    <string name="no_regular_file_found">路径处未找到常规文件。</string>
+    <string name="no_directory_found">路径处未找到目录。</string>
+    <string name="no_readable_file_found">路径处的文件不可读。</string>
+    <string name="no_executable_file_found">路径处的文件不可执行。</string>
+    <string name="no_readable_directory_found">路径处的目录不可读。</string>
+    <string name="no_executable_directory_found">路径处的目录不可执行。</string>
+    <string name="non_regular_file_found">路径处发现非常规文件。</string>
+    <string name="non_directory_file_found">路径处发现非目录文件。</string>
+    <string name="directory_creation_failed">在路径「%1$s」创建目录失败</string>
+    <string name="directory_creation_failed_with_exception">在路径「%1$s」创建目录失败\n异常信息：%2$s</string>
+    <string name="variable_in_path">（检测到变量）</string>
+    <string name="no_tasker_folder_title">缺少 ~/.termux/tasker/ 目录</string>
+    <string name="no_tasker_folder_message">您需要创建 ~/.termux/tasker/ 目录，并放入要执行的脚本。</string>
+    <string name="null_bundle">Bundle 为空。</string>
+
+    <string name="log_level_title">日志级别</string>
+    <string name="log_level_off">关闭</string>
+    <string name="log_level_normal">正常</string>
+    <string name="log_level_debug">调试</string>
+    <string name="log_level_verbose">详细</string>
+    <string name="log_level_unknown">*未知*</string>
+    <string name="log_level_value">插件应用及所有插件操作的 Logcat 日志级别已设置为「%1$s」</string>
+
+    <string name="termux_app_not_installed_or_disabled_warning">Termux 应用未安装或已禁用。Termux:Tasker 插件需要 Termux 应用来运行插件命令。</string>
+    <string name="termux_app_prefix_path_inaccessible_warning">Termux:Tasker 插件应用无法访问 Termux 应用的 $PREFIX 目录。这可能是因为您尚未安装或配置 Termux 应用，或者 Termux 应用和 Termux:Tasker 应用具有不同的 APK 签名（因为您从不同来源安装了这两个应用）。也可能是因为 termux $PREFIX 目录「/data/data/com.termux/files/usr」不存在或没有读取或执行权限。</string>
+    <string name="plugin_permission_ungranted_warning">%1$s 应用（%2$s）尚未授予「%3$s」权限，该权限是运行插件操作所必需的。</string>
+    <string name="allow_external_apps_ungranted_warning">要使用 ~/.termux/tasker/ 目录以外的可执行文件绝对路径，需要在 ~/.termux/termux.properties 文件中将 allow-external-apps 属性设置为「true」。</string>
+
+    <string name="blurb_in_background">%1$s %2$s</string>
+    <string name="blurb_in_terminal">%1$s %2$s\n\n✓ 终端会话</string>
+
+    <!-- From Locale API: -->
+    <string name="twofortyfouram_locale_breadcrumb_format" tools:ignore="UnusedResources">%1$s%2$s%3$s</string>
+    <string name="twofortyfouram_locale_breadcrumb_separator" tools:ignore="UnusedResources">\u0020＞\u0020</string>
+    <string name="twofortyfouram_locale_menu_dontsave">取消</string>
+    <string name="twofortyfouram_locale_menu_save">完成</string>
+</resources>
