@@ -82,12 +82,10 @@ public class TermuxCrashUtils implements CrashHandler.CrashHandlerClient {
         CrashHandler.logCrash(context, new TermuxCrashUtils(TYPE.CAUGHT_EXCEPTION), Thread.currentThread(), throwable);
     }
 
-    @Override
     public boolean onPreLogCrash(Context context, Thread thread, Throwable throwable) {
         return false;
     }
 
-    @Override
     public void onPostLogCrash(final Context currentPackageContext, Thread thread, Throwable throwable) {
         if (currentPackageContext == null) return;
         String currentPackageName = currentPackageContext.getPackageName();

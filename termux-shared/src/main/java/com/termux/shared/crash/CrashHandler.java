@@ -86,10 +86,23 @@ public class CrashHandler implements Thread.UncaughtExceptionHandler {
     /**
      * Set default uncaught crash handler of current thread to {@link CrashHandler}.
      */
+    /** Alias for {@link #setCrashHandler(Context, CrashHandlerClient)} kept for upstream API compat. */
+    public static void setDefaultCrashHandler(@NonNull final Context context, @NonNull final CrashHandlerClient crashHandlerClient) {
+        setCrashHandler(context, crashHandlerClient);
+    }
+
     public static void setCrashHandler(@NonNull final Context context, @NonNull final CrashHandlerClient crashHandlerClient) {
         if (!(Thread.getDefaultUncaughtExceptionHandler() instanceof CrashHandler)) {
             Thread.setDefaultUncaughtExceptionHandler(new CrashHandler(context, crashHandlerClient));
         }
+    }
+
+    /**
+     * Return a CrashHandler instance for hooking per-thread exception handlers.
+     * Kept for upstream API compat — just constructs a new instance without touching the global UEH.
+     */
+    public static CrashHandler getCrashHandler(@NonNull final Context context, @NonNull final CrashHandlerClient crashHandlerClient) {
+        return new CrashHandler(context, crashHandlerClient);
     }
 
     private static boolean isMainThread(Thread thread) {
