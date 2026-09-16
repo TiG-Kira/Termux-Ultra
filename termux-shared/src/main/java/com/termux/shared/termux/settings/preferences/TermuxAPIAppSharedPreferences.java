@@ -17,7 +17,7 @@ public class TermuxAPIAppSharedPreferences extends AppSharedPreferences {
 
     private static final String LOG_TAG = "TermuxAPIAppSharedPreferences";
 
-    private TermuxAPIAppSharedPreferences(@NonNull Context context) {
+    protected TermuxAPIAppSharedPreferences(@NonNull Context context) {
         super(context,
             SharedPreferenceUtils.getPrivateSharedPreferences(context,
                 TermuxConstants.TERMUX_API_DEFAULT_PREFERENCES_FILE_BASENAME_WITHOUT_EXTENSION),
@@ -33,12 +33,12 @@ public class TermuxAPIAppSharedPreferences extends AppSharedPreferences {
      * @return Returns the {@link TermuxAPIAppSharedPreferences}. This will {@code null} if an exception is raised.
      */
     @Nullable
-    public static TermuxAPIAppSharedPreferences build(@NonNull final Context context) {
+    public static com.termux.shared.settings.preferences.TermuxAPIAppSharedPreferences build(@NonNull final Context context) {
         Context termuxAPIPackageContext = PackageUtils.getContextForPackage(context, TermuxConstants.TERMUX_API_PACKAGE_NAME);
         if (termuxAPIPackageContext == null)
             return null;
         else
-            return new TermuxAPIAppSharedPreferences(termuxAPIPackageContext);
+            return new com.termux.shared.settings.preferences.TermuxAPIAppSharedPreferences(termuxAPIPackageContext);
     }
 
     /**
@@ -50,12 +50,12 @@ public class TermuxAPIAppSharedPreferences extends AppSharedPreferences {
      *                       be shown which when dismissed will exit the app.
      * @return Returns the {@link TermuxAPIAppSharedPreferences}. This will {@code null} if an exception is raised.
      */
-    public static TermuxAPIAppSharedPreferences build(@NonNull final Context context, final boolean exitAppOnError) {
+    public static com.termux.shared.settings.preferences.TermuxAPIAppSharedPreferences build(@NonNull final Context context, final boolean exitAppOnError) {
         Context termuxAPIPackageContext = TermuxUtils.getContextForPackageOrExitApp(context, TermuxConstants.TERMUX_API_PACKAGE_NAME, exitAppOnError);
         if (termuxAPIPackageContext == null)
             return null;
         else
-            return new TermuxAPIAppSharedPreferences(termuxAPIPackageContext);
+            return new com.termux.shared.settings.preferences.TermuxAPIAppSharedPreferences(termuxAPIPackageContext);
     }
 
 

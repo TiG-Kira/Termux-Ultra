@@ -19,7 +19,7 @@ public class TermuxWidgetAppSharedPreferences extends AppSharedPreferences {
 
     private static final String LOG_TAG = "TermuxWidgetAppSharedPreferences";
 
-    private TermuxWidgetAppSharedPreferences(@NonNull Context context) {
+    protected TermuxWidgetAppSharedPreferences(@NonNull Context context) {
         super(context,
             SharedPreferenceUtils.getPrivateSharedPreferences(context,
                 TermuxConstants.TERMUX_WIDGET_DEFAULT_PREFERENCES_FILE_BASENAME_WITHOUT_EXTENSION),
@@ -35,12 +35,12 @@ public class TermuxWidgetAppSharedPreferences extends AppSharedPreferences {
      * @return Returns the {@link TermuxWidgetAppSharedPreferences}. This will {@code null} if an exception is raised.
      */
     @Nullable
-    public static TermuxWidgetAppSharedPreferences build(@NonNull final Context context) {
+    public static com.termux.shared.settings.preferences.TermuxWidgetAppSharedPreferences build(@NonNull final Context context) {
         Context termuxWidgetPackageContext = PackageUtils.getContextForPackage(context, TermuxConstants.TERMUX_WIDGET_PACKAGE_NAME);
         if (termuxWidgetPackageContext == null)
             return null;
         else
-            return new TermuxWidgetAppSharedPreferences(termuxWidgetPackageContext);
+            return new com.termux.shared.settings.preferences.TermuxWidgetAppSharedPreferences(termuxWidgetPackageContext);
     }
 
     /**
@@ -52,12 +52,12 @@ public class TermuxWidgetAppSharedPreferences extends AppSharedPreferences {
      *                       be shown which when dismissed will exit the app.
      * @return Returns the {@link TermuxWidgetAppSharedPreferences}. This will {@code null} if an exception is raised.
      */
-    public static TermuxWidgetAppSharedPreferences build(@NonNull final Context context, final boolean exitAppOnError) {
+    public static com.termux.shared.settings.preferences.TermuxWidgetAppSharedPreferences build(@NonNull final Context context, final boolean exitAppOnError) {
         Context termuxWidgetPackageContext = TermuxUtils.getContextForPackageOrExitApp(context, TermuxConstants.TERMUX_WIDGET_PACKAGE_NAME, exitAppOnError);
         if (termuxWidgetPackageContext == null)
             return null;
         else
-            return new TermuxWidgetAppSharedPreferences(termuxWidgetPackageContext);
+            return new com.termux.shared.settings.preferences.TermuxWidgetAppSharedPreferences(termuxWidgetPackageContext);
     }
 
 

@@ -15,7 +15,7 @@ public class FunctionErrno extends Errno {
     public static final Errno ERRNO_PARAMETER_NOT_INSTANCE_OF = new Errno(TYPE, 104, "The %1$s parameter passed to \"%2$s\" is not an instance of %3$s.");
 
 
-    FunctionErrno(final String type, final int code, final String message) {
+    protected FunctionErrno(final String type, final int code, final String message) {
         super(type, code, message);
     }
 

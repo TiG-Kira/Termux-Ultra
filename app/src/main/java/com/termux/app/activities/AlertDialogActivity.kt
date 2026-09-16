@@ -655,14 +655,11 @@ private fun CrashPostDialogContent(
                             val reportInfo = com.termux.shared.models.ReportInfo(
                                 userActionName,                                                          // userAction
                                 "CrashPostDialog",                                                       // sender
-                                "崩溃报告",                           // reportTitle
-                                null,                                                                     // reportStringPrefix
-                                if (fullCrashReport.isNotBlank()) fullCrashReport else errorMessage,     // reportString (完整崩溃日志)
-                                "\n\n" + com.termux.shared.termux.TermuxUtils.getReportIssueMarkdownString(context), // reportStringSuffix
-                                true,                                                                     // addReportInfoHeaderToMarkdown
-                                null,                                                                     // reportSaveFileLabel
-                                null                                                                      // reportSaveFilePath
+                                "崩溃报告"                           // reportTitle
                             )
+                            reportInfo.reportString = if (fullCrashReport.isNotBlank()) fullCrashReport else errorMessage
+                            reportInfo.reportStringSuffix = "\n\n" + com.termux.shared.termux.TermuxUtils.getReportIssueMarkdownString(context)
+                            reportInfo.addReportInfoHeaderToMarkdown = true
                             val result = com.termux.shared.activities.ReportActivity.newInstance(context, reportInfo)
                             if (result.contentIntent != null) {
                                 context.startActivity(result.contentIntent)

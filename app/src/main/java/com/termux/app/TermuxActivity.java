@@ -107,7 +107,7 @@ public final class TermuxActivity extends ComponentActivity implements ServiceCo
      *  The {@link TerminalSessionClient} interface implementation to allow for communication between
      *  {@link TerminalSession} and {@link TermuxActivity}.
      */
-    TermuxTerminalSessionClient mTermuxTerminalSessionClient;
+    TermuxTerminalSessionActivityClient mTermuxTerminalSessionClient;
 
     /**
      * Termux app shared preferences manager.
@@ -769,19 +769,12 @@ public final class TermuxActivity extends ComponentActivity implements ServiceCo
 
 
     private void setActivityTheme() {
-        if (mProperties.isUsingBlackUI()) {
-            this.setTheme(R.style.Theme_Termux_Black);
-        } else {
-            this.setTheme(R.style.Theme_Termux);
-        }
+        // KEY_USE_BLACK_UI has been deprecated in v0.119.0. Always use the default theme.
+        this.setTheme(R.style.Theme_Termux);
     }
 
     private void setDrawerTheme() {
-        if (mProperties.isUsingBlackUI()) {
-            findViewById(R.id.left_drawer).setBackgroundColor(ContextCompat.getColor(this,
-                android.R.color.background_dark));
-            ((ImageButton) findViewById(R.id.settings_button)).setColorFilter(Color.WHITE);
-        }
+        // KEY_USE_BLACK_UI has been deprecated in v0.119.0. No drawer overrides needed.
     }
 
     private void setMargins() {
@@ -809,7 +802,7 @@ public final class TermuxActivity extends ComponentActivity implements ServiceCo
 
     private void setTermuxTerminalViewAndClients() {
         // Set termux terminal view and session clients
-        mTermuxTerminalSessionClient = new TermuxTerminalSessionClient(this);
+        mTermuxTerminalSessionClient = new TermuxTerminalSessionActivityClient(this);
         mTermuxTerminalViewClient = new TermuxTerminalViewClient(this, mTermuxTerminalSessionClient);
 
         // Set termux terminal view
@@ -1347,7 +1340,7 @@ public final class TermuxActivity extends ComponentActivity implements ServiceCo
         return mTermuxTerminalViewClient;
     }
 
-    public TermuxTerminalSessionClient getTermuxTerminalSessionClient() {
+    public TermuxTerminalSessionActivityClient getTermuxTerminalSessionClient() {
         return mTermuxTerminalSessionClient;
     }
 
@@ -1451,7 +1444,7 @@ public final class TermuxActivity extends ComponentActivity implements ServiceCo
 
             if (mExtraKeysView != null) {
                 mExtraKeysView.setButtonTextAllCaps(mProperties.shouldExtraKeysTextBeAllCaps());
-                mExtraKeysView.reload(mProperties.getExtraKeysInfo());
+                mExtraKeysView.reload(mProperties.getExtraKeysInfo(), 0f);
             }
         }
 

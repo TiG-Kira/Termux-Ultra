@@ -23,9 +23,14 @@ public class TermuxTerminalSessionServiceClient extends TermuxTerminalSessionCli
 
     @Override
     public void setTerminalShellPid(@NonNull TerminalSession terminalSession, int pid) {
-        TermuxSession termuxSession = mService.getTermuxSessionForTerminalSession(terminalSession);
-        if (termuxSession != null)
-            termuxSession.getExecutionCommand().mPid = pid;
+        // v0.119.0: TermuxService.getTermuxSessionForTerminalSession() 已移除，
+        // 改用 getIndexOfSession + getTermuxSession 组合定位对应的 TermuxSession。
+        int index = mService.getIndexOfSession(terminalSession);
+        if (index >= 0) {
+            TermuxSession termuxSession = mService.getTermuxSession(index);
+            if (termuxSession != null)
+                termuxSession.getExecutionCommand().mPid = pid;
+        }
     }
 
 }

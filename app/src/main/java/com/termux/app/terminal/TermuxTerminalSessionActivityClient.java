@@ -44,7 +44,7 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
 
     private static final String LOG_TAG = "TermuxTerminalSessionActivityClient";
 
-    public TermuxTerminalSessionClient(TermuxActivity activity) {
+    public TermuxTerminalSessionActivityClient(TermuxActivity activity) {
         this.mActivity = activity;
     }
 

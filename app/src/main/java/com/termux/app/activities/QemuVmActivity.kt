@@ -32,7 +32,7 @@ import androidx.core.view.WindowCompat
 import com.termux.R
 import com.termux.app.TermuxService
 import com.termux.app.compose.*
-import com.termux.shared.termux.shell.command.environment.TermuxShellCommandShellEnvironment
+import com.termux.shared.termux.shell.command.environment.TermuxShellEnvironment
 import com.termux.shared.termux.TermuxConstants
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay

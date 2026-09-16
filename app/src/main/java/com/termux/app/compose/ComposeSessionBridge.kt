@@ -5,7 +5,9 @@ import android.os.Handler
 import android.os.Looper
 import com.termux.shared.shell.command.ExecutionCommand
 import com.termux.shared.termux.shell.command.runner.terminal.TermuxSession
-import com.termux.shared.termux.shell.command.environment.TermuxShellCommandShellEnvironment
+import com.termux.shared.compat.TermuxSessionCompat
+import com.termux.shared.termux.shell.command.environment.TermuxShellEnvironment
+import com.termux.shared.compat.ShellEnvironmentCompat
 import com.termux.shared.termux.terminal.TermuxTerminalSessionClientBase
 import com.termux.app.compose.terminal.ComposeSessionManager
 import com.termux.app.compose.terminal.engine.TerminalSession as LibEngineSession
@@ -48,10 +50,10 @@ object ComposeSessionBridge {
         executionCommand: ExecutionCommand,
         sessionName: String?
     ): TermuxSession? {
-        val envClient = ShellEnvironmentCompat(TermuxShellCommandShellEnvironment())
+        val envClient = ShellEnvironmentCompat(TermuxShellEnvironment())
 
         // 1) Java 镜像：复用 TermuxSession.execute 构建（未附着到 TerminalView 时不会拉起进程）
-        val mirror = TermuxSession.execute(
+        val mirror = TermuxSessionCompat.execute(
             context,
             executionCommand,
             TermuxTerminalSessionClientBase(),

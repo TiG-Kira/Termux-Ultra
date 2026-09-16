@@ -64,4 +64,14 @@
         <item name="android:background">?android:attr/listDivider</item>
     </style>
 
+    <!-- TU custom drawer ButtonBar styles -->
+    <style name="TermuxActivity.Drawer.ButtonBarStyle.Light" parent="Widget.AppCompat.ButtonBar">
+        <item name="android:background">?android:attr/windowBackground</item>
+    </style>
+    <style name="TermuxActivity.Drawer.ButtonBarStyle.Dark" parent="Widget.AppCompat.ButtonBar">
+        <item name="android:background">?android:attr/windowBackground</item>
+    </style>
+    <!-- TU custom ReportActivity theme -->
+    <style name="Theme.AppCompat.TermuxReportActivity" parent="Theme.AppCompat.Light.DarkActionBar" />
+    <style name="Toolbar.Title" parent="TextAppearance.Widget.AppCompat.Toolbar.Title" />
 </resources>

@@ -16,11 +16,11 @@ public class TermuxTerminalExtraKeys extends TerminalExtraKeys {
 
 
     TermuxTerminalViewClient mTermuxTerminalViewClient;
-    TermuxTerminalSessionClient mTermuxTerminalSessionClient;
+    TermuxTerminalSessionActivityClient mTermuxTerminalSessionClient;
 
     public TermuxTerminalExtraKeys(@NonNull TerminalView terminalView,
                                    TermuxTerminalViewClient termuxTerminalViewClient,
-                                   TermuxTerminalSessionClient termuxTerminalSessionClient) {
+                                   TermuxTerminalSessionActivityClient termuxTerminalSessionClient) {
         super(terminalView);
         mTermuxTerminalViewClient = termuxTerminalViewClient;
         mTermuxTerminalSessionClient = termuxTerminalSessionClient;

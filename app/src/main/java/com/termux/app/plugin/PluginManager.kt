@@ -8,7 +8,7 @@ import com.termux.shared.shell.command.ExecutionCommand
 import com.termux.shared.shell.command.runner.app.AppShell
 import com.termux.shared.compat.ShellEnvironmentCompat
 import com.termux.shared.compat.TermuxTaskCompat
-import com.termux.shared.termux.shell.command.environment.TermuxShellCommandShellEnvironment
+import com.termux.shared.termux.shell.command.environment.TermuxShellEnvironment
 import com.termux.shared.termux.TermuxConstants
 import com.termux.shared.logger.Logger
 import java.io.File
@@ -198,7 +198,7 @@ object PluginManager {
                 arrayOf("-c", command),
                 null,
                 null,
-                true,
+                "app-shell",
                 false
             )
             executionCommand.commandLabel = "Plugin Shell Command"
@@ -208,7 +208,7 @@ object PluginManager {
                 context,
                 executionCommand,
                 null,
-                ShellEnvironmentCompat(TermuxShellCommandShellEnvironment()),
+                ShellEnvironmentCompat(TermuxShellEnvironment()),
                 true
             )
 

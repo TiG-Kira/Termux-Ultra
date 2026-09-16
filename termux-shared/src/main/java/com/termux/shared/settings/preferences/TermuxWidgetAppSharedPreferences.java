@@ -1,5 +1,9 @@
 package com.termux.shared.settings.preferences;
 
+import android.content.Context;
+
+import androidx.annotation.NonNull;
+
 /**
  * Backward-compat alias for {@link com.termux.shared.termux.settings.preferences.TermuxWidgetAppSharedPreferences}.
  *
@@ -11,4 +15,7 @@ package com.termux.shared.settings.preferences;
  */
 @Deprecated
 public class TermuxWidgetAppSharedPreferences extends com.termux.shared.termux.settings.preferences.TermuxWidgetAppSharedPreferences {
+    public TermuxWidgetAppSharedPreferences(@NonNull Context context) {
+        super(context);
+    }
 }

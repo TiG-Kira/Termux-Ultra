@@ -169,7 +169,7 @@ public class PluginUtils {
         if (preferences == null) return;
 
         // If user has disabled notifications for plugin commands, then just return
-        if (!preferences.arePluginErrorNotificationsEnabled() && !forceNotification)
+        if (!preferences.arePluginErrorNotificationsEnabled(false) && !forceNotification)
             return;
 
         // Flash and send notification for the error
@@ -228,12 +228,13 @@ public class PluginUtils {
         reportString.append("\n\n").append(AndroidUtils.getDeviceInfoMarkdownString(context));
 
         String userActionName = UserAction.PLUGIN_EXECUTION_COMMAND.getName();
-        ReportActivity.NewInstanceResult result = ReportActivity.newInstance(context,
-            new ReportInfo(userActionName, logTag, title, null,
-                reportString.toString(), null,true,
-                userActionName,
-                Environment.getExternalStorageDirectory() + "/" +
-                    FileUtils.sanitizeFileName(TermuxConstants.TERMUX_APP_NAME + "-" + userActionName + ".log", true, true)));
+        ReportInfo reportInfo = new ReportInfo(userActionName, logTag, title);
+        reportInfo.reportString = reportString.toString();
+        reportInfo.addReportInfoHeaderToMarkdown = true;
+        reportInfo.reportSaveFileLabel = userActionName;
+        reportInfo.reportSaveFilePath = Environment.getExternalStorageDirectory() + "/" +
+            FileUtils.sanitizeFileName(TermuxConstants.TERMUX_APP_NAME + "-" + userActionName + ".log", true, true);
+        ReportActivity.NewInstanceResult result = ReportActivity.newInstance(context, reportInfo);
         if (result.contentIntent == null) return;
 
         // Must ensure result code for PendingIntents and id for notification are unique otherwise will override previous
@@ -323,7 +324,8 @@ public class PluginUtils {
      */
     public static String checkIfAllowExternalAppsPolicyIsViolated(final Context context, String apiName) {
         String errmsg = null;
-        if (!SharedProperties.isPropertyValueTrue(context, TermuxPropertyConstants.getTermuxPropertiesFile(),
+        if (!SharedProperties.isPropertyValueTrue(context,
+            SharedProperties.getPropertiesFileFromList(TermuxConstants.TERMUX_PROPERTIES_FILE_PATHS_LIST, "PluginUtils"),
             TermuxConstants.PROP_ALLOW_EXTERNAL_APPS, true)) {
             errmsg = context.getString(R.string.error_allow_external_apps_ungranted, apiName,
                 TermuxFileUtils.getUnExpandedTermuxPath(TermuxConstants.TERMUX_PROPERTIES_PRIMARY_FILE_PATH));

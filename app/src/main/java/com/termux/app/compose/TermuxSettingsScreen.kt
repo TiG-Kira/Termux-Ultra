@@ -283,20 +283,18 @@ private fun launchAboutReport(context: Context) {
         aboutString.append("\n\n").append(TermuxUtils.getImportantLinksMarkdownString(context))
 
         val userActionName = UserAction.ABOUT.name
+        val reportInfo = ReportInfo(
+            userActionName,
+            TermuxConstants.TERMUX_APP.TERMUX_SETTINGS_ACTIVITY_NAME,
+            title
+        )
+        reportInfo.reportString = aboutString.toString()
+        reportInfo.reportSaveFileLabel = userActionName
+        reportInfo.reportSaveFilePath = Environment.getExternalStorageDirectory().toString() + "/" +
+            FileUtils.sanitizeFileName(TermuxConstants.TERMUX_APP_NAME + "-" + userActionName + ".log", true, true)
         ReportActivity.startReportActivity(
             context,
-            ReportInfo(
-                userActionName,
-                TermuxConstants.TERMUX_APP.TERMUX_SETTINGS_ACTIVITY_NAME,
-                title,
-                null,
-                aboutString.toString(),
-                null,
-                false,
-                userActionName,
-                Environment.getExternalStorageDirectory().toString() + "/" +
-                    FileUtils.sanitizeFileName(TermuxConstants.TERMUX_APP_NAME + "-" + userActionName + ".log", true, true)
-            )
+            reportInfo
         )
     }.start()
 }
@@ -503,8 +501,8 @@ private fun DebuggingSettingsPage(
     val context = LocalContext.current
     val prefs = remember { TermuxAppSharedPreferences.build(context) }
     var keyLoggingEnabled by remember { mutableStateOf(prefs?.isTerminalViewKeyLoggingEnabled() ?: false) }
-    var pluginErrorNotifications by remember { mutableStateOf(prefs?.arePluginErrorNotificationsEnabled() ?: true) }
-    var crashReportNotifications by remember { mutableStateOf(prefs?.areCrashReportNotificationsEnabled() ?: true) }
+    var pluginErrorNotifications by remember { mutableStateOf(prefs?.arePluginErrorNotificationsEnabled(false) ?: true) }
+    var crashReportNotifications by remember { mutableStateOf(prefs?.areCrashReportNotificationsEnabled(false) ?: true) }
     var logLevel by remember { mutableStateOf(prefs?.logLevel ?: Logger.DEFAULT_LOG_LEVEL) }
 
     val logLevelItems = remember {

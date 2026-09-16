@@ -42,7 +42,7 @@ public class TermuxCrashUtils implements CrashHandler.CrashHandlerClient {
 
     private static final String LOG_TAG = "TermuxCrashUtils";
 
-    TermuxCrashUtils(TYPE type) {
+    protected TermuxCrashUtils(TYPE type) {
         mType = type;
     }
 

@@ -3,7 +3,7 @@ package com.termux.app.compose
 import android.content.Context
 import android.util.Log
 import com.termux.shared.shell.command.ExecutionCommand
-import com.termux.shared.termux.shell.command.environment.TermuxShellCommandShellEnvironment
+import com.termux.shared.termux.shell.command.environment.TermuxShellEnvironment
 import com.termux.shared.termux.shell.TermuxShellUtils
 import com.termux.shared.shell.command.runner.app.AppShell
 import com.termux.shared.termux.TermuxConstants
@@ -199,11 +199,11 @@ object AiOllamaManager {
             arrayOf("-c", command),
             null,
             null,
-            true,
+            "app-shell",
             false
         )
 
-        val shellEnvClient = ShellEnvironmentCompat(TermuxShellCommandShellEnvironment())
+        val shellEnvClient = ShellEnvironmentCompat(TermuxShellEnvironment())
         val termuxTask = try {
             TermuxTaskCompat.execute(
                 ctx,
@@ -272,7 +272,7 @@ object AiOllamaManager {
     /** 解析 Termux shell 路径 */
     private fun resolveTermuxShell(): String? {
         // 方法1: 从 TermuxShellUtils 获取
-        val binDir = TermuxShellUtils.getDefaultBinPath()
+        val binDir = TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH
         if (binDir.isNotEmpty()) {
             for (shellBinary in arrayOf("bash", "login", "zsh", "sh", "dash")) {
                 val shellFile = File(binDir, shellBinary)

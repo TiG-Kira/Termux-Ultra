@@ -11,4 +11,24 @@ package com.termux.shared.crash;
  */
 @Deprecated
 public class TermuxCrashUtils extends com.termux.shared.termux.crash.TermuxCrashUtils {
+    /**
+     * Old-name {@link com.termux.shared.termux.crash.TermuxCrashUtils.TYPE} enum, kept so callers
+     * can write {@code TermuxCrashUtils.TYPE} without qualification.
+     */
+    public enum TYPE {
+        UNCAUGHT_EXCEPTION,
+        CAUGHT_EXCEPTION;
+
+        com.termux.shared.termux.crash.TermuxCrashUtils.TYPE toNew() {
+            return com.termux.shared.termux.crash.TermuxCrashUtils.TYPE.valueOf(name());
+        }
+    }
+
+    public TermuxCrashUtils() {
+        super(com.termux.shared.termux.crash.TermuxCrashUtils.TYPE.UNCAUGHT_EXCEPTION);
+    }
+
+    public TermuxCrashUtils(TYPE type) {
+        super(type.toNew());
+    }
 }

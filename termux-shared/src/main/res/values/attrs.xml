@@ -4,4 +4,8 @@
     <attr name="extraKeysButtonActiveTextColor" format="reference" />
     <attr name="extraKeysButtonBackgroundColor" format="reference" />
     <attr name="extraKeysButtonActiveBackgroundColor" format="reference" />
+
+    <!-- TU custom drawer attributes -->
+    <attr name="termuxActivityDrawerBackground" format="reference|color" />
+    <attr name="termuxActivityDrawerImageTint" format="reference|color" />
 </resources>

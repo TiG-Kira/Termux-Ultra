@@ -199,7 +199,7 @@ public class TermuxOpenReceiver extends BroadcastReceiver {
                 }
 
                 // If "allow-external-apps" property to not set to "true", then throw exception
-                String errmsg = PluginUtils.checkIfAllowExternalAppsPolicyIsViolated(getContext(), LOG_TAG);
+                String errmsg = TermuxPluginUtils.checkIfAllowExternalAppsPolicyIsViolated(getContext(), LOG_TAG);
                 if (errmsg != null) {
                     throw new IllegalArgumentException(errmsg);
                 }

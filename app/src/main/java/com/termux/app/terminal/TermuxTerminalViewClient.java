@@ -57,7 +57,7 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
 
     final TermuxActivity mActivity;
 
-    final TermuxTerminalSessionClient mTermuxTerminalSessionClient;
+    final TermuxTerminalSessionActivityClient mTermuxTerminalSessionClient;
 
     /** Keeping track of the special keys acting as Ctrl and Fn for the soft keyboard and other hardware keys. */
     boolean mVirtualControlKeyDown, mVirtualFnKeyDown;
@@ -71,7 +71,7 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
 
     private static final String LOG_TAG = "TermuxTerminalViewClient";
 
-    public TermuxTerminalViewClient(TermuxActivity activity, TermuxTerminalSessionClient termuxTerminalSessionClient) {
+    public TermuxTerminalViewClient(TermuxActivity activity, TermuxTerminalSessionActivityClient termuxTerminalSessionClient) {
         this.mActivity = activity;
         this.mTermuxTerminalSessionClient = termuxTerminalSessionClient;
     }
@@ -178,11 +178,11 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
         if (mActivity.getProperties().shouldOpenTerminalTranscriptURLOnClick()) {
             int[] columnAndRow = mActivity.getTerminalView().getColumnAndRow(e, true);
             String wordAtTap = term.getScreen().getWordAtLocation(columnAndRow[0], columnAndRow[1]);
-            LinkedHashSet<CharSequence> urlSet = UrlUtils.extractUrls(wordAtTap);
+            LinkedHashSet<CharSequence> urlSet = TermuxUrlUtils.extractUrls(wordAtTap);
 
             if (!urlSet.isEmpty()) {
                 String url = (String) urlSet.iterator().next();
-                ShareUtils.openURL(mActivity, url);
+                ShareUtils.openUrl(mActivity, url);
                 return;
             }
         }
@@ -665,7 +665,7 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
 
         String text = ShellUtils.getTerminalSessionTranscriptText(session, true, true);
 
-        LinkedHashSet<CharSequence> urlSet = UrlUtils.extractUrls(text);
+        LinkedHashSet<CharSequence> urlSet = TermuxUrlUtils.extractUrls(text);
         if (urlSet.isEmpty()) {
             new AlertDialog.Builder(mActivity).setMessage(R.string.title_select_url_none_found).show();
             return;
@@ -686,7 +686,7 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
             lv.setOnItemLongClickListener((parent, view, position, id) -> {
                 dialog.dismiss();
                 String url = (String) urls[position];
-                ShareUtils.openURL(mActivity, url);
+                ShareUtils.openUrl(mActivity, url);
                 return true;
             });
         });
@@ -736,14 +736,15 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
                 }
 
                 String userActionName = UserAction.REPORT_ISSUE_FROM_TRANSCRIPT.getName();
-                ReportActivity.startReportActivity(mActivity,
-                    new ReportInfo(userActionName,
-                        TermuxConstants.TERMUX_APP.TERMUX_ACTIVITY_NAME, title, null,
-                        reportString.toString(), "\n\n" + TermuxUtils.getReportIssueMarkdownString(mActivity),
-                        false,
-                        userActionName,
-                        Environment.getExternalStorageDirectory() + "/" +
-                            FileUtils.sanitizeFileName(TermuxConstants.TERMUX_APP_NAME + "-" + userActionName + ".log", true, true)));
+                ReportInfo reportInfo = new ReportInfo(userActionName,
+                    TermuxConstants.TERMUX_APP.TERMUX_ACTIVITY_NAME, title);
+                reportInfo.reportString = reportString.toString();
+                reportInfo.reportStringSuffix = "\n\n" + TermuxUtils.getReportIssueMarkdownString(mActivity);
+                reportInfo.addReportInfoHeaderToMarkdown = false;
+                reportInfo.reportSaveFileLabel = userActionName;
+                reportInfo.reportSaveFilePath = Environment.getExternalStorageDirectory() + "/" +
+                    FileUtils.sanitizeFileName(TermuxConstants.TERMUX_APP_NAME + "-" + userActionName + ".log", true, true);
+                ReportActivity.startReportActivity(mActivity, reportInfo);
             }
         }.start();
     }

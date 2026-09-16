@@ -45,12 +45,12 @@ android {
         manifestPlaceholders.TERMUX_TASKER_APP_NAME = "Termux:Tasker"
         manifestPlaceholders.TERMUX_WIDGET_APP_NAME = "Termux:Widget"
 
-        externalNativeBuild {
-            cmake {
-                arguments "-DANDROID_STL=none"
-                targets "native-vnc", "vncclient", "turbojpeg-static", "wolfssl", "termux-bootstrap"
-            }
-        }
+        // externalNativeBuild {
+        //     cmake {
+        //         arguments "-DANDROID_STL=none"
+        //         targets "native-vnc", "vncclient", "turbojpeg-static", "wolfssl", "termux-bootstrap"
+        //     }
+        // }
 
         // ABI splits: enabled only for release builds (per-architecture APKs); disabled for
         // debug so a single universal APK is produced (faster builds, matches project
@@ -103,12 +103,12 @@ android {
         kotlinCompilerExtensionVersion "1.5.14"
     }
 
-    externalNativeBuild {
-        cmake {
-            version = "3.22.1"
-            path file("CMakeLists.txt")
-        }
-    }
+    // externalNativeBuild {
+    //     cmake {
+    //         version = "3.22.1"
+    //         path file("CMakeLists.txt")
+    //     }
+    // }
 
     packaging {
         jniLibs.useLegacyPackaging = true
@@ -122,10 +122,6 @@ android {
             jniLibs.srcDirs = ['src/main/jniLibs']
         }
     }
-}
-
-kotlin {
-    jvmToolchain(21)
 }
 
 dependencies {

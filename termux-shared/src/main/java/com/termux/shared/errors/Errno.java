@@ -76,41 +76,41 @@ public class Errno {
 
 
 
-    public Error getError() {
-        return new Error(getType(), getCode(), getMessage());
+    public com.termux.shared.errors.Error getError() {
+        return new com.termux.shared.errors.Error(getType(), getCode(), getMessage());
     }
 
-    public Error getError(Object... args) {
+    public com.termux.shared.errors.Error getError(Object... args) {
         try {
-            return new Error(getType(), getCode(), String.format(getMessage(), args));
+            return new com.termux.shared.errors.Error(getType(), getCode(), String.format(getMessage(), args));
         } catch (Exception e) {
             Logger.logWarn(LOG_TAG, "Exception raised while calling String.format() for error message of errno " + this + " with args" + Arrays.toString(args) + "\n" + e.getMessage());
             // Return unformatted message as a backup
-            return new Error(getType(), getCode(), getMessage() + ": " + Arrays.toString(args));
+            return new com.termux.shared.errors.Error(getType(), getCode(), getMessage() + ": " + Arrays.toString(args));
         }
     }
 
-    public Error getError(Throwable throwable, Object... args) {
+    public com.termux.shared.errors.Error getError(Throwable throwable, Object... args) {
         if (throwable == null)
             return getError(args);
         else
             return getError(Collections.singletonList(throwable), args);
     }
 
-    public Error getError(List<Throwable> throwablesList, Object... args) {
+    public com.termux.shared.errors.Error getError(List<Throwable> throwablesList, Object... args) {
         try {
             if (throwablesList == null)
-                return new Error(getType(), getCode(), String.format(getMessage(), args));
+                return new com.termux.shared.errors.Error(getType(), getCode(), String.format(getMessage(), args));
             else
-                return new Error(getType(), getCode(), String.format(getMessage(), args), throwablesList);
+                return new com.termux.shared.errors.Error(getType(), getCode(), String.format(getMessage(), args), throwablesList);
         } catch (Exception e) {
             Logger.logWarn(LOG_TAG, "Exception raised while calling String.format() for error message of errno " + this + " with args" + Arrays.toString(args) + "\n" + e.getMessage());
             // Return unformatted message as a backup
-            return new Error(getType(), getCode(), getMessage() + ": " + Arrays.toString(args), throwablesList);
+            return new com.termux.shared.errors.Error(getType(), getCode(), getMessage() + ": " + Arrays.toString(args), throwablesList);
         }
     }
 
-    public boolean equalsErrorTypeAndCode(Error error) {
+    public boolean equalsErrorTypeAndCode(com.termux.shared.errors.Error error) {
         if (error == null) return false;
         return type.equals(error.getType()) && code == error.getCode();
     }

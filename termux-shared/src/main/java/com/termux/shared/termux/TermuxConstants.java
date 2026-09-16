@@ -962,6 +962,12 @@ public final class TermuxConstants {
 
             /** Intent action to make termux request storage permissions */
             public static final String ACTION_REQUEST_PERMISSIONS = TermuxConstants.TERMUX_PACKAGE_NAME + ".app.request_storage_permissions"; // Default: "com.termux.app.request_storage_permissions"
+
+            /** TU-custom: Intent boolean extra to trigger stop service flow after activity resumes */
+            public static final String EXTRA_TRIGGER_STOP_SERVICE = TERMUX_APP.TERMUX_ACTIVITY_NAME + ".EXTRA_TRIGGER_STOP_SERVICE";
+
+            /** TU-custom: Intent boolean extra to trigger quit app flow after activity resumes */
+            public static final String EXTRA_TRIGGER_QUIT_APP = TERMUX_APP.TERMUX_ACTIVITY_NAME + ".EXTRA_TRIGGER_QUIT_APP";
         }
 
 
@@ -986,6 +992,17 @@ public final class TermuxConstants {
             /** Intent action to stop TERMUX_SERVICE */
             public static final String ACTION_STOP_SERVICE = TERMUX_PACKAGE_NAME + ".service_stop"; // Default: "com.termux.service_stop"
 
+            /** TU-custom: force stop service (skip data-loss checks, already confirmed by user) */
+            public static final String ACTION_STOP_SERVICE_FORCE = TERMUX_PACKAGE_NAME + ".service_stop_force";
+
+            /** TU-custom: quit the app (stop service + quit activities) */
+            public static final String ACTION_QUIT_APP = TERMUX_PACKAGE_NAME + ".quit_app";
+
+            /** TU-custom: force quit app (skip data-loss checks) */
+            public static final String ACTION_QUIT_APP_FORCE = TERMUX_PACKAGE_NAME + ".quit_app_force";
+
+            /** TU-custom: kill all sessions (used when switching runtime core) */
+            public static final String ACTION_KILL_SESSIONS = TERMUX_PACKAGE_NAME + ".kill_sessions";
 
             /** Intent action to make TERMUX_SERVICE acquire a wakelock */
             public static final String ACTION_WAKE_LOCK = TERMUX_PACKAGE_NAME + ".service_wake_lock"; // Default: "com.termux.service_wake_lock"
@@ -1112,6 +1129,13 @@ public final class TermuxConstants {
             public static final String EXTRA_PLUGIN_RESULT_BUNDLE_ERR = "err"; // Default: "err"
             /** Intent {@code String} extra for errmsg value of execute command of the {@link #EXTRA_PLUGIN_RESULT_BUNDLE} */
             public static final String EXTRA_PLUGIN_RESULT_BUNDLE_ERRMSG = "errmsg"; // Default: "errmsg"
+
+            /** Intent action for memory warning sent from TermuxService */
+            public static final String ACTION_MEMORY_WARNING = TERMUX_PACKAGE_NAME + ".memory_warning";
+            /** Intent action for memory kill sent from TermuxService */
+            public static final String ACTION_MEMORY_KILL = TERMUX_PACKAGE_NAME + ".memory_kill";
+            /** Intent action to thaw a terminal session sent from TermuxService */
+            public static final String ACTION_THAW_SESSION = TERMUX_PACKAGE_NAME + ".thaw_session";
 
         }
 
@@ -1351,6 +1375,21 @@ public final class TermuxConstants {
     public static final class TERMUX_FLOAT extends TERMUX_FLOAT_APP {}
     public static final class TERMUX_STYLING extends TERMUX_STYLING_APP {}
     public static final class TERMUX_TASKER extends TERMUX_TASKER_APP {}
-    public static final class TERMUX_WIDGET extends TERMUX_WIDGET_APP {}
+    public static final class TERMUX_WIDGET extends TERMUX_WIDGET_APP {
+        /**
+         * Backward-compat re-export of {@link TERMUX_WIDGET_APP.TERMUX_WIDGET_PROVIDER}.
+         * Necessary because the alias class itself is not canonical; Java does not allow
+         * importing a nested type through an alias.
+         */
+        /**
+         * Duplicate of {@link TERMUX_WIDGET_APP.TERMUX_WIDGET_PROVIDER}. Java does not allow
+         * importing a nested type through a non-canonical alias class.
+         */
+        public static final class TERMUX_WIDGET_PROVIDER {
+            public static final String ACTION_WIDGET_ITEM_CLICKED = TERMUX_WIDGET_PACKAGE_NAME + ".ACTION_WIDGET_ITEM_CLICKED";
+            public static final String ACTION_REFRESH_WIDGET = TERMUX_WIDGET_PACKAGE_NAME + ".ACTION_REFRESH_WIDGET";
+            public static final String EXTRA_FILE_CLICKED = TERMUX_WIDGET_PACKAGE_NAME + ".EXTRA_FILE_CLICKED";
+        }
+    }
 
 }

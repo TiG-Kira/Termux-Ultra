@@ -85,9 +85,9 @@ public class Error implements Serializable {
             this.throwablesList = throwablesList;
     }
 
-    public Error setLabel(String label) {
+    public com.termux.shared.errors.Error setLabel(String label) {
         this.label = label;
-        return this;
+        return new com.termux.shared.errors.Error(type, code, message, throwablesList);
     }
 
     public String getLabel() {
@@ -122,14 +122,14 @@ public class Error implements Serializable {
     }
 
 
-    public synchronized boolean setStateFailed(@NonNull Error error) {
+    public synchronized boolean setStateFailed(@NonNull com.termux.shared.errors.Error error) {
         return setStateFailed(error.getType(), error.getCode(), error.getMessage(), null);
     }
 
-    public synchronized boolean setStateFailed(@NonNull Error error, Throwable throwable) {
+    public synchronized boolean setStateFailed(@NonNull com.termux.shared.errors.Error error, Throwable throwable) {
         return setStateFailed(error.getType(), error.getCode(), error.getMessage(), Collections.singletonList(throwable));
     }
-    public synchronized boolean setStateFailed(@NonNull Error error, List<Throwable> throwablesList) {
+    public synchronized boolean setStateFailed(@NonNull com.termux.shared.errors.Error error, List<Throwable> throwablesList) {
         return setStateFailed(error.getType(), error.getCode(), error.getMessage(), throwablesList);
     }
 
@@ -170,19 +170,19 @@ public class Error implements Serializable {
     @NonNull
     @Override
     public String toString() {
-        return getErrorLogString(this);
+        return getErrorLogString(new com.termux.shared.errors.Error(type, code, message, throwablesList));
     }
 
 
 
     /**
-     * Log the {@link Error} and show a toast for the minimal {@link String} for the {@link Error}.
+     * Log the {@link com.termux.shared.errors.Error} and show a toast for the minimal {@link String} for the {@link com.termux.shared.errors.Error}.
      *
      * @param context The {@link Context} for operations.
      * @param logTag The log tag to use for logging.
-     * @param error The {@link Error} to convert.
+     * @param error The {@link com.termux.shared.errors.Error} to convert.
      */
-    public static void logErrorAndShowToast(Context context, String logTag, Error error) {
+    public static void logErrorAndShowToast(Context context, String logTag, com.termux.shared.errors.Error error) {
         if (error == null) return;
         error.logErrorAndShowToast(context, logTag);
     }
@@ -194,12 +194,12 @@ public class Error implements Serializable {
 
 
     /**
-     * Get a log friendly {@link String} for {@link Error} error parameters.
+     * Get a log friendly {@link String} for {@link com.termux.shared.errors.Error} error parameters.
      *
-     * @param error The {@link Error} to convert.
+     * @param error The {@link com.termux.shared.errors.Error} to convert.
      * @return Returns the log friendly {@link String}.
      */
-    public static String getErrorLogString(final Error error) {
+    public static String getErrorLogString(final com.termux.shared.errors.Error error) {
         if (error == null) return "null";
         return error.getErrorLogString();
     }
@@ -216,12 +216,12 @@ public class Error implements Serializable {
     }
 
     /**
-     * Get a minimal log friendly {@link String} for {@link Error} error parameters.
+     * Get a minimal log friendly {@link String} for {@link com.termux.shared.errors.Error} error parameters.
      *
-     * @param error The {@link Error} to convert.
+     * @param error The {@link com.termux.shared.errors.Error} to convert.
      * @return Returns the log friendly {@link String}.
      */
-    public static String getMinimalErrorLogString(final Error error) {
+    public static String getMinimalErrorLogString(final com.termux.shared.errors.Error error) {
         if (error == null) return "null";
         return error.getMinimalErrorLogString();
     }
@@ -236,12 +236,12 @@ public class Error implements Serializable {
     }
 
     /**
-     * Get a minimal {@link String} for {@link Error} error parameters.
+     * Get a minimal {@link String} for {@link com.termux.shared.errors.Error} error parameters.
      *
-     * @param error The {@link Error} to convert.
+     * @param error The {@link com.termux.shared.errors.Error} to convert.
      * @return Returns the {@link String}.
      */
-    public static String getMinimalErrorString(final Error error) {
+    public static String getMinimalErrorString(final com.termux.shared.errors.Error error) {
         if (error == null) return "null";
         return error.getMinimalErrorString();
     }
@@ -256,12 +256,12 @@ public class Error implements Serializable {
     }
 
     /**
-     * Get a markdown {@link String} for {@link Error}.
+     * Get a markdown {@link String} for {@link com.termux.shared.errors.Error}.
      *
-     * @param error The {@link Error} to convert.
+     * @param error The {@link com.termux.shared.errors.Error} to convert.
      * @return Returns the markdown {@link String}.
      */
-    public static String getErrorMarkdownString(final Error error) {
+    public static String getErrorMarkdownString(final com.termux.shared.errors.Error error) {
         if (error == null) return "null";
         return error.getErrorMarkdownString();
     }
@@ -269,9 +269,9 @@ public class Error implements Serializable {
     public String getErrorMarkdownString() {
         StringBuilder markdownString = new StringBuilder();
 
-        markdownString.append(MarkdownUtils.getSingleLineMarkdownStringEntry("Error Code", getCode(), "-"));
+        markdownString.append(MarkdownUtils.getSingleLineMarkdownStringEntry("com.termux.shared.errors.Error Code", getCode(), "-"));
         markdownString.append("\n").append(MarkdownUtils.getMultiLineMarkdownStringEntry(
-            (Errno.TYPE.equals(getType()) ? "Error Message" : "Error Message (" + getType() + ")"), message, "-"));
+            (Errno.TYPE.equals(getType()) ? "com.termux.shared.errors.Error Message" : "com.termux.shared.errors.Error Message (" + getType() + ")"), message, "-"));
         if (throwablesList != null && throwablesList.size() > 0)
             markdownString.append("\n\n").append(geStackTracesMarkdownString());
 
@@ -280,11 +280,11 @@ public class Error implements Serializable {
 
 
     public String getCodeString() {
-        return Logger.getSingleLineLogStringEntry("Error Code", code, "-");
+        return Logger.getSingleLineLogStringEntry("com.termux.shared.errors.Error Code", code, "-");
     }
 
     public String getTypeAndMessageLogString() {
-        return Logger.getMultiLineLogStringEntry(Errno.TYPE.equals(type) ? "Error Message" : "Error Message (" + type + ")", message, "-");
+        return Logger.getMultiLineLogStringEntry(Errno.TYPE.equals(type) ? "com.termux.shared.errors.Error Message" : "com.termux.shared.errors.Error Message (" + type + ")", message, "-");
     }
 
     public String geStackTracesLogString() {

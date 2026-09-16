@@ -75,7 +75,7 @@ public class CrashUtils {
                 StringBuilder reportStringBuilder = new StringBuilder();
 
                 // Read report string from crash log file
-                error = FileUtils.readStringFromFile("crash log", TermuxConstants.TERMUX_CRASH_LOG_FILE_PATH, Charset.defaultCharset(), reportStringBuilder, false);
+                error = FileUtils.readTextFromFile("crash log", TermuxConstants.TERMUX_CRASH_LOG_FILE_PATH, Charset.defaultCharset(), reportStringBuilder, false);
                 if (error != null) {
                     Logger.logErrorExtended(logTag, error.toString());
                     return;
@@ -146,7 +146,7 @@ public class CrashUtils {
         if (preferences == null) return;
 
         // If user has disabled notifications for crashes
-        if (!preferences.areCrashReportNotificationsEnabled() && !forceNotification)
+        if (!preferences.areCrashReportNotificationsEnabled(false) && !forceNotification)
             return;
 
         logTag = DataUtils.getDefaultIfNull(logTag, LOG_TAG);
@@ -165,12 +165,14 @@ public class CrashUtils {
         }
 
         String userActionName = UserAction.CRASH_REPORT.getName();
-        ReportActivity.NewInstanceResult result = ReportActivity.newInstance(context, new ReportInfo(userActionName,
-            logTag, title, null, reportString.toString(),
-            "\n\n" + TermuxUtils.getReportIssueMarkdownString(context), true,
-            userActionName,
-            Environment.getExternalStorageDirectory() + "/" +
-                FileUtils.sanitizeFileName(TermuxConstants.TERMUX_APP_NAME + "-" + userActionName + ".log", true, true)));
+        ReportInfo reportInfo = new ReportInfo(userActionName, logTag, title);
+        reportInfo.reportString = reportString.toString();
+        reportInfo.reportStringSuffix = "\n\n" + TermuxUtils.getReportIssueMarkdownString(context);
+        reportInfo.addReportInfoHeaderToMarkdown = true;
+        reportInfo.reportSaveFileLabel = userActionName;
+        reportInfo.reportSaveFilePath = Environment.getExternalStorageDirectory() + "/" +
+            FileUtils.sanitizeFileName(TermuxConstants.TERMUX_APP_NAME + "-" + userActionName + ".log", true, true);
+        ReportActivity.NewInstanceResult result = ReportActivity.newInstance(context, reportInfo);
         if (result.contentIntent == null) return;
 
         // Must ensure result code for PendingIntents and id for notification are unique otherwise will override previous
