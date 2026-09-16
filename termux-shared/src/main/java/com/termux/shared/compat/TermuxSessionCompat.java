@@ -8,7 +8,7 @@ import androidx.annotation.Nullable;
 import com.termux.shared.logger.Logger;
 import com.termux.shared.shell.command.ExecutionCommand;
 import com.termux.shared.shell.command.environment.IShellEnvironment;
-import com.termux.shared.termux.shell.command.environment.TermuxShellCommandShellEnvironment;
+import com.termux.shared.shell.command.environment.AndroidShellEnvironment;
 import com.termux.shared.termux.shell.command.runner.terminal.TermuxSession;
 import com.termux.terminal.TerminalSessionClient;
 
@@ -60,7 +60,7 @@ public final class TermuxSessionCompat {
 
         IShellEnvironment env = shellEnvironment != null
             ? shellEnvironment.getDelegate()
-            : new TermuxShellCommandShellEnvironment();
+            : new AndroidShellEnvironment();
 
         // Honor the legacy sessionName by writing it into the upstream ExecutionCommand fields.
         if (sessionName != null && !sessionName.isEmpty()) {

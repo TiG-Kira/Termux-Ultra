@@ -9,7 +9,7 @@ import com.termux.shared.logger.Logger;
 import com.termux.shared.shell.command.ExecutionCommand;
 import com.termux.shared.shell.command.environment.IShellEnvironment;
 import com.termux.shared.shell.command.runner.app.AppShell;
-import com.termux.shared.termux.shell.command.environment.TermuxShellCommandShellEnvironment;
+import com.termux.shared.shell.command.environment.AndroidShellEnvironment;
 
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
@@ -75,7 +75,7 @@ public final class TermuxTaskCompat {
 
         IShellEnvironment env = shellEnvironment != null
             ? shellEnvironment.getDelegate()
-            : new TermuxShellCommandShellEnvironment();
+            : new AndroidShellEnvironment();
 
         LegacyTaskClientBridge bridge = new LegacyTaskClientBridge(taskClient);
 
