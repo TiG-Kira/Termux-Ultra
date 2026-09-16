@@ -45,12 +45,12 @@ android {
         manifestPlaceholders.TERMUX_TASKER_APP_NAME = "Termux:Tasker"
         manifestPlaceholders.TERMUX_WIDGET_APP_NAME = "Termux:Widget"
 
-        // externalNativeBuild {
-        //     cmake {
-        //         arguments "-DANDROID_STL=none"
-        //         targets "native-vnc", "vncclient", "turbojpeg-static", "wolfssl", "termux-bootstrap"
-        //     }
-        // }
+        externalNativeBuild {
+            cmake {
+                arguments "-DANDROID_STL=none"
+                targets "native-vnc", "vncclient", "turbojpeg-static", "wolfssl", "termux-bootstrap"
+            }
+        }
 
         // ABI splits: enabled for release builds by default, or whenever the
         // CI sets TERMUX_FORCE_SPLITS=1. Local debug builds keep the fast
@@ -103,12 +103,12 @@ android {
         kotlinCompilerExtensionVersion "1.5.14"
     }
 
-    // externalNativeBuild {
-    //     cmake {
-    //         version = "3.22.1"
-    //         path file("CMakeLists.txt")
-    //     }
-    // }
+    externalNativeBuild {
+        cmake {
+            version = "3.22.1"
+            path file("CMakeLists.txt")
+        }
+    }
 
     packaging {
         jniLibs.useLegacyPackaging = true
