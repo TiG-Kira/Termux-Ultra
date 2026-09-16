@@ -96,7 +96,7 @@ fun AboutScreen(onBack: () -> Unit) {
     var showBetaWarningDialog by remember { mutableStateOf(false) }
 
     val currentVersion = remember { BuildConfig.VERSION_NAME }
-    val termuxCoreVersion = remember { context.getString(R.string.termux_core_version) }
+    val termuxCoreVersion = remember { BuildConfig.TERMUX_CORE_VERSION }
 
     // 呼吸渐变动画 (FeatureCenterCard 风格)
     val infiniteTransition = rememberInfiniteTransition(label = "breathingGradient")
