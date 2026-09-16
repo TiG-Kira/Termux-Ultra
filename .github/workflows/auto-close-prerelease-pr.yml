@@ -1,0 +1,96 @@
+name: Auto-close PRs from corebump/2.x
+
+# ---------------------------------------------------------------------------
+# Policy for the Termux Ultra v2.0 corebump branch:
+#   - While Termux Ultra 2.0 (corebump/2.x) is still in development and not
+#     considered stable, PRs that target main from this branch must be
+#     rejected automatically.
+#   - The upstream Termux project still hasn't released 0.119.0 stable, so
+#     TU 2.0 remains a prerelease track.
+#
+# PR flow enforced by this workflow:
+#   1. PR created: auto-comment explaining the branch policy
+#   2. PR labeled: "corebump-prerelease" label added
+#   3. PR closed: automatically closed (cannot be merged to main)
+#
+# When TU 2.0 is stabilised and upstream 0.119.0 is formally released, the
+# maintainer will disable or delete this workflow to allow normal PR flow.
+# ---------------------------------------------------------------------------
+
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  auto-close-prerelease-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check PR source/target branches
+        id: check
+        run: |
+          PR_SOURCE="${{ github.event.pull_request.head.ref }}"
+          PR_TARGET="${{ github.event.pull_request.base.ref }}"
+          echo "source=${PR_SOURCE}" >> "$GITHUB_OUTPUT"
+          echo "target=${PR_TARGET}" >> "$GITHUB_OUTPUT"
+
+      - name: Leave policy comment & close PR
+        if: startsWith(steps.check.outputs.source, 'corebump/') && steps.check.outputs.target == 'main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          echo "Detected corebump/* -> main PR. Auto-closing per branch policy."
+
+          # 1. Add the prerelease label so future filtering is easy
+          gh pr edit "$PR_NUMBER" \
+            --repo "$GH_REPO" \
+            --add-label "corebump-prerelease"
+
+          # 2. Comment explaining the branch policy
+          gh pr comment "$PR_NUMBER" \
+            --repo "$GH_REPO" \
+            --body "$(cat <<'EOF'
+⚠️ **自动关闭的 Pull Request**
+
+这个 PR 已被自动关闭，因为它尝试将 **Termux Ultra 2.0 (corebump/\*)**
+的改动合入 **main** 分支。
+
+## 为什么会被关闭？
+
+根据 **Termux Ultra 2.0 分支策略**：
+
+- `corebump/2.x` 是一个**正在开发中的预发布分支**，底层从上游 `v0.118.3`
+  升级到了 `v0.119.0-beta.3`。
+- 上游 Termux 尚未发布 `v0.119.0` **正式版本**，因此 TU 2.0 的底层仍处于
+  随时可能变化的状态。
+- **在 TU 2.0 稳定之前，不得将其合入 main**。
+
+## 当前状态
+
+| 分支 | 基底 | 状态 |
+|------|------|------|
+| `main` | 上游 v0.118.3 | ✅ 稳定，可发布 |
+| `corebump/2.x` | 上游 v0.119.0-beta.3 | 🧪 预发布，禁止合入 main |
+
+## 什么时候可以合入 main？
+
+- ✅ 上游 Termux 发布了 `v0.119.0` **正式版本**
+- ✅ TU 2.0 的 API compat 层趋于稳定
+- ✅ 经过至少一个完整的 release cycle（beta）验证
+- ✅ **维护者手动关闭此工作流（或移除 corebump-prerelease 标签）后**
+
+如果你的改动同时涉及 main 和 corebump/2.x，请分别在各自分支上独立
+提交 PR。感谢理解 🙏
+EOF
+)"
+
+          # 3. Close the PR
+          gh pr close "$PR_NUMBER" \
+            --repo "$GH_REPO" \
+            --reason not_planned
+
+          echo "PR #${PR_NUMBER} has been labeled 'corebump-prerelease' and closed."

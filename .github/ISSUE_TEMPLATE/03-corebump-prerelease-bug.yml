@@ -1,0 +1,56 @@
+name: "🐛 Termux Ultra 2.0 beta bug report"
+description: "Report bugs specific to the corebump/2.x prerelease branch"
+title: "[2.0 beta]: "
+labels: ["bug report", "corebump-prerelease"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ⚠️ **请确认你的 Termux Ultra 版本：**
+        - 如果你用的是 **1.x stable** (main 分支)，请使用普通的 Bug Report 模板。
+        - 只有当你运行的是 **Termux Ultra 2.0 beta** (`corebump/2.x` 分支) 时才使用此模板。
+
+        Termux Ultra 2.0 基于上游 termux `v0.119.0-beta.3`，在 API compat 层和底层重构中
+        可能存在过渡性问题。提交前请先搜索已有的 `corebump-prerelease` 标签 issue。
+
+  - type: textarea
+    attributes:
+      label: Problem description
+      description: |
+        A clear and concise description of what the problem is. Include logs, screenshots,
+        or screen recordings. Issues without proper description will be closed.
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: Steps to reproduce
+      description: |
+        Post all necessary commands, exact session context, and any special TU 2.0 features
+        involved (Compose UI, AI engine, AVNC, QEMU, Plugin system, etc.).
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: Expected behavior
+
+  - type: textarea
+    attributes:
+      label: System information
+      description: Please provide your device details
+      value: |
+        * Termux Ultra version: 2.0.0.R5 (beta) / custom build
+        * Branch: corebump/2.x
+        * Android OS version:
+        * Device model:
+        * Upstream termux core: v0.119.0-beta.3
+    validations:
+      required: true
+
+  - type: markdown
+    attributes:
+      value: |
+        ---
+        **分支策略提醒**：corebump/2.x 是预发布分支，禁止合入 main 直到稳定。
+        详见 Issue #POLICY 和 `.github/workflows/auto-close-prerelease-pr.yml`。

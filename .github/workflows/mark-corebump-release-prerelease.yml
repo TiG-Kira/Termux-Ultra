@@ -1,0 +1,56 @@
+name: Auto-mark corebump releases as prerelease
+
+# ---------------------------------------------------------------------------
+# Policy for the Termux Ultra v2.0 corebump branch:
+#   - All releases that originate from the `corebump/*` branches (TU 2.0
+#     track) MUST be published as **prerelease / beta**.
+#   - This workflow ensures nobody accidentally publishes a "stable" release
+#     from the prerelease development branch.
+#
+# When a maintainer creates a release from corebump/2.x, this workflow:
+#   1. Detects the release branch context
+#   2. Calls the GitHub Releases API to set `prerelease: true`
+#   3. Also prepends "pre-release" to the release body if not already there
+# ---------------------------------------------------------------------------
+
+on:
+  release:
+    types: [created, published]
+
+permissions:
+  contents: write
+
+jobs:
+  ensure-prerelease:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Determine release source
+        id: source
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_ID: ${{ github.event.release.id }}
+        run: |
+          echo "Checking release #${RELEASE_ID}..."
+          SOURCE_BRANCH="$(gh api \
+            -H "Accept: application/vnd.github+json" \
+            "/repos/${GH_REPO}/releases/${RELEASE_ID}" \
+            --jq '.target_commitish')" || SOURCE_BRANCH="main"
+          echo "source_branch=${SOURCE_BRANCH}" >> "$GITHUB_OUTPUT"
+
+      - name: Force prerelease flag on corebump releases
+        if: startsWith(steps.source.outputs.source_branch, 'corebump/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_ID: ${{ github.event.release.id }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          echo "Release ${RELEASE_TAG} is from prerelease branch ${SOURCE_BRANCH}. Forcing prerelease flag."
+          gh api \
+            --method PATCH \
+            -H "Accept: application/vnd.github+json" \
+            "/repos/${GH_REPO}/releases/${RELEASE_ID}" \
+            -f prerelease=true \
+            -f name="v${RELEASE_TAG#v} (beta — corebump/2.x prerelease)"
+          echo "Done. Release ${RELEASE_TAG} is now marked as prerelease."

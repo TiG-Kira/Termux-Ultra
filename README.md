@@ -2,9 +2,34 @@
 
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](./LICENSE)
 [![Platform: Android](https://img.shields.io/badge/Platform-Android%208.0%2B-green.svg)]()
-[![Based on Termux](https://img.shields.io/badge/Based%20on-Termux%20v0.118.x-orange.svg)](https://github.com/termux/termux-app)
+[![Based on Termux v0.118.x](https://img.shields.io/badge/Base-Termux%20v0.118.x-orange.svg)](https://github.com/termux/termux-app)
+[![2.0 beta on corebump/2.x](https://img.shields.io/badge/2.0%20beta-corebump%2F2.x-red.svg)](https://github.com/TiG-Kira/Termux-Ultra/tree/corebump/2.x)
 
 [![Build status](https://github.com/TiG-Kira/Termux-Ultra/workflows/Build/badge.svg)](https://github.com/TiG-Kira/Termux-Ultra/actions)
+
+> ⚠️ **Termux Ultra 2.0 (corebump/2.x) 分支在开发中，禁止合入 main。** 详见下方「分支策略」。
+
+## 分支策略
+
+| 分支 | 基底 | 版本号 | 状态 | 可否合入 main |
+|------|------|--------|------|--------------|
+| `main` | 上游 Termux `v0.118.3` | 1.8.x | ✅ 稳定 | — |
+| `corebump/2.x` | 上游 Termux `v0.119.0-beta.3` | 2.0.0.R5+ | 🧪 预发布 / beta | ❌ **自动关闭** |
+
+**强制执行的策略（GitHub Actions）：**
+
+1. **corebump/2.x → main 的 PR 自动关闭** — 见 [auto-close-prerelease-pr.yml](.github/workflows/auto-close-prerelease-pr.yml)
+2. **从 corebump/2.x 发布的 release 自动标记为 prerelease** — 见 [mark-corebump-release-prerelease.yml](.github/workflows/mark-corebump-release-prerelease.yml)
+3. **直到上游 Termux 发布 v0.119.0 正式版，TU 2.0 才可合入 main**
+
+**PR 指南：**
+
+- ✅ `feature/xxx` → `corebump/2.x` ：正常提 PR
+- ✅ `feature/xxx` → `main` ：正常提 PR
+- ❌ `corebump/2.x` → `main` ：会被自动关闭并打 `corebump-prerelease` 标签
+- 🐛 2.0 beta bug 请用 Issue 表单 **「🐛 Termux Ultra 2.0 beta bug report」**
+
+
 
 **Termux Ultra** 是一款基于 [Termux](https://github.com/termux/termux-app) 二次开发的 Android 终端模拟器与 Linux 环境应用。它在保留 Termux 原生终端能力的基础上，集成了 VNC 远程桌面、SSH 连接管理、文件管理器、Linux 容器（proot）、QEMU 虚拟机、一键资源部署、AI 助手、插件系统等增强功能，并将 5 款 Termux 插件（API、Boot、Styling、Tasker、Widget）内置为可开关的集成工具，无需额外安装。UI 采用 Jetpack Compose + Miuix 设计语言打造。
 
