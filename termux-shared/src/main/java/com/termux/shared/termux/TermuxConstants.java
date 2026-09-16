@@ -1197,7 +1197,7 @@ public final class TermuxConstants {
     /**
      * Termux:API app constants.
      */
-    public static final class TERMUX_API_APP {
+    public static class TERMUX_API_APP {
 
         /** Termux:API app main activity name. */
         public static final String TERMUX_API_MAIN_ACTIVITY_NAME = TERMUX_API_PACKAGE_NAME + ".activities.TermuxAPIMainActivity"; // Default: "com.termux.api.activities.TermuxAPIMainActivity"
@@ -1214,7 +1214,7 @@ public final class TermuxConstants {
     /**
      * Termux:Boot app constants.
      */
-    public static final class TERMUX_BOOT_APP {
+    public static class TERMUX_BOOT_APP {
 
         /** Termux:Boot app main activity name. */
         public static final String TERMUX_BOOT_MAIN_ACTIVITY_NAME = TERMUX_BOOT_PACKAGE_NAME + ".activities.TermuxBootMainActivity"; // Default: "com.termux.boot.activities.TermuxBootMainActivity"
@@ -1231,7 +1231,7 @@ public final class TermuxConstants {
     /**
      * Termux:Float app constants.
      */
-    public static final class TERMUX_FLOAT_APP {
+    public static class TERMUX_FLOAT_APP {
 
         /** Termux:Float app core activity name. */
         public static final String TERMUX_FLOAT_ACTIVITY_NAME = TERMUX_FLOAT_PACKAGE_NAME + ".TermuxFloatActivity"; // Default: "com.termux.window.TermuxFloatActivity"
@@ -1264,7 +1264,7 @@ public final class TermuxConstants {
     /**
      * Termux:Styling app constants.
      */
-    public static final class TERMUX_STYLING_APP {
+    public static class TERMUX_STYLING_APP {
 
         /** Termux:Styling app core activity name. */
         public static final String TERMUX_STYLING_ACTIVITY_NAME = TERMUX_STYLING_PACKAGE_NAME + ".TermuxStyleActivity"; // Default: "com.termux.styling.TermuxStyleActivity"
@@ -1285,7 +1285,7 @@ public final class TermuxConstants {
     /**
      * Termux:Tasker app constants.
      */
-    public static final class TERMUX_TASKER_APP {
+    public static class TERMUX_TASKER_APP {
 
         /** Termux:Tasker app main activity name. */
         public static final String TERMUX_TASKER_MAIN_ACTIVITY_NAME = TERMUX_TASKER_PACKAGE_NAME + ".activities.TermuxTaskerMainActivity"; // Default: "com.termux.tasker.activities.TermuxTaskerMainActivity"
@@ -1302,7 +1302,7 @@ public final class TermuxConstants {
     /**
      * Termux:Widget app constants.
      */
-    public static final class TERMUX_WIDGET_APP {
+    public static class TERMUX_WIDGET_APP {
 
         /** Termux:Widget app main activity name. */
         public static final String TERMUX_WIDGET_MAIN_ACTIVITY_NAME = TERMUX_WIDGET_PACKAGE_NAME + ".activities.TermuxWidgetMainActivity"; // Default: "com.termux.widget.activities.TermuxWidgetMainActivity"
