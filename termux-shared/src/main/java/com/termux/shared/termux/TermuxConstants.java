@@ -1335,4 +1335,14 @@ public final class TermuxConstants {
 
     }
 
+
+    // Backward-compat aliases: upstream v0.119 renamed TERMUX_API → TERMUX_API_APP, etc.
+    // TU's custom add-ons still reference the old names. These "extends" copies keep both paths working.
+    public static final class TERMUX_API extends TERMUX_API_APP {}
+    public static final class TERMUX_BOOT extends TERMUX_BOOT_APP {}
+    public static final class TERMUX_FLOAT extends TERMUX_FLOAT_APP {}
+    public static final class TERMUX_STYLING extends TERMUX_STYLING_APP {}
+    public static final class TERMUX_TASKER extends TERMUX_TASKER_APP {}
+    public static final class TERMUX_WIDGET extends TERMUX_WIDGET_APP {}
+
 }
