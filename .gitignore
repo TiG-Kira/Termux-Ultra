@@ -42,3 +42,4 @@ HANDOFF.md
 build_log.txt
 _deps2.txt
 _deps.txt
+.kotlin/
