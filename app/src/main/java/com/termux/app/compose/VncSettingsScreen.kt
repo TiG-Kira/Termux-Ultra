@@ -34,7 +34,8 @@ enum class VncSettingsPage {
     MAIN,
     VIEWER,
     INPUT,
-    SERVER
+    SERVER,
+    CUSTOMIZE_KEYS
 }
 
 private fun getPageTitle(context: Context, page: VncSettingsPage): String {
@@ -43,6 +44,7 @@ private fun getPageTitle(context: Context, page: VncSettingsPage): String {
         VncSettingsPage.VIEWER -> context.getString(R.string.pref_viewer)
         VncSettingsPage.INPUT -> context.getString(R.string.pref_input)
         VncSettingsPage.SERVER -> context.getString(R.string.pref_servers)
+        VncSettingsPage.CUSTOMIZE_KEYS -> context.getString(R.string.pref_customize_virtual_keys)
     }
 }
 
@@ -61,6 +63,7 @@ fun VncSettingsScreen(
             VncSettingsPage.VIEWER -> { currentPage = VncSettingsPage.MAIN }
             VncSettingsPage.INPUT -> { currentPage = VncSettingsPage.MAIN }
             VncSettingsPage.SERVER -> { currentPage = VncSettingsPage.MAIN }
+            VncSettingsPage.CUSTOMIZE_KEYS -> { currentPage = VncSettingsPage.INPUT }
         }
     }
     
@@ -117,6 +120,7 @@ fun VncSettingsScreen(
                 }
                 VncSettingsPage.INPUT -> {
                     InputSettingsPage(
+                        onNavigate = { currentPage = it },
                         modifier = Modifier
                             .fillMaxSize()
                             .nestedScroll(scrollBehavior.nestedScrollConnection)
@@ -124,6 +128,14 @@ fun VncSettingsScreen(
                 }
                 VncSettingsPage.SERVER -> {
                     ServerSettingsPage(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .nestedScroll(scrollBehavior.nestedScrollConnection)
+                    )
+                }
+                VncSettingsPage.CUSTOMIZE_KEYS -> {
+                    CustomKeysEditorScreen(
+                        onBack = { currentPage = VncSettingsPage.INPUT },
                         modifier = Modifier
                             .fillMaxSize()
                             .nestedScroll(scrollBehavior.nestedScrollConnection)
@@ -461,6 +473,7 @@ private fun ViewerSettingsPage(
 
 @Composable
 private fun InputSettingsPage(
+    onNavigate: (VncSettingsPage) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -962,7 +975,7 @@ private fun InputSettingsPage(
                 ArrowPreference(
                     title = stringResource(R.string.pref_customize_virtual_keys),
                     summary = null,
-                    onClick = { },
+                    onClick = { onNavigate(VncSettingsPage.CUSTOMIZE_KEYS) },
                     startAction = {
                         VncSettingIcon(R.drawable.ic_edit)
                     }
