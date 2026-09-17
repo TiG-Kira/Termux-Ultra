@@ -177,7 +177,7 @@ fun CustomKeysEditorScreen(
                             Text(
                                 text = stringResource(R.string.pref_vk_show_all),
                                 style = MiuixTheme.textStyles.body1,
-                                color = MiuixTheme.colorScheme.onSurfaceSummary
+                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary
                             )
                         }
                     } else {
@@ -201,7 +201,7 @@ fun CustomKeysEditorScreen(
                         .fillMaxWidth()
                         .padding(horizontal = 20.dp, vertical = 4.dp),
                     style = MiuixTheme.textStyles.subtitle,
-                    color = MiuixTheme.colorScheme.onSurfaceSummary
+                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary
                 )
             }
 
@@ -276,7 +276,6 @@ fun CustomKeysEditorScreen(
                     modifier = Modifier.weight(1f)
                 )
                 Button(
-                    text = stringResource(android.R.string.ok),
                     onClick = {
                         VirtualKeyLayoutConfig.setLayout(prefs, keyList)
                         scope.launch {
@@ -288,7 +287,9 @@ fun CustomKeysEditorScreen(
                         onBack()
                     },
                     modifier = Modifier.weight(1f)
-                )
+                ) {
+                    Text(text = stringResource(android.R.string.ok))
+                }
             }
 
             Spacer(modifier = Modifier.height(8.dp))
