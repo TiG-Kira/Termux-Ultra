@@ -242,6 +242,7 @@ fun TextEditorScreen(
                     },
                     readOnly = readOnly,
                     maxLines = Int.MAX_VALUE,
+                    softWrap = false,
                     textStyle = TextStyle(
                         fontFamily = FontFamily.Monospace,
                         fontSize = 14.sp,
