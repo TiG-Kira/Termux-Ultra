@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?><!--
+  ~ Copyright (c) 2020  Gaurav Ujjwal.
+  ~
+  ~ SPDX-License-Identifier:  GPL-3.0-or-later
+  ~
+  ~ See COPYING.txt for more details.
+  -->
+
+<resources>
+    <color name="colorBorder">#464646</color>
+    <color name="colorUrlBarBackground">#464646</color>
+    <color name="icon_color">#FFFFFF</color>
+    <!-- HyperCeiler-style window background for splash/OOBE/main (dark) -->
+    <color name="hyper_surface">#1C1B1F</color>
+</resources>

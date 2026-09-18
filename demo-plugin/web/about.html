@@ -1,0 +1,181 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>关于 Demo - Termux Ultra</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            color: #333;
+        }
+        .container { max-width: 600px; margin: 0 auto; }
+        .header { text-align: center; padding: 20px 0 30px; color: #fff; }
+        .header h1 { font-size: 24px; margin-bottom: 8px; }
+        .header p { font-size: 14px; opacity: 0.9; }
+        .nav { display: flex; gap: 10px; margin-bottom: 16px; }
+        .nav-btn {
+            flex: 1; padding: 10px 14px;
+            background: rgba(255,255,255,0.3); color: #fff;
+            border: 1px solid rgba(255,255,255,0.5); border-radius: 10px;
+            font-size: 13px; font-weight: 600; text-align: center; cursor: pointer;
+            transition: background 0.2s;
+        }
+        .nav-btn:active { background: rgba(255,255,255,0.5); }
+        .card {
+            background: #fff; border-radius: 16px; padding: 20px; margin-bottom: 16px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+        }
+        .card h2 { font-size: 16px; margin-bottom: 12px; color: #333; display: flex; align-items: center; }
+        .card h2::before {
+            content: ''; display: inline-block;
+            width: 4px; height: 16px; background: #667eea;
+            border-radius: 2px; margin-right: 8px;
+        }
+        .card p { font-size: 14px; line-height: 1.6; color: #555; }
+        .card ul { padding-left: 20px; margin-top: 8px; }
+        .card ul li { font-size: 13px; line-height: 1.8; color: #555; }
+        .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .info-item {
+            background: #f8f8f8; border-radius: 10px; padding: 12px; text-align: center;
+        }
+        .info-item .label { font-size: 11px; color: #888; margin-bottom: 4px; }
+        .info-item .value { font-size: 14px; font-weight: 600; color: #333; }
+        .btn {
+            display: block; width: 100%; padding: 14px 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #fff; border: none; border-radius: 12px;
+            font-size: 15px; font-weight: 600; cursor: pointer;
+            margin-bottom: 10px; transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .btn:active { transform: scale(0.98); box-shadow: 0 2px 10px rgba(0,0,0,0.2); }
+        .btn-secondary { background: #f5f5f5; color: #333; }
+        .btn-secondary:active { background: #e8e8e8; }
+        .toast {
+            position: fixed; top: 20px; left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.8); color: #fff;
+            padding: 10px 20px; border-radius: 20px;
+            font-size: 13px; z-index: 1000;
+            opacity: 0; transition: opacity 0.3s; pointer-events: none;
+        }
+        .toast.show { opacity: 1; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>ℹ️ 关于 Demo</h1>
+            <p>了解 Termux Ultra 插件系统</p>
+        </div>
+
+        <div class="nav">
+            <div class="nav-btn" onclick="navigateTo('index.html')">🏠 主页</div>
+            <div class="nav-btn" onclick="navigateTo('about.html')">ℹ️ 关于</div>
+            <div class="nav-btn" onclick="navigateTo('settings.html')">⚙️ 设置</div>
+        </div>
+
+        <div class="card">
+            <h2>关于本插件</h2>
+            <p>这是 Termux Ultra 官方提供的示例插件，用于演示插件系统的完整功能和接入方式。</p>
+            <ul>
+                <li>展示 H5 多页面界面的组织方式</li>
+                <li>演示 JS Bridge API 的调用</li>
+                <li>提供资源卡片和技能卡片的配置示例</li>
+                <li>说明 System Prompt 的注入机制</li>
+            </ul>
+        </div>
+
+        <div class="card">
+            <h2>插件架构</h2>
+            <div class="info-grid">
+                <div class="info-item">
+                    <div class="label">版本</div>
+                    <div class="value" id="infoVersion">-</div>
+                </div>
+                <div class="info-item">
+                    <div class="label">插件 ID</div>
+                    <div class="value" id="infoId">-</div>
+                </div>
+                <div class="info-item">
+                    <div class="label">H5 页面</div>
+                    <div class="value">3 个</div>
+                </div>
+                <div class="info-item">
+                    <div class="label">入口类型</div>
+                    <div class="value">H5 + Cards</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>H5 文件结构规范</h2>
+            <p>插件 H5 页面需遵循以下文件结构要求：</p>
+            <ul>
+                <li>所有 H5 文件（HTML、CSS、JS、图片）放在插件包根目录下</li>
+                <li>manifest.json 中的 entry 路径相对于插件包根目录</li>
+                <li>例如 <code>web/index.html</code> 表示根目录下的 web 文件夹内的 index.html</li>
+                <li>h5Home.entry 指定主页入口，pages[].entry 指定子页面入口</li>
+                <li>所有 entry 指向的文件必须在插件安装时存在，否则会报错</li>
+            </ul>
+        </div>
+
+        <div class="card">
+            <h2>JS Bridge API</h2>
+            <ul>
+                <li><code>getPluginInfo()</code> — 获取插件元信息</li>
+                <li><code>getConfig()</code> / <code>setConfig(k,v)</code> — 读写插件配置</li>
+                <li><code>exec(cmd)</code> — 执行终端命令</li>
+                <li><code>readFile(path)</code> — 读取插件内文件</li>
+                <li><code>openUrl(url)</code> — 打开外部链接</li>
+                <li><code>toast(msg)</code> — 显示 Toast 提示</li>
+                <li><code>getDeviceInfo()</code> — 获取设备信息</li>
+                <li><code>finishPage()</code> — 关闭当前页面</li>
+            </ul>
+        </div>
+
+        <div class="card">
+            <h2>操作</h2>
+            <button class="btn" onclick="testBridge()">测试 JS Bridge</button>
+            <button class="btn btn-secondary" onclick="navigateTo('index.html')">返回主页</button>
+        </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <script>
+        var bridge = window.TermuxUltra;
+
+        function showToast(msg) {
+            var toast = document.getElementById('toast');
+            toast.textContent = msg;
+            toast.classList.add('show');
+            setTimeout(function() { toast.classList.remove('show'); }, 2000);
+        }
+
+        function navigateTo(page) {
+            window.location.href = page;
+        }
+
+        function testBridge() {
+            if (!bridge) {
+                showToast('JS Bridge 不可用');
+                return;
+            }
+            showToast('Bridge 版本: ' + (bridge.getPluginInfo ? '可用' : '不可用'));
+        }
+
+        if (bridge && bridge.getPluginInfo) {
+            try {
+                var info = JSON.parse(bridge.getPluginInfo());
+                document.getElementById('infoVersion').textContent = info.version || '-';
+                document.getElementById('infoId').textContent = info.id || '-';
+            } catch(e) {}
+        }
+    </script>
+</body>
+</html>

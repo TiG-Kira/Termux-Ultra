@@ -12,12 +12,12 @@ import android.view.WindowManager;
 import com.termux.R;
 import com.termux.app.utils.CrashUtils;
 import com.termux.shared.file.FileUtils;
-import com.termux.shared.file.TermuxFileUtils;
+import com.termux.shared.termux.file.TermuxFileUtils;
 import com.termux.shared.interact.MessageDialogUtils;
 import com.termux.shared.logger.Logger;
 import com.termux.shared.markdown.MarkdownUtils;
-import com.termux.shared.models.errors.Error;
-import com.termux.shared.packages.PackageUtils;
+import com.termux.shared.errors.Error;
+import com.termux.shared.android.PackageUtils;
 import com.termux.shared.termux.TermuxConstants;
 import com.termux.shared.termux.TermuxUtils;
 
@@ -156,9 +156,18 @@ final class TermuxInstaller {
                                         while ((readBytes = zipInput.read(buffer)) != -1)
                                             outStream.write(buffer, 0, readBytes);
                                     }
-                                    if (zipEntryName.startsWith("bin/") || zipEntryName.startsWith("libexec") ||
-                                        zipEntryName.startsWith("lib/apt/apt-helper") || zipEntryName.startsWith("lib/apt/methods")) {
-                                        Os.chmod(targetFile.getAbsolutePath(), 0700);
+                                    // Termux bootstrap zip 里的 Unix 权限 ZipInputStream 不会自动恢复，
+                                    // 必须手动 chmod。不仅 bin/ 下的命令，usr/bin/ 和 usr/sbin/ 下
+                                    // 的 dpkg、apt、chmod、cp、mkdir 等核心工具也需要执行权限。
+                                    boolean isExecutable = zipEntryName.startsWith("bin/")
+                                        || zipEntryName.startsWith("usr/bin/")
+                                        || zipEntryName.startsWith("usr/sbin/")
+                                        || zipEntryName.startsWith("usr/libexec/")
+                                        || zipEntryName.startsWith("libexec/")
+                                        || zipEntryName.startsWith("lib/apt/apt-helper")
+                                        || zipEntryName.startsWith("lib/apt/methods");
+                                    if (isExecutable) {
+                                        Os.chmod(targetFile.getAbsolutePath(), 0755);
                                     }
                                 }
                             }

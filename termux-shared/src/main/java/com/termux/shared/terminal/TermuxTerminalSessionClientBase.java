@@ -1,5 +1,7 @@
 package com.termux.shared.terminal;
 
+import androidx.annotation.NonNull;
+
 import com.termux.shared.logger.Logger;
 import com.termux.terminal.TerminalSession;
 import com.termux.terminal.TerminalSessionClient;
@@ -10,45 +12,45 @@ public class TermuxTerminalSessionClientBase implements TerminalSessionClient {
     }
 
     @Override
-    public void onTextChanged(TerminalSession changedSession) {
+    public void onTextChanged(@NonNull TerminalSession changedSession) {
     }
 
     @Override
-    public void onTitleChanged(TerminalSession updatedSession) {
+    public void onTitleChanged(@NonNull TerminalSession updatedSession) {
     }
 
     @Override
-    public void onSessionFinished(final TerminalSession finishedSession) {
+    public void onSessionFinished(@NonNull TerminalSession finishedSession) {
     }
 
     @Override
-    public void onCopyTextToClipboard(TerminalSession session, String text) {
+    public void onCopyTextToClipboard(@NonNull TerminalSession session, String text) {
     }
 
     @Override
-    public void onPasteTextFromClipboard(TerminalSession session) {
+    public void onPasteTextFromClipboard(@NonNull TerminalSession session) {
     }
 
     @Override
-    public void onBell(TerminalSession session) {
+    public void onBell(@NonNull TerminalSession session) {
     }
 
     @Override
-    public void onColorsChanged(TerminalSession changedSession) {
+    public void onColorsChanged(@NonNull TerminalSession changedSession) {
     }
 
     @Override
     public void onTerminalCursorStateChange(boolean state) {
     }
 
-
+    @Override
+    public void setTerminalShellPid(@NonNull TerminalSession session, int pid) {
+    }
 
     @Override
     public Integer getTerminalCursorStyle() {
         return null;
     }
-
-
 
     @Override
     public void logError(String tag, String message) {
@@ -84,5 +86,4 @@ public class TermuxTerminalSessionClientBase implements TerminalSessionClient {
     public void logStackTrace(String tag, Exception e) {
         Logger.logStackTrace(tag, e);
     }
-
 }

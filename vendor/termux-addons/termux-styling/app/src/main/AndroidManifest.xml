@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
+
+    <application>
+        <!-- Color/font picker. Disabled by default; enabled when Termux:Styling is toggled on. -->
+        <activity
+            android:name=".TermuxStyleActivity"
+            android:theme="@style/AppTheme"
+            android:noHistory="true"
+            android:enabled="false"
+            android:exported="false" />
+    </application>
+
+</manifest>

@@ -1,7 +1,15 @@
 plugins {
     id "com.android.application"
-    id "org.jetbrains.kotlin.android"
     id "org.jetbrains.kotlin.plugin.compose" version "2.3.10"
+    id "org.jetbrains.kotlin.plugin.serialization" version "2.3.10"
+    id "com.google.devtools.ksp" version "2.3.10"
+    id "kotlin-parcelize"
+}
+
+configurations.all {
+    resolutionStrategy {
+        force "top.yukonga.miuix.kmp:miuix-ui-android:0.9.4-rc01"
+    }
 }
 
 android {
@@ -17,8 +25,14 @@ android {
         applicationId "com.termux"
         minSdkVersion project.properties.minSdkVersion.toInteger()
         targetSdkVersion project.properties.targetSdkVersion.toInteger()
-        versionCode 1002
-        versionName "0.118.3"
+        versionCode 1205
+        versionName "2.0.0.R5"
+        // Termux 核心版本号（基于的上游 Termux 版本）
+        // 注意：termux_core_version 字符串已在 strings.xml 中定义
+        buildConfigField "String", "TERMUX_CORE_VERSION", "\"0.119.0\""
+
+        // 新星引擎 (LibTerminal) 核心版本号
+        buildConfigField "String", "LIBTERMINAL_VERSION", "\"3.0.0\""
 
         if (appVersionName) versionName = appVersionName
 
@@ -32,15 +46,23 @@ android {
         manifestPlaceholders.TERMUX_WIDGET_APP_NAME = "Termux:Widget"
 
         externalNativeBuild {
-            ndkBuild {
-                cFlags "-std=c11", "-Wall", "-Wextra", "-Werror", "-Os", "-fno-stack-protector", "-Wl,--gc-sections"
+            cmake {
+                arguments "-DANDROID_STL=none"
+                targets "native-vnc", "vncclient", "turbojpeg-static", "wolfssl", "termux-bootstrap"
             }
         }
 
+        // ABI splits: enabled for release builds by default, or whenever the
+        // CI sets TERMUX_FORCE_SPLITS=1. Local debug builds keep the fast
+        // single-universal-APK behaviour unless overridden.
+        def forceSplits = System.getenv("TERMUX_FORCE_SPLITS") == "1"
+        def isReleaseBuild = gradle.startParameter.taskNames.any {
+            it.toLowerCase().contains('release')
+        }
+        def enableSplits = isReleaseBuild || forceSplits
         splits {
             abi {
-                enable ((gradle.startParameter.taskNames.any { it.contains("Debug") } && splitAPKsForDebugBuilds == "1") ||
-                        (gradle.startParameter.taskNames.any { it.contains("Release") } && splitAPKsForReleaseBuilds == "1"))
+                enable enableSplits
                 reset ()
                 include 'x86', 'x86_64', 'armeabi-v7a', 'arm64-v8a'
                 universalApk true
@@ -48,26 +70,33 @@ android {
         }
     }
 
-    buildTypes {
-        debug {
+    signingConfigs {
+        release {
+            storeFile file("ki-terminal-release.jks")
+            storePassword "ki-terminal"
+            keyAlias "ki-terminal"
+            keyPassword "ki-terminal"
         }
+    }
+
+    buildTypes {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            signingConfig signingConfigs.release
         }
     }
 
     compileOptions {
-        sourceCompatibility JavaVersion.VERSION_1_8
-        targetCompatibility JavaVersion.VERSION_1_8
-    }
-
-    kotlinOptions {
-        jvmTarget = "1.8"
+        coreLibraryDesugaringEnabled true
+        sourceCompatibility JavaVersion.VERSION_21
+        targetCompatibility JavaVersion.VERSION_21
     }
 
     buildFeatures {
         compose true
+        dataBinding = true
+        buildConfig = true
     }
 
     composeOptions {
@@ -75,9 +104,17 @@ android {
     }
 
     externalNativeBuild {
-        ndkBuild {
-            path "src/main/cpp/Android.mk"
+        cmake {
+            version = "3.22.1"
+            path file("CMakeLists.txt")
         }
+    }
+
+    packaging {
+        jniLibs.useLegacyPackaging = true
+        resources.excludes += "META-INF/LICENSE.md"
+        resources.excludes += "META-INF/LICENSE-notice.md"
+        resources.excludes += "META-INF/DEPENDENCIES"
     }
 
     sourceSets {
@@ -88,35 +125,128 @@ android {
 }
 
 dependencies {
-    implementation "top.yukonga.miuix.kmp:miuix-android:0.8.5"
-    implementation "top.yukonga.miuix.kmp:miuix-icons-android:0.8.5"
+    implementation fileTree(dir: 'libs', include: ['*.jar'])
+    coreLibraryDesugaring "com.android.tools:desugar_jdk_libs:1.1.5"
+    implementation "top.yukonga.miuix.kmp:miuix-ui-android:0.9.4-rc01"
+    implementation "top.yukonga.miuix.kmp:miuix-icons-android:0.9.4-rc01"
+        implementation "top.yukonga.miuix.kmp:miuix-preference-android:0.9.4-rc01"
+
+    implementation "androidx.navigationevent:navigationevent-compose-android:1.0.0-alpha05"
 
     implementation "androidx.compose.ui:ui:1.8.3"
     implementation "androidx.compose.material3:material3:1.3.0"
+    implementation "androidx.compose.material:material-icons-extended:1.7.0"
     implementation "androidx.activity:activity-compose:1.9.3"
     implementation "androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.5"
     implementation "androidx.lifecycle:lifecycle-runtime-ktx:2.8.5"
+    implementation "androidx.lifecycle:lifecycle-viewmodel-compose:2.8.5"
     implementation "androidx.appcompat:appcompat:1.7.0"
     implementation "androidx.core:core-ktx:1.15.0"
     implementation "androidx.preference:preference-ktx:1.2.1"
 
+    implementation "io.coil-kt:coil-compose:2.7.0"
+implementation "io.coil-kt:coil:2.7.0"
+
+    // Liquid Glass effects (Android-only artifacts)
+    // CM Compose artifacts are excluded to avoid duplication;
+    // the project's androidx.compose (already resolved to 1.11.2 via MIUIX strictly) is used instead
+    implementation("io.github.kyant0:backdrop-android:2.0.1") {
+        exclude group: 'org.jetbrains.compose'
+        exclude group: 'org.jetbrains.compose.ui'
+        exclude group: 'org.jetbrains.compose.foundation'
+    }
+    implementation("io.github.kyant0:shapes-android:1.2.1") {
+        exclude group: 'org.jetbrains.compose'
+        exclude group: 'org.jetbrains.compose.ui'
+        exclude group: 'org.jetbrains.compose.foundation'
+    }
+
     implementation project(':terminal-view')
+    implementation project(':libterminal')
+
     implementation project(':termux-shared')
+    // Integrated Termux add-on tools
+    implementation project(':termux-api')
+    implementation project(':termux-styling')
+    implementation project(':termux-tasker')
+    implementation project(':termux-widget')
 
     implementation("com.google.guava:guava:24.1-jre") {
         exclude group: 'com.google.guava', module: 'listenablefuture'
     }
+    implementation "com.google.code.gson:gson:2.10.1"
+
+    // AVNC dependencies
+    implementation "androidx.activity:activity-ktx:1.10.1"
+    implementation "androidx.fragment:fragment-ktx:1.8.9"
+    implementation "androidx.dynamicanimation:dynamicanimation-ktx:1.1.0"
+    implementation "androidx.biometric:biometric-ktx:1.2.0-alpha05"
+    implementation "androidx.lifecycle:lifecycle-livedata-ktx:2.8.5"
+    implementation "androidx.recyclerview:recyclerview:1.4.0"
+    implementation "androidx.constraintlayout:constraintlayout:2.1.4"
+    implementation "androidx.drawerlayout:drawerlayout:1.2.0"
+
+    def roomVersion = "2.7.2"
+    implementation "androidx.room:room-runtime:$roomVersion"
+    implementation "androidx.room:room-ktx:$roomVersion"
+    ksp "androidx.room:room-compiler:$roomVersion"
+
+    implementation "com.google.android.material:material:1.7.0"
+    implementation "org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0"
+    implementation "org.connectbot:sshlib:2.2.36"
+
+    implementation "com.squareup.okhttp3:okhttp:4.12.0"
+
+    // Baseline Profile 运行时安装器：在应用启动时确保 baseline.prof 文件被安装到设备
+    implementation "androidx.profileinstaller:profileinstaller:1.3.1"
 }
 
 tasks.whenTaskAdded { task ->
-    if (task.name.contains('packageDebug')) {
+    if (task.name == 'packageDebug' || task.name == 'packageRelease') {
         task.doLast {
-            def apkFile = file("build/outputs/apk/debug/app-debug.apk")
-            if (apkFile.exists()) {
-                def newFileName = "termux-ultra_debug_universal.apk"
-                def outputDir = file("build/outputs/apk/debug")
-                apkFile.copyTo(new File(outputDir, newFileName), true)
+            String buildType = task.name == 'packageRelease' ? 'release' : 'debug'
+            File outDir = file("$buildDir/outputs/apk/$buildType")
+            if (!outDir.exists()) return
+            String tag = System.getenv("TERMUX_APK_VERSION_TAG")
+            // splits OFF: a single app-<type>.apk (universal).
+            // splits  ON: app-<abi>-<type>.apk (universal included with -universal-).
+            outDir.listFiles().each { File apk ->
+                String name = apk.name
+                if (!name.endsWith(".apk")) return
+                // Skip already-renamed files (idempotent across up-to-date runs)
+                if (name.startsWith("termux-ultra_") || name.startsWith("termux-app_")) return
+
+                String abi
+                if (name.contains("-universal-" + buildType)) {
+                    abi = "universal"
+                } else if (name == "app-" + buildType + ".apk") {
+                    abi = "universal"
+                } else if (name.startsWith("app-")) {
+                    // app-<abi>-<type>.apk  →  strip leading "app-" and trailing "-<type>.apk"
+                    abi = name.substring(4)                         // drop "app-"
+                    abi = abi.substring(0, abi.length() - buildType.length() - 5)  // drop "-<type>.apk" = -(6+4) chars
+                } else {
+                    return   // unknown naming, leave alone
+                }
+
+                String newName
+                if (tag != null && !tag.isEmpty()) {
+                    // CI workflow naming: termux-app_<version-tag>_<abi>.apk
+                    newName = "termux-app_${tag}_${abi}.apk"
+                } else {
+                    // Local naming: keep the TU prefix
+                    newName = "termux-ultra_${buildType}_${abi}.apk"
+                }
+                File dest = new File(outDir, newName)
+                if (dest.exists()) dest.delete()
+                apk.renameTo(dest)
             }
         }
+    }
+}
+
+afterEvaluate {
+    tasks.withType(com.android.build.gradle.tasks.PackageApplication) { task ->
+        task.outputs.upToDateWhen { false }
     }
 }

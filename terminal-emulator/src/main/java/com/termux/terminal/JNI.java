@@ -47,4 +47,12 @@ public final class JNI {
      */
     public static native int chmod(String path, int mode);
 
+    /**
+     * Install native signal handlers for SIGSEGV, SIGABRT, SIGBUS, SIGFPE, SIGILL.
+     * The handler writes crash_log.md (async-signal-safe) and then best-effort
+     * calls back to Java via NativeCrashBridge to show an unrecoverable dialog.
+     * Safe to call multiple times — only registers once.
+     */
+    public static native void nativeSetupCrashHandler();
+
 }

@@ -53,8 +53,11 @@ static int create_subprocess(JNIEnv* env,
     }
 
     // Enable UTF-8 mode and disable flow control to prevent Ctrl+S from locking up the display.
+    // Also explicitly enable ECHO|ICANON — Android /dev/ptmx default termios has ECHO disabled,
+    // which causes bash readline to not echo input and PS1 to not render.
     struct termios tios;
     tcgetattr(ptm, &tios);
+    tios.c_lflag |= (ECHO | ICANON | ISIG);
     tios.c_iflag |= IUTF8;
     tios.c_iflag &= ~(IXON | IXOFF);
     tcsetattr(ptm, TCSANOW, &tios);
@@ -80,6 +83,17 @@ static int create_subprocess(JNIEnv* env,
 
         int pts = open(devname, O_RDWR);
         if (pts < 0) exit(-1);
+
+        // Fix ECHO off bug: Android /dev/ptmx default termios has ECHO disabled.
+        // Must explicitly enable ECHO|ICANON on PTS before dup2 to stdin/stdout/stderr,
+        // otherwise bash readline won't echo input and PS1 won't render.
+        struct termios pts_tios;
+        if (tcgetattr(pts, &pts_tios) == 0) {
+            pts_tios.c_lflag |= (ECHO | ICANON | ISIG);
+            pts_tios.c_iflag |= IUTF8;
+            pts_tios.c_iflag &= ~(IXON | IXOFF);
+            tcsetattr(pts, TCSANOW, &pts_tios);
+        }
 
         dup2(pts, 0);
         dup2(pts, 1);

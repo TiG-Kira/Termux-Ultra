@@ -1,31 +1,34 @@
 package com.termux.shared.crash;
 
-import android.content.Context;
-
-import androidx.annotation.NonNull;
-
-import com.termux.shared.termux.TermuxConstants;
-import com.termux.shared.termux.TermuxUtils;
-
-public class TermuxCrashUtils implements CrashHandler.CrashHandlerClient {
-
+/**
+ * Backward-compat alias for {@link com.termux.shared.termux.crash.TermuxCrashUtils}.
+ *
+ * <p>TU's custom add-ons reference the old package layout from Termux v0.118.x.
+ * Upstream v0.119.0 restructured termux-shared; this subclass keeps old imports working
+ * so add-on source files do not need to be touched on every core bump.</p>
+ *
+ * @deprecated Use the class at {@code com.termux.shared.termux.crash.TermuxCrashUtils} instead.
+ */
+@Deprecated
+public class TermuxCrashUtils extends com.termux.shared.termux.crash.TermuxCrashUtils {
     /**
-     * Set default uncaught crash handler of current thread to {@link CrashHandler} for Termux app
-     * and its plugin to log crashes at {@link TermuxConstants#TERMUX_CRASH_LOG_FILE_PATH}.
+     * Old-name {@link com.termux.shared.termux.crash.TermuxCrashUtils.TYPE} enum, kept so callers
+     * can write {@code TermuxCrashUtils.TYPE} without qualification.
      */
-    public static void setCrashHandler(@NonNull final Context context) {
-        CrashHandler.setCrashHandler(context, new TermuxCrashUtils());
+    public enum TYPE {
+        UNCAUGHT_EXCEPTION,
+        CAUGHT_EXCEPTION;
+
+        com.termux.shared.termux.crash.TermuxCrashUtils.TYPE toNew() {
+            return com.termux.shared.termux.crash.TermuxCrashUtils.TYPE.valueOf(name());
+        }
     }
 
-    @NonNull
-    @Override
-    public String getCrashLogFilePath(Context context) {
-        return TermuxConstants.TERMUX_CRASH_LOG_FILE_PATH;
+    public TermuxCrashUtils() {
+        super(com.termux.shared.termux.crash.TermuxCrashUtils.TYPE.UNCAUGHT_EXCEPTION);
     }
 
-    @Override
-    public String getAppInfoMarkdownString(Context context) {
-        return TermuxUtils.getAppInfoMarkdownString(context, true);
+    public TermuxCrashUtils(TYPE type) {
+        super(type.toNew());
     }
-
 }

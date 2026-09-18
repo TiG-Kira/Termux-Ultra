@@ -64,9 +64,11 @@ public class KeyboardUtils {
      */
     public static void showSoftKeyboard(final Context context, final View view) {
         if (context == null || view == null) return;
-        InputMethodManager inputMethodManager = (InputMethodManager) context.getSystemService(Context.INPUT_METHOD_SERVICE);
-        if (inputMethodManager != null)
-            inputMethodManager.showSoftInput(view, 0);
+        view.postDelayed(() -> {
+            InputMethodManager inputMethodManager = (InputMethodManager) context.getSystemService(Context.INPUT_METHOD_SERVICE);
+            if (inputMethodManager != null)
+                inputMethodManager.showSoftInput(view, InputMethodManager.SHOW_IMPLICIT);
+        }, 100);
     }
 
     public static void hideSoftKeyboard(final Context context, final View view) {

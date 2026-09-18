@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <style name="App.BaseTheme" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="android:statusBarColor">#272727</item>
+        <item name="android:navigationBarColor">?colorSurface</item>
+    </style>
+
+    <!-- HyperCeiler-style About page theme (dark override) -->
+    <style name="Theme.Termux.About" parent="@style/Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowBackground">#1C1B1F</item>
+        <item name="android:windowContentOverlay">@null</item>
+    </style>
+
+</resources>

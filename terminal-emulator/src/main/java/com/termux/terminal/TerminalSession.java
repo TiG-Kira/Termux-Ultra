@@ -2,6 +2,7 @@ package com.termux.terminal;
 
 import android.annotation.SuppressLint;
 import android.os.Handler;
+import android.os.Looper;
 import android.os.Message;
 import android.system.ErrnoException;
 import android.system.Os;
@@ -13,9 +14,12 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.ref.WeakReference;
 import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 /**
  * A terminal session, consisting of a process coupled to a terminal interface.
@@ -32,6 +36,92 @@ public final class TerminalSession extends TerminalOutput {
 
     private static final int MSG_NEW_INPUT = 1;
     private static final int MSG_PROCESS_EXITED = 4;
+
+    /**
+     * 终端输入拦截器接口，用于在用户输入命令时进行高危检测。
+     */
+    public interface InputInterceptor {
+        /**
+         * 检查命令是否应该被拦截。
+         * @param command 用户输入的完整命令
+         * @return true 表示命令已被处理（拦截或拒绝），false 表示使用默认行为
+         */
+        boolean onCommandEntered(TerminalSession session, String command);
+
+        /**
+         * 命令被拒绝时调用。
+         */
+        void onCommandBlocked(TerminalSession session, String command);
+        
+        /**
+         * 命令被自动拦截时调用（不需要用户确认）。
+         * 返回 true 表示命令已被自动拦截处理。
+         */
+        default boolean onCommandAutoBlocked(TerminalSession session, String command) {
+            return false;
+        }
+    }
+
+    private static InputInterceptor sInputInterceptor;
+
+    public static void setInputInterceptor(InputInterceptor interceptor) {
+        sInputInterceptor = interceptor;
+    }
+
+    /**
+     * 写转发接口：当会话未附着到 PTY（Compose 模式下的镜像会话）时，
+     * 把针对该会话的写入转发到真正持有进程的 Compose 会话。
+     */
+    public interface WriteForwarder {
+        /** 转发一段写入数据。 */
+        void forwardWrite(byte[] data, int offset, int count);
+
+        /** 目标进程是否仍在运行。 */
+        default boolean isAlive() {
+            return false;
+        }
+
+        /** 结束目标进程。 */
+        default void kill() {
+        }
+    }
+
+    /**
+     * 运行核心设置项（Kotlin+Compose 模式）是否开启的状态镜像。
+     *
+     * 只有设置项为 Kotlin+Compose 时才允许把镜像会话的写入转发到 Compose 核心；
+     * 切回 Java+NDK 模式后清空该标记，转发立即失效。
+     */
+    private static volatile boolean sComposeForwardingEnabled = false;
+
+    public static void setComposeForwardingEnabled(boolean enabled) {
+        sComposeForwardingEnabled = enabled;
+    }
+
+    public static boolean isComposeForwardingEnabled() {
+        return sComposeForwardingEnabled;
+    }
+
+    private volatile WriteForwarder mWriteForwarder;
+
+    /** 设置写转发器（仅 Compose 模式的镜像会话使用，Java 模式保持 null）。 */
+    public void setWriteForwarder(WriteForwarder forwarder) {
+        mWriteForwarder = forwarder;
+    }
+
+    public WriteForwarder getWriteForwarder() {
+        return mWriteForwarder;
+    }
+
+    /** 命令输入缓冲区，用于检测回车时的完整命令 */
+    private final StringBuilder mCommandBuffer = new StringBuilder();
+
+    /** 用户最后执行的命令（用于区分手动 exit 和其他退出原因） */
+    private String mLastCommand = "";
+
+    /** 待确认的危险命令 */
+    private String mPendingDangerousCommand = null;
+    private byte[] mPendingEnterBytes = null;
 
     public final String mHandle = UUID.randomUUID().toString();
 
@@ -114,6 +204,16 @@ public final class TerminalSession extends TerminalOutput {
         return (mEmulator == null) ? null : mEmulator.getTitle();
     }
 
+    /** Get the shell path for this session. */
+    public String getShellPath() {
+        return mShellPath;
+    }
+
+    /** Get the command arguments for this session. */
+    public String[] getArgs() {
+        return mArgs;
+    }
+
     /**
      * Set the terminal emulator's window size and start terminal emulation.
      *
@@ -175,7 +275,128 @@ public final class TerminalSession extends TerminalOutput {
     /** Write data to the shell process. */
     @Override
     public void write(byte[] data, int offset, int count) {
-        if (mShellPid > 0) mTerminalToProcessIOQueue.write(data, offset, count);
+        if (mShellPid <= 0) {
+            // 会话进程未附着到 PTY（Compose 模式镜像会话等）：
+            // 仅当运行核心设置项为 Kotlin+Compose 时，才把写入转发到真正的 Compose 会话
+            if (sComposeForwardingEnabled) {
+                WriteForwarder forwarder = mWriteForwarder;
+                if (forwarder != null && count > 0) {
+                    forwarder.forwardWrite(data, offset, count);
+                }
+            }
+            return;
+        }
+
+        InputInterceptor interceptor = sInputInterceptor;
+        if (interceptor == null || count <= 0) {
+            if (count > 0) {
+                mTerminalToProcessIOQueue.write(data, offset, count);
+            }
+            return;
+        }
+
+        // Check if there's a pending dialog - don't allow new input until resolved
+        if (mPendingDangerousCommand != null) {
+            // Still buffer but don't forward to shell
+            bufferInput(data, offset, count);
+            return;
+        }
+
+        // Scan for Enter key in the data
+        int segmentStart = offset;
+        for (int i = offset; i < offset + count; i++) {
+            byte b = data[i];
+            if (b == '\r' || b == '\n') {
+                // Buffer everything up to Enter
+                for (int j = segmentStart; j < i; j++) {
+                    bufferChar(data[j]);
+                }
+                segmentStart = i + 1;
+
+                String command = mCommandBuffer.toString().trim();
+                mCommandBuffer.setLength(0);
+
+                if (command.length() > 0) {
+                    boolean handled = interceptor.onCommandEntered(this, command);
+                    if (handled) {
+                        // 检查是否需要自动拦截（不需要用户确认）
+                        if (interceptor.onCommandAutoBlocked(this, command)) {
+                            // 自动拦截：直接拒绝命令并清除输入行
+                            denyPendingCommand();
+                            return;
+                        }
+                        // Command is being handled by interceptor (dangerous)
+                        // Store the Enter bytes to be sent if confirmed
+                        byte[] enterBytes = new byte[]{b};
+                        mPendingEnterBytes = enterBytes;
+                        mPendingDangerousCommand = command;
+                        // Forward the characters but NOT the Enter
+                        if (i - offset > 0) {
+                            mTerminalToProcessIOQueue.write(data, offset, i - offset);
+                        }
+                        return;
+                    } else {
+                        // 命令被接受（非危险命令），记录为最后执行的命令
+                        mLastCommand = command;
+                    }
+                }
+            }
+        }
+
+        // Buffer and forward the rest
+        for (int i = segmentStart; i < offset + count; i++) {
+            bufferChar(data[i]);
+        }
+        if (count > 0) {
+            mTerminalToProcessIOQueue.write(data, offset, count);
+        }
+    }
+
+    private void bufferInput(byte[] data, int offset, int count) {
+        for (int i = offset; i < offset + count; i++) {
+            bufferChar(data[i]);
+        }
+    }
+
+    private void bufferChar(byte b) {
+        if (b == 8 || b == 127) {
+            // Backspace
+            if (mCommandBuffer.length() > 0) {
+                mCommandBuffer.deleteCharAt(mCommandBuffer.length() - 1);
+            }
+        } else if (b == 3 || b == 4) {
+            // Ctrl+C / Ctrl+D
+            mCommandBuffer.setLength(0);
+        } else if (b >= 32) {
+            mCommandBuffer.append((char) (b & 0xFF));
+        }
+    }
+
+    /** 用户确认执行危险命令，放行 Enter 键 */
+    public void confirmPendingCommand() {
+        if (mPendingDangerousCommand != null && mPendingEnterBytes != null) {
+            mTerminalToProcessIOQueue.write(mPendingEnterBytes, 0, mPendingEnterBytes.length);
+            mPendingDangerousCommand = null;
+            mPendingEnterBytes = null;
+        }
+    }
+
+    /** 用户拒绝危险命令，返回 Permission Denied 错误并清除行 */
+    public void denyPendingCommand() {
+        // 向终端输出 "Permission Denied" 错误信息
+        byte[] errorMsg = "\r\nTermux-Confirm: Permission Denied\r\n".getBytes();
+        mProcessToTerminalIOQueue.write(errorMsg, 0, errorMsg.length);
+        // 发送 Ctrl+U 清除当前输入行
+        byte[] killLine = new byte[]{0x15};
+        mTerminalToProcessIOQueue.write(killLine, 0, 1);
+        mPendingDangerousCommand = null;
+        mPendingEnterBytes = null;
+        mCommandBuffer.setLength(0);
+    }
+
+    /** 是否有待处理的危险命令确认 */
+    public boolean hasPendingDangerousCommand() {
+        return mPendingDangerousCommand != null;
     }
 
     /** Write the Unicode code point to the terminal encoded in UTF-8. */
@@ -232,11 +453,19 @@ public final class TerminalSession extends TerminalOutput {
 
     /** Finish this terminal session by sending SIGKILL to the shell. */
     public void finishIfRunning() {
-        if (isRunning()) {
+        if (mShellPid > 0) {
             try {
                 Os.kill(mShellPid, OsConstants.SIGKILL);
             } catch (ErrnoException e) {
                 Logger.logWarn(mClient, LOG_TAG, "Failed sending SIGKILL: " + e.getMessage());
+            }
+            return;
+        }
+        // 镜像会话：运行核心为 Kotlin+Compose 时结束其对应的 Compose 会话进程
+        if (sComposeForwardingEnabled) {
+            WriteForwarder forwarder = mWriteForwarder;
+            if (forwarder != null) {
+                forwarder.kill();
             }
         }
     }
@@ -251,7 +480,10 @@ public final class TerminalSession extends TerminalOutput {
         // Stop the reader and writer threads, and close the I/O streams
         mTerminalToProcessIOQueue.close();
         mProcessToTerminalIOQueue.close();
-        JNI.close(mTerminalFileDescriptor);
+        if (mTerminalFileDescriptor != 0) {
+            JNI.close(mTerminalFileDescriptor);
+            mTerminalFileDescriptor = 0;
+        }
     }
 
     @Override
@@ -260,12 +492,45 @@ public final class TerminalSession extends TerminalOutput {
     }
 
     public synchronized boolean isRunning() {
+        // 镜像会话（未附着到 PTY）：运行核心为 Kotlin+Compose 时，以 Compose 会话实际状态为准；
+        // 切回 Java+NDK 后镜像不再转发，视为已结束。
+        if (mShellPid == 0 && sComposeForwardingEnabled && mWriteForwarder != null) {
+            return mWriteForwarder.isAlive();
+        }
         return mShellPid != -1;
     }
 
     /** Only valid if not {@link #isRunning()}. */
     public synchronized int getExitStatus() {
         return mShellExitStatus;
+    }
+
+    /**
+     * 获取用户最后执行的命令。
+     * 用于区分用户手动输入 `exit` 直接退出和其他退出原因。
+     */
+    public synchronized String getLastCommand() {
+        return mLastCommand;
+    }
+
+    /**
+     * 检查最后执行的命令是否为 exit（用户手动退出 shell）。
+     */
+    public synchronized boolean isLastCommandExit() {
+        return "exit".equals(mLastCommand.trim());
+    }
+
+    /**
+     * Returns the shell process pid.
+     * <ul>
+     *   <li>{@code 0}  — 子进程尚未启动（终端会话未初始化）</li>
+     *   <li>{@code >0} — 子进程正在运行</li>
+     *   <li>{@code -1} — 子进程已结束</li>
+     * </ul>
+     * UI 层据此区分"未初始化"与"运行中"状态以展示不同的小字提示。
+     */
+    public synchronized int getShellPid() {
+        return mShellPid;
     }
 
     @Override
@@ -335,12 +600,16 @@ public final class TerminalSession extends TerminalOutput {
     @SuppressLint("HandlerLeak")
     class MainThreadHandler extends Handler {
 
+        MainThreadHandler() {
+            super(Looper.getMainLooper());
+        }
+
         final byte[] mReceiveBuffer = new byte[4 * 1024];
 
         @Override
         public void handleMessage(Message msg) {
             int bytesRead = mProcessToTerminalIOQueue.read(mReceiveBuffer, false);
-            if (bytesRead > 0) {
+            if (bytesRead > 0 && mEmulator != null) {
                 mEmulator.append(mReceiveBuffer, bytesRead);
                 notifyScreenUpdate();
             }
@@ -349,19 +618,21 @@ public final class TerminalSession extends TerminalOutput {
                 int exitCode = (Integer) msg.obj;
                 cleanupResources(exitCode);
 
-                String exitDescription = "\r\n[Process completed";
-                if (exitCode > 0) {
-                    // Non-zero process exit.
-                    exitDescription += " (code " + exitCode + ")";
-                } else if (exitCode < 0) {
-                    // Negated signal.
-                    exitDescription += " (signal " + (-exitCode) + ")";
-                }
-                exitDescription += " - press Enter]";
+                if (mEmulator != null) {
+                    String exitDescription = "\r\n[Process completed";
+                    if (exitCode > 0) {
+                        // Non-zero process exit.
+                        exitDescription += " (code " + exitCode + ")";
+                    } else if (exitCode < 0) {
+                        // Negated signal.
+                        exitDescription += " (signal " + (-exitCode) + ")";
+                    }
+                    exitDescription += " - press Enter]";
 
-                byte[] bytesToWrite = exitDescription.getBytes(StandardCharsets.UTF_8);
-                mEmulator.append(bytesToWrite, bytesToWrite.length);
-                notifyScreenUpdate();
+                    byte[] bytesToWrite = exitDescription.getBytes(StandardCharsets.UTF_8);
+                    mEmulator.append(bytesToWrite, bytesToWrite.length);
+                    notifyScreenUpdate();
+                }
 
                 mClient.onSessionFinished(TerminalSession.this);
             }

@@ -5,12 +5,12 @@ import android.content.Context;
 import androidx.annotation.NonNull;
 
 import com.termux.app.terminal.io.KeyboardShortcut;
-import com.termux.shared.terminal.io.extrakeys.ExtraKeysConstants;
-import com.termux.shared.terminal.io.extrakeys.ExtraKeysConstants.EXTRA_KEY_DISPLAY_MAPS;
-import com.termux.shared.terminal.io.extrakeys.ExtraKeysInfo;
+import com.termux.shared.termux.extrakeys.ExtraKeysConstants;
+import com.termux.shared.termux.extrakeys.ExtraKeysConstants.EXTRA_KEY_DISPLAY_MAPS;
+import com.termux.shared.termux.extrakeys.ExtraKeysInfo;
 import com.termux.shared.logger.Logger;
-import com.termux.shared.settings.properties.TermuxPropertyConstants;
-import com.termux.shared.settings.properties.TermuxSharedProperties;
+import com.termux.shared.termux.settings.properties.TermuxPropertyConstants;
+import com.termux.shared.termux.settings.properties.TermuxSharedProperties;
 import com.termux.shared.termux.TermuxConstants;
 
 import org.json.JSONException;
@@ -27,8 +27,9 @@ public class TermuxAppSharedProperties extends TermuxSharedProperties {
     private static final String LOG_TAG = "TermuxAppSharedProperties";
 
     public TermuxAppSharedProperties(@NonNull Context context) {
-        super(context, TermuxConstants.TERMUX_APP_NAME, TermuxPropertyConstants.getTermuxPropertiesFile(),
-            TermuxPropertyConstants.TERMUX_PROPERTIES_LIST, new SharedPropertiesParserClient());
+        super(context, TermuxConstants.TERMUX_APP_NAME,
+            TermuxConstants.TERMUX_PROPERTIES_FILE_PATHS_LIST,
+            TermuxPropertyConstants.TERMUX_APP_PROPERTIES_LIST, new SharedPropertiesParserClient());
     }
 
     /**
@@ -112,8 +113,8 @@ public class TermuxAppSharedProperties extends TermuxSharedProperties {
      * Load the {@link TermuxPropertyConstants#KEY_TERMINAL_TRANSCRIPT_ROWS} value from termux properties file on disk.
      */
     public static int getTerminalTranscriptRows(Context context) {
-        return  (int) TermuxSharedProperties.getInternalPropertyValue(context, TermuxPropertyConstants.getTermuxPropertiesFile(),
-            TermuxPropertyConstants.KEY_TERMINAL_TRANSCRIPT_ROWS, new SharedPropertiesParserClient());
+        return  (int) TermuxSharedProperties.getTermuxInternalPropertyValue(context,
+            TermuxPropertyConstants.KEY_TERMINAL_TRANSCRIPT_ROWS);
     }
 
 }

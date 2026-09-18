@@ -49,4 +49,39 @@
         <item name="android:colorAccent">#212121</item>
     </style>
 
+    <!-- 冷启动专用主题。继承 framework 原生主题（非 AppCompat），避免 SplashActivity 触发 AppCompat 初始化。
+         windowBackground 使用 HyperCeiler-style surface 色，跟随亮/暗模式，
+         与 OOBE / MainActivity 的首帧 windowBackground 对齐，消除启动视觉跳跃。 -->
+    <style name="Theme.Termux.Splash" parent="@android:style/Theme.NoTitleBar.Fullscreen">
+        <item name="android:windowBackground">@color/hyper_surface</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowFullscreen">true</item>
+    </style>
+
+    <!-- OOBE 页窗口主题。继承 Theme.Termux（保持 windowTranslucentStatus 让 Compose 延伸到状态栏），
+         仅覆盖 windowBackground 为 DayNight surface。 -->
+    <style name="Theme.Termux.Oobe" parent="@style/Theme.Termux">
+        <item name="android:windowBackground">@color/hyper_surface</item>
+    </style>
+
+    <!-- 主页窗口主题。继承 Theme.Termux（保持 windowTranslucentStatus），
+         仅覆盖 windowBackground 为 DayNight surface。 -->
+    <style name="Theme.Termux.Main" parent="@style/Theme.Termux">
+        <item name="android:windowBackground">@color/hyper_surface</item>
+    </style>
+
+    <style name="Theme.Termux.Transparent" parent="@style/Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowContentOverlay">@null</item>
+        <item name="android:windowAnimationStyle">@android:style/Animation.Dialog</item>
+    </style>
+
+    <!-- HyperCeiler-style About page theme. DayNight so light/dark both correct. -->
+    <style name="Theme.Termux.About" parent="@style/Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowBackground">#F7F7F7</item>
+        <item name="android:windowContentOverlay">@null</item>
+    </style>
+
 </resources>
