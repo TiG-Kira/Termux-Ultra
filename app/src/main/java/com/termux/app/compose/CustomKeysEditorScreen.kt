@@ -14,8 +14,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -27,6 +25,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -107,25 +107,34 @@ fun CustomKeysEditorScreen(
         modifier = modifier.fillMaxSize()
     ) {
         Column(
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(vertical = 8.dp)
         ) {
-            // ======= 按键网格区域 =======
+            // ======= 使用说明 =======
+            Text(
+                text = stringResource(R.string.msg_customize_keys_hint),
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
+                style = MiuixTheme.textStyles.body2,
+                color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+            )
+
+            // ======= 按键网格区域（横向可滑动） =======
             Box(
                 modifier = Modifier
-                    .weight(1f)
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 8.dp)
             ) {
-                Card(
-                    modifier = Modifier.fillMaxSize()
-                ) {
+                Card {
                     if (keyList.isEmpty()) {
                         Box(
-                            modifier = Modifier.fillMaxSize(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 32.dp),
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = stringResource(R.string.pref_vk_show_all),
+                                text = stringResource(R.string.msg_no_keys_added),
                                 style = MiuixTheme.textStyles.body1,
                                 color = MiuixTheme.colorScheme.onSurfaceVariantSummary
                             )
@@ -309,29 +318,22 @@ fun CustomKeysEditorScreen(
 
 // ================= 辅助 Composable =================
 
-/** 按键网格，按行展示已选按键（GridLayout 风格） */
-@OptIn(ExperimentalLayoutApi::class)
+/** 按键横向排列，支持左右滑动浏览 */
 @Composable
 private fun KeyGridView(
     keys: List<VirtualKey>,
     focusedIndex: Int,
     onKeyClick: (Int) -> Unit
 ) {
-    val context = LocalContext.current
-    val prefs = remember { AppPreferences(context) }
-    val columns = remember(prefs.input.vkRowCount) {
-        prefs.input.vkRowCount.coerceAtLeast(1)
-    }
-
-    FlowRow(
+    LazyRow(
         modifier = Modifier
-            .fillMaxSize()
+            .fillMaxWidth()
             .padding(12.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-        maxItemsInEachRow = columns
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 4.dp)
     ) {
-        keys.forEachIndexed { index, vk ->
+        items(keys) { vk ->
+            val index = keys.indexOf(vk)
             VirtualKeyChip(
                 key = vk,
                 isFocused = index == focusedIndex,
@@ -341,23 +343,21 @@ private fun KeyGridView(
     }
 }
 
-/** 可用按键选择网格（添加新按键时的底部弹层） */
-@OptIn(ExperimentalLayoutApi::class)
+/** 可用按键选择横向列表（添加新按键时的底部弹层） */
 @Composable
 private fun AvailableKeysGrid(
     keys: List<VirtualKey>,
     disabledKeys: Set<VirtualKey>,
     onKeyClick: (VirtualKey) -> Unit
 ) {
-    FlowRow(
+    LazyRow(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-        maxItemsInEachRow = 4
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 4.dp)
     ) {
-        keys.forEach { vk ->
+        items(keys) { vk ->
             VirtualKeyChip(
                 key = vk,
                 isFocused = disabledKeys.contains(vk),

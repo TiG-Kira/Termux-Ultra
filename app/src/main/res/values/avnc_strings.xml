@@ -218,6 +218,8 @@
     <string name="pref_vk">Virtual keys</string>
     <string name="pref_vk_show_all">Show all keys</string>
     <string name="pref_customize_virtual_keys">Customize keys</string>
+    <string name="msg_customize_keys_hint">Swipe left/right to browse keys. Tap a key to select it, then use the buttons below to reorder or remove.</string>
+    <string name="msg_no_keys_added">No keys added yet</string>
     <string name="pref_vk_open_with_keyboard">Open with keyboard</string>
     <string name="pref_vk_row_count">Rows</string>
     <string name="pref_vk_use_super_with_single_tap">Use Super key with single tap</string>

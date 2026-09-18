@@ -207,6 +207,8 @@
     <string name="title_load_defaults">加载默认</string>
     <string name="msg_saved">已保存</string>
     <string name="pref_customize_virtual_keys">自定义按键</string>
+    <string name="msg_customize_keys_hint">左右滑动浏览按键，点击选中后可通过下方按钮调整顺序或删除。</string>
+    <string name="msg_no_keys_added">尚未添加任何按键</string>
     <string name="msg_tap_to_select_a_key">轻按选择按键：</string>
     <string name="msg_done">完毕</string>
     <string name="pref_forget_known_hosts">忘记已知主机</string>
