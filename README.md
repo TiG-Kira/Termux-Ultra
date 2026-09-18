@@ -1,4 +1,11 @@
-> ⚠️ **此分支 (`release/r1-r4`) 为历史快照**，对应 Termux Ultra **v1.0.0.RB — v1.8.0.R4**（termux core v0.118.3），已停止功能更新。仅做紧急阻断性 Bug 修复。当前主线（2.0）请切至 `main` 分支。
+> 📌 **`release/r1-r4` 为 Termux Ultra 1.8.x 历史线**，对应 **v1.0.0.RB — v1.8.0.R4**（termux core v0.118.3）。
+
+**维护状态：**
+- 🚫 **不再对齐 `main` 分支**：2026-09-19 起 main 已升级至 Termux Ultra 2.0（termux core v0.119.0-beta.3），本分支与 main 分道扬镳，不再同步 main 的任何改动
+- 🛠️ **仅对重大问题提供修复**：安全漏洞、严重崩溃、数据丢失等**阻断性 Bug** 会收到 hotfix，其他问题（UI 细节、性能优化、功能增强等）将不再处理
+- 📢 **建议尽快升级到 2.x**：2.0 已合入 `main` 并进入 beta 阶段，正式版发布后本分支仅做安全兜底。新功能、性能改进、上游 Termux 修复全部在 `main` 进行。
+
+**下载最新版 → [main 分支](https://github.com/TiG-Kira/Termux-Ultra/tree/main)**
 
 # Termux Ultra
 
