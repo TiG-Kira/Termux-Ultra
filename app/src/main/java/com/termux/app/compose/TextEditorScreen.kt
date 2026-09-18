@@ -10,7 +10,10 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.runtime.*
+import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.flow.collectLatest
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -223,6 +226,15 @@ fun TextEditorScreen(
                     )
                     .padding(8.dp)
             ) {
+                val textFieldState = rememberTextFieldState(content)
+                LaunchedEffect(textFieldState) {
+                    snapshotFlow { textFieldState.text.toString() }.collectLatest { newText ->
+                        if (newText != content) {
+                            content = newText
+                            modified = true
+                        }
+                    }
+                }
                 val lineCount = if (content.isEmpty()) 1 else content.count { it == '\n' } + 1
                 Text(
                     text = (1..lineCount).joinToString("\n"),
@@ -234,39 +246,35 @@ fun TextEditorScreen(
                         .align(Alignment.TopStart)
                         .padding(end = 8.dp)
                 )
-                BasicTextField(
-                    value = content,
-                    onValueChange = {
-                        content = it
-                        modified = true
-                    },
-                    readOnly = readOnly,
-                    maxLines = Int.MAX_VALUE,
-                    softWrap = false,
-                    textStyle = TextStyle(
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 14.sp,
-                        color = if (isDark) Color(0xFFE5E5EA) else Color(0xFF1C1C1E),
-                        lineHeight = 20.sp
-                    ),
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .wrapContentHeight()
-                        .padding(start = 40.dp),
-                    decorationBox = { innerTextField ->
-                        Box {
-                            if (content.isEmpty()) {
-                                Text(
-                                    text = "在此输入...",
-                                    fontSize = 14.sp,
-                                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.5f),
-                                    fontFamily = FontFamily.Monospace
-                                )
-                            }
-                            innerTextField()
-                        }
+                        .padding(start = 40.dp)
+                ) {
+                    if (textFieldState.text.isEmpty()) {
+                        Text(
+                            text = "在此输入...",
+                            fontSize = 14.sp,
+                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.5f),
+                            fontFamily = FontFamily.Monospace,
+                            modifier = Modifier.fillMaxWidth()
+                        )
                     }
-                )
+                    BasicTextField(
+                        state = textFieldState,
+                        readOnly = readOnly,
+                        textStyle = TextStyle(
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 14.sp,
+                            color = if (isDark) Color(0xFFE5E5EA) else Color(0xFF1C1C1E),
+                            lineHeight = 20.sp
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .wrapContentHeight()
+                    )
+                }
             }
         }
 
