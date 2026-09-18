@@ -27,6 +27,18 @@
 
 ## 最近更新
 
+### Termux Ultra 2.0.0.R5 — 🚀 重大上游基底升级
+
+> 📅 **2026-09-19 合入 main**，以大 commit 方式将 2.x 分支完整内容覆盖主线，v1.8.x 历史全部保留。
+
+- **上游 Termux 核心从 v0.118.3 升级至 v0.119.0-beta.3**：终端模拟器、TermuxService、通知系统、原生库全部同步上游最新代码
+- **LiveUpdate 实时通知修复**：v0.119 基底引入了新的 `POST_PROMOTED_NOTIFICATIONS` API（Android 15+），适配旧版 API 兼容层（sdk_int < 36 回退普通通知），解决之前 2.x 分支通知不弹的问题
+- **Notification 渠道与权限全面适配**：`AndroidManifest.xml` 补齐 `POST_PROMOTED_NOTIFICATIONS` 权限声明，`TermuxService` 中通知构建改用新 API
+- **Kotlin 三件套 patch 升级**：compose 2.3.10→2.3.21、serialization 2.3.10→2.3.21、ksp 2.3.10→2.3.12，为后续升 2.4.x 大版本铺路
+- **CI Workflow 简化**：GitHub Actions 切换到 main 的 `ci.yml`（`ubuntu-26.04` + `checkout@v7` + `setup-java@v4`），移除了原来复杂的 matrix 构建
+- **Dependabot 重新配置**：新增 gradle 生态版本跟踪，配置 ignore 避免 Kotlin 三件套单独升大版本导致不一致
+- **分支架构重组**：`main` 承接 2.0 beta 主线，`release/r1-r4` 保存 v1.8.0 历史快照（停止功能更新），`archived/corebump/2.x` 归档 2.x 内部开发步骤
+
 ### VorteX Guard Engine (v1.7.0)
 
 > ⚠️ **原增强防护模块已全面改版升级为 VorteX Guard Engine (VGE)**，Shell hook 架构重写、检测更精准、零终端干扰
