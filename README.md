@@ -1,3 +1,5 @@
+> ⚠️ **此分支 (`release/r1-r4`) 为历史快照**，对应 Termux Ultra **v1.8.0.R1 — v1.8.0.R4**（termux core v0.118.3），已停止功能更新。仅做紧急阻断性 Bug 修复。当前主线（2.0）请切至 `main` 分支。
+
 # Termux Ultra
 
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](./LICENSE)
