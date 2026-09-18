@@ -82,7 +82,6 @@ fun CustomKeysEditorScreen(
 ) {
     val context = LocalContext.current
     val prefs = remember { AppPreferences(context) }
-    val scrollBehavior = MiuixScrollBehavior()
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
@@ -104,60 +103,11 @@ fun CustomKeysEditorScreen(
         }
     }
 
-    Scaffold(
-        modifier = modifier,
-        contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        topBar = {
-            TopAppBar(
-                title = stringResource(R.string.pref_customize_virtual_keys),
-                scrollBehavior = scrollBehavior,
-                navigationIcon = {
-                    Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(CircleShape)
-                            .clickable {
-                                when {
-                                    showAddSheet -> showAddSheet = false
-                                    focusedIndex >= 0 -> focusedIndex = -1
-                                    else -> onBack()
-                                }
-                            },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = MiuixIcons.Back,
-                            contentDescription = context.getString(R.string.back),
-                            tint = MiuixTheme.colorScheme.onSurface,
-                            modifier = Modifier.size(24.dp)
-                        )
-                    }
-                },
-                actions = {
-                    TextButton(
-                        text = stringResource(R.string.title_load_defaults),
-                        onClick = {
-                            keyList = VirtualKeyLayoutConfig.getDefaultLayout(prefs).toMutableList()
-                            focusedIndex = -1
-                        }
-                    )
-                }
-            )
-        },
-        snackbarHost = {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.BottomCenter
-            ) {
-                SnackbarHost(state = snackbarHostState)
-            }
-        }
-    ) { padding ->
+    Box(
+        modifier = modifier.fillMaxSize()
+    ) {
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .nestedScroll(scrollBehavior.nestedScrollConnection)
+            modifier = Modifier.fillMaxSize()
         ) {
             // ======= 按键网格区域 =======
             Box(
@@ -292,7 +242,29 @@ fun CustomKeysEditorScreen(
                 }
             }
 
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.End
+            ) {
+                TextButton(
+                    text = stringResource(R.string.title_load_defaults),
+                    onClick = {
+                        keyList = VirtualKeyLayoutConfig.getDefaultLayout(prefs).toMutableList()
+                        focusedIndex = -1
+                    }
+                )
+            }
+
             Spacer(modifier = Modifier.height(8.dp))
+        }
+
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.BottomCenter
+        ) {
+            SnackbarHost(state = snackbarHostState)
         }
     }
 
