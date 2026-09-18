@@ -41,7 +41,7 @@
                     android:id="@+id/keyboard_btn"
                     style="@style/ImageButton"
                     android:contentDescription="@string/desc_keyboard_btn"
-                    android:src="@drawable/ic_keyboard" />
+                    android:src="@drawable/ic_keyboard_vnc" />
 
                 <ImageButton
                     android:id="@+id/virtual_keys_btn"
@@ -53,7 +53,7 @@
                     android:id="@+id/view_modes_toggle"
                     style="@style/ToolbarFlyoutToggle"
                     android:contentDescription="@string/desc_view_modes_toggle"
-                    android:drawableStart="@drawable/ic_visibility" />
+                    android:drawableStart="@drawable/ic_visibility_vnc" />
 
                 <ToggleButton
                     android:id="@+id/gesture_style_toggle"
@@ -95,7 +95,7 @@
                     style="@style/ImageButton.Toggle"
                     android:checked="@{viewModel.profileLive.fZoomLocked}"
                     android:contentDescription="@string/desc_lock_zoom_btn"
-                    android:drawableStart="@drawable/ic_lock"
+                    android:drawableStart="@drawable/ic_lock_vnc"
                     android:padding="12dp" />
 
                 <ImageButton
@@ -104,7 +104,7 @@
                     android:alpha="@{viewModel.profileLive.ID != 0 ? 1f : .25f}"
                     android:contentDescription="@string/desc_save_zoom_btn"
                     android:enabled="@{viewModel.profileLive.ID != 0}"
-                    android:src="@drawable/ic_save" />
+                    android:src="@drawable/ic_save_vnc" />
 
             </LinearLayout>
 
