@@ -25,7 +25,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import androidx.core.app.NotificationCompat
-import com.termux.shared.shell.TermuxShellUtils
+import com.termux.shared.termux.shell.TermuxShellUtils
 import com.termux.app.ftp.FtpServer
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.BreadcrumbBar

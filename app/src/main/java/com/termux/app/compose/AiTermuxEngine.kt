@@ -17,14 +17,17 @@ import com.google.gson.JsonPrimitive
 import com.termux.app.TermuxService
 import com.termux.app.TermuxActivity
 import com.termux.app.activities.QemuVmActivity
-import com.termux.shared.models.ExecutionCommand
-import com.termux.shared.shell.TermuxShellEnvironmentClient
-import com.termux.shared.shell.TermuxShellUtils
-import com.termux.shared.shell.TermuxTask
+import com.termux.shared.shell.command.ExecutionCommand
+import com.termux.shared.termux.shell.command.environment.TermuxShellEnvironment
+import com.termux.shared.termux.shell.TermuxShellUtils
+import com.termux.shared.termux.TermuxConstants
+import com.termux.shared.shell.command.runner.app.AppShell
 import com.termux.app.ssh.SshConnection
 import com.termux.app.ssh.SshConnectionManager
 import com.termux.app.vnc.VncConnection
 import com.termux.app.vnc.VncConnectionManager
+import com.termux.shared.compat.ShellEnvironmentCompat
+import com.termux.shared.compat.TermuxTaskCompat
 import com.gaurav.avnc.ui.vnc.VncActivity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -651,8 +654,7 @@ object SkillExecutor {
             "multi" -> "多选"
             else -> "请输入"
         }
-        return SkillExecutionResult(
-            true, "向用户提问：$question",
+        return SkillExecutionResult(true, "向用户提问：$question",
             SkillCardData(
                 skillType = SkillType.ASK_USER,
                 title = "AI 需要你的回答（$typeTitle）",
@@ -790,8 +792,7 @@ object SkillExecutor {
                     i.putExtra("sessionHandle", handle)
                     context.startActivity(i)
                 }
-                SkillExecutionResult(
-                    true, if (unlimited) "已创建并激活终端会话" else "已生成终端会话卡片",
+                SkillExecutionResult(true, if (unlimited) "已创建并激活终端会话" else "已生成终端会话卡片",
                     SkillCardData(
                         skillType = SkillType.NEW_SESSION,
                         title = if (unlimited) "已新建并激活终端会话" else "已新建终端会话",
@@ -834,8 +835,7 @@ object SkillExecutor {
                 val ts = target.getTerminalSession()
                 val displayName = ts.mSessionName ?: "Terminal"
                 termuxService.removeTermuxSession(ts)
-                SkillExecutionResult(
-                    true, "已关闭会话 $displayName",
+                SkillExecutionResult(true, "已关闭会话 $displayName",
                     SkillCardData(
                         skillType = SkillType.CLOSE_SESSION,
                         title = "已关闭会话",
@@ -860,8 +860,7 @@ object SkillExecutor {
         return@withContext try {
             val sessions = termuxService.getTermuxSessions().toList()
             sessions.forEach { termuxService.removeTermuxSession(it.getTerminalSession()) }
-            SkillExecutionResult(
-                true, "已关闭全部 ${sessions.size} 个会话",
+            SkillExecutionResult(true, "已关闭全部 ${sessions.size} 个会话",
                 SkillCardData(
                     skillType = SkillType.CLOSE_ALL_SESSIONS,
                     title = "已关闭全部会话",
@@ -886,8 +885,7 @@ object SkillExecutor {
                 }
                 context.startActivity(homeIntent)
             }
-            SkillExecutionResult(
-                true, "已退出 Termux",
+            SkillExecutionResult(true, "已退出 Termux",
                 SkillCardData(
                     skillType = SkillType.EXIT_TERMUX,
                     title = "已退出 Termux",
@@ -912,8 +910,7 @@ object SkillExecutor {
                 "- ${ts.mSessionName ?: "Terminal"} [handle=${ts.mHandle}] 运行中=${ts.isRunning}"
             }
             val desc = if (sessions.isEmpty()) "当前无运行会话" else "共 ${sessions.size} 个会话"
-            SkillExecutionResult(
-                true, info.ifBlank { "无会话" },
+            SkillExecutionResult(true, info.ifBlank { "无会话" },
                 SkillCardData(
                     skillType = SkillType.GET_SESSION_INFO,
                     title = "会话信息",
@@ -936,8 +933,7 @@ object SkillExecutor {
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             if (vmName.isNotBlank()) intent.putExtra("vmName", vmName)
             context.startActivity(intent)
-            SkillExecutionResult(
-                true, "已打开 QEMU 虚拟机管理页",
+            SkillExecutionResult(true, "已打开 QEMU 虚拟机管理页",
                 SkillCardData(
                     skillType = SkillType.RUN_VM_QEMU,
                     title = "打开 QEMU 虚拟机",
@@ -961,8 +957,7 @@ object SkillExecutor {
             if (params.has("diskGB")) intent.putExtra("diskGB", params.get("diskGB").asInt)
             if (params.has("cpuCores")) intent.putExtra("cpuCores", params.get("cpuCores").asInt)
             context.startActivity(intent)
-            SkillExecutionResult(
-                true, "已打开新建 QEMU 虚拟机配置页",
+            SkillExecutionResult(true, "已打开新建 QEMU 虚拟机配置页",
                 SkillCardData(
                     skillType = SkillType.CREATE_VM_QEMU,
                     title = "新建 QEMU 虚拟机",
@@ -1014,7 +1009,7 @@ object SkillExecutor {
     // ---- 命令执行（带输出捕获） ----
 
     private fun resolveTermuxShell(): String? {
-        val binDir = TermuxShellUtils.getDefaultBinPath()
+        val binDir = TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH
         if (binDir.isNotEmpty()) {
             for (shellBinary in arrayOf("bash", "login", "zsh", "sh")) {
                 val shellFile = java.io.File(binDir, shellBinary)
@@ -1055,12 +1050,12 @@ object SkillExecutor {
                 arrayOf("-c", command),
                 null,
                 null,
-                true,
+                "app-shell",
                 false
             )
 
-            val shellEnvClient = TermuxShellEnvironmentClient()
-            val termuxTask = TermuxTask.execute(
+            val shellEnvClient = ShellEnvironmentCompat(TermuxShellEnvironment())
+            val termuxTask = TermuxTaskCompat.execute(
                 context,
                 executionCommand,
                 null,
@@ -1149,8 +1144,7 @@ object SkillExecutor {
             intent.putExtra("port", port)
             if (password.isNotBlank()) intent.putExtra("password", password)
             context.startActivity(intent)
-            SkillExecutionResult(
-                true, "已生成 VNC 连接卡片",
+            SkillExecutionResult(true, "已生成 VNC 连接卡片",
                 SkillCardData(
                     skillType = SkillType.CONNECT_VNC,
                     title = "VNC 连接",
@@ -1198,8 +1192,7 @@ object SkillExecutor {
                     i.putExtra("sessionHandle", handle)
                     context.startActivity(i)
                 }
-                SkillExecutionResult(
-                    true, if (unlimited) "已创建 SSH 连接会话" else "已生成 SSH 连接卡片",
+                SkillExecutionResult(true, if (unlimited) "已创建 SSH 连接会话" else "已生成 SSH 连接卡片",
                     SkillCardData(
                         skillType = SkillType.CONNECT_SSH,
                         title = "SSH 连接",
@@ -1251,8 +1244,7 @@ object SkillExecutor {
             sb.appendLine("共 $total 个连接。使用 connectionId 指定要连接的连接。")
         }
 
-        SkillExecutionResult(
-            true, "已列出远程连接",
+        SkillExecutionResult(true, "已列出远程连接",
             SkillCardData(
                 skillType = SkillType.LIST_REMOTE_CONNECTIONS,
                 title = "远程连接列表",
@@ -1309,8 +1301,7 @@ object SkillExecutor {
                 if (session != null) {
                     val ts = session.getTerminalSession()
                     val handle = ts.mHandle.toString()
-                    SkillExecutionResult(
-                        true, "已生成 SSH 连接卡片",
+                    SkillExecutionResult(true, "已生成 SSH 连接卡片",
                         SkillCardData(
                             skillType = SkillType.CONNECT_REMOTE_CONNECTION,
                             title = "SSH 连接: ${ssh.name}",
@@ -1327,8 +1318,7 @@ object SkillExecutor {
             }
             foundVnc != null -> {
                 val vnc = foundVnc
-                SkillExecutionResult(
-                    true, "已生成 VNC 连接卡片",
+                SkillExecutionResult(true, "已生成 VNC 连接卡片",
                     SkillCardData(
                         skillType = SkillType.CONNECT_REMOTE_CONNECTION,
                         title = "VNC 连接: ${vnc.name}",
@@ -1366,8 +1356,7 @@ object SkillExecutor {
                 "$type ${f.name}  $size"
             }?.sorted() ?: emptyList()
             val output = entries.joinToString("\n").ifBlank { "(空目录)" }
-            SkillExecutionResult(
-                true, "列出目录 $path",
+            SkillExecutionResult(true, "列出目录 $path",
                 SkillCardData(
                     skillType = SkillType.FILE_LIST,
                     title = "目录列表",
@@ -1402,8 +1391,7 @@ object SkillExecutor {
                 return SkillExecutionResult(false, "文件过大（>1MB），请使用终端命令查看")
             }
             val content = file.readText()
-            SkillExecutionResult(
-                true, "已读取文件",
+            SkillExecutionResult(true, "已读取文件",
                 SkillCardData(
                     skillType = SkillType.FILE_READ,
                     title = "读取文件",
@@ -1428,8 +1416,7 @@ object SkillExecutor {
             val file = File(path)
             file.parentFile?.mkdirs()
             if (append) file.appendText(content) else file.writeText(content)
-            SkillExecutionResult(
-                true, if (append) "已追加写入文件" else "已写入文件",
+            SkillExecutionResult(true, if (append) "已追加写入文件" else "已写入文件",
                 SkillCardData(
                     skillType = SkillType.FILE_WRITE,
                     title = if (append) "追加写入文件" else "写入文件",
@@ -1455,8 +1442,7 @@ object SkillExecutor {
             if (!file.exists()) return SkillExecutionResult(false, "文件不存在: $path")
             val ok = file.deleteRecursively()
             if (ok) {
-                SkillExecutionResult(
-                    true, "已删除 $path",
+                SkillExecutionResult(true, "已删除 $path",
                     SkillCardData(
                         skillType = SkillType.FILE_DELETE,
                         title = "已删除文件",
@@ -1518,8 +1504,7 @@ object SkillExecutor {
                     if (!ts.isRunning) delay(1500)
                     // 写入命令（追加换行）
                     ts.write(command + "\n")
-                    SkillExecutionResult(
-                        true, if (unlimited) "命令已自动执行" else "已生成命令卡片",
+                    SkillExecutionResult(true, if (unlimited) "命令已自动执行" else "已生成命令卡片",
                         SkillCardData(
                             skillType = SkillType.RUN_COMMAND,
                             title = "执行命令",
@@ -1547,8 +1532,7 @@ object SkillExecutor {
                         i.putExtra("sessionHandle", handle)
                         context.startActivity(i)
                     }
-                    SkillExecutionResult(
-                        true, if (unlimited) "命令已自动执行" else "已生成命令卡片",
+                    SkillExecutionResult(true, if (unlimited) "命令已自动执行" else "已生成命令卡片",
                         SkillCardData(
                             skillType = SkillType.RUN_COMMAND,
                             title = "新会话执行命令",
@@ -1622,8 +1606,7 @@ object SkillExecutor {
             val file = File(path)
             file.parentFile?.mkdirs()
             file.writeText(content)
-            SkillExecutionResult(
-                true, "已生成文件",
+            SkillExecutionResult(true, "已生成文件",
                 SkillCardData(
                     skillType = SkillType.FILE_GENERATE,
                     title = "生成文件",
@@ -1683,8 +1666,7 @@ object SkillExecutor {
             }
 
             file.writeText(content)
-            SkillExecutionResult(
-                true, "已修改文件",
+            SkillExecutionResult(true, "已修改文件",
                 SkillCardData(
                     skillType = SkillType.FILE_MODIFY,
                     title = "修改文件",
@@ -2155,8 +2137,7 @@ object SkillExecutor {
                     }
                 }
                 context.startActivity(intent)
-                SkillExecutionResult(
-                    true, "已打开页面: $activityClass",
+                SkillExecutionResult(true, "已打开页面: $activityClass",
                     SkillCardData(
                         skillType = SkillType.CUSTOM_COMMAND,
                         title = "打开页面",
@@ -2192,8 +2173,7 @@ object SkillExecutor {
                     }
                 }
                 context.sendBroadcast(intent)
-                SkillExecutionResult(
-                    true, "已发送广播: $action",
+                SkillExecutionResult(true, "已发送广播: $action",
                     SkillCardData(
                         skillType = SkillType.CUSTOM_COMMAND,
                         title = "发送广播",
@@ -2230,8 +2210,7 @@ object SkillExecutor {
             }
             val delayLabel = if (delayMinutes > 0) "${delayMinutes}分钟后" else "立即"
 
-            SkillExecutionResult(
-                true,
+            SkillExecutionResult(true,
                 "定时任务已创建：$task（$delayLabel，$repeatLabel）",
                 SkillCardData(
                     skillType = SkillType.SCHEDULE_TASK,
@@ -2266,8 +2245,7 @@ object SkillExecutor {
                 "- ${ts.mSessionName ?: "Terminal"} [handle=${ts.mHandle}] 运行中=${ts.isRunning}$marker"
             }
             val output = if (sessions.isEmpty()) "当前无运行会话" else "当前活跃会话：\n$currentInfo\n\n全部会话：\n$allInfo"
-            SkillExecutionResult(
-                true, output,
+            SkillExecutionResult(true, output,
                 SkillCardData(
                     skillType = SkillType.GET_CURRENT_SESSION,
                     title = "当前会话",
@@ -2287,8 +2265,7 @@ object SkillExecutor {
             val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
             val text = clipboard.primaryClip?.getItemAt(0)?.text?.toString() ?: ""
             if (text.isBlank()) {
-                SkillExecutionResult(
-                    true, "剪贴板为空",
+                SkillExecutionResult(true, "剪贴板为空",
                     SkillCardData(
                         skillType = SkillType.CLIPBOARD_READ,
                         title = "剪贴板",
@@ -2300,8 +2277,7 @@ object SkillExecutor {
                 )
             } else {
                 val truncated = if (text.length > 5000) text.take(5000) + "...(已截断)" else text
-                SkillExecutionResult(
-                    true, "已读取剪贴板",
+                SkillExecutionResult(true, "已读取剪贴板",
                     SkillCardData(
                         skillType = SkillType.CLIPBOARD_READ,
                         title = "剪贴板内容",
@@ -2326,8 +2302,7 @@ object SkillExecutor {
         return@withContext try {
             val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
             clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Termux Agent", content))
-            SkillExecutionResult(
-                true, "已写入剪贴板",
+            SkillExecutionResult(true, "已写入剪贴板",
                 SkillCardData(
                     skillType = SkillType.CLIPBOARD_WRITE,
                     title = "已写入剪贴板",

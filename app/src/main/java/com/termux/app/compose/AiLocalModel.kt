@@ -1,11 +1,13 @@
 package com.termux.app.compose
 
 import android.content.Context
-import com.termux.shared.models.ExecutionCommand
-import com.termux.shared.shell.TermuxShellEnvironmentClient
-import com.termux.shared.shell.TermuxShellUtils
-import com.termux.shared.shell.TermuxTask
+import com.termux.shared.shell.command.ExecutionCommand
+import com.termux.shared.termux.shell.command.environment.TermuxShellEnvironment
+import com.termux.shared.termux.shell.TermuxShellUtils
+import com.termux.shared.shell.command.runner.app.AppShell
 import com.termux.shared.termux.TermuxConstants
+import com.termux.shared.compat.ShellEnvironmentCompat
+import com.termux.shared.compat.TermuxTaskCompat
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -643,7 +645,7 @@ object AiLocalModel {
      * 解析 Termux 可用的 shell 路径（与 execCaptureOutput 中保持一致）。
      */
     private fun resolveTermuxShell(): String? {
-        val binDir = TermuxShellUtils.getDefaultBinPath()
+        val binDir = TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH
         if (binDir.isNotEmpty()) {
             for (shellBinary in arrayOf("bash", "login", "zsh", "sh")) {
                 val shellFile = File(binDir, shellBinary)
@@ -680,13 +682,13 @@ object AiLocalModel {
             arrayOf("-c", command),
             null,
             null,
-            true,
+            "app-shell",
             false
         )
 
-        val shellEnvClient = TermuxShellEnvironmentClient()
+        val shellEnvClient = ShellEnvironmentCompat(TermuxShellEnvironment())
         val termuxTask = try {
-            TermuxTask.execute(
+            TermuxTaskCompat.execute(
                 context,
                 executionCommand,
                 null,

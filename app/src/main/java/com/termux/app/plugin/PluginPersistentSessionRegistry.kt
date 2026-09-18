@@ -1,6 +1,6 @@
 package com.termux.app.plugin
 
-import com.termux.shared.shell.TermuxSession
+import com.termux.shared.termux.shell.command.runner.terminal.TermuxSession
 import com.termux.terminal.TerminalSession
 
 /**

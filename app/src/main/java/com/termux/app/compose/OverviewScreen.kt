@@ -124,7 +124,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.Canvas
 import com.termux.R
 import com.termux.app.TermuxService
-import com.termux.shared.shell.TermuxSession
+import com.termux.shared.termux.shell.command.runner.terminal.TermuxSession
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch

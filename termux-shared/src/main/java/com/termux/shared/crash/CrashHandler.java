@@ -10,8 +10,10 @@ import androidx.annotation.NonNull;
 import com.termux.shared.file.FileUtils;
 import com.termux.shared.logger.Logger;
 import com.termux.shared.markdown.MarkdownUtils;
-import com.termux.shared.models.errors.Error;
-import com.termux.shared.termux.AndroidUtils;
+import com.termux.shared.errors.Error;
+import com.termux.shared.android.AndroidUtils;
+
+import java.lang.reflect.Method;
 
 import java.lang.reflect.Method;
 
@@ -86,10 +88,84 @@ public class CrashHandler implements Thread.UncaughtExceptionHandler {
     /**
      * Set default uncaught crash handler of current thread to {@link CrashHandler}.
      */
+    /** Alias for {@link #setCrashHandler(Context, CrashHandlerClient)} kept for upstream API compat. */
+    public static void setDefaultCrashHandler(@NonNull final Context context, @NonNull final CrashHandlerClient crashHandlerClient) {
+        setCrashHandler(context, crashHandlerClient);
+    }
+
     public static void setCrashHandler(@NonNull final Context context, @NonNull final CrashHandlerClient crashHandlerClient) {
         if (!(Thread.getDefaultUncaughtExceptionHandler() instanceof CrashHandler)) {
             Thread.setDefaultUncaughtExceptionHandler(new CrashHandler(context, crashHandlerClient));
         }
+    }
+
+    private static boolean isMainThread(Thread thread) {
+        return Looper.getMainLooper().getThread() == thread;
+    }
+
+    private static String buildShortErrorMessage(Throwable t) {
+        if (t == null) return "Unknown error";
+        String msg = t.getClass().getSimpleName() + ": " + t.getMessage();
+        if (msg.length() > 500) msg = msg.substring(0, 500) + "...";
+        return msg;
+    }
+
+    private boolean tryLaunchCrashDialog(final boolean canRecover, final boolean mainThreadCrashed, final String errorMessage) {
+        try {
+            // Post to main thread — the crash might have happened on a background thread,
+            // and startActivity must run on the main thread.
+            new Handler(Looper.getMainLooper()).post(() -> {
+                try {
+                    // Use reflection so termux-shared doesn't depend on app module directly.
+                    Class<?> alertCls = Class.forName("com.termux.app.activities.AlertDialogActivity");
+                    Method startMethod = alertCls.getMethod(
+                        "startCrashError",
+                        Context.class, String.class, boolean.class, boolean.class);
+                    startMethod.invoke(null, mContext, errorMessage, canRecover, mainThreadCrashed);
+                } catch (Throwable t) {
+                    Logger.logError(LOG_TAG, "Reflection launch crash dialog failed: " + t.getMessage());
+                }
+            });
+            // We can't know for sure if Activity started successfully from here
+            // (startActivity is async), but if the post() didn't throw, consider it launched.
+            return true;
+        } catch (Throwable t) {
+            Logger.logError(LOG_TAG, "tryLaunchCrashDialog failed: " + t.getMessage());
+            return false;
+        }
+    }
+
+    private void markDialogShown() {
+        try {
+            SharedPreferences prefs = mContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+            prefs.edit().putBoolean(KEY_CRASH_DIALOG_SHOWN, true).apply();
+        } catch (Throwable ignored) {}
+    }
+
+    /**
+     * Clear the dialog-shown flag. Called from {@code CrashUtils.notifyAppCrashOnLastRun}
+     * when it detects crash_log.md — we check this flag and skip TYPE_CRASH_POST if it's set,
+     * but we MUST clear the flag either way so it doesn't permanently suppress future dialogs.
+     */
+    public static boolean consumeDialogShownFlag(Context context) {
+        try {
+            SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+            boolean shown = prefs.getBoolean(KEY_CRASH_DIALOG_SHOWN, false);
+            if (shown) {
+                prefs.edit().remove(KEY_CRASH_DIALOG_SHOWN).apply();
+            }
+            return shown;
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
+    /**
+     * Return a CrashHandler instance for hooking per-thread exception handlers.
+     * Kept for upstream API compat — just constructs a new instance without touching the global UEH.
+     */
+    public static CrashHandler getCrashHandler(@NonNull final Context context, @NonNull final CrashHandlerClient crashHandlerClient) {
+        return new CrashHandler(context, crashHandlerClient);
     }
 
     private static boolean isMainThread(Thread thread) {
@@ -180,7 +256,7 @@ public class CrashHandler implements Thread.UncaughtExceptionHandler {
         Logger.logError(reportString.toString());
 
         // Write report string to crash log file
-        Error error = FileUtils.writeStringToFile("crash log", crashHandlerClient.getCrashLogFilePath(context),
+        Error error = FileUtils.writeTextToFile("crash log", crashHandlerClient.getCrashLogFilePath(context),
                         Charset.defaultCharset(), reportString.toString(), false);
         if (error != null) {
             Logger.logErrorExtended(LOG_TAG, error.toString());

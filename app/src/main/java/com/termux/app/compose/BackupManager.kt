@@ -2,7 +2,8 @@ package com.termux.app.compose
 
 import android.content.Context
 import android.os.Environment
-import com.termux.shared.shell.TermuxShellEnvironmentClient
+import com.termux.shared.termux.shell.command.environment.TermuxShellEnvironment
+import com.termux.shared.compat.ShellEnvironmentCompat
 import com.termux.shared.termux.TermuxConstants
 import java.io.BufferedReader
 import java.io.File
@@ -36,7 +37,7 @@ object BackupManager {
     @Volatile
     private var restoreProcess: Process? = null
 
-    private val envClient = TermuxShellEnvironmentClient()
+    private val envClient = ShellEnvironmentCompat(TermuxShellEnvironment())
 
     /** Build the Termux shell environment array for [Runtime.exec]. */
     private fun buildEnv(context: Context): Array<String> {

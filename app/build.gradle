@@ -25,11 +25,11 @@ android {
         applicationId "com.termux"
         minSdkVersion project.properties.minSdkVersion.toInteger()
         targetSdkVersion project.properties.targetSdkVersion.toInteger()
-        versionCode 1103
-        versionName "1.8.0.R4"
+        versionCode 1205
+        versionName "2.0.0.R5"
         // Termux 核心版本号（基于的上游 Termux 版本）
         // 注意：termux_core_version 字符串已在 strings.xml 中定义
-        buildConfigField "String", "TERMUX_CORE_VERSION", "\"0.118.3\""
+        buildConfigField "String", "TERMUX_CORE_VERSION", "\"0.119.0\""
 
         // 新星引擎 (LibTerminal) 核心版本号
         buildConfigField "String", "LIBTERMINAL_VERSION", "\"3.0.0\""
@@ -52,17 +52,17 @@ android {
             }
         }
 
-        // ABI splits: enabled only for release builds (per-architecture APKs); disabled for
-        // debug so a single universal APK is produced (faster builds, matches project
-        // preference). Detection uses the requested Gradle task name. The previous
-        // variantFilter was ineffective for ABI splits (splits do not create separate
-        // variants), so it has been removed.
+        // ABI splits: enabled for release builds by default, or whenever the
+        // CI sets TERMUX_FORCE_SPLITS=1. Local debug builds keep the fast
+        // single-universal-APK behaviour unless overridden.
+        def forceSplits = System.getenv("TERMUX_FORCE_SPLITS") == "1"
         def isReleaseBuild = gradle.startParameter.taskNames.any {
             it.toLowerCase().contains('release')
         }
+        def enableSplits = isReleaseBuild || forceSplits
         splits {
             abi {
-                enable isReleaseBuild
+                enable enableSplits
                 reset ()
                 include 'x86', 'x86_64', 'armeabi-v7a', 'arm64-v8a'
                 universalApk true
@@ -122,10 +122,6 @@ android {
             jniLibs.srcDirs = ['src/main/jniLibs']
         }
     }
-}
-
-kotlin {
-    jvmToolchain(21)
 }
 
 dependencies {
@@ -206,13 +202,44 @@ implementation "io.coil-kt:coil:2.7.0"
 }
 
 tasks.whenTaskAdded { task ->
-    if (task.name == 'packageDebug') {
+    if (task.name == 'packageDebug' || task.name == 'packageRelease') {
         task.doLast {
-            def apkFile = file("$buildDir/outputs/apk/debug/app-debug.apk")
-            if (apkFile.exists()) {
-                def newFileName = "termux-ultra_debug_universal.apk"
-                def destFile = new File(apkFile.parentFile, newFileName)
-                apkFile.renameTo(destFile)
+            String buildType = task.name == 'packageRelease' ? 'release' : 'debug'
+            File outDir = file("$buildDir/outputs/apk/$buildType")
+            if (!outDir.exists()) return
+            String tag = System.getenv("TERMUX_APK_VERSION_TAG")
+            // splits OFF: a single app-<type>.apk (universal).
+            // splits  ON: app-<abi>-<type>.apk (universal included with -universal-).
+            outDir.listFiles().each { File apk ->
+                String name = apk.name
+                if (!name.endsWith(".apk")) return
+                // Skip already-renamed files (idempotent across up-to-date runs)
+                if (name.startsWith("termux-ultra_") || name.startsWith("termux-app_")) return
+
+                String abi
+                if (name.contains("-universal-" + buildType)) {
+                    abi = "universal"
+                } else if (name == "app-" + buildType + ".apk") {
+                    abi = "universal"
+                } else if (name.startsWith("app-")) {
+                    // app-<abi>-<type>.apk  →  strip leading "app-" and trailing "-<type>.apk"
+                    abi = name.substring(4)                         // drop "app-"
+                    abi = abi.substring(0, abi.length() - buildType.length() - 5)  // drop "-<type>.apk" = -(6+4) chars
+                } else {
+                    return   // unknown naming, leave alone
+                }
+
+                String newName
+                if (tag != null && !tag.isEmpty()) {
+                    // CI workflow naming: termux-app_<version-tag>_<abi>.apk
+                    newName = "termux-app_${tag}_${abi}.apk"
+                } else {
+                    // Local naming: keep the TU prefix
+                    newName = "termux-ultra_${buildType}_${abi}.apk"
+                }
+                File dest = new File(outDir, newName)
+                if (dest.exists()) dest.delete()
+                apk.renameTo(dest)
             }
         }
     }

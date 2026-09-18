@@ -2,8 +2,8 @@ package com.termux.shared.notification;
 
 import android.content.Context;
 
-import com.termux.shared.settings.preferences.TermuxAppSharedPreferences;
-import com.termux.shared.settings.preferences.TermuxPreferenceConstants;
+import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
+import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants;
 import com.termux.shared.termux.TermuxConstants;
 
 public class TermuxNotificationUtils {

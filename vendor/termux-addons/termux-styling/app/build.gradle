@@ -16,10 +16,6 @@ android {
     }
 }
 
-kotlin {
-    jvmToolchain(21)
-}
-
 dependencies {
     // TermuxStyleActivity only uses the Android framework; kotlin-stdlib is
     // injected automatically by the kotlin android plugin.

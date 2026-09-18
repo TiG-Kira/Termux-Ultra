@@ -20,7 +20,7 @@ import com.termux.R;
 import com.termux.app.TermuxActivity;
 import com.termux.app.TermuxService;
 import com.termux.app.terminal.TermuxSessionsListAdapter;
-import com.termux.shared.shell.TermuxSession;
+import com.termux.shared.termux.shell.command.runner.terminal.TermuxSession;
 
 import java.util.List;
 

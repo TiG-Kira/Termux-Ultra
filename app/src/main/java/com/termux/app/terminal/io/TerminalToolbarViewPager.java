@@ -11,7 +11,7 @@ import androidx.viewpager.widget.ViewPager;
 
 import com.termux.R;
 import com.termux.app.TermuxActivity;
-import com.termux.shared.terminal.io.extrakeys.ExtraKeysView;
+import com.termux.shared.termux.extrakeys.ExtraKeysView;
 import com.termux.terminal.TerminalSession;
 
 public class TerminalToolbarViewPager {
@@ -48,7 +48,7 @@ public class TerminalToolbarViewPager {
                     mActivity.getTermuxTerminalViewClient(), mActivity.getTermuxTerminalSessionClient()));
                 extraKeysView.setButtonTextAllCaps(mActivity.getProperties().shouldExtraKeysTextBeAllCaps());
                 mActivity.setExtraKeysView(extraKeysView);
-                extraKeysView.reload(mActivity.getProperties().getExtraKeysInfo());
+                extraKeysView.reload(mActivity.getProperties().getExtraKeysInfo(), 0f);
 
                 // apply extra keys fix if enabled in prefs
                 if (mActivity.getProperties().isUsingFullScreen() && mActivity.getProperties().isUsingFullScreenWorkAround()) {

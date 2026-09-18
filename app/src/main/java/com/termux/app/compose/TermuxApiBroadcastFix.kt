@@ -2,7 +2,7 @@ package com.termux.app.compose
 
 import android.content.Context
 import com.termux.shared.logger.Logger
-import com.termux.shared.shell.TermuxShellEnvironmentClient
+import com.termux.shared.termux.shell.command.environment.TermuxShellCommandShellEnvironment
 import com.termux.shared.termux.TermuxConstants
 import java.io.File
 

@@ -12,11 +12,11 @@ import com.termux.R;
 import com.termux.app.LanguageHelper;
 import com.termux.app.MainActivity;
 import com.termux.app.activities.AboutActivity;
-import com.termux.shared.packages.PackageUtils;
-import com.termux.shared.settings.preferences.TermuxAPIAppSharedPreferences;
-import com.termux.shared.settings.preferences.TermuxFloatAppSharedPreferences;
-import com.termux.shared.settings.preferences.TermuxTaskerAppSharedPreferences;
-import com.termux.shared.settings.preferences.TermuxWidgetAppSharedPreferences;
+import com.termux.shared.android.PackageUtils;
+import com.termux.shared.termux.settings.preferences.TermuxAPIAppSharedPreferences;
+import com.termux.shared.termux.settings.preferences.TermuxFloatAppSharedPreferences;
+import com.termux.shared.termux.settings.preferences.TermuxTaskerAppSharedPreferences;
+import com.termux.shared.termux.settings.preferences.TermuxWidgetAppSharedPreferences;
 import com.termux.shared.interact.ShareUtils;
 import com.termux.shared.termux.TermuxConstants;
 import com.termux.shared.termux.TermuxUtils;
@@ -116,7 +116,7 @@ public class SettingsFragment extends PreferenceFragmentCompat {
             }
 
             donatePreference.setOnPreferenceClickListener(preference -> {
-                ShareUtils.openURL(context, TermuxConstants.TERMUX_DONATE_URL);
+                ShareUtils.openUrl(context, TermuxConstants.TERMUX_DONATE_URL);
                 return true;
             });
         }
