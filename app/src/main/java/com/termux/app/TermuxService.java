@@ -1295,11 +1295,13 @@ public synchronized int removeTermuxSession(TerminalSession sessionToRemove) {
         // LiveUpdate 上岛 + 药丸
         if (Build.VERSION.SDK_INT >= 36) {
             try {
-                // extras.putBoolean(Notification.EXTRA_REQUEST_PROMOTED_ONGOING, true); // Android 14+ API, 非关键功能，暂注释
+                Bundle extras = new Bundle();
+                extras.putBoolean(Notification.EXTRA_REQUEST_PROMOTED_ONGOING, true);
+                builder.addExtras(extras);
                 if (pkg.getProgress() > 0) {
-                    builder.setContentText("操作进行:" + pkg.getProgress() + "%");
+                    builder.setShortCriticalText("操作进行:" + pkg.getProgress() + "%");
                 } else {
-                    builder.setContentText("操作进行中");
+                    builder.setShortCriticalText("操作进行中");
                 }
             } catch (Throwable ignored) {}
         }
@@ -1328,8 +1330,10 @@ public synchronized int removeTermuxSession(TerminalSession sessionToRemove) {
 
         if (Build.VERSION.SDK_INT >= 36) {
             try {
-                // extras.putBoolean(Notification.EXTRA_REQUEST_PROMOTED_ONGOING, true); // Android 14+ API, 非关键功能，暂注释
-                builder.setContentText("思考中");
+                Bundle extras = new Bundle();
+                extras.putBoolean(Notification.EXTRA_REQUEST_PROMOTED_ONGOING, true);
+                builder.addExtras(extras);
+                builder.setShortCriticalText("思考中");
             } catch (Throwable ignored) {}
         }
         return builder.build();
@@ -1427,13 +1431,15 @@ public synchronized int removeTermuxSession(TerminalSession sessionToRemove) {
                 if (!sessionsCleared && (sessionCount > 0 || qemuCount > 0 || containerRunning)) {
                     builder.setPriority(Notification.PRIORITY_HIGH);
                     builder.setStyle(new Notification.BigTextStyle().bigText(body));
-                    // extras.putBoolean(Notification.EXTRA_REQUEST_PROMOTED_ONGOING, true); // Android 14+ API, 非关键功能，暂注释
+                    Bundle extras = new Bundle();
+                    extras.putBoolean(Notification.EXTRA_REQUEST_PROMOTED_ONGOING, true);
+                    builder.addExtras(extras);
                     if (qemuCount > 0) {
-                        builder.setContentText(qemuCount + " 个虚拟机会话");
+                        builder.setShortCriticalText(qemuCount + " 个虚拟机会话");
                     } else if (containerRunning) {
-                        builder.setContentText(sessionCount + " 个会话(含容器)");
+                        builder.setShortCriticalText(sessionCount + " 个会话(含容器)");
                     } else {
-                        builder.setContentText(sessionCount + " 个会话");
+                        builder.setShortCriticalText(sessionCount + " 个会话");
                     }
                 }
             } catch (Throwable e) {
