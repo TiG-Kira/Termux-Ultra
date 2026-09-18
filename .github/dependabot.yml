@@ -15,7 +15,10 @@ updates:
   commit-message:
     prefix: "chore(deps)"
   ignore:
-    # Kotlin plugin 2.4.x 单独升会与 serialization/ksp 版本不一致
-    # 等 Kotlin 主版本升级后再统一升到 2.4.20+
+    # Kotlin 三件套需要统一升级
+    # compose + serialization + ksp 都要升到同一 Kotlin 版本
+    # 等 ksp 有升级 PR 后再一起合
     - dependency-name: "org.jetbrains.kotlin.plugin.compose"
+      versions: [">=2.4.0"]
+    - dependency-name: "org.jetbrains.kotlin.plugin.serialization"
       versions: [">=2.4.0"]
