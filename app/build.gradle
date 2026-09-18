@@ -214,7 +214,7 @@ tasks.whenTaskAdded { task ->
                 String name = apk.name
                 if (!name.endsWith(".apk")) return
                 // Skip already-renamed files (idempotent across up-to-date runs)
-                if (name.startsWith("termux-ultra_") || name.startsWith("termux-app_")) return
+                if (name.startsWith("app-") || name.startsWith("termux-ultra_") || name.startsWith("termux-app_")) return
 
                 String abi
                 if (name.contains("-universal-" + buildType)) {
@@ -234,8 +234,8 @@ tasks.whenTaskAdded { task ->
                     // CI workflow naming: termux-app_<version-tag>_<abi>.apk
                     newName = "termux-app_${tag}_${abi}.apk"
                 } else {
-                    // Local naming: keep the TU prefix
-                    newName = "termux-ultra_${buildType}_${abi}.apk"
+                    // Local naming: restore default app- prefix
+                    newName = "app-${buildType}-${abi}.apk"
                 }
                 File dest = new File(outDir, newName)
                 if (dest.exists()) dest.delete()
