@@ -142,7 +142,8 @@ object PluginManager {
                         action = PluginAction(
                             type = try { ActionType.valueOf(ref.action.type) } catch (_: Exception) { ActionType.CUSTOM },
                             command = ref.action.command,
-                            url = ref.action.url
+                            url = ref.action.url,
+                            hostActionId = ref.action.hostActionId
                         )
                     )
                 )
@@ -251,6 +252,15 @@ object PluginManager {
         val config = getPluginConfig(context, pluginId).toMutableMap()
         config[key] = value
         savePluginConfig(context, pluginId, config)
+    }
+
+    fun executeAction(
+        context: Context,
+        pluginId: String,
+        actionStr: String,
+        payload: Map<String, Any?> = emptyMap()
+    ): Boolean {
+        return ActionExecutor.execute(context, pluginId, actionStr, payload)
     }
 
 // ============================================================

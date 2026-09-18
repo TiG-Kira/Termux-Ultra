@@ -308,6 +308,12 @@
             android:configChanges="orientation|screenSize|screenLayout|uiMode"
             android:theme="@style/Theme.AppCompat.DayNight.NoActionBar" />
 
+        <activity
+            android:name="com.termux.app.plugin.PluginComposeActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|screenLayout|uiMode"
+            android:theme="@style/Theme.AppCompat.DayNight.NoActionBar" />
+
         <provider
             android:name=".filepicker.TermuxDocumentsProvider"
             android:authorities="${TERMUX_PACKAGE_NAME}.documents"

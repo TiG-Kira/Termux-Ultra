@@ -347,6 +347,18 @@ class PluginWebViewActivity : ComponentActivity() {
             )
             return gson.toJson(info)
         }
+
+        @JavascriptInterface
+        fun hostAction(actionId: String): String {
+            val ok = ActionExecutor.execute(this@PluginWebViewActivity, pluginId, "action:$actionId")
+            return gson.toJson(mapOf("success" to ok))
+        }
+
+        @JavascriptInterface
+        fun navigate(pageId: String): String {
+            val ok = ActionExecutor.execute(this@PluginWebViewActivity, pluginId, "nav:$pageId")
+            return gson.toJson(mapOf("success" to ok))
+        }
     }
 
     private fun WebView.injectBackgroundFix() {

@@ -59,7 +59,8 @@ data class PluginResourceCardRef(
 data class PluginActionRef(
     val type: String,
     val command: String? = null,
-    val url: String? = null
+    val url: String? = null,
+    val hostActionId: String? = null
 )
 
 data class PluginSettingItemRef(

@@ -74,13 +74,15 @@ data class PluginResourceCard(
 data class PluginAction(
     val type: ActionType,
     val command: String? = null,
-    val url: String? = null
+    val url: String? = null,
+    val hostActionId: String? = null
 )
 
 enum class ActionType {
     SHELL_COMMAND,
     OPEN_URL,
-    CUSTOM
+    CUSTOM,
+    HOST_ACTION
 }
 
 data class PluginSkill(
