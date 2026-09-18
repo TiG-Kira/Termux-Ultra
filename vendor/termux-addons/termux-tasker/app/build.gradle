@@ -18,6 +18,6 @@ android {
 
 dependencies {
     // AppTheme extends Theme.AppCompat.Light.DarkActionBar
-    implementation 'androidx.appcompat:appcompat:1.7.0'
+    implementation 'androidx.appcompat:appcompat:1.8.0'
     implementation 'com.google.android.material:material:1.7.0'
 }
