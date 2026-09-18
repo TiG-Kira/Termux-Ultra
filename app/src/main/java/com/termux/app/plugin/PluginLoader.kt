@@ -128,6 +128,16 @@ object PluginLoader {
                 }
             }
         }
+
+        // Compose DSL 页面入口文件校验
+        manifest.entryPoints?.pages?.forEach { page ->
+            if (page.type == "compose" && !page.entry.isNullOrBlank()) {
+                val entryFile = File(pluginDir, page.entry)
+                if (!entryFile.exists()) {
+                    throw IllegalStateException("插件 Compose 页面配置不存在: ${page.entry}")
+                }
+            }
+        }
     }
 
     private fun checkHostVersion(context: Context, minVersion: String) {

@@ -956,7 +956,43 @@ private fun PluginContentDialog(
                         )
                     )
                     Spacer(Modifier.height(8.dp))
-                    h5Entries.forEach { (title, entry) ->
+                    activePlugin.manifest.entryPoints?.pages?.forEach { page ->
+                        Button(
+                            onClick = {
+                                if (page.type == "compose") {
+                                    PluginComposeActivity.start(
+                                        context,
+                                        activePlugin.id,
+                                        page.entry ?: "",
+                                        page.title
+                                    )
+                                } else {
+                                    PluginWebViewActivity.start(
+                                        context,
+                                        activePlugin.id,
+                                        page.entry ?: "",
+                                        page.title
+                                    )
+                                }
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .padding(vertical = 2.dp),
+                            colors = ButtonDefaults.buttonColors(color = MiuixTheme.colorScheme.primary)
+                        ) {
+                            Text(
+                                text = page.title,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                        }
+                    }
+                    // h5Home 入口也显示
+                    h5Entries.filter { (_, entry) ->
+                        activePlugin.manifest.entryPoints?.pages?.none { it.entry == entry } != false
+                    }.forEach { (title, entry) ->
                         Button(
                             onClick = {
                                 PluginWebViewActivity.start(

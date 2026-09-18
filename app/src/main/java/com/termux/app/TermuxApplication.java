@@ -120,6 +120,14 @@ public class TermuxApplication extends Application {
             }
             setLogLevel();
 
+            // 注册插件宿主能力（轻量操作，纯内存注册）
+            try {
+                com.termux.app.plugin.HostActionRegistry.INSTANCE.registerDefaults(TermuxApplication.this);
+                android.util.Log.i("TermuxApplication", "HostActionRegistry 默认能力注册完成");
+            } catch (Throwable t) {
+                android.util.Log.w("TermuxApplication", "HostActionRegistry 注册失败", t);
+            }
+
             startTermuxApiListener(getApplicationContext());
 
             // am-wrapper 同步（可能跑 shell 命令）
