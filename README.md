@@ -7,7 +7,7 @@
 
 [![Build status](https://github.com/TiG-Kira/Termux-Ultra/workflows/Build/badge.svg)](https://github.com/TiG-Kira/Termux-Ultra/actions)
 
-> ℹ️ **`corebump/2.x`（Termux Ultra 2.0）计划于本月底正式合入 `main`**，详见下方「分支策略与合并计划」。
+> ℹ️ **`corebump/2.x`（Termux Ultra 2.0）已合入 `main`**，详见下方「分支策略与合并计划」。
 
 ## 📦 归档声明
 
