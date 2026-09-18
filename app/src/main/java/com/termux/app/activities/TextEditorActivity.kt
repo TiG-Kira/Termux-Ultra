@@ -10,6 +10,7 @@ import androidx.core.view.WindowCompat
 import com.termux.app.compose.TextEditorScreen
 import com.termux.app.compose.KiTerminalTheme
 import com.termux.app.compose.NavigationHelper
+import com.termux.app.compose.RecentFilesManager
 import java.io.File
 
 /**
@@ -55,6 +56,8 @@ class TextEditorActivity : ComponentActivity() {
                                     val target = File(savePath)
                                     target.parentFile?.mkdirs()
                                     target.writeText(newText)
+                                    // 保存成功 → 记录到最近文件列表
+                                    RecentFilesManager.addRecent(this, target.absolutePath)
                                 } catch (e: Exception) {
                                     android.widget.Toast.makeText(
                                         this, "保存失败: ${e.message}", android.widget.Toast.LENGTH_SHORT

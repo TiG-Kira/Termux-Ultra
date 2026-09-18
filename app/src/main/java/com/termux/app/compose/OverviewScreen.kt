@@ -1178,8 +1178,8 @@ private fun TipsAgentCard(
                     icon = Icons.Rounded.Edit,
                     iconColor = Color(0xFF0EA5E9),
                     iconBgColor = Color(0xFF0EA5E9).copy(alpha = 0.12f),
-                    label = "新建文本",
-                     onClick = { val intent = android.content.Intent(context, com.termux.app.activities.TextEditorActivity::class.java); context.startActivity(intent) }
+                    label = "编辑文本",
+                    onClick = { val intent = Intent(context, com.termux.app.activities.TextEditorHomeActivity::class.java); context.startActivity(intent) }
                 )
                 QuickEntryButton(
                     modifier = Modifier.weight(1f),

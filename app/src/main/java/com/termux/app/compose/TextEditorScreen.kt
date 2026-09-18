@@ -223,10 +223,11 @@ fun TextEditorScreen(
                     )
                     .padding(8.dp)
             ) {
-                val lineCount = content.count { it == '\n' } + 1
+                val lineCount = if (content.isEmpty()) 1 else content.count { it == '\n' } + 1
                 Text(
                     text = (1..lineCount).joinToString("\n"),
                     fontSize = 14.sp,
+                    lineHeight = 20.sp,
                     color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.4f),
                     fontFamily = FontFamily.Monospace,
                     modifier = Modifier
