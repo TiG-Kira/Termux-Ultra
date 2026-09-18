@@ -371,7 +371,7 @@ enum class VirtualKey(
 ) {
 
     // Special actions
-    ToggleKeyboard(description = "Toggle keyboard", icon = R.drawable.ic_keyboard),
+    ToggleKeyboard(description = "Toggle keyboard", icon = R.drawable.ic_keyboard_vnc),
     CloseKeys(description = "Close virtual keys", icon = R.drawable.ic_clear),
 
     // Meta keys
