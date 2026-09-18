@@ -7,26 +7,46 @@
 
 [![Build status](https://github.com/TiG-Kira/Termux-Ultra/workflows/Build/badge.svg)](https://github.com/TiG-Kira/Termux-Ultra/actions)
 
-> ⚠️ **Termux Ultra 2.0 (corebump/2.x) 分支在开发中，禁止合入 main。** 详见下方「分支策略」。
+> ℹ️ **`corebump/2.x`（Termux Ultra 2.0）计划于本月底正式合入 `main`**，详见下方「分支策略与合并计划」。
 
-## 分支策略
+## 分支策略与合并计划
 
-| 分支 | 基底 | 版本号 | 状态 | 可否合入 main |
-|------|------|--------|------|--------------|
-| `main` | 上游 Termux `v0.118.3` | 1.8.x | ✅ 稳定 | — |
-| `corebump/2.x` | 上游 Termux `v0.119.0-beta.3` | 2.0.0.R5+ | 🧪 预发布 / beta | ❌ **自动关闭** |
+### 当前分支状态
 
-**强制执行的策略（GitHub Actions）：**
+| 分支 | 基底 | 版本号 | 状态 | 合并计划 |
+|------|------|--------|------|---------|
+| `main` | 上游 Termux `v0.118.3` | 1.8.x | ✅ 稳定发布线 | — |
+| `corebump/2.x` | 上游 Termux `v0.119.0-beta.3` | 2.0.0.R5+ | 🔄 R5 新基底适配中 | **本月底合并进 main** |
 
-1. **corebump/2.x → main 的 PR 自动关闭** — 见 [auto-close-prerelease-pr.yml](.github/workflows/auto-close-prerelease-pr.yml)
-2. **从 corebump/2.x 发布的 release 自动标记为 prerelease** — 见 [mark-corebump-release-prerelease.yml](.github/workflows/mark-corebump-release-prerelease.yml)
-3. **直到上游 Termux 发布 v0.119.0 正式版，TU 2.0 才可合入 main**
+### 2.x → main 合并窗口期
 
-**PR 指南：**
+上游 Termux 正在进行大规模代码结构性重构（代码位置优化），维护团队已决定**提前将 `corebump/2.x` 转正式版**，以免上游重构继续扩大 TU 2.0 的合并冲突面。
 
-- ✅ `feature/xxx` → `corebump/2.x` ：正常提 PR
+**当前阶段（即日起 → 本月底）：**
+
+- ✅ 工作流策略已切换：`auto-close-prerelease-pr.yml` **已移除**，不再自动关闭 2.x → main 的 PR
+- ✅ Mega PR 已创建：[corebump/2.x → main](https://github.com/TiG-Kira/Termux-Ultra/pull/27)，用于日常 diff 对照与 review，**但暂不合并**
+- ⏳ 维护者正在对 2.x 分支进行**基础功能测试**（构建、基础终端、文件管理、VNC/SSH/QEMU、插件系统、AI 助手），并对照 main 分支做差异审查
+
+**合并条件：**
+
+- ✅ 基础功能测试完成
+- ✅ 不存在阻断性 Bug（严重崩溃、核心路径不可用等）
+- ✅ 上游 Termux 重构进度评估完成
+
+**合并方式：** 本月底在上述条件达成后，维护者手动点击 Mega PR 的 **Merge** 按钮，将 `corebump/2.x` 合入 `main`。之后 `main` 即成为 Termux Ultra 2.0 正式主线。
+
+### 对开发者与用户的提示
+
+- **遇到问题请在 Issue 反馈**：Bug 报告请用 Issue 表单 **「🐛 Termux Ultra 2.0 beta bug report」**。本月底合并后仍有修复窗口，非阻断 Bug 会在合并后继续迭代修复。
+- **功能适配类 PR**：继续往 `corebump/2.x` 提，维护者在合并时会一并带入 main。
+- **main 分支 PR**：涉及 1.8.x 稳定线的 bugfix 继续往 `main` 提，合并窗口关闭后 2.x 会覆盖掉这些变更——如需保留请同时往 `corebump/2.x` 提交。
+
+### PR 指南（更新后）
+
+- ✅ `feature/xxx` → `corebump/2.x` ：正常提 PR（合并前继续）
 - ✅ `feature/xxx` → `main` ：正常提 PR
-- ❌ `corebump/2.x` → `main` ：会被自动关闭并打 `corebump-prerelease` 标签
+- ✅ `corebump/2.x` → `main` ：**现在不会被自动关闭**，请指向已有 Mega PR（#27）之外的专项 PR 时说明用途
 - 🐛 2.0 beta bug 请用 Issue 表单 **「🐛 Termux Ultra 2.0 beta bug report」**
 
 
