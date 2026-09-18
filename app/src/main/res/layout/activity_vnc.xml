@@ -72,7 +72,7 @@
                     android:src="@drawable/ic_toolbar_open"
                     android:visibility="gone"
                     app:backgroundAlpha="@{.5}"
-                    app:tint="?colorOnSurface" />
+                    app:tint="#FFFFFFFF" />
 
                 <!--Virtual keys-->
                 <ViewStub
