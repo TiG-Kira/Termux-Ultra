@@ -1,9 +1,16 @@
 version: 2
 updates:
+# GitHub Actions
 - package-ecosystem: github-actions
   directory: /
   schedule:
     interval: daily
   commit-message:
-    # Prefix all commit messages with "Changed: "
     prefix: "Changed"
+# Gradle
+- package-ecosystem: gradle
+  directory: /
+  schedule:
+    interval: daily
+  commit-message:
+    prefix: "chore(deps)"
