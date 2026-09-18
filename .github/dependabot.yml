@@ -14,3 +14,8 @@ updates:
     interval: daily
   commit-message:
     prefix: "chore(deps)"
+  ignore:
+    # Kotlin plugin 2.4.x 单独升会与 serialization/ksp 版本不一致
+    # 等 Kotlin 主版本升级后再统一升到 2.4.20+
+    - dependency-name: "org.jetbrains.kotlin.plugin.compose"
+      versions: [">=2.4.0"]
