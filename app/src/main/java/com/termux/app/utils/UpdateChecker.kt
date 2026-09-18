@@ -156,13 +156,10 @@ object UpdateChecker {
                         }
                     }
 
-                    if (!currentTagMatched) {
-                        return@withContext UpdateResult.UpToDate(
-                            currentVersion = currentVersion,
-                            currentVersionName = currentVersionName
-                        )
-                    }
-
+                    // If the current tag is not found on GitHub, still allow
+                    // returning an update when one exists (e.g. user has a newer
+                    // build than the latest public release). Only bail out early
+                    // when there truly is no candidate at all.
                     if (bestVersion == null || bestVersion <= currentVersion) {
                         return@withContext UpdateResult.UpToDate(
                             currentVersion = currentVersion,
