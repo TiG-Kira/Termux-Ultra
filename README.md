@@ -9,51 +9,26 @@
 
 > ℹ️ **`corebump/2.x`（Termux Ultra 2.0）计划于本月底正式合入 `main`**，详见下方「分支策略与合并计划」。
 
-## 分支策略与合并计划
+## 📦 归档声明
 
-### 当前分支状态
+> ⚠️ **本分支 (`archived/corebump/2.x`) 已归档**，原始 `corebump/2.x` 开发分支已于 2026-09-19 合入 `main`（commit `85034da`）。
 
-| 分支 | 基底 | 版本号 | 状态 | 合并计划 |
-|------|------|--------|------|---------|
-| `main` | 上游 Termux `v0.118.3` | 1.8.x | ✅ 稳定发布线 | — |
-| `corebump/2.x` | 上游 Termux `v0.119.0-beta.3` | 2.0.0.R5+ | 🔄 R5 新基底适配中 | **本月底合并进 main** |
+**用途：** 仅用于**开发溯源**——保留 2.x 从 v0.118.3 基底迁移到 v0.119.0-beta.3 的完整中间步骤（LiveUpdate 修复、Notification 适配、Kotlin 三件套 patch 等），便于追溯每一步改动的原因与上下文。
 
-### 2.x → main 合并窗口期
+**请勿在此分支编译：**
+- 2.x 分支是基于 `main` 旧历史 graft 共同祖先构建的临时开发线
+- 编译配置、workflow 与当前 `main` 已不同步
+- 如需构建最新可运行的 APK，请切至 **[main](https://github.com/TiG-Kira/Termux-Ultra/tree/main)** 分支
 
-Termux Ultra 维护者即将对仓库进行**大规模文件目录调整与重构**，一旦完成，`main` 分支的目录/包结构将发生大幅变化。维护团队已决定**提前将 `corebump/2.x` 转正式版**——如果不先把 2.x 合入 main，后续重构会把当前两条分支的差异进一步拉大，届时合并将带来巨大工作量。
+**当前分支架构：**
 
-**当前阶段（即日起 → 本月底）：**
+| 分支 | 基底 | 版本 | 状态 |
+|------|------|------|------|
+| **`main`** 🎯 | Termux v0.119.0-beta.3 | 2.0.0.R5 → 正式版 | 活跃开发主线 |
+| `release/r1-r4` | Termux v0.118.3 | 1.8.0.R4 | 历史快照，仅重大问题修复 |
+| `archived/corebump/2.x` ⬅️ 本分支 | Termux v0.119.0-beta.3 | 2.0.0.R5 | **只读归档，开发溯源用** |
 
-- ✅ 工作流策略已切换：`auto-close-prerelease-pr.yml` **已移除**，不再自动关闭 2.x → main 的 PR
-- ✅ **Mega PR 已创建**：[#27](https://github.com/TiG-Kira/Termux-Ultra/pull/27) `corebump/2.x` → `main`，用于日常 diff 对照与 review。通过在 2.x 分支历史中 graft `main` 的 initial commit 作为共同祖先，GitHub PR 创建限制已解除。**本月底前暂不合并**。
-- ⏳ 维护者正在对 2.x 分支进行**基础功能测试**（构建、基础终端、文件管理、VNC/SSH/QEMU、插件系统、AI 助手），并对照 main 分支做差异审查
-
-**合并条件：**
-
-- ✅ 基础功能测试完成
-- ✅ 无阻断性 Bug（严重崩溃、核心路径不可用等）
-- ✅ **Termux Ultra 自身大规模重构开始前**（目录调整 / 包结构重排）
-
-**合并方式：** 本月底在上述条件达成后，维护者手动点击 Mega PR 的 **Merge** 按钮，将 `corebump/2.x` 合入 `main`。之后 `main` 即成为 Termux Ultra 2.0 正式主线。
-
-### 对开发者与用户的提示
-
-- **遇到问题请在 Issue 反馈**：Bug 报告请用 Issue 表单 **「🐛 Termux Ultra 2.0 beta bug report」**。本月底合并后仍有修复窗口，非阻断 Bug 会在合并后继续迭代修复。
-- **功能适配类 PR**：继续往 `corebump/2.x` 提，维护者在合并时会一并带入 main。
-- **main 分支 PR**：涉及 1.8.x 稳定线的 bugfix 继续往 `main` 提，合并窗口关闭后 2.x 会覆盖掉这些变更——如需保留请同时往 `corebump/2.x` 提交。
-
-### PR 指南（更新后）
-
-- ✅ `feature/xxx` → `corebump/2.x` ：正常提 PR（合并前继续）
-- ✅ `feature/xxx` → `main` ：正常提 PR
-- ✅ `corebump/2.x` → `main` ：**现在不会被自动关闭**，请指向已有 Mega PR（#27）之外的专项 PR 时说明用途
-- 🐛 2.0 beta bug 请用 Issue 表单 **「🐛 Termux Ultra 2.0 beta bug report」**
-
-
-
-**Termux Ultra** 是一款基于 [Termux](https://github.com/termux/termux-app) 二次开发的 Android 终端模拟器与 Linux 环境应用。它在保留 Termux 原生终端能力的基础上，集成了 VNC 远程桌面、SSH 连接管理、文件管理器、Linux 容器（proot）、QEMU 虚拟机、一键资源部署、AI 助手、插件系统等增强功能，并将 5 款 Termux 插件（API、Boot、Styling、Tasker、Widget）内置为可开关的集成工具，无需额外安装。UI 采用 Jetpack Compose + Miuix 设计语言打造。
-
-> 本仓库为应用本体（用户界面、终端模拟及扩展功能）。应用内可安装的软件包请参见 [termux/termux-packages](https://github.com/termux/termux-packages)。
+> 2.x → main 合并记录：[PR #27](https://github.com/TiG-Kira/Termux-Ultra/pull/27)（Mega PR）、合并大 commit [85034da](https://github.com/TiG-Kira/Termux-Ultra/commit/85034da)。
 
 ***
 
