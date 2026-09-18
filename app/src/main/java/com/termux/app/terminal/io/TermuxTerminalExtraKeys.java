@@ -7,20 +7,20 @@ import android.view.View;
 import androidx.annotation.NonNull;
 import androidx.drawerlayout.widget.DrawerLayout;
 
-import com.termux.app.terminal.TermuxTerminalSessionClient;
+import com.termux.app.terminal.TermuxTerminalSessionActivityClient;
 import com.termux.app.terminal.TermuxTerminalViewClient;
-import com.termux.shared.terminal.io.TerminalExtraKeys;
+import com.termux.shared.termux.terminal.io.TerminalExtraKeys;
 import com.termux.view.TerminalView;
 
 public class TermuxTerminalExtraKeys extends TerminalExtraKeys {
 
 
     TermuxTerminalViewClient mTermuxTerminalViewClient;
-    TermuxTerminalSessionClient mTermuxTerminalSessionClient;
+    TermuxTerminalSessionActivityClient mTermuxTerminalSessionClient;
 
     public TermuxTerminalExtraKeys(@NonNull TerminalView terminalView,
                                    TermuxTerminalViewClient termuxTerminalViewClient,
-                                   TermuxTerminalSessionClient termuxTerminalSessionClient) {
+                                   TermuxTerminalSessionActivityClient termuxTerminalSessionClient) {
         super(terminalView);
         mTermuxTerminalViewClient = termuxTerminalViewClient;
         mTermuxTerminalSessionClient = termuxTerminalSessionClient;

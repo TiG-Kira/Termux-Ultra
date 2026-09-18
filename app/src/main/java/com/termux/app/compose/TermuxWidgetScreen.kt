@@ -18,7 +18,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.termux.R
 import com.termux.shared.logger.Logger
-import com.termux.shared.packages.PackageUtils
+import com.termux.shared.android.PackageUtils
 import com.termux.shared.termux.TermuxConstants
 import top.yukonga.miuix.kmp.basic.*
 import top.yukonga.miuix.kmp.icon.MiuixIcons

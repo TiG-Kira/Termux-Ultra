@@ -69,7 +69,7 @@ import com.termux.app.compose.AiLocalModel
 import com.termux.app.compose.AiTermuxConfig
 import com.termux.app.compose.SkillType
 import com.termux.app.utils.SnackbarHelper
-import com.termux.shared.settings.preferences.TermuxAppSharedPreferences
+import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences
 import com.termux.shared.logger.Logger
 import com.google.android.material.snackbar.Snackbar
 import java.io.File

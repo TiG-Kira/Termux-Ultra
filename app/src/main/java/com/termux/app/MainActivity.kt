@@ -38,7 +38,7 @@ import com.termux.app.compose.KiTerminalTheme
 import com.termux.app.compose.MainScreen
 import com.termux.app.compose.RiskConfirmDialogHost
 import com.termux.shared.termux.TermuxConstants
-import com.termux.shared.shell.TermuxSession as SharedTermuxSession
+import com.termux.shared.termux.shell.command.runner.terminal.TermuxSession as SharedTermuxSession
 import com.termux.app.TermuxService
 import com.termux.terminal.TerminalSession
 

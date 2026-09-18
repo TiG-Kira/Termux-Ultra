@@ -11,25 +11,25 @@ import androidx.annotation.Nullable;
 import com.termux.R;
 import com.termux.shared.activities.ReportActivity;
 import com.termux.shared.file.FileUtils;
-import com.termux.shared.file.TermuxFileUtils;
-import com.termux.shared.models.ResultConfig;
-import com.termux.shared.models.ResultData;
-import com.termux.shared.models.errors.Errno;
-import com.termux.shared.models.errors.Error;
+import com.termux.shared.termux.file.TermuxFileUtils;
+import com.termux.shared.shell.command.result.ResultConfig;
+import com.termux.shared.shell.command.result.ResultData;
+import com.termux.shared.errors.Errno;
+import com.termux.shared.errors.Error;
 import com.termux.shared.notification.NotificationUtils;
 import com.termux.shared.notification.TermuxNotificationUtils;
-import com.termux.shared.shell.ResultSender;
+import com.termux.shared.shell.command.result.ResultSender;
 import com.termux.shared.shell.ShellUtils;
-import com.termux.shared.termux.AndroidUtils;
+import com.termux.shared.android.AndroidUtils;
 import com.termux.shared.termux.TermuxConstants;
 import com.termux.shared.termux.TermuxConstants.TERMUX_APP.TERMUX_SERVICE;
 import com.termux.shared.logger.Logger;
-import com.termux.shared.settings.preferences.TermuxAppSharedPreferences;
-import com.termux.shared.settings.preferences.TermuxPreferenceConstants.TERMUX_APP;
+import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
+import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP;
 import com.termux.shared.settings.properties.SharedProperties;
-import com.termux.shared.settings.properties.TermuxPropertyConstants;
+import com.termux.shared.termux.settings.properties.TermuxPropertyConstants;
 import com.termux.shared.models.ReportInfo;
-import com.termux.shared.models.ExecutionCommand;
+import com.termux.shared.shell.command.ExecutionCommand;
 import com.termux.app.models.UserAction;
 import com.termux.shared.data.DataUtils;
 import com.termux.shared.markdown.MarkdownUtils;
@@ -169,7 +169,7 @@ public class PluginUtils {
         if (preferences == null) return;
 
         // If user has disabled notifications for plugin commands, then just return
-        if (!preferences.arePluginErrorNotificationsEnabled() && !forceNotification)
+        if (!preferences.arePluginErrorNotificationsEnabled(false) && !forceNotification)
             return;
 
         // Flash and send notification for the error
@@ -228,12 +228,13 @@ public class PluginUtils {
         reportString.append("\n\n").append(AndroidUtils.getDeviceInfoMarkdownString(context));
 
         String userActionName = UserAction.PLUGIN_EXECUTION_COMMAND.getName();
-        ReportActivity.NewInstanceResult result = ReportActivity.newInstance(context,
-            new ReportInfo(userActionName, logTag, title, null,
-                reportString.toString(), null,true,
-                userActionName,
-                Environment.getExternalStorageDirectory() + "/" +
-                    FileUtils.sanitizeFileName(TermuxConstants.TERMUX_APP_NAME + "-" + userActionName + ".log", true, true)));
+        ReportInfo reportInfo = new ReportInfo(userActionName, logTag, title);
+        reportInfo.reportString = reportString.toString();
+        reportInfo.addReportInfoHeaderToMarkdown = true;
+        reportInfo.reportSaveFileLabel = userActionName;
+        reportInfo.reportSaveFilePath = Environment.getExternalStorageDirectory() + "/" +
+            FileUtils.sanitizeFileName(TermuxConstants.TERMUX_APP_NAME + "-" + userActionName + ".log", true, true);
+        ReportActivity.NewInstanceResult result = ReportActivity.newInstance(context, reportInfo);
         if (result.contentIntent == null) return;
 
         // Must ensure result code for PendingIntents and id for notification are unique otherwise will override previous
@@ -323,7 +324,8 @@ public class PluginUtils {
      */
     public static String checkIfAllowExternalAppsPolicyIsViolated(final Context context, String apiName) {
         String errmsg = null;
-        if (!SharedProperties.isPropertyValueTrue(context, TermuxPropertyConstants.getTermuxPropertiesFile(),
+        if (!SharedProperties.isPropertyValueTrue(context,
+            SharedProperties.getPropertiesFileFromList(TermuxConstants.TERMUX_PROPERTIES_FILE_PATHS_LIST, "PluginUtils"),
             TermuxConstants.PROP_ALLOW_EXTERNAL_APPS, true)) {
             errmsg = context.getString(R.string.error_allow_external_apps_ungranted, apiName,
                 TermuxFileUtils.getUnExpandedTermuxPath(TermuxConstants.TERMUX_PROPERTIES_PRIMARY_FILE_PATH));

@@ -1,12 +1,14 @@
 package com.termux.app.plugin
 
 import android.content.Context
-import com.termux.shared.models.ExecutionCommand
+import com.termux.shared.shell.command.ExecutionCommand
 import com.termux.shared.shell.ShellUtils
-import com.termux.shared.shell.TermuxSession
-import com.termux.shared.shell.TermuxShellEnvironmentClient
+import com.termux.shared.termux.shell.command.runner.terminal.TermuxSession
+import com.termux.shared.compat.ShellEnvironmentCompat
+import com.termux.shared.compat.TermuxSessionCompat
+import com.termux.shared.termux.shell.command.environment.TermuxShellEnvironment
 import com.termux.shared.termux.TermuxConstants
-import com.termux.shared.terminal.TermuxTerminalSessionClientBase
+import com.termux.shared.termux.terminal.TermuxTerminalSessionClientBase
 import com.termux.terminal.TerminalSession
 import java.util.UUID
 
@@ -139,7 +141,7 @@ class PluginPersistentSession(
             val sessionId = "${pluginId}::${UUID.randomUUID().toString().take(8)}"
 
             val shellPath = TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/bash"
-            val envClient = TermuxShellEnvironmentClient()
+            val envClient = ShellEnvironmentCompat(TermuxShellEnvironment())
             val wd = envClient.defaultWorkingDirectoryPath.ifEmpty { "/" }
 
             val command = ExecutionCommand(
@@ -148,7 +150,7 @@ class PluginPersistentSession(
                 null, // arguments —— null 让 shell 以交互模式启动（login shell）
                 null, // stdin
                 wd,
-                false, // inBackground —— false，让 TerminalSession 正常走 PTY 流程
+                "terminal-session", // runner: TERMINAL_SESSION (foreground PTY)
                 false  // isFailsafe
             )
             command.commandLabel = "PluginSession: $sessionName ($pluginId)"
@@ -162,7 +164,7 @@ class PluginPersistentSession(
                 PluginPersistentSessionRegistry.onSessionExited(exited.terminalSession)
             }
 
-            val termuxSession = TermuxSession.execute(
+            val termuxSession = TermuxSessionCompat.execute(
                 context,
                 command,
                 sessionClient,
@@ -179,9 +181,6 @@ class PluginPersistentSession(
 
             // 等 PTY 完全就绪
             Thread.sleep(300)
-
-            // 标记会话来源为 PLUGIN
-            termuxSession.setSource(TermuxSession.SessionSource.PLUGIN)
 
             return PluginPersistentSession(sessionId, pluginId, sessionName, termuxSession)
         }

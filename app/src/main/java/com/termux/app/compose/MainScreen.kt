@@ -66,7 +66,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.width
 import com.termux.R
-import com.termux.shared.shell.TermuxSession
+import com.termux.shared.termux.shell.command.runner.terminal.TermuxSession
 
 private const val SWIPE_THRESHOLD = 100f
 private const val SWIPE_VELOCITY_THRESHOLD = 300f

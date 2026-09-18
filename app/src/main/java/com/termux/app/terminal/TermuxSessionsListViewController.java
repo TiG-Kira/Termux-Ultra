@@ -20,7 +20,7 @@ import androidx.core.content.ContextCompat;
 
 import com.termux.R;
 import com.termux.app.TermuxActivity;
-import com.termux.shared.shell.TermuxSession;
+import com.termux.shared.termux.shell.command.runner.terminal.TermuxSession;
 import com.termux.terminal.TerminalSession;
 
 import java.util.List;
@@ -55,13 +55,14 @@ public class TermuxSessionsListViewController extends ArrayAdapter<TermuxSession
             return sessionRowView;
         }
 
-        boolean isUsingBlackUI = mActivity.getProperties().isUsingBlackUI();
+        // KEY_USE_BLACK_UI has been deprecated in v0.119.0, always use default (non-black) UI.
+        boolean isUsingBlackUI = false;
 
-        if (isUsingBlackUI) {
-            sessionTitleView.setBackground(
-                ContextCompat.getDrawable(mActivity, R.drawable.session_background_black_selected)
-            );
-        }
+        // if (isUsingBlackUI) {
+        //     sessionTitleView.setBackground(
+        //         ContextCompat.getDrawable(mActivity, R.drawable.session_background_black_selected)
+        //     );
+        // }
 
         String name = sessionAtRow.mSessionName;
         String sessionTitle = sessionAtRow.getTitle();
@@ -84,7 +85,7 @@ public class TermuxSessionsListViewController extends ArrayAdapter<TermuxSession
         } else {
             sessionTitleView.setPaintFlags(sessionTitleView.getPaintFlags() | Paint.STRIKE_THRU_TEXT_FLAG);
         }
-        int defaultColor = isUsingBlackUI ? Color.WHITE : Color.BLACK;
+        int defaultColor = Color.BLACK;
         int color = sessionRunning || sessionAtRow.getExitStatus() == 0 ? defaultColor : Color.RED;
         sessionTitleView.setTextColor(color);
         return sessionRowView;

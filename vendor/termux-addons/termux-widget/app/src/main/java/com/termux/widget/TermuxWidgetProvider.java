@@ -20,7 +20,7 @@ import com.termux.shared.file.filesystem.FileType;
 import com.termux.shared.logger.Logger;
 import com.termux.shared.models.ExecutionCommand;
 import com.termux.shared.models.ResultData;
-import com.termux.shared.models.errors.Error;
+import com.termux.shared.errors.Error;
 import com.termux.shared.settings.preferences.TermuxWidgetAppSharedPreferences;
 import com.termux.shared.shell.ShellUtils;
 import com.termux.shared.termux.TermuxConstants;

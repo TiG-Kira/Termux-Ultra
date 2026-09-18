@@ -2,8 +2,10 @@ package com.termux.app.compose
 
 import android.content.Context
 import android.graphics.Color as AndroidColor
-import com.termux.shared.shell.TermuxShellEnvironmentClient
+import com.termux.shared.termux.shell.command.environment.TermuxShellEnvironment
 import com.termux.shared.termux.TermuxConstants
+import com.termux.shared.compat.ShellEnvironmentCompat
+import com.termux.shared.compat.TermuxTaskCompat
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.BufferedReader
@@ -47,7 +49,7 @@ object ProcessDetector {
         return try {
             val shell = TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/sh"
             val home = TermuxConstants.TERMUX_HOME_DIR_PATH
-            val envClient = TermuxShellEnvironmentClient()
+            val envClient = ShellEnvironmentCompat(TermuxShellEnvironment())
             val env = envClient.buildEnvironment(context, false, home)
             // 进程名可能是 qemu-system-x86_64 (Termux 原生) 或带路径的容器版本 /usr/bin/qemu-system-x86_64，
             // 用 pgrep -f 配合 [q]emu-system 过滤掉检测命令本身

@@ -10,8 +10,8 @@ import androidx.annotation.NonNull;
 import com.termux.shared.file.FileUtils;
 import com.termux.shared.logger.Logger;
 import com.termux.shared.markdown.MarkdownUtils;
-import com.termux.shared.models.errors.Error;
-import com.termux.shared.termux.AndroidUtils;
+import com.termux.shared.errors.Error;
+import com.termux.shared.android.AndroidUtils;
 
 import java.lang.reflect.Method;
 
@@ -86,10 +86,23 @@ public class CrashHandler implements Thread.UncaughtExceptionHandler {
     /**
      * Set default uncaught crash handler of current thread to {@link CrashHandler}.
      */
+    /** Alias for {@link #setCrashHandler(Context, CrashHandlerClient)} kept for upstream API compat. */
+    public static void setDefaultCrashHandler(@NonNull final Context context, @NonNull final CrashHandlerClient crashHandlerClient) {
+        setCrashHandler(context, crashHandlerClient);
+    }
+
     public static void setCrashHandler(@NonNull final Context context, @NonNull final CrashHandlerClient crashHandlerClient) {
         if (!(Thread.getDefaultUncaughtExceptionHandler() instanceof CrashHandler)) {
             Thread.setDefaultUncaughtExceptionHandler(new CrashHandler(context, crashHandlerClient));
         }
+    }
+
+    /**
+     * Return a CrashHandler instance for hooking per-thread exception handlers.
+     * Kept for upstream API compat — just constructs a new instance without touching the global UEH.
+     */
+    public static CrashHandler getCrashHandler(@NonNull final Context context, @NonNull final CrashHandlerClient crashHandlerClient) {
+        return new CrashHandler(context, crashHandlerClient);
     }
 
     private static boolean isMainThread(Thread thread) {
@@ -180,7 +193,7 @@ public class CrashHandler implements Thread.UncaughtExceptionHandler {
         Logger.logError(reportString.toString());
 
         // Write report string to crash log file
-        Error error = FileUtils.writeStringToFile("crash log", crashHandlerClient.getCrashLogFilePath(context),
+        Error error = FileUtils.writeTextToFile("crash log", crashHandlerClient.getCrashLogFilePath(context),
                         Charset.defaultCharset(), reportString.toString(), false);
         if (error != null) {
             Logger.logErrorExtended(LOG_TAG, error.toString());

@@ -66,7 +66,7 @@ import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import com.termux.R
 import com.termux.app.TermuxService
-import com.termux.shared.shell.TermuxSession
+import com.termux.shared.termux.shell.command.runner.terminal.TermuxSession
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect

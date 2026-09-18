@@ -4,9 +4,11 @@ import android.content.Context
 import android.content.Intent
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
-import com.termux.shared.models.ExecutionCommand
-import com.termux.shared.shell.TermuxTask
-import com.termux.shared.shell.TermuxShellEnvironmentClient
+import com.termux.shared.shell.command.ExecutionCommand
+import com.termux.shared.shell.command.runner.app.AppShell
+import com.termux.shared.compat.ShellEnvironmentCompat
+import com.termux.shared.compat.TermuxTaskCompat
+import com.termux.shared.termux.shell.command.environment.TermuxShellEnvironment
 import com.termux.shared.termux.TermuxConstants
 import com.termux.shared.logger.Logger
 import java.io.File
@@ -196,27 +198,23 @@ object PluginManager {
                 arrayOf("-c", command),
                 null,
                 null,
-                true,
+                "app-shell",
                 false
             )
             executionCommand.commandLabel = "Plugin Shell Command"
             executionCommand.backgroundCustomLogLevel = Logger.LOG_LEVEL_OFF
 
-            val termuxTask = TermuxTask.execute(
+            val termuxTask = TermuxTaskCompat.execute(
                 context,
                 executionCommand,
                 null,
-                TermuxShellEnvironmentClient(),
+                ShellEnvironmentCompat(TermuxShellEnvironment()),
                 true
             )
 
-            if (termuxTask == null) {
+            if (termuxTask == null || termuxTask.getExecutionCommand().isStateFailed()) {
                 val errMsg = executionCommand.resultData.errorsList?.firstOrNull()?.message
                     ?: "命令执行失败: 无法启动 TermuxTask"
-                Result.failure(Exception(errMsg))
-            } else if (executionCommand.isStateFailed()) {
-                val errMsg = executionCommand.resultData.errorsList?.firstOrNull()?.message
-                    ?: "命令执行失败 (exit=${executionCommand.resultData.exitCode})"
                 Result.failure(Exception(errMsg))
             } else {
                 val stdout = executionCommand.resultData.stdout?.toString()?.trim() ?: ""

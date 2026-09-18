@@ -13,7 +13,7 @@ import androidx.preference.PreferenceFragmentCompat;
 import androidx.preference.PreferenceManager;
 
 import com.termux.R;
-import com.termux.shared.settings.preferences.TermuxAppSharedPreferences;
+import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.logger.Logger;
 
 @Keep
@@ -144,9 +144,9 @@ class DebuggingPreferencesDataStore extends PreferenceDataStore {
             case "terminal_view_key_logging_enabled":
                 return mPreferences.isTerminalViewKeyLoggingEnabled();
             case "plugin_error_notifications_enabled":
-                return mPreferences.arePluginErrorNotificationsEnabled();
+                return mPreferences.arePluginErrorNotificationsEnabled(false);
             case "crash_report_notifications_enabled":
-                return mPreferences.areCrashReportNotificationsEnabled();
+                return mPreferences.areCrashReportNotificationsEnabled(false);
             default:
                 return false;
         }

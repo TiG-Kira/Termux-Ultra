@@ -10,8 +10,8 @@ import android.net.LocalSocket;
 
 import com.termux.api.TermuxApiReceiver;
 import com.termux.api.util.TermuxApiLogger;
-import com.termux.shared.crash.TermuxCrashUtils;
-import com.termux.shared.settings.preferences.TermuxAppSharedPreferences;
+import com.termux.shared.termux.crash.TermuxCrashUtils;
+import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.logger.Logger;
 import com.termux.terminal.JNI;
 

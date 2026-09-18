@@ -46,10 +46,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.res.stringResource
-import com.termux.shared.models.ExecutionCommand
-import com.termux.shared.shell.TermuxShellEnvironmentClient
-import com.termux.shared.shell.TermuxShellUtils
-import com.termux.shared.shell.TermuxTask
+import com.termux.shared.shell.command.ExecutionCommand
+import com.termux.shared.termux.shell.command.environment.TermuxShellEnvironment
+import com.termux.shared.compat.ShellEnvironmentCompat
+import com.termux.shared.compat.TermuxTaskCompat
+import com.termux.shared.termux.shell.TermuxShellUtils
 import com.termux.shared.termux.TermuxConstants
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -83,11 +84,11 @@ object AppShell {
                 System.currentTimeMillis().toInt(),
                 shell,
                 arrayOf("-c", command),
-                null, null, true, false
+                null, null, "app-shell", false
             )
-            val client = TermuxShellEnvironmentClient()
+            val client = ShellEnvironmentCompat(TermuxShellEnvironment())
             val task = try {
-                TermuxTask.execute(context, ec, null, client, false)
+                TermuxTaskCompat.execute(context, ec, null, client, false)
             } catch (e: Exception) {
                 return@withContext Pair(-1, e.message ?: "执行失败")
             }
@@ -97,7 +98,7 @@ object AppShell {
                 delay(150)
                 if (ec.hasExecuted() || ec.resultData.exitCode != null) break
             }
-            runCatching { task.killIfExecuting(context, false) }
+            runCatching { task?.killIfExecuting(context, false) }
 
             val rd = ec.resultData
             val out = rd.stdout.toString()
@@ -123,11 +124,11 @@ object AppShell {
             System.currentTimeMillis().toInt(),
             shell,
             arrayOf("-c", command),
-            null, null, true, false
+            null, null, "app-shell", false
         )
-        val client = TermuxShellEnvironmentClient()
+        val client = ShellEnvironmentCompat(TermuxShellEnvironment())
         val task = try {
-            TermuxTask.execute(context, ec, null, client, false)
+            TermuxTaskCompat.execute(context, ec, null, client, false)
         } catch (e: Exception) {
             return@withContext Pair(-1, e.message ?: "执行失败")
         }
@@ -155,7 +156,7 @@ object AppShell {
             }
             if (ec.hasExecuted() || rd.exitCode != null) break
         }
-        runCatching { task.killIfExecuting(context, false) }
+        runCatching { task?.killIfExecuting(context, false) }
 
         val rd = ec.resultData
         val out = rd.stdout.toString()
@@ -166,7 +167,7 @@ object AppShell {
     }
 
     private fun resolveShell(): String? {
-        val binDir = TermuxShellUtils.getDefaultBinPath()
+        val binDir = TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH
         if (binDir.isNotEmpty()) {
             for (name in arrayOf("bash", "login", "zsh", "sh")) {
                 val f = File(binDir, name)
