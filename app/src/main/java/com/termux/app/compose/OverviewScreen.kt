@@ -94,6 +94,7 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -476,6 +477,32 @@ fun OverviewScreen(
     // Session counts
     val runningSessions = sessions.filter { it.getTerminalSession().isRunning }
     val stoppedSessions = sessions.filter { !it.getTerminalSession().isRunning }
+
+    // Compose (Nova) engine session state — OverviewScreen 需同时识别两种引擎
+    val isComposeRuntime = TerminalRuntimeCore.isComposeMode(context)
+    val composeSessionInfos by if (isComposeRuntime) {
+        val mgr = remember(context) {
+            com.termux.app.compose.terminal.ComposeSessionManager.getInstance(context)
+        }
+        mgr.sessions.collectAsState()
+    } else {
+        mutableStateOf(emptyList<com.termux.app.compose.terminal.ComposeSessionManager.SessionInfo>())
+    }
+    val unifiedRunningCount = if (isComposeRuntime) {
+        composeSessionInfos.count { it.session.isRunning }
+    } else {
+        runningSessions.size
+    }
+    val unifiedStoppedCount = if (isComposeRuntime) {
+        composeSessionInfos.count { !it.session.isRunning }
+    } else {
+        stoppedSessions.size
+    }
+    val unifiedSessionPids: Set<Int> = if (isComposeRuntime) {
+        composeSessionInfos.mapNotNull { it.session.pid.takeIf { it > 0 } }.toSet()
+    } else {
+        sessions.mapNotNull { it.getTerminalSession()?.shellPid?.takeIf { pid -> pid > 0 } }.toSet()
+    }
     
     // Load cards
     LaunchedEffect(Unit) {
@@ -488,17 +515,21 @@ fun OverviewScreen(
     }
     
     // CPU/GPU monitoring loop
-    LaunchedEffect(sessions) {
+    LaunchedEffect(sessions, composeSessionInfos, isComposeRuntime) {
         // First call to initialize baseline
-        val sessionPids = sessions.mapNotNull { 
-            it.getTerminalSession()?.shellPid?.takeIf { pid -> pid > 0 } 
-        }.toSet()
+        val sessionPids = if (isComposeRuntime) {
+            composeSessionInfos.mapNotNull { it.session.pid.takeIf { it > 0 } }.toSet()
+        } else {
+            sessions.mapNotNull { it.getTerminalSession()?.shellPid?.takeIf { pid -> pid > 0 } }.toSet()
+        }
         readCpuUsage(sessionPids)
         delay(500)
         while (true) {
-            val currentSessionPids = sessions.mapNotNull { 
-                it.getTerminalSession()?.shellPid?.takeIf { pid -> pid > 0 } 
-            }.toSet()
+            val currentSessionPids = if (isComposeRuntime) {
+                composeSessionInfos.mapNotNull { it.session.pid.takeIf { it > 0 } }.toSet()
+            } else {
+                sessions.mapNotNull { it.getTerminalSession()?.shellPid?.takeIf { pid -> pid > 0 } }.toSet()
+            }
             cpuUsage = readCpuUsage(currentSessionPids)
             cpuTemperature = readCpuTemperature()
             
@@ -531,11 +562,13 @@ fun OverviewScreen(
     }
     
     // Process list monitoring
-    LaunchedEffect(sessions) {
+    LaunchedEffect(sessions, composeSessionInfos, isComposeRuntime) {
         while (true) {
-            val sessionPids = sessions.mapNotNull { 
-                it.getTerminalSession()?.shellPid?.takeIf { pid -> pid > 0 } 
-            }.toSet()
+            val sessionPids = if (isComposeRuntime) {
+                composeSessionInfos.mapNotNull { it.session.pid.takeIf { it > 0 } }.toSet()
+            } else {
+                sessions.mapNotNull { it.getTerminalSession()?.shellPid?.takeIf { pid -> pid > 0 } }.toSet()
+            }
             processList = readProcessList(sessionPids)
             delay(2000)
         }
@@ -917,6 +950,9 @@ fun OverviewScreen(
                     runningSessions = runningSessions,
                     stoppedSessions = stoppedSessions,
                     sessions = sessions,
+                    unifiedRunningCount = unifiedRunningCount,
+                    unifiedStoppedCount = unifiedStoppedCount,
+                    isComposeRuntime = isComposeRuntime,
                     isWakeLockEnabled = isWakeLockEnabled,
                     onSessionClick = onSessionClick,
                     onStopAllSessions = onStopAllSessions,
@@ -1864,6 +1900,7 @@ private fun SessionsCard(
     runningCount: Int,
     stoppedCount: Int,
     sessions: List<TermuxSession>,
+    isComposeRuntime: Boolean,
     onSessionClick: (TermuxSession) -> Unit,
     isEditMode: Boolean,
     onEditClick: () -> Unit
@@ -1921,7 +1958,7 @@ private fun SessionsCard(
                         .fillMaxHeight()
                         .clip(RoundedCornerShape(14.dp))
                         .background(runningColor.copy(alpha = 0.08f))
-                        .clickable(enabled = !isEditMode && sessions.isNotEmpty()) {
+                        .clickable(enabled = !isEditMode && !isComposeRuntime && sessions.isNotEmpty()) {
                             val running = sessions.filter { it.getTerminalSession().isRunning }
                             if (running.isNotEmpty()) onSessionClick(running.first())
                         }
@@ -4119,6 +4156,9 @@ private fun CardItem(
     runningSessions: List<TermuxSession>,
     stoppedSessions: List<TermuxSession>,
     sessions: List<TermuxSession>,
+    unifiedRunningCount: Int,
+    unifiedStoppedCount: Int,
+    isComposeRuntime: Boolean,
     isWakeLockEnabled: Boolean,
     onSessionClick: (TermuxSession) -> Unit,
     onStopAllSessions: () -> Unit,
@@ -4135,7 +4175,7 @@ private fun CardItem(
                 card = card,
                 isEditMode = isEditMode,
                 isWakeLockEnabled = isWakeLockEnabled,
-                runningSessionsCount = runningSessions.size,
+                runningSessionsCount = unifiedRunningCount,
                 onExecuteScript = onExecuteScript,
                 onEditClick = {
                     onCardSelected(card.id)
@@ -4146,9 +4186,10 @@ private fun CardItem(
         OverviewCardType.SESSIONS -> {
             SessionsCard(
                 card = card,
-                runningCount = runningSessions.size,
-                stoppedCount = stoppedSessions.size,
+                runningCount = unifiedRunningCount,
+                stoppedCount = unifiedStoppedCount,
                 sessions = sessions,
+                isComposeRuntime = isComposeRuntime,
                 onSessionClick = onSessionClick,
                 onEditClick = {
                     onCardSelected(card.id)
