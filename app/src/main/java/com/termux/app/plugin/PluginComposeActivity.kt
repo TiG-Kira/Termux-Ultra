@@ -42,20 +42,21 @@ class PluginComposeActivity : ComponentActivity() {
         val entryPath = intent.getStringExtra(EXTRA_ENTRY_PATH) ?: "pages/index.json"
         val title = intent.getStringExtra(EXTRA_TITLE) ?: "插件页面"
 
+        // 提前校验插件状态，避免在 Composable 里 return
+        val plugin = PluginManager.getPluginById(this, pluginId)
+        if (plugin == null || plugin.state != PluginState.ENABLED) {
+            finish()
+            return
+        }
+
         setContent {
             KiTerminalTheme {
                 val context = LocalContext.current
-                val plugin = PluginManager.getPluginById(context, pluginId)
-
-                if (plugin == null || plugin.state != PluginState.ENABLED) {
-                    finish()
-                    return@setContent
-                }
-
                 val json = PluginManager.getPluginFileContent(context, pluginId, entryPath)
                 val rootNode = json?.let { ComposeUiNodeParser.parse(it) }
+                // 显式转为 MutableMap<String, Any?> 匹配 RenderNode 签名
                 val stateStore = remember {
-                    PluginManager.getPluginConfig(context, pluginId).toMutableMap()
+                    PluginManager.getPluginConfig(context, pluginId).toMutableMap<String, Any?>()
                 }
 
                 Scaffold(topBar = { TopAppBar(title = title) }) { padding ->
