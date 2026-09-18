@@ -25,7 +25,7 @@
 **当前阶段（即日起 → 本月底）：**
 
 - ✅ 工作流策略已切换：`auto-close-prerelease-pr.yml` **已移除**，不再自动关闭 2.x → main 的 PR
-- ✅ Mega PR 已创建：[corebump/2.x → main](https://github.com/TiG-Kira/Termux-Ultra/pull/27)，用于日常 diff 对照与 review，**但暂不合并**
+- ⚠️ **Mega PR 说明**：`corebump/2.x` 与 `main` 两条分支**没有共同历史**（2.x 是独立基于上游 v0.119.0-beta.3 重建的分支），GitHub 拒绝创建跨无历史分支的 PR（报错：`no history in common`）。因此"diff 对照" PR 需通过本地命令查看，或由维护者临时 graft 共同祖先后创建。本月底实际合并时也需要 **`git merge --allow-unrelated-histories`**。
 - ⏳ 维护者正在对 2.x 分支进行**基础功能测试**（构建、基础终端、文件管理、VNC/SSH/QEMU、插件系统、AI 助手），并对照 main 分支做差异审查
 
 **合并条件：**
