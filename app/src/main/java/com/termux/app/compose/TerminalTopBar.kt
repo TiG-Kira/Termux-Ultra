@@ -7,14 +7,13 @@ import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
-import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -24,6 +23,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -40,15 +40,6 @@ object TerminalTopBarState {
     var iconColor by mutableStateOf(Color.White)
 }
 
-/**
- * 经典模式下快捷指令 BottomSheet 的共享显示状态。
- * 经典模式的 TopBar 使用独立 ComposeView 渲染，没有 TerminalDetailScreen 的状态容器，
- * 所以用全局 state 暴露给 Java 层调用（长按键盘按钮触发）。
- */
-object QuickCommandSheetState {
-    var show by mutableStateOf(false)
-}
-
 private val mainHandler = Handler(Looper.getMainLooper())
 
 @Composable
@@ -57,9 +48,11 @@ fun TerminalTopBar(
     onNewSession: () -> Unit,
     onCloseSession: () -> Unit,
     onToggleKeyboard: () -> Unit,
-    onLongPressKeyboard: () -> Unit,
     onLongPressNewSession: () -> Unit
 ) {
+    val context = LocalContext.current
+    var showQuickCommandSheet by remember { mutableStateOf(false) }
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -96,7 +89,7 @@ fun TerminalTopBar(
                         interactionSource = kbInteractionSource,
                         indication = LocalIndication.current,
                         onClick = onToggleKeyboard,
-                        onLongClick = onLongPressKeyboard
+                        onLongClick = { showQuickCommandSheet = true }
                     ),
                 contentAlignment = Alignment.Center
             ) {
@@ -136,6 +129,13 @@ fun TerminalTopBar(
             )
         }
     }
+
+    // 经典模式快捷指令面板（miuix WindowDialog，独立窗口，不依赖 Scaffold）
+    QuickCommandWindowSheet(
+        show = showQuickCommandSheet,
+        onDismiss = { showQuickCommandSheet = false },
+        onExecuteCommand = { cmd -> executeQuickCommand(context, cmd) }
+    )
 }
 
 fun updateTerminalTitle(title: String) {
@@ -170,22 +170,6 @@ fun updateIconColorForBackground(backgroundColor: Int) {
     }
 }
 
-fun showQuickCommandSheet() {
-    if (Looper.myLooper() == Looper.getMainLooper()) {
-        QuickCommandSheetState.show = true
-    } else {
-        mainHandler.post { QuickCommandSheetState.show = true }
-    }
-}
-
-fun hideQuickCommandSheet() {
-    if (Looper.myLooper() == Looper.getMainLooper()) {
-        QuickCommandSheetState.show = false
-    } else {
-        mainHandler.post { QuickCommandSheetState.show = false }
-    }
-}
-
 fun isColorDark(color: Int): Boolean {
     val r = android.graphics.Color.red(color)
     val g = android.graphics.Color.green(color)
@@ -205,31 +189,12 @@ fun setTerminalTopBarContent(
     // miuix UI 库不可用时跳过设置，避免 TermuxActivity 崩溃
     if (!ApiCompat.canLoadMiuixUi()) return
     composeView.setContent {
-        // 必须用 miuix Scaffold 作为根容器，才能提供 MiuixPopupHost
-        // 给 OverlayBottomSheet / OverlayDialog 使用。经典模式下这个
-        // ComposeView 是独立容器，外面没有 Scaffold，必须自己包一层。
-        Scaffold(
-            containerColor = Color.Transparent,
-            contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0)
-        ) {
-            Box(modifier = Modifier.fillMaxSize()) {
-                TerminalTopBar(
-                    onBack = onBack,
-                    onNewSession = onNewSession,
-                    onCloseSession = onCloseSession,
-                    onToggleKeyboard = onToggleKeyboard,
-                    onLongPressKeyboard = { showQuickCommandSheet() },
-                    onLongPressNewSession = onLongPressNewSession
-                )
-                val activity = composeView.context as? TermuxActivity
-                QuickCommandSheet(
-                    show = QuickCommandSheetState.show,
-                    onDismiss = { QuickCommandSheetState.show = false },
-                    onExecuteCommand = { cmd ->
-                        if (activity != null) executeQuickCommand(activity, cmd)
-                    }
-                )
-            }
-        }
+        TerminalTopBar(
+            onBack = onBack,
+            onNewSession = onNewSession,
+            onCloseSession = onCloseSession,
+            onToggleKeyboard = onToggleKeyboard,
+            onLongPressNewSession = onLongPressNewSession
+        )
     }
 }
