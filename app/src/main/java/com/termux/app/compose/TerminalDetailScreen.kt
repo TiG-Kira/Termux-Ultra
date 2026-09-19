@@ -702,6 +702,7 @@ fun TerminalDetailScreen(
             Box(
                 modifier = Modifier
                     .size(40.dp)
+                    .clip(CircleShape)
                     .combinedClickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = topBarIndication,
@@ -795,6 +796,7 @@ fun TerminalDetailScreen(
             Box(
                 modifier = Modifier
                     .size(40.dp)
+                    .clip(CircleShape)
                     .combinedClickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = topBarIndication,
