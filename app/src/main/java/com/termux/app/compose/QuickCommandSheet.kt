@@ -17,8 +17,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Delete
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.OutlinedTextField
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -36,10 +35,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.termux.R
 import com.termux.app.TermuxActivity
+import top.yukonga.miuix.kmp.basic.Checkbox
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
+import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.overlay.OverlayBottomSheet
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.window.WindowDialog
@@ -302,26 +303,32 @@ private fun AddQuickCommandDialog(
                     .padding(16.dp)
                     .heightIn(min = 180.dp)
             ) {
-                OutlinedTextField(
+                TextField(
                     value = label,
                     onValueChange = { label = it },
-                    label = { Text("名称", fontSize = 13.sp) },
+                    label = "名称",
+                    useLabelAsPlaceholder = true,
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
                 Spacer(Modifier.height(12.dp))
-                OutlinedTextField(
+                TextField(
                     value = command,
                     onValueChange = { command = it },
-                    label = { Text("命令", fontSize = 13.sp) },
-                    singleLine = false,
-                    modifier = Modifier.fillMaxWidth()
+                    label = "命令",
+                    useLabelAsPlaceholder = true,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 80.dp),
+                    maxLines = Int.MAX_VALUE,
+                    minLines = 2
                 )
                 Spacer(Modifier.height(12.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(
-                        checked = autoExecute,
-                        onCheckedChange = { autoExecute = it }
+                        state = if (autoExecute) ToggleableState.On else ToggleableState.Off,
+                        onClick = { autoExecute = !autoExecute },
+                        modifier = Modifier.size(22.dp)
                     )
                     Text(
                         text = "添加后自动执行",
