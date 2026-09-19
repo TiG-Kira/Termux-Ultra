@@ -157,6 +157,7 @@ fun TerminalDetailScreenCompose(
     var showRenameDialog by remember { mutableStateOf(false) }
     var renameValue by remember { mutableStateOf("") }
     var showSessionList by remember { mutableStateOf(false) }
+    var showQuickCommandSheet by remember { mutableStateOf(false) }
 
     val rawSessionName by currentSession.sessionName.collectAsState(initial = "")
     val oscTitle by currentSession.titleState.collectAsState(initial = null)
@@ -523,7 +524,21 @@ fun TerminalDetailScreenCompose(
             )
         }
         if (softKeyboardEnabled) {
-            IconButton(onClick = { updateInteractionTime(); toggleKeyboard() }) {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .combinedClickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = topBarIndication,
+                        onClick = { updateInteractionTime(); toggleKeyboard() },
+                        onLongClick = {
+                            updateInteractionTime()
+                            showQuickCommandSheet = true
+                        }
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
                 Icon(
                     painter = painterResource(R.drawable.ic_keyboard),
                     contentDescription = null,
@@ -598,7 +613,21 @@ fun TerminalDetailScreenCompose(
             )
         }
         if (softKeyboardEnabled) {
-            IconButton(onClick = { updateInteractionTime(); toggleKeyboard() }) {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .combinedClickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = topBarIndication,
+                        onClick = { updateInteractionTime(); toggleKeyboard() },
+                        onLongClick = {
+                            updateInteractionTime()
+                            showQuickCommandSheet = true
+                        }
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
                 Icon(
                     painter = painterResource(R.drawable.ic_keyboard),
                     contentDescription = null,
@@ -1112,6 +1141,15 @@ fun TerminalDetailScreenCompose(
 
             // 挂载风险确认宿主：收集VorteX Guard Engine Snackbar 事件（仅提示/完全拦截），与 Java 版控制台行为一致
             RiskConfirmDialogHost(snackbarHostState)
+
+            // 快捷指令 BottomSheet：长按 TopBar 键盘按钮触发
+            QuickCommandSheet(
+                show = showQuickCommandSheet,
+                onDismiss = { showQuickCommandSheet = false },
+                onExecuteCommand = { cmd ->
+                    executeQuickCommand(context, cmd)
+                }
+            )
         }
     }
 }
