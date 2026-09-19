@@ -246,11 +246,13 @@ Termux Ultra 与原版 Termux 及其所有插件共享 `sharedUserId`（`com.ter
 > "bootstrap" 指 `termux-app` 自带的用于启动最小 shell 环境的最小包集合，其 zip 由 [termux/termux-packages releases](https://github.com/termux/termux-packages/releases) 构建发布。
 
 ### APK 来源
+发行渠道如下：
 
-| 来源 | 说明 |
-| --- | --- |
-| GitHub Releases | 稳定版本，发布页 `Assets` 下提供各架构 APK |
-| GitHub Build | 每次 commit 自动构建，适合尝鲜与测试 PR，需登录 GitHub 账号下载 Artifacts |
+| <img src="https://avatars.githubusercontent.com/in/15368?s=64&v=4" width = "30" height = "30" alt="LOGO"/> | [GitHub CI](https://github.com/TiG-Kira/Termux-Ultra/actions/workflows/ci.yml) | CI 自动构建 (测试版)，每次 commit 自动构建，适合尝鲜与测试 PR，需登录 GitHub 账号下载 Artifacts。 |
+|------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------|---------------|
+
+| <img src="https://avatars.githubusercontent.com/in/15368?s=64&v=4" width = "30" height = "30" alt="LOGO"/> | [GitHub Releases](https://github.com/TiG-Kira/Termux-Ultra/releases) | 正式版 (稳定版) ，发布页 `Assets` 下提供各架构 APK。|
+|------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------|-----------|
 
 - Debug 版本仅输出 universal APK（`termux-ultra_debug_universal.apk`），安装包 + bootstrap 约 `~180MB`。
 - Release 版本输出各架构独立 APK，使用架构包约 `~120MB`。
@@ -258,7 +260,8 @@ Termux Ultra 与原版 Termux 及其所有插件共享 `sharedUserId`（`com.ter
 
 ### 关于 Google Play 商店（已弃用）
 
-原版 Termux 及其插件因 [Android 10 问题](https://github.com/termux/termux-packages/wiki/Termux-and-Android-10) 已在 Play Store 停止更新，最后版本为 `v0.101`。**强烈建议不再从 Play Store 安装 Termux 系应用**，请迁移至 GitHub 或 F-Droid 来源。
+原版 Termux 及其插件因 [Android 10 问题](https://github.com/termux/termux-packages/wiki/Termux-and-Android-10) 已在 Play Store 停止更新，最后版本为 `v0.101`。
+>**强烈建议不再从 Play Store 安装 Termux 系应用**，请迁移至 GitHub 或 F-Droid 来源。
 
 ## 卸载
 
