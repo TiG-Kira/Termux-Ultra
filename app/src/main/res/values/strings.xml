@@ -1307,5 +1307,8 @@
     <string name="text_editor_new_file">新建文本</string>
     <string name="text_editor_open_file">打开文件</string>
     <string name="text_editor_delete">从列表移除</string>
+    <string name="action_close">关闭</string>
+    <string name="action_add">添加</string>
+    <string name="action_delete">删除</string>
 </resources>
 
