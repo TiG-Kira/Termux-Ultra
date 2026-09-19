@@ -442,6 +442,43 @@ fun AboutScreen(onBack: () -> Unit) {
                      }
                  }
 
+                 item {
+                     Card(
+                         modifier = Modifier.graphicsLayer { alpha = cardsAlphaAnim }
+                             .fillMaxWidth()
+                             .padding(horizontal = 16.dp)
+                     ) {
+                         ArrowPreference(
+                             title = context.getString(R.string.contributor_yhlfurry_name),
+                             summary = context.getString(R.string.contributor_yhlfurry_summary),
+                             onClick = {
+                                 val intent = android.content.Intent(
+                                     android.content.Intent.ACTION_VIEW,
+                                     android.net.Uri.parse("https://github.com/" +
+                                         context.getString(R.string.contributor_yhlfurry_github))
+                                 )
+                                 context.startActivity(intent)
+                             },
+                             startAction = {
+                                 Box(
+                                     modifier = Modifier
+                                         .size(40.dp)
+                                         .clip(CircleShape)
+                                         .background(MiuixTheme.colorScheme.surfaceVariant),
+                                     contentAlignment = Alignment.Center
+                                 ) {
+                                     AsyncImage(
+                                         model = "https://github.com/" +
+                                             context.getString(R.string.contributor_yhlfurry_github) + ".png",
+                                         contentDescription = "Contributor Avatar",
+                                         modifier = Modifier.size(40.dp)
+                                     )
+                                 }
+                             }
+                         )
+                     }
+                 }
+
                 item {
                      Spacer(modifier = Modifier.height(12.dp))
                  }
