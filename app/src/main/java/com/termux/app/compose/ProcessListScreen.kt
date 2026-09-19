@@ -1,8 +1,11 @@
 package com.termux.app.compose
 
 import android.content.Context
+import android.os.Process
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,6 +21,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -39,7 +44,6 @@ import androidx.compose.ui.unit.sp
 import com.termux.R
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import top.yukonga.miuix.kmp.basic.Card as MiuixCard
@@ -53,17 +57,91 @@ import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
-data class DetailedProcessInfo(
-    val pid: Int,
-    val name: String,
-    val status: String,
+/** 扩展 ProcessInfo，补充 ProcessListScreen 需要的 user / path 信息。 */
+private data class DetailedProcess(
+    val base: ProcessInfo,
     val user: String,
-    val cpuPercent: Float,
-    val memoryKb: Long,
-    val path: String,
-    val isTermuxRelated: Boolean = false,
-    val isFrozen: Boolean = false
+    val path: String
 )
+
+/** 判断进程是否为 Termux 应用本体（com.termux），不允许用户在进程页面关闭它。 */
+private fun isTermuxAppSelf(base: ProcessInfo, context: Context): Boolean {
+    // 1. 检查进程名是否就是 com.termux
+    if (base.name.equals("com.termux", ignoreCase = true)) return true
+    // 2. 用当前应用的 pid 对比
+    if (base.pid == Process.myPid()) return true
+    // 3. 通过 cmdline 检查（兜底）
+    return try {
+        val cmdlineFile = java.io.File("/proc/${base.pid}/cmdline")
+        if (cmdlineFile.exists() && cmdlineFile.canRead()) {
+            val cmd = cmdlineFile.readText().substringBefore('\u0000').trim()
+            cmd.contains("com.termux", ignoreCase = true)
+        } else false
+    } catch (_: Exception) { false }
+}
+
+private fun killProcessPid(context: Context, pid: Int) {
+    try {
+        // 用 Termux 的 kill 命令执行，比 android.os.Process.killProcess 更可靠
+        Runtime.getRuntime().exec(arrayOf("sh", "-c", "kill -9 $pid || true"))
+        Toast.makeText(context, R.string.process_killed, Toast.LENGTH_SHORT).show()
+    } catch (_: Exception) {
+        try {
+            Process.killProcess(pid)
+            Toast.makeText(context, R.string.process_killed, Toast.LENGTH_SHORT).show()
+        } catch (e: Exception) {
+            Toast.makeText(
+                context,
+                context.getString(R.string.process_not_running),
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
+}
+
+private fun buildDetailedProcessList(processes: List<ProcessInfo>): List<DetailedProcess> {
+    return processes.mapNotNull { base ->
+        try {
+            val dir = java.io.File("/proc/${base.pid}")
+            if (!dir.exists()) return@mapNotNull null
+
+            // user
+            val statusFile = java.io.File(dir, "status")
+            val uid = if (statusFile.exists() && statusFile.canRead()) {
+                statusFile.readText().lines()
+                    .find { it.startsWith("Uid:") }
+                    ?.trim()?.split("\\s+".toRegex())?.getOrNull(1)?.toIntOrNull() ?: 0
+            } else 0
+            val user = resolveUserName(uid)
+
+            // path
+            val exeFile = java.io.File(dir, "exe")
+            val path = if (exeFile.exists()) {
+                try { exeFile.canonicalPath } catch (_: Exception) { dir.absolutePath }
+            } else {
+                val cmdLineFile = java.io.File(dir, "cmdline")
+                if (cmdLineFile.exists()) {
+                    cmdLineFile.readText().replace("\u0000", " ").trim()
+                } else {
+                    dir.absolutePath
+                }
+            }
+
+            DetailedProcess(base = base, user = user, path = path)
+        } catch (_: Exception) { null }
+    }
+}
+
+private fun resolveUserName(uid: Int): String {
+    return try {
+        val process = Runtime.getRuntime().exec(arrayOf("id", "-un", "$uid"))
+        val output = process.inputStream.bufferedReader().readText().trim()
+        process.waitFor()
+        if (output.isNotEmpty()) output else "uid:$uid"
+    } catch (_: Exception) {
+        "uid:$uid"
+    }
+}
 
 @Composable
 fun ProcessListScreen(
@@ -76,27 +154,31 @@ fun ProcessListScreen(
 
     var cpuUsage by remember { mutableStateOf(0f) }
     var gpuUsage by remember { mutableStateOf(0f) }
-    var processList by remember { mutableStateOf<List<DetailedProcessInfo>>(emptyList()) }
+    var detailedList by remember { mutableStateOf<List<DetailedProcess>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
 
-    LaunchedEffect(Unit) {
-        refreshProcessData(context) { cpu, gpu, processes ->
+    fun doRefresh() {
+        CoroutineScope(Dispatchers.IO).launch {
+            val cpu = try { readCpuUsage() } catch (_: Exception) { 0f }
+            val gpu = try { readGpuUsage() } catch (_: Exception) { 0f }
+            val rawList = try { readProcessList() } catch (_: Exception) { emptyList() }
+            val detailed = buildDetailedProcessList(rawList)
             cpuUsage = cpu
             gpuUsage = gpu
-            processList = processes
+            detailedList = detailed
             isLoading = false
         }
+    }
+
+    LaunchedEffect(Unit) {
+        doRefresh()
     }
 
     DisposableEffect(Unit) {
         val job = CoroutineScope(Dispatchers.Default).launch {
             while (true) {
                 delay(2000)
-                refreshProcessData(context) { cpu, gpu, processes ->
-                    cpuUsage = cpu
-                    gpuUsage = gpu
-                    processList = processes
-                }
+                doRefresh()
             }
         }
         onDispose { job.cancel() }
@@ -185,7 +267,7 @@ fun ProcessListScreen(
                             )
                         }
                     }
-                } else if (processList.isEmpty()) {
+                } else if (detailedList.isEmpty()) {
                     item {
                         Box(
                             modifier = Modifier
@@ -202,10 +284,18 @@ fun ProcessListScreen(
                     }
                 } else {
                     items(
-                        items = processList,
-                        key = { it.pid }
-                    ) { process ->
-                        ProcessDetailItem(process = process, isDark = isDark)
+                        items = detailedList,
+                        key = { it.base.pid }
+                    ) { dp ->
+                        ProcessDetailItem(
+                            dp = dp,
+                            isDark = isDark,
+                            onKillClick = {
+                                killProcessPid(context, dp.base.pid)
+                                doRefresh()
+                            },
+                            canKill = !isTermuxAppSelf(dp.base, context)
+                        )
                     }
                 }
             }
@@ -256,9 +346,13 @@ private fun ProcessStatCard(
 
 @Composable
 private fun ProcessDetailItem(
-    process: DetailedProcessInfo,
-    isDark: Boolean
+    dp: DetailedProcess,
+    isDark: Boolean,
+    onKillClick: () -> Unit,
+    canKill: Boolean
 ) {
+    val base = dp.base
+
     MiuixCard(
         modifier = Modifier
             .fillMaxWidth()
@@ -278,7 +372,7 @@ private fun ProcessDetailItem(
                 Column(modifier = Modifier.weight(1f)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            text = process.name,
+                            text = base.name,
                             fontSize = 15.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = MiuixTheme.colorScheme.onSurface,
@@ -286,10 +380,10 @@ private fun ProcessDetailItem(
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f)
                         )
-                        if (process.isTermuxRelated) {
+                        if (base.isTermuxRelated) {
                             TermuxRelatedBadge()
                         }
-                        ProcessStatusBadge(status = process.status, isFrozen = process.isFrozen)
+                        ProcessStatusBadge(base = base)
                     }
                     Spacer(modifier = Modifier.height(6.dp))
                     Row(
@@ -298,21 +392,48 @@ private fun ProcessDetailItem(
                     ) {
                         ProcessInfoChip(
                             label = stringResource(R.string.process_pid_label),
-                            value = "${process.pid}"
+                            value = "${base.pid}"
                         )
                         ProcessInfoChip(
                             label = stringResource(R.string.process_user_label),
-                            value = process.user
+                            value = dp.user
                         )
                     }
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
-                        text = process.path,
+                        text = dp.path,
                         fontSize = 11.sp,
                         color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
+                }
+
+                // Kill 按钮：Termux 本体进程不显示
+                if (canKill) {
+                    Spacer(modifier = Modifier.size(8.dp))
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
+                                onClick = onKillClick
+                            )
+                            .background(
+                                color = Color(0xFFFF3B30).copy(alpha = 0.15f),
+                                shape = CircleShape
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Close,
+                            contentDescription = stringResource(R.string.kill_process_pid, base.pid),
+                            modifier = Modifier.size(18.dp),
+                            tint = Color(0xFFFF3B30)
+                        )
+                    }
                 }
             }
         }
@@ -337,20 +458,20 @@ private fun TermuxRelatedBadge() {
     Spacer(modifier = Modifier.size(4.dp))
 }
 
+/**
+ * 与 OverviewScreen 卡片使用完全相同的状态判断逻辑（ProcessInfo.stateLabel +
+ * 相同的颜色映射），保证进程页面与总览页进程卡片的状态展示一致。
+ */
 @Composable
-private fun ProcessStatusBadge(status: String, isFrozen: Boolean = false) {
-    val (text, color) = when {
-        isFrozen ->
-            stringResource(R.string.process_stopped) to Color(0xFFFF3B30)
-        status.contains("S", ignoreCase = false) && !status.contains("T") ->
-            stringResource(R.string.process_sleeping) to Color(0xFFFF9500)
-        status.contains("R", ignoreCase = false) ->
-            stringResource(R.string.process_running) to Color(0xFF34C759)
-        status.contains("T", ignoreCase = false) ->
-            stringResource(R.string.process_stopped) to Color(0xFFFF3B30)
-        status.contains("Z", ignoreCase = false) ->
-            stringResource(R.string.process_zombie) to Color(0xFF8E8E93)
-        else -> status to Color(0xFF8E8E93)
+private fun ProcessStatusBadge(base: ProcessInfo) {
+    val color = when {
+        base.isFrozen -> Color(0xFFFF3B30)
+        base.isRunning -> Color(0xFF34C759)
+        base.isBackgroundRunning -> Color(0xFFFF9500)
+        base.isSleeping -> Color(0xFF8E8E93)
+        base.state == "D" -> Color(0xFFFF9500)
+        base.state == "Z" -> Color(0xFF8E8E93)
+        else -> Color(0xFF8E8E93)
     }
 
     Box(
@@ -360,7 +481,7 @@ private fun ProcessStatusBadge(status: String, isFrozen: Boolean = false) {
             .padding(horizontal = 6.dp, vertical = 2.dp)
     ) {
         Text(
-            text = text,
+            text = base.stateLabel,
             fontSize = 10.sp,
             fontWeight = FontWeight.Medium,
             color = color
@@ -383,175 +504,4 @@ private fun ProcessInfoChip(label: String, value: String) {
             color = MiuixTheme.colorScheme.onSurfaceVariantSummary
         )
     }
-}
-
-private fun refreshProcessData(
-    context: Context,
-    onResult: (Float, Float, List<DetailedProcessInfo>) -> Unit
-) {
-    CoroutineScope(Dispatchers.IO).launch {
-        val cpuUsage = try {
-            readCpuUsage()
-        } catch (_: Exception) { 0f }
-
-        val gpuUsage = try {
-            readGpuUsage()
-        } catch (_: Exception) { 0f }
-
-        val processes = try {
-            readDetailedProcesses(context)
-        } catch (_: Exception) { emptyList() }
-
-        onResult(cpuUsage, gpuUsage, processes)
-    }
-}
-
-private fun readDetailedProcesses(context: Context): List<DetailedProcessInfo> {
-    val processList = mutableListOf<DetailedProcessInfo>()
-    val sessionPids = getSessionPids()
-
-    try {
-        val processDir = java.io.File("/proc")
-        val pidDirs = processDir.listFiles { file -> file.isDirectory && file.name.all { it.isDigit() } }
-            ?: return emptyList()
-
-        for (dir in pidDirs) {
-            val pid = dir.name.toIntOrNull() ?: continue
-
-            try {
-                val statusFile = java.io.File(dir, "status")
-                if (!statusFile.exists() || !statusFile.canRead()) continue
-
-                val statusContent = statusFile.readText()
-
-                val nameLine = statusContent.lines().find { it.startsWith("Name:") }
-                val name = nameLine?.substringAfter("Name:")?.trim() ?: "Unknown"
-
-                val stateLine = statusContent.lines().find { it.startsWith("State:") }
-                val state = stateLine?.trim()?.split("\\s+".toRegex())?.getOrNull(1) ?: "S"
-
-                val isFrozen = state == "T" || state == "t" || checkFreezerState(pid)
-
-                val uidLine = statusContent.lines().find { it.startsWith("Uid:") }
-                val uid = uidLine?.trim()?.split("\\s+".toRegex())?.getOrNull(1)?.toIntOrNull() ?: 0
-                val user = resolveUserName(uid)
-
-                val exeFile = java.io.File(dir, "exe")
-                val path = if (exeFile.exists()) {
-                    try { exeFile.canonicalPath } catch (_: Exception) { dir.absolutePath }
-                } else {
-                    val cmdLineFile = java.io.File(dir, "cmdline")
-                    if (cmdLineFile.exists()) {
-                        cmdLineFile.readText().replace("\u0000", " ").trim()
-                    } else {
-                        dir.absolutePath
-                    }
-                }
-
-                val vmRSSLine = statusContent.lines().find { it.startsWith("VmRSS:") }
-                val memKb = vmRSSLine?.filter { it.isDigit() }?.toLongOrNull() ?: 0L
-
-                val isTermuxRelated = sessionPids.contains(pid) ||
-                    name.contains("termux", ignoreCase = true) ||
-                    name.contains("com.termux", ignoreCase = true) ||
-                    name.contains("qemu", ignoreCase = true) ||
-                    name.contains("proot", ignoreCase = true) ||
-                    name.contains("ssh", ignoreCase = true) ||
-                    name.contains("vnc", ignoreCase = true) ||
-                    name.contains("tmux", ignoreCase = true)
-
-                processList.add(
-                    DetailedProcessInfo(
-                        pid = pid,
-                        name = name,
-                        status = state,
-                        user = user,
-                        cpuPercent = 0f,
-                        memoryKb = memKb,
-                        path = path,
-                        isTermuxRelated = isTermuxRelated,
-                        isFrozen = isFrozen
-                    )
-                )
-            } catch (_: Exception) {
-                continue
-            }
-        }
-    } catch (_: Exception) {
-    }
-
-    return processList.sortedWith(
-        compareByDescending<DetailedProcessInfo> { it.isTermuxRelated }
-            .thenByDescending { !it.isFrozen }
-            .thenByDescending { it.memoryKb }
-            .thenBy { it.name }
-    )
-}
-
-private fun checkFreezerState(pid: Int): Boolean {
-    return try {
-        val freezerFile = java.io.File("/proc/$pid/freezer_state")
-        if (freezerFile.exists() && freezerFile.canRead()) {
-            val state = freezerFile.readText().trim()
-            if (state == "FROZEN" || state == "ON") {
-                return true
-            }
-        }
-        val cgroupFile = java.io.File("/proc/$pid/cgroup")
-        if (cgroupFile.exists() && cgroupFile.canRead()) {
-            val content = cgroupFile.readText()
-            if (content.contains("freezer") || content.contains("frozen")) {
-                true
-            } else {
-                false
-            }
-        } else {
-            false
-        }
-    } catch (_: Exception) {
-        false
-    }
-}
-
-private fun resolveUserName(uid: Int): String {
-    return try {
-        val process = Runtime.getRuntime().exec(arrayOf("id", "-un", "$uid"))
-        val output = process.inputStream.bufferedReader().readText().trim()
-        process.waitFor()
-        if (output.isNotEmpty()) output else "uid:$uid"
-    } catch (_: Exception) {
-        "uid:$uid"
-    }
-}
-
-private fun getSessionPids(): Set<Int> {
-    val pids = mutableSetOf<Int>()
-    try {
-        val runtime = Runtime.getRuntime()
-        val process = runtime.exec(arrayOf("sh", "-c", "ps -A -o PID,NAME"))
-        val reader = process.inputStream.bufferedReader()
-        val lines = reader.readLines()
-        process.waitFor()
-
-        for (line in lines.drop(1)) {
-            val parts = line.trim().split("\\s+".toRegex())
-            if (parts.size >= 2) {
-                val pid = parts[0].toIntOrNull()
-                val name = parts[1]
-                if (pid != null && (name.contains("termux", ignoreCase = true) ||
-                    name.contains("com.termux", ignoreCase = true) ||
-                    name.contains("bash", ignoreCase = true) ||
-                    name.contains("mosh", ignoreCase = true) ||
-                    name.contains("qemu", ignoreCase = true) ||
-                    name.contains("proot", ignoreCase = true) ||
-                    name.contains("ssh", ignoreCase = true) ||
-                    name.contains("vnc", ignoreCase = true) ||
-                    name.contains("tmux", ignoreCase = true))) {
-                    pids.add(pid)
-                }
-            }
-        }
-    } catch (_: Exception) {
-    }
-    return pids
 }
