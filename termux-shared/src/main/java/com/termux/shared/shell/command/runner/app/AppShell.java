@@ -209,21 +209,43 @@ public final class AppShell {
         }
 
         // wait for our process to finish, while we gobble away in the background
-        int exitCode = mProcess.waitFor();
-
-        // make sure our threads are done gobbling
-        // and the process is destroyed - while the latter shouldn't be
-        // needed in theory, and may even produce warnings, in "normal" Java
-        // they are required for guaranteed cleanup of resources, so lets be
-        // safe and do this on Android as well
+        //
+        // waitFor() 抛 InterruptedException（例如应用退出、调用方取消）时，原本会
+        // 直接跳出方法，导致 STDIN 不关闭、两个 StreamGobbler 线程不 join、
+        // mProcess 不 destroy —— 子进程与读取线程一并泄漏，且中断状态被吞掉。
+        // 这里把清理放进 finally，被打断时也一定执行，并恢复中断标志。
+        boolean interrupted = false;
+        int exitCode;
         try {
-            STDIN.close();
-        } catch (IOException e) {
-            // might be closed already
+            exitCode = mProcess.waitFor();
+        } catch (InterruptedException e) {
+            interrupted = true;
+            exitCode = 1;
+        } finally {
+            // make sure our threads are done gobbling
+            // and the process is destroyed - while the latter shouldn't be
+            // needed in theory, and may even produce warnings, in "normal" Java
+            // they are required for guaranteed cleanup of resources, so lets be
+            // safe and do this on Android as well
+            try {
+                if (STDIN != null) STDIN.close();
+            } catch (IOException e) {
+                // might be closed already
+            }
+            try {
+                if (STDOUT != null) STDOUT.join();
+                if (STDERR != null) STDERR.join();
+            } catch (InterruptedException e) {
+                interrupted = true;
+            }
+            mProcess.destroy();
         }
-        STDOUT.join();
-        STDERR.join();
-        mProcess.destroy();
+
+        if (interrupted) {
+            // 恢复中断状态，让上层能感知到取消，而不是被静默吞掉
+            Thread.currentThread().interrupt();
+            return;
+        }
 
         // Process result
         if (exitCode == 0)
@@ -246,7 +268,7 @@ public final class AppShell {
     }
 
     /**
-     * Kill this {@link AppShell} by sending a {@link OsConstants#SIGILL} to its {@link #mProcess}
+     * Kill this {@link AppShell} by sending a {@link OsConstants#SIGKILL} to its {@link #mProcess}
      * if its still executing.
      *
      * @param context The {@link Context} for operations.
@@ -275,7 +297,7 @@ public final class AppShell {
     }
 
     /**
-     * Kill this {@link AppShell} by sending a {@link OsConstants#SIGILL} to its {@link #mProcess}.
+     * Kill this {@link AppShell} by sending a {@link OsConstants#SIGKILL} to its {@link #mProcess}.
      */
     public void kill() {
         int pid = ShellUtils.getPid(mProcess);

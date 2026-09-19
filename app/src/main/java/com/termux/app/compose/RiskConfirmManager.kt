@@ -116,18 +116,9 @@ object RiskConfirmManager {
     @Volatile
     private var cachedProtectionLevel: ProtectionLevel? = null
 
-    /** 会话环境类型缓存（使用 WeakHashMap 避免内存泄漏） */
-    private val environmentCache = java.util.concurrent.ConcurrentHashMap<String, EnvironmentType>()
-
-    /** 清除指定会话的环境缓存 */
-    fun invalidateEnvironmentCache(sessionHandle: String) {
-        environmentCache.remove(sessionHandle)
-    }
-
-    /** 清除所有环境缓存 */
-    fun clearAllEnvironmentCache() {
-        environmentCache.clear()
-    }
+    // 环境类型缓存（EnvironmentType）已随 InputInterceptor 拦截路径一并移除：
+    // 唯一写入方是 detectEnvironment，而它只服务于被删除的
+    // handleTerminalCommandInternal；现在所有活跃入口的 environmentType 都由调用方显式传入。
 
     /** 预加载缓存到内存（避免首次命令读取 SharedPreferences） */
     fun preloadCache(context: Context) {
@@ -244,7 +235,14 @@ object RiskConfirmManager {
         val environmentType: EnvironmentType = EnvironmentType.NATIVE,
         val isSshPowerOperation: Boolean = false,
         /** 是否为 Windows 磁盘级命令（SSH 连接 Windows 时使用特殊警告文案） */
-        val isWindowsDiskCommand: Boolean = false
+        val isWindowsDiskCommand: Boolean = false,
+        /**
+         * 该弹窗绑定的协程确认请求 id（阻塞式请求为空串）。
+         * confirm/cancel 必须按它精确结算 —— 此前用 pendingRequests.keys.lastOrNull()
+         * 取请求，而 HashMap 迭代顺序与插入顺序无关，多个请求同时在途时会把结果
+         * 结算给错误的调用方（A 点了确认，B 拿到放行）。
+         */
+        val requestId: String = ""
     )
 
     internal val _dialogState = MutableStateFlow<DialogState?>(null)
@@ -265,17 +263,6 @@ object RiskConfirmManager {
     private val _agentLoadingText = kotlinx.coroutines.flow.MutableStateFlow("")
     val agentLoadingText: kotlinx.coroutines.flow.StateFlow<String> = _agentLoadingText
 
-    private fun showAgentLoadingDialog(context: Context, command: String) {
-        _agentLoadingText.value = "正在询问 Agent 判定脚本安全性..."
-        _agentLoadingVisible.value = true
-        android.util.Log.i("RiskConfirmManager", "显示 Agent loading dialog")
-    }
-
-    private fun hideAgentLoadingDialog() {
-        _agentLoadingVisible.value = false
-        android.util.Log.i("RiskConfirmManager", "隐藏 Agent loading dialog")
-    }
-
     /** 显示"安全检测中"加载弹窗（SecuritySocketServer 脚本判定期间调用） */
     fun showAgentLoading(text: String? = null) {
         _agentLoadingText.value = text ?: "正在检测脚本安全性..."
@@ -285,65 +272,6 @@ object RiskConfirmManager {
     /** 隐藏"安全检测中"加载弹窗 */
     fun hideAgentLoading() {
         _agentLoadingVisible.value = false
-    }
-
-    /**
-     * 脚本判定结果处理（主线程调用）。
-     * - Agent 开：只看 Agent verdict
-     * - Agent 关：做本地 detectScript
-     */
-    private fun processScriptJudgeResult(
-        context: Context,
-        adapter: RiskSessionAdapter,
-        command: String,
-        scriptPath: String,
-        agentEnabled: Boolean,
-        agentResult: AgentScriptJudge.JudgeResult?
-    ) {
-        val isSafe: Boolean
-        val denyReason: String?
-
-        if (agentEnabled && agentResult != null && agentResult.agentResponded) {
-            // Agent 结果
-            isSafe = agentResult.verdict == AgentScriptJudge.Verdict.SAFE
-            denyReason = if (isSafe) null else agentResult.reason
-            android.util.Log.i("RiskConfirmManager", "Agent verdict=${agentResult.verdict}, safe=$isSafe")
-        } else {
-            // Agent 关闭或没回复 → 本地检测脚本
-            val localDetections = try {
-                val content = java.io.File(scriptPath).readText(Charsets.UTF_8).take(50 * 1024)
-                val expanded = RiskCommandDetector.expandShellVarsPublic(content)
-                RiskCommandDetector.detectScript(expanded)
-            } catch (e: Exception) {
-                android.util.Log.w("RiskConfirmManager", "本地脚本检测异常: ${e.message}")
-                emptyList()
-            }
-            isSafe = localDetections.isEmpty()
-            denyReason = if (isSafe) null else (localDetections.firstOrNull()?.lineContent?.take(100) ?: "本地检测发现危险模式")
-            android.util.Log.i("RiskConfirmManager", "本地检测: detections=${localDetections.size}, safe=$isSafe")
-        }
-
-        android.util.Log.i("RiskConfirmManager", "[RESULT] agentEnabled=$agentEnabled, agentResponded=${agentResult?.agentResponded}, isSafe=$isSafe, reason=$denyReason")
-        if (isSafe) {
-            android.util.Log.i("RiskConfirmManager", "[RESULT] → confirmPendingCommand 放行")
-            adapter.confirmPendingCommand()
-        } else {
-            android.util.Log.i("RiskConfirmManager", "[RESULT] → denyPendingCommand 拦截, reason=$denyReason")
-            // 用 Snackbar 提示原因，然后 deny
-            denyWithReason(context, adapter, command, denyReason)
-        }
-    }
-
-    private fun denyWithReason(
-        context: Context,
-        adapter: RiskSessionAdapter,
-        command: String,
-        reason: String?
-    ) {
-        val msg = reason ?: "脚本被拦截：检测到危险操作"
-        emitSnackbar(msg, android.widget.Toast.LENGTH_LONG)
-        // 然后 denyPendingCommand 会向终端输出 Permission Denied
-        adapter.denyPendingCommand()
     }
 
     /** 自动确认等待时限(秒)：倒计时、auto-deny、latch await 三者一致。
@@ -369,15 +297,49 @@ object RiskConfirmManager {
         countdownJob = null
     }
 
-    /** 挂起的确认请求（用于协程调用） */
-    private val pendingRequests = mutableMapOf<String, (Boolean) -> Unit>()
+    /**
+     * 挂起的确认请求（用于协程调用）。
+     * 注册方在后台线程、结算方在主线程（用户点击），必须是并发容器。
+     */
+    private val pendingRequests =
+        java.util.concurrent.ConcurrentHashMap<String, (Boolean) -> Unit>()
+
+    /** requestId 自增序号。原实现用 System.currentTimeMillis() 作 id，
+     * 同一毫秒内发起的两个请求会撞 id，后注册的覆盖先注册的回调。 */
+    private val requestIdSeq = java.util.concurrent.atomic.AtomicLong(0)
+    private fun nextRequestId(): String = "req-${requestIdSeq.incrementAndGet()}"
+
+    /**
+     * 按 requestId 精确结算一个挂起请求。remove 成功才执行回调，
+     * 保证每个请求最多被结算一次（重复 resume 协程会抛 IllegalStateException）。
+     */
+    private fun resolveRequest(requestId: String, confirmed: Boolean) {
+        val callback = pendingRequests.remove(requestId) ?: return
+        callback(confirmed)
+    }
+
+    /**
+     * 新弹窗顶掉旧弹窗前调用：把旧弹窗绑定的协程请求按「拒绝」结算。
+     * 否则旧调用方会一直挂起，直到超时才恢复 —— 用户看到的是"点了没反应"。
+     */
+    private fun preemptActiveRequest() {
+        val id = _dialogState.value?.requestId
+        if (!id.isNullOrEmpty()) resolveRequest(id, false)
+    }
+
+    private val mainHandler = Handler(Looper.getMainLooper())
+
+    @Volatile
+    private var pendingTimeout: Runnable? = null
+
+    private fun cancelPendingTimeout(r: Runnable) {
+        mainHandler.removeCallbacks(r)
+        if (pendingTimeout === r) pendingTimeout = null
+    }
 
     /** 阻塞式确认请求（用于 Service/Java 调用） */
     private var blockingRequest: ((Boolean) -> Unit)? = null
     private var blockingRequestActive = false
-
-    /** 待处理的终端会话（用于拦截用户输入的高危命令，直接回调模式） */
-    private var pendingTerminalSession: com.termux.terminal.TerminalSession? = null
 
     /** "关闭二次确认" 警告弹窗状态 */
     data class DisableWarningState(
@@ -525,16 +487,6 @@ object RiskConfirmManager {
             .apply()
     }
 
-    /** 保存待确认的命令状态到 SharedPreferences */
-    private fun savePendingState(context: Context, sessionHandle: String, command: String) {
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        prefs.edit()
-            .putString(KEY_PENDING_SESSION_HANDLE, sessionHandle)
-            .putString(KEY_PENDING_COMMAND, command)
-            .remove(KEY_PENDING_RESULT)
-            .apply()
-    }
-
     /**
      * 由 TermuxActivity 调用，检查并消费待处理的风险确认结果。
      *
@@ -639,11 +591,25 @@ object RiskConfirmManager {
             environmentType = environmentType
         )
 
-        startCountdown()
+        // 超时与倒计时/自动拒绝保持同一时限（此前写死 60000ms，与 CONFIRM_WAIT_SECONDS=25
+        // 不一致，且 Runnable 从不移除，用户确认后仍会留一个空转回调在主线程队列里）。
+        val timeoutRunnable = Runnable { resolveRequest(requestId, false) }
 
         return try {
             kotlinx.coroutines.suspendCancellableCoroutine { continuation ->
+                if (!continuation.isActive) {
+                    // 协程已被取消：不放弹窗，避免留下无人结算的对话框
+                    return@suspendCancellableCoroutine
+                }
+
+                // 顺序至关重要：
+                //   ① 结算被顶掉的旧请求 → ② 登记本请求回调 → ③ 才放出弹窗
+                // 若在回调登记之前就把弹窗放出去，用户在这个窗口内点「确认」时
+                // resolveRequest 找不到回调，本次点击被吃掉，请求要等超时才恢复
+                // （现象：点了确认没反应）。
+                preemptActiveRequest()
                 pendingRequests[requestId] = { confirmed ->
+                    cancelPendingTimeout(timeoutRunnable)
                     _dialogState.value = null
                     stopCountdown()
                     if (continuation.isActive) {
@@ -651,15 +617,35 @@ object RiskConfirmManager {
                     }
                 }
 
-                val timeoutRunnable = Runnable {
-                    if (pendingRequests.containsKey(requestId)) {
-                        pendingRequests[requestId]?.invoke(false)
-                        pendingRequests.remove(requestId)
+                _dialogState.value = DialogState(
+                    command = command,
+                    riskDescription = detection.description,
+                    riskType = detection.riskType?.displayName ?: "高危操作",
+                    environmentType = environmentType,
+                    requestId = requestId
+                )
+                startCountdown()
+                pendingTimeout = timeoutRunnable
+                mainHandler.postDelayed(timeoutRunnable, CONFIRM_WAIT_SECONDS * 1000L)
+
+                continuation.invokeOnCancellation {
+                    // 调用方协程被取消：移除登记并撤掉超时回调，避免泄漏与后续误结算
+                    cancelPendingTimeout(timeoutRunnable)
+                    pendingRequests.remove(requestId)
+                    if (_dialogState.value?.requestId == requestId) {
+                        _dialogState.value = null
+                        stopCountdown()
                     }
                 }
-                activity?.window?.decorView?.postDelayed(timeoutRunnable, 60000L)
             }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            // 取消必须向上传播，不能被当成"用户拒绝"吞掉
+            cancelPendingTimeout(timeoutRunnable)
+            pendingRequests.remove(requestId)
+            throw e
         } catch (e: Exception) {
+            cancelPendingTimeout(timeoutRunnable)
+            pendingRequests.remove(requestId)
             _dialogState.value = null
             stopCountdown()
             false
@@ -870,6 +856,10 @@ object RiskConfirmManager {
 
         blockingRequestActive = true
         handler.post {
+            // 阻塞式请求顶掉协程请求时，同样要先结算旧请求
+            preemptActiveRequest()
+            // 阻塞式请求不设 requestId：它由 blockingRequest 单独结算，
+            // 不参与 pendingRequests 的 requestId 匹配
             _dialogState.value = DialogState(
                 command = command,
                 riskDescription = reason,
@@ -938,11 +928,16 @@ object RiskConfirmManager {
             navigateBackToTermux(context, sessionHandle, RESULT_CONFIRMED)
             return
         }
-        // 最后处理协程请求
-        val requestId = pendingRequests.keys.lastOrNull()
-        if (requestId != null) {
-            pendingRequests[requestId]?.invoke(true)
-            pendingRequests.remove(requestId)
+        // 最后处理协程请求：按当前弹窗绑定的 requestId 精确结算
+        resolveActiveRequest(true)
+    }
+
+    /** 结算当前弹窗绑定的协程确认请求；无绑定请求时只收起弹窗。 */
+    private fun resolveActiveRequest(confirmed: Boolean) {
+        val requestId = _dialogState.value?.requestId
+        if (!requestId.isNullOrEmpty()) {
+            resolveRequest(requestId, confirmed)
+        } else {
             _dialogState.value = null
         }
     }
@@ -998,454 +993,6 @@ object RiskConfirmManager {
         intent.putExtra(EXTRA_RISK_RESULT, result)
         intent.putExtra(EXTRA_SESSION_HANDLE, sessionHandle)
         context.startActivity(intent)
-    }
-
-    /**
-     * 终端会话风险检测适配器：屏蔽 Java 核心（com.termux.terminal.TerminalSession）
-     * 与 Compose 核心（libterminal TerminalSession）的实现差异，
-     * 供VorteX Guard Engine对两种内核使用同一套检测/确认流程。
-     */
-    private interface RiskSessionAdapter {
-        /** 会话唯一句柄（确认结果返回时按此找回会话） */
-        val sessionHandle: String
-
-        val shellPath: String?
-
-        val sessionName: String?
-
-        val args: Array<out String>?
-
-        fun confirmPendingCommand()
-
-        fun denyPendingCommand()
-    }
-
-    /** Java 核心会话适配器（由已废弃的 InputInterceptor 路径使用，shell hook 接管后不再触发） */
-    private class JavaSessionAdapter(val session: com.termux.terminal.TerminalSession) : RiskSessionAdapter {
-        override val sessionHandle: String get() = session.mHandle
-        override val shellPath: String? get() = session.shellPath
-        override val sessionName: String? get() = session.mSessionName
-        override val args: Array<out String>? get() = session.args
-        // confirm/deny 已由 shell hook 在 shell 层完成，Java/Kotlin 层拦截 API 已删除
-        override fun confirmPendingCommand() {}
-        override fun denyPendingCommand() {}
-    }
-
-    /** Compose 核心会话适配器（由已废弃的 InputInterceptor 路径使用，shell hook 接管后不再触发） */
-    private class ComposeSessionAdapter(
-        val session: com.termux.app.compose.terminal.engine.TerminalSession
-    ) : RiskSessionAdapter {
-        override val sessionHandle: String get() = session.handle
-        override val shellPath: String? get() = session.shellPath
-        override val sessionName: String? get() = session.sessionName.value
-        override val args: Array<out String>? get() = session.args
-        override fun confirmPendingCommand() {}
-        override fun denyPendingCommand() {}
-    }
-
-    /** 待确认的 Compose 核心会话（确认结果返回时按 handle 恢复，Java 会话由 TermuxActivity 按句柄查找） */
-    private var pendingComposeSession: com.termux.app.compose.terminal.engine.TerminalSession? = null
-
-    /**
-     * 处理终端会话中用户输入的高危命令。
-     * 由 TerminalSession.InputInterceptor 调用。
-     *
-     * 流程：检测高危 → 保存状态 → 跳转主页 → 主页弹窗 → 用户确认/取消 → 返回执行
-     *
-     * 特殊逻辑：
-     * - su/sudo 在非原生 Termux 环境（容器/VM/SSH）中：只 Snackbar 提醒，放行不拦截
-     * - su/sudo 在原生 Termux 环境中：完整拦截 + 弹窗
-     * - 其他高危命令：无论环境如何均拦截
-     *
-     * @param context Context
-     * @param session TerminalSession
-     * @param command 用户输入的命令
-     * @return true 表示命令已被拦截处理，false 表示非高危命令
-     */
-    fun handleTerminalCommand(context: Context, session: com.termux.terminal.TerminalSession, command: String): Boolean {
-        return handleTerminalCommandInternal(context, JavaSessionAdapter(session), command)
-    }
-
-    /**
-     * 处理 Compose 核心会话中用户输入的高危命令。
-     * 由 libterminal TerminalSession.InputInterceptor 调用，
-     * 与 Java 核心走同一套 [handleTerminalCommandInternal] 检测/确认流程。
-     */
-    fun handleComposeTerminalCommand(
-        context: Context,
-        session: com.termux.app.compose.terminal.engine.TerminalSession,
-        command: String
-    ): Boolean {
-        return handleTerminalCommandInternal(context, ComposeSessionAdapter(session), command)
-    }
-
-    private fun handleTerminalCommandInternal(
-        context: Context,
-        adapter: RiskSessionAdapter,
-        command: String
-    ): Boolean {
-        // 无限制模式：仅对 Agent 命令放行（shouldSkipRiskCheck 为 true），用户手敲命令仍按保护级别检查
-        if (isUnlimitedModeActive(context) && shouldSkipRiskCheck()) return false
-
-        val level = getProtectionLevel(context)
-        setLastProtectionLevel(level)
-
-        val trimmed = command.trim()
-
-        // ===== 脚本执行前置判定（独立于 ProtectionLevel） =====
-        // 只要是脚本执行就拦截 + 弹窗 + 异步判定。
-        // Agent 开 → 只靠 Agent；Agent 关 → 只靠本地检测。
-        // 判定完成后：通过 → 放行；不通过 → deny。
-        val scriptPath = extractScriptPath(command)
-        val isScriptExecution = scriptPath != null
-        android.util.Log.i("RiskConfirmManager", "[SCRIPT] command=${command.take(80)} -> scriptPath=$scriptPath, isScript=$isScriptExecution")
-
-        if (isScriptExecution) {
-            android.util.Log.i("RiskConfirmManager", "脚本执行拦截: path=$scriptPath, command=${command.take(80)}")
-            // 立即拦截命令（buffer 在 TerminalSession.pending）
-            showAgentLoadingDialog(context, command)
-            // 后台协程执行判定（IO 线程，不阻塞主线程）
-            countdownScope.launch(Dispatchers.IO) {
-                val agentEnabled = AgentScriptJudge.isAvailable(context)
-                val agentResult = try {
-                    if (agentEnabled) {
-                        AgentScriptJudge.judge(context, scriptPath!!)
-                    } else {
-                        // Agent 关闭：直接本地检测
-                        null
-                    }
-                } catch (e: Throwable) {
-                    android.util.Log.e("RiskConfirmManager", "脚本判定异常: ${e.message}")
-                    null
-                }
-                android.util.Log.i("RiskConfirmManager",
-                    "脚本判定完成: agentEnabled=$agentEnabled, verdict=${agentResult?.verdict}, responded=${agentResult?.agentResponded}")
-                // 回到主线程处理结果
-                kotlinx.coroutines.withContext(Dispatchers.Main) {
-                    hideAgentLoadingDialog()
-                    processScriptJudgeResult(context, adapter, command, scriptPath!!, agentEnabled, agentResult)
-                }
-            }
-            return true
-        }
-
-        // OFF: 非脚本命令直接放行
-        if (level == ProtectionLevel.OFF) return false
-
-        // 先用原生环境模式检测（su/sudo 会被标记为危险）
-        val nativeDetection = RiskCommandDetector.detect(command, inNativeTermux = true)
-
-        // ===== 非脚本命令：原有同步逻辑 =====
-        if (!nativeDetection.isDangerous) return false
-
-        // 记录危险命令计数
-        incrementDangerCount()
-
-        // 检测当前环境（带缓存）
-        val envType = detectEnvironment(context, adapter)
-
-        // --- SSH 会话快速路径优化 ---
-        // SSH 会话中，危险操作实际发生在远程设备，本地防护意义有限
-        // 对于非破坏性命令（su/sudo 等），直接放行
-        if (envType == EnvironmentType.SSH) {
-            // su/sudo 在 SSH 中：仅 Snackbar 提醒，放行
-            if (nativeDetection.riskType == RiskCommandDetector.RiskType.SU_SUDO) {
-                Handler(Looper.getMainLooper()).post {
-                    SnackbarHelper.show(
-                        context,
-                        "检测到容器/SSH/虚拟机环境内提权，请注意使用安全",
-                        Snackbar.LENGTH_SHORT
-                    )
-                }
-                return false
-            }
-
-            // WARN_ONLY 级别：所有危险命令仅提示，放行
-            if (level == ProtectionLevel.WARN_ONLY) {
-                emitSnackbar(nativeDetection.description, Snackbar.LENGTH_SHORT)
-                return false
-            }
-
-            // WARN_VERIFY 级别：SSH 会话中大部分危险命令仅 Snackbar 提示
-            // SHUTDOWN_REBOOT 和 FORMAT 仍需弹窗（可能影响远程服务器可用性）
-            if (level == ProtectionLevel.WARN_VERIFY) {
-                when (nativeDetection.riskType) {
-                    RiskCommandDetector.RiskType.SHUTDOWN_REBOOT,
-                    RiskCommandDetector.RiskType.FORMAT,
-                    RiskCommandDetector.RiskType.RM_RF_ROOT -> {
-                        // 这些命令在远程服务器上也很危险，继续拦截流程
-                        return handleDangerousCommand(context, adapter, command, nativeDetection, envType)
-                    }
-                    else -> {
-                        // 其他命令仅 Snackbar 提示，放行
-                        val msg = "SSH远程: ${nativeDetection.description}"
-                        emitSnackbar(msg, Snackbar.LENGTH_SHORT)
-                        return false
-                    }
-                }
-            }
-
-            // AUTO_BLOCK 级别：SSH 会话中也直接拦截
-            if (level == ProtectionLevel.AUTO_BLOCK) {
-                lastCommandAutoBlocked = true
-                val msg = "危险操作被拒绝: ${nativeDetection.description}"
-                emitSnackbar(msg, Snackbar.LENGTH_LONG)
-                return true
-            }
-        }
-
-        // --- 非 SSH 环境（原生/容器/虚拟机）按原逻辑处理 ---
-
-        // WARN_ONLY: Snackbar 提示但不拦截，显示危险命令的具体描述
-        if (level == ProtectionLevel.WARN_ONLY) {
-            val msg = nativeDetection.description
-            emitSnackbar(msg, Snackbar.LENGTH_LONG)
-            return false
-        }
-
-        // AUTO_BLOCK: 直接拦截，显示拒绝原因
-        if (level == ProtectionLevel.AUTO_BLOCK) {
-            lastCommandAutoBlocked = true
-            val msg = "危险操作被拒绝: ${nativeDetection.description}"
-            emitSnackbar(msg, Snackbar.LENGTH_LONG)
-            return true
-        }
-
-        // WARN_VERIFY: 完整拦截 + 弹窗验证流程
-        // 如果是 su/sudo，检查是否在原生 Termux 环境
-        if (nativeDetection.riskType == RiskCommandDetector.RiskType.SU_SUDO) {
-            // 检查是否包装了其他危险命令（如 sudo shutdown、sudo poweroff 等）
-            val wrappedCommand = extractWrappedCommand(trimmed)
-            if (wrappedCommand != null) {
-                val wrappedDetection = RiskCommandDetector.detect(wrappedCommand)
-                if (wrappedDetection.isDangerous && wrappedDetection.riskType != RiskCommandDetector.RiskType.SU_SUDO) {
-                    // 包装的命令更危险，按包装命令的类型处理
-                    return handleDangerousCommand(context, adapter, command, wrappedDetection, envType)
-                }
-            }
-
-            if (envType != EnvironmentType.NATIVE) {
-                // 非原生环境：Snackbar 提醒后放行
-                Handler(Looper.getMainLooper()).post {
-                    SnackbarHelper.show(
-                        context,
-                        "检测到容器/SSH/虚拟机环境内提权，请注意使用安全",
-                        Snackbar.LENGTH_LONG
-                    )
-                }
-                return false
-            }
-        }
-
-        // 其他高危命令或原生环境下的 su/sudo：正常拦截流程
-        return handleDangerousCommand(context, adapter, command, nativeDetection, envType)
-    }
-
-    /**
-     * 从 su/sudo 命令中提取被包装的子命令。
-     * 例如："sudo shutdown -h now" → "shutdown -h now"
-     *       "su -c 'poweroff'" → "poweroff"
-     *       "su -c reboot" → "reboot"
-     */
-    private fun extractWrappedCommand(command: String): String? {
-        val trimmed = command.trim()
-
-        // 匹配 sudo <command> 或 su -c <command> 或 su -c '<command>'
-        val sudoPattern = Regex("""^\s*sudo\s+(.*)""", RegexOption.DOT_MATCHES_ALL)
-        val sudoMatch = sudoPattern.find(trimmed)
-        if (sudoMatch != null) {
-            return sudoMatch.groupValues[1].trim()
-        }
-
-        val suPattern = Regex("""^\s*su\s+-c\s+['"]?(.+?)['"]?\s*$""", RegexOption.DOT_MATCHES_ALL)
-        val suMatch = suPattern.find(trimmed)
-        if (suMatch != null) {
-            return suMatch.groupValues[1].trim()
-        }
-
-        return null
-    }
-
-    /**
-     * 处理高危命令拦截的通用流程。
-     */
-    private fun handleDangerousCommand(
-        context: Context,
-        adapter: RiskSessionAdapter,
-        command: String,
-        detection: RiskCommandDetector.DetectionResult,
-        envType: EnvironmentType,
-        agentReason: String? = null
-    ): Boolean {
-
-        // Compose 核心会话：记录引用，确认结果返回时按 handle 恢复
-        if (adapter is ComposeSessionAdapter) {
-            pendingComposeSession = adapter.session
-        }
-        // SHUTDOWN_REBOOT 类型：原生环境和 SSH 环境都拦截
-        if (detection.riskType == RiskCommandDetector.RiskType.SHUTDOWN_REBOOT) {
-            // SSH 环境下，对 init 命令额外检查只拦截 init 0 和 init 6
-            if (envType == EnvironmentType.SSH) {
-                val trimmed = command.trim()
-                if (trimmed.matches(Regex("""\s*init\s+.*""", RegexOption.IGNORE_CASE))) {
-                    if (!trimmed.matches(Regex("""\s*init\s+[06]\s*""", RegexOption.IGNORE_CASE))) {
-                        // 不是 init 0 或 init 6，放行
-                        return false
-                    }
-                }
-            }
-            // SSH 电源操作，设置特殊弹窗状态
-            savePendingState(context, adapter.sessionHandle, command)
-            startCountdown()
-            _dialogState.value = DialogState(
-                command = command,
-                riskDescription = agentReason ?: detection.description,
-                riskType = detection.riskType?.displayName ?: "高危操作",
-                environmentType = envType,
-                isSshPowerOperation = true
-            )
-            // 60 秒超时自动拒绝并恢复会话
-            Handler(Looper.getMainLooper()).postDelayed({
-                val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                val handle = prefs.getString(KEY_PENDING_SESSION_HANDLE, null)
-                val result = prefs.getString(KEY_PENDING_RESULT, null)
-                if (handle != null && result == null) {
-                    prefs.edit().putString(KEY_PENDING_RESULT, RESULT_DENIED).apply()
-                    _dialogState.value = null
-                    stopCountdown()
-                    // 超时走取消逻辑，恢复会话
-                    navigateBackToTermux(context, handle, RESULT_DENIED)
-                }
-            }, 60000L)
-            // 跳转到主页 Activity
-            val intent = Intent(context, com.termux.app.MainActivity::class.java)
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-            context.startActivity(intent)
-            return true
-        }
-
-        // 其他高危命令：拦截流程
-        // 保存待处理状态到 SharedPreferences
-        savePendingState(context, adapter.sessionHandle, command)
-
-        // 启动倒计时
-        startCountdown()
-
-        // 设置弹窗状态（MainActivity 中的 RiskConfirmDialogHost 会观察到并显示）
-        val dialogState = DialogState(
-            command = command,
-            riskDescription = agentReason ?: detection.description,
-            riskType = detection.riskType?.displayName ?: "高危操作",
-            environmentType = envType,
-            isWindowsDiskCommand = detection.isWindowsDiskCommand
-        )
-        _dialogState.value = dialogState
-        
-        // 记录日志帮助调试
-        android.util.Log.i("RiskConfirmManager", "Dialog state set: command=$command, envType=$envType, riskType=${detection.riskType}")
-        android.util.Log.i("RiskConfirmManager", "Starting MainActivity to show dialog...")
-
-        // 60 秒超时自动拒绝并恢复会话
-        Handler(Looper.getMainLooper()).postDelayed({
-            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            val handle = prefs.getString(KEY_PENDING_SESSION_HANDLE, null)
-            val result = prefs.getString(KEY_PENDING_RESULT, null)
-            if (handle != null && result == null) {
-                // 超时未处理，自动拒绝
-                prefs.edit().putString(KEY_PENDING_RESULT, RESULT_DENIED).apply()
-                _dialogState.value = null
-                stopCountdown()
-                // 超时走取消逻辑，恢复会话
-                navigateBackToTermux(context, handle, RESULT_DENIED)
-            }
-        }, 60000L)
-
-        // 跳转到主页 Activity，主页的 RiskConfirmDialogHost 会显示弹窗
-        val intent = Intent(context, com.termux.app.MainActivity::class.java)
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-        context.startActivity(intent)
-
-        return true
-    }
-
-    /**
-     * 检测当前终端会话的运行环境（带缓存优化）。
-     *
-     * @param context Context
-     * @param session TerminalSession
-     * @return 环境类型
-     */
-    private fun detectEnvironment(
-        context: Context,
-        adapter: RiskSessionAdapter
-    ): EnvironmentType {
-        val sessionHandle = adapter.sessionHandle
-
-        // 先从缓存读取
-        environmentCache[sessionHandle]?.let { return it }
-
-        val shellPath = adapter.shellPath ?: ""
-        val sessionName = adapter.sessionName ?: ""
-
-        // 检查 shell 路径是否指向容器
-        val containerIndicators = listOf("proot", "/rootfs/", "/container/")
-        for (indicator in containerIndicators) {
-            if (shellPath.contains(indicator, ignoreCase = true)) {
-                environmentCache[sessionHandle] = EnvironmentType.CONTAINER
-                return EnvironmentType.CONTAINER
-            }
-        }
-
-        // 检查 shell 路径是否指向虚拟机
-        val vmIndicators = listOf("qemu", "/vm/", "/guest/")
-        for (indicator in vmIndicators) {
-            if (shellPath.contains(indicator, ignoreCase = true)) {
-                environmentCache[sessionHandle] = EnvironmentType.VM
-                return EnvironmentType.VM
-            }
-        }
-
-        // 检查会话名称是否包含 SSH 标识
-        val sshIndicators = listOf("ssh", "scp", "sftp", "remote", "SSH-")
-        for (indicator in sshIndicators) {
-            if (sessionName.contains(indicator, ignoreCase = true)) {
-                environmentCache[sessionHandle] = EnvironmentType.SSH
-                return EnvironmentType.SSH
-            }
-        }
-
-        // 检查会话参数是否包含 SSH 命令（通过远程页面创建的 SSH 会话）
-        val args = adapter.args
-        if (args != null) {
-            for (arg in args) {
-                if (arg != null && arg.contains("ssh", ignoreCase = true)) {
-                    environmentCache[sessionHandle] = EnvironmentType.SSH
-                    return EnvironmentType.SSH
-                }
-            }
-        }
-
-        // 默认视为原生 Termux 环境
-        environmentCache[sessionHandle] = EnvironmentType.NATIVE
-        return EnvironmentType.NATIVE
-    }
-
-    /** 判断是否为原生 Termux 环境 */
-    private fun isNativeTermuxEnvironment(
-        context: Context,
-        adapter: RiskSessionAdapter
-    ): Boolean = detectEnvironment(context, adapter) == EnvironmentType.NATIVE
-
-    /**
-     * 消费 Compose 核心会话的待确认结果。
-     * TermuxActivity 按 handle 找不到 Java 会话时调用此方法恢复 Compose 会话的
-     * 确认流程（确认 → 放行 Enter；拒绝 → 输出拒绝信息并清行）。
-     *
-     * @return true 表示已按 Compose 会话处理
-     */
-    fun consumePendingComposeSession(handle: String, result: String): Boolean {
-        // shell hook 接管后，Java/Kotlin 层不再拦截命令，此路径永远不会触发
-        return false
     }
 
     /** 显示"关闭二次确认"的警告弹窗（使用主页授权遮罩覆盖方式） */

@@ -69,7 +69,8 @@ class ComposeSessionManager private constructor(private val context: Context) {
             sessionName = kotlinx.coroutines.flow.MutableStateFlow(sessionName),
             processFactory = processFactory
         )
-        // 记录 shell 元数据，供VorteX Guard Engine的环境检测（RiskConfirmManager.detectEnvironment）使用
+        // 记录 shell 元数据。（注：原先唯一的读取方 RiskConfirmManager.detectEnvironment
+        // 已随 InputInterceptor 路径一起删除，目前这两字段暂无读取侧，keep 以备后续复用。）
         session.shellPath = shellPath
         session.args = args
 

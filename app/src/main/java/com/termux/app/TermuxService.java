@@ -1011,10 +1011,6 @@ public synchronized int removeTermuxSession(TerminalSession sessionToRemove) {
             com.termux.app.compose.ComposeSessionBridge.INSTANCE.removeByJavaMirror(sessionToRemove);
             mTermuxSessions.get(index).getTerminalSession().finishIfRunning();
             mTermuxSessions.remove(index);
-            // 清理环境缓存
-            if (sessionToRemove.mHandle != null) {
-                com.termux.app.compose.RiskConfirmManager.INSTANCE.invalidateEnvironmentCache(sessionToRemove.mHandle);
-            }
         }
 
         updateNotification();
@@ -1040,11 +1036,6 @@ public synchronized int removeTermuxSession(TerminalSession sessionToRemove) {
             com.termux.app.compose.ComposeSessionBridge.INSTANCE.removeByJavaMirror(session.getTerminalSession());
             session.getTerminalSession().finishIfRunning();
             mTermuxSessions.remove(index);
-            // 清理环境缓存
-            TerminalSession terminalSession = sessionToRemove.getTerminalSession();
-            if (terminalSession != null && terminalSession.mHandle != null) {
-                com.termux.app.compose.RiskConfirmManager.INSTANCE.invalidateEnvironmentCache(terminalSession.mHandle);
-            }
             final String finalSessionName = sessionName;
             new Handler(getMainLooper()).post(() ->
                 Toast.makeText(TermuxService.this, finalSessionName + " 已停止，返回代码: 137", Toast.LENGTH_SHORT).show()
@@ -1081,12 +1072,6 @@ public synchronized int removeTermuxSession(TerminalSession sessionToRemove) {
                 TermuxPluginUtils.processPluginExecutionCommandResult(this, LOG_TAG, executionCommand);
 
             mTermuxSessions.remove(termuxSession);
-
-            // 清理环境缓存
-            String handle = termuxSession.getTerminalSession().mHandle;
-            if (handle != null) {
-                com.termux.app.compose.RiskConfirmManager.INSTANCE.invalidateEnvironmentCache(handle);
-            }
 
             // Notify {@link TermuxSessionsListViewController} that sessions list has been updated if
             // activity in is foreground

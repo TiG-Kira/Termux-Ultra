@@ -59,12 +59,20 @@ class TerminalSession(
 
     // 命令输入缓冲区，用于检测回车时的完整命令（主页终端卡片的「最近执行」）
     private val commandBuffer = StringBuilder()
+
+    // 增量 UTF-8 解码状态：还需要读取的后续字节数（0 = 不在多字节序列中）
+    private var utf8BytesNeeded = 0
+    private var utf8CodePoint = 0
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     private class DataChunk(val buffer: ByteArray, var length: Int)
     private val terminalReadChannel: Channel<DataChunk> = Channel(Channel.UNLIMITED)
     private val terminalReadBufferPoolChannel = Channel<DataChunk>(64)
-    private val terminalWriteChannel: Channel<ByteArray> = Channel(Channel.BUFFERED)
+    // UNLIMITED：用户输入绝不能丢。原实现用 BUFFERED（容量 64）+ trySend，
+    // 消费者（向 pty 写）被慢速 shell 阻塞时队列会被填满，trySend 返回失败且结果被忽略，
+    // 后续按键/粘贴内容被静默丢弃。UNLIMITED 的 trySend 永远不会因容量失败，
+    // 保证「写进去的字节一定会送到 pty」。
+    private val terminalWriteChannel: Channel<ByteArray> = Channel(Channel.UNLIMITED)
 
     init {
         for (i in 0..<64) {
@@ -204,18 +212,24 @@ class TerminalSession(
                         consecutiveCrashes = 0 // 正常处理一个 chunk 后重置计数
                         var bytesProcessed = chunk.length
 
-                        synchronized(emulator) {
-                            emulator.append(chunk.buffer, chunk.length)
+                        // 无论 append 是否抛异常，都要把「真实」的 chunk 归还池中。
+                        // 原实现在 catch 里改为回池一个 4096 占位对象：既静默丢弃了
+                        // 这段 PTY 输出，又让池里混入尺寸不一致的对象。
+                        try {
+                            synchronized(emulator) {
+                                emulator.append(chunk.buffer, chunk.length)
 
-                            while (bytesProcessed < 32 * 1024) {
-                                val moreChunk = terminalReadChannel.tryReceive().getOrNull() ?: break
-                                emulator.append(moreChunk.buffer, moreChunk.length)
-                                bytesProcessed += moreChunk.length
-                                terminalReadBufferPoolChannel.trySend(moreChunk)
+                                while (bytesProcessed < 32 * 1024) {
+                                    val moreChunk = terminalReadChannel.tryReceive().getOrNull() ?: break
+                                    emulator.append(moreChunk.buffer, moreChunk.length)
+                                    bytesProcessed += moreChunk.length
+                                    terminalReadBufferPoolChannel.trySend(moreChunk)
+                                }
                             }
+                        } finally {
+                            terminalReadBufferPoolChannel.trySend(chunk)
                         }
 
-                        terminalReadBufferPoolChannel.trySend(chunk)
                         notifyScreenUpdate()
                         yield()
                     }
@@ -224,8 +238,7 @@ class TerminalSession(
                     consecutiveCrashes++
                     android.util.Log.e("TerminalSession",
                         "launchEmulatorProcessor crash ($consecutiveCrashes/$maxCrashes), restarting...", t)
-                    // 注意: chunk 已经在 catch 前被消费但未回池, 所以这里只回池一个占位
-                    terminalReadBufferPoolChannel.trySend(DataChunk(ByteArray(4096), 0))
+                    // 当前 chunk 已在上面的 finally 中归还，这里无需再补占位对象
                     kotlinx.coroutines.delay(100)
                 }
             }
@@ -305,6 +318,7 @@ class TerminalSession(
 
                 val command = commandBuffer.toString().trim()
                 commandBuffer.setLength(0)
+                resetUtf8State()
 
                 if (command.isNotEmpty()) {
                     lastCommand = command
@@ -313,17 +327,92 @@ class TerminalSession(
         }
 
         for (i in segmentStart until data.size) bufferChar(data[i])
-        terminalWriteChannel.trySend(data)
+        enqueueWrite(data)
+    }
+
+    /**
+     * 投递待写数据。
+     * 通道为 UNLIMITED，trySend 只可能在通道已关闭（会话结束）时失败，
+     * 那时丢弃是正确行为，但必须留痕，避免"输入莫名消失"无法定位。
+     */
+    private fun enqueueWrite(data: ByteArray) {
+        val result = terminalWriteChannel.trySend(data)
+        if (result.isFailure) {
+            android.util.Log.w(
+                "TerminalSession",
+                "write: 通道已关闭，丢弃 ${data.size} 字节（会话已结束）"
+            )
+        }
     }
 
     /** 逐字符缓冲命令行：处理退格 / Ctrl+C / Ctrl+D（与 Java 版 bufferChar 一致）。 */
     private fun bufferChar(b: Byte) {
+        val v = b.toInt() and 0xFF
         when {
             b == 8.toByte() || b == 127.toByte() -> {
-                if (commandBuffer.isNotEmpty()) commandBuffer.deleteCharAt(commandBuffer.length - 1)
+                // 退格：删除最后一个「字符」，代理对整体删除，避免留下半个 emoji
+                if (commandBuffer.isNotEmpty()) {
+                    val last = commandBuffer.length - 1
+                    if (Character.isLowSurrogate(commandBuffer[last]) && last > 0) {
+                        commandBuffer.delete(last - 1, last + 1)
+                    } else {
+                        commandBuffer.deleteCharAt(last)
+                    }
+                }
+                resetUtf8State()
             }
-            b == 3.toByte() || b == 4.toByte() -> commandBuffer.setLength(0) // Ctrl+C / Ctrl+D
-            b >= 32 -> commandBuffer.append((b.toInt() and 0xFF).toChar())
+            b == 3.toByte() || b == 4.toByte() -> { // Ctrl+C / Ctrl+D
+                commandBuffer.setLength(0)
+                resetUtf8State()
+            }
+            v >= 32 -> {
+                // 原实现把每个字节当成 Latin-1 字符；而 Kotlin 的 Byte 有符号，
+                // `b >= 32` 对所有 >=0x80 的 UTF-8 字节都为假，整段被丢弃 ——
+                // 中文/emoji 命令在「最近执行」里被截断。这里改为 UTF-8 增量解码。
+                bufferUtf8(v)
+            }
+        }
+    }
+
+    /** 重置增量 UTF-8 解码状态。 */
+    private fun resetUtf8State() {
+        utf8BytesNeeded = 0
+        utf8CodePoint = 0
+    }
+
+    /** 增量解码一个 UTF-8 字节，凑满一个码点后追加到命令缓冲区。 */
+    private fun bufferUtf8(v: Int) {
+        if (utf8BytesNeeded == 0) {
+            when {
+                v < 0x80 -> {
+                    commandBuffer.append(v.toChar())
+                    return
+                }
+                (v and 0xE0) == 0xC0 -> {
+                    utf8BytesNeeded = 1
+                    utf8CodePoint = v and 0x1F
+                }
+                (v and 0xF0) == 0xE0 -> {
+                    utf8BytesNeeded = 2
+                    utf8CodePoint = v and 0x0F
+                }
+                (v and 0xF8) == 0xF0 -> {
+                    utf8BytesNeeded = 3
+                    utf8CodePoint = v and 0x07
+                }
+                else -> resetUtf8State() // 非法首字节 / 孤立续字节：丢弃
+            }
+        } else {
+            if ((v and 0xC0) != 0x80) {
+                // 期望续字节却来了别的字节：整段序列作废
+                resetUtf8State()
+                return
+            }
+            utf8CodePoint = (utf8CodePoint shl 6) or (v and 0x3F)
+            if (--utf8BytesNeeded == 0) {
+                commandBuffer.appendCodePoint(utf8CodePoint)
+                utf8CodePoint = 0
+            }
         }
     }
 
@@ -333,7 +422,7 @@ class TerminalSession(
      * 拦截会污染命令缓冲，需绕过。
      */
     private fun writeRaw(data: ByteArray) {
-        if (isRunning) terminalWriteChannel.trySend(data)
+        if (isRunning) enqueueWrite(data)
     }
 
     inline fun write(data: String) {

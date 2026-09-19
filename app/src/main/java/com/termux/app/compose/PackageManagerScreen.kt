@@ -198,6 +198,16 @@ data class PackageInfo(
 
 object PkgRepo {
 
+    /**
+     * 把任意字符串转成 sh 的单引号字面量，防止命令注入。
+     *
+     * 所有 `AppShell.exec()` 最终都走 `sh -c "<command>"`，因此任何拼接进命令的
+     * 用户输入（搜索关键字等）都必须先经过这里。否则关键字里的 `;` `$(...)`、
+     * 反引号、`&&` 会被 shell 当作语法执行，造成命令注入；即便不含恶意字符，
+     * 空格也会让 `pkg search` 收到被拆开的多个参数。
+     */
+    private fun shq(value: String): String = "'" + value.replace("'", "'\\''") + "'"
+
     suspend fun getInstalled(context: Context): List<PackageInfo> {
         val (code, output) = AppShell.exec(context, "pkg list-installed 2>/dev/null")
         if (code != 0) return emptyList()
@@ -251,7 +261,7 @@ object PkgRepo {
 
     suspend fun searchAvailable(context: Context, keyword: String): List<PackageInfo> {
         if (keyword.isBlank()) return emptyList()
-        val (code, output) = AppShell.exec(context, "pkg search ${keyword} 2>/dev/null")
+        val (code, output) = AppShell.exec(context, "pkg search ${shq(keyword)} 2>/dev/null")
         if (code != 0) return emptyList()
         val result = mutableListOf<PackageInfo>()
         val installedNames = getInstalledNames(context)
@@ -289,7 +299,7 @@ object PkgRepo {
 
     suspend fun getDetail(context: Context, name: String): PackageInfo? {
         val installed = getInstalledNames(context)
-        val (code, output) = AppShell.exec(context, "pkg show $name 2>/dev/null")
+        val (code, output) = AppShell.exec(context, "pkg show ${shq(name)} 2>/dev/null")
         if (code != 0 && output.isBlank()) return null
 
         val fields = mutableMapOf<String, String>()
@@ -325,14 +335,14 @@ object PkgRepo {
     }
 
     suspend fun install(context: Context, name: String, onOutput: ((String) -> Unit)? = null): Pair<Boolean, String> {
-        val cmd = "export DEBIAN_FRONTEND=noninteractive && pkg install -y $name 2>&1"
+        val cmd = "export DEBIAN_FRONTEND=noninteractive && pkg install -y ${shq(name)} 2>&1"
         val (code, output) = if (onOutput != null) AppShell.execStreaming(context, cmd, timeout = 180, onOutput = onOutput)
                              else AppShell.exec(context, cmd, timeout = 180)
         return (code == 0) to output
     }
 
     suspend fun uninstall(context: Context, name: String, onOutput: ((String) -> Unit)? = null): Pair<Boolean, String> {
-        val cmd = "export DEBIAN_FRONTEND=noninteractive && pkg uninstall -y $name 2>&1"
+        val cmd = "export DEBIAN_FRONTEND=noninteractive && pkg uninstall -y ${shq(name)} 2>&1"
         val (code, output) = if (onOutput != null) AppShell.execStreaming(context, cmd, timeout = 60, onOutput = onOutput)
                              else AppShell.exec(context, cmd, timeout = 60)
         return (code == 0) to output

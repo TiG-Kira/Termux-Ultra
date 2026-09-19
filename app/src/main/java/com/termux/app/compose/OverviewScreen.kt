@@ -324,6 +324,7 @@ class OverviewCardManager(context: Context) {
     companion object {
         @Volatile
         private var instance: OverviewCardManager? = null
+
         fun getInstance(context: Context): OverviewCardManager {
             return instance ?: synchronized(this) {
                 instance ?: OverviewCardManager(context.applicationContext).also { instance = it }

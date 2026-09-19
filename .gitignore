@@ -32,6 +32,16 @@ google-services.json
 # Android Profiling
 *.hprof
 
+# 抓屏 / 调试产物（uiautomator dump 等）
+ui_dump.xml
+window_dump.xml
+
+# 误提交的编译输出（.class 不应入库）
+*.class
+
+# 误提交的工具输出目录
+top/
+
 
 memory
 memory.md
@@ -43,3 +53,5 @@ build_log.txt
 _deps2.txt
 _deps.txt
 .kotlin/
+.workbuddy
+CODE_REVIEW_REPORT.md

@@ -158,8 +158,15 @@ __VGE_wrap() {
     command "$__fn" "$@"
 }
 
+# 说明: 这张表必须与 RiskCommandDetector 中的规则对齐, 否则检测端有规则、
+# shell 端却不投递, 规则形同虚设。补齐了原先缺失的分区/擦除/加密/内核模块
+# 与其余 mkfs 变体（parted / cfdisk / gdisk / sgdisk / wipefs / shred /
+# cryptsetup / mkfs.xfs / mkfs.btrfs / mkfs.ntfs / insmod / rmmod / modprobe 等）。
 for __f in su sudo pkexec doas dd mkswap fdisk sfdisk setprop \
            mkfs mkfs.ext2 mkfs.ext3 mkfs.ext4 mkfs.f2fs mkfs.vfat mkfs.exfat \
+           mkfs.fat mkfs.ntfs mkfs.xfs mkfs.btrfs mkfs.zfs mke2fs newfs_msdos \
+           parted cfdisk gdisk sgdisk wipefs shred cryptsetup \
+           insmod rmmod modprobe \
            shutdown reboot poweroff halt rm chmod \
            bash sh zsh ksh dash fish; do
     eval "${__f}() { __VGE_wrap ${__f} \"\$@\"; }"
@@ -198,15 +205,34 @@ if [ -n "$BASH_VERSION" ]; then
                 __VGE_IN_TRAP=; return 0 ;;
         esac
 
-        # 4. 只检测直接执行脚本的命令 (./..//*)
+        # 4. 检测范围
+        #    a) 直接执行脚本 (./ ../ /*) —— 不走函数包装, 只能靠 DEBUG trap
+        #    b) 重定向写入块设备 (> /dev/sdX、>> /dev/nvme0n1 ...)
+        #       这类命令没有可包装的命令名, 函数包装抓不到; 原先被整类放行,
+        #       导致 RiskCommandDetector 的 RAW_DISK_WRITE 规则永远不触发
+        #       （`cat x > /dev/sda` 这类破坏性写盘可直接执行）
+        #    c) 其余交互命令放行 —— 性能考虑, 不把每条命令都送去 TCP 检测
+        #
+        # 重定向判定基于「去掉所有空白」的副本: case 模式无法表达可选的空格,
+        # 否则 `cat x > /dev/sda`（> 后有空格）会被漏掉 —— 这正是检测端正则
+        # 里 `>\s*/dev/` 所允许的形式。
+        __vge_nosp=${__cmd//[[:space:]]/}
         case "$__cmd" in
             ./*|../*|/*)
                 # 可能是 ./script.sh 或 /bin/ls 等
                 # /bin/ls 不是脚本, 但检测一下也无妨 (TCP 会判断)
                 ;;
             *)
-                # 其他命令 (cat, ls, echo...) 直接放行, 不检测
-                __VGE_IN_TRAP=; return 0 ;;
+                case "$__vge_nosp" in
+                    *\>/dev/sd*|*\>/dev/nvme*|*\>/dev/mmcblk*|*\>/dev/loop*\
+                    |*\>/dev/ram*|*\>/dev/zram*|*\>/dev/vd*|*\>/dev/xvd*|*\>/dev/blk*)
+                        # 可能是 cat/tee/cp > /dev/sda 等, 交给检测端判断
+                        ;;
+                    *)
+                        # 其他命令 (cat, ls, echo...) 直接放行, 不检测
+                        __VGE_IN_TRAP=; return 0 ;;
+                esac
+                ;;
         esac
 
         # 5. 子 shell TCP (安全!)

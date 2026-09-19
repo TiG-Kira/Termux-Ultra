@@ -42,10 +42,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.termux.R
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.Job
 import top.yukonga.miuix.kmp.basic.Card as MiuixCard
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
@@ -132,15 +134,31 @@ private fun buildDetailedProcessList(processes: List<ProcessInfo>): List<Detaile
     }
 }
 
+/**
+ * UID -> 用户名 查询结果缓存。
+ *
+ * 进程列表每 2 秒刷新一次，而 Android 上常见进程数是几百个；原先对每个进程都
+ * 执行一次 `Runtime.exec("id -un <uid>")` + `waitFor()`，等于每 2 秒派生
+ * 几百个子进程，会造成明显卡顿与耗电。实际 UID 种类通常只有个位数，
+ * 这里做记忆化后，稳定状态下几乎不再派生子进程。
+ */
+private val uidNameCache = java.util.concurrent.ConcurrentHashMap<Int, String>()
+
 private fun resolveUserName(uid: Int): String {
-    return try {
+    uidNameCache[uid]?.let { return it }
+    val name = try {
         val process = Runtime.getRuntime().exec(arrayOf("id", "-un", "$uid"))
-        val output = process.inputStream.bufferedReader().readText().trim()
+        // 必须同时排空 stderr，否则子进程 stderr 缓冲区写满会阻塞其退出
+        process.errorStream.close()
+        val output = process.inputStream.bufferedReader().use { it.readText() }.trim()
         process.waitFor()
+        process.destroy()
         if (output.isNotEmpty()) output else "uid:$uid"
     } catch (_: Exception) {
         "uid:$uid"
     }
+    uidNameCache[uid] = name
+    return name
 }
 
 @Composable
@@ -157,25 +175,29 @@ fun ProcessListScreen(
     var detailedList by remember { mutableStateOf<List<DetailedProcess>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
 
+    // 用与组合绑定的作用域：离开页面时自动取消，避免原先每次刷新都新建一个
+    // 永不取消的 CoroutineScope（每 2 秒泄漏一个）。
+    val refreshScope = rememberCoroutineScope()
+
     fun doRefresh() {
-        CoroutineScope(Dispatchers.IO).launch {
+        refreshScope.launch(Dispatchers.IO) {
             val cpu = try { readCpuUsage() } catch (_: Exception) { 0f }
             val gpu = try { readGpuUsage() } catch (_: Exception) { 0f }
             val rawList = try { readProcessList() } catch (_: Exception) { emptyList() }
             val detailed = buildDetailedProcessList(rawList)
-            cpuUsage = cpu
-            gpuUsage = gpu
-            detailedList = detailed
-            isLoading = false
+            // Compose 状态回到主线程再写，避免跨线程快照写入
+            withContext(Dispatchers.Main.immediate) {
+                cpuUsage = cpu
+                gpuUsage = gpu
+                detailedList = detailed
+                isLoading = false
+            }
         }
     }
 
-    LaunchedEffect(Unit) {
-        doRefresh()
-    }
-
     DisposableEffect(Unit) {
-        val job = CoroutineScope(Dispatchers.Default).launch {
+        doRefresh()
+        val job: Job = refreshScope.launch(Dispatchers.Default) {
             while (true) {
                 delay(2000)
                 doRefresh()
