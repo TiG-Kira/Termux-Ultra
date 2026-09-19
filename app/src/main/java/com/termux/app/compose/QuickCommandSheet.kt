@@ -288,10 +288,13 @@ private fun AddQuickCommandDialog(
     var command by remember { mutableStateOf("") }
     var autoExecute by remember { mutableStateOf(true) }
 
-    OverlayBottomSheet(
+    // 用 miuix WindowDialog（独立窗口），nova / 经典两种模式都能用，
+    // 不依赖 Scaffold 的 MiuixPopupHost，避免经典模式下 "添加 +" 无响应。
+    WindowDialog(
         show = true,
-        onDismissRequest = onDismiss,
         title = "添加快捷指令",
+        summary = "",
+        onDismissRequest = onDismiss,
         content = {
             Column(
                 modifier = Modifier
