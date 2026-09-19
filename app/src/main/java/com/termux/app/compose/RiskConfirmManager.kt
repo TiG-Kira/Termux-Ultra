@@ -628,7 +628,9 @@ object RiskConfirmManager {
 
         // WARN_VERIFY: 完整弹窗验证流程
         val activity = context as? ComponentActivity
-        val requestId = System.currentTimeMillis().toString()
+        // 使用 UUID 作为请求键，避免同毫秒并发确认时 map key 碰撞导致
+        // 前一个 suspendCancellableCoroutine 永不 resume（协程泄漏/永久挂起）。
+        val requestId = java.util.UUID.randomUUID().toString()
 
         _dialogState.value = DialogState(
             command = command,
@@ -962,6 +964,15 @@ object RiskConfirmManager {
             prefs.edit().putString(KEY_AGENT_PENDING_RESULT, RESULT_DENIED).apply()
             _dialogState.value = null
             navigateBackToAgent(context)
+            return
+        }
+        // 处理终端会话的跳转模式（与 confirm() 对称：取消时写 DENIED 并导航回 Termux，
+        // 否则 pending 状态永不清除，终端会一直等待确认而卡死）
+        val sessionHandle = prefs.getString(KEY_PENDING_SESSION_HANDLE, null)
+        if (sessionHandle != null) {
+            prefs.edit().putString(KEY_PENDING_RESULT, RESULT_DENIED).apply()
+            _dialogState.value = null
+            navigateBackToTermux(context, sessionHandle, RESULT_DENIED)
             return
         }
         // 最后处理协程请求

@@ -93,37 +93,52 @@ class QuickCommandStore private constructor(
     }
 
     fun add(command: QuickCommand): List<QuickCommand> {
-        val list = getAll().toMutableList()
-        list.add(command)
-        saveAll(list)
+        val list = synchronized(this) {
+            val l = getAll().toMutableList()
+            l.add(command)
+            saveAll(l)
+            l
+        }
         return list
     }
 
     fun remove(label: String): List<QuickCommand> {
-        val list = getAll().filter { it.label != label }
-        saveAll(list)
+        val list = synchronized(this) {
+            val l = getAll().filter { it.label != label }
+            saveAll(l)
+            l
+        }
         return list
     }
 
     fun removeById(id: String): List<QuickCommand> {
-        val list = getAll().filter { it.id != id }
-        saveAll(list)
+        val list = synchronized(this) {
+            val l = getAll().filter { it.id != id }
+            saveAll(l)
+            l
+        }
         return list
     }
 
     fun update(oldLabel: String, newItem: QuickCommand): List<QuickCommand> {
-        val list = getAll().toMutableList()
-        val idx = list.indexOfFirst { it.label == oldLabel }
-        if (idx >= 0) list[idx] = newItem else list.add(newItem)
-        saveAll(list)
+        val list = synchronized(this) {
+            val l = getAll().toMutableList()
+            val idx = l.indexOfFirst { it.label == oldLabel }
+            if (idx >= 0) l[idx] = newItem else l.add(newItem)
+            saveAll(l)
+            l
+        }
         return list
     }
 
     fun updateById(id: String, newItem: QuickCommand): List<QuickCommand> {
-        val list = getAll().toMutableList()
-        val idx = list.indexOfFirst { it.id == id }
-        if (idx >= 0) list[idx] = newItem else list.add(newItem)
-        saveAll(list)
+        val list = synchronized(this) {
+            val l = getAll().toMutableList()
+            val idx = l.indexOfFirst { it.id == id }
+            if (idx >= 0) l[idx] = newItem else l.add(newItem)
+            saveAll(l)
+            l
+        }
         return list
     }
 

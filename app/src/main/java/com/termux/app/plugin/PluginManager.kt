@@ -311,8 +311,17 @@ object PluginManager {
             val intent = Intent(context, TermuxService::class.java)
             context.bindService(intent, object : android.content.ServiceConnection {
                 override fun onServiceConnected(name: ComponentName, binder: android.os.IBinder) {
-                    val service = (binder as TermuxService.LocalBinder).service
-                    service.registerPluginSession(session.termuxSession)
+                    val localBinder = binder as? TermuxService.LocalBinder
+                    if (localBinder == null) {
+                        Logger.logStackTraceWithMessage(
+                            "PluginManager",
+                            "registerWithService: unexpected binder type for ${session.sessionId}",
+                            ClassCastException(binder.javaClass.name)
+                        )
+                        unbindFromService(context, this)
+                        return
+                    }
+                    localBinder.service.registerPluginSession(session.termuxSession)
                     unbindFromService(context, this)
                 }
                 override fun onServiceDisconnected(name: ComponentName) {}
