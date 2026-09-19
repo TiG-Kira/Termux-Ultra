@@ -92,6 +92,10 @@ fun QuickCommandSheet(
                 val item = QuickCommand(label = label, command = command, autoExecute = auto)
                 commands = store.add(item)
                 showAddDialog = false
+                if (auto) {
+                    onDismiss()
+                    onExecuteCommand(item)
+                }
             }
         )
     }
@@ -148,6 +152,10 @@ fun QuickCommandWindowSheet(
                 val item = QuickCommand(label = label, command = command, autoExecute = auto)
                 commands = store.add(item)
                 showAddDialog = false
+                if (auto) {
+                    onDismiss()
+                    onExecuteCommand(item)
+                }
             }
         )
     }
@@ -324,7 +332,10 @@ private fun AddQuickCommandDialog(
                     minLines = 2
                 )
                 Spacer(Modifier.height(12.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                     Checkbox(
                         state = if (autoExecute) ToggleableState.On else ToggleableState.Off,
                         onClick = { autoExecute = !autoExecute },
