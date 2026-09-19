@@ -322,12 +322,12 @@ class OverviewCardManager(context: Context) {
     private val prefs = context.getSharedPreferences("overview_cards", Context.MODE_PRIVATE)
     
     companion object {
+        @Volatile
         private var instance: OverviewCardManager? = null
         fun getInstance(context: Context): OverviewCardManager {
-            if (instance == null) {
-                instance = OverviewCardManager(context.applicationContext)
+            return instance ?: synchronized(this) {
+                instance ?: OverviewCardManager(context.applicationContext).also { instance = it }
             }
-            return instance!!
         }
     }
     

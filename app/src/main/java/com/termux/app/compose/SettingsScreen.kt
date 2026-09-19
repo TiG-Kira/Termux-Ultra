@@ -275,29 +275,38 @@ fun SettingsScreen(
                 NotificationHelper.showProgressNotification(context, restoreTitle, 0, -1, context.getString(R.string.initializing), pendingCancelIntent)
                 val mainHandler = Handler(Looper.getMainLooper())
                 Thread {
-                    val inputStream = context.contentResolver.openInputStream(uri)
                     val tempFile = File(context.cacheDir, "temp_backup.tar")
-                    inputStream?.use { input ->
-                        tempFile.outputStream().use { output ->
-                            input.copyTo(output)
+                    var result = false
+                    try {
+                        val inputStream = context.contentResolver.openInputStream(uri)
+                        inputStream?.use { input ->
+                            tempFile.outputStream().use { output ->
+                                input.copyTo(output)
+                            }
                         }
+                        result = BackupManager.restoreBackup(context, tempFile.absolutePath) { processed, total, message ->
+                            val display = when {
+                                message.isNotBlank() -> message
+                                processed > 0 -> context.getString(R.string.restored_size, processed)
+                                else -> context.getString(R.string.initializing)
+                            }
+                            mainHandler.post {
+                                NotificationHelper.showProgressNotification(context, restoreTitle, 0, total, display, pendingCancelIntent)
+                            }
+                        }
+                    } catch (_: Throwable) {
+                        result = false
+                    } finally {
+                        // 无论成功或异常都删除临时文件，避免缓存目录残留
+                        tempFile.delete()
                     }
-
-                    val result = BackupManager.restoreBackup(context, tempFile.absolutePath) { processed, total, message ->
-                        val display = when {
-                            message.isNotBlank() -> message
-                            processed > 0 -> context.getString(R.string.restored_size, processed)
-                            else -> context.getString(R.string.initializing)
-                        }
-                        mainHandler.post {
-                            NotificationHelper.showProgressNotification(context, restoreTitle, 0, total, display, pendingCancelIntent)
-                        }
-                    }
-                    tempFile.delete()
-
                     mainHandler.post {
                         isProcessing = false
-                        context.unregisterReceiver(cancelReceiver)
+                        // 无论成功或异常都反注册接收器，避免 BroadcastReceiver 泄漏
+                        try {
+                            context.unregisterReceiver(cancelReceiver)
+                        } catch (_: IllegalArgumentException) {
+                        }
                         if (result) {
                             NotificationHelper.showCompleteNotification(context, context.getString(R.string.restore_complete), context.getString(R.string.restore_restart_hint), true)
                         } else {
@@ -374,19 +383,28 @@ fun SettingsScreen(
                     NotificationHelper.showProgressNotification(context, backupTitle, 0, -1, context.getString(R.string.initializing), pendingCancelIntent)
                     val mainHandler = Handler(Looper.getMainLooper())
                     Thread {
-                        val backupPath = BackupManager.createBackup(context) { processed, total, message ->
-                            val display = when {
-                                message.isNotBlank() -> message
-                                processed > 0 -> context.getString(R.string.backed_up_size, processed)
-                                else -> context.getString(R.string.initializing)
+                        var backupPath: String? = null
+                        try {
+                            backupPath = BackupManager.createBackup(context) { processed, total, message ->
+                                val display = when {
+                                    message.isNotBlank() -> message
+                                    processed > 0 -> context.getString(R.string.backed_up_size, processed)
+                                    else -> context.getString(R.string.initializing)
+                                }
+                                mainHandler.post {
+                                    NotificationHelper.showProgressNotification(context, backupTitle, 0, total, display, pendingCancelIntent)
+                                }
                             }
-                            mainHandler.post {
-                                NotificationHelper.showProgressNotification(context, backupTitle, 0, total, display, pendingCancelIntent)
-                            }
+                        } catch (_: Throwable) {
+                            backupPath = null
                         }
                         mainHandler.post {
                             isProcessing = false
-                            context.unregisterReceiver(cancelReceiver)
+                            // 无论成功或异常都反注册接收器，避免 BroadcastReceiver 泄漏
+                            try {
+                                context.unregisterReceiver(cancelReceiver)
+                            } catch (_: IllegalArgumentException) {
+                            }
                             if (backupPath != null) {
                                 NotificationHelper.showCompleteNotification(context, context.getString(R.string.backup_complete), backupPath, true)
                             } else {
