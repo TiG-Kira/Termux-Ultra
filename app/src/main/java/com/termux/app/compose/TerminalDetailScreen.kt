@@ -206,6 +206,9 @@ fun TerminalDetailScreen(
     // ROOT 状态
     var hasRootAccess by remember { mutableStateOf(false) }
     var showRootStatusDialog by remember { mutableStateOf(false) }
+
+    // 快捷指令 BottomSheet
+    var showQuickCommandSheet by remember { mutableStateOf(false) }
     
     // 监听软键盘设置变化
     LaunchedEffect(Unit) {
@@ -696,7 +699,20 @@ fun TerminalDetailScreen(
             )
         }
         if (softKeyboardEnabled) {
-            IconButton(onClick = { updateInteractionTime(); toggleKeyboard() }) {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .combinedClickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = topBarIndication,
+                        onClick = { updateInteractionTime(); toggleKeyboard() },
+                        onLongClick = {
+                            updateInteractionTime()
+                            showQuickCommandSheet = true
+                        }
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
                 Icon(
                     painter = painterResource(R.drawable.ic_keyboard),
                     contentDescription = null,
@@ -776,7 +792,20 @@ fun TerminalDetailScreen(
             )
         }
         if (softKeyboardEnabled) {
-            IconButton(onClick = { updateInteractionTime(); toggleKeyboard() }) {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .combinedClickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = topBarIndication,
+                        onClick = { updateInteractionTime(); toggleKeyboard() },
+                        onLongClick = {
+                            updateInteractionTime()
+                            showQuickCommandSheet = true
+                        }
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
                 Icon(
                     painter = painterResource(R.drawable.ic_keyboard),
                     contentDescription = null,
@@ -1590,6 +1619,15 @@ fun TerminalDetailScreen(
             
             // 添加 RiskConfirmDialogHost 以收集 Snackbar 事件和显示风险确认弹窗
             RiskConfirmDialogHost(snackbarHostState)
+
+            // 快捷指令 BottomSheet：长按 TopBar 键盘按钮触发
+            QuickCommandSheet(
+                show = showQuickCommandSheet,
+                onDismiss = { showQuickCommandSheet = false },
+                onExecuteCommand = { cmd ->
+                    executeQuickCommand(activity, cmd)
+                }
+            )
         }
     }
 }

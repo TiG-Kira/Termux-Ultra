@@ -7,7 +7,7 @@ import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -39,6 +39,15 @@ object TerminalTopBarState {
     var iconColor by mutableStateOf(Color.White)
 }
 
+/**
+ * 经典模式下快捷指令 BottomSheet 的共享显示状态。
+ * 经典模式的 TopBar 使用独立 ComposeView 渲染，没有 TerminalDetailScreen 的状态容器，
+ * 所以用全局 state 暴露给 Java 层调用（长按键盘按钮触发）。
+ */
+object QuickCommandSheetState {
+    var show by mutableStateOf(false)
+}
+
 private val mainHandler = Handler(Looper.getMainLooper())
 
 @Composable
@@ -47,6 +56,7 @@ fun TerminalTopBar(
     onNewSession: () -> Unit,
     onCloseSession: () -> Unit,
     onToggleKeyboard: () -> Unit,
+    onLongPressKeyboard: () -> Unit,
     onLongPressNewSession: () -> Unit
 ) {
     Row(
@@ -77,7 +87,18 @@ fun TerminalTopBar(
                 .padding(horizontal = 8.dp)
         )
         if (!TerminalTopBarState.isKeyboardVisible) {
-            IconButton(onClick = onToggleKeyboard) {
+            val kbInteractionSource = remember { MutableInteractionSource() }
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .combinedClickable(
+                        interactionSource = kbInteractionSource,
+                        indication = LocalIndication.current,
+                        onClick = onToggleKeyboard,
+                        onLongClick = onLongPressKeyboard
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
                 Icon(
                     painter = painterResource(R.drawable.ic_keyboard),
                     contentDescription = null,
@@ -148,6 +169,22 @@ fun updateIconColorForBackground(backgroundColor: Int) {
     }
 }
 
+fun showQuickCommandSheet() {
+    if (Looper.myLooper() == Looper.getMainLooper()) {
+        QuickCommandSheetState.show = true
+    } else {
+        mainHandler.post { QuickCommandSheetState.show = true }
+    }
+}
+
+fun hideQuickCommandSheet() {
+    if (Looper.myLooper() == Looper.getMainLooper()) {
+        QuickCommandSheetState.show = false
+    } else {
+        mainHandler.post { QuickCommandSheetState.show = false }
+    }
+}
+
 fun isColorDark(color: Int): Boolean {
     val r = android.graphics.Color.red(color)
     val g = android.graphics.Color.green(color)
@@ -167,12 +204,23 @@ fun setTerminalTopBarContent(
     // miuix UI 库不可用时跳过设置，避免 TermuxActivity 崩溃
     if (!ApiCompat.canLoadMiuixUi()) return
     composeView.setContent {
-        TerminalTopBar(
-            onBack = onBack,
-            onNewSession = onNewSession,
-            onCloseSession = onCloseSession,
-            onToggleKeyboard = onToggleKeyboard,
-            onLongPressNewSession = onLongPressNewSession
-        )
+        Box(modifier = Modifier.fillMaxSize()) {
+            TerminalTopBar(
+                onBack = onBack,
+                onNewSession = onNewSession,
+                onCloseSession = onCloseSession,
+                onToggleKeyboard = onToggleKeyboard,
+                onLongPressKeyboard = { showQuickCommandSheet() },
+                onLongPressNewSession = onLongPressNewSession
+            )
+            val activity = composeView.context as? TermuxActivity
+            QuickCommandSheet(
+                show = QuickCommandSheetState.show,
+                onDismiss = { QuickCommandSheetState.show = false },
+                onExecuteCommand = { cmd ->
+                    if (activity != null) executeQuickCommand(activity, cmd)
+                }
+            )
+        }
     }
 }
