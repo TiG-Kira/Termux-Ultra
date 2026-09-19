@@ -353,11 +353,9 @@ fun StorageScreen(onBack: () -> Unit) {
 
     suspend fun scan() {
         isScanning = true
-        val (scannedCategories, accurateBytes) = withContext(Dispatchers.IO) {
-            scanTermuxStorage(context) to getAccurateAppStorageBytes(context)
+        categories = withContext(Dispatchers.IO) {
+            scanTermuxStorage(context)
         }
-        categories = scannedCategories
-        accurateUsedBytes = accurateBytes
         isScanning = false
     }
 
