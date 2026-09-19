@@ -806,7 +806,7 @@
     <string name="card_layout_horizontal">Horizontal (Swipe)</string>
 
     <!-- Terminal -->
-    <string name="termux_core_version">0.118.3</string>
+    <string name="termux_core_version">0.119.0</string>
     <string name="terminal_new_session_with_handle">New Session [%1$s]</string>
     <string name="terminal_session_ended">Session ended</string>
     <string name="terminal_session_ended_with_code">Session ended (exit code: %1$d)</string>

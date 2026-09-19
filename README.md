@@ -2,8 +2,8 @@
 
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](./LICENSE)
 [![Platform: Android](https://img.shields.io/badge/Platform-Android%208.0%2B-green.svg)]()
-[![Based on Termux v0.119.0-beta.3](https://img.shields.io/badge/Base-Termux%20v0.119.0--beta.3-orange.svg)](https://github.com/termux/termux-app)
-[![2.0 beta on main](https://img.shields.io/badge/2.0%20beta-main-red.svg)](https://github.com/TiG-Kira/Termux-Ultra)
+[![Based on Termux v0.119.0](https://img.shields.io/badge/Base-Termux%20v0.119.0-orange.svg)](https://github.com/termux/termux-app/releases/tag/v0.119.0-beta.3)
+[![v2.1.0.R5](https://img.shields.io/badge/v2.1.0.R5-stable-brightgreen.svg)](https://github.com/TiG-Kira/Termux-Ultra/releases)
 
 [![Build status](https://github.com/TiG-Kira/Termux-Ultra/actions/workflows/ci.yml/badge.svg)](https://github.com/TiG-Kira/Termux-Ultra/actions)
 
@@ -11,11 +11,11 @@
 
 | 分支 | 基底 | 版本 | 状态 |
 |------|------|------|------|
-| **`main`** 🎯 | 上游 Termux `v0.119.0-beta.3` | 2.x.x.R5 | **活跃开发主线**，承接功能开发、Bug 修复、架构优化 |
+| **`main`** 🎯 | 上游 Termux `v0.119.0` | 2.1.0.R5 | **正式版主线**，承接功能开发、Bug 修复、架构优化 |
 | `release/r1-r4` | 上游 Termux `v0.118.3` | 1.8.0.R4 | 📦 v1.8.x 历史快照，**停止功能更新**，仅做紧急阻断 Bug 修复 |
 | `archived/corebump/2.x` | 上游 Termux `v0.119.0-beta.3` | 2.0.0.R5 | 📂 归档快照，保留 2.x 内部开发步骤 |
 
-> ✅ **2.0 已于 2026-09-19 合入 main**，以大 commit 方式（`85034da`）将 2.x 完整内容覆盖 main，v1.8.0 全部历史保留。相关 PR 见 [#26](https://github.com/TiG-Kira/Termux-Ultra/pull/26)（LiveUpdate 修复）、[#27](https://github.com/TiG-Kira/Termux-Ultra/pull/27)（Mega PR）、[Issue #22](https://github.com/TiG-Kira/Termux-Ultra/issues/22)（合并追踪）。
+> ✅ **2.1.0.R5 正式版已于 2026-09-19 发布**，基于上游 Termux v0.119.0，包含 Nova 引擎、玻璃导航栏、插件系统、AI 助手等核心功能。
 
 
 
@@ -26,6 +26,20 @@
 ***
 
 ## 最近更新
+
+### Termux Ultra 2.1.0.R5 — 🎉 正式版发布
+
+> 📅 **2026-09-19 正式发布**
+
+- **Nova 引擎 (LibTerminal) 3.0.0**：全新终端核心引擎，性能与兼容性大幅提升，支持在经典引擎与新星引擎间一键切换
+- **玻璃/柔光/浮动导航栏**：HyperOS 原生视觉风格复刻，指示器支持拖动切页，玻璃效果亮色模式更白、暗色模式更暗
+- **插件系统 v2.0.0**：完整的第三方插件支持，包括 Compose JSON DSL 原生页面、宿主 Action 桥、持久化会话、权限管理
+- **AI Termux 助手**：内置 AI 助手，支持多模型配置（OpenAI/本地大模型/内置 LLama）、技能系统、深度思考展示、训练本地模型
+- **HyperOS 主题适配**：TopAppBar 和悬浮底栏 100% 复刻 HyperOS 原生样式与动画，系统版本自动检测
+- **UI/UX 全面优化**：Miuix 风格设置页、统一 TabRow、页面过渡动画、预测式返回、横滑手势切页
+- **VNC/SSH/文件管理**：远程管理页面统一搜索 UI，VNC 基于 AVNC + libvncserver，SSH 基于 connectbot
+- **资源页一键部署**：Ubuntu/Debian 容器、QEMU 虚拟机、朱雀面板、Python 环境等一键安装脚本
+- **LiveUpdate 实时通知**：下载进度分段显示、Agent 思考状态、包管理通知优化
 
 ### Termux Ultra 2.0.0.R5 — 🚀 重大上游基底升级
 
