@@ -17,6 +17,8 @@ import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
@@ -66,6 +68,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
@@ -149,6 +152,7 @@ fun TerminalDetailScreenCompose(
     var smallTitleAlpha by remember { mutableFloatStateOf(0f) }
     var useLargeButtons by remember { mutableStateOf(false) }
     var lastInteractionTime by remember { mutableStateOf(System.currentTimeMillis()) }
+    var lastInteractionFromTopBar by remember { mutableStateOf(false) }
     var sessionKey by remember { mutableIntStateOf(0) }
     var showNewSessionLabel by remember { mutableStateOf(false) }
     var sessionLabelTimer by remember { mutableStateOf(0L) }
@@ -220,8 +224,14 @@ fun TerminalDetailScreenCompose(
 
     val topBarIndication = LocalIndication.current
 
-    fun updateInteractionTime() {
+    fun updateInteractionTime(fromTopBar: Boolean = true) {
         lastInteractionTime = System.currentTimeMillis()
+        lastInteractionFromTopBar = fromTopBar
+    }
+
+    fun markOutsideInteraction() {
+        lastInteractionTime = System.currentTimeMillis()
+        lastInteractionFromTopBar = false
     }
 
     fun showSnack(message: String) {
@@ -332,6 +342,7 @@ fun TerminalDetailScreenCompose(
             showNewSessionLabel = false
             sessionKey++
             lastInteractionTime = System.currentTimeMillis()
+            lastInteractionFromTopBar = true
             coroutineScope.launch {
                 animate(initialValue = smallTitleAlpha, targetValue = 0f, animationSpec = tween(100, easing = FastOutLinearInEasing)) { value, _ ->
                     smallTitleAlpha = value
@@ -353,6 +364,7 @@ fun TerminalDetailScreenCompose(
             showNewSessionLabel = false
             sessionKey++
             lastInteractionTime = System.currentTimeMillis()
+            lastInteractionFromTopBar = true
         }
     }
 
@@ -394,6 +406,7 @@ fun TerminalDetailScreenCompose(
         showNewSessionLabel = true
         sessionKey++
         lastInteractionTime = System.currentTimeMillis()
+        lastInteractionFromTopBar = true
     }
 
     // 状态栏颜色适配（照搬 Java 版 L286-301）
@@ -430,7 +443,7 @@ fun TerminalDetailScreenCompose(
             }
             val now = System.currentTimeMillis()
             val elapsed = now - lastInteractionTime
-            if (showSessionList || showContextMenu || showRenameDialog) {
+            if (lastInteractionFromTopBar || showSessionList || showContextMenu || showRenameDialog) {
                 delay(100)
                 continue
             }
@@ -880,6 +893,12 @@ fun TerminalDetailScreenCompose(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(padding)
+                    .pointerInput(Unit) {
+                        awaitEachGesture {
+                            awaitFirstDown(requireUnconsumed = false)
+                            markOutsideInteraction()
+                        }
+                    }
             ) {
                 ComposeTerminalScreen(
                     session = currentSession,
