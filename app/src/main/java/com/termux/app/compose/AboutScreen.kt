@@ -443,6 +443,10 @@ fun AboutScreen(onBack: () -> Unit) {
                  }
 
                  item {
+                     Spacer(modifier = Modifier.height(12.dp))
+                 }
+
+                 item {
                      Card(
                          modifier = Modifier.graphicsLayer { alpha = cardsAlphaAnim }
                              .fillMaxWidth()
