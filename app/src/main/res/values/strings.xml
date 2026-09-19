@@ -1293,6 +1293,9 @@
     <string name="contributor_1_name">awkoo</string>
     <string name="contributor_1_username">@awkox</string>
     <string name="contributor_awkoo_name">awkoo</string>
+    <string name="contributor_yhlfurry_name">YHLFurry</string>
+    <string name="contributor_yhlfurry_summary">@YHLFurry · Maintainer</string>
+    <string name="contributor_yhlfurry_github">YHLFurry</string>
     <string name="about_contributors_section">贡献者</string>
     <string name="checking_updates">检查更新中...</string>
     <string name="about_check_updates_desc">点击检查最新 Termux Ultra 更新</string>
