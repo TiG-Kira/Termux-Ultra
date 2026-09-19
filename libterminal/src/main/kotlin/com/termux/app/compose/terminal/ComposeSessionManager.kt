@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import java.io.File
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Compose 模式下的终端会话管理器。
@@ -38,7 +39,11 @@ class ComposeSessionManager private constructor(private val context: Context) {
     val currentSession: TerminalSession?
         get() = _sessions.value.firstOrNull { it.session.id == _currentSessionId.value }?.session
 
-    private var nextId = 1
+    /** 会话 id 分配器（原子，避免 binder 线程与主线并发创建时产生重复 id）。 */
+    private val nextId = AtomicInteger(1)
+
+    /** 保护 _sessions 列表读-改-写的锁（create/kill 可能跨线程调用）。 */
+    private val sessionsLock = Any()
 
     /**
      * 创建新会话、启动 shell、设为当前活跃会话。
@@ -60,7 +65,7 @@ class ComposeSessionManager private constructor(private val context: Context) {
         }
 
         val session = TerminalSession(
-            id = nextId++,
+            id = nextId.getAndIncrement(),
             sessionName = kotlinx.coroutines.flow.MutableStateFlow(sessionName),
             processFactory = processFactory
         )
@@ -69,7 +74,9 @@ class ComposeSessionManager private constructor(private val context: Context) {
         session.shellPath = shellPath
         session.args = args
 
-        _sessions.value = _sessions.value + SessionInfo(session, sessionName)
+        synchronized(sessionsLock) {
+            _sessions.value = _sessions.value + SessionInfo(session, sessionName)
+        }
 
                 // 设置启动后回调：注入自动执行命令
         session.onSessionStarted = {
@@ -154,24 +161,31 @@ class ComposeSessionManager private constructor(private val context: Context) {
      * 结束指定会话。如果关闭的是当前会话，自动切换到列表中下一个可用的（或上一个）。
      */
     fun killSession(sessionId: Int) {
-        val info = _sessions.value.firstOrNull { it.session.id == sessionId } ?: return
+        val info = synchronized(sessionsLock) {
+            _sessions.value.firstOrNull { it.session.id == sessionId }
+        } ?: return
         info.session.finishIfRunning()
 
-        val remaining = _sessions.value.filter { it.session.id != sessionId }
-        _sessions.value = remaining
+        synchronized(sessionsLock) {
+            val remaining = _sessions.value.filter { it.session.id != sessionId }
+            _sessions.value = remaining
 
-        if (_currentSessionId.value == sessionId) {
-            _currentSessionId.value = remaining.firstOrNull()?.session?.id ?: -1
+            if (_currentSessionId.value == sessionId) {
+                _currentSessionId.value = remaining.firstOrNull()?.session?.id ?: -1
+            }
         }
         notifySessionsChanged()
     }
 
     /** 结束所有会话。 */
     fun killAllSessions() {
-        _sessions.value.forEach { it.session.finishIfRunning() }
-        _sessions.value = emptyList()
-        _currentSessionId.value = -1
-        nextId = 1
+        synchronized(sessionsLock) {
+            _sessions.value.forEach { it.session.finishIfRunning() }
+            _sessions.value = emptyList()
+            _currentSessionId.value = -1
+        }
+        // 注意：不重置 nextId，保持会话 handle 全局单调递增，
+        // 避免切换核心后旧的 sessionHandle intent extra 解析到已不存在的会话。
         notifySessionsChanged()
     }
 

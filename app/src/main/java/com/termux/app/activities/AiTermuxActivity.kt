@@ -83,6 +83,9 @@ import java.io.File
 
 class AiTermuxActivity : FragmentActivity() {
 
+    /** 停止 Agent 的广播接收器（onCreate 注册，onDestroy 反注册，避免泄漏）。 */
+    private var stopReceiver: android.content.BroadcastReceiver? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -91,7 +94,7 @@ class AiTermuxActivity : FragmentActivity() {
         // 注册停止 Agent 的 broadcast receiver（通知按钮触发）
         val filter = android.content.IntentFilter()
         filter.addAction(com.termux.app.TermuxService.ACTION_STOP_AGENT)
-        val stopReceiver = object : android.content.BroadcastReceiver() {
+        stopReceiver = object : android.content.BroadcastReceiver() {
             override fun onReceive(context: android.content.Context, intent: android.content.Intent) {
                 if (intent.action == com.termux.app.TermuxService.ACTION_STOP_AGENT) {
                     vm.cancelGeneration()
@@ -135,6 +138,19 @@ class AiTermuxActivity : FragmentActivity() {
         super.onPause()
         val vm: AiTermuxViewModel by viewModels()
         AiTermuxPrefs.saveChatHistory(this, vm.messages.toOpenAiMessages())
+    }
+
+    override fun onDestroy() {
+        // 反注册 stopReceiver，避免 BroadcastReceiver 泄漏（持有 Activity 引用）
+        // 以及重建时叠加多个实例。判空以防重复反注册抛 "Receiver not registered"。
+        stopReceiver?.let {
+            try {
+                unregisterReceiver(it)
+            } catch (_: IllegalArgumentException) {
+            }
+        }
+        stopReceiver = null
+        super.onDestroy()
     }
 
     /** 检查并处理从主页返回的 Agent 二次确认结果 */

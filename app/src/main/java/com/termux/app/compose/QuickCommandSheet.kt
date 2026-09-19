@@ -363,7 +363,21 @@ fun executeQuickCommand(context: Context, command: QuickCommand) {
     // Compose 的 LocalContext.current 可能是 ContextWrapper（如 ComposeView 的 context），
     // 必须向上遍历找到真正的 TermuxActivity，直接 `as?` 会静默失败导致点击无响应。
     val activity = findActivityFromContext(context, TermuxActivity::class.java) ?: return
+    val text = buildQuickCommandText(command)
+
+    // Nova（Kotlin+Compose）模式下，Java 侧会话列表为空、mTerminalView 不被使用，
+    // activity.currentSession 恒为 null。必须改用 ComposeSessionManager 中的活跃会话，
+    // 否则快捷指令在 Nova 模式下会静默失效。
+    if (TerminalRuntimeCore.isComposeMode(context)) {
+        val composeSession = com.termux.app.compose.terminal.ComposeSessionManager
+            .getInstance(context).currentSession
+        if (composeSession != null && composeSession.isRunning) {
+            composeSession.write(text)
+        }
+        return
+    }
+
     val session = activity.currentSession ?: return
     if (!session.isRunning) return
-    session.write(buildQuickCommandText(command))
+    session.write(text)
 }

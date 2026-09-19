@@ -161,7 +161,11 @@ object ComposeTerminalSettings {
         // 兜底：init 未调用时（如后台服务路径直接 setter）自动初始化，避免静默丢失持久化
         val p = prefs ?: appContext?.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)?.also { prefs = it }
             ?: return
-        block(p.edit())
+        val editor = p.edit()
+        block(editor)
+        // 关键修复：此前 block(p.edit()) 创建 Editor 后从未提交，导致所有 setter
+        // 只更新内存 StateFlow、SharedPreferences 从不落盘，设置重启后全部回退。
+        editor.apply()
     }
 
     // --- Styling（~/.termux/colors.properties + font.ttf）解析 ---
