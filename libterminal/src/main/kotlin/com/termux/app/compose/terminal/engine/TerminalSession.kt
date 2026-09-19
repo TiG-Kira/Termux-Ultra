@@ -34,27 +34,9 @@ class TerminalSession(
     private val processFactory: (Int, Int, Int, Int) -> ITerminalProcess
 ) {
 
-    /**
-     * 高危命令输入拦截器。
-     * 语义与 Java 版 com.termux.terminal.TerminalSession.InputInterceptor 一致，
-     * 供VorteX Guard Engine（RiskConfirmManager）在 Compose 核心下检测用户输入的命令行。
-     */
-    interface InputInterceptor {
-        /** 回车时回调。返回 true 表示命令已被拦截处理（如高危命令弹窗确认）。 */
-        fun onCommandEntered(session: TerminalSession, command: String): Boolean
-
-        /** 命令被拦截时回调（用于显示提示）。 */
-        fun onCommandBlocked(session: TerminalSession, command: String)
-
-        /** 是否为自动拦截模式（无需用户确认，直接拒绝）。 */
-        fun onCommandAutoBlocked(session: TerminalSession, command: String): Boolean
-    }
-
     companion object {
-        /** 全局输入拦截器（与 Java 版一致为静态单点注册）。 */
-        @JvmStatic
-        @Volatile
-        var inputInterceptor: InputInterceptor? = null
+        // 高危命令拦截已由 shell hook（trap DEBUG + PROMPT_COMMAND）+ SecuritySocketServer
+        // 在 shell 层处理，Kotlin 层不再维护 InputInterceptor。
     }
 
     /**
@@ -75,11 +57,8 @@ class TerminalSession(
     var lastCommand: String = ""
         private set
 
-    // ---- 高危命令拦截状态（对齐 Java 版 mCommandBuffer/mPendingDangerousCommand） ----
+    // 命令输入缓冲区，用于检测回车时的完整命令（主页终端卡片的「最近执行」）
     private val commandBuffer = StringBuilder()
-    @Volatile
-    private var pendingDangerousCommand: String? = null
-    private var pendingEnterBytes: ByteArray? = null
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     private class DataChunk(val buffer: ByteArray, var length: Int)
@@ -314,16 +293,9 @@ class TerminalSession(
 
         if (data.isEmpty()) return
 
-        val interceptor = inputInterceptor
-
-        // 有待确认的高危命令：缓冲新输入但不转发到 Shell（与 Java 版一致）
-        if (pendingDangerousCommand != null) {
-            for (b in data) bufferChar(b)
-            return
-        }
-
-        // 扫描 Enter 键，提取完整命令行 —— 无论有没有 interceptor 都要扫描，
-        // 这样 lastCommand（最近输入）才能在无高危拦截器时也正常更新
+        // 扫描回车提取完整命令，用于更新 lastCommand（主页终端卡片的「最近执行」）。
+        // 命令拦截已完全由 shell hook（trap DEBUG + PROMPT_COMMAND）+ SecuritySocketServer
+        // 在 shell 层处理，不再在 Kotlin/Java 层拦截。
         var segmentStart = 0
         for (i in data.indices) {
             val b = data[i]
@@ -335,33 +307,11 @@ class TerminalSession(
                 commandBuffer.setLength(0)
 
                 if (command.isNotEmpty()) {
-                    // 始终记录最近执行的命令（无论高危拦截器是否存在）
                     lastCommand = command
-
-                    // 只有注册了拦截器才做高危检查
-                    if (interceptor != null) {
-                        val handled = interceptor.onCommandEntered(this, command)
-                        if (handled) {
-                            if (interceptor.onCommandAutoBlocked(this, command)) {
-                                // 自动拦截：直接拒绝命令并清除输入行
-                                denyPendingCommand()
-                                return
-                            }
-                            // 高危命令：扣住 Enter，等待用户确认后放行
-                            pendingEnterBytes = byteArrayOf(b)
-                            pendingDangerousCommand = command
-                            // 先转发命令字符（不含 Enter），保持行内回显完整
-                            if (i > 0) {
-                                terminalWriteChannel.trySend(data.copyOf(i))
-                            }
-                            return
-                        }
-                    }
                 }
             }
         }
 
-        // 无 Enter：逐字节缓冲并原样转发
         for (i in segmentStart until data.size) bufferChar(data[i])
         terminalWriteChannel.trySend(data)
     }
@@ -376,34 +326,6 @@ class TerminalSession(
             b >= 32 -> commandBuffer.append((b.toInt() and 0xFF).toChar())
         }
     }
-
-    /** 用户确认执行危险命令，放行被扣住的 Enter 键（与 Java 版一致）。 */
-    fun confirmPendingCommand() {
-        val enter = pendingEnterBytes
-        if (pendingDangerousCommand != null && enter != null) {
-            terminalWriteChannel.trySend(enter)
-            pendingDangerousCommand = null
-            pendingEnterBytes = null
-        }
-    }
-
-    /** 用户拒绝危险命令，向终端输出拒绝信息并清除当前输入行（与 Java 版一致）。 */
-    fun denyPendingCommand() {
-        if (pendingDangerousCommand == null) return
-        synchronized(emulator) {
-            val errorMsg = "\r\nTermux-Confirm: Permission Denied\r\n".toByteArray()
-            emulator.append(errorMsg, errorMsg.size)
-        }
-        notifyScreenUpdate()
-        // 发送 Ctrl+U 清除当前输入行
-        terminalWriteChannel.trySend(byteArrayOf(0x15))
-        pendingDangerousCommand = null
-        pendingEnterBytes = null
-        commandBuffer.setLength(0)
-    }
-
-    /** 是否有待处理的危险命令确认。 */
-    fun hasPendingDangerousCommand(): Boolean = pendingDangerousCommand != null
 
     /**
      * 终端模拟器响应直通写入（不经过高危命令拦截）。

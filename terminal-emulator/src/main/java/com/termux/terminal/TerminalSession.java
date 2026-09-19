@@ -38,37 +38,6 @@ public final class TerminalSession extends TerminalOutput {
     private static final int MSG_PROCESS_EXITED = 4;
 
     /**
-     * 终端输入拦截器接口，用于在用户输入命令时进行高危检测。
-     */
-    public interface InputInterceptor {
-        /**
-         * 检查命令是否应该被拦截。
-         * @param command 用户输入的完整命令
-         * @return true 表示命令已被处理（拦截或拒绝），false 表示使用默认行为
-         */
-        boolean onCommandEntered(TerminalSession session, String command);
-
-        /**
-         * 命令被拒绝时调用。
-         */
-        void onCommandBlocked(TerminalSession session, String command);
-        
-        /**
-         * 命令被自动拦截时调用（不需要用户确认）。
-         * 返回 true 表示命令已被自动拦截处理。
-         */
-        default boolean onCommandAutoBlocked(TerminalSession session, String command) {
-            return false;
-        }
-    }
-
-    private static InputInterceptor sInputInterceptor;
-
-    public static void setInputInterceptor(InputInterceptor interceptor) {
-        sInputInterceptor = interceptor;
-    }
-
-    /**
      * 写转发接口：当会话未附着到 PTY（Compose 模式下的镜像会话）时，
      * 把针对该会话的写入转发到真正持有进程的 Compose 会话。
      */
@@ -118,10 +87,6 @@ public final class TerminalSession extends TerminalOutput {
 
     /** 用户最后执行的命令（用于区分手动 exit 和其他退出原因） */
     private String mLastCommand = "";
-
-    /** 待确认的危险命令 */
-    private String mPendingDangerousCommand = null;
-    private byte[] mPendingEnterBytes = null;
 
     public final String mHandle = UUID.randomUUID().toString();
 
@@ -289,22 +254,13 @@ public final class TerminalSession extends TerminalOutput {
 
         if (count <= 0) return;
 
-        InputInterceptor interceptor = sInputInterceptor;
-
-        // Check if there's a pending dialog - don't allow new input until resolved
-        if (mPendingDangerousCommand != null) {
-            // Still buffer but don't forward to shell
-            bufferInput(data, offset, count);
-            return;
-        }
-
-        // Scan for Enter key in the data — 无论有没有 interceptor 都要扫描，
-        // 这样 mLastCommand（最近输入）才能在经典引擎下正常更新
+        // 扫描回车提取完整命令，用于更新 mLastCommand（主页终端卡片的「最近执行」）。
+        // 命令拦截已完全由 shell hook（trap DEBUG + PROMPT_COMMAND）+ SecuritySocketServer
+        // 在 shell 层处理，不再在 Java/Kotlin 层拦截。
         int segmentStart = offset;
         for (int i = offset; i < offset + count; i++) {
             byte b = data[i];
             if (b == '\r' || b == '\n') {
-                // Buffer everything up to Enter
                 for (int j = segmentStart; j < i; j++) {
                     bufferChar(data[j]);
                 }
@@ -314,46 +270,15 @@ public final class TerminalSession extends TerminalOutput {
                 mCommandBuffer.setLength(0);
 
                 if (command.length() > 0) {
-                    // 始终记录最近执行的命令（无论高危拦截器是否存在）
                     mLastCommand = command;
-
-                    // 只有注册了拦截器才做高危检查
-                    if (interceptor != null) {
-                        boolean handled = interceptor.onCommandEntered(this, command);
-                        if (handled) {
-                            // 检查是否需要自动拦截（不需要用户确认）
-                            if (interceptor.onCommandAutoBlocked(this, command)) {
-                                // 自动拦截：直接拒绝命令并清除输入行
-                                denyPendingCommand();
-                                return;
-                            }
-                            // Command is being handled by interceptor (dangerous)
-                            // Store the Enter bytes to be sent if confirmed
-                            byte[] enterBytes = new byte[]{b};
-                            mPendingEnterBytes = enterBytes;
-                            mPendingDangerousCommand = command;
-                            // Forward the characters but NOT the Enter
-                            if (i - offset > 0) {
-                                mTerminalToProcessIOQueue.write(data, offset, i - offset);
-                            }
-                            return;
-                        }
-                    }
                 }
             }
         }
 
-        // Buffer and forward the rest
         for (int i = segmentStart; i < offset + count; i++) {
             bufferChar(data[i]);
         }
         mTerminalToProcessIOQueue.write(data, offset, count);
-    }
-
-    private void bufferInput(byte[] data, int offset, int count) {
-        for (int i = offset; i < offset + count; i++) {
-            bufferChar(data[i]);
-        }
     }
 
     private void bufferChar(byte b) {
@@ -368,33 +293,6 @@ public final class TerminalSession extends TerminalOutput {
         } else if (b >= 32) {
             mCommandBuffer.append((char) (b & 0xFF));
         }
-    }
-
-    /** 用户确认执行危险命令，放行 Enter 键 */
-    public void confirmPendingCommand() {
-        if (mPendingDangerousCommand != null && mPendingEnterBytes != null) {
-            mTerminalToProcessIOQueue.write(mPendingEnterBytes, 0, mPendingEnterBytes.length);
-            mPendingDangerousCommand = null;
-            mPendingEnterBytes = null;
-        }
-    }
-
-    /** 用户拒绝危险命令，返回 Permission Denied 错误并清除行 */
-    public void denyPendingCommand() {
-        // 向终端输出 "Permission Denied" 错误信息
-        byte[] errorMsg = "\r\nTermux-Confirm: Permission Denied\r\n".getBytes();
-        mProcessToTerminalIOQueue.write(errorMsg, 0, errorMsg.length);
-        // 发送 Ctrl+U 清除当前输入行
-        byte[] killLine = new byte[]{0x15};
-        mTerminalToProcessIOQueue.write(killLine, 0, 1);
-        mPendingDangerousCommand = null;
-        mPendingEnterBytes = null;
-        mCommandBuffer.setLength(0);
-    }
-
-    /** 是否有待处理的危险命令确认 */
-    public boolean hasPendingDangerousCommand() {
-        return mPendingDangerousCommand != null;
     }
 
     /** Write the Unicode code point to the terminal encoded in UTF-8. */
