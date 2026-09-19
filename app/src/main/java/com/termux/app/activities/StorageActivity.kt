@@ -124,9 +124,14 @@ private fun scanTermuxStorage(context: android.content.Context): List<CategorySt
         if (dir == null || !dir.exists()) return 0L
         return try {
             if (dir.isFile) dir.length()
-            else dir.walkTopDown().filter { it.isFile }.sumOf { file ->
-                runCatching { file.length() }.getOrDefault(0L)
-            }
+            else dir.walkTopDown()
+                .filter { file ->
+                    try { !java.nio.file.Files.isSymbolicLink(file.toPath()) } catch (_: Exception) { true }
+                }
+                .filter { it.isFile }
+                .sumOf { file ->
+                    runCatching { file.length() }.getOrDefault(0L)
+                }
         } catch (_: Exception) {
             0L
         }
@@ -355,6 +360,9 @@ fun StorageScreen(onBack: () -> Unit) {
         isScanning = true
         categories = withContext(Dispatchers.IO) {
             scanTermuxStorage(context)
+        }
+        accurateUsedBytes = withContext(Dispatchers.IO) {
+            getAccurateAppStorageBytes(context)
         }
         isScanning = false
     }
