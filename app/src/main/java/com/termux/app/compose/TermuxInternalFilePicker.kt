@@ -78,10 +78,9 @@ fun TermuxInternalFilePicker(
     }
 
     fun toSavedPath(f: File): String {
-        val abs = f.absolutePath
-        return if (abs.startsWith(TERMUX_HOME_ABS)) {
-            "\$HOME" + abs.removePrefix(TERMUX_HOME_ABS)
-        } else abs
+        // 返回绝对路径——调用方（如 TextEditorScreen 的 File(pickedDir, name)）
+        // 需要真实文件路径来创建 File 对象，不能用 $HOME 环境变量占位符
+        return f.absolutePath
     }
 
     suspend fun loadEntries(dir: File) {
