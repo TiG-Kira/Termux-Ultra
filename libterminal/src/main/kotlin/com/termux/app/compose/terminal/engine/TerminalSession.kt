@@ -312,11 +312,9 @@ class TerminalSession(
             return
         }
 
+        if (data.isEmpty()) return
+
         val interceptor = inputInterceptor
-        if (interceptor == null || data.isEmpty()) {
-            if (data.isNotEmpty()) terminalWriteChannel.trySend(data)
-            return
-        }
 
         // 有待确认的高危命令：缓冲新输入但不转发到 Shell（与 Java 版一致）
         if (pendingDangerousCommand != null) {
@@ -324,7 +322,8 @@ class TerminalSession(
             return
         }
 
-        // 扫描 Enter 键，提取完整命令行进行风险检测
+        // 扫描 Enter 键，提取完整命令行 —— 无论有没有 interceptor 都要扫描，
+        // 这样 lastCommand（最近输入）才能在无高危拦截器时也正常更新
         var segmentStart = 0
         for (i in data.indices) {
             val b = data[i]
@@ -336,24 +335,27 @@ class TerminalSession(
                 commandBuffer.setLength(0)
 
                 if (command.isNotEmpty()) {
-                    val handled = interceptor.onCommandEntered(this, command)
-                    if (handled) {
-                        if (interceptor.onCommandAutoBlocked(this, command)) {
-                            // 自动拦截：直接拒绝命令并清除输入行
-                            denyPendingCommand()
+                    // 始终记录最近执行的命令（无论高危拦截器是否存在）
+                    lastCommand = command
+
+                    // 只有注册了拦截器才做高危检查
+                    if (interceptor != null) {
+                        val handled = interceptor.onCommandEntered(this, command)
+                        if (handled) {
+                            if (interceptor.onCommandAutoBlocked(this, command)) {
+                                // 自动拦截：直接拒绝命令并清除输入行
+                                denyPendingCommand()
+                                return
+                            }
+                            // 高危命令：扣住 Enter，等待用户确认后放行
+                            pendingEnterBytes = byteArrayOf(b)
+                            pendingDangerousCommand = command
+                            // 先转发命令字符（不含 Enter），保持行内回显完整
+                            if (i > 0) {
+                                terminalWriteChannel.trySend(data.copyOf(i))
+                            }
                             return
                         }
-                        // 高危命令：扣住 Enter，等待用户确认后放行
-                        pendingEnterBytes = byteArrayOf(b)
-                        pendingDangerousCommand = command
-                        // 先转发命令字符（不含 Enter），保持行内回显完整
-                        if (i > 0) {
-                            terminalWriteChannel.trySend(data.copyOf(i))
-                        }
-                        return
-                    } else {
-                        // 非高危命令，记录为最近执行的命令
-                        lastCommand = command
                     }
                 }
             }
