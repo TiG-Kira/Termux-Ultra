@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
+import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -204,23 +205,31 @@ fun setTerminalTopBarContent(
     // miuix UI 库不可用时跳过设置，避免 TermuxActivity 崩溃
     if (!ApiCompat.canLoadMiuixUi()) return
     composeView.setContent {
-        Box(modifier = Modifier.fillMaxSize()) {
-            TerminalTopBar(
-                onBack = onBack,
-                onNewSession = onNewSession,
-                onCloseSession = onCloseSession,
-                onToggleKeyboard = onToggleKeyboard,
-                onLongPressKeyboard = { showQuickCommandSheet() },
-                onLongPressNewSession = onLongPressNewSession
-            )
-            val activity = composeView.context as? TermuxActivity
-            QuickCommandSheet(
-                show = QuickCommandSheetState.show,
-                onDismiss = { QuickCommandSheetState.show = false },
-                onExecuteCommand = { cmd ->
-                    if (activity != null) executeQuickCommand(activity, cmd)
-                }
-            )
+        // 必须用 miuix Scaffold 作为根容器，才能提供 MiuixPopupHost
+        // 给 OverlayBottomSheet / OverlayDialog 使用。经典模式下这个
+        // ComposeView 是独立容器，外面没有 Scaffold，必须自己包一层。
+        Scaffold(
+            containerColor = Color.Transparent,
+            contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0)
+        ) {
+            Box(modifier = Modifier.fillMaxSize()) {
+                TerminalTopBar(
+                    onBack = onBack,
+                    onNewSession = onNewSession,
+                    onCloseSession = onCloseSession,
+                    onToggleKeyboard = onToggleKeyboard,
+                    onLongPressKeyboard = { showQuickCommandSheet() },
+                    onLongPressNewSession = onLongPressNewSession
+                )
+                val activity = composeView.context as? TermuxActivity
+                QuickCommandSheet(
+                    show = QuickCommandSheetState.show,
+                    onDismiss = { QuickCommandSheetState.show = false },
+                    onExecuteCommand = { cmd ->
+                        if (activity != null) executeQuickCommand(activity, cmd)
+                    }
+                )
+            }
         }
     }
 }
