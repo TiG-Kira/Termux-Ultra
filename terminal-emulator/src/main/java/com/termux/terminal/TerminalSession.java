@@ -85,6 +85,12 @@ public final class TerminalSession extends TerminalOutput {
     /** 命令输入缓冲区，用于检测回车时的完整命令 */
     private final StringBuilder mCommandBuffer = new StringBuilder();
 
+    /** 增量 UTF-8 解码状态：还需要读取的后续字节数（0 表示不在多字节序列中） */
+    private int mUtf8BytesNeeded = 0;
+
+    /** 增量 UTF-8 解码状态：当前多字节序列已累积的码点值 */
+    private int mUtf8CodePoint = 0;
+
     /** 用户最后执行的命令（用于区分手动 exit 和其他退出原因） */
     private String mLastCommand = "";
 
@@ -268,6 +274,7 @@ public final class TerminalSession extends TerminalOutput {
 
                 String command = mCommandBuffer.toString().trim();
                 mCommandBuffer.setLength(0);
+                resetUtf8State();
 
                 if (command.length() > 0) {
                     mLastCommand = command;
@@ -283,15 +290,70 @@ public final class TerminalSession extends TerminalOutput {
 
     private void bufferChar(byte b) {
         if (b == 8 || b == 127) {
-            // Backspace
+            // Backspace：删除最后一个「字符」（代理对整体删除，避免留下半个 emoji）
             if (mCommandBuffer.length() > 0) {
-                mCommandBuffer.deleteCharAt(mCommandBuffer.length() - 1);
+                int last = mCommandBuffer.length() - 1;
+                if (Character.isLowSurrogate(mCommandBuffer.charAt(last)) && last > 0) {
+                    mCommandBuffer.delete(last - 1, last + 1);
+                } else {
+                    mCommandBuffer.deleteCharAt(last);
+                }
             }
+            resetUtf8State();
         } else if (b == 3 || b == 4) {
             // Ctrl+C / Ctrl+D
             mCommandBuffer.setLength(0);
-        } else if (b >= 32) {
-            mCommandBuffer.append((char) (b & 0xFF));
+            resetUtf8State();
+        } else if ((b & 0xFF) >= 32) {
+            // 可打印字符。原先直接 (char)(b & 0xFF) 会把 UTF-8 的每个字节当成
+            // 一个 Latin-1 字符，而 Java/Kotlin 的 byte 是有符号的，所有 >=0x80
+            // 的字节都变成负数，导致 `b >= 32` 为假而被整段丢弃 —— 中文/emoji
+            // 命令在「最近执行」里被截断（如 `cd 桌面` 只剩 `cd`）。
+            // 这里改为按 UTF-8 增量解码后再写入缓冲区。
+            bufferUtf8(b & 0xFF);
+        }
+    }
+
+    /** 重置增量 UTF-8 解码状态（缓冲区被清空或删除字符时调用）。 */
+    private void resetUtf8State() {
+        mUtf8BytesNeeded = 0;
+        mUtf8CodePoint = 0;
+    }
+
+    /**
+     * 将一个字节按 UTF-8 增量解码，凑满一个码点后追加到命令缓冲区。
+     * 无法识别的字节（孤立续字节、非法首字节）直接丢弃，不污染缓冲区。
+     */
+    private void bufferUtf8(int v) {
+        if (mUtf8BytesNeeded == 0) {
+            if (v < 0x80) {
+                mCommandBuffer.append((char) v);
+                return;
+            }
+            if ((v & 0xE0) == 0xC0) {
+                mUtf8BytesNeeded = 1;
+                mUtf8CodePoint = v & 0x1F;
+            } else if ((v & 0xF0) == 0xE0) {
+                mUtf8BytesNeeded = 2;
+                mUtf8CodePoint = v & 0x0F;
+            } else if ((v & 0xF8) == 0xF0) {
+                mUtf8BytesNeeded = 3;
+                mUtf8CodePoint = v & 0x07;
+            } else {
+                // 非法的 UTF-8 首字节（含孤立续字节），丢弃
+                resetUtf8State();
+            }
+        } else {
+            if ((v & 0xC0) != 0x80) {
+                // 期望续字节却来了别的字节：整段序列作废
+                resetUtf8State();
+                return;
+            }
+            mUtf8CodePoint = (mUtf8CodePoint << 6) | (v & 0x3F);
+            if (--mUtf8BytesNeeded == 0) {
+                mCommandBuffer.appendCodePoint(mUtf8CodePoint);
+                mUtf8CodePoint = 0;
+            }
         }
     }
 

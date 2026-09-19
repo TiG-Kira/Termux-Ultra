@@ -322,12 +322,16 @@ class OverviewCardManager(context: Context) {
     private val prefs = context.getSharedPreferences("overview_cards", Context.MODE_PRIVATE)
     
     companion object {
+        // @Volatile + 双重检查：原先既无 volatile 也无同步，两个线程可同时看到 null
+        // 并各自构造一个实例 —— 后写的覆盖先写的，前一个实例的 prefs 写入会丢失，
+        // 且并发读到的可能是尚未安全发布的半初始化对象。
+        @Volatile
         private var instance: OverviewCardManager? = null
+
         fun getInstance(context: Context): OverviewCardManager {
-            if (instance == null) {
-                instance = OverviewCardManager(context.applicationContext)
+            return instance ?: synchronized(this) {
+                instance ?: OverviewCardManager(context.applicationContext).also { instance = it }
             }
-            return instance!!
         }
     }
     

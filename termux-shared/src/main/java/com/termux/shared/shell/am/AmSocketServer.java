@@ -119,6 +119,9 @@ public class AmSocketServer {
         if (error != null) {
             sendResultToClient(localSocketManager, clientSocket, 1, stdout.toString(),
                 !stderr.toString().isEmpty() ? stderr + "\n\n" + error : error.toString());
+            // 失败后必须返回：否则会再发一次 exitCode=0 的成功结果，客户端收到
+            // 互相矛盾的两次响应，且第二次写入已关闭的流会触发 onError。
+            return;
         }
 
         sendResultToClient(localSocketManager, clientSocket, 0, stdout.toString(), stderr.toString());
