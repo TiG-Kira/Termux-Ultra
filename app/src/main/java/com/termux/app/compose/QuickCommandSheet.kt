@@ -78,7 +78,7 @@ fun QuickCommandSheet(
                     onDismiss()
                     onExecuteCommand(cmd)
                 },
-                onDeleteCommand = { cmd -> commands = store.remove(cmd.label) },
+                onDeleteCommand = { cmd -> commands = store.removeById(cmd.id) },
                 onAddClick = { showAddDialog = true }
             )
         }
@@ -134,7 +134,7 @@ fun QuickCommandWindowSheet(
                     onDismiss()
                     onExecuteCommand(cmd)
                 },
-                onDeleteCommand = { cmd -> commands = store.remove(cmd.label) },
+                onDeleteCommand = { cmd -> commands = store.removeById(cmd.id) },
                 onAddClick = { showAddDialog = true }
             )
         }
@@ -191,7 +191,7 @@ private fun QuickCommandPanelContent(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(2.dp)
             ) {
-                items(commands, key = { it.label }) { cmd ->
+                items(commands, key = { it.id }) { cmd ->
                     QuickCommandItem(
                         command = cmd,
                         onClick = { onCommandClick(cmd) },
@@ -360,7 +360,9 @@ fun buildQuickCommandText(command: QuickCommand): String {
 }
 
 fun executeQuickCommand(context: Context, command: QuickCommand) {
-    val activity = context as? TermuxActivity ?: return
+    // Compose 的 LocalContext.current 可能是 ContextWrapper（如 ComposeView 的 context），
+    // 必须向上遍历找到真正的 TermuxActivity，直接 `as?` 会静默失败导致点击无响应。
+    val activity = findActivityFromContext(context, TermuxActivity::class.java) ?: return
     val session = activity.currentSession ?: return
     if (!session.isRunning) return
     session.write(buildQuickCommandText(command))

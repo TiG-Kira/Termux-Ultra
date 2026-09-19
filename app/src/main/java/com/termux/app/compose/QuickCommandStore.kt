@@ -1,6 +1,7 @@
 package com.termux.app.compose
 
 import android.content.Context
+import android.content.ContextWrapper
 import android.content.SharedPreferences
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
@@ -10,15 +11,30 @@ import kotlinx.serialization.json.Json
 /**
  * 一条快捷指令。
  *
+ * @param id 稳定唯一 ID（UUID 字符串），用于列表 key 和删除依据，
+ *           与 label 解耦，避免同名指令互相覆盖。
  * @param label 用户给指令起的名字（列表显示用）。
  * @param command 实际写入终端的命令文本（不含末尾换行）。
  * @param autoExecute 选择后是否自动追加 `\r` 执行；若为 false 则仅粘贴文本。
  */
 @Serializable
 data class QuickCommand(
+    val id: String,
     val label: String,
     val command: String,
     val autoExecute: Boolean = true
+)
+
+/** 构造 QuickCommand 的便捷函数，自动生成 UUID。 */
+fun QuickCommand(
+    label: String,
+    command: String,
+    autoExecute: Boolean = true
+): QuickCommand = QuickCommand(
+    id = java.util.UUID.randomUUID().toString(),
+    label = label,
+    command = command,
+    autoExecute = autoExecute
 )
 
 /**
@@ -89,6 +105,12 @@ class QuickCommandStore private constructor(
         return list
     }
 
+    fun removeById(id: String): List<QuickCommand> {
+        val list = getAll().filter { it.id != id }
+        saveAll(list)
+        return list
+    }
+
     fun update(oldLabel: String, newItem: QuickCommand): List<QuickCommand> {
         val list = getAll().toMutableList()
         val idx = list.indexOfFirst { it.label == oldLabel }
@@ -97,7 +119,31 @@ class QuickCommandStore private constructor(
         return list
     }
 
+    fun updateById(id: String, newItem: QuickCommand): List<QuickCommand> {
+        val list = getAll().toMutableList()
+        val idx = list.indexOfFirst { it.id == id }
+        if (idx >= 0) list[idx] = newItem else list.add(newItem)
+        saveAll(list)
+        return list
+    }
+
     fun clear() {
         prefs.edit().remove(KEY_COMMANDS).apply()
     }
+}
+
+/**
+ * 从 [context] 向上遍历 ContextWrapper 链，查找指定类型的 Activity。
+ *
+ * Compose 的 LocalContext.current 在某些场景下（如 Provider、ComposeView）
+ * 可能不是 Activity 本身，而是 ContextWrapper。之前直接
+ * `context as? TermuxActivity` 会静默失败。
+ */
+fun <T> findActivityFromContext(context: Context, clazz: Class<T>): T? {
+    var c: Context? = context
+    while (c is ContextWrapper) {
+        if (clazz.isInstance(c)) return clazz.cast(c)
+        c = c.baseContext
+    }
+    return null
 }
