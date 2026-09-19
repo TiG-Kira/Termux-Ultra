@@ -936,21 +936,6 @@ object RiskConfirmManager {
             navigateBackToTermux(context, sessionHandle, RESULT_CONFIRMED)
             return
         }
-        // 再处理直接回调模式
-        if (pendingTerminalSession != null) {
-            pendingTerminalSession?.confirmPendingCommand()
-            pendingTerminalSession = null
-            _dialogState.value = null
-            return
-        }
-        // 再处理阻塞式请求
-        if (blockingRequest != null) {
-            blockingRequest?.invoke(true)
-            blockingRequest = null
-            blockingRequestActive = false
-            _dialogState.value = null
-            return
-        }
         // 最后处理协程请求
         val requestId = pendingRequests.keys.lastOrNull()
         if (requestId != null) {
@@ -979,28 +964,7 @@ object RiskConfirmManager {
             navigateBackToAgent(context)
             return
         }
-        // 再处理终端会话的跳转模式
-        val sessionHandle = prefs.getString(KEY_PENDING_SESSION_HANDLE, null)
-        if (sessionHandle != null) {
-            prefs.edit().putString(KEY_PENDING_RESULT, RESULT_DENIED).apply()
-            _dialogState.value = null
-            navigateBackToTermux(context, sessionHandle, RESULT_DENIED)
-            return
-        }
-        // 再处理直接回调模式
-        if (pendingTerminalSession != null) {
-            pendingTerminalSession?.denyPendingCommand()
-            pendingTerminalSession = null
-            _dialogState.value = null
-            return
-        }
-        if (blockingRequest != null) {
-            blockingRequest?.invoke(false)
-            blockingRequest = null
-            blockingRequestActive = false
-            _dialogState.value = null
-            return
-        }
+        // 最后处理协程请求
         val requestId = pendingRequests.keys.lastOrNull()
         if (requestId != null) {
             pendingRequests[requestId]?.invoke(false)
@@ -1045,17 +1009,18 @@ object RiskConfirmManager {
         fun denyPendingCommand()
     }
 
-    /** Java 核心会话适配器 */
+    /** Java 核心会话适配器（由已废弃的 InputInterceptor 路径使用，shell hook 接管后不再触发） */
     private class JavaSessionAdapter(val session: com.termux.terminal.TerminalSession) : RiskSessionAdapter {
         override val sessionHandle: String get() = session.mHandle
         override val shellPath: String? get() = session.shellPath
         override val sessionName: String? get() = session.mSessionName
         override val args: Array<out String>? get() = session.args
-        override fun confirmPendingCommand() = session.confirmPendingCommand()
-        override fun denyPendingCommand() = session.denyPendingCommand()
+        // confirm/deny 已由 shell hook 在 shell 层完成，Java/Kotlin 层拦截 API 已删除
+        override fun confirmPendingCommand() {}
+        override fun denyPendingCommand() {}
     }
 
-    /** Compose 核心会话适配器 */
+    /** Compose 核心会话适配器（由已废弃的 InputInterceptor 路径使用，shell hook 接管后不再触发） */
     private class ComposeSessionAdapter(
         val session: com.termux.app.compose.terminal.engine.TerminalSession
     ) : RiskSessionAdapter {
@@ -1063,8 +1028,8 @@ object RiskConfirmManager {
         override val shellPath: String? get() = session.shellPath
         override val sessionName: String? get() = session.sessionName.value
         override val args: Array<out String>? get() = session.args
-        override fun confirmPendingCommand() = session.confirmPendingCommand()
-        override fun denyPendingCommand() = session.denyPendingCommand()
+        override fun confirmPendingCommand() {}
+        override fun denyPendingCommand() {}
     }
 
     /** 待确认的 Compose 核心会话（确认结果返回时按 handle 恢复，Java 会话由 TermuxActivity 按句柄查找） */
@@ -1468,15 +1433,8 @@ object RiskConfirmManager {
      * @return true 表示已按 Compose 会话处理
      */
     fun consumePendingComposeSession(handle: String, result: String): Boolean {
-        val session = pendingComposeSession ?: return false
-        if (session.handle != handle) return false
-        pendingComposeSession = null
-        if (RESULT_CONFIRMED.equals(result)) {
-            session.confirmPendingCommand()
-        } else if (RESULT_DENIED.equals(result)) {
-            session.denyPendingCommand()
-        }
-        return true
+        // shell hook 接管后，Java/Kotlin 层不再拦截命令，此路径永远不会触发
+        return false
     }
 
     /** 显示"关闭二次确认"的警告弹窗（使用主页授权遮罩覆盖方式） */

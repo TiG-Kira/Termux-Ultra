@@ -524,13 +524,10 @@ public final class TermuxActivity extends ComponentActivity implements ServiceCo
             return;
         }
 
-        if (com.termux.app.compose.RiskConfirmManager.RESULT_CONFIRMED.equals(result)) {
-            session.confirmPendingCommand();
-            Logger.logInfo(LOG_TAG, "Risk confirm: command confirmed, handle=" + sessionHandle);
-        } else if (com.termux.app.compose.RiskConfirmManager.RESULT_DENIED.equals(result)) {
-            session.denyPendingCommand();
-            Logger.logInfo(LOG_TAG, "Risk confirm: command denied, handle=" + sessionHandle);
-        }
+        // shell hook + SecuritySocketServer 接管命令拦截后，Java/Kotlin 层
+        // 的 confirmPendingCommand / denyPendingCommand 已删除。
+        // 此路径（InputInterceptor 触发的跳转模式）也已废弃。
+        Logger.logInfo(LOG_TAG, "Risk confirm result received (shell hook mode, no-op): " + result + ", handle=" + sessionHandle);
 
         // 成功处理后清除状态
         intent.removeExtra(com.termux.app.compose.RiskConfirmManager.EXTRA_RISK_RESULT);
@@ -606,13 +603,8 @@ public final class TermuxActivity extends ComponentActivity implements ServiceCo
             return;
         }
 
-        if (com.termux.app.compose.RiskConfirmManager.RESULT_CONFIRMED.equals(result)) {
-            session.confirmPendingCommand();
-            Logger.logInfo(LOG_TAG, "Risk confirm (from prefs): command confirmed");
-        } else if (com.termux.app.compose.RiskConfirmManager.RESULT_DENIED.equals(result)) {
-            session.denyPendingCommand();
-            Logger.logInfo(LOG_TAG, "Risk confirm (from prefs): command denied");
-        }
+        // shell hook 接管后此路径已废弃，不再调用 Java 层拦截 API
+        Logger.logInfo(LOG_TAG, "handlePendingRiskConfirmFromPrefs: no-op (shell hook mode), result=" + result);
     }
 
     @Override
