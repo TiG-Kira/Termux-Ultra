@@ -287,13 +287,9 @@ public final class TerminalSession extends TerminalOutput {
             return;
         }
 
+        if (count <= 0) return;
+
         InputInterceptor interceptor = sInputInterceptor;
-        if (interceptor == null || count <= 0) {
-            if (count > 0) {
-                mTerminalToProcessIOQueue.write(data, offset, count);
-            }
-            return;
-        }
 
         // Check if there's a pending dialog - don't allow new input until resolved
         if (mPendingDangerousCommand != null) {
@@ -302,7 +298,8 @@ public final class TerminalSession extends TerminalOutput {
             return;
         }
 
-        // Scan for Enter key in the data
+        // Scan for Enter key in the data — 无论有没有 interceptor 都要扫描，
+        // 这样 mLastCommand（最近输入）才能在经典引擎下正常更新
         int segmentStart = offset;
         for (int i = offset; i < offset + count; i++) {
             byte b = data[i];
@@ -317,27 +314,30 @@ public final class TerminalSession extends TerminalOutput {
                 mCommandBuffer.setLength(0);
 
                 if (command.length() > 0) {
-                    boolean handled = interceptor.onCommandEntered(this, command);
-                    if (handled) {
-                        // 检查是否需要自动拦截（不需要用户确认）
-                        if (interceptor.onCommandAutoBlocked(this, command)) {
-                            // 自动拦截：直接拒绝命令并清除输入行
-                            denyPendingCommand();
+                    // 始终记录最近执行的命令（无论高危拦截器是否存在）
+                    mLastCommand = command;
+
+                    // 只有注册了拦截器才做高危检查
+                    if (interceptor != null) {
+                        boolean handled = interceptor.onCommandEntered(this, command);
+                        if (handled) {
+                            // 检查是否需要自动拦截（不需要用户确认）
+                            if (interceptor.onCommandAutoBlocked(this, command)) {
+                                // 自动拦截：直接拒绝命令并清除输入行
+                                denyPendingCommand();
+                                return;
+                            }
+                            // Command is being handled by interceptor (dangerous)
+                            // Store the Enter bytes to be sent if confirmed
+                            byte[] enterBytes = new byte[]{b};
+                            mPendingEnterBytes = enterBytes;
+                            mPendingDangerousCommand = command;
+                            // Forward the characters but NOT the Enter
+                            if (i - offset > 0) {
+                                mTerminalToProcessIOQueue.write(data, offset, i - offset);
+                            }
                             return;
                         }
-                        // Command is being handled by interceptor (dangerous)
-                        // Store the Enter bytes to be sent if confirmed
-                        byte[] enterBytes = new byte[]{b};
-                        mPendingEnterBytes = enterBytes;
-                        mPendingDangerousCommand = command;
-                        // Forward the characters but NOT the Enter
-                        if (i - offset > 0) {
-                            mTerminalToProcessIOQueue.write(data, offset, i - offset);
-                        }
-                        return;
-                    } else {
-                        // 命令被接受（非危险命令），记录为最后执行的命令
-                        mLastCommand = command;
                     }
                 }
             }
@@ -347,9 +347,7 @@ public final class TerminalSession extends TerminalOutput {
         for (int i = segmentStart; i < offset + count; i++) {
             bufferChar(data[i]);
         }
-        if (count > 0) {
-            mTerminalToProcessIOQueue.write(data, offset, count);
-        }
+        mTerminalToProcessIOQueue.write(data, offset, count);
     }
 
     private void bufferInput(byte[] data, int offset, int count) {
