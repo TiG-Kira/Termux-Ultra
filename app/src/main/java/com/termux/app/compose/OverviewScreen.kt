@@ -1206,8 +1206,10 @@ private fun TipsAgentCard(
                     iconBgColor = Color(0xFFEC4899).copy(alpha = 0.12f),
                     label = "主题外观",
                     onClick = {
-                        val intent = Intent(context, com.termux.app.activities.TermuxStylingActivity::class.java)
-                        context.startActivity(intent)
+                        if (IntegratedTools.requireEnabled(context, IntegratedTools.Tool.TERMUX_STYLING)) {
+                            val intent = Intent(context, com.termux.app.activities.TermuxStylingActivity::class.java)
+                            context.startActivity(intent)
+                        }
                     }
                 )
                 QuickEntryButton(
