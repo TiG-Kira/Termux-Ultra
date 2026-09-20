@@ -476,6 +476,27 @@ object SecuritySocketServer {
                 // 统一弹窗宿主会把 Loading 无缝切换为二次确认，避免两个 DialogWindow 叠加渲染失败
                 val pass = awaitUserConfirmation(context, command, result.reason, result.riskType)
                 writeResponse(writer, if (pass) DetectResult.Allow() else result)
+            } else if (result is DetectResult.Allow && result.error != null && result.error.startsWith("AGENT_")) {
+                // Agent 判定有问题（超时/异常/ABNORMAL）但本地检测安全 → 跳过二次确认
+                val parts = result.error.split("|", limit = 2)
+                val tag = parts[0]
+                val detail = parts.getOrNull(1).orEmpty()
+                val mode = when (tag) {
+                    "AGENT_TIMEOUT" -> RiskConfirmManager.AgentSkipState.Mode.TIMEOUT
+                    "AGENT_ERROR"   -> RiskConfirmManager.AgentSkipState.Mode.ABNORMAL
+                    else            -> RiskConfirmManager.AgentSkipState.Mode.ABNORMAL
+                }
+                // 先 hide loading → 让 DialogHost 切到跳过二次确认弹窗
+                RiskConfirmManager.hideAgentLoading()
+                val pass = RiskConfirmManager.requestAgentSkipConfirmBlocking(
+                    context = context,
+                    command = command,
+                    mode = mode,
+                    detail = detail
+                )
+                writeResponse(writer, if (pass) DetectResult.Allow() else DetectResult.Deny(
+                    reason = "Agent 判定${if (tag == "AGENT_TIMEOUT") "超时" else "异常"}，用户选择不跳过"
+                ))
             } else {
                 writeResponse(writer, result)
             }
@@ -556,12 +577,20 @@ object SecuritySocketServer {
                             }
                             return DetectResult.Allow()
                         }
-                        // Agent 未真正回复（超时/异常）：本地检测兜底，本地安全时把
-                        // Agent 侧原因带回终端显示，本地危险仍按本地结果拦截
+                        // Agent 未真正回复（超时/异常/本地不可达）：本地检测兜底
                         val local = localScriptDetect(trimmed)
-                        if (local is DetectResult.Allow && result.reason.isNotBlank()) {
-                            return DetectResult.Allow("Agent 判定未返回: ${result.reason}")
+                        if (local is DetectResult.Allow) {
+                            // 本地静态检测安全，但 Agent 判定有问题 → 进入二次确认
+                            // verdict 类型编码进 error：让 handleCheckScript 能区分 TIMEOUT / ERROR / ABNORMAL
+                            val verdictTag = when (result.verdict) {
+                                AgentScriptJudge.Verdict.TIMEOUT -> "AGENT_TIMEOUT"
+                                AgentScriptJudge.Verdict.ERROR   -> "AGENT_ERROR"
+                                else                              -> "AGENT_ABNORMAL"
+                            }
+                            val detail = result.reason.ifBlank { "Agent 判定未返回" }
+                            return DetectResult.Allow("$verdictTag|$detail")
                         }
+                        // 本地静态检测出危险（命中本地正则）→ 按本地结果拦截，不走二次确认
                         return local
                     } finally {
                         agentSemaphore.release()

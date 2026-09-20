@@ -274,6 +274,191 @@ object RiskConfirmManager {
         _agentLoadingVisible.value = false
     }
 
+    // ===== Agent 跳过判定二次确认 =====
+    //
+    // 触发场景：
+    //   a) 用户在 Loading 弹窗点"跳过验证"按钮
+    //   b) Agent 判定 TIMEOUT / ERROR / ABNORMAL 但本地检测安全
+    // 两种场景共用一套 DialogState + pendingRequest 结算机制。
+    // 弹窗显示后，用户确认才放行（PASS），否则拒绝（DENY）。
+
+    /** Agent 跳过判定二次确认弹窗状态 */
+    data class AgentSkipState(
+        val command: String,
+        /** SKIP=用户主动跳过；TIMEOUT=Agent超时；ABNORMAL=Agent异常 */
+        val mode: Mode,
+        /** 额外说明（来自本地检测结果或 Agent 返回的 reason） */
+        val detail: String = "",
+        val requestId: String = ""
+    ) {
+        enum class Mode { SKIP, TIMEOUT, ABNORMAL }
+    }
+
+    internal val _agentSkipState = MutableStateFlow<AgentSkipState?>(null)
+    val agentSkipState: StateFlow<AgentSkipState?> = _agentSkipState.asStateFlow()
+
+    /** 启动跳过二次确认（挂起协程等待结果） */
+    suspend fun requestAgentSkipConfirm(
+        context: Context,
+        command: String,
+        mode: AgentSkipState.Mode,
+        detail: String = ""
+    ): Boolean {
+        if (isUnlimitedModeActive(context)) return true
+        val level = getProtectionLevel(context)
+        if (level == ProtectionLevel.OFF) return true
+
+        val requestId = java.util.UUID.randomUUID().toString()
+        val timeoutRunnable = Runnable { resolveAgentSkipRequest(requestId, false) }
+
+        return try {
+            kotlinx.coroutines.suspendCancellableCoroutine { continuation ->
+                if (!continuation.isActive) return@suspendCancellableCoroutine
+
+                preemptActiveRequest()
+                pendingRequests[requestId] = { confirmed ->
+                    cancelPendingTimeout(timeoutRunnable)
+                    _agentSkipState.value = null
+                    if (continuation.isActive) {
+                        continuation.resumeWith(Result.success(confirmed))
+                    }
+                }
+
+                _agentSkipState.value = AgentSkipState(
+                    command = command,
+                    mode = mode,
+                    detail = detail,
+                    requestId = requestId
+                )
+                pendingTimeout = timeoutRunnable
+                mainHandler.postDelayed(timeoutRunnable, CONFIRM_WAIT_SECONDS * 1000L)
+
+                continuation.invokeOnCancellation {
+                    cancelPendingTimeout(timeoutRunnable)
+                    pendingRequests.remove(requestId)
+                    if (_agentSkipState.value?.requestId == requestId) {
+                        _agentSkipState.value = null
+                    }
+                }
+            }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            cancelPendingTimeout(timeoutRunnable)
+            pendingRequests.remove(requestId)
+            throw e
+        } catch (e: Exception) {
+            cancelPendingTimeout(timeoutRunnable)
+            pendingRequests.remove(requestId)
+            _agentSkipState.value = null
+            false
+        }
+    }
+
+    /** 阻塞式跳过二次确认（供 SecuritySocketServer 在后台线程调用） */
+    @JvmOverloads
+    fun requestAgentSkipConfirmBlocking(
+        context: Context,
+        command: String,
+        mode: AgentSkipState.Mode,
+        detail: String = ""
+    ): Boolean {
+        if (isUnlimitedModeActive(context)) return true
+        val level = getProtectionLevel(context)
+        if (level == ProtectionLevel.OFF) return true
+
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            val result = arrayOf(false)
+            val latch = CountDownLatch(1)
+            CoroutineScope(Dispatchers.Default).launch {
+                result[0] = doAgentSkipBlocking(context, command, mode, detail)
+                latch.countDown()
+            }
+            try {
+                latch.await(CONFIRM_WAIT_SECONDS.toLong(), TimeUnit.SECONDS)
+            } catch (_: InterruptedException) {
+                return false
+            }
+            return result[0]
+        }
+        return doAgentSkipBlocking(context, command, mode, detail)
+    }
+
+    private fun doAgentSkipBlocking(
+        context: Context,
+        command: String,
+        mode: AgentSkipState.Mode,
+        detail: String
+    ): Boolean {
+        val result = arrayOf(false)
+        val latch = CountDownLatch(1)
+        val handler = Handler(Looper.getMainLooper())
+        val requestId = "skip-" + requestIdSeq.incrementAndGet()
+
+        preemptActiveRequest()
+        pendingRequests[requestId] = { confirmed ->
+            result[0] = confirmed
+            _agentSkipState.value = null
+            latch.countDown()
+        }
+
+        handler.post {
+            _agentSkipState.value = AgentSkipState(
+                command = command,
+                mode = mode,
+                detail = detail,
+                requestId = requestId
+            )
+        }
+        handler.postDelayed({
+            resolveAgentSkipRequest(requestId, false)
+        }, CONFIRM_WAIT_SECONDS * 1000L)
+
+        try {
+            latch.await(CONFIRM_WAIT_SECONDS.toLong(), TimeUnit.SECONDS)
+        } catch (_: InterruptedException) {
+            resolveAgentSkipRequest(requestId, false)
+            return false
+        }
+        return result[0]
+    }
+
+    /** 结算跳过确认请求 */
+    private fun resolveAgentSkipRequest(requestId: String, confirmed: Boolean) {
+        val callback = pendingRequests.remove(requestId)
+        if (callback != null) {
+            _agentSkipState.value = null
+            callback(confirmed)
+            return
+        }
+        // 阻塞式请求兜底：requestId 以 "skip-" 开头，也可能已经被 resolveRequest 吃掉
+        if (_agentSkipState.value?.requestId == requestId) {
+            _agentSkipState.value = null
+        }
+    }
+
+    /** 用户点击"跳过验证"（Loading 弹窗上的按钮）。触发 SKIP 模式二次确认。 */
+    fun requestSkipFromLoading(context: Context, command: String = "") {
+        // 先 hide loading（否则两个 DialogWindow 叠加会冲突），然后 show skip confirm
+        _agentLoadingVisible.value = false
+        requestAgentSkipConfirmBlocking(
+            context = context,
+            command = command,
+            mode = AgentSkipState.Mode.SKIP,
+            detail = ""
+        )
+    }
+
+    /** 用户在跳过二次确认弹窗上点"确认通过" */
+    internal fun confirmAgentSkip() {
+        val state = _agentSkipState.value ?: return
+        resolveAgentSkipRequest(state.requestId, true)
+    }
+
+    /** 用户在跳过二次确认弹窗上点"取消" */
+    internal fun cancelAgentSkip() {
+        val state = _agentSkipState.value ?: return
+        resolveAgentSkipRequest(state.requestId, false)
+    }
+
     /** 自动确认等待时限(秒)：倒计时、auto-deny、latch await 三者一致。
      * 超过此时限（弹窗异常/未及时点击）自动按 DENY 返回并写响应，
      * 绝不让 shell 长时间卡死（此前 60s/90s 不一致导致“超90s才恢复/一直不恢复”）。 */
@@ -1072,6 +1257,7 @@ fun RiskConfirmDialogHost(
     val countdown by RiskConfirmManager.countdown.collectAsState()
     val agentLoading by RiskConfirmManager.agentLoadingVisible.collectAsState()
     val agentLoadingText by RiskConfirmManager.agentLoadingText.collectAsState()
+    val agentSkipState by RiskConfirmManager.agentSkipState.collectAsState()
     var checkboxChecked by remember { mutableStateOf(false) }
 
     LaunchedEffect(dialogState) {
@@ -1166,10 +1352,16 @@ fun RiskConfirmDialogHost(
     // 渲染不出来（用户看到"检测弹窗消失但没有二次确认"，随后 latch 等待 → shell 卡死）。
     val state = dialogState
     val isSshPower = state?.isSshPowerOperation == true
-    val showDialog = agentLoading || state != null
+    val skipState = agentSkipState
+    val showDialog = agentLoading || state != null || skipState != null
 
     val dialogTitle: String = when {
         isSshPower -> "远程电源操作确认"
+        skipState != null -> when (skipState.mode) {
+            RiskConfirmManager.AgentSkipState.Mode.SKIP -> "跳过 Agent 验证 - 二次确认"
+            RiskConfirmManager.AgentSkipState.Mode.TIMEOUT -> "Agent 判定超时 - 二次确认"
+            RiskConfirmManager.AgentSkipState.Mode.ABNORMAL -> "Agent 判定异常 - 二次确认"
+        }
         state != null -> when (state.environmentType) {
             RiskConfirmManager.EnvironmentType.NATIVE -> "即将执行风险命令"
             RiskConfirmManager.EnvironmentType.CONTAINER -> "高危命令 - 容器环境"
@@ -1197,6 +1389,28 @@ fun RiskConfirmDialogHost(
         }
         else -> null
     }
+    val agentSkipSummary: String = skipState?.let { skip ->
+    buildString {
+        when (skip.mode) {
+            RiskConfirmManager.AgentSkipState.Mode.SKIP -> {
+                append("您手动选择跳过 Agent 安全检测。")
+                if (skip.detail.isNotBlank()) { append("\n\nAgent 返回原因：${skip.detail}") }
+                append("\n\n继续执行脚本意味着您将绕过 VorteX Guard Engine 的 AI 安全审查。脚本可能包含危险操作（磁盘破坏、远程连接、数据泄露等），这些风险将完全由您自己承担。")
+            }
+            RiskConfirmManager.AgentSkipState.Mode.TIMEOUT -> {
+                append("Agent 判定在时限内未返回（可能是网络延迟或长脚本推理耗时过长）。")
+                if (skip.detail.isNotBlank()) { append("\n\n本地静态检测结果：${skip.detail}") }
+                append("\n\n继续执行脚本意味着您承认 Agent 判定未完成，同意自行确认脚本用途无害。")
+            }
+            RiskConfirmManager.AgentSkipState.Mode.ABNORMAL -> {
+                append("Agent 判定发生异常（如 API 调用失败、本地模型未就绪等）。")
+                if (skip.detail.isNotBlank()) { append("\n\nAgent 错误信息：${skip.detail}") }
+                append("\n\n继续执行脚本意味着您确认脚本用途无害，同意自行承担风险。")
+            }
+        }
+    }
+} ?: ""
+
     val dialogSummary: String = when {
         isSshPower -> "您即将对通过 SSH 连接的远程系统执行关机或重新启动。\n\n您确认后，远程主机将终止全部正在运行的程序与服务并断开 SSH 会话。如您选择关机，如果没有相关人员物理接触此远程设备或此设备不具备网络开机能力，系统将要持续离线，您无法通过远程方式恢复运行。\n\n若此环境为生产环境，此操作会造成服务中断与可能的业务损失。\n\n请确认您确实需要执行电源操作再继续！"
         state != null -> buildString {
@@ -1208,6 +1422,7 @@ fun RiskConfirmDialogHost(
             append("\n\n")
             append("该命令可能造成不可恢复的数据丢失、系统损坏或安全问题。您执行高危命令所造成的任何后果，本应用不承担任何责任，且不受理因高危操作产生的 Issue。")
         }
+        agentSkipState != null -> agentSkipSummary
         else -> agentLoadingText.ifBlank { "正在检测脚本安全性..." }
     }
 
@@ -1219,7 +1434,7 @@ fun RiskConfirmDialogHost(
 
     // 用 key 强制 content 分支变化（Loading ↔ 确认）时重建整个 Dialog，
     // 避免同一个 WindowDialog 内 content 切换时残留"安全检测中"内容、确认帧渲染不出来。
-    key(agentLoading, state?.command, isSshPower) {
+    key(agentLoading, state?.command, isSshPower, skipState?.requestId) {
     top.yukonga.miuix.kmp.window.WindowDialog(
         show = showDialog,
         onDismissRequest = {},
@@ -1227,6 +1442,93 @@ fun RiskConfirmDialogHost(
         summary = dialogSummary,
         content = {
             when {
+                agentSkipState != null -> run {
+                    val skip = agentSkipState ?: return@run
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .physicalTouchDetector()
+                            .accessibilityGuard(thirdPartyBlocked)
+                            .padding(top = 4.dp),
+                        horizontalAlignment = Alignment.Start
+                    ) {
+                        Text(
+                            text = "命令" + ":",
+                            style = androidx.compose.ui.text.TextStyle(
+                                fontSize = 13.sp,
+                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                            )
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        top.yukonga.miuix.kmp.basic.Card(
+                            modifier = Modifier
+                                .background(MiuixTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                                .clip(RoundedCornerShape(8.dp))
+                        ) {
+                            Text(
+                                text = skip.command.ifBlank { "（未提供命令）" },
+                                modifier = Modifier.padding(8.dp),
+                                style = androidx.compose.ui.text.TextStyle(
+                                    fontSize = 13.sp,
+                                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                    color = MiuixTheme.colorScheme.onSurface
+                                ),
+                                maxLines = 3
+                            )
+                        }
+
+                        Spacer(Modifier.height(12.dp))
+
+                        Text(
+                            text = "警告：此操作将绕过或确认跳过 VorteX Guard Engine 的 AI 安全审查。请确认脚本用途确实无害后再继续。",
+                            style = androidx.compose.ui.text.TextStyle(
+                                fontSize = 12.sp,
+                                color = MiuixTheme.colorScheme.error,
+                                fontWeight = FontWeight.Medium
+                            )
+                        )
+
+                        Spacer(Modifier.height(16.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(20.dp)
+                        ) {
+                            Button(
+                                onClick = guardedOnClick(context, thirdPartyBlocked, showBlockedMessage) {
+                                    RiskConfirmManager.cancelAgentSkip()
+                                },
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.buttonColors(
+                                    color = Color.Transparent
+                                )
+                            ) {
+                                Text(
+                                    text = "取消",
+                                    color = MiuixTheme.colorScheme.onSurface,
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                            Button(
+                                onClick = guardedOnClick(context, thirdPartyBlocked, showBlockedMessage) {
+                                    RiskConfirmManager.confirmAgentSkip()
+                                },
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.buttonColors(
+                                    color = Color(0xFFD32F2F)
+                                )
+                            ) {
+                                Text(
+                                    text = "确认通过",
+                                    color = Color.White,
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
+                    }
+                }
                 isSshPower && state != null -> {
                     Column(
                         modifier = Modifier
@@ -1409,6 +1711,18 @@ fun RiskConfirmDialogHost(
                             modifier = androidx.compose.ui.Modifier.size(36.dp),
                             strokeWidth = 3.dp
                         )
+                        Spacer(Modifier.height(16.dp))
+                        top.yukonga.miuix.kmp.basic.Button(
+                            onClick = guardedOnClick(context, thirdPartyBlocked, showBlockedMessage) {
+                                RiskConfirmManager.requestSkipFromLoading(context)
+                            }
+                        ) {
+                            Text(
+                                text = "跳过验证",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
                     }
                 }
             }
