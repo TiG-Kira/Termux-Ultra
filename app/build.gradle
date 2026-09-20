@@ -140,8 +140,6 @@ dependencies {
     implementation "top.yukonga.miuix.kmp:miuix-icons-android:0.9.4"
         implementation "top.yukonga.miuix.kmp:miuix-preference-android:0.9.4"
 
-    // Xiaomi SuperIsland Playground - HyperOS Focus Notification
-    implementation "com.github.HuberHaYu:Xiaomi-SuperIsland-Playground:v1"
 
     implementation "androidx.navigationevent:navigationevent-compose-android:1.0.0-alpha05"
 

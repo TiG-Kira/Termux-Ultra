@@ -14,6 +14,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.res.Resources;
+import android.graphics.drawable.Icon;
 import android.net.Uri;
 import android.net.wifi.WifiManager;
 import android.os.Binder;
@@ -56,11 +57,6 @@ import com.termux.shared.termux.terminal.TermuxTerminalSessionClientBase;
 import com.termux.shared.logger.Logger;
 import com.termux.app.compose.LiveUpdateState;
 import com.termux.app.compose.NotificationPrefs;
-import com.lab.island.sdk.island.IslandClient;
-import com.lab.island.sdk.island.IslandDraft;
-import com.lab.island.sdk.island.IslandDraftBuilder;
-import com.lab.island.sdk.island.IslandScene;
-import com.lab.island.sdk.island.PublishOutcome;
 import com.termux.shared.notification.NotificationUtils;
 import com.termux.shared.android.PermissionUtils;
 import com.termux.shared.data.DataUtils;
@@ -159,8 +155,6 @@ public final class TermuxService extends Service implements TermuxTaskCompat.Ter
 
     private MemoryBroadcastReceiver mMemoryBroadcastReceiver;
     private boolean mIsMemoryWarningActive = false;
-    /** 焦点通知（Island）活跃 notificationId，-1 表示无。用于 cancel / publish 前清理。 */
-    private int mActiveIslandNotificationId = -1;
     private boolean mIsMemoryKillActive = false;
     private boolean mAreSessionsFrozen = false;
     private String mKilledSessionName = null;
@@ -1252,15 +1246,12 @@ public synchronized int removeTermuxSession(TerminalSession sessionToRemove) {
         int pendingIntentFlags = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ? PendingIntent.FLAG_IMMUTABLE : 0;
         PendingIntent contentIntent = PendingIntent.getActivity(this, 0, notificationIntent, pendingIntentFlags);
 
-        // ===== 通知方式门控 =====
+    // ===== 通知方式门控 =====
         String mode = NotificationPrefs.getMode(this);
         if (NotificationPrefs.MODE_FOCUS.equals(mode)) {
-            // 焦点通知：业务走 IslandClient，前台服务仅返回最小化 ongoing
+            // 焦点模式返回最小化通知用于 startForeground() 首次调用
+            // 运行时由 publishFocusForCurrentState() 用原生 HyperOS extras 更新
             return buildMinimalNotification(contentIntent, pendingIntentFlags);
-        }
-        // 如果用户刚从焦点通知模式切回来，清理残留 Island
-        if (mActiveIslandNotificationId > 0) {
-            cancelActiveIsland();
         }
 
         boolean liveUpdateEnabled = NotificationPrefs.MODE_LIVE_UPDATE.equals(mode);
@@ -1507,102 +1498,159 @@ public synchronized int removeTermuxSession(TerminalSession sessionToRemove) {
     private synchronized void updateNotification() {
         String mode = NotificationPrefs.getMode(this);
         if (NotificationPrefs.MODE_FOCUS.equals(mode)) {
-            // 焦点通知模式：业务通知走 IslandClient，前台服务只返回最小化 ongoing
+            // 焦点模式：publishFocusForCurrentState() 内部会 notify 更新同一 notification ID
             publishFocusForCurrentState();
+            return;
         }
         Notification notification = buildNotification();
         ((NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE)).notify(TermuxConstants.TERMUX_APP_NOTIFICATION_ID, notification);
     }
 
-    // ===== 焦点通知（Xiaomi SuperIsland Playground）=====
+    // ===== 焦点通知（原生 HyperOS miui.focus.param）=====
+    // 参照 SiberiaApp/Maling-Island 项目，用 Notification + extras 实现
 
-    /** 根据当前业务状态发布焦点通知。无业务状态时取消已有的 Island。 */
+    private static final String FOCUS_ISLAND_JSON =
+        "{" +
+          "\"param_v2\":{" +
+            "\"protocol\":3," +
+            "\"business\":\"termux_focus\"," +
+            "\"updatable\":true," +
+            "\"enableFloat\":true," +
+            "\"isShowNotification\":true," +
+            "\"islandFirstFloat\":true," +
+            "\"ticker\":\"{{ticker}}\"," +
+            "\"aodTitle\":\"{{ticker}}\"," +
+            "\"param_island\":{" +
+              "\"islandProperty\":1," +
+              "\"islandOrder\":false," +
+              "\"dismissIsland\":false," +
+              "\"needCloseAnimation\":true," +
+              "\"smallIslandArea\":{" +
+                "\"imageTextInfoLeft\":{" +
+                  "\"type\":2," +
+                  "\"textInfo\":{\"title\":\"{{left}}\",\"showHighlightColor\":false,\"narrowFont\":true}" +
+                "}," +
+                "\"imageTextInfoRight\":{" +
+                  "\"type\":2," +
+                  "\"textInfo\":{\"title\":\"{{right}}\",\"showHighlightColor\":false,\"narrowFont\":true}" +
+                "}" +
+              "}" +
+            "}" +
+          "}" +
+        "}";
+
+    private static final String PIC_MAIN_KEY     = "miui.focus.pic_icon_main";
+    private static final String PIC_APP_KEY      = "miui.focus.pic_app";
+    private static final String PIC_TICKER_KEY   = "miui.focus.pic_ticker";
+    private static final String PIC_AOD_KEY      = "miui.focus.pic_aod";
+    private static final String PIC_IM_BADGE_KEY = "miui.focus.pic_im_badge";
+
+    /** 转义 JSON 特殊字符，用于模板占位符替换。 */
+    private static String escapeJson(String s) {
+        if (s == null) return "";
+        StringBuilder sb = new StringBuilder(s.length());
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            switch (c) {
+                case '"':  sb.append("\\\""); break;
+                case '\\': sb.append("\\\\"); break;
+                case '\n': sb.append("\\n"); break;
+                case '\r': sb.append("\\r"); break;
+                case '\t': sb.append("\\t"); break;
+                default:
+                    if (c < 0x20) sb.append(String.format("\\u%04x", (int) c));
+                    else sb.append(c);
+            }
+        }
+        return sb.toString();
+    }
+
+    /** 根据当前业务状态发布焦点通知。无业务状态时取消。 */
     private void publishFocusForCurrentState() {
         try {
-            Resources res = getResources();
-
             // 档 1：包管理器操作
             LiveUpdateState.PkgState pkgState = LiveUpdateState.getPkgStateSnapshot();
             if (NotificationPrefs.isPackageEnabled(this) && pkgState != null && !pkgState.getFinished()) {
-                String title = "Termux · 软件包操作";
-                String subtitle;
                 int progress = Math.max(1, pkgState.getProgress());
+                String verb;
                 if (pkgState.getOperation() == com.termux.app.compose.LiveUpdateState.PkgOperation.INSTALL) {
-                    subtitle = "安装中: " + pkgState.getPackageName();
+                    verb = "安装中";
                 } else if (pkgState.getOperation() == com.termux.app.compose.LiveUpdateState.PkgOperation.UNINSTALL) {
-                    subtitle = "卸载中: " + pkgState.getPackageName();
+                    verb = "卸载中";
                 } else if (pkgState.getOperation() == com.termux.app.compose.LiveUpdateState.PkgOperation.UPGRADE) {
-                    subtitle = "升级中";
+                    verb = "升级中";
                 } else {
-                    subtitle = "刷新中";
+                    verb = "刷新中";
                 }
-                publishIslandDraft(title, subtitle, "Termux", progress);
+                publishFocusNotification("软件包", verb + " " + progress + "%");
                 return;
             }
 
             // 档 2：Agent 执行中
             if (NotificationPrefs.isAgentEnabled(this) && LiveUpdateState.hasAgent()) {
-                publishIslandDraft("Termux · Agent", "正在执行任务...", "Termux", -1);
+                publishFocusNotification("Agent", "思考中");
                 return;
             }
 
-            // 档 3：终端会话活跃（只在 terminalEnabled 时显示）
+            // 档 3：终端会话活跃
             if (NotificationPrefs.isTerminalEnabled(this) && mTermuxSessions.size() > 0) {
-                publishIslandDraft("Termux · 终端", mTermuxSessions.size() + " 个会话运行中", "Termux", -1);
+                publishFocusNotification("终端", mTermuxSessions.size() + " 个会话");
                 return;
             }
 
-            // 无业务状态 → 取消活跃的 Island
-            cancelActiveIsland();
+            // 无业务状态 → 取消通知
+            ((NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE))
+                .cancel(TermuxConstants.TERMUX_APP_NOTIFICATION_ID);
         } catch (Throwable t) {
             Logger.logError(LOG_TAG, "publishFocusForCurrentState failed: " + t.getMessage());
         }
     }
 
-    private void publishIslandDraft(String title, String subtitle, String source, int progress) {
+    /** 构建并发布原生 HyperOS 焦点通知（miui.focus.param extras）。 */
+    private void publishFocusNotification(String leftLabel, String rightLabel) {
         try {
-            IslandClient island = IslandClient.get(this);
-            IslandDraftBuilder builder = new IslandDraftBuilder()
-                .scene(IslandScene.GENERAL)
-                .title(title)
-                .subtitle(subtitle)
-                .source(source);
-            if (progress > 0) builder.progress(progress);
-            IslandDraft draft = builder.build();
+            Intent notificationIntent = TermuxActivity.newInstance(this);
+            int piFlags = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ? PendingIntent.FLAG_IMMUTABLE : 0;
+            PendingIntent contentIntent = PendingIntent.getActivity(this, 0, notificationIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT | piFlags);
 
-            // 先取消上一个，避免叠加
-            if (mActiveIslandNotificationId > 0) {
-                try { island.cancel(mActiveIslandNotificationId); } catch (Throwable ignored) {}
-            }
+            Notification.Builder builder = (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+                ? new Notification.Builder(this, TermuxConstants.TERMUX_APP_NOTIFICATION_CHANNEL_ID)
+                : new Notification.Builder(this);
 
-            island.publish(draft, outcome -> {
-                Logger.logDebug(LOG_TAG, "Island publish outcome: kind=" +
-                    (outcome != null ? outcome.getKind() : "null") + ", msg=" +
-                    (outcome != null ? outcome.getMessage() : "null"));
-            });
-            // publish 触发后从 activeIslands 拿新 id（StateFlow 是 snapshot，publish 后短暂 delay 内可能还没更新，
-            // 但下一次 publishFocusForCurrentState() 被调时会用新 id）
-            try {
-                java.util.List<com.lab.island.sdk.island.ActiveIsland> active =
-                    island.getActiveIslands().getValue();
-                if (active != null && !active.isEmpty()) {
-                    mActiveIslandNotificationId = active.get(active.size() - 1).getNotificationId();
-                }
-            } catch (Throwable ignored) {}
+            String contentText = leftLabel + " · " + rightLabel;
+            builder.setContentTitle("Termux")
+                   .setContentText(contentText)
+                   .setContentIntent(contentIntent)
+                   .setShowWhen(false)
+                   .setSmallIcon(R.drawable.ic_service_notification)
+                   .setOngoing(true)
+                   .setOnlyAlertOnce(true)
+                   .setCategory(Notification.CATEGORY_PROGRESS)
+                   .setVisibility(Notification.VISIBILITY_PUBLIC)
+                   .setPriority(Notification.PRIORITY_HIGH);
+
+            Bundle extras = new Bundle();
+            extras.putString("miui.focus.param",
+                FOCUS_ISLAND_JSON
+                    .replace("{{ticker}}", escapeJson(contentText))
+                    .replace("{{left}}",   escapeJson(leftLabel))
+                    .replace("{{right}}",  escapeJson(rightLabel)));
+
+            Bundle pics = new Bundle();
+            Icon ic = Icon.createWithResource(this, R.drawable.ic_service_notification);
+            pics.putParcelable(PIC_MAIN_KEY,     ic);
+            pics.putParcelable(PIC_APP_KEY,      ic);
+            pics.putParcelable(PIC_TICKER_KEY,   ic);
+            pics.putParcelable(PIC_AOD_KEY,      ic);
+            pics.putParcelable(PIC_IM_BADGE_KEY, Icon.createWithResource(this, android.R.color.transparent));
+            extras.putBundle("miui.focus.pics", pics);
+
+            Notification n = builder.setExtras(extras).build();
+            ((NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE))
+                .notify(TermuxConstants.TERMUX_APP_NOTIFICATION_ID, n);
         } catch (Throwable t) {
-            Logger.logError(LOG_TAG, "publishIslandDraft failed: " + t.getMessage());
-        }
-    }
-
-    private void cancelActiveIsland() {
-        if (mActiveIslandNotificationId > 0) {
-            try {
-                IslandClient island = IslandClient.get(this);
-                island.cancel(mActiveIslandNotificationId);
-                mActiveIslandNotificationId = -1;
-            } catch (Throwable t) {
-                Logger.logError(LOG_TAG, "cancelActiveIsland failed: " + t.getMessage());
-            }
+            Logger.logError(LOG_TAG, "publishFocusNotification failed: " + t.getMessage());
         }
     }
 
