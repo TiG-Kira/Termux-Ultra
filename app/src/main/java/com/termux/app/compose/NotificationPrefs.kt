@@ -2,7 +2,6 @@ package com.termux.app.compose
 
 import android.content.Context
 import android.content.SharedPreferences
-import com.termux.app.utils.HyperOSDetector
 import android.os.Build
 
 /**
@@ -10,7 +9,7 @@ import android.os.Build
  *
  * 存储：
  *  - 通知开关：终端 / Agent / 软件包状态
- *  - 通知方式：普通 / LiveUpdate / 焦点通知
+ *  - 通知方式：普通 / LiveUpdate
  */
 object NotificationPrefs {
 
@@ -19,7 +18,6 @@ object NotificationPrefs {
     // 通知方式常量
     const val MODE_NORMAL = "normal"
     const val MODE_LIVE_UPDATE = "live_update"
-    const val MODE_FOCUS = "focus"
 
     // 开关键
     private const val KEY_TERMINAL_ENABLED = "notify_terminal_enabled"
@@ -83,8 +81,4 @@ object NotificationPrefs {
     /** LiveUpdate（Android 16+）是否可用 */
     @JvmStatic
     fun isLiveUpdateAvailable(): Boolean = Build.VERSION.SDK_INT >= 36
-
-    /** 焦点通知（HyperOS 2+）是否可用 */
-    @JvmStatic
-    fun isFocusNotificationAvailable(): Boolean = HyperOSDetector.isHyperOS2OrAbove()
 }

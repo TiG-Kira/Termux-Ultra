@@ -47,7 +47,7 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
  * 通知管理设置页。
  *
  * 第一组「通知」：终端 / Agent / 软件包 三个开关。
- * 第二组「通知方式」：普通 / LiveUpdate / 焦点通知 三选一。
+ * 第二组「通知方式」：普通 / LiveUpdate 二选一。
  */
 @Composable
 fun NotificationManagerScreen(

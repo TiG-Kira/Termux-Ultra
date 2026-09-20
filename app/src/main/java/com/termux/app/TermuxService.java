@@ -1272,7 +1272,7 @@ public synchronized int removeTermuxSession(TerminalSession sessionToRemove) {
         return buildMinimalNotification(contentIntent, pendingIntentFlags);
     }
 
-    /** 所有通知开关关闭或焦点通知模式下的最小化前台通知（Android 强制要求前台服务必须有 notification）。 */
+    /** 所有通知开关关闭时的最小化前台通知（Android 强制要求前台服务必须有 notification）。 */
     private Notification buildMinimalNotification(PendingIntent contentIntent, int piFlags) {
         Notification.Builder builder = (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
             ? new Notification.Builder(this, TermuxConstants.TERMUX_APP_NOTIFICATION_CHANNEL_ID)
