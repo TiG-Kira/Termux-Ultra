@@ -6,6 +6,9 @@
     android:sharedUserId="${TERMUX_PACKAGE_NAME}"
     android:sharedUserLabel="@string/shared_user_label">
 
+    <!-- Xiaomi-SuperIsland-Playground v1 declares minSdk 31, but we only invoke it on HyperOS devices (API 31+)
+         via HyperOSDetector gating. Override the merger's minSdk check here. -->
+    <uses-sdk tools:overrideLibrary="com.lab.island.sdk" />
 
     <uses-feature
         android:name="android.hardware.touchscreen"
