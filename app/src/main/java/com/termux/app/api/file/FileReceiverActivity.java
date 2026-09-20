@@ -198,11 +198,33 @@ public class FileReceiverActivity extends AppCompatActivity {
             });
     }
 
+    /**
+     * 只保留纯文件名，剥掉任何路径成分。
+     *
+     * 外部应用可以通过 intent 的 DISPLAY_NAME / subject 传入 "../../bin/termux-file-editor"
+     * 之类的名字，若不净化，`new File(receiveDir, name)` 会把文件写到接收目录之外
+     * （例如覆盖 $HOME/bin/termux-file-editor 这个被调用的脚本）。
+     *
+     * @return 净化后的文件名；无法得到合法名字时返回 null
+     */
+    public static String sanitizeFileName(String name) {
+        if (DataUtils.isNullOrEmpty(name)) return null;
+        String sanitized = new File(name).getName();
+        if (sanitized.isEmpty() || sanitized.equals(".") || sanitized.equals("..")) return null;
+        return sanitized;
+    }
+
     public File saveStreamWithName(InputStream in, String attachmentFileName) {
         File receiveDir = new File(TERMUX_RECEIVEDIR);
 
         if (DataUtils.isNullOrEmpty(attachmentFileName)) {
             showErrorDialogAndQuit("File name cannot be null or empty");
+            return null;
+        }
+
+        final String safeFileName = sanitizeFileName(attachmentFileName);
+        if (safeFileName == null) {
+            showErrorDialogAndQuit("Invalid file name: " + attachmentFileName);
             return null;
         }
 
@@ -212,11 +234,13 @@ public class FileReceiverActivity extends AppCompatActivity {
         }
 
         try {
-            final File outFile = new File(receiveDir, attachmentFileName);
-            try (FileOutputStream f = new FileOutputStream(outFile)) {
+            final File outFile = new File(receiveDir, safeFileName);
+            final InputStream inputStream = in;
+            // 输入流必须一并关闭：它是 getContentResolver().openInputStream(uri) 打开的 fd
+            try (InputStream ignoredInput = inputStream; FileOutputStream f = new FileOutputStream(outFile)) {
                 byte[] buffer = new byte[4096];
                 int readBytes;
-                while ((readBytes = in.read(buffer)) > 0) {
+                while ((readBytes = ignoredInput.read(buffer)) > 0) {
                     f.write(buffer, 0, readBytes);
                 }
             }

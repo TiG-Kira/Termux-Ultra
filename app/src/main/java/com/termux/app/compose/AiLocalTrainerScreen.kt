@@ -304,7 +304,14 @@ private fun handleTrainerEvent(
         }
         is LocalTrainerEvent.RoundDone -> steps.add(evt.round.roundIndex to "【第${evt.round.roundIndex}轮完成】得分=${evt.round.score}，记忆块当前${evt.learnedNowCount} chars")
         is LocalTrainerEvent.ErrorOccurred -> { steps.add(evt.roundIndex to "❌ 错误（第${evt.roundIndex}轮）\n${evt.message}"); statusMsg.value = "错误：${evt.message}" }
-        is LocalTrainerEvent.SessionSnapshot -> { session.value = evt.session; AiTermuxPrefs.saveLastTrainSession(ctx, evt.session) }
+        is LocalTrainerEvent.SessionSnapshot -> {
+            // 给 UI 一份独立快照：LocalTrainSession.rounds 是与训练引擎共享的
+            // MutableList，引擎在 Dispatchers.IO 上 add/修改，UI 在 Main 上遍历，
+            // 直接用同一个实例会 ConcurrentModificationException 或读到撕裂状态
+            val snapshot = evt.session.copy(rounds = evt.session.rounds.toMutableList())
+            session.value = snapshot
+            AiTermuxPrefs.saveLastTrainSession(ctx, evt.session)
+        }
         is LocalTrainerEvent.WaitingForUserRating -> {
             val ss = "%.1f".format(evt.suggestedScore)
             val sm = "%.1f".format(evt.suggestedMaxScore)

@@ -584,12 +584,13 @@ object RiskConfirmManager {
         // 前一个 suspendCancellableCoroutine 永不 resume（协程泄漏/永久挂起）。
         val requestId = java.util.UUID.randomUUID().toString()
 
-        _dialogState.value = DialogState(
-            command = command,
-            riskDescription = detection.description,
-            riskType = detection.riskType?.displayName ?: "高危操作",
-            environmentType = environmentType
-        )
+        // 注意：弹窗只能在 suspendCancellableCoroutine 内部、且**回调登记之后**再放出来（见下方）。
+        // 此处曾经也赋过一次 _dialogState（且漏了 requestId = requestId），后果是：
+        //   1) 弹窗先于回调登记出现，用户在这一瞬间点击会被 resolveRequest 吃掉 —— F16 回归；
+        //   2) 这个中途状态里 requestId 为空，此时点击走的是
+        //      resolveActiveRequest 的 else 分支：只把弹窗收起，谁也不结算，
+        //      调用方要挂到 CONFIRM_WAIT_SECONDS 超时才有反应。
+        // 第二轮修过的两个缺陷由此回到线上，RiskConfirmRequestMatchTest 也随之变红。
 
         // 超时与倒计时/自动拒绝保持同一时限（此前写死 60000ms，与 CONFIRM_WAIT_SECONDS=25
         // 不一致，且 Runnable 从不移除，用户确认后仍会留一个空转回调在主线程队列里）。
@@ -970,13 +971,11 @@ object RiskConfirmManager {
             navigateBackToTermux(context, sessionHandle, RESULT_DENIED)
             return
         }
-        // 最后处理协程请求
-        val requestId = pendingRequests.keys.lastOrNull()
-        if (requestId != null) {
-            pendingRequests[requestId]?.invoke(false)
-            pendingRequests.remove(requestId)
-            _dialogState.value = null
-        }
+        // 最后处理协程请求。
+        // 旧实现用 pendingRequests.keys.lastOrNull() 结算，与 confirm() 的精确匹配不对称：
+        // 现在只有一个请求在途时能碰巧正确，一旦同时在途多个就会把「拒绝」
+        // 结算给别的挂起调用方。
+        resolveActiveRequest(false)
     }
 
     /** 导航回 AiTermuxActivity */

@@ -2497,6 +2497,7 @@ object AiApiClient {
 
     /** 在线获取可用模型列表（GET {baseUrl}/models） */
     suspend fun fetchOnlineModels(baseUrl: String, apiKey: String): Pair<List<String>, String?> = withContext(Dispatchers.IO) {
+        var connection: HttpURLConnection? = null
         try {
             val url = URL("${baseUrl.trimEnd('/')}/models")
             val conn = (url.openConnection() as HttpURLConnection).apply {
@@ -2506,6 +2507,7 @@ object AiApiClient {
                 setRequestProperty("Authorization", "Bearer $apiKey")
                 setRequestProperty("Content-Type", "application/json")
             }
+            connection = conn
             val code = conn.responseCode
             if (code !in 200..299) {
                 val err = conn.errorStream?.bufferedReader()?.use { it.readText() } ?: "HTTP $code"
@@ -2522,6 +2524,9 @@ object AiApiClient {
             Pair(models, null)
         } catch (e: Exception) {
             Pair(emptyList(), e.message ?: "未知错误")
+        } finally {
+            // 只 close 流不 disconnect 的话，keep-alive 连接不会及时回收
+            connection?.disconnect()
         }
     }
 
@@ -2530,6 +2535,7 @@ object AiApiClient {
         config: AiProviderConfig,
         messages: List<OpenAiMessage>
     ): ChatCompletionResponse = withContext(Dispatchers.IO) {
+        var connection: HttpURLConnection? = null
         try {
             val baseUrl = config.apiBaseUrl.trimEnd('/')
             val url = URL("$baseUrl/chat/completions")
@@ -2551,6 +2557,7 @@ object AiApiClient {
                 doOutput = true
                 doInput = true
             }
+            connection = conn
 
             DataOutputStream(conn.outputStream).use { it.write(body.toByteArray(Charsets.UTF_8)) }
 
@@ -2571,6 +2578,9 @@ object AiApiClient {
             ChatCompletionResponse(
                 error = ChatCompletionResponse.ApiError("请求失败: ${e.message ?: "未知错误"}")
             )
+        } finally {
+            // 与流式路径保持一致：只 close 流不 disconnect 会让连接留在 keep-alive 池里
+            connection?.disconnect()
         }
     }
 

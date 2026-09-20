@@ -746,7 +746,10 @@ data class QemuVmConfig(
         }
         sb.append("    -vga virtio\n")
         sb.append("    -usb -device usb-tablet\n")
-        sb.append("    -vnc 0.0.0.0:$vncDisplay\${VNC_AUDIO_ARG}\n")
+        // 与原生路径保持一致，只监听回环：proot 容器不隔离网络栈，
+        // 绑 0.0.0.0 等于把这台虚拟机的 VNC（且未设密码）暴露到设备所有网卡，
+        // 同网段任何主机都能直接连进来操作虚拟机
+        sb.append("    -vnc localhost:$vncDisplay\${VNC_AUDIO_ARG}\n")
         sb.append("    -no-reboot\n")
         val driveCacheOption = if (ssdCacheMode) ",cache=writeback,aio=threads,discard=on,detect-zeroes=on" else ""
         when (diskInterface) {

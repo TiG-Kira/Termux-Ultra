@@ -351,6 +351,15 @@ public final class TermuxService extends Service implements TermuxTaskCompat.Ter
         // 注销 LiveUpdateState 监听器
         LiveUpdateState.removeListener(mLiveUpdateListener);
 
+        // 注销 Compose 会话变更回调。ComposeSessionManager 是进程级单例，
+        // 不注销会一直持有这个已经销毁的 Service（连带 Context / WakeLock /
+        // mTermuxSessions），之后每次会话变化还会回调它去重建通知。
+        try {
+            com.termux.app.compose.terminal.ComposeSessionManager.setOnSessionsChanged(null);
+        } catch (Throwable t) {
+            Logger.logDebug(LOG_TAG, "Failed to unregister Compose sessions callback: " + t.getMessage());
+        }
+
         unregisterMemoryBroadcastReceiver();
         stopMemoryCheck();
     }

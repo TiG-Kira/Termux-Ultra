@@ -1426,7 +1426,9 @@ object AiTermuxPrefs {
 
     fun isAutoExecEnabled(context: Context): Boolean {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        return prefs.getBoolean("auto_exec_enabled", false)
+        // 写入端 saveAutoExecConfig 用的是 "ai_auto_exec_enabled"，这里读回了
+        // "auto_exec_enabled"，永远读不到，恒返回 false
+        return prefs.getBoolean("ai_auto_exec_enabled", false)
     }
 
     // ---------- Fallback Online ----------

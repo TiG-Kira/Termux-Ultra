@@ -20,6 +20,7 @@ import java.io.BufferedReader
 import java.io.File
 import java.io.InputStreamReader
 import androidx.compose.ui.res.stringResource
+import kotlin.concurrent.thread
 
 /**
  * 本地大模型支持（通过 Termux 的 llama.cpp 在设备上运行 GGUF 模型）。
@@ -1570,6 +1571,39 @@ object AiLocalModel {
         }
     }
 
+    /**
+     * 收集 llama-cli 子进程的 stdout / stderr，返回 (stdout, stderr)。
+     *
+     * 两个流必须**并发**排空：若先串行走心地读完 stderr 再读 stdout，那么当子进程
+     * 的 stdout 输出超过管道缓冲区（约 64KB）时，子进程阻塞在写 stdout 上，
+     * 而父进程阻塞在读 stderr 上（stderr 要等子进程结束才 EOF）—— 双方互等，死锁。
+     * 这里起一个独立线程专读 stderr，当前线程读 stdout。
+     */
+    private fun runCliCollectingStderr(proc: Process): Pair<String, String> {
+        val stderr = StringBuilder()
+        val stderrThread = thread(name = "llama-cli-stderr", isDaemon = true) {
+            runCatching {
+                proc.errorStream.bufferedReader().use { reader ->
+                    while (true) {
+                        val line = reader.readLine() ?: break
+                        stderr.appendLine(line)
+                    }
+                }
+            }
+        }
+        val stdout = try {
+            proc.inputStream.bufferedReader().use { it.readText() }
+        } catch (e: Exception) {
+            // 读出错就没必要再等子进程了，否则 waitFor() 可能同样悬住
+            runCatching { proc.destroy() }
+            runCatching { stderrThread.join(1000) }
+            throw e
+        }
+        proc.waitFor()
+        runCatching { stderrThread.join(5000) }
+        return stdout to stderr.toString()
+    }
+
     /** 非流式本地调用，返回兼容响应体 */
     suspend fun completeLocal(
         config: AiProviderConfig,
@@ -1598,9 +1632,7 @@ object AiLocalModel {
             val pb = buildProcess(entry, promptFile, config.temperature)
             pb.redirectErrorStream(false)
             val proc = pb.start()
-            proc.errorStream.bufferedReader().use { it.readText() }
-            val text = proc.inputStream.bufferedReader().use { it.readText() }
-            proc.waitFor()
+            val (text, _) = runCliCollectingStderr(proc)
             val output = extractAssistantResponse(text.trim('\n'))
             if (output.isBlank()) {
                 ChatCompletionResponse(error = ChatCompletionResponse.ApiError("本地模型返回为空"))
@@ -1676,9 +1708,7 @@ object AiLocalModel {
             val pb = buildProcess(entry, promptFile, config.temperature)
             pb.redirectErrorStream(false)
             val proc = pb.start()
-            proc.errorStream.bufferedReader().use { it.readText() }
-            val text = proc.inputStream.bufferedReader().use { it.readText() }
-            proc.waitFor()
+            val (text, _) = runCliCollectingStderr(proc)
             val output = extractAssistantResponse(text.trim('\n'))
             if (output.isBlank()) {
                 ChatCompletionResponse(error = ChatCompletionResponse.ApiError("本地模型返回为空"))

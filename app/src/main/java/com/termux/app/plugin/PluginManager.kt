@@ -186,9 +186,15 @@ object PluginManager {
     }
 
     fun executeShellCommand(context: Context, pluginId: String, command: String): Result<String> {
-        if (!hasPermission(context, pluginId, PluginPermission.ROOT_EXECUTE) &&
-            !hasPermission(context, pluginId, PluginPermission.TERMUX_SESSION_ACCESS)) {
-            return Result.failure(SecurityException("插件没有执行命令的权限"))
+        // PluginSecurity.canExecuteShellCommand 校验了「插件存在 / 已启用 / 有命令权限」，
+        // 这里不再重复判 hasPermission；额外多出的一层是命令风险评审：
+        // 高危命令必须持有 ROOT_EXECUTE，否则拒绝（而无法在这里拉起用户确认）。
+        //
+        // 修复前这条安全链路从未被调用，只查了权限位 —— 拿到 TERMUX_SESSION_ACCESS
+        // 的插件可以直接执行 `rm -rf /`、`dd if=...`、`mkfs` 而没有任何拦截。
+        val security = PluginSecurity.canExecuteShellCommand(context, pluginId, command)
+        if (!security.allowed) {
+            return Result.failure(SecurityException(security.reason ?: "命令被插件安全策略拒绝"))
         }
 
         return try {

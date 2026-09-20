@@ -170,6 +170,23 @@ fun FileManagerScreen(
         files = currentPath.listFiles()?.sortedWith(compareBy({ !it.isDirectory }, { it.name })) ?: emptyList()
     }
 
+    /**
+     * 在 parent 内构造子文件，名字必须是**纯文件名**。
+     *
+     * 用户输入的 "../../xxx"、"/abs/path" 这类名字若不净化，会被 File(parent, name)
+     * 直接解析到父目录之外（例如应用沙盒根的 shared_prefs / lib），造成越目录写入。
+     * 无法得到安全名字时返回 null，由调用方提示用户。
+     */
+    fun safeChildFile(parent: File?, name: String): File? {
+        if (parent == null) return null
+        val trimmed = name.trim()
+        if (trimmed.isEmpty()) return null
+        val base = File(trimmed).name
+        // File(...).name 会剥掉路径成分，与输入不等即说明输入里带了路径分隔符
+        if (base.isEmpty() || base == "." || base == ".." || base != trimmed) return null
+        return File(parent, base)
+    }
+
     fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val name = "FTP 服务"
@@ -1210,12 +1227,23 @@ fun FileManagerScreen(
                         TextButton(
                             text = "确定",
                             onClick = {
-                                val newFile = File(renameFile.parentFile, newFileName)
-                                renameFile.renameTo(newFile)
-                                selectedFiles = emptySet()
-                                isInSelectionMode = false
-                                refreshFiles()
-                                showRenameDialog = false
+                                // 旧实现既没净化文件名，也没判断 renameTo 的返回值：
+                                // 目标已存在或名字含路径成分时会静默失败，UI 却照常显示成功
+                                val target = safeChildFile(renameFile.parentFile, newFileName)
+                                val failure = when {
+                                    target == null -> "文件名不合法"
+                                    target.exists() -> "已存在同名文件"
+                                    !renameFile.renameTo(target) -> "重命名失败"
+                                    else -> null
+                                }
+                                if (failure == null) {
+                                    selectedFiles = emptySet()
+                                    isInSelectionMode = false
+                                    refreshFiles()
+                                    showRenameDialog = false
+                                } else {
+                                    android.widget.Toast.makeText(context, failure, android.widget.Toast.LENGTH_SHORT).show()
+                                }
                             },
                             modifier = Modifier.weight(1f),
                             colors = ButtonDefaults.textButtonColorsPrimary()
@@ -1259,13 +1287,19 @@ fun FileManagerScreen(
                                 operationProgressText = "创建文件夹中..."
                                 operationProgress = 0f
                                 coroutineScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-                                    val newFolder = File(currentPath, newFolderName)
-                                    newFolder.mkdirs()
+                                    val target = safeChildFile(currentPath, newFolderName)
+                                    val ok = target != null && target.mkdirs()
                                     operationProgress = 1f
                                     kotlinx.coroutines.delay(200)
                                     kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
                                         refreshFiles()
                                         showOperationProgress = false
+                                        if (!ok) {
+                                            android.widget.Toast.makeText(
+                                                context, "创建文件夹失败：文件名不合法或已存在",
+                                                android.widget.Toast.LENGTH_SHORT
+                                            ).show()
+                                        }
                                     }
                                 }
                             },
@@ -1311,13 +1345,19 @@ fun FileManagerScreen(
                                 operationProgressText = "创建文件中..."
                                 operationProgress = 0f
                                 coroutineScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-                                    val newFile = File(currentPath, newFileInputName)
-                                    newFile.createNewFile()
+                                    val target = safeChildFile(currentPath, newFileInputName)
+                                    val ok = target != null && runCatching { target.createNewFile() }.getOrDefault(false)
                                     operationProgress = 1f
                                     kotlinx.coroutines.delay(200)
                                     kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
                                         refreshFiles()
                                         showOperationProgress = false
+                                        if (!ok) {
+                                            android.widget.Toast.makeText(
+                                                context, "创建文件失败：文件名不合法或已存在",
+                                                android.widget.Toast.LENGTH_SHORT
+                                            ).show()
+                                        }
                                     }
                                 }
                             },

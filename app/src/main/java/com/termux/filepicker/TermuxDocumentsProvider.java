@@ -90,8 +90,13 @@ public class TermuxDocumentsProvider extends DocumentsProvider {
     public Cursor queryChildDocuments(String parentDocumentId, String[] projection, String sortOrder) throws FileNotFoundException {
         final MatrixCursor result = new MatrixCursor(projection != null ? projection : DEFAULT_DOCUMENT_PROJECTION);
         final File parent = getFileForDocId(parentDocumentId);
-        for (File file : parent.listFiles()) {
-            includeFile(result, null, file);
+        // listFiles() 在父路径不是目录、已被删除或发生 I/O 错误时返回 null，
+        // 直接遍历会抛 NullPointerException 并让文件选择器崩溃。
+        final File[] children = parent.listFiles();
+        if (children != null) {
+            for (File file : children) {
+                includeFile(result, null, file);
+            }
         }
         return result;
     }
@@ -141,9 +146,29 @@ public class TermuxDocumentsProvider extends DocumentsProvider {
     @Override
     public void deleteDocument(String documentId) throws FileNotFoundException {
         File file = getFileForDocId(documentId);
-        if (!file.delete()) {
+        // File.delete() 只能删除空目录，非空目录会返回 false 导致删除失败
+        if (file.isDirectory()) {
+            if (!deleteRecursively(file)) {
+                throw new FileNotFoundException("Failed to delete directory with id " + documentId);
+            }
+        } else if (!file.delete()) {
             throw new FileNotFoundException("Failed to delete document with id " + documentId);
         }
+    }
+
+    /** 递归删除目录及其内容，全部失败才返回 false */
+    private static boolean deleteRecursively(File file) {
+        final File[] children = file.listFiles();
+        if (children != null) {
+            for (File child : children) {
+                if (child.isDirectory()) {
+                    if (!deleteRecursively(child)) return false;
+                } else if (!child.delete()) {
+                    return false;
+                }
+            }
+        }
+        return file.delete();
     }
 
     @Override

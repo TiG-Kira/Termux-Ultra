@@ -119,6 +119,58 @@ vge_check_and_block() {
 # ============================================================================
 # 函数覆盖
 # ============================================================================
+# rm 是否必须送检测端:
+#   1) 带递归开关 (-r / -R / 组合形式如 -rf / -fr, 或 --recursive / --no-preserve-root)
+#   2) 删除目标是绝对路径 (/ 或 /xxx)
+#
+# 旧实现是一张固定组合的 case 表, 只认 "-rf /" "-fr /" "-f -r /" "-r -f /"
+# "--no-preserve-root" "-rf /*", 于是 `rm -r /`、`rm -R /*`、`rm -rf /etc`
+# 全部落到 *) 分支原样执行 —— 而 RiskCommandDetector 的 RM_RF_ROOT 规则本来
+# 正好能匹配这些形式, 只是 hook 压根没把命令发出去。
+#
+# 宁可多送一次检测：误送只会多一次本地 TCP 往返（毫秒级），漏送是直接放行。
+__VGE_rm_dangerous() {
+    local __arg __rec=0
+    for __arg in "$@"; do
+        case "$__arg" in
+            --recursive|--no-preserve-root) __rec=1 ;;
+            -[a-zA-Z]*) case "$__arg" in *r*|*R*) __rec=1 ;; esac ;;
+            /*|/) return 0 ;;
+        esac
+    done
+    [ "$__rec" = 1 ]
+}
+
+# 剥离 env / nohup / xargs / busybox 等前缀执行器, 结果写入 __VGE_STRIPPED。
+#
+# 为什么需要: 函数覆盖只对「裸命令名」生效。`env rm -rf /` 里的 rm 是 env 从 PATH
+# 里重新查出来的真二进制, 不走我们的 rm 函数; DEBUG trap 那边它既不是 ./ ../ /*
+# 开头、也没有块设备重定向, 同样直接放行。常见的前缀还有 nohup / xargs / nice /
+# setsid / stdbuf / timeout / time / busybox / eval / command / exec / strace。
+__VGE_STRIPPED=
+__VGE_strip_prefix() {
+    local __rest="$1" __tok
+    while :; do
+        __tok=${__rest%%[[:space:]]*}
+        [ "$__tok" = "$__rest" ] && break
+        case "$__tok" in
+            env|nohup|nice|setsid|stdbuf|timeout|time|xargs|busybox|eval|command|exec|watch|strace)
+                __rest=${__rest#*[[:space:]]}
+                # 再吃掉前缀执行器自身的选项 (-i / -n1 / -p ...)
+                while :; do
+                    __tok=${__rest%%[[:space:]]*}
+                    case "$__tok" in
+                        -*) __rest=${__rest#*[[:space:]]} ;;
+                        *) break ;;
+                    esac
+                done
+                ;;
+            *) break ;;
+        esac
+    done
+    __VGE_STRIPPED="$__rest"
+}
+
 __VGE_wrap() {
     local __fn="$1"; shift
     local __full="$__fn"
@@ -133,10 +185,10 @@ __VGE_wrap() {
             fi
             ;;
         rm)
-            case "$*" in
-                *"-rf /"*|*"-fr /"*|*"-f -r /"*|*"-r -f /"*|*"--no-preserve-root"*|*"-rf /*"*) ;;
-                *) command rm "$@"; return $? ;;
-            esac
+            if ! __VGE_rm_dangerous "$@"; then
+                command rm "$@"
+                return $?
+            fi
             ;;
         chmod)
             case "$*" in
@@ -212,28 +264,66 @@ if [ -n "$BASH_VERSION" ]; then
         #       导致 RiskCommandDetector 的 RAW_DISK_WRITE 规则永远不触发
         #       （`cat x > /dev/sda` 这类破坏性写盘可直接执行）
         #    c) 其余交互命令放行 —— 性能考虑, 不把每条命令都送去 TCP 检测
+        #    d) 前缀执行器 (env / nohup / xargs / busybox ...) 包裹的危险命令
+        #       见 __VGE_strip_prefix 的说明
         #
         # 重定向判定基于「去掉所有空白」的副本: case 模式无法表达可选的空格,
         # 否则 `cat x > /dev/sda`（> 后有空格）会被漏掉 —— 这正是检测端正则
         # 里 `>\s*/dev/` 所允许的形式。
+        #
+        # 再放宽一层: 只去掉空白仍挡不住 `cat x >${IFS}/dev/sda` 这类夹变量的写法,
+        # 因此只要「同时出现重定向符和块设备路径」就送检测端（误送仅多一次本地往返）。
         __vge_nosp=${__cmd//[[:space:]]/}
+
+        # 三类需要送检测的情况，任一命中即检查；都不命中才放行
+        __vge_check=0
+
+        #   a) 直接执行脚本 (./ ../ /*) —— 不走函数包装, 只能靠 DEBUG trap
         case "$__cmd" in
-            ./*|../*|/*)
-                # 可能是 ./script.sh 或 /bin/ls 等
-                # /bin/ls 不是脚本, 但检测一下也无妨 (TCP 会判断)
-                ;;
-            *)
-                case "$__vge_nosp" in
-                    *\>/dev/sd*|*\>/dev/nvme*|*\>/dev/mmcblk*|*\>/dev/loop*\
-                    |*\>/dev/ram*|*\>/dev/zram*|*\>/dev/vd*|*\>/dev/xvd*|*\>/dev/blk*)
-                        # 可能是 cat/tee/cp > /dev/sda 等, 交给检测端判断
-                        ;;
-                    *)
-                        # 其他命令 (cat, ls, echo...) 直接放行, 不检测
-                        __VGE_IN_TRAP=; return 0 ;;
-                esac
-                ;;
+            ./*|../*|/*) __vge_check=1 ;;
         esac
+
+        #   b) 重定向写入块设备 (> /dev/sdX、>> /dev/nvme0n1 ...)
+        #      判定基于「去掉所有空白」的副本: case 模式无法表达可选的空格,
+        #      否则 `cat x > /dev/sda`（> 后有空格）会被漏掉。
+        #      再放宽一层: 只去掉空白仍允许中间夹别的东西 (`>${IFS}/dev/sda`、
+        #      `>${DISK}`)，所以「出现块设备路径 + 出现重定向符」一并视为可疑。
+        #      误判代价只是一次本地往返，漏判代价是直接放行。
+        if [ "$__vge_check" = 0 ]; then
+            case "$__vge_nosp" in
+                *\>/dev/sd*|*\>/dev/nvme*|*\>/dev/mmcblk*|*\>/dev/loop*\
+                |*\>/dev/ram*|*\>/dev/zram*|*\>/dev/vd*|*\>/dev/xvd*|*\>/dev/blk*)
+                    __vge_check=1 ;;
+                */dev/sd*|*/dev/nvme*|*/dev/mmcblk*|*/dev/loop*\
+                |*/dev/ram*|*/dev/zram*|*/dev/vd*|*/dev/xvd*|*/dev/blk*)
+                    case "$__vge_nosp" in
+                        *">"*) __vge_check=1 ;;
+                    esac ;;
+            esac
+        fi
+
+        #   c) 前缀执行器包裹的危险命令（注意这里必须用原始 $__cmd 匹配，
+        #      去空白的副本连 "env" 这个词都拼不出来了）
+        if [ "$__vge_check" = 0 ]; then
+            case "$__cmd" in
+                env\ *|nohup\ *|nice\ *|setsid\ *|stdbuf\ *|timeout\ *|time\ *\
+                |xargs\ *|busybox\ *|eval\ *|command\ *|exec\ *|watch\ *|strace\ *)
+                    __VGE_strip_prefix "$__cmd"
+                    case "${__VGE_STRIPPED%%[[:space:]]*}" in
+                        rm|mv|chmod|chown|su|sudo|pkexec|doas|dd|mkswap|setprop\
+                        |mkfs|mkfs.*|newfs_msdos|fdisk|sfdisk|cfdisk|gdisk|sgdisk|parted\
+                        |wipefs|shred|cryptsetup|insmod|rmmod|modprobe\
+                        |shutdown|reboot|poweroff|halt)
+                            __vge_check=1 ;;
+                    esac ;;
+            esac
+        fi
+
+        #   d) 其余交互命令放行 —— 性能考虑, 不把每条命令都送去 TCP 检测
+        if [ "$__vge_check" = 0 ]; then
+            __VGE_IN_TRAP=
+            return 0
+        fi
 
         # 5. 子 shell TCP (安全!)
         vge_check_and_block "$__cmd"

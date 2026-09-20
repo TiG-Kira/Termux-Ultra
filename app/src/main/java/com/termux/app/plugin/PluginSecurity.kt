@@ -92,7 +92,16 @@ object PluginSecurity {
         }
 
         val termuxBase = "/data/data/com.termux"
-        if (!path.startsWith(termuxBase) && !path.startsWith("/data/local/tmp")) {
+        // 规范化后必须带分隔符边界比较：直接 startsWith 的话
+        // /data/data/com.termux-evil/... 也能通过前缀检查
+        val normalized = try {
+            java.io.File(path).canonicalPath
+        } catch (_: Exception) {
+            path
+        }
+        val inSandbox = normalized == termuxBase || normalized.startsWith("$termuxBase/") ||
+            normalized == "/data/local/tmp" || normalized.startsWith("/data/local/tmp/")
+        if (!inSandbox) {
             return PermissionCheckResult(
                 allowed = false,
                 reason = "文件访问路径超出沙盒限制"
