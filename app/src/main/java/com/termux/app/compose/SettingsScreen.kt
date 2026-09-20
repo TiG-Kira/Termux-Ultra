@@ -1769,6 +1769,30 @@ fun SettingsScreen(
                 .verticalScroll(rememberScrollState())
         ) {
                                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                // 从 LLM Profile 一键载入
+                                val profiles = com.termux.app.compose.AiTermuxPrefs.getLlmProfiles(context)
+                                if (profiles.isNotEmpty()) {
+                                    Box(modifier = Modifier.fillMaxWidth().height(40.dp)
+                                        .clickable {
+                                            val p = profiles.first()
+                                            fbUrl = p.apiBaseUrl; fbKey = p.apiKey; fbModel = p.model; fbTemp = p.temperature
+                                            com.termux.app.compose.AiTermuxPrefs.saveFallbackOnlineConfig(context,
+                                                com.termux.app.compose.AiTermuxPrefs.FallbackOnlineConfig(
+                                                    enabled = true, apiKey = p.apiKey, baseUrl = p.apiBaseUrl,
+                                                    model = p.model, temperature = p.temperature))
+                                            SnackbarHelper.show(context, "已从 Profile「" + p.name + "」载入备用大模型", Snackbar.LENGTH_SHORT, null)
+                                            showFallbackEditor = false
+                                        }
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(MiuixTheme.colorScheme.primary.copy(alpha = 0.1f))
+                                        .padding(horizontal = 14.dp),
+                                        contentAlignment = Alignment.CenterStart) {
+                                        Text("📋 从 LLM Profile 一键载入 (" + profiles.first().name + ")",
+                                            style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Medium),
+                                            color = MiuixTheme.colorScheme.primary)
+                                    }
+                                }
+
                                 TextField(
                     value = fbUrl,
                     onValueChange = { v -> fbUrl = v },
