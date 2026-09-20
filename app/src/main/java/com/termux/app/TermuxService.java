@@ -56,6 +56,11 @@ import com.termux.shared.termux.terminal.TermuxTerminalSessionClientBase;
 import com.termux.shared.logger.Logger;
 import com.termux.app.compose.LiveUpdateState;
 import com.termux.app.compose.NotificationPrefs;
+import com.lab.island.sdk.island.IslandClient;
+import com.lab.island.sdk.island.IslandDraft;
+import com.lab.island.sdk.island.IslandDraftBuilder;
+import com.lab.island.sdk.island.IslandScene;
+import com.lab.island.sdk.island.PublishOutcome;
 import com.termux.shared.notification.NotificationUtils;
 import com.termux.shared.android.PermissionUtils;
 import com.termux.shared.data.DataUtils;
@@ -154,6 +159,8 @@ public final class TermuxService extends Service implements TermuxTaskCompat.Ter
 
     private MemoryBroadcastReceiver mMemoryBroadcastReceiver;
     private boolean mIsMemoryWarningActive = false;
+    /** 焦点通知（Island）活跃 notificationId，-1 表示无。用于 cancel / publish 前清理。 */
+    private int mActiveIslandNotificationId = -1;
     private boolean mIsMemoryKillActive = false;
     private boolean mAreSessionsFrozen = false;
     private String mKilledSessionName = null;
@@ -1245,10 +1252,15 @@ public synchronized int removeTermuxSession(TerminalSession sessionToRemove) {
         int pendingIntentFlags = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ? PendingIntent.FLAG_IMMUTABLE : 0;
         PendingIntent contentIntent = PendingIntent.getActivity(this, 0, notificationIntent, pendingIntentFlags);
 
-        // ===== 通知方式门控：焦点通知完全屏蔽当前通知逻辑 =====
+        // ===== 通知方式门控 =====
         String mode = NotificationPrefs.getMode(this);
         if (NotificationPrefs.MODE_FOCUS.equals(mode)) {
+            // 焦点通知：业务走 IslandClient，前台服务仅返回最小化 ongoing
             return buildMinimalNotification(contentIntent, pendingIntentFlags);
+        }
+        // 如果用户刚从焦点通知模式切回来，清理残留 Island
+        if (mActiveIslandNotificationId > 0) {
+            cancelActiveIsland();
         }
 
         boolean liveUpdateEnabled = NotificationPrefs.MODE_LIVE_UPDATE.equals(mode);
@@ -1276,19 +1288,19 @@ public synchronized int removeTermuxSession(TerminalSession sessionToRemove) {
         return buildMinimalNotification(contentIntent, pendingIntentFlags);
     }
 
-    /** 所有通知开关关闭或焦点通知模式下的最小化前台通知。 */
+    /** 所有通知开关关闭或焦点通知模式下的最小化前台通知（Android 强制要求前台服务必须有 notification）。 */
     private Notification buildMinimalNotification(PendingIntent contentIntent, int piFlags) {
         Notification.Builder builder = (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
             ? new Notification.Builder(this, TermuxConstants.TERMUX_APP_NOTIFICATION_CHANNEL_ID)
             : new Notification.Builder(this);
 
         builder.setContentTitle("Termux");
-        builder.setContentText("服务运行中");
+        builder.setContentText("运行中");
         builder.setContentIntent(contentIntent);
         builder.setShowWhen(false);
         builder.setSmallIcon(R.drawable.ic_service_notification);
         builder.setOngoing(true);
-        builder.setPriority(Notification.PRIORITY_LOW);
+        builder.setPriority(Notification.PRIORITY_MIN);
 
         return builder.build();
     }
@@ -1493,8 +1505,105 @@ public synchronized int removeTermuxSession(TerminalSession sessionToRemove) {
 
     /** Update the shown foreground service notification after making any changes that affect it. */
     private synchronized void updateNotification() {
+        String mode = NotificationPrefs.getMode(this);
+        if (NotificationPrefs.MODE_FOCUS.equals(mode)) {
+            // 焦点通知模式：业务通知走 IslandClient，前台服务只返回最小化 ongoing
+            publishFocusForCurrentState();
+        }
         Notification notification = buildNotification();
         ((NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE)).notify(TermuxConstants.TERMUX_APP_NOTIFICATION_ID, notification);
+    }
+
+    // ===== 焦点通知（Xiaomi SuperIsland Playground）=====
+
+    /** 根据当前业务状态发布焦点通知。无业务状态时取消已有的 Island。 */
+    private void publishFocusForCurrentState() {
+        try {
+            Resources res = getResources();
+
+            // 档 1：包管理器操作 → 左药丸"软件包"，右药丸"安装"/"卸载"/"更新"
+            LiveUpdateState.PkgState pkgState = LiveUpdateState.getPkgStateSnapshot();
+            if (NotificationPrefs.isPackageEnabled(this) && pkgState != null && !pkgState.getFinished()) {
+                String trailingText;
+                if (pkgState.getOperation() == com.termux.app.compose.LiveUpdateState.PkgOperation.INSTALL) {
+                    trailingText = "安装";
+                } else if (pkgState.getOperation() == com.termux.app.compose.LiveUpdateState.PkgOperation.UNINSTALL) {
+                    trailingText = "卸载";
+                } else {
+                    trailingText = "更新";
+                }
+                publishIslandDraft("软件包", trailingText);
+                return;
+            }
+
+            // 档 2：Agent 执行中 → 左药丸"Agent"，右药丸"思考中"
+            if (NotificationPrefs.isAgentEnabled(this) && LiveUpdateState.hasAgent()) {
+                publishIslandDraft("Agent", "思考中");
+                return;
+            }
+
+            // 档 3：终端会话 → 左药丸"终端"，右药丸显示会话数
+            if (NotificationPrefs.isTerminalEnabled(this) && mTermuxSessions.size() > 0) {
+                publishIslandDraft("终端", String.valueOf(mTermuxSessions.size()));
+                return;
+            }
+
+            // 无业务状态 → 取消活跃的 Island
+            cancelActiveIsland();
+        } catch (Throwable t) {
+            Logger.logError(LOG_TAG, "publishFocusForCurrentState failed: " + t.getMessage());
+        }
+    }
+
+    /**
+     * 发布超级岛药丸：title=左药丸短名，trailingText=右药丸内容。
+     * ⚠️ 注意：不要调 IslandDraftBuilder.progress() —— HyperOS 把它当作药丸右侧大数字渲染（百分比样式），
+     * 跟我们要的右侧文本位置完全重叠且无法覆盖。药丸右侧文本必须用 trailingText() / digitText()。
+     */
+    private void publishIslandDraft(String title, String trailingText) {
+        try {
+            IslandClient island = IslandClient.get(this);
+            IslandDraftBuilder builder = new IslandDraftBuilder()
+                .scene(IslandScene.GENERAL)
+                .title(title)
+                .trailingText(trailingText)
+                .source("Termux");
+            IslandDraft draft = builder.build();
+
+            // 先取消上一个，避免叠加
+            if (mActiveIslandNotificationId > 0) {
+                try { island.cancel(mActiveIslandNotificationId); } catch (Throwable ignored) {}
+            }
+
+            island.publish(draft, outcome -> {
+                Logger.logDebug(LOG_TAG, "Island publish outcome: kind=" +
+                    (outcome != null ? outcome.getKind() : "null") + ", msg=" +
+                    (outcome != null ? outcome.getMessage() : "null"));
+            });
+            // publish 触发后从 activeIslands 拿新 id（StateFlow 是 snapshot，publish 后短暂 delay 内可能还没更新，
+            // 但下一次 publishFocusForCurrentState() 被调时会用新 id）
+            try {
+                java.util.List<com.lab.island.sdk.island.ActiveIsland> active =
+                    island.getActiveIslands().getValue();
+                if (active != null && !active.isEmpty()) {
+                    mActiveIslandNotificationId = active.get(active.size() - 1).getNotificationId();
+                }
+            } catch (Throwable ignored) {}
+        } catch (Throwable t) {
+            Logger.logError(LOG_TAG, "publishIslandDraft failed: " + t.getMessage());
+        }
+    }
+
+    private void cancelActiveIsland() {
+        if (mActiveIslandNotificationId > 0) {
+            try {
+                IslandClient island = IslandClient.get(this);
+                island.cancel(mActiveIslandNotificationId);
+                mActiveIslandNotificationId = -1;
+            } catch (Throwable t) {
+                Logger.logError(LOG_TAG, "cancelActiveIsland failed: " + t.getMessage());
+            }
+        }
     }
 
 
@@ -1820,6 +1929,8 @@ public synchronized int removeTermuxSession(TerminalSession sessionToRemove) {
     }
 
     private void showMemoryWarningNotification() {
+        // 焦点通知模式下不走原生通知（已完全屏蔽）
+        if (NotificationPrefs.MODE_FOCUS.equals(NotificationPrefs.getMode(this))) return;
         Notification.Builder builder = NotificationUtils.geNotificationBuilder(this,
             TermuxConstants.TERMUX_APP_NOTIFICATION_CHANNEL_ID, Notification.PRIORITY_HIGH,
             getString(R.string.memory_warning_title), getString(R.string.memory_warning_message), null,
@@ -1834,6 +1945,8 @@ public synchronized int removeTermuxSession(TerminalSession sessionToRemove) {
     }
 
     private void showMemoryKillNotification() {
+        // 焦点通知模式下不走原生通知（已完全屏蔽）
+        if (NotificationPrefs.MODE_FOCUS.equals(NotificationPrefs.getMode(this))) return;
         Notification.Builder builder = NotificationUtils.geNotificationBuilder(this,
             TermuxConstants.TERMUX_APP_NOTIFICATION_CHANNEL_ID, Notification.PRIORITY_HIGH,
             getString(R.string.memory_kill_title), getString(R.string.memory_kill_message), null,
