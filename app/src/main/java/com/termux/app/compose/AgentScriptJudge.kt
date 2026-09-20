@@ -22,13 +22,13 @@ import java.io.File
  * 关键设计：
  * - 所有 IO + 正则检测 + 网络请求都在 Dispatchers.IO 上执行，绝不阻塞主线程
  * - 脚本大小硬上限 50KB，防止 OOM
- * - 超时（云端 10s / 本地 30s）自动 fallback 到本地检测
+ * - 超时（正常脚本 120s / 长/混淆脚本 180s）自动 fallback 到本地检测
  */
 object AgentScriptJudge {
 
     private const val TAG = "AgentScriptJudge"
-    private const val TIMEOUT_CLOUD_MS = 10000L
-    private const val TIMEOUT_LOCAL_MS = 30000L
+    private const val TIMEOUT_CLOUD_MS = 120_000L
+    private const val TIMEOUT_LOCAL_MS = 120_000L
     /** 脚本大小硬上限：超过此长度的脚本只做本地检测（100KB） */
     private const val MAX_SCRIPT_BYTES = 100 * 1024
 
@@ -44,9 +44,9 @@ object AgentScriptJudge {
     /** 隐式动态命令构造（Agent 需要追踪变量赋值链才能还原实际执行内容） */
     private const val DYNAMIC_CMD_HINT_PATTERN = """(\$\{?[a-zA-Z_]\w*\}?\s*\$\{?[a-zA-Z_]\w*\}?|\w+\s*=\s*["']?\$\([^)]+\)|^\s*\$\{?[a-zA-Z_]\w*\}?\s+[-a-zA-Z]+[=:]\S+|\w+\s*=\s*`[^`]+`|\$\{?\w+\}?\s*\+\s*["']\w+["']|\b(readonly|export)\s+\w+\s*=\s*\$\{?\w+\}?)"""
 
-    /** 长脚本/混淆脚本时的扩展超时（云端 30s / 本地 90s） */
-    private const val TIMEOUT_CLOUD_EXTENDED_MS = 30000L
-    private const val TIMEOUT_LOCAL_EXTENDED_MS = 90000L
+    /** 长脚本/混淆脚本时的扩展超时（统一 180s） */
+    private const val TIMEOUT_CLOUD_EXTENDED_MS = 180_000L
+    private const val TIMEOUT_LOCAL_EXTENDED_MS = 180_000L
 
     data class JudgeResult(
         val verdict: Verdict,
@@ -446,10 +446,10 @@ ${content.take(12000)}
 
         val conn = (url.openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
-            // 短超时：默认 connect 3s / read 5s，长/混淆脚本扩展为 connect 5s / read 25s
-            // 保证在硬超时预算内完成，不会被 HTTP readTimeout 先截断
-            connectTimeout = if (extended) 5000 else 3000
-            readTimeout = if (extended) 25000 else 5000
+            // HTTP 读超时（必须 ≤ 硬超时，否则 HTTP 会先断导致硬超时形同虚设）
+            // 默认 connect 5s / read 110s；扩展（长/混淆脚本）connect 5s / read 170s
+            connectTimeout = 5000
+            readTimeout = if (extended) 170_000 else 110_000
             setRequestProperty("Content-Type", "application/json")
             if (cfg.apiKey.isNotBlank()) {
                 setRequestProperty("Authorization", "Bearer ${cfg.apiKey}")

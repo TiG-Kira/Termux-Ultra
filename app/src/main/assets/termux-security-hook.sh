@@ -2,15 +2,15 @@
 # ============================================================================
 # VorteX Guard Engine Hook — v21
 #
-# v20 成功证明: TCP 在子 shell 里做 = 零 prompt 干扰
-# v21 加回 DEBUG trap 拦截 ./script.sh (直接 exec, 不走 shell 命令)
+# v22 成功证明: TCP 在子 shell 里做 = 零 prompt 干扰
+# v22 同步服务端 Agent 判定超时（正常 120s / 长脚本 180s），shell 端 CHECK_SCRIPT 升级到 200s；支持跳过验证二次确认
 #
 # trap 设计原则:
 #   1. 开头立刻 shopt -u extdebug → PROMPT_COMMAND 永远不被拦截
 #   2. 白名单 (vge_*, _omb_*, shopt, trap) 直接 return 0
 #   3. 只检测 ./ ../ /* 开头的命令 (直接执行脚本)
 #   4. TCP 在子 shell 里做 (已证明安全)
-#   5. DENY 时才临时开 extdebug + return 1 (只为让 bash 跳过命令)
+#   5. 超时自动放行（v22 延长到 200s，给用户跳过验证留足时间）
 #   6. precmd 兜底关 extdebug (如果 DENY 后泄漏)
 # ============================================================================
 
@@ -32,7 +32,7 @@ vge_log() {
     esac
 }
 
-vge_log "Loading VorteX Guard Engine (v21)..."
+vge_log "Loading VorteX Guard Engine (v22)..."
 
 # ============================================================================
 # TCP 通信 — 放在子 shell 里, 父进程零 fd 操作!
@@ -43,8 +43,14 @@ vge_call() {
     port=$(cat "$PORT_FILE" 2>/dev/null) || { vge_RESULT="ALLOW"; vge_ERROR="no-port-file"; return 0; }
     [ -z "$port" ] && { vge_RESULT="ALLOW"; vge_ERROR="empty-port"; return 0; }
 
+    # 超时设计：必须 ≥ 服务端 AgentScriptJudge 硬超时 + 二次确认窗口
+    #   CHECK_CMD  → 不走 Agent，仅本地检测 + 弹窗确认 ≈ 30s，给 90s 足够
+    #   CHECK_SCRIPT → 正常脚本服务端硬超时 120s、长脚本/混淆脚本 180s，
+    #                  加二次确认最多 25s + 15s TCP 余量 → 统一给 200s
+    # nc -w 是 read timeout：服务端返回得早，nc 自然读完 END 就 break；
+    # 只有服务端异常卡死（用户手动跳过也能在 25s 内出结果）才会落到这个兜底
     local timeout=90
-    [ "$method" = "CHECK_SCRIPT" ] && timeout=120
+    [ "$method" = "CHECK_SCRIPT" ] && timeout=200
 
     local __resp
     __resp=$(
@@ -388,5 +394,5 @@ fi
 __VGE_READY=1
 export __VGE_READY
 
-vge_log "Security module active (v21, trap + sub-shell TCP)."
+vge_log "Security module active (v22, trap + sub-shell TCP)."
 vge_dlog "init-done"
