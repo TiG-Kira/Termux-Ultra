@@ -35,23 +35,29 @@ object NotificationPrefs {
     // ===== 开关 =====
 
     /** 终端会话通知开关（默认开） */
+    @JvmStatic
     fun isTerminalEnabled(context: Context): Boolean =
         prefs(context).getBoolean(KEY_TERMINAL_ENABLED, true)
 
+    @JvmStatic
     fun setTerminalEnabled(context: Context, enabled: Boolean) =
         prefs(context).edit().putBoolean(KEY_TERMINAL_ENABLED, enabled).apply()
 
     /** Agent 通知开关（默认开） */
+    @JvmStatic
     fun isAgentEnabled(context: Context): Boolean =
         prefs(context).getBoolean(KEY_AGENT_ENABLED, true)
 
+    @JvmStatic
     fun setAgentEnabled(context: Context, enabled: Boolean) =
         prefs(context).edit().putBoolean(KEY_AGENT_ENABLED, enabled).apply()
 
     /** 软件包状态通知开关（默认开） */
+    @JvmStatic
     fun isPackageEnabled(context: Context): Boolean =
         prefs(context).getBoolean(KEY_PACKAGE_ENABLED, true)
 
+    @JvmStatic
     fun setPackageEnabled(context: Context, enabled: Boolean) =
         prefs(context).edit().putBoolean(KEY_PACKAGE_ENABLED, enabled).apply()
 
@@ -60,6 +66,7 @@ object NotificationPrefs {
     /**
      * 当前通知方式。未配置时根据平台能力给默认值。
      */
+    @JvmStatic
     fun getMode(context: Context): String {
         val saved = prefs(context).getString(KEY_NOTIFY_MODE, null)
         if (saved != null) return saved
@@ -67,14 +74,17 @@ object NotificationPrefs {
         return if (Build.VERSION.SDK_INT >= 36) MODE_LIVE_UPDATE else MODE_NORMAL
     }
 
+    @JvmStatic
     fun setMode(context: Context, mode: String) =
         prefs(context).edit().putString(KEY_NOTIFY_MODE, mode).apply()
 
     // ===== 能力判断 =====
 
     /** LiveUpdate（Android 16+）是否可用 */
+    @JvmStatic
     fun isLiveUpdateAvailable(): Boolean = Build.VERSION.SDK_INT >= 36
 
     /** 焦点通知（HyperOS 2+）是否可用 */
+    @JvmStatic
     fun isFocusNotificationAvailable(): Boolean = HyperOSDetector.isHyperOS2OrAbove()
 }
