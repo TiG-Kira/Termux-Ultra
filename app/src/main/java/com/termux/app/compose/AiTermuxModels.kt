@@ -21,6 +21,19 @@ data class AiTermuxConfig(
     var isConfigured: Boolean = false         // 是否已完成基本配置
 )
 
+/** LLM Profile：保存一组在线大模型配置，方便切换 */
+data class LlmProfile(
+    val id: String = System.currentTimeMillis().toString() + "_${java.lang.Long.toHexString((Math.random() * 1e9).toLong())}",
+    val name: String,                         // 用户自定义的 profile 名称，如 "DeepSeek 家用"
+    val provider: String,                     // "openai" | "custom"
+    val apiKey: String,
+    val apiBaseUrl: String,
+    val model: String,
+    val temperature: Float = 0.7f,
+    val createdAt: Long = System.currentTimeMillis(),
+    val updatedAt: Long = System.currentTimeMillis()
+)
+
 /** 聊天消息 */
 data class ChatMessage(
     val id: String = System.currentTimeMillis().toString() + "_${java.lang.Long.toHexString((Math.random() * 1e9).toLong())}",
@@ -1212,6 +1225,8 @@ object AiTermuxPrefs {
     private const val KEY_LESSONS = "ai_lessons"
     private const val KEY_NEEDS_RECONFIG = "needs_reconfig"
     private const val KEY_TEACHER_CHAT_HISTORY = "teacher_chat_history"
+    private const val KEY_LLM_PROFILES = "llm_profiles_v1"
+    private const val KEY_ACTIVE_PROFILE_ID = "active_llm_profile_id"
 
     // ---------- Config ----------
     data class AutoExecConfig(
@@ -1278,7 +1293,118 @@ object AiTermuxPrefs {
         }
     }
 
-    // ---------- Chat History ----------
+
+    // ---------- LLM Profiles ----------
+
+    /**
+     * 获取所有在线 LLM Profile。
+     * 首次调用时如果旧版本已配置在线模型（provider != local 且 apiKey 非空），
+     * 会将其自动迁移为一个名为「默认配置（已迁移）」的 Profile 并设为当前激活，
+     * 保证旧用户升级后看到的配置不丢失。迁移幂等，仅执行一次。
+     */
+    fun getLlmProfiles(context: Context): List<LlmProfile> {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val raw = prefs.getString(KEY_LLM_PROFILES, null)
+        if (raw != null) {
+            return try {
+                val arr = Gson().fromJson(raw, Array<LlmProfile>::class.java)
+                arr.toList().sortedByDescending { it.updatedAt }
+            } catch (_: Throwable) { emptyList() }
+        }
+        // 首次：尝试从旧版本配置迁移
+        val provider = prefs.getString("provider", "") ?: ""
+        val apiKey = prefs.getString("api_key", "") ?: ""
+        val baseUrl = prefs.getString("base_url", "") ?: ""
+        val model = prefs.getString("model", "") ?: ""
+        val temperature = prefs.getFloat("temperature", 0.7f)
+        if (provider.isNotBlank() && provider != "local" && apiKey.isNotBlank()) {
+            val migrated = LlmProfile(
+                name = "默认配置（已迁移）",
+                provider = provider,
+                apiKey = apiKey,
+                apiBaseUrl = baseUrl,
+                model = model,
+                temperature = temperature
+            )
+            val list = listOf(migrated)
+            prefs.edit()
+                .putString(KEY_LLM_PROFILES, Gson().toJson(list))
+                .putString(KEY_ACTIVE_PROFILE_ID, migrated.id)
+                .apply()
+            return list
+        }
+        // 旧版本没配过在线模型，写入空列表避免每次都走迁移分支
+        prefs.edit().putString(KEY_LLM_PROFILES, "[]").apply()
+        return emptyList()
+    }
+
+    fun saveLlmProfiles(context: Context, profiles: List<LlmProfile>) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val activeId = prefs.getString(KEY_ACTIVE_PROFILE_ID, null)
+        if (activeId != null && profiles.none { it.id == activeId }) {
+            prefs.edit().remove(KEY_ACTIVE_PROFILE_ID).apply()
+        }
+        prefs.edit().putString(KEY_LLM_PROFILES, Gson().toJson(profiles)).apply()
+    }
+
+    fun upsertLlmProfile(context: Context, profile: LlmProfile) {
+        val list = getLlmProfiles(context).toMutableList()
+        val now = System.currentTimeMillis()
+        val existingIdx = list.indexOfFirst { it.id == profile.id }
+        val updated = profile.copy(updatedAt = now)
+        if (existingIdx >= 0) list[existingIdx] = updated else list.add(updated)
+        saveLlmProfiles(context, list)
+    }
+
+    fun deleteLlmProfile(context: Context, id: String) {
+        val list = getLlmProfiles(context).toMutableList()
+        val removed = list.removeAll { it.id == id }
+        if (removed) {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val activeId = prefs.getString(KEY_ACTIVE_PROFILE_ID, null)
+            if (activeId == id) {
+                val nextActive = list.firstOrNull()?.id
+                prefs.edit()
+                    .putString(KEY_LLM_PROFILES, Gson().toJson(list))
+                    .putString(KEY_ACTIVE_PROFILE_ID, nextActive)
+                    .apply()
+            } else {
+                saveLlmProfiles(context, list)
+            }
+        }
+    }
+
+    fun getActiveLlmProfileId(context: Context): String? {
+        return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getString(KEY_ACTIVE_PROFILE_ID, null)
+    }
+
+    fun setActiveLlmProfileId(context: Context, id: String?) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().apply {
+            if (id == null) remove(KEY_ACTIVE_PROFILE_ID) else putString(KEY_ACTIVE_PROFILE_ID, id)
+            apply()
+        }
+    }
+
+    fun getActiveLlmProfile(context: Context): LlmProfile? {
+        val id = getActiveLlmProfileId(context) ?: return null
+        return getLlmProfiles(context).firstOrNull { it.id == id }
+    }
+
+    /** 将某个 LlmProfile 应用为当前生效配置（写入旧字段 provider/api_key/base_url/model/temperature） */
+    fun applyLlmProfile(context: Context, profile: LlmProfile) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().apply {
+            putString("provider", profile.provider)
+            putString("api_key", profile.apiKey)
+            putString("base_url", profile.apiBaseUrl)
+            putString("model", profile.model)
+            putFloat("temperature", profile.temperature)
+            putString(KEY_ACTIVE_PROFILE_ID, profile.id)
+            apply()
+        }
+    }
+
+        // ---------- Chat History ----------
     fun getChatHistory(context: Context): List<OpenAiMessage> {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val raw = prefs.getString(KEY_CHAT_HISTORY, null) ?: return emptyList()
