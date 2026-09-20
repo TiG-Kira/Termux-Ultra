@@ -61,6 +61,8 @@ import com.termux.R
 import com.termux.app.utils.UpdateChecker
 import com.termux.app.utils.UpdateResult
 import com.termux.app.utils.ApkDownloader
+import com.termux.app.utils.SnackbarHelper
+import com.google.android.material.snackbar.Snackbar
 import com.termux.BuildConfig
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.viewinterop.AndroidView
@@ -113,7 +115,7 @@ fun AboutScreen(onBack: () -> Unit) {
 
     LaunchedEffect(Unit) {
         scope.launch {
-            val status = if (isWorkflowCliBuild) UpdateChecker.ReleaseStatus.NOT_FOUND else UpdateChecker.getReleaseStatus(currentVersion)
+            val status = UpdateChecker.getReleaseStatus(currentVersion)
             if (status != null) {
                 releaseStatus = status
             }
@@ -316,12 +318,12 @@ fun AboutScreen(onBack: () -> Unit) {
                                     color = headerFg
                                 )
                             )
-                            if (releaseStatus == UpdateChecker.ReleaseStatus.PRERELEASE) {
+                            if (isWorkflowCliBuild) {
+                                WorkflowTag()
+                            } else if (releaseStatus == UpdateChecker.ReleaseStatus.PRERELEASE) {
                                 BetaTag()
                             } else if (releaseStatus == UpdateChecker.ReleaseStatus.NOT_FOUND) {
                                 InternalBuildTag()
-                            } else if (isWorkflowCliBuild) {
-                                WorkflowTag()
                             }
                         }
                     }
@@ -510,15 +512,19 @@ fun AboutScreen(onBack: () -> Unit) {
                              title = context.getString(R.string.check_updates),
                              summary = updateSummary,
                              onClick = {
-                                 if (!checkingUpdate) {
-                                     checkingUpdate = true
-                                     scope.launch {
-                                         if (!isWorkflowCliBuild) updateResult = UpdateChecker.checkForUpdates(currentVersion, betaUpdateEnabled)
-                                         showUpdateDialog = true
-                                         checkingUpdate = false
-                                     }
-                                 }
-                             }
+                                if (!checkingUpdate) {
+                                    if (isWorkflowCliBuild) {
+                                        SnackbarHelper.show(context, context.getString(R.string.workflow_cli_cannot_update), Snackbar.LENGTH_SHORT, null)
+                                    } else {
+                                        checkingUpdate = true
+                                        scope.launch {
+                                            updateResult = UpdateChecker.checkForUpdates(currentVersion, betaUpdateEnabled)
+                                            showUpdateDialog = true
+                                            checkingUpdate = false
+                                        }
+                                    }
+                                }
+                            }
                          )
                      }
                  }
