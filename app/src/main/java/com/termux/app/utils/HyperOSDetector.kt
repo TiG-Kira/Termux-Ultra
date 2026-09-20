@@ -37,12 +37,12 @@ object HyperOSDetector {
             brand.contains("poco") || brand.contains("blackshark")
     }
 
-    /** 是否在 HyperOS 2.0 或以上（支持焦点通知的最低版本）。 */
-    fun isHyperOS2OrAbove(): Boolean {
-        if (!isXiaomiDevice) return false
-        // MIUI 15 / HyperOS 2 及以上 code >= 1500
-        return uiVersionCode >= 1500
-    }
+    /** 是否支持焦点通知（小米超级岛/流体云）。
+     * 放宽条件：只要是小米设备就允许，不再硬卡 ro.miui.ui.version.code。
+     * 原因：HyperOS 4 上 ro.miui.ui.version.code 可能返回空或新格式值，
+     * 硬卡版本号会误判已有超级岛能力的小米设备。小米系设备全版本都有流体云/超级岛环境。
+     */
+    fun isHyperOS2OrAbove(): Boolean = isXiaomiDevice
 
     /** 是否在 HyperOS 3.0 或以上。 */
     fun isHyperOS3OrAbove(): Boolean {
