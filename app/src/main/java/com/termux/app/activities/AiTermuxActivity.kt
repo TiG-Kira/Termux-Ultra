@@ -79,6 +79,7 @@ import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.window.WindowDialog
 import top.yukonga.miuix.kmp.theme.MiuixTheme
+import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import java.io.File
 
 class AiTermuxActivity : FragmentActivity() {
@@ -1464,6 +1465,12 @@ private fun AiSetupScreen(vm: AiTermuxViewModel, onBack: () -> Unit) {
     var modelsError by remember { mutableStateOf<String?>(null) }
     var modelExpanded by remember { mutableStateOf(false) }
 
+    var llmProfiles by remember { mutableStateOf<List<com.termux.app.compose.LlmProfile>>(emptyList()) }
+    var activeProfileId by remember { mutableStateOf<String?>(null) }
+    var showProfileEditor by remember { mutableStateOf(false) }
+    var editingProfile by remember { mutableStateOf<com.termux.app.compose.LlmProfile?>(null) }
+    var pendingDeleteProfile by remember { mutableStateOf<com.termux.app.compose.LlmProfile?>(null) }
+
     val modelScope = rememberCoroutineScope()
 
     // ---- 本地大模型状态 ----
@@ -1529,7 +1536,13 @@ private fun AiSetupScreen(vm: AiTermuxViewModel, onBack: () -> Unit) {
                     availableModels = emptyList()
                 }
             }
-LazyColumn(
+
+            LaunchedEffect(Unit) {
+                llmProfiles = com.termux.app.compose.AiTermuxPrefs.getLlmProfiles(ctx)
+                activeProfileId = com.termux.app.compose.AiTermuxPrefs.getActiveLlmProfileId(ctx)
+            }
+
+            LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
@@ -2045,6 +2058,68 @@ LazyColumn(
             }
 
             if (provider != "local") {
+                item { SectionTitle("0. LLM Profile（可选 · 快速切换多模型）") }
+                item {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        if (llmProfiles.isEmpty()) {
+                            Card(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) {
+                                Column(modifier = Modifier.padding(16.dp)) {
+                                    Text("还没有 LLM Profile", style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Bold))
+                                    Spacer(Modifier.height(4.dp))
+                                    Text("可以把当前配置保存为 Profile，方便后续快速切换不同模型。",
+                                        style = TextStyle(fontSize = 13.sp), color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+                                    Spacer(Modifier.height(10.dp))
+                                    Button(onClick = { editingProfile = null; showProfileEditor = true },
+                                        modifier = Modifier.height(40.dp)) { Text("新建 Profile", fontWeight = FontWeight.Bold) }
+                                }
+                            }
+                        } else {
+                            llmProfiles.forEachIndexed { _, prof ->
+                                val isActive = activeProfileId == prof.id
+                                Card(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) {
+                                    Column(modifier = Modifier.padding(16.dp)) {
+                                        Row(modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(prof.name,
+                                                    style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Bold),
+                                                    color = if (isActive) MiuixTheme.colorScheme.primary else MiuixTheme.colorScheme.onSurface)
+                                                Spacer(Modifier.height(2.dp))
+                                                val providerLabel = if (prof.provider == "openai") "OpenAI" else "OpenAI兼容"
+                                                Text("$providerLabel · ${prof.model}",
+                                                    style = TextStyle(fontSize = 13.sp), color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+                                                if (prof.apiBaseUrl.isNotBlank()) {
+                                                    Text(prof.apiBaseUrl,
+                                                        style = TextStyle(fontSize = 13.sp), color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+                                                }
+                                            }
+                                            Row {
+                                                TextButton(text = "编辑", onClick = { editingProfile = prof; showProfileEditor = true })
+                                                TextButton(text = "删除", onClick = { pendingDeleteProfile = prof })
+                                            }
+                                        }
+                                        if (!isActive) {
+                                            Button(onClick = {
+                                                com.termux.app.compose.AiTermuxPrefs.applyLlmProfile(ctx, prof)
+                                                activeProfileId = prof.id
+                                                provider = prof.provider; apiKey = prof.apiKey
+                                                baseUrl = prof.apiBaseUrl; model = prof.model; temperature = prof.temperature
+                                                testResult = null
+                                                SnackbarHelper.show(ctx, "已切换到 Profile「${prof.name}」", Snackbar.LENGTH_SHORT, null)
+                                            }, modifier = Modifier.height(36.dp)) { Text("应用此 Profile", fontWeight = FontWeight.SemiBold) }
+                                        } else {
+                                            Text("当前激活 ✓", style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Medium),
+                                                color = MiuixTheme.colorScheme.primary)
+                                        }
+                                    }
+                                }
+                            }
+                            Button(onClick = { editingProfile = null; showProfileEditor = true },
+                                modifier = Modifier.fillMaxWidth().height(40.dp)) { Text("＋ 新建 Profile", fontWeight = FontWeight.Bold) }
+                        }
+                    }
+                }
+
                 item { SectionTitle("2. API Key（必填）") }
             item {
                 TextField(
@@ -2292,6 +2367,109 @@ LazyColumn(
             }
 
             item { Spacer(Modifier.height(32.dp)) }
+        }
+
+        // ---- LLM Profile Editor Dialog ----
+        if (showProfileEditor) {
+            val ep = editingProfile
+            var editName by remember(ep?.id) { mutableStateOf(ep?.name ?: "") }
+            var editProvider by remember(ep?.id) { mutableStateOf(ep?.provider ?: "custom") }
+            var editKey by remember(ep?.id) { mutableStateOf(ep?.apiKey ?: "") }
+            var editUrl by remember(ep?.id) { mutableStateOf(ep?.apiBaseUrl ?: "") }
+            var editModel by remember(ep?.id) { mutableStateOf(ep?.model ?: "") }
+            var editTemp by remember(ep?.id) { mutableStateOf(ep?.temperature ?: 0.7f) }
+            OverlayDialog(
+                title = if (ep != null) "编辑 Profile" else "新建 Profile",
+                summary = "填写以下信息保存 LLM Profile",
+                show = true,
+                onDismissRequest = { showProfileEditor = false },
+                content = {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        TextField(value = editName, onValueChange = { editName = it },
+                            label = "Profile 名称", modifier = Modifier.fillMaxWidth(),
+                            useLabelAsPlaceholder = true, singleLine = true)
+                        TextField(value = editKey, onValueChange = { editKey = it },
+                            label = "API Key", modifier = Modifier.fillMaxWidth(),
+                            useLabelAsPlaceholder = true, singleLine = true)
+                        TextField(value = editUrl, onValueChange = { editUrl = it },
+                            label = "Base URL", modifier = Modifier.fillMaxWidth(),
+                            useLabelAsPlaceholder = true, singleLine = true)
+                        TextField(value = editModel, onValueChange = { editModel = it },
+                            label = "Model", modifier = Modifier.fillMaxWidth(),
+                            useLabelAsPlaceholder = true, singleLine = true)
+                        Text("温度 %.1f".format(editTemp), style = TextStyle(fontSize = 13.sp))
+                        Slider(value = editTemp,
+                            onValueChange = { editTemp = (it * 10).toInt() / 10f },
+                            valueRange = 0f..1.6f, steps = 15, modifier = Modifier.fillMaxWidth())
+                        Row(modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            TextButton(text = "取消", onClick = { showProfileEditor = false },
+                                modifier = Modifier.weight(1f))
+                            Button(onClick = {
+                                if (editName.isBlank()) editName = editModel.ifBlank { editProvider }
+                                val profile = (ep?.copy(name = editName, provider = editProvider,
+                                    apiKey = editKey, apiBaseUrl = editUrl, model = editModel, temperature = editTemp)
+                                    ?: com.termux.app.compose.LlmProfile(name = editName, provider = editProvider,
+                                        apiKey = editKey, apiBaseUrl = editUrl, model = editModel, temperature = editTemp))
+                                com.termux.app.compose.AiTermuxPrefs.upsertLlmProfile(ctx, profile)
+                                llmProfiles = com.termux.app.compose.AiTermuxPrefs.getLlmProfiles(ctx)
+                                activeProfileId = profile.id
+                                com.termux.app.compose.AiTermuxPrefs.applyLlmProfile(ctx, profile)
+                                provider = editProvider; apiKey = editKey
+                                baseUrl = editUrl; model = editModel; temperature = editTemp
+                                showProfileEditor = false
+                                SnackbarHelper.show(ctx, "Profile「${editName}」已保存", Snackbar.LENGTH_SHORT, null)
+                            }, modifier = Modifier.weight(1f).height(44.dp),
+                                colors = ButtonDefaults.buttonColors(color = MiuixTheme.colorScheme.primary)) {
+                                Text("保存", color = Color.White, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+            )
+        }
+
+        // ---- 删除确认 Dialog ----
+        pendingDeleteProfile?.let { prof ->
+            OverlayDialog(
+                title = "删除 Profile",
+                summary = "确定要删除 Profile「${prof.name}」吗？此操作不可恢复。",
+                show = true,
+                onDismissRequest = { pendingDeleteProfile = null },
+                content = {
+                    Row(modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        TextButton(text = "取消", onClick = { pendingDeleteProfile = null },
+                            modifier = Modifier.weight(1f))
+                        Button(onClick = {
+                            com.termux.app.compose.AiTermuxPrefs.deleteLlmProfile(ctx, prof.id)
+                            llmProfiles = com.termux.app.compose.AiTermuxPrefs.getLlmProfiles(ctx)
+                            activeProfileId = com.termux.app.compose.AiTermuxPrefs.getActiveLlmProfileId(ctx)
+                            val newActive = activeProfileId?.let { id ->
+                                llmProfiles.firstOrNull { it.id == id }
+                            } ?: llmProfiles.firstOrNull()
+                            if (newActive != null) {
+                                com.termux.app.compose.AiTermuxPrefs.applyLlmProfile(ctx, newActive)
+                                activeProfileId = newActive.id
+                                provider = newActive.provider; apiKey = newActive.apiKey
+                                baseUrl = newActive.apiBaseUrl; model = newActive.model
+                                temperature = newActive.temperature
+                            } else {
+                                provider = "local"; apiKey = ""; baseUrl = ""
+                                model = ""; temperature = 0.7f
+                            }
+                            pendingDeleteProfile = null
+                            SnackbarHelper.show(ctx, "Profile「${prof.name}」已删除", Snackbar.LENGTH_SHORT, null)
+                        }, modifier = Modifier.weight(1f).height(44.dp),
+                            colors = ButtonDefaults.buttonColors(color = Color(0xFFDC2626))) {
+                            Text("删除", color = Color.White, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            )
         }
     }
 }
