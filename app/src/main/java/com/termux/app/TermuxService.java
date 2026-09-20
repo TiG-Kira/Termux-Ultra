@@ -14,7 +14,6 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.res.Resources;
-import android.graphics.drawable.Icon;
 import android.net.Uri;
 import android.net.wifi.WifiManager;
 import android.os.Binder;
@@ -1248,12 +1247,6 @@ public synchronized int removeTermuxSession(TerminalSession sessionToRemove) {
 
     // ===== 通知方式门控 =====
         String mode = NotificationPrefs.getMode(this);
-        if (NotificationPrefs.MODE_FOCUS.equals(mode)) {
-            // 焦点模式返回最小化通知用于 startForeground() 首次调用
-            // 运行时由 publishFocusForCurrentState() 用原生 HyperOS extras 更新
-            return buildMinimalNotification(contentIntent, pendingIntentFlags);
-        }
-
         boolean liveUpdateEnabled = NotificationPrefs.MODE_LIVE_UPDATE.equals(mode);
 
         // ===== 档 1：包管理器操作 =====
@@ -1496,167 +1489,9 @@ public synchronized int removeTermuxSession(TerminalSession sessionToRemove) {
 
     /** Update the shown foreground service notification after making any changes that affect it. */
     private synchronized void updateNotification() {
-        String mode = NotificationPrefs.getMode(this);
-        if (NotificationPrefs.MODE_FOCUS.equals(mode)) {
-            // 焦点模式：publishFocusForCurrentState() 内部会 notify 更新同一 notification ID
-            publishFocusForCurrentState();
-            return;
-        }
         Notification notification = buildNotification();
         ((NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE)).notify(TermuxConstants.TERMUX_APP_NOTIFICATION_ID, notification);
     }
-
-    // ===== 焦点通知（原生 HyperOS miui.focus.param）=====
-    // 参照 SiberiaApp/Maling-Island 项目，用 Notification + extras 实现
-
-    private static final String FOCUS_ISLAND_JSON =
-        "{" +
-          "\"param_v2\":{" +
-            "\"protocol\":3," +
-            "\"business\":\"termux_focus\"," +
-            "\"updatable\":true," +
-            "\"enableFloat\":true," +
-            "\"isShowNotification\":true," +
-            "\"islandFirstFloat\":true," +
-            "\"ticker\":\"{{ticker}}\"," +
-            "\"aodTitle\":\"{{ticker}}\"," +
-            "\"param_island\":{" +
-              "\"islandProperty\":1," +
-              "\"islandOrder\":false," +
-              "\"dismissIsland\":false," +
-              "\"needCloseAnimation\":true," +
-              "\"smallIslandArea\":{" +
-                "\"imageTextInfoLeft\":{" +
-                  "\"type\":2," +
-                  "\"textInfo\":{\"title\":\"{{left}}\",\"showHighlightColor\":false,\"narrowFont\":true}" +
-                "}," +
-                "\"imageTextInfoRight\":{" +
-                  "\"type\":2," +
-                  "\"textInfo\":{\"title\":\"{{right}}\",\"showHighlightColor\":false,\"narrowFont\":true}" +
-                "}" +
-              "}" +
-            "}" +
-          "}" +
-        "}";
-
-    private static final String PIC_MAIN_KEY     = "miui.focus.pic_icon_main";
-    private static final String PIC_APP_KEY      = "miui.focus.pic_app";
-    private static final String PIC_TICKER_KEY   = "miui.focus.pic_ticker";
-    private static final String PIC_AOD_KEY      = "miui.focus.pic_aod";
-    private static final String PIC_IM_BADGE_KEY = "miui.focus.pic_im_badge";
-
-    /** 转义 JSON 特殊字符，用于模板占位符替换。 */
-    private static String escapeJson(String s) {
-        if (s == null) return "";
-        StringBuilder sb = new StringBuilder(s.length());
-        for (int i = 0; i < s.length(); i++) {
-            char c = s.charAt(i);
-            switch (c) {
-                case '"':  sb.append("\\\""); break;
-                case '\\': sb.append("\\\\"); break;
-                case '\n': sb.append("\\n"); break;
-                case '\r': sb.append("\\r"); break;
-                case '\t': sb.append("\\t"); break;
-                default:
-                    if (c < 0x20) sb.append(String.format("\\u%04x", (int) c));
-                    else sb.append(c);
-            }
-        }
-        return sb.toString();
-    }
-
-    /** 根据当前业务状态发布焦点通知。无业务状态时取消。 */
-    private void publishFocusForCurrentState() {
-        try {
-            // 档 1：包管理器操作
-            LiveUpdateState.PkgState pkgState = LiveUpdateState.getPkgStateSnapshot();
-            if (NotificationPrefs.isPackageEnabled(this) && pkgState != null && !pkgState.getFinished()) {
-                int progress = Math.max(1, pkgState.getProgress());
-                String verb;
-                if (pkgState.getOperation() == com.termux.app.compose.LiveUpdateState.PkgOperation.INSTALL) {
-                    verb = "安装中";
-                } else if (pkgState.getOperation() == com.termux.app.compose.LiveUpdateState.PkgOperation.UNINSTALL) {
-                    verb = "卸载中";
-                } else if (pkgState.getOperation() == com.termux.app.compose.LiveUpdateState.PkgOperation.UPGRADE) {
-                    verb = "升级中";
-                } else {
-                    verb = "刷新中";
-                }
-                publishFocusNotification("软件包", verb + " " + progress + "%");
-                return;
-            }
-
-            // 档 2：Agent 执行中
-            if (NotificationPrefs.isAgentEnabled(this) && LiveUpdateState.hasAgent()) {
-                publishFocusNotification("Agent", "思考中");
-                return;
-            }
-
-            // 档 3：终端会话活跃
-            if (NotificationPrefs.isTerminalEnabled(this) && mTermuxSessions.size() > 0) {
-                publishFocusNotification("终端", mTermuxSessions.size() + " 个会话");
-                return;
-            }
-
-            // 无业务状态 → 取消通知
-            ((NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE))
-                .cancel(TermuxConstants.TERMUX_APP_NOTIFICATION_ID);
-        } catch (Throwable t) {
-            Logger.logError(LOG_TAG, "publishFocusForCurrentState failed: " + t.getMessage());
-        }
-    }
-
-    /** 构建并发布原生 HyperOS 焦点通知（miui.focus.param extras）。 */
-    private void publishFocusNotification(String leftLabel, String rightLabel) {
-        try {
-            Intent notificationIntent = TermuxActivity.newInstance(this);
-            int piFlags = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ? PendingIntent.FLAG_IMMUTABLE : 0;
-            PendingIntent contentIntent = PendingIntent.getActivity(this, 0, notificationIntent,
-                PendingIntent.FLAG_UPDATE_CURRENT | piFlags);
-
-            Notification.Builder builder = (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
-                ? new Notification.Builder(this, TermuxConstants.TERMUX_APP_NOTIFICATION_CHANNEL_ID)
-                : new Notification.Builder(this);
-
-            String contentText = leftLabel + " · " + rightLabel;
-            builder.setContentTitle("Termux")
-                   .setContentText(contentText)
-                   .setContentIntent(contentIntent)
-                   .setShowWhen(false)
-                   .setSmallIcon(R.drawable.ic_service_notification)
-                   .setOngoing(true)
-                   .setOnlyAlertOnce(true)
-                   .setCategory(Notification.CATEGORY_PROGRESS)
-                   .setVisibility(Notification.VISIBILITY_PUBLIC)
-                   .setPriority(Notification.PRIORITY_HIGH);
-
-            Bundle extras = new Bundle();
-            extras.putString("miui.focus.param",
-                FOCUS_ISLAND_JSON
-                    .replace("{{ticker}}", escapeJson(contentText))
-                    .replace("{{left}}",   escapeJson(leftLabel))
-                    .replace("{{right}}",  escapeJson(rightLabel)));
-
-            Bundle pics = new Bundle();
-            Icon ic = Icon.createWithResource(this, R.drawable.ic_service_notification);
-            pics.putParcelable(PIC_MAIN_KEY,     ic);
-            pics.putParcelable(PIC_APP_KEY,      ic);
-            pics.putParcelable(PIC_TICKER_KEY,   ic);
-            pics.putParcelable(PIC_AOD_KEY,      ic);
-            pics.putParcelable(PIC_IM_BADGE_KEY, Icon.createWithResource(this, android.R.color.transparent));
-            extras.putBundle("miui.focus.pics", pics);
-
-            Notification n = builder.setExtras(extras).build();
-            ((NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE))
-                .notify(TermuxConstants.TERMUX_APP_NOTIFICATION_ID, n);
-        } catch (Throwable t) {
-            Logger.logError(LOG_TAG, "publishFocusNotification failed: " + t.getMessage());
-        }
-    }
-
-
-
-
 
     private void setCurrentStoredTerminalSession(TerminalSession session) {
         if (session == null) return;
@@ -1977,8 +1812,6 @@ public synchronized int removeTermuxSession(TerminalSession sessionToRemove) {
     }
 
     private void showMemoryWarningNotification() {
-        // 焦点通知模式下不走原生通知（已完全屏蔽）
-        if (NotificationPrefs.MODE_FOCUS.equals(NotificationPrefs.getMode(this))) return;
         Notification.Builder builder = NotificationUtils.geNotificationBuilder(this,
             TermuxConstants.TERMUX_APP_NOTIFICATION_CHANNEL_ID, Notification.PRIORITY_HIGH,
             getString(R.string.memory_warning_title), getString(R.string.memory_warning_message), null,
@@ -1993,8 +1826,6 @@ public synchronized int removeTermuxSession(TerminalSession sessionToRemove) {
     }
 
     private void showMemoryKillNotification() {
-        // 焦点通知模式下不走原生通知（已完全屏蔽）
-        if (NotificationPrefs.MODE_FOCUS.equals(NotificationPrefs.getMode(this))) return;
         Notification.Builder builder = NotificationUtils.geNotificationBuilder(this,
             TermuxConstants.TERMUX_APP_NOTIFICATION_CHANNEL_ID, Notification.PRIORITY_HIGH,
             getString(R.string.memory_kill_title), getString(R.string.memory_kill_message), null,

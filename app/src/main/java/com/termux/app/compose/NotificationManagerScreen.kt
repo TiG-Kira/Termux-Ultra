@@ -70,12 +70,10 @@ fun NotificationManagerScreen(
     val modeOptions = listOf(
         NotificationPrefs.MODE_NORMAL to stringResource(R.string.notification_mode_normal),
         NotificationPrefs.MODE_LIVE_UPDATE to stringResource(R.string.notification_mode_live_update),
-        NotificationPrefs.MODE_FOCUS to stringResource(R.string.notification_mode_focus),
     )
     val modeSummaries = listOf(
         stringResource(R.string.notification_mode_normal_desc),
         stringResource(R.string.notification_mode_live_update_desc),
-        stringResource(R.string.notification_mode_focus_desc),
     )
 
     var currentMode by remember {
@@ -83,12 +81,10 @@ fun NotificationManagerScreen(
     }
 
     val liveUpdateAvailable = remember { NotificationPrefs.isLiveUpdateAvailable() }
-    val focusAvailable = remember { NotificationPrefs.isFocusNotificationAvailable() }
 
     val disabledModes = remember {
         buildSet {
             if (!liveUpdateAvailable) add(NotificationPrefs.MODE_LIVE_UPDATE)
-            if (!focusAvailable) add(NotificationPrefs.MODE_FOCUS)
         }
     }
 
@@ -211,8 +207,6 @@ fun NotificationManagerScreen(
             // ===== 提示卡片 =====
             item(key = "card_hint") {
                 val hintText = when (currentMode) {
-                    NotificationPrefs.MODE_FOCUS ->
-                        stringResource(R.string.notification_focus_hint)
                     NotificationPrefs.MODE_LIVE_UPDATE ->
                         stringResource(R.string.notification_live_update_hint)
                     else -> null
