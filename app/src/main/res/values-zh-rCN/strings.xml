@@ -615,6 +615,8 @@
     <string name="download_failed_with_code">下载失败: %1$d</string>
     <string name="beta_version">Beta 版本</string>
     <string name="internal_version">内部版本</string>
+    <string name="workflow_build">Workflow</string>
+    <string name="workflow_cli_cannot_update">此版本由 Workflow CLI 生成，无法检查新版本。</string>
 
     <!-- 风险命令确认弹窗 -->
     <string name="risk_command_dialog_title">即将执行风险命令</string>

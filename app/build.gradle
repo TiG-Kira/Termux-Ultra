@@ -19,6 +19,7 @@ android {
     def appVersionName = System.getenv("TERMUX_APP_VERSION_NAME") ?: ""
     def apkVersionTag = System.getenv("TERMUX_APK_VERSION_TAG") ?: ""
     def splitAPKsForDebugBuilds = System.getenv("TERMUX_SPLIT_APKS_FOR_DEBUG_BUILDS") ?: "1"
+    def workflowCliBuild = System.getenv("TERMUX_WORKFLOW_CLI") == "true"
     def splitAPKsForReleaseBuilds = System.getenv("TERMUX_SPLIT_APKS_FOR_RELEASE_BUILDS") ?: "0"
 
     defaultConfig {
@@ -34,7 +35,11 @@ android {
         // 新星引擎 (LibTerminal) 核心版本号
         buildConfigField "String", "LIBTERMINAL_VERSION", "\"3.0.0\""
 
+        // Workflow CLI build flag (set by GitHub Actions)
+        buildConfigField "boolean", "WORKFLOW_CLI", "${workflowCliBuild}"
+
         if (appVersionName) versionName = appVersionName
+        if (workflowCliBuild) versionName = "${versionName}-CLI"
 
         manifestPlaceholders.TERMUX_PACKAGE_NAME = "com.termux"
         manifestPlaceholders.TERMUX_APP_NAME = "Termux Ultra"

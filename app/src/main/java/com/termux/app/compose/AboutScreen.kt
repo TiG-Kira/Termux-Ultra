@@ -97,6 +97,7 @@ fun AboutScreen(onBack: () -> Unit) {
 
     val currentVersion = remember { BuildConfig.VERSION_NAME }
     val termuxCoreVersion = remember { BuildConfig.TERMUX_CORE_VERSION }
+    val isWorkflowCliBuild = remember { try { BuildConfig.WORKFLOW_CLI } catch (_: Throwable) { false } }
 
     // 呼吸渐变动画 (FeatureCenterCard 风格)
     val infiniteTransition = rememberInfiniteTransition(label = "breathingGradient")
@@ -112,7 +113,7 @@ fun AboutScreen(onBack: () -> Unit) {
 
     LaunchedEffect(Unit) {
         scope.launch {
-            val status = UpdateChecker.getReleaseStatus(currentVersion)
+            val status = if (isWorkflowCliBuild) UpdateChecker.ReleaseStatus.NOT_FOUND else UpdateChecker.getReleaseStatus(currentVersion)
             if (status != null) {
                 releaseStatus = status
             }
@@ -319,6 +320,8 @@ fun AboutScreen(onBack: () -> Unit) {
                                 BetaTag()
                             } else if (releaseStatus == UpdateChecker.ReleaseStatus.NOT_FOUND) {
                                 InternalBuildTag()
+                            } else if (isWorkflowCliBuild) {
+                                WorkflowTag()
                             }
                         }
                     }
@@ -510,7 +513,7 @@ fun AboutScreen(onBack: () -> Unit) {
                                  if (!checkingUpdate) {
                                      checkingUpdate = true
                                      scope.launch {
-                                         updateResult = UpdateChecker.checkForUpdates(currentVersion, betaUpdateEnabled)
+                                         if (!isWorkflowCliBuild) updateResult = UpdateChecker.checkForUpdates(currentVersion, betaUpdateEnabled)
                                          showUpdateDialog = true
                                          checkingUpdate = false
                                      }
@@ -574,14 +577,20 @@ fun AboutScreen(onBack: () -> Unit) {
                                     )
                                 )
                             }
-                            Text(
-                                text = currentVersion,
-                                style = TextStyle(
-                                    fontSize = 24.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MiuixTheme.colorScheme.onSurface
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Text(
+                                    text = currentVersion,
+                                    style = TextStyle(
+                                        fontSize = 24.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MiuixTheme.colorScheme.onSurface
+                                    )
                                 )
-                            )
+                                if (isWorkflowCliBuild) WorkflowTag()
+                            }
                             Text(
                                 text = context.getString(R.string.based_on_termux_version) + " " + termuxCoreVersion + "\n" +
                                     context.getString(R.string.libterminal_core_info, BuildConfig.LIBTERMINAL_VERSION),
@@ -908,6 +917,25 @@ private fun BetaTag() {
 
 @Composable
 private fun InternalBuildTag() {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(10.dp))
+            .background(Color(0xFFFF9800).copy(alpha = 0.15f))
+            .padding(horizontal = 6.dp, vertical = 2.dp)
+    ) {
+        Text(
+            text = "Internal",
+            style = TextStyle(
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFFFF9800)
+            )
+        )
+    }
+}
+
+@Composable
+private fun WorkflowTag() {
     Box(
         modifier = Modifier
             .clip(RoundedCornerShape(10.dp))
