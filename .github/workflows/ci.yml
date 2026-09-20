@@ -28,6 +28,7 @@ jobs:
 
       - name: 编译
         run: |
+          export TERMUX_WORKFLOW_CLI=true
           ./gradlew :app:assembleDebug
 
       - name: 上传 Debug APK

@@ -686,6 +686,8 @@
     <string name="download_failed_with_code">Download failed: %1$d</string>
     <string name="beta_version">Beta</string>
     <string name="internal_version">Internal Build</string>
+    <string name="workflow_build">Workflow</string>
+    <string name="workflow_cli_cannot_update">This is a Workflow CLI build. Check for updates is disabled.</string>
 
     <!-- Risk command confirmation dialog -->
     <string name="risk_command_dialog_title">High Risk Command About To Be Executed</string>
