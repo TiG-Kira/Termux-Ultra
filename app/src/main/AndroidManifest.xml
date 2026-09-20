@@ -246,6 +246,12 @@
             android:theme="@style/Theme.AppCompat.DayNight.NoActionBar" />
 
         <activity
+            android:name=".app.activities.NotificationManagerActivity"
+            android:exported="false"
+            android:label="@string/notification_management"
+            android:theme="@style/Theme.AppCompat.DayNight.NoActionBar" />
+
+        <activity
             android:name=".app.activities.TermuxWidgetActivity"
             android:exported="false"
             android:label="@string/title_widget_settings"

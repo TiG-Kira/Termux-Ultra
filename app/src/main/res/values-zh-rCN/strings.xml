@@ -853,6 +853,28 @@
     <string name="plugin_dialog_overwrite_confirm">我已知晓，确认覆盖</string>
     <string name="plugin_dialog_overwrite_cancel">取消</string>
 
+
+    <!-- 通知管理 -->
+    <string name="notification_management">通知管理</string>
+    <string name="notification_management_desc">配置 Termux 的通知行为</string>
+    <string name="notification_category">通知</string>
+    <string name="notification_terminal">终端会话通知</string>
+    <string name="notification_terminal_desc">当终端会话运行时显示通知</string>
+    <string name="notification_agent">Agent 通知</string>
+    <string name="notification_agent_desc">当 Termux Agent 正在执行任务时显示通知</string>
+    <string name="notification_package">软件包状态通知</string>
+    <string name="notification_package_desc">当软件包安装/卸载进行中时显示通知</string>
+    <string name="notification_mode_category">通知方式</string>
+    <string name="notification_mode_normal">普通通知</string>
+    <string name="notification_mode_normal_desc">传统 Android 通知样式</string>
+    <string name="notification_mode_live_update">LiveUpdate</string>
+    <string name="notification_mode_live_update_desc">Android 16+ 系统级上岛样式（药丸提示）</string>
+    <string name="notification_mode_focus">焦点通知</string>
+    <string name="notification_mode_focus_desc">HyperOS 2+ 超级岛 / 流体云焦点通知</string>
+    <string name="notification_mode_not_available">（不可用）</string>
+    <string name="notification_focus_hint">HyperOS 焦点通知可能受小米服务框架（XMSF）白名单限制。若通知无法正常显示，您可能需要暂时解除 XMSF 的网络权限或在使用时临时断网。</string>
+    <string name="notification_live_update_hint">LiveUpdate 可能触发超级岛、流体云或药丸等系统 UI（具体取决于厂商皮肤）。若觉打扰，建议切换为普通通知。</string>
+
     <!-- 日志管理 -->
     <string name="log_management">日志管理</string>
     <string name="log_management_desc">查看和管理应用日志</string>

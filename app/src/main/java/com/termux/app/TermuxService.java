@@ -55,6 +55,7 @@ import com.termux.shared.termux.shell.command.runner.terminal.TermuxSession;
 import com.termux.shared.termux.terminal.TermuxTerminalSessionClientBase;
 import com.termux.shared.logger.Logger;
 import com.termux.app.compose.LiveUpdateState;
+import com.termux.app.compose.NotificationPrefs;
 import com.termux.shared.notification.NotificationUtils;
 import com.termux.shared.android.PermissionUtils;
 import com.termux.shared.data.DataUtils;
@@ -1230,6 +1231,12 @@ public synchronized int removeTermuxSession(TerminalSession sessionToRemove) {
      *   1) LiveUpdateState.hasPkg()  → 包管理器操作中
      *   2) LiveUpdateState.hasAgent() → Agent 正在执行
      *   3) 终端会话（现有逻辑兜底）
+     *
+     * 同时受 NotificationPrefs 门控：
+     *   - 通知开关关闭 → 跳过对应档位
+     *   - 通知方式 FOCUS → 完全屏蔽当前通知逻辑（仅保留最小化前台通知）
+     *   - 通知方式 NORMAL → 构建但不附加 LiveUpdate 属性
+     *   - 通知方式 LIVE_UPDATE → 构建 + LiveUpdate 属性
      */
     private Notification buildNotification() {
         Resources res = getResources();
@@ -1238,23 +1245,56 @@ public synchronized int removeTermuxSession(TerminalSession sessionToRemove) {
         int pendingIntentFlags = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ? PendingIntent.FLAG_IMMUTABLE : 0;
         PendingIntent contentIntent = PendingIntent.getActivity(this, 0, notificationIntent, pendingIntentFlags);
 
+        // ===== 通知方式门控：焦点通知完全屏蔽当前通知逻辑 =====
+        String mode = NotificationPrefs.getMode(this);
+        if (NotificationPrefs.MODE_FOCUS.equals(mode)) {
+            return buildMinimalNotification(contentIntent, pendingIntentFlags);
+        }
+
+        boolean liveUpdateEnabled = NotificationPrefs.MODE_LIVE_UPDATE.equals(mode);
+
         // ===== 档 1：包管理器操作 =====
+        boolean pkgEnabled = NotificationPrefs.isPackageEnabled(this);
         LiveUpdateState.PkgState pkgState = LiveUpdateState.getPkgStateSnapshot();
-        if (pkgState != null && !pkgState.getFinished()) {
-            return buildPkgNotification(pkgState, contentIntent, pendingIntentFlags);
+        if (pkgEnabled && pkgState != null && !pkgState.getFinished()) {
+            return buildPkgNotification(pkgState, contentIntent, pendingIntentFlags, liveUpdateEnabled);
         }
 
         // ===== 档 2：Agent 执行中 =====
-        if (LiveUpdateState.hasAgent()) {
-            return buildAgentNotification(contentIntent, pendingIntentFlags);
+        boolean agentEnabled = NotificationPrefs.isAgentEnabled(this);
+        if (agentEnabled && LiveUpdateState.hasAgent()) {
+            return buildAgentNotification(contentIntent, pendingIntentFlags, liveUpdateEnabled);
         }
 
         // ===== 档 3：终端会话 =====
-        return buildTerminalNotification(res, contentIntent, pendingIntentFlags);
+        boolean terminalEnabled = NotificationPrefs.isTerminalEnabled(this);
+        if (terminalEnabled) {
+            return buildTerminalNotification(res, contentIntent, pendingIntentFlags, liveUpdateEnabled);
+        }
+
+        // 所有开关关闭 → 最小化前台通知
+        return buildMinimalNotification(contentIntent, pendingIntentFlags);
+    }
+
+    /** 所有通知开关关闭或焦点通知模式下的最小化前台通知。 */
+    private Notification buildMinimalNotification(PendingIntent contentIntent, int piFlags) {
+        Notification.Builder builder = (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+            ? new Notification.Builder(this, TermuxConstants.TERMUX_APP_NOTIFICATION_CHANNEL_ID)
+            : new Notification.Builder(this);
+
+        builder.setContentTitle("Termux");
+        builder.setContentText("服务运行中");
+        builder.setContentIntent(contentIntent);
+        builder.setShowWhen(false);
+        builder.setSmallIcon(R.drawable.ic_service_notification);
+        builder.setOngoing(true);
+        builder.setPriority(Notification.PRIORITY_LOW);
+
+        return builder.build();
     }
 
     /** 档 1：包管理器进度通知（带 ProgressStyle + 药丸"操作进行:XX%"）。 */
-    private Notification buildPkgNotification(LiveUpdateState.PkgState pkg, PendingIntent contentIntent, int piFlags) {
+    private Notification buildPkgNotification(LiveUpdateState.PkgState pkg, PendingIntent contentIntent, int piFlags, boolean liveUpdateEnabled) {
         Resources res = getResources();
         Notification.Builder builder = (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
             ? new Notification.Builder(this, TermuxConstants.TERMUX_APP_NOTIFICATION_CHANNEL_ID)
@@ -1286,8 +1326,8 @@ public synchronized int removeTermuxSession(TerminalSession sessionToRemove) {
             builder.setProgress(0, 0, true);  // indeterminate
         }
 
-        // LiveUpdate 上岛 + 药丸
-        if (Build.VERSION.SDK_INT >= 36) {
+        // LiveUpdate 上岛 + 药丸（仅在 LIVE_UPDATE 模式下附加）
+        if (liveUpdateEnabled && Build.VERSION.SDK_INT >= 36) {
             try {
                 Bundle extras = new Bundle();
                 extras.putBoolean(Notification.EXTRA_REQUEST_PROMOTED_ONGOING, true);
@@ -1303,7 +1343,7 @@ public synchronized int removeTermuxSession(TerminalSession sessionToRemove) {
     }
 
     /** 档 2：Agent 执行通知（药丸"思考中" + 停止按钮）。 */
-    private Notification buildAgentNotification(PendingIntent contentIntent, int piFlags) {
+    private Notification buildAgentNotification(PendingIntent contentIntent, int piFlags, boolean liveUpdateEnabled) {
         Notification.Builder builder = (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
             ? new Notification.Builder(this, TermuxConstants.TERMUX_APP_NOTIFICATION_CHANNEL_ID)
             : new Notification.Builder(this);
@@ -1322,7 +1362,8 @@ public synchronized int removeTermuxSession(TerminalSession sessionToRemove) {
         builder.addAction(android.R.drawable.ic_media_pause, getString(R.string.common_stop),
             PendingIntent.getService(this, 1001, stopIntent, PendingIntent.FLAG_UPDATE_CURRENT | piFlags));
 
-        if (Build.VERSION.SDK_INT >= 36) {
+        // LiveUpdate（仅在 LIVE_UPDATE 模式下附加）
+        if (liveUpdateEnabled && Build.VERSION.SDK_INT >= 36) {
             try {
                 Bundle extras = new Bundle();
                 extras.putBoolean(Notification.EXTRA_REQUEST_PROMOTED_ONGOING, true);
@@ -1334,7 +1375,7 @@ public synchronized int removeTermuxSession(TerminalSession sessionToRemove) {
     }
 
     /** 档 3：终端会话通知（兜底）。 */
-    private Notification buildTerminalNotification(Resources res, PendingIntent contentIntent, int piFlags) {
+    private Notification buildTerminalNotification(Resources res, PendingIntent contentIntent, int piFlags, boolean liveUpdateEnabled) {
         int sessionCount = getTermuxSessionsSize();
         if (com.termux.app.compose.TerminalRuntimeCore.isComposeMode(this)) {
             try {
@@ -1419,8 +1460,8 @@ public synchronized int removeTermuxSession(TerminalSession sessionToRemove) {
         builder.addAction(actionIcon, actionTitle,
             PendingIntent.getService(this, 0, toggleWakeLockIntent, PendingIntent.FLAG_UPDATE_CURRENT | piFlags));
 
-        // LiveUpdate 上岛
-        if (Build.VERSION.SDK_INT >= 36) {
+        // LiveUpdate 上岛（仅在 LIVE_UPDATE 模式下附加）
+        if (liveUpdateEnabled && Build.VERSION.SDK_INT >= 36) {
             try {
                 if (!sessionsCleared && (sessionCount > 0 || qemuCount > 0 || containerRunning)) {
                     builder.setPriority(Notification.PRIORITY_HIGH);

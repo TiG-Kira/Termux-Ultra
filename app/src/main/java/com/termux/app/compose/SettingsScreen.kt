@@ -429,6 +429,17 @@ fun SettingsScreen(
         buildList {
             add(
                 SettingItem(
+                    title = context.getString(R.string.notification_management),
+                    description = context.getString(R.string.notification_management_desc),
+                    iconRes = R.drawable.ic_notification_bell,
+                    action = {
+                        val intent = Intent(context, com.termux.app.activities.NotificationManagerActivity::class.java)
+                        context.startActivity(intent)
+                    }
+                )
+            )
+            add(
+                SettingItem(
                     title = context.getString(R.string.log_management),
                     description = context.getString(R.string.log_management_desc),
                     iconRes = R.drawable.ic_bug,

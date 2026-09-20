@@ -1022,7 +1022,28 @@
     <string name="storage_size_gb">%1$.2f GB</string>
     <string name="storage_category_estimate_note">Category usage is estimated by logical file size and may differ from system statistics</string>
 
-    <!-- Log Management -->
+        <!-- Notification Management -->
+    <string name="notification_management">Notification Management</string>
+    <string name="notification_management_desc">Configure Termux notification behavior</string>
+    <string name="notification_category">Notifications</string>
+    <string name="notification_terminal">Terminal Session Notifications</string>
+    <string name="notification_terminal_desc">Notify when a terminal session is running</string>
+    <string name="notification_agent">Agent Notifications</string>
+    <string name="notification_agent_desc">Notify when Termux Agent is executing tasks</string>
+    <string name="notification_package">Package Status Notifications</string>
+    <string name="notification_package_desc">Notify when package install/uninstall is in progress</string>
+    <string name="notification_mode_category">Notification Style</string>
+    <string name="notification_mode_normal">Standard Notification</string>
+    <string name="notification_mode_normal_desc">Traditional Android notification style</string>
+    <string name="notification_mode_live_update">LiveUpdate</string>
+    <string name="notification_mode_live_update_desc">Android 16+ promoted notification style with pill</string>
+    <string name="notification_mode_focus">Focus Notification</string>
+    <string name="notification_mode_focus_desc">HyperOS 2+ Super Island / Fluid Cloud focus notification</string>
+    <string name="notification_mode_not_available"> (Not Available)</string>
+    <string name="notification_focus_hint">HyperOS Focus Notifications may be blocked by XMSF whitelist restrictions. If notifications do not appear, you may need to temporarily revoke XMSF network permission or disconnect from the network.</string>
+    <string name="notification_live_update_hint">LiveUpdate may trigger system UI elements such as Super Island, Fluid Cloud, or pill indicators depending on vendor skin. If you find them distracting, switch to Standard Notification.</string>
+
+<!-- Log Management -->
     <string name="log_management">Log Management</string>
     <string name="log_management_desc">View and manage application logs</string>
     <string name="clear_logs">Clear</string>
