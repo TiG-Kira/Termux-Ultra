@@ -1603,8 +1603,7 @@ private fun AiSetupScreen(vm: AiTermuxViewModel, onBack: () -> Unit) {
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    ProviderChip("OpenAI 兼容", "custom", provider, isDark) { provider = it }
-                    ProviderChip("直接 OpenAI", "openai", provider, isDark) { provider = it }
+                    ProviderChip("在线模型", "online", provider, isDark) { provider = it }
                     ProviderChip("本地大模型", "local", provider, isDark) { provider = it }
                 }
             }
@@ -2058,7 +2057,7 @@ private fun AiSetupScreen(vm: AiTermuxViewModel, onBack: () -> Unit) {
             }
 
             if (provider != "local") {
-                item { SectionTitle("0. LLM Profile（可选 · 快速切换多模型）") }
+                item { SectionTitle("2. LLM Profile（可选 · 快速切换多模型）") }
                 item {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         if (llmProfiles.isEmpty()) {
@@ -2070,7 +2069,7 @@ private fun AiSetupScreen(vm: AiTermuxViewModel, onBack: () -> Unit) {
                                         style = TextStyle(fontSize = 13.sp), color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
                                     Spacer(Modifier.height(10.dp))
                                     Button(onClick = { editingProfile = null; showProfileEditor = true },
-                                        modifier = Modifier.height(40.dp)) { Text("新建 Profile", fontWeight = FontWeight.Bold) }
+                                        modifier = Modifier.height(48.dp)) { Text("新建 Profile", fontWeight = FontWeight.Bold) }
                                 }
                             }
                         } else {
@@ -2098,153 +2097,23 @@ private fun AiSetupScreen(vm: AiTermuxViewModel, onBack: () -> Unit) {
                                                 TextButton(text = "删除", onClick = { pendingDeleteProfile = prof })
                                             }
                                         }
-                                        if (!isActive) {
-                                            Button(onClick = {
-                                                com.termux.app.compose.AiTermuxPrefs.applyLlmProfile(ctx, prof)
-                                                activeProfileId = prof.id
-                                                provider = prof.provider; apiKey = prof.apiKey
-                                                baseUrl = prof.apiBaseUrl; model = prof.model; temperature = prof.temperature
-                                                testResult = null
-                                                SnackbarHelper.show(ctx, "已切换到 Profile「${prof.name}」", Snackbar.LENGTH_SHORT, null)
-                                            }, modifier = Modifier.height(36.dp)) { Text("应用此 Profile", fontWeight = FontWeight.SemiBold) }
-                                        } else {
-                                            Text("当前激活 ✓", style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Medium),
-                                                color = MiuixTheme.colorScheme.primary)
-                                        }
+                                        Text(
+                                            text = if (isActive) "当前激活 ✓ · 点击其他 Profile 可切换" else "👆 点击卡片快速切换",
+                                            style = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Medium),
+                                            color = if (isActive) MiuixTheme.colorScheme.primary else MiuixTheme.colorScheme.onSurfaceVariantSummary
+                                        )
                                     }
                                 }
                             }
                             Button(onClick = { editingProfile = null; showProfileEditor = true },
-                                modifier = Modifier.fillMaxWidth().height(40.dp)) { Text("＋ 新建 Profile", fontWeight = FontWeight.Bold) }
+                                modifier = Modifier.fillMaxWidth().height(48.dp)) { Text("＋ 新建 Profile", fontWeight = FontWeight.Bold) }
                         }
                     }
                 }
 
-                item { SectionTitle("2. API Key（必填）") }
-            item {
-                TextField(
-                    value = apiKey,
-                    onValueChange = { apiKey = it.trim() },
-                    label = "API Key",
-                    modifier = Modifier.fillMaxWidth(),
-                    useLabelAsPlaceholder = true,
-                    singleLine = true
-                )
             }
 
-            item { SectionTitle("3. API 地址") }
-            item {
-                TextField(
-                    value = baseUrl,
-                    onValueChange = { baseUrl = it.trim() },
-                    label = "Base URL（如 https://api.openai.com/v1）",
-                    modifier = Modifier.fillMaxWidth(),
-                    useLabelAsPlaceholder = true,
-                    singleLine = true
-                )
-            }
-
-            // Auto-fetch models when API key and URL are filled
-
-
-            item { SectionTitle("4. 模型选择") }
-            item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(48.dp)
-                            .clickable { if (availableModels.isNotEmpty()) modelExpanded = true }
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(if (isDark) Color(0xFF2A2A2E) else Color(0xFFF5F5F5))
-                            .padding(horizontal = 14.dp),
-                        contentAlignment = Alignment.CenterStart
-                    ) {
-                        when {
-                            loadingModels -> Text("加载中...", color = MiuixTheme.colorScheme.onSurfaceVariantSummary, fontSize = 14.sp)
-                            availableModels.isEmpty() && modelsError != null -> Text("加载失败：$modelsError", color = Color(0xFFDC2626), fontSize = 13.sp)
-                            availableModels.isEmpty() -> Text("手动输入模型名（无法自动获取）", color = MiuixTheme.colorScheme.onSurfaceVariantSummary, fontSize = 14.sp)
-                            model.isNotBlank() -> Text(model, color = MiuixTheme.colorScheme.onSurface, fontSize = 14.sp)
-                            else -> Text("选择或输入模型", color = MiuixTheme.colorScheme.onSurfaceVariantSummary, fontSize = 14.sp)
-                        }
-                        if (availableModels.isNotEmpty()) {
-                            Icon(
-                                imageVector = androidx.compose.material.icons.Icons.Default.ArrowDropDown,
-                                contentDescription = null,
-                                modifier = Modifier.align(Alignment.CenterEnd).size(24.dp),
-                                tint = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                            )
-                        }
-                    }
-                    IconButton(
-                        onClick = {
-                            if (apiKey.isNotBlank() && baseUrl.isNotBlank()) {
-                                loadingModels = true
-                                modelsError = null
-                                modelScope.launch {
-                                    val (models, err) = AiApiClient.fetchOnlineModels(baseUrl, apiKey)
-                                    availableModels = models
-                                    modelsError = err
-                                    loadingModels = false
-                                }
-                            }
-                        },
-                        modifier = Modifier.size(48.dp).clip(CircleShape)
-                    ) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_refresh),
-                            contentDescription = "刷新模型列表",
-                            modifier = Modifier.size(22.dp),
-                            tint = MiuixTheme.colorScheme.onSurface
-                        )
-                    }
-                }
-            }
-
-                        if (modelExpanded && availableModels.isNotEmpty()) {
-                item {
-                    Box(modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) {
-                        androidx.compose.material3.DropdownMenu(
-                            expanded = modelExpanded,
-                            onDismissRequest = { modelExpanded = false },
-                            modifier = Modifier.fillMaxWidth(0.9f)
-                                .background(MiuixTheme.colorScheme.surface)
-                        ) {
-                            androidx.compose.material3.DropdownMenuItem(
-                                text = { Text("✏️ 手动输入", fontSize = 14.sp) },
-                                onClick = { modelExpanded = false; model = "" }
-                            )
-                            androidx.compose.material3.HorizontalDivider()
-                            availableModels.forEach { m ->
-                                androidx.compose.material3.DropdownMenuItem(
-                                    text = { Text(m, fontSize = 14.sp, color = if (m == model) MiuixTheme.colorScheme.primary else MiuixTheme.colorScheme.onSurface) },
-                                    onClick = { model = m; modelExpanded = false }
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Manual input field (always visible, for custom models)
-            item {
-                TextField(
-                    value = model,
-                    onValueChange = { model = it.trim() },
-                    label = "Model（如 gpt-4o-mini / deepseek-chat 等）",
-                    modifier = Modifier.fillMaxWidth(),
-                    useLabelAsPlaceholder = true,
-                    singleLine = true
-                )
-            }
-
-            }
-
-            item { SectionTitle("5. 温度 (%.1f)".format(temperature)) }
+            item { SectionTitle("3. 温度 (%.1f)".format(temperature)) }
             item {
                 Slider(
                     value = temperature,
@@ -2255,7 +2124,7 @@ private fun AiSetupScreen(vm: AiTermuxViewModel, onBack: () -> Unit) {
                 )
             }
 
-            item { SectionTitle("6. 自定义 System Prompt（可选）") }
+            item { SectionTitle("4. 自定义 System Prompt（可选）") }
             item {
                 TextField(
                     value = customPrompt,
