@@ -545,6 +545,12 @@ class TerminalView(
 
     init {
         isVerticalScrollBarEnabled = true
+        // 经典引擎在 XML 布局中通过 android:focusableInTouchMode="true" 确保
+        // 触摸模式下可被 requestFocus() 成功获取焦点（默认值是 false）。
+        // Compose 模式下通过代码创建 TerminalView 必须显式设置，
+        // 否则所有 requestFocus() 调用静默失败 → IME 不会弹出 → 无法输入。
+        isFocusableInTouchMode = true
+        defaultFocusHighlightEnabled = false
     }
 
     private val Int.dp: Int
