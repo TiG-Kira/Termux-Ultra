@@ -1084,6 +1084,111 @@ fun PackageManagerScreen(
             )
         }
     }
+    )
+}
+
+@Composable
+private fun EmptyStateView(
+    main: String,
+    hint: String,
+    isDark: Boolean,
+    iconRes: Int
+) {
+    val iconTint = if (isDark) Color.White.copy(alpha = 0.35f)
+                   else Color.Black.copy(alpha = 0.35f)
+    val mainColor = if (isDark) Color.White.copy(alpha = 0.75f)
+                    else Color.Black.copy(alpha = 0.75f)
+    val hintColor = if (isDark) Color.White.copy(alpha = 0.45f)
+                    else Color.Black.copy(alpha = 0.45f)
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 80.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(
+                painter = painterResource(iconRes),
+                contentDescription = null,
+                tint = iconTint,
+                modifier = Modifier.size(64.dp)
+            )
+            Spacer(Modifier.height(16.dp))
+            Text(
+                text = main,
+                color = mainColor,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Medium,
+                textAlign = TextAlign.Center
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = hint,
+                color = hintColor,
+                fontSize = 13.sp,
+                textAlign = TextAlign.Center
+            )
+        }
+    }
+}
+
+@Composable
+private fun CategoryEntry(
+    sectionKey: String,
+    label: String,
+    count: Int,
+    onClick: () -> Unit,
+    isDark: Boolean
+) {
+    val bgColor = if (isDark) Color(0xFF1C1C1E) else Color(0xFFF5F5F7)
+    val titleColor = if (isDark) Color.White else Color.Black
+    val subColor = if (isDark) Color.White.copy(alpha = 0.55f) else Color.Black.copy(alpha = 0.55f)
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(bgColor)
+            .clickable { onClick() }
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(Color(0xFF2563EB).copy(alpha = 0.15f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                painter = painterResource(R.drawable.ic_folder),
+                contentDescription = null,
+                tint = Color(0xFF2563EB),
+                modifier = Modifier.size(20.dp)
+            )
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = label,
+                color = titleColor,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Medium
+            )
+            Text(
+                text = "$count ${stringResource(R.string.pkg_category_count_suffix)}",
+                color = subColor,
+                fontSize = 13.sp
+            )
+        }
+        Icon(
+            painter = painterResource(R.drawable.ic_arrow_right),
+            contentDescription = null,
+            tint = subColor,
+            modifier = Modifier.size(18.dp)
+        )
+    }
 }
 
 @Composable
@@ -1143,4 +1248,7 @@ private fun PackageCard(
             }
         }
     }
+}
+
+}
 }
