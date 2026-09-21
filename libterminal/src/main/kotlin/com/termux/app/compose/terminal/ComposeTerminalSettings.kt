@@ -5,6 +5,7 @@ import android.content.SharedPreferences
 import android.graphics.Typeface
 import com.termux.app.compose.terminal.color.TerminalColorScheme
 import com.termux.app.compose.terminal.color.TerminalThemes
+import com.termux.app.compose.terminal.engine.TerminalCursorStyle
 import com.termux.shared.termux.TermuxConstants
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -40,6 +41,8 @@ object ComposeTerminalSettings {
     const val DEFAULT_SOFT_KEYBOARD = true
     const val DEFAULT_SHOW_TOOLBAR = true
     const val DEFAULT_KEEP_SCREEN_ON = false
+    const val DEFAULT_CURSOR_STYLE_NAME = "BAR"
+    const val DEFAULT_TEXT_BLINKING = true
 
     // StateFlow - 所有终端组件订阅这些值
     private val _fontSize = MutableStateFlow(DEFAULT_FONT_SIZE)
@@ -47,6 +50,16 @@ object ComposeTerminalSettings {
 
     private val _cursorBlink = MutableStateFlow(DEFAULT_CURSOR_BLINK)
     val cursorBlink: StateFlow<Boolean> = _cursorBlink.asStateFlow()
+
+    private val _cursorStyleName = MutableStateFlow(DEFAULT_CURSOR_STYLE_NAME)
+    val cursorStyleName: StateFlow<String> = _cursorStyleName.asStateFlow()
+    val cursorStyle: TerminalCursorStyle get() = run {
+        try { TerminalCursorStyle.valueOf(_cursorStyleName.value) }
+        catch (_: Throwable) { TerminalCursorStyle.BAR }
+    }
+
+    private val _textBlinking = MutableStateFlow(DEFAULT_TEXT_BLINKING)
+    val textBlinking: StateFlow<Boolean> = _textBlinking.asStateFlow()
 
     /** 主题名称，对应 TerminalThemes 里的 TerminalTheme.name */
     private val _colorSchemeName = MutableStateFlow(DEFAULT_COLOR_SCHEME)
@@ -98,6 +111,8 @@ object ComposeTerminalSettings {
         val p = prefs ?: return
         _fontSize.value = p.getInt("font_size", DEFAULT_FONT_SIZE)
         _cursorBlink.value = p.getBoolean("cursor_blink", DEFAULT_CURSOR_BLINK)
+        _cursorStyleName.value = p.getString("cursor_style", DEFAULT_CURSOR_STYLE_NAME) ?: DEFAULT_CURSOR_STYLE_NAME
+        _textBlinking.value = p.getBoolean("text_blinking", DEFAULT_TEXT_BLINKING)
         _colorSchemeName.value = p.getString("color_scheme", DEFAULT_COLOR_SCHEME) ?: DEFAULT_COLOR_SCHEME
         _scrollbackLines.value = p.getInt("scrollback_lines", DEFAULT_SCROLLBACK_LINES)
         _softKeyboard.value = p.getBoolean("soft_keyboard", DEFAULT_SOFT_KEYBOARD)

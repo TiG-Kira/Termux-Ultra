@@ -12,6 +12,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
 import com.termux.app.compose.terminal.color.TerminalColorScheme
 import com.termux.app.compose.terminal.engine.TerminalSession
+import com.termux.app.compose.terminal.engine.TerminalCursorStyle
 import com.termux.app.compose.terminal.view.TerminalView as LibTerminalView
 
 /**
@@ -27,6 +28,8 @@ fun ComposeTerminalScreen(
     useLightTheme: Boolean = false,
     textSize: Int = 14,
     cursorBlink: Boolean = true,
+    cursorStyle: TerminalCursorStyle = TerminalCursorStyle.BAR,
+    textBlinking: Boolean = true,
     colorScheme: TerminalColorScheme? = null,
     typeface: android.graphics.Typeface? = null
 ) {

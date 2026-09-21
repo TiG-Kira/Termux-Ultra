@@ -4,6 +4,7 @@ include ':terminal-emulator'
 include ':terminal-view'
 include ':termux-shared'
 include ':libterminal'
+include ':libterminal-pty'
 
 // Vendor add-ons (built as sub-projects from vendor/termux-addons)
 include ':termux-api'
@@ -14,3 +15,4 @@ include ':termux-tasker'
 project(':termux-tasker').projectDir = new File(rootDir, 'vendor/termux-addons/termux-tasker/app')
 include ':termux-widget'
 project(':termux-widget').projectDir = new File(rootDir, 'vendor/termux-addons/termux-widget/app')
+
