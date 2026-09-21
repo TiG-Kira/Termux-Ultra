@@ -629,15 +629,15 @@ fun PackageManagerScreen(
     var showDetail by remember { mutableStateOf<PackageInfo?>(null) }
 
     // 分类视图状态
-    private val pkgPrefs = remember {
+    val pkgPrefs = remember {
         context.getSharedPreferences("termux_preferences", android.content.Context.MODE_PRIVATE)
     }
     val viewMode by remember { mutableStateOf(pkgPrefs.getInt("KEY_PKG_VIEW_MODE", 0)) }
 
-    private var navStack by remember {
+    var navStack by remember {
         mutableStateOf(listOf(PkgNavLevel(sectionKey = null, label = null)))
     }
-    private val currentSection: String? get() = navStack.lastOrNull()?.sectionKey
+    val currentSection: String? get() = navStack.lastOrNull()?.sectionKey
 
     // 观察 LiveUpdateState — 实时 log + 后台任务按钮 + 恢复请求
     val livePkgLog by LiveUpdateState.pkgLog.collectAsState()
