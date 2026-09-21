@@ -99,6 +99,23 @@
             android:exported="false" />
 
         <activity
+            android:name=".app.activities.GitHubAccountActivity"
+            android:label="@string/github_account_title"
+            android:exported="false" />
+        <activity
+            android:name=".app.activities.GitHubIssuesActivity"
+            android:label="@string/github_topics_title"
+            android:exported="false" />
+        <activity
+            android:name=".app.activities.GitHubIssueDetailActivity"
+            android:label="@string/github_issue_detail_label"
+            android:exported="false" />
+        <activity
+            android:name=".app.activities.GitHubFeedbackActivity"
+            android:label="@string/github_feedback_page_title"
+            android:exported="false" />
+
+        <activity
             android:name=".app.activities.AiTermuxActivity"
             android:label="AI Termux"
             android:exported="false" />

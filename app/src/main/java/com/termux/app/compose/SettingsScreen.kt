@@ -552,6 +552,9 @@ val composeTextBlinking by com.termux.app.compose.terminal.ComposeTerminalSettin
                 .nestedScroll(scrollBehavior.nestedScrollConnection),
             contentPadding = PaddingValues(bottom = navBarBottomPadding + 16.dp)
         ) {
+            // ---------- GitHub 账户 ----------
+            item(key = "github_account") { GitHubAccountCard() }
+
             // ---------- Appearance ----------
             item(key = "section_appearance") { SmallTitle(text = context.getString(R.string.appearance)) }
             item(key = "card_appearance") {

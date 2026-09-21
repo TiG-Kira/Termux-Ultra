@@ -1,0 +1,201 @@
+package com.termux.app.compose
+
+import android.content.Context
+import android.content.Intent
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
+import com.termux.R
+import com.termux.app.activities.GitHubAccountActivity
+import com.termux.app.github.GitHubDeviceAuth
+import com.termux.app.github.GitHubLoginRunner
+import com.termux.app.github.GitHubSession
+import com.termux.app.github.GitHubSessionStore
+import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.Icon
+import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.basic.TextButton
+import top.yukonga.miuix.kmp.overlay.OverlayDialog
+import top.yukonga.miuix.kmp.preference.ArrowPreference
+import top.yukonga.miuix.kmp.theme.MiuixTheme
+
+/**
+ * 设置页顶部的 GitHub 账户卡片（独立 Card + ArrowPreference）。
+ *
+ * - 未登录：抽象人头像 + 「使用 GitHub 登录」；
+ * - 已登录：GitHub 头像 + 昵称，点击直接进入账户详情页；
+ * - 点击未登录卡片：启动 6241 回环 + Device Flow 双通道登录。
+ */
+@Composable
+fun GitHubAccountCard() {
+    val context = LocalContext.current
+    var session by remember { mutableStateOf(GitHubSessionStore.load(context)) }
+    var showLoginSheet by remember { mutableStateOf(false) }
+    var statusText by remember { mutableStateOf(context.getString(R.string.github_login_preparing)) }
+    var deviceAuth by remember { mutableStateOf<GitHubDeviceAuth?>(null) }
+    var runner by remember { mutableStateOf<GitHubLoginRunner?>(null) }
+
+    DisposableEffect(Unit) {
+        onDispose { runner?.cancel() }
+    }
+
+    // 从账户页返回（含注销）时刷新登录态
+    val accountLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) {
+        session = GitHubSessionStore.load(context)
+    }
+
+    fun beginLogin() {
+        deviceAuth = null
+        statusText = context.getString(R.string.github_login_preparing)
+        showLoginSheet = true
+        val login = GitHubLoginRunner(context)
+        runner = login
+        login.start(
+            onStatus = { statusText = it },
+            onDeviceAuth = { deviceAuth = it },
+            onSuccess = { result ->
+                session = result
+                runner = null
+                showLoginSheet = false
+            },
+            onFailure = { message ->
+                runner = null
+                showLoginSheet = false
+                Toast.makeText(
+                    context,
+                    context.getString(R.string.github_login_failed, message),
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        )
+    }
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .clip(RoundedCornerShape(16.dp))
+    ) {
+        ArrowPreference(
+            title = session?.user?.login ?: stringResource(R.string.github_login_title),
+            summary = if (session == null) {
+                stringResource(R.string.github_login_summary)
+            } else {
+                stringResource(R.string.github_login_summary_signed_in)
+            },
+            onClick = {
+                if (session == null) beginLogin()
+                else accountLauncher.launch(Intent(context, GitHubAccountActivity::class.java))
+            },
+            startAction = { LoginAvatar(session?.user?.avatarUrl) }
+        )
+    }
+
+    OverlayDialog(
+        show = showLoginSheet,
+        onDismissRequest = {
+            showLoginSheet = false
+            runner?.cancel()
+        },
+        title = stringResource(R.string.github_login_dialog_title),
+        content = {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = statusText,
+                    fontSize = 14.sp,
+                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                )
+                deviceAuth?.takeIf { it.userCode.isNotBlank() }?.let { auth ->
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = stringResource(R.string.github_login_device_hint, auth.userCode),
+                        fontSize = 14.sp
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = stringResource(R.string.github_login_device_tip),
+                        fontSize = 12.sp,
+                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                    )
+                    TextButton(
+                        text = stringResource(R.string.github_login_open_device_page),
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = { openDevicePage(context, auth.verificationUri) }
+                    )
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+                TextButton(
+                    text = stringResource(R.string.cancel),
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = {
+                        showLoginSheet = false
+                        runner?.cancel()
+                    }
+                )
+            }
+        }
+    )
+}
+
+private fun openDevicePage(context: Context, uri: String) {
+    runCatching {
+        context.startActivity(
+            Intent(Intent.ACTION_VIEW, android.net.Uri.parse(uri)).addCategory(Intent.CATEGORY_BROWSABLE)
+        )
+    }
+}
+
+@Composable
+private fun LoginAvatar(avatarUrl: String?) {
+    Box(
+        modifier = Modifier
+            .size(40.dp)
+            .clip(CircleShape)
+            .background(MiuixTheme.colorScheme.surfaceVariant),
+        contentAlignment = Alignment.Center
+    ) {
+        if (avatarUrl.isNullOrBlank()) {
+            Icon(
+                painter = painterResource(R.drawable.ic_person),
+                contentDescription = stringResource(R.string.github_login_title),
+                modifier = Modifier.size(24.dp),
+                tint = MiuixTheme.colorScheme.onSurface
+            )
+        } else {
+            AsyncImage(
+                model = avatarUrl,
+                contentDescription = stringResource(R.string.github_account_title),
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+            )
+        }
+    }
+}
