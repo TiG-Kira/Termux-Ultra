@@ -182,7 +182,8 @@ object ComposeTerminalSettings {
             val hasCustom = listOf("foreground", "background", "color0").any { props.containsKey(it) }
             if (!hasCustom) return null
 
-            val default16 = TerminalColorScheme.dark().palette16().toIntArray()
+            val defaultScheme = TerminalColorScheme.dark()
+            val default16 = IntArray(16) { defaultScheme.color(it) }
             val palette16 = IntArray(16)
             for (i in 0..15) {
                 palette16[i] = props.getProperty("color$i")?.let { parseColorHex(it) } ?: default16[i]

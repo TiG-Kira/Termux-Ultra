@@ -62,6 +62,7 @@ internal class GestureAndScaleRecognizer(context: Context, val mListener: Listen
 
         mGestureDetector.setOnDoubleTapListener(object : GestureDetector.OnDoubleTapListener {
             override fun onSingleTapConfirmed(p0: MotionEvent): Boolean {
+                if (isAfterLongPress) return true
                 return mListener.onSingleTapUp(p0)
             }
 

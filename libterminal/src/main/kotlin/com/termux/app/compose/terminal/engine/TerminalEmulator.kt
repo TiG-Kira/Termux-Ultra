@@ -1,8 +1,10 @@
 package com.termux.app.compose.terminal.engine
 
-import com.termux.app.compose.terminal.view.TerminalCursorStyle
-import com.termux.app.compose.terminal.engine.ansi.AnsiEscapeParser
-import com.termux.app.compose.terminal.engine.ansi.TerminalActionHandler
+import com.termux.app.compose.terminal.engine.protocol.ansi.AnsiEscapeParser
+import com.termux.app.compose.terminal.engine.protocol.ansi.TerminalActionHandler
+import com.termux.app.compose.terminal.engine.protocol.OscHandler
+import com.termux.app.compose.terminal.engine.protocol.InputSequenceEncoder
+import com.termux.app.compose.terminal.engine.protocol.DeviceControlHandler
 import com.termux.app.compose.terminal.engine.buffer.TerminalBuffer
 import com.termux.app.compose.terminal.engine.buffer.CursorCoord
 import com.termux.app.compose.terminal.color.SparsePalette
@@ -464,7 +466,7 @@ internal class TerminalEmulator(
             }
 
             'B' -> this.cursorRow =
-                min(mRows - 1, mCursorRow + AnsiEscapeParser.getArg(args, 0, 1, true))
+                min(originBottom - 1, mCursorRow + AnsiEscapeParser.getArg(args, 0, 1, true))
 
             'C', 'a' -> this.cursorCol =
                 min(mRightMargin - 1, mCursorCol + AnsiEscapeParser.getArg(args, 0, 1, true))

@@ -1,5 +1,6 @@
-package com.termux.app.compose.terminal.engine
+package com.termux.app.compose.terminal.engine.protocol
 
+import com.termux.app.compose.terminal.engine.TerminalEmulator
 import kotlin.math.max
 import kotlin.math.min
 

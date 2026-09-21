@@ -42,7 +42,7 @@ internal class TerminalGestureListener(
     override fun onSingleTapUp(e: MotionEvent): Boolean {
         val emulator = view.mEmulator ?: return true
 
-        if (view.isSelectingText) {
+        if (view.isSelectingText && !view.touchHandler.gestureRecognizer.isAfterLongPress) {
             view.stopTextSelectionMode()
             return true
         }

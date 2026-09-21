@@ -1,4 +1,4 @@
-package com.termux.app.compose.terminal.view
+package com.termux.app.compose.terminal.view.interact
 
 import android.content.ClipData
 import android.content.ClipboardManager

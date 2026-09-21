@@ -1,4 +1,4 @@
-package com.termux.app.compose.terminal.view
+package com.termux.app.compose.terminal.view.interact
 
 /**
  * 浮动工具栏（ActionMode）的定制基类。

@@ -8,7 +8,6 @@ import java.io.OutputStream
  * 无论是本地 Linux 进程、还是远程 SSH 连接、亦或是用于测试的 Mock 进程，均实现此接口。
  */
 interface ITerminalProcess {
-    val pid: Int
     val inputStream: InputStream
     val outputStream: OutputStream
 

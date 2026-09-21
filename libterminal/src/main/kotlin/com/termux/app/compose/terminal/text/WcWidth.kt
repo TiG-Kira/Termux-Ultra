@@ -514,9 +514,20 @@ internal object WcWidth {
         return false
     }
 
-    /** 返回码点的终端显示宽度：0、1 或 2。 */
-    @JvmStatic
-    fun width(ucs: Int): Int = when {
+    /**
+     * BMP（0x0000..0xFFFF）码点的显示宽度查找表：O(1) 索引。
+     *
+     * 终端文本绝大多数落在 BMP 内（含全部 CJK、假名、谚文、全角符号与组合符），
+     * 用 64KB 字节表替代二分查找，辅助平面码点仍走区间二分。
+     */
+    private val BMP_WIDTH: ByteArray = ByteArray(0x10000).also { lut ->
+        for (cp in lut.indices) {
+            lut[cp] = classicWidth(cp).toByte()
+        }
+    }
+
+    /** 区间表 + 特殊控制范围判定的经典宽度计算。 */
+    private fun classicWidth(ucs: Int): Int = when {
         ucs == 0 ||
         ucs == 0x034F ||
         ucs in 0x200B..0x200F ||
@@ -529,6 +540,11 @@ internal object WcWidth {
         intable(WIDE_EASTASIAN, ucs) -> 2
         else -> 1
     }
+
+    /** 返回码点的终端显示宽度：0、1 或 2。 */
+    @JvmStatic
+    fun width(ucs: Int): Int =
+        if (ucs in 0 until BMP_WIDTH.size) BMP_WIDTH[ucs].toInt() else classicWidth(ucs)
 
     /** 获取 char 数组中指定索引处字符的显示宽度。 */
     @JvmStatic

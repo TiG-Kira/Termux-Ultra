@@ -11,7 +11,7 @@ import android.view.View
 import com.termux.app.compose.terminal.R
 import com.termux.app.compose.terminal.engine.buffer.TerminalBuffer
 import com.termux.app.compose.terminal.text.forEachColumn
-import com.termux.app.compose.terminal.view.ActionModeItem
+import com.termux.app.compose.terminal.view.interact.ActionModeItem
 import com.termux.app.compose.terminal.view.TerminalView
 import kotlin.math.max
 import kotlin.math.min
