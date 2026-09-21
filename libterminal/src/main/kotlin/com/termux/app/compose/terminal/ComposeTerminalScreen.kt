@@ -51,9 +51,6 @@ fun ComposeTerminalScreen(
                     this.cursorBlinking = cursorBlink
                     this.cursorStyle = cursorStyle
                     this.textBlinking = textBlinking
-                    // Compose 模式下 AndroidView 中的 Android View 需要显式请求焦点
-                    // 才能让 IME 输入连接到它（经典 XML 模式由 Activity/Window 自动处理）
-                    post { requestFocus() }
                 }.also { tv ->
                     terminalView = tv
                 }
@@ -68,8 +65,6 @@ fun ComposeTerminalScreen(
                 if (session != null && lastSessionId != session.id) {
                     tv.currentSession = session
                     lastSessionId = session.id
-                    // 会话切换后重新请求焦点，确保 IME 连接到当前 TerminalView
-                    tv.post { tv.requestFocus() }
                 }
             },
             modifier = Modifier.fillMaxSize()
