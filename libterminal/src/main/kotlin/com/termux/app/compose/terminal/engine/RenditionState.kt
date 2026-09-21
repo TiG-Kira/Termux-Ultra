@@ -1,6 +1,6 @@
 package com.termux.app.compose.terminal.engine
 
-import com.termux.app.compose.terminal.engine.ansi.AnsiEscapeParser
+import com.termux.app.compose.terminal.engine.protocol.ansi.AnsiEscapeParser
 import com.termux.app.compose.terminal.text.TextStyle
 
 /**
@@ -112,10 +112,16 @@ internal class RenditionState {
                 38, 48, 58 -> if (i + 2 < argCount) {
                     when (args[i + 1]) {
                         2 -> {
-                            if (i + 4 < argCount) {
-                                val r = AnsiEscapeParser.getArg(args, i + 2, 0, false)
-                                val g = AnsiEscapeParser.getArg(args, i + 3, 0, false)
-                                val b = AnsiEscapeParser.getArg(args, i + 4, 0, false)
+                            // 兼容 38:2:R:G:B 与标准双冒号形式 38:2::R:G:B
+                            // （后者经解析器展开后会在类型 2 之后产生一个空参数槽 -1）
+                            var colorStart = i + 2
+                            while (colorStart < argCount && args[colorStart] < 0) {
+                                colorStart++
+                            }
+                            if (colorStart + 2 < argCount) {
+                                val r = AnsiEscapeParser.getArg(args, colorStart, 0, false)
+                                val g = AnsiEscapeParser.getArg(args, colorStart + 1, 0, false)
+                                val b = AnsiEscapeParser.getArg(args, colorStart + 2, 0, false)
                                 if (r in 0..255 && g in 0..255 && b in 0..255) {
                                     val argb = TextStyle.makeTrueColor(r, g, b)
                                     when (code) {
@@ -124,7 +130,7 @@ internal class RenditionState {
                                         58 -> underlineColor = argb
                                     }
                                 }
-                                i += 4
+                                i = colorStart + 2
                             } else {
                                 i += 2
                             }

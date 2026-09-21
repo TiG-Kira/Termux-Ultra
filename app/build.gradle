@@ -33,7 +33,7 @@ android {
         buildConfigField "String", "TERMUX_CORE_VERSION", "\"0.119.0\""
 
         // 新星引擎 (LibTerminal) 核心版本号
-        buildConfigField "String", "LIBTERMINAL_VERSION", "\"3.0.0\""
+        buildConfigField "String", "LIBTERMINAL_VERSION", "\"3.1.1\""
 
         // Workflow CLI build flag (set by GitHub Actions)
         buildConfigField "boolean", "WORKFLOW_CLI", "${workflowCliBuild}"

@@ -47,7 +47,7 @@ class TermuxProcessBridge(
         fileDescriptor = wrapFd(terminalFd)
     }
 
-    override val pid: Int get() = processId
+    val pid: Int get() = processId
 
     override val inputStream: java.io.InputStream get() = _inputStream
 

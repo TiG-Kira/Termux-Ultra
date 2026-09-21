@@ -2,14 +2,19 @@ package com.termux.app.compose.terminal
 
 import android.content.Context
 import com.termux.app.compose.terminal.engine.TerminalSession
+import com.termux.app.compose.terminal.engine.TerminalSessionCompat
 import com.termux.app.compose.terminal.process.ITerminalProcess
 import com.termux.app.compose.terminal.process.TermuxProcessBridge
 import com.termux.shared.termux.shell.command.environment.TermuxShellEnvironment
 import com.termux.shared.compat.ShellEnvironmentCompat
 import com.termux.shared.compat.TermuxTaskCompat
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import java.io.File
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -45,6 +50,9 @@ class ComposeSessionManager private constructor(private val context: Context) {
     /** 保护 _sessions 列表读-改-写的锁（create/kill 可能跨线程调用）。 */
     private val sessionsLock = Any()
 
+    /** 会话状态观察协程作用域。 */
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     /**
      * 创建新会话、启动 shell、设为当前活跃会话。
      *
@@ -60,26 +68,40 @@ class ComposeSessionManager private constructor(private val context: Context) {
         sessionName: String = "",
         startImmediately: Boolean = true
     ): TerminalSession {
+        val sessionId = nextId.getAndIncrement()
+
+        // 初始化兼容层注册表：pidState 默认 0（未初始化），sessionExited 默认 false
+        TerminalSessionCompat.registerSession(sessionId)
+
         val processFactory: (Int, Int, Int, Int) -> ITerminalProcess = { rows, cols, cw, ch ->
-            TermuxProcessBridge(shellPath, cwd, args, env, rows, cols, cw, ch)
+            val bridge = TermuxProcessBridge(shellPath, cwd, args, env, rows, cols, cw, ch)
+            TerminalSessionCompat.setPid(sessionId, bridge.pid)
+            bridge
         }
 
         val session = TerminalSession(
-            id = nextId.getAndIncrement(),
+            id = sessionId,
             sessionName = kotlinx.coroutines.flow.MutableStateFlow(sessionName),
             processFactory = processFactory
         )
-        // 记录 shell 元数据。（注：原先唯一的读取方 RiskConfirmManager.detectEnvironment
-        // 已随 InputInterceptor 路径一起删除，目前这两字段暂无读取侧，keep 以备后续复用。）
-        session.shellPath = shellPath
-        session.args = args
+
+        // 观察会话 uiEvent，维护 pidState / sessionExited 兼容属性的实时更新
+        scope.launch {
+            session.uiEvent.collect {
+                TerminalSessionCompat.updateFromUi(sessionId, session.isRunning)
+            }
+            // uiEvent 关闭后（会话完全结束）做最后一次状态刷新
+            TerminalSessionCompat.updateFromUi(sessionId, session.isRunning)
+        }
 
         synchronized(sessionsLock) {
             _sessions.value = _sessions.value + SessionInfo(session, sessionName)
         }
 
-                // 设置启动后回调：注入自动执行命令
-        session.onSessionStarted = {
+        if (startImmediately) {
+            session.execute()
+            _currentSessionId.value = session.id
+            // 进程启动后注入自动执行命令
             try {
                 val prefs = context.getSharedPreferences("termux_preferences", android.content.Context.MODE_PRIVATE)
                 val cmd = prefs.getString("auto_start_command", "") ?: ""
@@ -88,12 +110,6 @@ class ComposeSessionManager private constructor(private val context: Context) {
                     session.write(withNewline.toByteArray())
                 }
             } catch (_: Throwable) {}
-        }
-
-
-        if (startImmediately) {
-            session.execute()
-            _currentSessionId.value = session.id
         }
         notifySessionsChanged()
         return session

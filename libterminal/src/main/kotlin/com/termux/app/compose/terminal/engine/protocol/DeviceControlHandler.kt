@@ -1,4 +1,4 @@
-package com.termux.app.compose.terminal.engine
+package com.termux.app.compose.terminal.engine.protocol
 
 /**
  * DCS（Device Control String）设备控制串处理器。
@@ -28,7 +28,7 @@ internal class DeviceControlHandler(
                     val responseValue = when (trans) {
                         "Co", "colors" -> "256"
                         "TN", "name" -> "xterm"
-                        else -> KeyHandler.getCodeFromTermcap(trans, appCursorKeys, appKeypad)
+                        else -> KeySequenceEncoder.getCodeFromTermcap(trans, appCursorKeys, appKeypad)
                     }
                     if (responseValue == null) {
                         writeString("\u001bP0+r$part\u001b\\")

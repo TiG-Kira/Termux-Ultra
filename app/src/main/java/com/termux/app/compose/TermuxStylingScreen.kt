@@ -50,7 +50,7 @@ private val DEFAULT_TERMINAL_COLORS = run {
         foreground = Color(scheme.foreground),
         background = Color(scheme.background),
         cursor = Color(scheme.cursor),
-        colors = scheme.palette16().map { Color(it) }
+        colors = (0..15).map { Color(scheme.color(it)) }
     )
 }
 

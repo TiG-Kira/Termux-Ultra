@@ -3,6 +3,7 @@ package com.termux.app.compose.terminal.view.input
 import android.app.Activity
 import android.content.ContextWrapper
 import android.view.View
+import android.view.Window
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -15,6 +16,13 @@ import androidx.core.view.WindowInsetsCompat
  */
 internal class ImeController(private val view: View) {
 
+    /** 定位宿主 Activity 窗口，无窗口时返回 null。 */
+    private fun activityWindow(): Window? = generateSequence(view.context) {
+        (it as? ContextWrapper)?.baseContext
+    }
+        .filterIsInstance<Activity>()
+        .firstOrNull()?.window
+
     /**
      * 显示或隐藏软键盘。
      *
@@ -23,11 +31,7 @@ internal class ImeController(private val view: View) {
     fun toggleIme(show: Boolean? = null) {
         view.requestFocus()
 
-        val window = generateSequence(view.context) {
-            (it as? ContextWrapper)?.baseContext
-        }
-            .filterIsInstance<Activity>()
-            .firstOrNull()?.window ?: return
+        val window = activityWindow() ?: return
 
         val controller = WindowCompat.getInsetsController(window, view)
         val imeType = WindowInsetsCompat.Type.ime()
@@ -38,5 +42,16 @@ internal class ImeController(private val view: View) {
         } else {
             controller.hide(imeType)
         }
+    }
+
+    /**
+     * 隐藏软键盘，不额外请求焦点。
+     *
+     * 供覆盖层（如设置页）打开时收起键盘，
+     * 避免 [toggleIme] 的 [View.requestFocus] 触发输入法重新弹起。
+     */
+    fun hideIme() {
+        val window = activityWindow() ?: return
+        WindowCompat.getInsetsController(window, view).hide(WindowInsetsCompat.Type.ime())
     }
 }

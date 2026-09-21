@@ -87,6 +87,8 @@ import com.termux.app.compose.terminal.ComposeSessionManager
 import com.termux.app.compose.terminal.ComposeTerminalSettings
 import com.termux.app.compose.terminal.ComposeTerminalScreen
 import com.termux.app.compose.terminal.engine.TerminalSession as LibTerminalSession
+import com.termux.app.compose.terminal.engine.pid
+import com.termux.app.compose.terminal.engine.sessionExited
 import com.termux.shared.view.KeyboardUtils
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch

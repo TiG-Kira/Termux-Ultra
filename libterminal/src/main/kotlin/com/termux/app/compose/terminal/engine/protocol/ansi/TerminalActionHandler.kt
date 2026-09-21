@@ -1,4 +1,4 @@
-package com.termux.app.compose.terminal.engine.ansi
+package com.termux.app.compose.terminal.engine.protocol.ansi
 
 /**
  * 终端动作回调接口。

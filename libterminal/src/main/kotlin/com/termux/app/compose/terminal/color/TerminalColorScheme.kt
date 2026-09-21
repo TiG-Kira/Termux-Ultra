@@ -6,11 +6,14 @@ import com.termux.app.compose.terminal.text.TextStyle
  * 终端主题基底色板。
  *
  * 决定终端默认前景色、背景色与光标色的基底值（以及 256 色板其余槽位的默认值）。
- * 是可实例化的纯数据类，每个终端实例持有一份（[com.awkoo.libterminal.engine.TerminalEmulator.colourScheme]），
+ * 是可实例化的纯值类，每个终端实例持有一份（[com.awkoo.libterminal.engine.TerminalEmulator.colorScheme]），
  * 不再使用全局单例，因此不同的 view/session 可拥有彼此独立的主题。
  *
  * shell 通过 OSC 序列动态改色时，写入的是 [SparsePalette] 覆盖板，而不是本基底；
  * 因此主题基底保持只读不变，复位只需清空覆盖板。
+ *
+ * 值语义：基于内容判等（[color] 各槽位一致即相等），可在不同 view 间安全复用，
+ * 且 Compose 重组中重建等值实例也不会被误判为"已变更"。
  *
  * @see SparsePalette
  * @see TerminalPaletteResolver
@@ -18,7 +21,7 @@ import com.termux.app.compose.terminal.text.TextStyle
 class TerminalColorScheme private constructor(
     private val colors: IntArray
 ) {
-    /** 取指定槽位的基底色值。 */
+    /** 取指定槽位的基底色值（0..255 为 256 色板，256=前景，257=背景，258=光标）。 */
     fun color(index: Int): Int = colors[index]
 
     /** 默认前景色基底。 */
@@ -30,13 +33,24 @@ class TerminalColorScheme private constructor(
     /** 默认光标色基底。 */
     val cursor: Int get() = colors[TextStyle.COLOR_INDEX_CURSOR]
 
-    /** 完整 259 色数组副本。 */
-    fun toIntArray(): IntArray = colors.copyOf()
+    override fun equals(other: Any?): Boolean =
+        other is TerminalColorScheme && colors.contentEquals(other.colors)
 
-    /** 前 16 色（标准色 + 高亮色），返回列表。 */
-    fun palette16(): List<Int> = colors.copyOfRange(0, 16).toList()
+    override fun hashCode(): Int = colors.contentHashCode()
 
     companion object {
+        /** 槽位索引：默认前景色。 */
+        const val INDEX_FOREGROUND: Int = TextStyle.COLOR_INDEX_FOREGROUND
+
+        /** 槽位索引：默认背景色。 */
+        const val INDEX_BACKGROUND: Int = TextStyle.COLOR_INDEX_BACKGROUND
+
+        /** 槽位索引：默认光标色。 */
+        const val INDEX_CURSOR: Int = TextStyle.COLOR_INDEX_CURSOR
+
+        /** 槽位总数：256 色板 (0..255) + 前景 + 背景 + 光标。 */
+        const val COLOR_COUNT: Int = TextStyle.NUM_INDEXED_COLORS
+
         /** 深色主题基线：白字黑底，光标白。 */
         fun dark(): TerminalColorScheme = TerminalColorScheme(buildDarkPalette())
 
@@ -44,27 +58,43 @@ class TerminalColorScheme private constructor(
         fun light(): TerminalColorScheme = TerminalColorScheme(buildLightPalette())
 
         /**
-         * 从自定义颜色构建主题基底。
+         * 以完整 259 槽位色板构建主题。
          *
-         * @param foreground 前景色（0xAARRGGBB）
-         * @param background 背景色（0xAARRGGBB）
-         * @param cursor 光标色（0xAARRGGBB）
-         * @param palette16 可选的 16 色覆盖；若为 null 则使用标准 Xterm 16 色
+         * @param colors 长度必须为 [COLOR_COUNT] 的数组，槽位含义见 [color]；
+         *               传入数组会被拷贝，之后对原数组的修改不影响本主题。
+         */
+        fun custom(colors: IntArray): TerminalColorScheme {
+            require(colors.size == COLOR_COUNT) {
+                "colors must contain exactly $COLOR_COUNT entries, but got ${colors.size}"
+            }
+            return TerminalColorScheme(colors.copyOf())
+        }
+
+        /**
+         * 基于标准 Xterm 256 色板构建主题，仅覆盖默认前景/背景/光标与前 16 种基础 ANSI 颜色。
+         *
+         * 如需改写 256 色板其余槽位，请使用 [custom] 全量入口。
+         *
+         * @param foreground 默认前景色（0xFFRRGGBB）
+         * @param background 默认背景色（0xFFRRGGBB）
+         * @param cursor 光标颜色（0xFFRRGGBB）
+         * @param ansi16Colors 前 16 种基础 ANSI 颜色（0..7 为标准色，8..15 为高亮色）。
+         *                      缺省时使用 Xterm 标准色。
          */
         fun custom(
             foreground: Int,
             background: Int,
             cursor: Int,
-            palette16: IntArray? = null
+            ansi16Colors: IntArray? = null
         ): TerminalColorScheme {
-            val palette = buildBasePalette()
-            if (palette16 != null) {
-                val copyCount = minOf(palette16.size, 16)
-                System.arraycopy(palette16, 0, palette, 0, copyCount)
+            require(ansi16Colors === null || ansi16Colors.size == 16) {
+                "ansi16Colors must contain exactly 16 entries, but got ${ansi16Colors?.size}"
             }
+            val palette = buildBasePalette()
             palette[TextStyle.COLOR_INDEX_FOREGROUND] = foreground
             palette[TextStyle.COLOR_INDEX_BACKGROUND] = background
             palette[TextStyle.COLOR_INDEX_CURSOR] = cursor
+            ansi16Colors?.copyInto(palette, destinationOffset = 0, startIndex = 0, endIndex = 16)
             return TerminalColorScheme(palette)
         }
 

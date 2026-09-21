@@ -1,4 +1,4 @@
-package com.termux.app.compose.terminal.view
+package com.termux.app.compose.terminal.view.render
 
 import com.termux.app.compose.terminal.color.SparsePalette
 import com.termux.app.compose.terminal.color.TerminalColorScheme

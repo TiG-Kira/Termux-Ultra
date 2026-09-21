@@ -9,7 +9,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.viewinterop.AndroidView
 import com.termux.app.compose.terminal.color.TerminalColorScheme
 import com.termux.app.compose.terminal.engine.TerminalSession
@@ -37,24 +36,25 @@ fun ComposeTerminalScreen(
     Box(
         modifier = modifier.fillMaxSize()
     ) {
+        val resolvedScheme = colorScheme
+            ?: if (useLightTheme) TerminalColorScheme.light() else TerminalColorScheme.dark()
+
         AndroidView(
             factory = { ctx ->
-                LibTerminalView(ctx, useLightTheme).apply {
+                LibTerminalView(ctx).apply {
                     this.textSize = textSize
                     this.typeface = typeface ?: android.graphics.Typeface.MONOSPACE
-                    this.customColorScheme = colorScheme
+                    this.colorScheme = resolvedScheme
+                    this.cursorBlinking = cursorBlink
                 }.also { tv ->
                     terminalView = tv
                 }
             },
             update = { tv ->
-                tv.useLightTheme = useLightTheme
                 tv.textSize = textSize
                 tv.typeface = typeface ?: android.graphics.Typeface.MONOSPACE
-                tv.customColorScheme = colorScheme
-                // cursorBlink 由 TerminalEmulator 内部管理，通过 TerminalView.setBlinkingEnabled setter 无法直接设置，
-                // 但 session.emulator.isTextBlinkingEnabled 可动态控制
-                tv.currentSession?.emulator?.isTextBlinkingEnabled = cursorBlink
+                tv.colorScheme = resolvedScheme
+                tv.cursorBlinking = cursorBlink
                 if (session != null && lastSessionId != session.id) {
                     tv.currentSession = session
                     lastSessionId = session.id

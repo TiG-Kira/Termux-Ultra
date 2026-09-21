@@ -1,4 +1,4 @@
-package com.termux.app.compose.terminal.engine.ansi
+package com.termux.app.compose.terminal.engine.protocol.ansi
 
 import kotlin.math.min
 

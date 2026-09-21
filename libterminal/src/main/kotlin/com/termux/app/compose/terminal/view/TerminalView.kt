@@ -15,13 +15,20 @@ import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputConnection
 import com.termux.app.compose.terminal.color.TerminalColorScheme
 import com.termux.app.compose.terminal.engine.TerminalEmulator
+import com.termux.app.compose.terminal.engine.TerminalCursorStyle
 import com.termux.app.compose.terminal.engine.TerminalSession
 import com.termux.app.compose.terminal.engine.buffer.CursorCoord
 import com.termux.app.compose.terminal.view.input.ImeController
 import com.termux.app.compose.terminal.view.input.KeyInputProcessor
 import com.termux.app.compose.terminal.view.input.TerminalImeConnection
 import com.termux.app.compose.terminal.view.input.TerminalTouchHandler
+import com.termux.app.compose.terminal.view.render.TerminalRenderer
+import com.termux.app.compose.terminal.view.render.TerminalBlinker
+import com.termux.app.compose.terminal.view.render.TerminalPaletteResolver
 import com.termux.app.compose.terminal.view.textselection.TextSelectionCursorController
+import com.termux.app.compose.terminal.view.lifecycle.SessionBinder
+import com.termux.app.compose.terminal.view.interact.TerminalClipboard
+import com.termux.app.compose.terminal.view.interact.ActionModeCustomizer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -67,40 +74,24 @@ inline fun ExtraKeysModifierSnapshot(
  *
  * 键盘处理（[onKeyDown]、[onKeyUp] 等）因与 View 状态和会话 I/O 紧密耦合，保留在此类中。
  *
- * @param useLightTheme 是否使用浅色主题。可在运行时修改，修改且已绑定会话时立即重建配色。
- *                      浅色主题仅调整默认前景/背景/光标三项底色，OSC 动态改色仍作为覆盖层生效。
+ * 渲染配色通过 [colorScheme] 属性完全由外部控制：可在运行时修改，
+ * 修改且已绑定会话时立即重建配色。OSC 动态改色仍作为覆盖层生效。
  */
 class TerminalView(
-    context: Context,
-    useLightTheme: Boolean = false
+    context: Context
 ) : View(context) {
     companion object {
-        /** 虚拟 / 扩展按键键盘的事件来源标识。 */
-        const val KEY_EVENT_SOURCE_VIRTUAL_KEYBOARD = 2
+        /** 虚拟 / 扩展按键键盘的事件来源标识，仅供模块内部使用。 */
+        internal const val KEY_EVENT_SOURCE_VIRTUAL_KEYBOARD = 2
     }
 
     /**
-     * 是否使用浅色主题基底。
+     * 终端渲染配色的主题基底。
      *
      * 可在运行时修改：若已有绑定会话，会立即重建该会话的渲染配色（主题基底 + OSC 覆盖板）。
+     * shell 通过 OSC 动态改色作为覆盖板叠在此基底之上，仍保持生效。
      */
-    var useLightTheme: Boolean = useLightTheme
-        set(value) {
-            if (value == field) return
-            field = value
-            val session = currentSession ?: return
-            applyColorScheme(session)
-            invalidate()
-        }
-
-    /**
-     * 自定义终端配色方案。
-     *
-     * 若设置非 null，[applyColorScheme] 优先使用此值；
-     * 否则退回 [useLightTheme] 决定的默认 dark/light 基底。
-     * 可运行时修改，已绑定会话会立即重建配色并重绘。
-     */
-    var customColorScheme: TerminalColorScheme? = null
+    var colorScheme: TerminalColorScheme = TerminalColorScheme.dark()
         set(value) {
             if (value == field) return
             field = value
@@ -173,11 +164,11 @@ class TerminalView(
 
             if (value != null) {
                 applyColorScheme(value)
+                value.emulator.cursorStyle = cursorStyle
                 updateSize()
                 onScreenUpdated()
-                cursorBlinker.start(value.emulator)
-                textBlinker.start(value.emulator)
-                toggleIme(true)
+                if (cursorBlinking) cursorBlinker.start(value.emulator) else cursorBlinker.stop()
+                if (textBlinking) textBlinker.start(value.emulator) else textBlinker.stop()
             } else {
                 currentPalette = null
                 invalidate()
@@ -185,21 +176,20 @@ class TerminalView(
         }
 
     /**
-     * 依据当前 [useLightTheme] 为指定会话重建主题基底与合成调色板。
+     * 依据当前 [colorScheme] 为指定会话重建主题基底与合成调色板。
      *
-     * 主题基底只调整默认前景/背景/光标三项底色；OSC 动态改色作为
-     * [TerminalPaletteResolver] 的覆盖板盖在主题之上，仍保持生效。
+     * OSC 动态改色作为 [TerminalPaletteResolver] 的覆盖板盖在主题之上，仍保持生效。
      */
     private fun applyColorScheme(session: TerminalSession) {
-        val scheme = customColorScheme
-            ?: if (useLightTheme) TerminalColorScheme.light() else TerminalColorScheme.dark()
-        session.emulator.colorScheme = scheme
-        currentPalette = TerminalPaletteResolver(scheme, session.emulator.mPalette)
+        synchronized(session.emulator) {
+            session.emulator.colorScheme = colorScheme
+        }
+        currentPalette = TerminalPaletteResolver(colorScheme, session.emulator.mPalette)
     }
 
     /**
      * 当前会话渲染用的合成颜色查询对象（主题基底 + OSC 稀疏覆盖板）。
-     * 绑定会话时构建，主题基底由 [useLightTheme] 决定。
+     * 绑定会话时构建，主题基底由 [colorScheme] 决定。
      */
     private var currentPalette: TerminalPaletteResolver? = null
 
@@ -215,7 +205,6 @@ class TerminalView(
 
     var typeface: Typeface = Typeface.MONOSPACE
         set(value) {
-            if (value == field) return
             field = value
             mRenderer = TerminalRenderer(textSize.dp, field)
             updateSize()
@@ -226,6 +215,54 @@ class TerminalView(
 
     /** 浮动工具栏定制器，用于本地化按钮文字或添加额外操作。 */
     var actionModeCustomizer: ActionModeCustomizer? = null
+
+    /**
+     * 终端默认光标样式。
+     *
+     * 设置后立即写入当前模拟器，绑定新会话时也会应用该默认值。
+     * 注意：应用 / Shell 通过 DECSET 序列主动切换的光标形状优先于该默认值，不会被覆盖。
+     */
+    var cursorStyle: TerminalCursorStyle = TerminalCursorStyle.BAR
+        set(value) {
+            if (field == value) return
+            field = value
+            mEmulator?.cursorStyle = value
+            invalidate()
+        }
+
+    /**
+     * 光标闪烁开关（默认开启）。
+     *
+     * 关闭时立即停止闪烁动画，光标保持常亮；绑定新会话时同样生效。
+     */
+    var cursorBlinking: Boolean = true
+        set(value) {
+            if (field == value) return
+            field = value
+            val emulator = mEmulator
+            if (value) {
+                emulator?.let { cursorBlinker.start(it) }
+            } else {
+                cursorBlinker.stop()
+            }
+        }
+
+    /**
+     * 文本（带闪烁属性）闪烁开关（默认开启）。
+     *
+     * 关闭时立即停止闪烁动画，相关文本保持常亮；绑定新会话时同样生效。
+     */
+    var textBlinking: Boolean = true
+        set(value) {
+            if (field == value) return
+            field = value
+            val emulator = mEmulator
+            if (value) {
+                emulator?.let { textBlinker.start(it) }
+            } else {
+                textBlinker.stop()
+            }
+        }
 
     private val textSelectionCursorController = TextSelectionCursorController(this)
 
@@ -369,6 +406,9 @@ class TerminalView(
 
     fun toggleIme(show: Boolean? = null) = imeController.toggleIme(show)
 
+    /** 隐藏软键盘（不请求焦点），供覆盖层（如设置页）打开时收起键盘。 */
+    fun hideIme() = imeController.hideIme()
+
     /**
      * 外部修饰键状态读取器（如来自屏幕扩展按键栏）。
      * 设置后，[onKeyDown] 会同时参考 [KeyEvent] 元状态和此读取器，
@@ -400,7 +440,25 @@ class TerminalView(
         return true
     }
 
-    fun inputCodePoint(
+    /**
+     * 将虚拟 / 扩展按键栏产生的 Unicode 码点注入终端。
+     *
+     * 与 [android.view.KeyEvent] 注入不同，此入口专供应用自建的扩展按键栏使用；
+     * 内部固定为虚拟来源，调用方无需感知来源标识。
+     */
+    fun inputVirtualKeyCodePoint(
+        codePoint: Int,
+        controlDownFromEvent: Boolean = false,
+        leftAltDownFromEvent: Boolean = false
+    ) =
+        inputCodePoint(
+            KEY_EVENT_SOURCE_VIRTUAL_KEYBOARD,
+            codePoint,
+            controlDownFromEvent,
+            leftAltDownFromEvent
+        )
+
+    internal fun inputCodePoint(
         eventSource: Int,
         codePoint: Int,
         controlDownFromEvent: Boolean,
@@ -487,9 +545,6 @@ class TerminalView(
 
     init {
         isVerticalScrollBarEnabled = true
-        isFocusable = true
-        isFocusableInTouchMode = true
-        defaultFocusHighlightEnabled = false
     }
 
     private val Int.dp: Int

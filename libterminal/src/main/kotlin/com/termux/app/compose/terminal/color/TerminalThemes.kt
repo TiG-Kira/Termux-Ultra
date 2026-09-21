@@ -28,7 +28,7 @@ object TerminalThemes {
                 foreground = 0xFFEBDBB2.toInt(),
                 background = 0xFF282828.toInt(),
                 cursor = 0xFFEBDBB2.toInt(),
-                palette16 = intArrayOf(
+                ansi16Colors = intArrayOf(
                     0xFF282828.toInt(), 0xFFCC241D.toInt(), 0xFF98971A.toInt(), 0xFFD79921.toInt(),
                     0xFF458588.toInt(), 0xFFB16286.toInt(), 0xFF689D6A.toInt(), 0xFFA89984.toInt(),
                     0xFF928374.toInt(), 0xFFFB4934.toInt(), 0xFFB8BB26.toInt(), 0xFFFABD2F.toInt(),
@@ -42,7 +42,7 @@ object TerminalThemes {
                 foreground = 0xFFF8F8F2.toInt(),
                 background = 0xFF282A36.toInt(),
                 cursor = 0xFFF8F8F2.toInt(),
-                palette16 = intArrayOf(
+                ansi16Colors = intArrayOf(
                     0xFF21222C.toInt(), 0xFFFF5555.toInt(), 0xFF50FA7B.toInt(), 0xFFF1FA8C.toInt(),
                     0xFFBD93F9.toInt(), 0xFFFF79C6.toInt(), 0xFF8BE9FD.toInt(), 0xFFBFBFBF.toInt(),
                     0xFF4D4D4D.toInt(), 0xFFFF6E6E.toInt(), 0xFF69FF94.toInt(), 0xFFFFFFA5.toInt(),
@@ -56,7 +56,7 @@ object TerminalThemes {
                 foreground = 0xFFC0CAF5.toInt(),
                 background = 0xFF1A1B26.toInt(),
                 cursor = 0xFFC0CAF5.toInt(),
-                palette16 = intArrayOf(
+                ansi16Colors = intArrayOf(
                     0xFF1A1B26.toInt(), 0xFFF7768E.toInt(), 0xFF9ECE6A.toInt(), 0xFFE0AF68.toInt(),
                     0xFF7AA2F7.toInt(), 0xFFBB9AF7.toInt(), 0xFF7DCFFF.toInt(), 0xFFA9B1D6.toInt(),
                     0xFF565F89.toInt(), 0xFFF7768E.toInt(), 0xFF9ECE6A.toInt(), 0xFFE0AF68.toInt(),
@@ -70,7 +70,7 @@ object TerminalThemes {
                 foreground = 0xFFCDD6F4.toInt(),
                 background = 0xFF1E1E2E.toInt(),
                 cursor = 0xFFCDD6F4.toInt(),
-                palette16 = intArrayOf(
+                ansi16Colors = intArrayOf(
                     0xFF45475A.toInt(), 0xFFF38BA8.toInt(), 0xFFA6E3A1.toInt(), 0xFFF9E2AF.toInt(),
                     0xFF89B4FA.toInt(), 0xFFF5C2E7.toInt(), 0xFF94E2D5.toInt(), 0xFFBAC2DE.toInt(),
                     0xFF585B70.toInt(), 0xFFF38BA8.toInt(), 0xFFA6E3A1.toInt(), 0xFFF9E2AF.toInt(),
@@ -100,7 +100,7 @@ object TerminalThemes {
                 foreground = 0xFF4C4F69.toInt(),
                 background = 0xFFEFF1F5.toInt(),
                 cursor = 0xFF4C4F69.toInt(),
-                palette16 = intArrayOf(
+                ansi16Colors = intArrayOf(
                     0xFFCC000000.toInt(), 0xFFD20F39.toInt(), 0xFF40A02B.toInt(), 0xFFDF8E1D.toInt(),
                     0xFF1E66F5.toInt(), 0xFFEA76CB.toInt(), 0xFF179299.toInt(), 0xFFACB0BE.toInt(),
                     0xFF6C6F85.toInt(), 0xFFD20F39.toInt(), 0xFF40A02B.toInt(), 0xFFDF8E1D.toInt(),
