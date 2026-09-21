@@ -42,6 +42,13 @@ internal class TerminalTouchHandler(
     fun onTouchEvent(event: MotionEvent): Boolean {
         val emulator = view.mEmulator ?: return true
 
+        // 经典引擎 Java TerminalView 在 ACTION_DOWN 时会 requestFocus()，
+        // Nova 引擎 Compose 模式下 View 必须获得焦点才能打开 IME 软键盘。
+        // 没有这行，用户点击终端也无法弹输入法，命令也就无法输入。
+        if (event.action == MotionEvent.ACTION_DOWN) {
+            view.requestFocus()
+        }
+
         if (view.isSelectingText) {
             view.updateFloatingToolbarVisibility(event)
             gestureRecognizer.onTouchEvent(event)
