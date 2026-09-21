@@ -5,13 +5,12 @@ import com.termux.R
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.AnimatedContentTransitionScope
-import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
@@ -669,10 +668,10 @@ fun PackageManagerScreen(
         transitionSpec = {
             if (targetState != null) {
                 (slideInHorizontally { it } + fadeIn()) togetherWith
-                (slideOutHorizontally { -it / 3 } + fadeOut()) using SizeTransform(clip = false)
+                (slideOutHorizontally { -it / 3 } + fadeOut())
             } else {
                 (slideInHorizontally { -it / 3 } + fadeIn()) togetherWith
-                (slideOutHorizontally { it } + fadeOut()) using SizeTransform(clip = false)
+                (slideOutHorizontally { it } + fadeOut())
             }
         },
         label = "pkg-detail-anim"
