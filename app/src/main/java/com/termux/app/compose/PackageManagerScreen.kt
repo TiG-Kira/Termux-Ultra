@@ -1086,6 +1086,7 @@ fun PackageManagerScreen(
     }
 }
 }
+}
 
 @Composable
 private fun EmptyStateView(
