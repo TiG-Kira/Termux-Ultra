@@ -1337,5 +1337,44 @@
     <string name="action_close">关闭</string>
     <string name="action_add">添加</string>
     <string name="action_delete">删除</string>
-</resources>
 
+    <!-- Package Manager Enhance -->
+    <string name="pkg_view_mode">软件包管理显示方式</string>
+    <string name="pkg_view_mode_desc">切换分类视图或列表视图</string>
+    <string name="pkg_view_mode_category">分类视图</string>
+    <string name="pkg_view_mode_list">列表视图</string>
+    <string name="pkg_empty_installed">还没有安装任何软件包</string>
+    <string name="pkg_empty_installed_hint">前往「未安装」页面挑选第一个包吧</string>
+    <string name="pkg_empty_available">所有可用包都已安装 🎉</string>
+    <string name="pkg_empty_available_hint">刷新软件源看看有没有新包</string>
+    <string name="pkg_empty_search">未找到匹配的软件包</string>
+    <string name="pkg_empty_search_hint">换个关键字试试，或刷新软件源</string>
+    <string name="pkg_empty_section">这个分类里暂时没有包</string>
+    <string name="pkg_empty_section_hint">试试其他分类</string>
+    <string name="pkg_all_packages">全部软件包</string>
+    <string name="pkg_unclassified">其他</string>
+    <string name="pkg_category_count_suffix">个包</string>
+    <string name="pkg_category_back">返回分类</string>
+    <string name="pkg_cat_admin">系统管理</string>
+    <string name="pkg_cat_net">网络工具</string>
+    <string name="pkg_cat_utils">实用工具</string>
+    <string name="pkg_cat_shell">Shell 与终端</string>
+    <string name="pkg_cat_python">Python</string>
+    <string name="pkg_cat_perl">Perl</string>
+    <string name="pkg_cat_ruby">Ruby</string>
+    <string name="pkg_cat_java">Java</string>
+    <string name="pkg_cat_devel">开发工具</string>
+    <string name="pkg_cat_libs">开发库</string>
+    <string name="pkg_cat_database">数据库</string>
+    <string name="pkg_cat_graphics">图形图像处理</string>
+    <string name="pkg_cat_editors">文本编辑器</string>
+    <string name="pkg_cat_sound">音频与多媒体</string>
+    <string name="pkg_cat_video">视频工具</string>
+    <string name="pkg_cat_x11">X11 图形应用</string>
+    <string name="pkg_cat_mail">邮件工具</string>
+    <string name="pkg_cat_math">数学计算</string>
+    <string name="pkg_cat_science">科学计算</string>
+    <string name="pkg_cat_vcs">版本控制</string>
+    <string name="pkg_cat_oldlibs">遗留库</string>
+    <string name="pkg_cat_other">其他</string>
+</resources>

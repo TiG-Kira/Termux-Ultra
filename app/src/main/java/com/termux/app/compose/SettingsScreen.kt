@@ -619,6 +619,23 @@ val composeTextBlinking by com.termux.app.compose.terminal.ComposeTerminalSettin
                                 SettingIcon(R.drawable.ic_swap, contentDescription = context.getString(R.string.horizontal_tip_layout))
                             }
                         )
+                            OverlayDropdownPreference(
+                            title = context.getString(R.string.pkg_view_mode),
+                            summary = if (prefs.getInt("KEY_PKG_VIEW_MODE", 0) == 0)
+                                context.getString(R.string.pkg_view_mode_category)
+                                else context.getString(R.string.pkg_view_mode_list),
+                            items = listOf(
+                                context.getString(R.string.pkg_view_mode_category),
+                                context.getString(R.string.pkg_view_mode_list)
+                            ),
+                            selectedIndex = prefs.getInt("KEY_PKG_VIEW_MODE", 0),
+                            onSelectedIndexChange = { idx ->
+                                prefs.edit().putInt("KEY_PKG_VIEW_MODE", idx).apply()
+                            },
+                            startAction = {
+                                SettingIcon(R.drawable.ic_folder, contentDescription = context.getString(R.string.pkg_view_mode))
+                            }
+                        )
                     }
                 }
             }
