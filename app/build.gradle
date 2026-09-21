@@ -205,7 +205,7 @@ implementation "io.coil-kt:coil:2.7.0"
     implementation "org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0"
     implementation "org.connectbot:sshlib:2.2.36"
 
-    implementation "com.squareup.okhttp3:okhttp:4.12.0"
+    implementation "com.squareup.okhttp3:okhttp:5.5.0"
 
     // 加密存储 GitHub 登录凭据（AES256-SIV / GCM，主密钥存于 Android Keystore）
     // 排除 tink-android，避免与 sshlib 引入的 JVM tink:1.20.0 产生重复类冲突；
