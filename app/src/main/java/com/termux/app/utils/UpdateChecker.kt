@@ -72,7 +72,9 @@ sealed class UpdateResult {
 
     data class UpToDate(
         val currentVersion: AppVersion,
-        val currentVersionName: String
+        val currentVersionName: String,
+        /** 当前版本自身的 Release Notes；无则为空串。已是最新版时用于展示更新日志。 */
+        val releaseNotes: String = ""
     ) : UpdateResult()
 
     data object CheckFailed : UpdateResult()
@@ -124,6 +126,7 @@ object UpdateChecker {
                     val releases = JSONArray(body)
 
                     var currentTagMatched = false
+                    var currentReleaseNotes = ""
                     var bestRelease: JSONObject? = null
                     var bestVersion: AppVersion? = null
                     var bestVersionName = ""
@@ -143,6 +146,13 @@ object UpdateChecker {
 
                         if (tagVersion == currentVersion) {
                             currentTagMatched = true
+                            // 记录当前版本自身的 Release Notes，供「已是最新版」时展示
+                            val notes = release.optString("body", "")
+                            if (tagName.equals(currentVersionName, ignoreCase = true)) {
+                                currentReleaseNotes = notes
+                            } else if (currentReleaseNotes.isEmpty()) {
+                                currentReleaseNotes = notes
+                            }
                         }
 
                         val isPreRelease = release.optBoolean("prerelease", false)
@@ -163,7 +173,8 @@ object UpdateChecker {
                     if (bestVersion == null || bestVersion <= currentVersion) {
                         return@withContext UpdateResult.UpToDate(
                             currentVersion = currentVersion,
-                            currentVersionName = currentVersionName
+                            currentVersionName = currentVersionName,
+                            releaseNotes = currentReleaseNotes
                         )
                     }
 

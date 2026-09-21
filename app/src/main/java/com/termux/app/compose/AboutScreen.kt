@@ -671,7 +671,14 @@ fun AboutScreen(onBack: () -> Unit) {
             onDismissRequest = { showUpdateDialog = false },
             content = {
                 Column(modifier = Modifier.padding(top = 8.dp)) {
-                if (result is UpdateResult.UpdateAvailable && result.releaseNotes.isNotBlank()) {
+                // 有新版本时展示新版本的 Release Notes；
+                // 已是最新版时，若当前版本自身有 Release Notes 也照样展示。
+                val notesToShow = when (result) {
+                    is UpdateResult.UpdateAvailable -> result.releaseNotes
+                    is UpdateResult.UpToDate -> result.releaseNotes
+                    is UpdateResult.CheckFailed -> ""
+                }
+                if (notesToShow.isNotBlank()) {
                     Text(
                         text = context.getString(R.string.update_log),
                         style = TextStyle(
@@ -681,8 +688,8 @@ fun AboutScreen(onBack: () -> Unit) {
                         ),
                         modifier = Modifier.padding(bottom = 4.dp)
                     )
-                    MarkdownText(
-                        text = result.releaseNotes,
+                    MarkdownContent(
+                        text = notesToShow,
                         modifier = Modifier
                             .padding(bottom = 16.dp)
                             .heightIn(max = 200.dp)
@@ -979,81 +986,6 @@ private fun InfoRow(title: String, value: String) {
     }
 }
 
-@Composable
-private fun MarkdownText(text: String, modifier: Modifier = Modifier) {
-    val lines = text.lines()
-    Column(modifier = modifier) {
-        lines.forEach { line ->
-            when {
-                line.startsWith("### ") -> {
-                    Text(
-                        text = line.removePrefix("### "),
-                        style = TextStyle(
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MiuixTheme.colorScheme.onSurface
-                        ),
-                        modifier = Modifier.padding(top = 6.dp, bottom = 2.dp)
-                    )
-                }
-                line.startsWith("## ") -> {
-                    Text(
-                        text = line.removePrefix("## "),
-                        style = TextStyle(
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MiuixTheme.colorScheme.onSurface
-                        ),
-                        modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
-                    )
-                }
-                line.startsWith("# ") -> {
-                    Text(
-                        text = line.removePrefix("# "),
-                        style = TextStyle(
-                            fontSize = 17.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MiuixTheme.colorScheme.onSurface
-                        ),
-                        modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
-                    )
-                }
-                line.startsWith("- ") || line.startsWith("* ") -> {
-                    Row(
-                        modifier = Modifier.padding(vertical = 1.dp)
-                    ) {
-                        Text(
-                            text = "• ",
-                            style = TextStyle(
-                                fontSize = 13.sp,
-                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                            )
-                        )
-                        Text(
-                            text = line.substring(2),
-                            style = TextStyle(
-                                fontSize = 13.sp,
-                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                            )
-                        )
-                    }
-                }
-                line.isBlank() -> {
-                    Spacer(modifier = Modifier.height(4.dp))
-                }
-                else -> {
-                    Text(
-                        text = line,
-                        style = TextStyle(
-                            fontSize = 13.sp,
-                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                        )
-                    )
-                }
-            }
-        }
-    }
-}
 
 private fun formatUpdateFileSize(bytes: Long): String {
     return when {
