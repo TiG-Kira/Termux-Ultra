@@ -3,6 +3,12 @@ name: 发布 APK 到 Release
 on:
   release:
     types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "要附加 APK 的 Release tag（workflow_dispatch 时必填；release 事件自动取触发 tag）"
+        required: false
+        type: string
 
 permissions:
   contents: write
@@ -31,7 +37,14 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          tag="${{ github.event.release.tag_name }}"
+          # release 事件 → 触发 tag；workflow_dispatch → 手动输入的 tag
+          tag="${{ github.event.release.tag_name || inputs.tag }}"
+          if [ -z "$tag" ]; then
+            echo "::error::无法确定 tag：release 事件的 tag_name 和 workflow_dispatch 的 inputs.tag 都为空"
+            exit 1
+          fi
+          echo "目标 tag: $tag"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
           api_url="https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/tags/${tag}"
           assets=$(curl -s -H "Authorization: token $GITHUB_TOKEN" "$api_url" \
             | jq -r '.assets[]?.name' 2>/dev/null | grep -i '\.apk$' || true)
@@ -78,18 +91,35 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          tag="${{ github.event.release.tag_name }}"
+          tag="${{ steps.check.outputs.tag }}"
           upload_url="https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/tags/${tag}"
           # 从 API 拿 upload_url（带 ?name= 参数模板）
           upload_base=$(curl -s -H "Authorization: token $GITHUB_TOKEN" "$upload_url" \
             | jq -r '.upload_url' | sed 's/{?name,label}//')
+          echo "upload_base=$upload_base"
 
-          for apk in ${{ steps.collect.outputs.paths }}; do
+          # steps.collect.outputs.paths 是多行文本（heredoc 写入 GITHUB_OUTPUT），
+          # 用 while read 逐行遍历，避免 shell 把多行内联展开成语法错误。
+          echo "${{ steps.collect.outputs.paths }}" | while IFS= read -r apk; do
+            # 跳过空行
+            [ -z "$apk" ] && continue
+            [ ! -f "$apk" ] && { echo "⚠️  跳过不存在的路径: $apk"; continue; }
             name=$(basename "$apk")
-            echo "上传 $name ..."
-            curl -s -H "Authorization: token $GITHUB_TOKEN" \
-                 -H "Content-Type: application/vnd.android.package-archive" \
-                 --data-binary @"$apk" \
-                 "${upload_base}?name=${name}" \
-              | jq -r '.html_url // .message // .url'
+            size=$(stat -c%s "$apk")
+            echo "上传 $name ($size bytes) ..."
+            resp=$(curl -s -w "\nHTTP_CODE:%{http_code}" \
+                     -H "Authorization: token $GITHUB_TOKEN" \
+                     -H "Content-Type: application/vnd.android.package-archive" \
+                     --data-binary @"$apk" \
+                     "${upload_base}?name=${name}")
+            body=$(echo "$resp" | sed '$d')
+            http_code=$(echo "$resp" | tail -1 | sed 's/HTTP_CODE://')
+            if [ "$http_code" = "201" ]; then
+              url=$(echo "$body" | jq -r '.html_url // .url // empty')
+              echo "✅ 上传成功: $url"
+            else
+              echo "❌ 上传失败 HTTP $http_code"
+              echo "$body"
+              exit 1
+            fi
           done
