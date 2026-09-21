@@ -145,6 +145,16 @@ object ComposeTerminalSettings {
         edit { it.putBoolean("cursor_blink", value) }
     }
 
+    fun setCursorStyle(value: TerminalCursorStyle) {
+        _cursorStyleName.value = value.name
+        edit { it.putString("cursor_style", value.name) }
+    }
+
+    fun setTextBlinking(value: Boolean) {
+        _textBlinking.value = value
+        edit { it.putBoolean("text_blinking", value) }
+    }
+
     fun setColorScheme(name: String) {
         _colorSchemeName.value = name
         _colorScheme.value = TerminalThemes.findByName(name)?.terminalColorScheme
