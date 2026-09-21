@@ -3,22 +3,16 @@ package com.termux.app.github
 /**
  * GitHub OAuth 与仓库交互的常量配置。
  *
- * 本项目使用 **PKCE（Authorization Code + PKCE, S256）** 完成浏览器授权回调，
- * 因此【不需要也不应写入 Client Secret】——OAuth App 的 Client ID 本身是公开信息，
+ * 本项目登录使用 **Device Flow（设备码）**：应用申请设备码并展示，
+ * 用户在浏览器输入设备码完成授权，应用轮询换取令牌。
+ * 因此【不需要也不应写入 Client Secret】——Client ID 本身是公开信息，
  * 而 Client Secret 一旦随 APK 发布即可被任何人提取。
  */
 internal object GitHubConfig {
     /** OAuth App Client ID（公开信息，非机密） */
     const val CLIENT_ID = "Ov23li5nucDUhazywwXD"
 
-    /** 本地回环回调地址，需与 OAuth App 中登记的 Callback URL 一致 */
-    const val REDIRECT_URI = "http://127.0.0.1:6241/callback"
-    const val CALLBACK_PORT = 6241
-    const val CALLBACK_PATH = "/callback"
-
-    /** 授权端点 */
-    const val AUTHORIZE_URL = "https://github.com/login/oauth/authorize"
-    /** Token 交换端点（三种 grant_type 共用） */
+    /** Token 交换端点（Device Flow 轮询用） */
     const val TOKEN_URL = "https://github.com/login/oauth/access_token"
     /** Device Flow 设备码申请端点 */
     const val DEVICE_CODE_URL = "https://github.com/login/device/code"

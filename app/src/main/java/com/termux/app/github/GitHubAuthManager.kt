@@ -1,48 +1,31 @@
 package com.termux.app.github
 
 import android.content.Context
-import android.content.Intent
-import android.net.Uri
 import android.os.Handler
-import com.termux.R
 import android.os.Looper
+import com.termux.R
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.withContext
 import okhttp3.FormBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
-import java.io.BufferedReader
-import java.io.InputStreamReader
-import java.io.OutputStream
-import java.net.InetAddress
-import java.net.ServerSocket
-import java.net.Socket
-import java.net.URLEncoder
-import java.nio.charset.StandardCharsets
-import java.security.MessageDigest
-import java.security.SecureRandom
-import java.util.Base64
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * GitHub 登录：Authorization Code + PKCE 回环回调 **与** Device Flow 双通道并行。
+ * GitHub 登录：仅使用 **Device Flow**（设备码）。
  *
- * 两条链路同时启动，先拿到 Access Token 的一方胜出并被用于建立登录状态：
- * - 主通道：本机 6241 端口监听 `http://127.0.0.1:6241/callback`，浏览器完成授权后回调携带 code；
- * - 备用通道：Device Flow 轮询，若回环端口不可用或用户迟迟未通过浏览器返回，则它自动接管。
+ * 用户点击登录后，弹窗展示一次性设备码与授权地址，由用户自行在浏览器/其他设备完成授权；
+ * 应用只负责轮询令牌，不再主动拉起浏览器，也不再监听任何本地端口。
  *
- * 全程使用 PKCE（S256），因此不依赖 Client Secret。
+ * 全程不使用 Client Secret——Device Flow 只依赖公开的 Client ID。
  */
 class GitHubLoginRunner(private val context: Context) {
 
@@ -58,13 +41,13 @@ class GitHubLoginRunner(private val context: Context) {
         .build()
 
     @Volatile
-    private var serverSocket: ServerSocket? = null
-
-    @Volatile
     private var cancelled = false
 
     private val finished = AtomicBoolean(false)
 
+    /**
+     * @param onDeviceAuth 拿到设备码后回调，UI 据此展示设备码与授权地址
+     */
     fun start(
         onStatus: (String) -> Unit,
         onDeviceAuth: (GitHubDeviceAuth) -> Unit,
@@ -81,19 +64,16 @@ class GitHubLoginRunner(private val context: Context) {
                 if (!cancelled && finished.compareAndSet(false, true)) {
                     postToMain { onFailure(t.message ?: t.javaClass.simpleName) }
                 }
-            } finally {
-                closeServerSocket()
             }
         }
     }
 
     fun cancel() {
         cancelled = true
-        closeServerSocket()
         runCatching { scope.cancel() }
     }
 
-    // ---------------------------------------------------------------- 竞速主体
+    // ---------------------------------------------------------------- 主流程
 
     private suspend fun doLogin(
         onStatus: (String) -> Unit,
@@ -101,62 +81,8 @@ class GitHubLoginRunner(private val context: Context) {
     ): GitHubSession {
         val uiDeviceAuth: (GitHubDeviceAuth) -> Unit = { auth -> postToMain { onDeviceAuth(auth) } }
         status(onStatus, R.string.github_login_preparing)
-
-        val server = withContext(Dispatchers.IO) {
-            runCatching {
-                ServerSocket(GitHubConfig.CALLBACK_PORT, 1, InetAddress.getByName("127.0.0.1")).apply {
-                    soTimeout = 0
-                    reuseAddress = true
-                }
-            }.getOrNull()
-        }
-        serverSocket = server
-
-        // 端口被占用时没有回环可用，直接进入 Device Flow 单通道
-        if (server == null) {
-            status(onStatus, R.string.github_login_port_busy)
-            val bundle = runDeviceFlow(uiDeviceAuth) { launchBrowser(it) }
-            return completeLogin(bundle, onStatus)
-        }
-
-        return coroutineScope {
-            val verifier = randomUrlSafeString(32)
-            val challenge = sha256Base64Url(verifier)
-            val state = randomUrlSafeString(16)
-
-            var loopback: Deferred<Result<TokenBundle>>? = null
-            var device: Deferred<Result<TokenBundle>>? = null
-            try {
-                val socket = server
-                loopback = async(Dispatchers.IO) { runCatching { awaitLoopbackCode(socket, state, verifier) } }
-                device = async(Dispatchers.IO) {
-                    // 备用通道：不主动打开设备认证页，避免与主通道的浏览器页面互相覆盖
-                    runCatching { runDeviceFlow(uiDeviceAuth) { /* no-op */ } }
-                }
-
-                status(onStatus, R.string.github_login_waiting_browser)
-                launchBrowser(authorizeUrl(challenge, state))
-
-                val first = select<Pair<Boolean, Result<TokenBundle>>> {
-                    loopback!!.onAwait { Pair(false, it) }
-                    device!!.onAwait { Pair(true, it) }
-                }
-                val bundle = if (first.second.isSuccess) {
-                    first.second.getOrThrow()
-                } else if (first.first) {
-                    // Device Flow 先失败（授权被拒 / 设备码过期），等回环
-                    loopback!!.await().getOrThrow()
-                } else {
-                    // 回环先失败（用户未授权返回 / 端口通讯被中断），等 Device Flow
-                    device!!.await().getOrThrow()
-                }
-                completeLogin(bundle, onStatus)
-            } finally {
-                loopback?.cancel()
-                device?.cancel()
-                closeServerSocket()
-            }
-        }
+        val bundle = runDeviceFlow(uiDeviceAuth)
+        return completeLogin(bundle, onStatus)
     }
 
     private suspend fun completeLogin(bundle: TokenBundle, onStatus: (String) -> Unit): GitHubSession {
@@ -169,82 +95,23 @@ class GitHubLoginRunner(private val context: Context) {
             user = user,
             loginAtMillis = System.currentTimeMillis()
         )
+        // 同步落盘：写完再回调成功，避免 UI 先进入已登录态而存储尚未生效
         GitHubSessionStore.save(appContext, session)
         return session
-    }
-
-    // ---------------------------------------------------------------- 回环通道
-
-    private suspend fun awaitLoopbackCode(server: ServerSocket, state: String, verifier: String): TokenBundle =
-        withContext(Dispatchers.IO) {
-            var client: Socket? = null
-            try {
-                client = server.accept()
-                client.soTimeout = 8_000
-                val reader = BufferedReader(InputStreamReader(client.getInputStream(), StandardCharsets.UTF_8))
-                val requestLine = reader.readLine().orEmpty()
-                // 丢弃请求头，读到空行为止
-                while (true) {
-                    val line = reader.readLine() ?: break
-                    if (line.isEmpty()) break
-                }
-                respond(client)
-
-                if (!requestLine.startsWith("GET")) error("unexpected request: $requestLine")
-                val target = requestLine.split(" ").getOrNull(1).orEmpty()
-                val params = queryParams(target)
-                if (params["error"].isNullOrBlank()) {
-                    val code = params["code"] ?: error(appContext.getString(R.string.github_login_no_code))
-                    val returnedState = params["state"].orEmpty()
-                    if (returnedState != state) error(appContext.getString(R.string.github_login_state_mismatch))
-                    return@withContext exchangeCodeForToken(code, verifier)
-                } else {
-                    error(params["error_description"].takeIf { !it.isNullOrBlank() } ?: params["error"]!!)
-                }
-            } finally {
-                runCatching { client?.close() }
-            }
-        }
-
-    private fun respond(client: Socket) {
-        runCatching {
-            val html = "<html><head><meta charset=\"utf-8\"><title>${GitHubConfig.REPO_NAME}</title></head>" +
-                "<body style=\"font-family:sans-serif;text-align:center;padding-top:80px\">" +
-                "<h2>${appContext.getString(R.string.github_login_callback_done)}</h2></body></html>"
-            val out: OutputStream = client.getOutputStream()
-            out.write(("HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\n" +
-                "Content-Length: ${html.toByteArray(StandardCharsets.UTF_8).size}\r\nConnection: close\r\n\r\n" +
-                html).toByteArray(StandardCharsets.UTF_8))
-            out.flush()
-            out.close()
-        }
-    }
-
-    private suspend fun exchangeCodeForToken(code: String, verifier: String): TokenBundle = withContext(Dispatchers.IO) {
-        val body = FormBody.Builder()
-            .add("client_id", GitHubConfig.CLIENT_ID)
-            .add("code", code)
-            .add("redirect_uri", GitHubConfig.REDIRECT_URI)
-            .add("grant_type", "authorization_code")
-            .add("code_verifier", verifier)
-            .build()
-        parseToken(executeForm(GitHubConfig.TOKEN_URL, body))
     }
 
     // ---------------------------------------------------------------- 设备码通道
 
     private suspend fun runDeviceFlow(
-        onDeviceAuth: (GitHubDeviceAuth) -> Unit,
-        onOpenVerification: (String) -> Unit
+        onDeviceAuth: (GitHubDeviceAuth) -> Unit
     ): TokenBundle = withContext(Dispatchers.IO) {
         val hello = requestDeviceCode()
         onDeviceAuth(hello.second)
-        onOpenVerification(hello.second.verificationUri)
 
         val deadline = System.currentTimeMillis() + hello.first.expiresInSeconds * 1000L
         var waitSeconds = hello.first.intervalSeconds
         while (System.currentTimeMillis() < deadline) {
-            if (cancelled) throw kotlinx.coroutines.CancellationException("cancelled")
+            if (cancelled) throw CancellationException("cancelled")
             delay(waitSeconds * 1000L)
             val body = FormBody.Builder()
                 .add("client_id", GitHubConfig.CLIENT_ID)
@@ -323,69 +190,6 @@ class GitHubLoginRunner(private val context: Context) {
             }
             return text
         }
-    }
-
-    private fun parseToken(text: String): TokenBundle {
-        val json = JSONObject(text)
-        val token = json.optString("access_token", "")
-        if (token.isEmpty()) {
-            error(json.optString("error_description", "").ifBlank {
-                json.optString("error", "").ifBlank { appContext.getString(R.string.github_login_failed_unexpected) }
-            })
-        }
-        return TokenBundle(
-            token = token,
-            tokenType = json.optString("token_type", "bearer"),
-            scope = json.optString("scope", "")
-        )
-    }
-
-    private fun authorizeUrl(challenge: String, state: String): String {
-        val encodedRedirect = URLEncoder.encode(GitHubConfig.REDIRECT_URI, StandardCharsets.UTF_8.name())
-        val encodedScope = URLEncoder.encode(GitHubConfig.SCOPES, StandardCharsets.UTF_8.name())
-        return "${GitHubConfig.AUTHORIZE_URL}?client_id=${GitHubConfig.CLIENT_ID}" +
-            "&redirect_uri=$encodedRedirect" +
-            "&scope=$encodedScope" +
-            "&state=$state" +
-            "&code_challenge=$challenge" +
-            "&code_challenge_method=S256"
-    }
-
-    private fun launchBrowser(url: String) {
-        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
-            addCategory(Intent.CATEGORY_BROWSABLE)
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
-        runCatching { appContext.startActivity(intent) }
-    }
-
-    private fun queryParams(target: String): Map<String, String> {
-        val query = target.substringAfter('?', "")
-        if (query.isEmpty()) return emptyMap()
-        val map = HashMap<String, String>()
-        query.split('&').forEach { part ->
-            val keyValue = part.split('=', limit = 2)
-            val key = keyValue.getOrNull(0) ?: return@forEach
-            val raw = keyValue.getOrNull(1).orEmpty()
-            map[key] = runCatching { java.net.URLDecoder.decode(raw, StandardCharsets.UTF_8.name()) }.getOrDefault(raw)
-        }
-        return map
-    }
-
-    private fun randomUrlSafeString(byteCount: Int): String {
-        val bytes = ByteArray(byteCount)
-        SecureRandom().nextBytes(bytes)
-        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes)
-    }
-
-    private fun sha256Base64Url(value: String): String {
-        val digest = MessageDigest.getInstance("SHA-256").digest(value.toByteArray(StandardCharsets.US_ASCII))
-        return Base64.getUrlEncoder().withoutPadding().encodeToString(digest)
-    }
-
-    private fun closeServerSocket() {
-        runCatching { serverSocket?.close() }
-        serverSocket = null
     }
 
     private suspend fun status(onStatus: (String) -> Unit, textRes: Int) {
