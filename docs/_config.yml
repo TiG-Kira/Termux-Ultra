@@ -1,0 +1,30 @@
+# Termux Ultra 文档站 — Jekyll 配置
+# Pages 发布方式：Settings → Pages → Deploy from a branch → main / /(docs root)
+
+title: "Termux Ultra 文档"
+description: "Termux Ultra — Android 终端模拟器与 Linux 环境。使用手册、功能讲解与插件开发文档。"
+lang: zh-CN
+
+theme: jekyll-theme-primer
+
+markdown: kramdown
+kramdown:
+  input: GFM
+  hard_wrap: false
+  auto_ids: true
+  toc_levels: 2..3
+  syntax_highlighter: rouge
+
+permalink: pretty
+
+defaults:
+  - scope:
+      path: ""
+    values:
+      layout: default
+
+exclude:
+  - Gemfile
+  - Gemfile.lock
+  - README.md
+  - .gitignore

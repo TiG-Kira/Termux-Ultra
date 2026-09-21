@@ -6,6 +6,7 @@
 [![v2.1.0.R5](https://img.shields.io/badge/v2.1.0.R5-stable-brightgreen.svg)](https://github.com/TiG-Kira/Termux-Ultra/releases)
 
 [![Build status](https://github.com/TiG-Kira/Termux-Ultra/actions/workflows/ci.yml/badge.svg)](https://github.com/TiG-Kira/Termux-Ultra/actions)
+[![Docs](https://img.shields.io/badge/Docs-GitHub%20Pages-blue.svg)](https://tig-kira.github.io/Termux-Ultra/)
 
 ## 分支说明
 

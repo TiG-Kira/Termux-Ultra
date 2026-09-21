@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="{{ page.lang | default: 'zh-CN' }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% if page.title %}{{ page.title }} · {% endif %}Termux Ultra 文档</title>
+  <meta name="description" content="{{ page.description | default: site.description }}">
+  <link rel="stylesheet" href="{{ '/assets/css/docs.css' | relative_url }}">
+</head>
+<body>
+{% assign r = page.ref | default: 'index' %}
+{% assign other = 'zh' %}{% if page.lang == 'zh' %}{% assign other = 'en' %}{% endif %}
+
+{% if page.lang == 'zh' %}
+  {% assign l_index = "首页" %}
+  {% assign l_manual = "使用手册" %}
+  {% assign l_features = "功能讲解" %}
+  {% assign l_plugins = "插件构建文档" %}
+  {% assign l_switch = "English" %}
+  {% assign l_onthis = "本页目录" %}
+{% else %}
+  {% assign l_index = "Home" %}
+  {% assign l_manual = "User Manual" %}
+  {% assign l_features = "Features" %}
+  {% assign l_plugins = "Plugin Development" %}
+  {% assign l_switch = "中文" %}
+  {% assign l_onthis = "On this page" %}
+{% endif %}
+
+<a class="skip-link" href="#main">跳到正文</a>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <a class="brand" href="{{ '/' | relative_url }}">
+      <span class="brand-mark">TU</span><span class="brand-text">Termux Ultra 文档</span>
+    </a>
+    <nav class="topnav">
+      {% if r == 'index' %}
+        {% if other == 'zh' %}
+          <a class="lang" href="{{ '/' | relative_url }}">{{ l_switch }}</a>
+        {% else %}
+          <a class="lang" href="{{ '/en/' | relative_url }}">{{ l_switch }}</a>
+        {% endif %}
+      {% else %}
+        <a class="lang" href="{{ '/' | append: other | append: '/' | append: r | append: '/' | relative_url }}">{{ l_switch }}</a>
+      {% endif %}
+      <a href="https://github.com/TiG-Kira/Termux-Ultra">GitHub</a>
+      <a href="https://github.com/TiG-Kira/Termux-Ultra/releases">{% if page.lang == 'zh' %}下载{% else %}Releases{% endif %}</a>
+    </nav>
+  </div>
+</header>
+
+<div class="layout">
+  <aside class="sidebar">
+    <nav class="sidenav">
+      <p class="sidenav-title">{% if page.lang == 'zh' %}文档{% else %}Docs{% endif %}</p>
+      <a class="sidenav-item{% if r == 'index' %} is-active{% endif %}" href="{{ '/' | relative_url }}">{{ l_index }}</a>
+      <a class="sidenav-item{% if r == 'manual' %} is-active{% endif %}" href="{{ '/' | append: page.lang | default: 'zh' | append: '/manual/' | relative_url }}">{{ l_manual }}</a>
+      <a class="sidenav-item{% if r == 'features' %} is-active{% endif %}" href="{{ '/' | append: page.lang | default: 'zh' | append: '/features/' | relative_url }}">{{ l_features }}</a>
+      <a class="sidenav-item{% if r == 'plugins' %} is-active{% endif %}" href="{{ '/' | append: page.lang | default: 'zh' | append: '/plugins/' | relative_url }}">{{ l_plugins }}</a>
+    </nav>
+  </aside>
+
+  <main id="main" class="content">
+    {% if page.title %}<h1 class="page-title">{{ page.title }}</h1>{% endif %}
+    {{ content }}
+  </main>
+</div>
+
+<footer class="footer">
+  <div class="footer-inner">
+    <p>Termux Ultra · {% if page.lang == 'zh' %}基于{% else %}based on{% endif %} <a href="https://github.com/termux/termux-app">Termux</a> · <a href="https://www.gnu.org/licenses/agpl-3.0.html">AGPL-3.0</a></p>
+    <p class="muted">{% if page.lang == 'zh' %}维护者：{% else %}Maintainer: {% endif %}<a href="https://github.com/TiG-Kira">@TiG-Kira</a></p>
+  </div>
+</footer>
+</body>
+</html>
