@@ -4,6 +4,14 @@ import android.content.Context
 import com.termux.R
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
@@ -647,31 +655,8 @@ fun PackageManagerScreen(
         }
     }
 
-    if (showDetail != null) {
-        BackHandler { showDetail = null }
-        PackageDetailScreen(
-            pkg = showDetail!!,
-            navBarBottomPadding = navBarBottomPadding,
-            onBack = { showDetail = null },
-            onChanged = { success ->
-                scope.launch {
-                    installedList = PkgRepo.getInstalled(context)
-                    if (searchQuery.isNotBlank()) {
-                        availableList = PkgRepo.searchAvailable(context, searchQuery)
-                    }
-                }
-                if (success) {
-                    Toast.makeText(context, "操作成功", Toast.LENGTH_SHORT).show()
-                } else {
-                    Toast.makeText(context, "操作失败，请检查日志", Toast.LENGTH_SHORT).show()
-                }
-                showDetail = null
-            }
-        )
-        return
-    }
 
-    BackHandler {
+    BackHandler(enabled = showDetail == null) {
         when {
             searchQuery.isNotBlank() -> searchQuery = ""
             navStack.size > 1 -> navStack = navStack.dropLast(1)
@@ -679,318 +664,355 @@ fun PackageManagerScreen(
         }
     }
 
-    Scaffold(
-        contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0),
-        topBar = {
-            TopAppBar(
-                title = if (navStack.size > 1) PkgRepo.sectionDisplayName(context, navStack.last().sectionKey ?: "")
-                         else "软件包管理",
-                scrollBehavior = scrollBehavior,
-                navigationIcon = {
-                    Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(CircleShape)
-                            .clickable {
-                                if (searchQuery.isNotBlank()) searchQuery = ""
-                                else if (navStack.size > 1) navStack = navStack.dropLast(1)
-                                else onBackPressed()
-                            },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = MiuixIcons.Back,
-                            contentDescription = stringResource(R.string.back),
-                            tint = MiuixTheme.colorScheme.onSurface,
-                            modifier = Modifier.size(24.dp)
-                        )
-                    }
-                },
-                actions = {
-                    // 后台任务恢复按钮 — 有运行中的包操作时显示
-                    if (pkgStateSnap != null && !pkgStateSnap!!.finished) {
-                        IconButton(
-                            onClick = {
-                                LiveUpdateState.requestResumePkg()
-                                showProgressDialog = true
-                                progressSuccess = null
-                                progressTitle = when (pkgStateSnap!!.operation) {
-                                    LiveUpdateState.PkgOperation.UPDATE -> "正在刷新软件源"
-                                    LiveUpdateState.PkgOperation.UPGRADE -> "正在升级所有包"
-                                    LiveUpdateState.PkgOperation.INSTALL -> "正在安装 ${pkgStateSnap!!.packageName}"
-                                    LiveUpdateState.PkgOperation.UNINSTALL -> "正在卸载 ${pkgStateSnap!!.packageName}"
-                                }
-                            }
-                        ) {
-                            Icon(
-                                painter = painterResource(R.drawable.ic_play),
-                                contentDescription = stringResource(R.string.resume_background),
-                                tint = MiuixTheme.colorScheme.primary,
-                                modifier = Modifier.size(22.dp)
-                            )
+    AnimatedContent(
+        targetState = showDetail,
+        transitionSpec = {
+            if (targetState != null) {
+                (slideInHorizontally { it } + fadeIn()) togetherWith
+                (slideOutHorizontally { -it / 3 } + fadeOut()) using SizeTransform(clip = false)
+            } else {
+                (slideInHorizontally { -it / 3 } + fadeIn()) togetherWith
+                (slideOutHorizontally { it } + fadeOut()) using SizeTransform(clip = false)
+            }
+        },
+        label = "pkg-detail-anim"
+    ) { detail ->
+        if (detail != null) {
+            BackHandler { showDetail = null }
+            PackageDetailScreen(
+                pkg = detail,
+                navBarBottomPadding = navBarBottomPadding,
+                onBack = { showDetail = null },
+                onChanged = { success ->
+                    scope.launch {
+                        installedList = PkgRepo.getInstalled(context)
+                        if (searchQuery.isNotBlank()) {
+                            availableList = PkgRepo.searchAvailable(context, searchQuery)
                         }
                     }
-                    IconButton(
-                        onClick = {
-                            progressTitle = "正在刷新软件源"
-                            progressLog = ""
-                            progressSuccess = null
-                            showProgressDialog = true
-                            LiveUpdateState.startPkg(LiveUpdateState.PkgOperation.UPDATE, "", backgrounded = false)
-                            LiveUpdateState.pkgScope.launch {
-                                val (ok, log) = PkgRepo.update(context, onOutput = { LiveUpdateState.appendPkgLog(it) })
-                                LiveUpdateState.finishPkg(ok)
-                                progressLog = log
-                                progressSuccess = ok
-                                if (ok) {
-                                    installedList = PkgRepo.getInstalled(context)
-                                    if (searchQuery.isBlank()) {
-                                        availableList = PkgRepo.getAvailableAll(context)
-                                    }
-                                }
-                            }
-                        }
-                    ) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_refresh),
-                            contentDescription = stringResource(R.string.refresh_sources),
-                            tint = MiuixTheme.colorScheme.onSurface,
-                            modifier = Modifier.size(22.dp)
-                        )
+                    if (success) {
+                        Toast.makeText(context, "操作成功", Toast.LENGTH_SHORT).show()
+                    } else {
+                        Toast.makeText(context, "操作失败，请检查日志", Toast.LENGTH_SHORT).show()
                     }
-                    IconButton(
-                        onClick = {
-                            progressTitle = "正在升级所有包"
-                            progressLog = ""
-                            progressSuccess = null
-                            showProgressDialog = true
-                            LiveUpdateState.startPkg(LiveUpdateState.PkgOperation.UPGRADE, "", backgrounded = false)
-                            LiveUpdateState.pkgScope.launch {
-                                val (ok, log) = PkgRepo.upgradeAll(context, onOutput = { LiveUpdateState.appendPkgLog(it) })
-                                LiveUpdateState.finishPkg(ok)
-                                progressLog = log
-                                progressSuccess = ok
-                                if (ok) {
-                                    installedList = PkgRepo.getInstalled(context)
-                                }
-                            }
-                        }
-                    ) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_download),
-                            contentDescription = stringResource(R.string.upgrade_all_packages),
-                            tint = MiuixTheme.colorScheme.onSurface,
-                            modifier = Modifier.size(22.dp)
-                        )
-                    }
+                    showDetail = null
                 }
             )
-        }
-    ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-        ) {
-            val searchFocusRequester = remember { androidx.compose.ui.focus.FocusRequester() }
-            var searchBarActivated by remember { mutableStateOf(false) }
-            SearchBar(
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                inputField = {
-                    InputField(
-                        query = searchQuery,
-                        onQueryChange = { searchQuery = it; searchBarActivated = true },
-                        onSearch = { },
-                        expanded = searchBarActivated,
-                        onExpandedChange = { searchBarActivated = it },
-                        label = "搜索软件包"
-                    )
-                },
-                expanded = searchBarActivated,
-                onExpandedChange = { searchBarActivated = it }
-            ) { }
-
-            if (searchQuery.isBlank()) {
-                TabRowWithContour(
-                    tabs = listOf("已安装 (${installedList.size})", "未安装"),
-                    selectedTabIndex = selectedTab,
-                    onTabSelected = { selectedTab = it },
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
-                )
-            }
-
-            Box(modifier = Modifier.fillMaxSize()) {
-                if (isLoading || loadingAvailable) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.align(Alignment.Center),
-                        color = Color(0xFF2563EB)
-                    )
-                } else {
-                    // 先拿到当前 tab 的包列表（搜索优先）
-                    val rawList = if (searchQuery.isNotBlank()) {
-                        val q = searchQuery.lowercase()
-                        val installedMatch = installedList.filter { it.name.lowercase().contains(q) }
-                        val availableMatch = availableList.filter { it.name.lowercase().contains(q) }
-                        (installedMatch + availableMatch).distinctBy { it.name }
-                    } else if (selectedTab == 0) installedList else availableList
-
-                    // 分类模式: viewMode=0
-                    val showCategory = pkgViewMode == 0 && searchQuery.isBlank()
-
-                    val isCategoryRoot = showCategory && navStack.size == 1
-                    val isCategoryDetail = showCategory && navStack.size > 1
-
-                    // 在分类详情里 → 过滤当前 section 的包
-                    val displayList = if (isCategoryDetail) {
-                        val cur = currentSection
-                        rawList.filter { pkg -> pkg.resolveSection() == cur }
-                    } else {
-                        rawList
-                    }
-
-                    LazyColumn(
-                        state = listState,
-                        modifier = Modifier.fillMaxSize().nestedScroll(scrollBehavior.nestedScrollConnection),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                        contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                            start = 16.dp, end = 16.dp,
-                            top = 4.dp, bottom = 16.dp
-                        )
-                    ) {
-                        // === 分类根级: 显示分类网格 ===
-                        if (isCategoryRoot) {
-                            val sectionGroups = rawList
-                                .groupBy { pkg -> PkgRepo.normalizeSectionKey(pkg.resolveSection()) }
-                                .map { (k, v) -> k to v.size }
-                                .sortedByDescending { it.second }
-
-                            if (sectionGroups.isEmpty()) {
-                                item {
-                                    EmptyStateView(
-                                        message = if (selectedTab == 0)
-                                            context.getString(R.string.pkg_empty_installed)
-                                        else
-                                            context.getString(R.string.pkg_empty_available)
+        } else {
+            Scaffold(
+                contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0),
+                topBar = {
+                    TopAppBar(
+                        title = if (navStack.size > 1) PkgRepo.sectionDisplayName(context, navStack.last().sectionKey ?: "")
+                                 else "软件包管理",
+                        scrollBehavior = scrollBehavior,
+                        navigationIcon = {
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(CircleShape)
+                                    .clickable {
+                                        if (searchQuery.isNotBlank()) searchQuery = ""
+                                        else if (navStack.size > 1) navStack = navStack.dropLast(1)
+                                        else onBackPressed()
+                                    },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = MiuixIcons.Back,
+                                    contentDescription = stringResource(R.string.back),
+                                    tint = MiuixTheme.colorScheme.onSurface,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+                        },
+                        actions = {
+                            // 后台任务恢复按钮 — 有运行中的包操作时显示
+                            if (pkgStateSnap != null && !pkgStateSnap!!.finished) {
+                                IconButton(
+                                    onClick = {
+                                        LiveUpdateState.requestResumePkg()
+                                        showProgressDialog = true
+                                        progressSuccess = null
+                                        progressTitle = when (pkgStateSnap!!.operation) {
+                                            LiveUpdateState.PkgOperation.UPDATE -> "正在刷新软件源"
+                                            LiveUpdateState.PkgOperation.UPGRADE -> "正在升级所有包"
+                                            LiveUpdateState.PkgOperation.INSTALL -> "正在安装 ${pkgStateSnap!!.packageName}"
+                                            LiveUpdateState.PkgOperation.UNINSTALL -> "正在卸载 ${pkgStateSnap!!.packageName}"
+                                        }
+                                    }
+                                ) {
+                                    Icon(
+                                        painter = painterResource(R.drawable.ic_play),
+                                        contentDescription = stringResource(R.string.resume_background),
+                                        tint = MiuixTheme.colorScheme.primary,
+                                        modifier = Modifier.size(22.dp)
                                     )
                                 }
+                            }
+                            IconButton(
+                                onClick = {
+                                    progressTitle = "正在刷新软件源"
+                                    progressLog = ""
+                                    progressSuccess = null
+                                    showProgressDialog = true
+                                    LiveUpdateState.startPkg(LiveUpdateState.PkgOperation.UPDATE, "", backgrounded = false)
+                                    LiveUpdateState.pkgScope.launch {
+                                        val (ok, log) = PkgRepo.update(context, onOutput = { LiveUpdateState.appendPkgLog(it) })
+                                        LiveUpdateState.finishPkg(ok)
+                                        progressLog = log
+                                        progressSuccess = ok
+                                        if (ok) {
+                                            installedList = PkgRepo.getInstalled(context)
+                                            if (searchQuery.isBlank()) {
+                                                availableList = PkgRepo.getAvailableAll(context)
+                                            }
+                                        }
+                                    }
+                                }
+                            ) {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_refresh),
+                                    contentDescription = stringResource(R.string.refresh_sources),
+                                    tint = MiuixTheme.colorScheme.onSurface,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
+                            IconButton(
+                                onClick = {
+                                    progressTitle = "正在升级所有包"
+                                    progressLog = ""
+                                    progressSuccess = null
+                                    showProgressDialog = true
+                                    LiveUpdateState.startPkg(LiveUpdateState.PkgOperation.UPGRADE, "", backgrounded = false)
+                                    LiveUpdateState.pkgScope.launch {
+                                        val (ok, log) = PkgRepo.upgradeAll(context, onOutput = { LiveUpdateState.appendPkgLog(it) })
+                                        LiveUpdateState.finishPkg(ok)
+                                        progressLog = log
+                                        progressSuccess = ok
+                                        if (ok) {
+                                            installedList = PkgRepo.getInstalled(context)
+                                        }
+                                    }
+                                }
+                            ) {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_download),
+                                    contentDescription = stringResource(R.string.upgrade_all_packages),
+                                    tint = MiuixTheme.colorScheme.onSurface,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
+                        }
+                    )
+                }
+            ) { innerPadding ->
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(innerPadding)
+                ) {
+                    val searchFocusRequester = remember { androidx.compose.ui.focus.FocusRequester() }
+                    var searchBarActivated by remember { mutableStateOf(false) }
+                    SearchBar(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        inputField = {
+                            InputField(
+                                query = searchQuery,
+                                onQueryChange = { searchQuery = it; searchBarActivated = true },
+                                onSearch = { },
+                                expanded = searchBarActivated,
+                                onExpandedChange = { searchBarActivated = it },
+                                label = "搜索软件包"
+                            )
+                        },
+                        expanded = searchBarActivated,
+                        onExpandedChange = { searchBarActivated = it }
+                    ) { }
+
+                    if (searchQuery.isBlank()) {
+                        TabRowWithContour(
+                            tabs = listOf("已安装 (${installedList.size})", "未安装"),
+                            selectedTabIndex = selectedTab,
+                            onTabSelected = { selectedTab = it },
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                        )
+                    }
+
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        if (isLoading || loadingAvailable) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.align(Alignment.Center),
+                                color = Color(0xFF2563EB)
+                            )
+                        } else {
+                            // 先拿到当前 tab 的包列表（搜索优先）
+                            val rawList = if (searchQuery.isNotBlank()) {
+                                val q = searchQuery.lowercase()
+                                val installedMatch = installedList.filter { it.name.lowercase().contains(q) }
+                                val availableMatch = availableList.filter { it.name.lowercase().contains(q) }
+                                (installedMatch + availableMatch).distinctBy { it.name }
+                            } else if (selectedTab == 0) installedList else availableList
+
+                            // 分类模式: viewMode=0
+                            val showCategory = pkgViewMode == 0 && searchQuery.isBlank()
+
+                            val isCategoryRoot = showCategory && navStack.size == 1
+                            val isCategoryDetail = showCategory && navStack.size > 1
+
+                            // 在分类详情里 → 过滤当前 section 的包
+                            val displayList = if (isCategoryDetail) {
+                                val cur = currentSection
+                                rawList.filter { pkg -> pkg.resolveSection() == cur }
                             } else {
-                                items(sectionGroups) { (sectionKey, count) ->
-                                    CategoryEntry(
-                                        label = PkgRepo.sectionDisplayName(context, sectionKey),
-                                        count = count,
-                                        onClick = {
-                                            navStack = navStack + PkgNavLevel(
-                                                sectionKey = sectionKey,
-                                                label = PkgRepo.sectionDisplayName(context, sectionKey)
+                                rawList
+                            }
+
+                            LazyColumn(
+                                state = listState,
+                                modifier = Modifier.fillMaxSize().nestedScroll(scrollBehavior.nestedScrollConnection),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                                contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                                    start = 16.dp, end = 16.dp,
+                                    top = 4.dp, bottom = 16.dp
+                                )
+                            ) {
+                                // === 分类根级: 显示分类网格 ===
+                                if (isCategoryRoot) {
+                                    val sectionGroups = rawList
+                                        .groupBy { pkg -> PkgRepo.normalizeSectionKey(pkg.resolveSection()) }
+                                        .map { (k, v) -> k to v.size }
+                                        .sortedByDescending { it.second }
+
+                                    if (sectionGroups.isEmpty()) {
+                                        item {
+                                            EmptyStateView(
+                                                message = if (selectedTab == 0)
+                                                    context.getString(R.string.pkg_empty_installed)
+                                                else
+                                                    context.getString(R.string.pkg_empty_available)
                                             )
                                         }
-                                    )
+                                    } else {
+                                        items(sectionGroups) { (sectionKey, count) ->
+                                            CategoryEntry(
+                                                label = PkgRepo.sectionDisplayName(context, sectionKey),
+                                                count = count,
+                                                onClick = {
+                                                    navStack = navStack + PkgNavLevel(
+                                                        sectionKey = sectionKey,
+                                                        label = PkgRepo.sectionDisplayName(context, sectionKey)
+                                                    )
+                                                }
+                                            )
+                                        }
+                                    }
+                                // === 列表(普通/分类详情/搜索) ===
+                                } else if (displayList.isEmpty()) {
+                                    item {
+                                        EmptyStateView(
+                                            message = when {
+                                                searchQuery.isNotBlank() ->
+                                                    context.getString(R.string.pkg_empty_search)
+                                                isCategoryDetail ->
+                                                    context.getString(R.string.pkg_empty_section)
+                                                selectedTab == 0 ->
+                                                    context.getString(R.string.pkg_empty_installed)
+                                                else ->
+                                                    context.getString(R.string.pkg_empty_available)
+                                            }
+                                        )
+                                    }
+                                } else {
+                                    items(displayList) { pkg ->
+                                        PackageCard(
+                                            pkg = pkg,
+                                            onClick = { showDetail = pkg }
+                                        )
+                                    }
                                 }
                             }
-                        // === 列表(普通/分类详情/搜索) ===
-                        } else if (displayList.isEmpty()) {
-                            item {
-                                EmptyStateView(
-                                    message = when {
-                                        searchQuery.isNotBlank() ->
-                                            context.getString(R.string.pkg_empty_search)
-                                        isCategoryDetail ->
-                                            context.getString(R.string.pkg_empty_section)
-                                        selectedTab == 0 ->
-                                            context.getString(R.string.pkg_empty_installed)
-                                        else ->
-                                            context.getString(R.string.pkg_empty_available)
-                                    }
-                                )
-                            }
-                        } else {
-                            items(displayList) { pkg ->
-                                PackageCard(
-                                    pkg = pkg,
-                                    onClick = { showDetail = pkg }
-                                )
-                            }
                         }
                     }
+
+                    OverlayDialog(
+                        show = showProgressDialog,
+                        title = progressTitle.ifBlank { "正在处理" },
+                        summary = "",
+                        onDismissRequest = { if (progressSuccess != null) showProgressDialog = false },
+                        content = {
+                            val logScrollState = rememberScrollState()
+                            Column(
+                                modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                // Loading indicator + "处理中..." 一行居中
+                                if (progressSuccess == null) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.Center,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(24.dp),
+                                            color = MiuixTheme.colorScheme.primary,
+                                            strokeWidth = 3.dp
+                                        )
+                                        Spacer(Modifier.width(12.dp))
+                                        Text(
+                                            text = stringResource(R.string.common_processing),
+                                            fontSize = 14.sp,
+                                            color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                                        )
+                                    }
+                                    Spacer(Modifier.height(12.dp))
+                                }
+                                if (progressSuccess != null) {
+                                    Text(
+                                        text = if (progressSuccess == true) "操作成功" else "操作失败",
+                                        fontSize = 15.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = if (progressSuccess == true) MiuixTheme.colorScheme.primary else Color(0xFFDC2626)
+                                    )
+                                    Spacer(Modifier.height(12.dp))
+                                }
+                                // Log area — 加载中和完成后都显示，实时更新
+                                val displayLog = if (progressSuccess == null) livePkgLog else progressLog
+                                val clippedLog = if (displayLog.length > 5000) displayLog.substring(displayLog.length - 5000) else displayLog
+                                if (clippedLog.isNotBlank()) {
+                                    Box(
+                                        modifier = Modifier.fillMaxWidth()
+                                            .height(200.dp)
+                                            .background(
+                                                color = if (isDark) Color(0xFF1A1A1A) else Color(0xFFF5F5F5),
+                                                shape = RoundedCornerShape(8.dp)
+                                            )
+                                            .padding(12.dp)
+                                    ) {
+                                        Text(
+                                            text = clippedLog,
+                                            fontSize = 12.sp,
+                                            color = if (isDark) Color.White.copy(alpha = 0.8f) else Color.Black.copy(alpha = 0.7f),
+                                            lineHeight = 16.sp,
+                                            modifier = Modifier.verticalScroll(logScrollState)
+                                        )
+                                    }
+                                    Spacer(Modifier.height(12.dp))
+                                }
+                                if (progressSuccess != null) {
+                                    Row(modifier = Modifier.fillMaxWidth()) {
+                                        TextButton(
+                                            text = stringResource(R.string.low_android_force_disable_confirm),
+                                            onClick = { showProgressDialog = false },
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    )
                 }
             }
-
-            OverlayDialog(
-                show = showProgressDialog,
-                title = progressTitle.ifBlank { "正在处理" },
-                summary = "",
-                onDismissRequest = { if (progressSuccess != null) showProgressDialog = false },
-                content = {
-                    val logScrollState = rememberScrollState()
-                    Column(
-                        modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        // Loading indicator + "处理中..." 一行居中
-                        if (progressSuccess == null) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.Center,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(24.dp),
-                                    color = MiuixTheme.colorScheme.primary,
-                                    strokeWidth = 3.dp
-                                )
-                                Spacer(Modifier.width(12.dp))
-                                Text(
-                                    text = stringResource(R.string.common_processing),
-                                    fontSize = 14.sp,
-                                    color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                                )
-                            }
-                            Spacer(Modifier.height(12.dp))
-                        }
-                        if (progressSuccess != null) {
-                            Text(
-                                text = if (progressSuccess == true) "操作成功" else "操作失败",
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = if (progressSuccess == true) MiuixTheme.colorScheme.primary else Color(0xFFDC2626)
-                            )
-                            Spacer(Modifier.height(12.dp))
-                        }
-                        // Log area — 加载中和完成后都显示，实时更新
-                        val displayLog = if (progressSuccess == null) livePkgLog else progressLog
-                        val clippedLog = if (displayLog.length > 5000) displayLog.substring(displayLog.length - 5000) else displayLog
-                        if (clippedLog.isNotBlank()) {
-                            Box(
-                                modifier = Modifier.fillMaxWidth()
-                                    .height(200.dp)
-                                    .background(
-                                        color = if (isDark) Color(0xFF1A1A1A) else Color(0xFFF5F5F5),
-                                        shape = RoundedCornerShape(8.dp)
-                                    )
-                                    .padding(12.dp)
-                            ) {
-                                Text(
-                                    text = clippedLog,
-                                    fontSize = 12.sp,
-                                    color = if (isDark) Color.White.copy(alpha = 0.8f) else Color.Black.copy(alpha = 0.7f),
-                                    lineHeight = 16.sp,
-                                    modifier = Modifier.verticalScroll(logScrollState)
-                                )
-                            }
-                            Spacer(Modifier.height(12.dp))
-                        }
-                        if (progressSuccess != null) {
-                            Row(modifier = Modifier.fillMaxWidth()) {
-                                TextButton(
-                                    text = stringResource(R.string.low_android_force_disable_confirm),
-                                    onClick = { showProgressDialog = false },
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-                            }
-                        }
-                    }
-                }
-            )
         }
     }
 }
