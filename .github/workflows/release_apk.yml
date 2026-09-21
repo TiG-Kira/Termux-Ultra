@@ -44,12 +44,13 @@ jobs:
             echo "skip=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: 解码 JKS 到仓库根目录
+      - name: 解码 JKS 到 app 目录
         if: steps.check.outputs.skip == 'false'
         run: |
-          echo "$JKS_BASE64" | base64 -d > ki-terminal-release.jks
-          test -s ki-terminal-release.jks
-          echo "JKS 写入完成：$(stat -c%s ki-terminal-release.jks) 字节"
+          # app/build.gradle 中 storeFile 使用的是相对 app 模块目录的路径
+          echo "$JKS_BASE64" | base64 -d > app/ki-terminal-release.jks
+          test -s app/ki-terminal-release.jks
+          echo "JKS 写入完成：$(stat -c%s app/ki-terminal-release.jks) 字节"
 
       - name: 编译 Release APK（拆架构）
         if: steps.check.outputs.skip == 'false'
