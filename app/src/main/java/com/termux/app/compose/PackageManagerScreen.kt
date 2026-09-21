@@ -458,7 +458,7 @@ object SectionClassifier {
         Regex("^kotlin") to "java",
         Regex("^clang") to "devel",
         Regex("^gcc") to "devel",
-        Regex("^g\+\+") to "devel",
+        Regex("""^g\+\+""") to "devel",
         Regex("^cmake") to "devel",
         Regex("^make$") to "devel",
         Regex("^meson") to "devel",
