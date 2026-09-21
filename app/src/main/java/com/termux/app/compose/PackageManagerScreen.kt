@@ -637,7 +637,7 @@ fun PackageManagerScreen(
     var navStack by remember {
         mutableStateOf(listOf(PkgNavLevel(sectionKey = null, label = null)))
     }
-    val currentSection: String? get() = navStack.lastOrNull()?.sectionKey
+    val currentSection = navStack.lastOrNull()?.sectionKey
 
     // 观察 LiveUpdateState — 实时 log + 后台任务按钮 + 恢复请求
     val livePkgLog by LiveUpdateState.pkgLog.collectAsState()
