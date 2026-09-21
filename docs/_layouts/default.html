@@ -62,7 +62,7 @@
   </aside>
 
   <main id="main" class="content">
-    {% if page.title %}<h1 class="page-title">{{ page.title }}</h1>{% endif %}
+    {% if page.title and r != 'index' %}<h1 class="page-title">{{ page.title }}</h1>{% endif %}
     {{ content }}
   </main>
 </div>
