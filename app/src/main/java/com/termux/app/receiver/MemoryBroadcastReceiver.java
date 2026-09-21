@@ -17,7 +17,6 @@ public class MemoryBroadcastReceiver extends BroadcastReceiver {
 
     private static final String LOG_TAG = "MemoryBroadcastReceiver";
     private static final String BUNDLE_KEY_COMMON = "common";
-    private static final String BUNDLE_KEY_EXTRA = "extra";
     private static final String KEY_NOTIFY_TYPE = "notifyType";
     private static final String KEY_NOTIFY_ID = "notifyId";
     private static final String KEY_CALLBACK = "callback";

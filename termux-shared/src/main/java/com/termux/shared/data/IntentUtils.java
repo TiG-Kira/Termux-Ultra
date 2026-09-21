@@ -10,7 +10,6 @@ import java.util.Arrays;
 
 public class IntentUtils {
 
-    private static final String LOG_TAG = "IntentUtils";
 
 
     /**

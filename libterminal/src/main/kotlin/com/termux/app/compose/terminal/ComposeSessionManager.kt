@@ -7,7 +7,6 @@ import com.termux.app.compose.terminal.process.ITerminalProcess
 import com.termux.app.compose.terminal.process.TermuxProcessBridge
 import com.termux.shared.termux.shell.command.environment.TermuxShellEnvironment
 import com.termux.shared.compat.ShellEnvironmentCompat
-import com.termux.shared.compat.TermuxTaskCompat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob

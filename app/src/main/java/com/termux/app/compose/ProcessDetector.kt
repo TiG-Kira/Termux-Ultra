@@ -1,17 +1,14 @@
 package com.termux.app.compose
 
 import android.content.Context
-import android.graphics.Color as AndroidColor
 import com.termux.shared.termux.shell.command.environment.TermuxShellEnvironment
 import com.termux.shared.termux.TermuxConstants
 import com.termux.shared.compat.ShellEnvironmentCompat
-import com.termux.shared.compat.TermuxTaskCompat
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.BufferedReader
 import java.io.File
 import java.io.InputStreamReader
-import java.io.RandomAccessFile
 
 /**
  * 运行时进程检测器：用于检测 QEMU 虚拟机数量、proot 容器是否运行等。

@@ -20,7 +20,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -29,7 +28,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.google.android.material.snackbar.Snackbar
 import com.termux.app.compose.terminal.color.TerminalColorScheme
-import com.termux.app.compose.terminal.color.TerminalThemes
 import com.termux.R
 import com.termux.app.utils.SnackbarHelper
 import top.yukonga.miuix.kmp.basic.*

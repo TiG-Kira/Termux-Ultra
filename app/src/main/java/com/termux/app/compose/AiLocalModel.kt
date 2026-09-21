@@ -3,8 +3,6 @@ package com.termux.app.compose
 import android.content.Context
 import com.termux.shared.shell.command.ExecutionCommand
 import com.termux.shared.termux.shell.command.environment.TermuxShellEnvironment
-import com.termux.shared.termux.shell.TermuxShellUtils
-import com.termux.shared.shell.command.runner.app.AppShell
 import com.termux.shared.termux.TermuxConstants
 import com.termux.shared.compat.ShellEnvironmentCompat
 import com.termux.shared.compat.TermuxTaskCompat
@@ -19,7 +17,6 @@ import kotlinx.coroutines.channels.Channel
 import java.io.BufferedReader
 import java.io.File
 import java.io.InputStreamReader
-import androidx.compose.ui.res.stringResource
 import kotlin.concurrent.thread
 
 /**

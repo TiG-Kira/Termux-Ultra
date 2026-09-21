@@ -20,7 +20,6 @@ public class TermuxFloatAppSharedPreferences extends AppSharedPreferences {
     private int MAX_FONTSIZE;
     private int DEFAULT_FONTSIZE;
 
-    private static final String LOG_TAG = "TermuxFloatAppSharedPreferences";
 
     private TermuxFloatAppSharedPreferences(@NonNull Context context) {
         super(context,

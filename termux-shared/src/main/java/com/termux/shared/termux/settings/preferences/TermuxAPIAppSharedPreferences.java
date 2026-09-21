@@ -15,7 +15,6 @@ import com.termux.shared.termux.TermuxConstants;
 
 public class TermuxAPIAppSharedPreferences extends AppSharedPreferences {
 
-    private static final String LOG_TAG = "TermuxAPIAppSharedPreferences";
 
     protected TermuxAPIAppSharedPreferences(@NonNull Context context) {
         super(context,

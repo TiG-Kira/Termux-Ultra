@@ -256,8 +256,4 @@ class OobeActivity : ComponentActivity() {
         overridePendingTransition(0, 0)
     }
 
-    private fun completeOobe() {
-        startMainActivity()
-        finish()
-    }
 }

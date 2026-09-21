@@ -9,20 +9,17 @@ import android.os.Bundle
 import android.os.IBinder
 import android.provider.OpenableColumns
 import com.google.gson.JsonObject
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.viewModels
 import androidx.fragment.app.FragmentActivity
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.foundation.border
@@ -49,9 +46,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
@@ -707,7 +702,6 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
         val maxConsecutiveSameSkill = 3
         // [END_TURN] 容错计数：AI 连续多少轮未输出 [END_TURN] 才截断
         var missingEndTurnRounds = 0
-        val maxMissingEndTurnRounds = 5
         // AI 文本回复历史：检测纯文本重复（AI 反复回答同样的问题）
         val recentAiReplies = mutableListOf<String>()
         val maxReplyHistory = 5
@@ -2343,14 +2337,6 @@ private fun AiSetupScreen(vm: AiTermuxViewModel, onBack: () -> Unit) {
     }
 }
 
-private fun formatByteCount(bytes: Long): String {
-    return when {
-        bytes < 1024 -> "$bytes B"
-        bytes < 1024 * 1024 -> String.format("%.1f KB", bytes / 1024.0)
-        bytes < 1024L * 1024 * 1024 -> String.format("%.1f MB", bytes / (1024.0 * 1024.0))
-        else -> String.format("%.2f GB", bytes / (1024.0 * 1024.0 * 1024.0))
-    }
-}
 
 @Composable
 private fun SectionTitle(text: String) {
@@ -2363,7 +2349,6 @@ private fun SectionTitle(text: String) {
 
 @Composable
 private fun InfoBullet(title: String, desc: String) {
-    val isDark = isSystemInDarkTheme()
     Row(
         modifier = Modifier
             .fillMaxWidth()

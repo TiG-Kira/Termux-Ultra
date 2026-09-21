@@ -13,7 +13,6 @@ import com.termux.terminal.TerminalSessionClient;
 /** The {@link TerminalSessionClient} implementation that may require a {@link Service} for its interface methods. */
 public class TermuxTerminalSessionServiceClient extends TermuxTerminalSessionClientBase {
 
-    private static final String LOG_TAG = "TermuxTerminalSessionServiceClient";
 
     private final TermuxService mService;
 

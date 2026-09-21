@@ -1,7 +1,6 @@
 package com.termux.app.ftp
 
 import android.content.Context
-import android.content.SharedPreferences
 
 object FtpServiceManager {
     private var ftpServer: FtpServer? = null
@@ -80,16 +79,4 @@ object FtpServiceManager {
         }
     }
 
-    private fun isPortInUse(port: Int): Boolean {
-        return try {
-            java.net.Socket("127.0.0.1", port).use {
-                it.close()
-                true
-            }
-        } catch (e: java.net.ConnectException) {
-            false
-        } catch (e: Exception) {
-            false
-        }
-    }
 }

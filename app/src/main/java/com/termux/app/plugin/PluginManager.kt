@@ -3,9 +3,7 @@ package com.termux.app.plugin
 import android.content.Context
 import android.content.Intent
 import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
 import com.termux.shared.shell.command.ExecutionCommand
-import com.termux.shared.shell.command.runner.app.AppShell
 import com.termux.shared.compat.ShellEnvironmentCompat
 import com.termux.shared.compat.TermuxTaskCompat
 import com.termux.shared.termux.shell.command.environment.TermuxShellEnvironment
@@ -370,13 +368,6 @@ object PluginManager {
     }
 
     /** 清理一个已过期的注册表项（会话进程已退出）。 */
-    internal fun cleanupDeadSessions() {
-        val dead = persistentSessionRegistry.entries.filter { !it.value.isRunning }
-        dead.forEach { (_, s) ->
-            PluginPersistentSessionRegistry.unregister(s)
-            persistentSessionRegistry.remove(s.sessionId)
-        }
-    }
 
 }
 

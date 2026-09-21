@@ -42,7 +42,6 @@ import com.termux.app.compose.guardedOnClick
 import com.termux.app.compose.physicalTouchDetector
 import com.termux.app.compose.rememberThirdPartyBlocked
 import com.termux.app.compose.KiTerminalTheme
-import com.termux.shared.file.FileUtils
 import com.termux.shared.termux.TermuxConstants
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.ButtonDefaults

@@ -10,7 +10,6 @@ import androidx.core.app.NotificationCompat
 import com.google.android.material.snackbar.Snackbar
 import com.termux.R
 import com.termux.app.compose.ApiCompat
-import com.termux.app.utils.LogManager
 import com.termux.app.utils.SnackbarHelper
 
 /**

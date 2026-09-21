@@ -1,7 +1,6 @@
 package com.termux.app.compose
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -65,7 +64,6 @@ fun ScriptDetectionDialog(
     onCancel: () -> Unit = {}
 ) {
     var showDialog by remember { mutableStateOf(true) }
-    val context = LocalContext.current
     val isDark = androidx.compose.foundation.isSystemInDarkTheme()
 
     OverlayDialog(

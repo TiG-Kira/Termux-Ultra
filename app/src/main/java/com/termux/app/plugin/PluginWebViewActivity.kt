@@ -20,7 +20,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.size
-import androidx.compose.material.icons.Icons
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -29,7 +28,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.compose.ui.res.stringResource
 import androidx.core.view.WindowCompat
 import com.google.gson.Gson
 import com.termux.app.compose.KiTerminalTheme
@@ -45,7 +43,6 @@ class PluginWebViewActivity : ComponentActivity() {
         private const val EXTRA_PLUGIN_ID = "plugin_id"
         private const val EXTRA_ENTRY_PATH = "entry_path"
         private const val EXTRA_TITLE = "title"
-    private const val EXTRA_URL = "url"
 
         fun start(context: Context, pluginId: String, entryPath: String, title: String? = null) {
             val intent = Intent(context, PluginWebViewActivity::class.java).apply {
@@ -142,7 +139,6 @@ class PluginWebViewActivity : ComponentActivity() {
         onWebViewReady: (WebView) -> Unit
     ) {
         val context = LocalContext.current
-        val plugin = PluginManager.getPluginById(context, pluginId)
 
         Scaffold(
             contentWindowInsets = WindowInsets(0, 0, 0, 0),

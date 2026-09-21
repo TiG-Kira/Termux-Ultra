@@ -418,11 +418,6 @@ public final class TermuxService extends Service implements TermuxTaskCompat.Ter
     }
 
     /** Request to stop service. */
-    private void requestStopService() {
-        Logger.logDebug(LOG_TAG, "Requesting to stop service");
-        runStopForeground();
-        stopSelf();
-    }
 
     /** Process action to stop service.
      *  If QEMU VMs or proot containers are detected running, this will NOT kill sessions directly;
@@ -713,7 +708,6 @@ public final class TermuxService extends Service implements TermuxTaskCompat.Ter
 
         Logger.logDebug(LOG_TAG, "Executing background \"" + executionCommand.getCommandIdAndLabelLogString() + "\" TermuxTaskCompat command");
 
-        TermuxTaskCompat newTermuxTask = createTermuxTask(executionCommand);
     }
 
     /** Create a {@link TermuxTaskCompat}. */
@@ -1291,7 +1285,6 @@ public synchronized int removeTermuxSession(TerminalSession sessionToRemove) {
 
     /** 档 1：包管理器进度通知（带 ProgressStyle + 药丸"操作进行:XX%"）。 */
     private Notification buildPkgNotification(LiveUpdateState.PkgState pkg, PendingIntent contentIntent, int piFlags, boolean liveUpdateEnabled) {
-        Resources res = getResources();
         Notification.Builder builder = (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
             ? new Notification.Builder(this, TermuxConstants.TERMUX_APP_NOTIFICATION_CHANNEL_ID)
             : new Notification.Builder(this);

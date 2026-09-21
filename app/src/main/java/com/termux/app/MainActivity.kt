@@ -9,28 +9,19 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
-import androidx.activity.ComponentActivity
 import androidx.core.view.WindowCompat
 import androidx.activity.compose.setContent
 import androidx.fragment.app.FragmentActivity
 import androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner
 import com.termux.app.compose.NavigationHelper
-import android.content.SharedPreferences
-import android.widget.Toast
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.snapshotFlow
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
-import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.lifecycle.compose.LifecycleResumeEffect
-import kotlinx.coroutines.android.awaitFrame
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import com.termux.app.activities.AboutActivity
@@ -40,7 +31,6 @@ import com.termux.app.compose.RiskConfirmDialogHost
 import com.termux.shared.termux.TermuxConstants
 import com.termux.shared.termux.shell.command.runner.terminal.TermuxSession as SharedTermuxSession
 import com.termux.app.TermuxService
-import com.termux.terminal.TerminalSession
 
 class AppViewModel : ViewModel() {
     private val _showVnc = MutableStateFlow(false)
