@@ -29,6 +29,9 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import coil.compose.AsyncImage
 import com.termux.R
 import com.termux.app.activities.GitHubAccountActivity
@@ -47,13 +50,14 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
 /**
  * 设置页顶部的 GitHub 账户卡片（独立 Card + ArrowPreference）。
  *
- * - 未登录：抽象人头像 + 「使用 GitHub 登录」；
- * - 已登录：GitHub 头像 + 昵称，点击直接进入账户详情页；
- * - 点击未登录卡片：启动 6241 回环 + Device Flow 双通道登录。
+ * - 未登录：抽象人头像 + 「使用 GitHub 登录」；点击弹窗展示设备码，由用户自行授权；
+ * - 已登录：GitHub 头像 + 昵称，点击直接进入账户详情页。
  */
 @Composable
 fun GitHubAccountCard() {
     val context = LocalContext.current
+    // 每次重组都从存储读一次并不划算，但登录/注销都会回到本页，
+    // 因此用 Lifecycle 的 ON_RESUME 作为唯一的刷新时机，保证状态与存储一致。
     var session by remember { mutableStateOf(GitHubSessionStore.load(context)) }
     var showLoginSheet by remember { mutableStateOf(false) }
     var statusText by remember { mutableStateOf(context.getString(R.string.github_login_preparing)) }
@@ -62,6 +66,18 @@ fun GitHubAccountCard() {
 
     DisposableEffect(Unit) {
         onDispose { runner?.cancel() }
+    }
+
+    // 从账户页返回（含注销）或任何回到设置页的时机，同步一次登录态
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                session = GitHubSessionStore.load(context)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     // 从账户页返回（含注销）时刷新登录态
@@ -79,7 +95,10 @@ fun GitHubAccountCard() {
         runner = login
         login.start(
             onStatus = { statusText = it },
-            onDeviceAuth = { deviceAuth = it },
+            onDeviceAuth = {
+                deviceAuth = it
+                statusText = context.getString(R.string.github_login_waiting_device)
+            },
             onSuccess = { result ->
                 session = result
                 runner = null

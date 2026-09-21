@@ -68,7 +68,7 @@ class GitHubAccountActivity : ComponentActivity() {
                     val systemNavBarsHeight = with(density) {
                         WindowInsets.navigationBars.getBottom(density).toDp()
                     }
-                    val session = remember { GitHubSessionStore.load(context) }
+                    val session = GitHubSessionStore.load(context)
 
                     if (session == null) {
                         Scaffold(
@@ -263,25 +263,27 @@ class GitHubAccountActivity : ComponentActivity() {
                                 }
                             }
                         }
+                    }
 
-                        OverlayDialog(
-                            show = showLogout,
-                            onDismissRequest = { showLogout = false },
-                            title = stringResource(R.string.github_logout_confirm_title),
-                            summary = stringResource(R.string.github_logout_confirm_summary)
-                        ) {
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                                TextButton(text = stringResource(R.string.cancel), onClick = { showLogout = false })
-                                Spacer(Modifier.width(12.dp))
-                                TextButton(
-                                    text = stringResource(R.string.github_logout),
-                                    onClick = {
-                                        showLogout = false
-                                        GitHubSessionStore.clear(context)
-                                        finish()
-                                    }
-                                )
-                            }
+                    // 注销确认弹窗（放在 LazyColumn 之外，避免随列表复用被回收）
+                    OverlayDialog(
+                        show = showLogout,
+                        onDismissRequest = { showLogout = false },
+                        title = stringResource(R.string.github_logout_confirm_title),
+                        summary = stringResource(R.string.github_logout_confirm_summary)
+                    ) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                            TextButton(text = stringResource(R.string.cancel), onClick = { showLogout = false })
+                            Spacer(Modifier.width(12.dp))
+                            TextButton(
+                                text = stringResource(R.string.github_logout),
+                                onClick = {
+                                    showLogout = false
+                                    GitHubSessionStore.clear(context)
+                                    // 关闭本页，让设置页在 ON_RESUME 时重新读取登录态
+                                    finish()
+                                }
+                            )
                         }
                     }
                 }
