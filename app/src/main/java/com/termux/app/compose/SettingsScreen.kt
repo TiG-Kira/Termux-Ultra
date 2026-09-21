@@ -796,7 +796,7 @@ val composeTextBlinking by com.termux.app.compose.terminal.ComposeTerminalSettin
                             OverlayDropdownPreference(
                                 title = context.getString(R.string.cursor_style),
                                 summary = context.getString(R.string.cursor_style_desc),
-                                items = listOf("Bar █", "Underline ▁", "Block ■"),
+                                items = listOf("Bar I", "Underline ▁", "Block ■"),
                                 selectedIndex = listOf("BAR", "UNDERLINE", "BLOCK").indexOf(composeCursorStyleName).coerceAtLeast(0),
                                 onSelectedIndexChange = { idx ->
                                     com.termux.app.compose.terminal.ComposeTerminalSettings.setCursorStyle(

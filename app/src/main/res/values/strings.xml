@@ -1194,7 +1194,7 @@
     <string name="font_size">Font size</string>
     <string name="cursor_blink">Cursor blink</string>
     <string name="cursor_style">Cursor style</string>
-    <string name="cursor_style_desc">Choose cursor shape: bar (█), underline (▁), or block (■)</string>
+    <string name="cursor_style_desc">Choose cursor shape: bar (I), underline (▁), or block (■)</string>
     <string name="text_blinking">Text blinking</string>
     <string name="text_blinking_desc">Allow bold/blink terminal sequences to blink text</string>
     <string name="security_settings">Security settings</string>
