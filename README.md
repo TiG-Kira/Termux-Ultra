@@ -1,4 +1,4 @@
-# Termux Ultra
+<img width="5643" height="2790" alt="AATUltra" src="https://github.com/user-attachments/assets/d9205d38-6acf-4e9e-8b95-28969322bad1" />
 
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](./LICENSE)
 [![Platform: Android](https://img.shields.io/badge/Platform-Android%208.0%2B-green.svg)]()
