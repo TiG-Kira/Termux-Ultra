@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" width="432" height="432">
+  <!-- Termux Ultra modern icon - squircle 3.52 + prompt glyph -->
+  <defs>
+    <linearGradient id="body" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#141519"/>
+      <stop offset="1" stop-color="#060607"/>
+    </linearGradient>
+  </defs>
+  <path d="M54,0 C98.75,0 108,9.25 108,54 C108,98.75 98.75,108 54,108 C9.25,108 0,98.75 0,54 C0,9.25 9.25,0 54,0 Z" fill="url(#body)"/>
+  <g stroke="#FFFFFF" stroke-width="10" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <path d="M31.18,38 L47.89,54.73 L30.55,71.3"/>
+    <path d="M57.82,69.9 L77.59,69.9"/>
+  </g>
+</svg>
