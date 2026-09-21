@@ -970,11 +970,6 @@ private fun ConnectionMethodSelector(
     }
 }
 
-private fun loadConnections(context: Context, connections: MutableList<SshConnection>) {
-    val manager = SshConnectionManager(context)
-    connections.clear()
-    connections.addAll(manager.getConnections())
-}
 
 private fun saveConnection(context: Context, connection: SshConnection, connections: MutableList<SshConnection>) {
     val manager = SshConnectionManager(context)

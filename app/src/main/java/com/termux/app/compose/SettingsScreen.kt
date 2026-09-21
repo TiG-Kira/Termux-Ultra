@@ -3,7 +3,6 @@ package com.termux.app.compose
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.content.SharedPreferences
 import android.os.Handler
 import android.os.Looper
 import android.app.PendingIntent
@@ -14,7 +13,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.fragment.app.FragmentActivity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.material3.RadioButton
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -41,7 +39,6 @@ import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.SmallTitle
-import top.yukonga.miuix.kmp.basic.Switch
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.Button
@@ -52,7 +49,6 @@ import top.yukonga.miuix.kmp.basic.SnackbarHostState
 import top.yukonga.miuix.kmp.basic.SnackbarDuration
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.ui.res.stringResource
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.preference.SwitchPreference
@@ -66,7 +62,6 @@ import com.termux.R
 import com.termux.app.LocaleHelper
 import com.termux.app.compose.AiTermuxPrefs
 import com.termux.app.compose.AiLocalModel
-import com.termux.app.compose.AiTermuxConfig
 import com.termux.app.compose.SkillType
 import com.termux.app.utils.SnackbarHelper
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences

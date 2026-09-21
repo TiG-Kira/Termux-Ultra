@@ -6,44 +6,25 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
-import android.os.Environment
 import android.os.Process
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -73,7 +54,6 @@ import androidx.compose.material.icons.rounded.List
 import androidx.compose.material.icons.rounded.Memory
 import androidx.compose.material.icons.rounded.Monitor
 import androidx.compose.material.icons.rounded.Pause
-import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.rounded.Stop
@@ -83,15 +63,11 @@ import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Archive
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
-import androidx.compose.material.icons.automirrored.rounded.ArrowForward
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.collectAsState
@@ -101,22 +77,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.painter.Painter
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.style.TextAlign
@@ -126,15 +96,10 @@ import androidx.compose.foundation.Canvas
 import com.termux.R
 import com.termux.app.TermuxService
 import com.termux.shared.termux.shell.command.runner.terminal.TermuxSession
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.DropdownEntry
-import top.yukonga.miuix.kmp.basic.DropdownItem
 import top.yukonga.miuix.kmp.basic.HorizontalDivider
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
@@ -144,8 +109,6 @@ import top.yukonga.miuix.kmp.basic.Switch
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.TopAppBar
-import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.menu.OverlayIconDropdownMenu
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import com.termux.app.compose.terminal.engine.pid
@@ -3477,26 +3440,6 @@ private fun readThreadCount(pid: Int): Int {
     }
 }
 
-private fun readTotalCpuTime(): Long {
-    fun parseStat(text: String): Long {
-        val firstLine = text.lines().firstOrNull { it.startsWith("cpu ") } ?: return 0
-        return firstLine.trim().split("\\s+".toRegex())
-            .drop(1)
-            .sumOf { it.toLongOrNull() ?: 0L }
-    }
-    return try {
-        val statFile = java.io.File("/proc/stat")
-        if (statFile.exists() && statFile.canRead()) {
-            val direct = parseStat(statFile.readText())
-            if (direct > 0) return direct
-        }
-        val process = Runtime.getRuntime().exec(arrayOf("cat", "/proc/stat"))
-        val text = process.inputStream.bufferedReader().readText()
-        parseStat(text)
-    } catch (_: Exception) {
-        0
-    }
-}
 
 private fun readProcessCpuFromPs(): Map<Int, Float> {
     val cpuMap = mutableMapOf<Int, Float>()
@@ -3544,20 +3487,6 @@ private fun readProcessCpuFromPs(): Map<Int, Float> {
     return cpuMap
 }
 
-private fun readProcessMemoryPercent(pid: Int): Float {
-    return try {
-        val statusFile = java.io.File("/proc/$pid/status")
-        if (!statusFile.exists() || !statusFile.canRead()) return 0f
-        val vmRSSLine = statusFile.readText().lines().find { it.startsWith("VmRSS:") }
-            ?: return 0f
-        val kb = vmRSSLine.filter { it.isDigit() }.toLongOrNull() ?: 0L
-        val runtime = java.lang.Runtime.getRuntime()
-        val totalMem = runtime.totalMemory() + runtime.freeMemory()
-        if (totalMem > 0) (kb * 1024).toFloat() / totalMem * 100f else 0f
-    } catch (_: Exception) {
-        0f
-    }
-}
 
 private fun checkFreezerState(pid: Int): Boolean {
     return try {

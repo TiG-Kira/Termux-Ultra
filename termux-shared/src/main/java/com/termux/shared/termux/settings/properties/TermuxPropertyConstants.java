@@ -95,7 +95,6 @@ import java.util.Set;
  */
 public final class TermuxPropertyConstants {
 
-    private static final String LOG_TAG = "TermuxPropertyConstants";
 
     /* boolean */
 

@@ -1,6 +1,5 @@
 package com.termux.app.compose
 
-import android.content.Context
 import android.graphics.RenderEffect
 import android.graphics.RuntimeShader
 import android.os.Build
@@ -8,8 +7,6 @@ import android.view.View
 import androidx.annotation.RawRes
 import com.termux.R
 import kotlin.math.floor
-import kotlin.math.max
-import kotlin.math.min
 
 /**
  * HyperCeiler About-page background effect port.
@@ -21,7 +18,6 @@ import kotlin.math.min
  */
 object AboutBgEffect {
 
-    private const val TAG = "HyperCeilerBg"
 
     private val BOUND = floatArrayOf(0f, 0f, 1f, 1f)
 

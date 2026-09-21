@@ -1,6 +1,5 @@
 package com.termux.app.compose.terminal.engine
 
-import androidx.annotation.Keep
 import com.termux.app.compose.terminal.process.ITerminalProcess
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers

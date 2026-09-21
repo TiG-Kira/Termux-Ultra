@@ -30,7 +30,6 @@ import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
 import com.termux.R
 import com.termux.app.compose.AiLocalModel
-import com.termux.app.compose.LOCAL_MODELS
 import com.termux.app.compose.KiTerminalTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch

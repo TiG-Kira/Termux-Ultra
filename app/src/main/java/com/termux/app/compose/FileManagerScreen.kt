@@ -8,8 +8,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.border
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.verticalScroll
@@ -17,7 +15,6 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.navigationBars
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.activity.compose.BackHandler
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -25,13 +22,9 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import androidx.core.app.NotificationCompat
-import com.termux.shared.termux.shell.TermuxShellUtils
-import com.termux.app.ftp.FtpServer
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.BreadcrumbBar
 import top.yukonga.miuix.kmp.basic.BreadcrumbItem
-import top.yukonga.miuix.kmp.basic.joinToPath
-import top.yukonga.miuix.kmp.preference.CheckboxPreference
 import top.yukonga.miuix.kmp.basic.Checkbox
 import androidx.compose.ui.state.ToggleableState
 import top.yukonga.miuix.kmp.basic.HorizontalDivider
@@ -43,7 +36,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp

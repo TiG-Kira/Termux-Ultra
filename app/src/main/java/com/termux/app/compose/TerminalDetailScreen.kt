@@ -90,9 +90,7 @@ import com.termux.R
 import com.termux.app.TermuxActivity
 import com.termux.app.activities.HelpActivity
 import com.termux.app.activities.SettingsActivity
-import com.termux.app.terminal.io.TerminalToolbarViewPager
 import com.termux.shared.termux.shell.command.runner.terminal.TermuxSession
-import com.termux.terminal.TerminalSession
 import com.termux.shared.view.KeyboardUtils
 import com.termux.terminal.TextStyle
 import com.termux.view.TerminalView
@@ -1636,7 +1634,6 @@ fun TerminalDetailScreen(
 
 @Composable
 private fun TerminalToolbar(activity: TermuxActivity) {
-    val context = LocalContext.current
     // Use the shared toolbar ViewPager from TermuxActivity (created in
     // setTerminalToolbarView). This ensures legacy code (key event routing
     // to terminal_toolbar_text_input, etc.) keeps working even though the

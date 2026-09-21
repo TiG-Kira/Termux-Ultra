@@ -19,9 +19,7 @@ import com.termux.app.TermuxActivity
 import com.termux.app.activities.QemuVmActivity
 import com.termux.shared.shell.command.ExecutionCommand
 import com.termux.shared.termux.shell.command.environment.TermuxShellEnvironment
-import com.termux.shared.termux.shell.TermuxShellUtils
 import com.termux.shared.termux.TermuxConstants
-import com.termux.shared.shell.command.runner.app.AppShell
 import com.termux.app.ssh.SshConnection
 import com.termux.app.ssh.SshConnectionManager
 import com.termux.app.vnc.VncConnection
@@ -42,7 +40,6 @@ import java.io.InputStreamReader
 import java.net.HttpURLConnection
 import java.net.URLEncoder
 import java.net.URL
-import androidx.compose.ui.res.stringResource
 
 /** ---------- 技能执行器 ---------- */
 

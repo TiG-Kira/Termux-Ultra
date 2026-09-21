@@ -1,14 +1,12 @@
 package com.termux.app.compose
 
 import android.content.Context
-import android.content.Intent
 import android.os.Environment
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -208,7 +206,6 @@ private fun MainTermuxSettingsPage(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    val prefs = remember { TermuxAppSharedPreferences.build(context) }
 
     val pluginItems = remember {
         buildList {
@@ -600,7 +597,6 @@ private fun PluginSettingsPage(
     pluginType: String,
     modifier: Modifier = Modifier
 ) {
-    val context = LocalContext.current
     val (title, summary) = when (pluginType) {
         "api" -> stringResource(R.string.termux_api_preferences_title) to stringResource(R.string.termux_api_preferences_summary)
         "float" -> stringResource(R.string.termux_float_preferences_title) to stringResource(R.string.termux_float_preferences_summary)

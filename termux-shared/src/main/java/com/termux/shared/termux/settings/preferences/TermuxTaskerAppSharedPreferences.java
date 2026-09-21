@@ -15,7 +15,6 @@ import com.termux.shared.logger.Logger;
 
 public class TermuxTaskerAppSharedPreferences extends AppSharedPreferences {
 
-    private static final String LOG_TAG = "TermuxTaskerAppSharedPreferences";
 
     private  TermuxTaskerAppSharedPreferences(@NonNull Context context) {
         super(context,

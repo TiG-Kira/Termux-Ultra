@@ -2,7 +2,6 @@ package com.termux.app.compose
 
 import android.content.Context
 import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
 
 /** AI 提供商配置 */
 data class AiProviderConfig(
@@ -1201,7 +1200,6 @@ Termux:API（termux-battery-status、termux-network-status 等命令行工具）
 object AiTermuxPrefs {
     // ---------- Keys ----------
     private const val PREFS_NAME = "ai_termux_prefs"
-    private const val KEY_CONFIG = "ai_config"
     private const val KEY_CHAT_HISTORY = "chat_history"
     private const val KEY_DEVELOPER_MODE = "ai_developer_mode"
     private const val KEY_CUSTOM_SKILLS = "custom_skills"

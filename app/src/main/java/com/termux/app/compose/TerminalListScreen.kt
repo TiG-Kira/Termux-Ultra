@@ -7,17 +7,14 @@ import android.content.ServiceConnection
 import android.os.IBinder
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -26,7 +23,6 @@ import androidx.compose.material.icons.rounded.CheckCircleOutline
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.ExpandLess
-import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Warning
 import top.yukonga.miuix.kmp.preference.CheckboxPreference
@@ -38,11 +34,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -69,8 +63,6 @@ import com.termux.app.TermuxService
 import com.termux.shared.termux.shell.command.runner.terminal.TermuxSession
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.collect
-import androidx.compose.runtime.snapshotFlow
 
 @Composable
 fun TerminalListScreen(
@@ -96,8 +88,6 @@ fun TerminalListScreen(
     var searchExpanded by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
     var isRefreshing by remember { mutableStateOf(false) }
-    val aiTermuxEnabled = context.getSharedPreferences("app_settings", android.content.Context.MODE_PRIVATE)
-        .getBoolean("ai_termux_enabled", true)
     // 卡片布局模式：0 = 垂直网格，1 = 横向滑动（仅提示卡片横向，终端卡片始终竖向）
     val cardLayoutMode = context.getSharedPreferences("app_settings", android.content.Context.MODE_PRIVATE)
         .getInt("KEY_CARD_LAYOUT_MODE", 0)

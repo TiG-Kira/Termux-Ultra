@@ -4,7 +4,6 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import androidx.compose.ui.res.stringResource
 
 /**
  * TextEditorScreen 语法高亮引擎。

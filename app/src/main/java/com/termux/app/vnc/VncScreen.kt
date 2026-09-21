@@ -333,11 +333,6 @@ fun VncEditDialog(
     )
 }
 
-private fun loadConnections(context: Context, connections: MutableList<VncConnection>) {
-    val manager = VncConnectionManager(context)
-    connections.clear()
-    connections.addAll(manager.getConnections())
-}
 
 private fun saveConnection(context: Context, connection: VncConnection, connections: MutableList<VncConnection>) {
     val manager = VncConnectionManager(context)

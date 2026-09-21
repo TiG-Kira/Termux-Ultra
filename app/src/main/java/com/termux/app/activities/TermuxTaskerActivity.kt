@@ -7,14 +7,12 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.core.view.WindowCompat
 import androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner
 import com.termux.app.compose.KiTerminalTheme
 import com.termux.app.compose.NavigationHelper
 import com.termux.app.compose.TermuxTaskerScreen
-import com.termux.shared.logger.Logger
 
 class TermuxTaskerActivity : ComponentActivity() {
 

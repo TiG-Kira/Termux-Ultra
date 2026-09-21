@@ -7,7 +7,6 @@ import androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner
 import com.termux.app.TermuxActivity
 import com.termux.app.compose.terminal.ComposeSessionManager
 import com.termux.app.compose.terminal.ComposeTerminalSettings
-import com.termux.app.compose.terminal.engine.TerminalSession as LibTerminalSession
 import com.termux.app.compose.terminal.engine.pid
 
 /**

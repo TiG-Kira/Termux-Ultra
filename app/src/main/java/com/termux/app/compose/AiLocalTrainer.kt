@@ -3,19 +3,11 @@ package com.termux.app.compose
 import android.content.Context
 import android.util.Log
 import com.google.gson.Gson
-import com.termux.app.activities.AiTermuxActivity
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.channels.awaitClose
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.runInterruptible
 import com.termux.app.compose.SkillExecutor
-import java.util.concurrent.atomic.AtomicBoolean
 
 // --------- 事件类型（发给 UI 的更新流） ---------
 sealed class LocalTrainerEvent {
@@ -95,7 +87,6 @@ object AiLocalTrainer {
 
 
     private const val TAG = "AiLocalTrainer"
-    private const val DEFAULT_ROUNDS = 10
     /** 多轮追问最多轮数（防止死循环） */
     private const val MAX_FOLLOWUPS = 3
 
@@ -977,10 +968,6 @@ ${memoryBlock.ifBlank { "(暂无)" }}
     }
 
     /** 在线模型非流式调用，返回某个 JSON key 的值（简单提取） */
-    private suspend fun callOnlineNonStream(context: Context, msgs: List<OpenAiMessage>, expectJsonKey: String): String? {
-        val raw = callOnlineNonStreamRaw(context, msgs) ?: return null
-        return extractJsonField(raw, expectJsonKey) ?: stripFirstJsonString(raw)
-    }
 
     /** 在线追问调用：解析 needFollowup / followupText / score / shouldFinalizeNow */
     private suspend fun callOnlineNonStreamForFollowup(context: Context, msgs: List<OpenAiMessage>): FollowupDecision {

@@ -32,8 +32,6 @@ import androidx.core.view.WindowCompat
 import com.termux.R
 import com.termux.app.TermuxService
 import com.termux.app.compose.*
-import com.termux.shared.termux.shell.command.environment.TermuxShellEnvironment
-import com.termux.shared.termux.TermuxConstants
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -43,8 +41,6 @@ import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.theme.MiuixTheme
-import java.io.BufferedReader
-import java.io.InputStreamReader
 
 /**
  * QEMU 虚拟机管理页面。

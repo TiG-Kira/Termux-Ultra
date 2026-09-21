@@ -1,10 +1,8 @@
 package com.termux.app.compose
 
-import java.io.File
 
 import android.content.Context
 import android.content.Intent
-import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
@@ -12,14 +10,11 @@ import android.view.WindowManager
 import com.termux.app.utils.SnackbarHelper
 import com.google.android.material.snackbar.Snackbar
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
 import androidx.biometric.auth.AuthPromptCallback
 import androidx.biometric.auth.startClass2BiometricOrCredentialAuthentication
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import top.yukonga.miuix.kmp.preference.CheckboxPreference
@@ -30,14 +25,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentActivity
-import com.termux.R
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CoroutineScope
@@ -46,7 +37,6 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -523,7 +513,6 @@ object RiskConfirmManager {
     /** requestId 自增序号。原实现用 System.currentTimeMillis() 作 id，
      * 同一毫秒内发起的两个请求会撞 id，后注册的覆盖先注册的回调。 */
     private val requestIdSeq = java.util.concurrent.atomic.AtomicLong(0)
-    private fun nextRequestId(): String = "req-${requestIdSeq.incrementAndGet()}"
 
     /**
      * 按 requestId 精确结算一个挂起请求。remove 成功才执行回调，

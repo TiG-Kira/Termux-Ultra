@@ -5,7 +5,6 @@ import android.util.Log
 import com.termux.shared.shell.command.ExecutionCommand
 import com.termux.shared.termux.shell.command.environment.TermuxShellEnvironment
 import com.termux.shared.termux.shell.TermuxShellUtils
-import com.termux.shared.shell.command.runner.app.AppShell
 import com.termux.shared.termux.TermuxConstants
 import com.termux.shared.compat.ShellEnvironmentCompat
 import com.termux.shared.compat.TermuxTaskCompat
@@ -15,7 +14,6 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.withContext
 import java.io.File
-import androidx.compose.ui.res.stringResource
 
 /** Ollama模型条目 */
 data class OllamaModelEntry(

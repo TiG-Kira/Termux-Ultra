@@ -21,10 +21,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.res.stringResource
@@ -376,32 +374,6 @@ fun TextEditorScreen(
 }
 
 
-private fun tokenStyle(type: SyntaxHighlighter.Type, isDark: Boolean): SpanStyle {
-    return when (type) {
-        SyntaxHighlighter.Type.KEYWORD -> SpanStyle(
-            color = if (isDark) Color(0xFFFF6482) else Color(0xFFC74DB6),
-            fontWeight = FontWeight.Bold
-        )
-        SyntaxHighlighter.Type.STRING -> SpanStyle(
-            color = if (isDark) Color(0xFF98FB98) else Color(0xFF0A8F08)
-        )
-        SyntaxHighlighter.Type.COMMENT -> SpanStyle(
-            color = if (isDark) Color(0xFF6B7280) else Color(0xFF8B949E)
-        )
-        SyntaxHighlighter.Type.NUMBER -> SpanStyle(
-            color = if (isDark) Color(0xFFFFD700) else Color(0xFF986801)
-        )
-        SyntaxHighlighter.Type.FUNCTION -> SpanStyle(
-            color = if (isDark) Color(0xFF56B6C2) else Color(0xFF4078F2)
-        )
-        SyntaxHighlighter.Type.OPERATOR, SyntaxHighlighter.Type.BRACE -> SpanStyle(
-            color = if (isDark) Color(0xFFD4D4D4) else Color(0xFF383A42)
-        )
-        SyntaxHighlighter.Type.DEFAULT -> SpanStyle(
-            color = if (isDark) Color(0xFFE5E5EA) else Color(0xFF1C1C1E)
-        )
-    }
-}
 
 @Composable
 private fun FilePermissionDialog(file: File, onDismiss: () -> Unit) {

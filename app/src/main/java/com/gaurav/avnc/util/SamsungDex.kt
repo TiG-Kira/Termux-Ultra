@@ -22,15 +22,6 @@ object SamsungDex {
     /**
      * Returns true, if DeX mode is enabled.
      */
-    private fun isInDexMode(context: Context) = runCatching {
-        val config = context.resources.configuration
-        val configClass = config.javaClass
-
-        val flag = configClass.getField("SEM_DESKTOP_MODE_ENABLED").getInt(configClass)
-        val value = configClass.getField("semDesktopModeEnabled").getInt(config)
-
-        value == flag
-    }.getOrDefault(false)
 
 
     /**
