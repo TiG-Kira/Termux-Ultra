@@ -226,7 +226,7 @@ implementation "io.coil-kt:coil:2.7.0"
     // 注意: 必须使用支持当前 JDK 字节码版本的 Robolectric。4.13 在 JDK 25
     // 上会抛 "Unsupported class file major version 69"（字节码插桩不支持），
     // 4.16+ 才支持较新的 class 文件版本。
-    testImplementation "org.robolectric:robolectric:4.16"
+    testImplementation "org.robolectric:robolectric:4.17"
     testImplementation "androidx.test:core:1.6.1"
 }
 
