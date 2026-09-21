@@ -1,28 +1,30 @@
+<!-- Termux Ultra adaptive foreground: squircle body + prompt glyph -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:height="108dp"
+    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
+    android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-
-    <!-- Keep in sync with non-adaptive ic_launcher.xml -->
+    <path android:pathData="M54,0 C98.75,0 108,9.25 108,54 C108,98.75 98.75,108 54,108 C9.25,108 0,98.75 0,54 C0,9.25 9.25,0 54,0 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="54" android:startY="0"
+                android:endX="54" android:endY="108">
+                <item android:color="#FF141519" android:offset="0"/>
+                <item android:color="#FF060607" android:offset="1"/>
+            </gradient>
+        </aapt:attr>
+    </path>
     <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M34,38
-                          h6
-                          l12,16
-                          l-12,16
-                          h-6
-                          l12,-16
-                          "
-        />
-
+        android:pathData="M31.18,38 L47.89,54.73 L30.55,71.3"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="10"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"/>
     <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M56,66
-                          h18
-                          v4
-                          h-18
-                          "
-        />
-
+        android:pathData="M57.82,69.9 L77.59,69.9"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="10"
+        android:strokeLineCap="round"/>
 </vector>
