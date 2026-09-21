@@ -249,6 +249,11 @@ val composeTextBlinking by com.termux.app.compose.terminal.ComposeTerminalSettin
         mutableStateOf(prefs.getInt("KEY_CARD_LAYOUT_MODE", 0))
     }
 
+    // 软件包管理显示方式
+    var pkgViewModeIndex by remember {
+        mutableStateOf(prefs.getInt("KEY_PKG_VIEW_MODE", 0))
+    }
+
     val scrollBehavior = MiuixScrollBehavior()
 
     val restoreFileLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -616,15 +621,16 @@ val composeTextBlinking by com.termux.app.compose.terminal.ComposeTerminalSettin
                         )
                             OverlayDropdownPreference(
                             title = context.getString(R.string.pkg_view_mode),
-                            summary = if (prefs.getInt("KEY_PKG_VIEW_MODE", 0) == 0)
+                            summary = if (pkgViewModeIndex == 0)
                                 context.getString(R.string.pkg_view_mode_category)
                                 else context.getString(R.string.pkg_view_mode_list),
                             items = listOf(
                                 context.getString(R.string.pkg_view_mode_category),
                                 context.getString(R.string.pkg_view_mode_list)
                             ),
-                            selectedIndex = prefs.getInt("KEY_PKG_VIEW_MODE", 0),
+                            selectedIndex = pkgViewModeIndex,
                             onSelectedIndexChange = { idx ->
+                                pkgViewModeIndex = idx
                                 prefs.edit().putInt("KEY_PKG_VIEW_MODE", idx).apply()
                             },
                             startAction = {
