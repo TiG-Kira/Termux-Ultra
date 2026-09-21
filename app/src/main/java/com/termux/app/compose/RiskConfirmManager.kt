@@ -7,6 +7,7 @@ import android.content.Intent
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import android.view.WindowManager
 import com.termux.app.utils.SnackbarHelper
 import com.google.android.material.snackbar.Snackbar
@@ -366,18 +367,15 @@ object RiskConfirmManager {
         if (level == ProtectionLevel.OFF) return true
 
         if (Looper.myLooper() == Looper.getMainLooper()) {
-            val result = arrayOf(false)
-            val latch = CountDownLatch(1)
+            // 不能在主线程用 latch.await 阻塞：会导致 ANR，且 handler.post 设置
+            // _agentSkipState 的 Runnable 无法被处理（主线程卡住）。
+            // 正确做法：挂起到 Dispatchers.Default 上执行阻塞逻辑，主线程立即返回 false。
+            // 调用方不应在主线程调用此阻塞 API，这里做兜底保护。
+            Log.w("RiskConfirm", "requestAgentSkipConfirmBlocking called on main thread — dispatching to Default dispatcher without waiting")
             CoroutineScope(Dispatchers.Default).launch {
-                result[0] = doAgentSkipBlocking(context, command, mode, detail)
-                latch.countDown()
+                doAgentSkipBlocking(context, command, mode, detail)
             }
-            try {
-                latch.await(CONFIRM_WAIT_SECONDS.toLong(), TimeUnit.SECONDS)
-            } catch (_: InterruptedException) {
-                return false
-            }
-            return result[0]
+            return false
         }
         return doAgentSkipBlocking(context, command, mode, detail)
     }
@@ -435,16 +433,49 @@ object RiskConfirmManager {
         }
     }
 
-    /** 用户点击"跳过验证"（Loading 弹窗上的按钮）。触发 SKIP 模式二次确认。 */
+    /** 用户点击"跳过验证"（Loading 弹窗上的按钮）。触发 SKIP 模式二次确认。
+     *  必须在主线程调用：直接设置 state 让 UI 层渲染二次确认弹窗，不阻塞主线程。
+     *
+     *  关键顺序约束（showDialog = agentLoading || state != null || skipState != null）：
+     *  1. 先设置 _agentSkipState → showDialog 保持 true
+     *  2. 再 hide loading → showDialog 仍为 true（skipState 非 null）
+     *  否则反过来 hide loading 会先让 showDialog 变 false → WindowDialog 消失闪烁。 */
     fun requestSkipFromLoading(context: Context, command: String = "") {
-        // 先 hide loading（否则两个 DialogWindow 叠加会冲突），然后 show skip confirm
-        _agentLoadingVisible.value = false
-        requestAgentSkipConfirmBlocking(
-            context = context,
+        // 无限制模式直接放行，不需要二次确认
+        if (isUnlimitedModeActive(context)) {
+            _agentLoadingVisible.value = false
+            return
+        }
+        val level = getProtectionLevel(context)
+        if (level == ProtectionLevel.OFF) {
+            _agentLoadingVisible.value = false
+            return
+        }
+
+        val requestId = "skip-" + requestIdSeq.incrementAndGet()
+
+        // 结算被顶掉的旧请求
+        preemptActiveRequest()
+
+        // 注册 pendingRequest（让 confirmAgentSkip/cancelAgentSkip 能结算）
+        pendingRequests[requestId] = { confirmed ->
+            _agentSkipState.value = null
+        }
+
+        // 先设 skipState → UI 层观察到后渲染二次确认弹窗
+        _agentSkipState.value = AgentSkipState(
             command = command,
             mode = AgentSkipState.Mode.SKIP,
-            detail = ""
+            detail = "",
+            requestId = requestId
         )
+
+        // 超时自动按拒绝结算
+        val timeoutRunnable = Runnable { resolveAgentSkipRequest(requestId, false) }
+        mainHandler.postDelayed(timeoutRunnable, CONFIRM_WAIT_SECONDS * 1000L)
+
+        // 最后 hide loading —— 此时 skipState 已设好，showDialog 仍为 true，WindowDialog 不会消失
+        _agentLoadingVisible.value = false
     }
 
     /** 用户在跳过二次确认弹窗上点"确认通过" */
