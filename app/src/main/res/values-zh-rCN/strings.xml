@@ -1042,7 +1042,7 @@
     <string name="font_size">字体大小</string>
     <string name="cursor_blink">光标闪烁</string>
     <string name="cursor_style">光标样式</string>
-    <string name="cursor_style_desc">选择光标形状：竖线 (█)、下划线 (▁) 或方块 (■)</string>
+    <string name="cursor_style_desc">选择光标形状：竖线 (I)、下划线 (▁) 或方块 (■)</string>
     <string name="text_blinking">文本闪烁</string>
     <string name="text_blinking_desc">允许终端的加粗/闪烁序列使文本闪烁</string>
     <string name="security_settings">安全设置</string>

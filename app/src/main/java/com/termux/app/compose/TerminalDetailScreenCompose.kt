@@ -136,6 +136,12 @@ fun TerminalDetailScreenCompose(
 
     val textSize by ComposeTerminalSettings.fontSize.collectAsState()
     val cursorBlink by ComposeTerminalSettings.cursorBlink.collectAsState()
+    val cursorStyleName by ComposeTerminalSettings.cursorStyleName.collectAsState()
+    val cursorStyle = run {
+        try { com.termux.app.compose.terminal.engine.TerminalCursorStyle.valueOf(cursorStyleName) }
+        catch (_: Throwable) { com.termux.app.compose.terminal.engine.TerminalCursorStyle.BAR }
+    }
+    val textBlinking by ComposeTerminalSettings.textBlinking.collectAsState()
     val colorScheme by ComposeTerminalSettings.colorScheme.collectAsState()
     val stylingColorScheme by ComposeTerminalSettings.stylingColorScheme.collectAsState()
     val stylingTypeface by ComposeTerminalSettings.stylingTypeface.collectAsState()
@@ -908,6 +914,8 @@ fun TerminalDetailScreenCompose(
                     useLightTheme = false,
                     textSize = textSize,
                     cursorBlink = cursorBlink,
+                    cursorStyle = cursorStyle,
+                    textBlinking = textBlinking,
                     colorScheme = effectiveColorScheme,
                     typeface = stylingTypeface
                 )

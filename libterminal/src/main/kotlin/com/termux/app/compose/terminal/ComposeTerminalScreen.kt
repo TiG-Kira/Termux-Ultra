@@ -49,6 +49,8 @@ fun ComposeTerminalScreen(
                     this.typeface = typeface ?: android.graphics.Typeface.MONOSPACE
                     this.colorScheme = resolvedScheme
                     this.cursorBlinking = cursorBlink
+                    this.cursorStyle = cursorStyle
+                    this.textBlinking = textBlinking
                 }.also { tv ->
                     terminalView = tv
                 }
@@ -58,6 +60,8 @@ fun ComposeTerminalScreen(
                 tv.typeface = typeface ?: android.graphics.Typeface.MONOSPACE
                 tv.colorScheme = resolvedScheme
                 tv.cursorBlinking = cursorBlink
+                tv.cursorStyle = cursorStyle
+                tv.textBlinking = textBlinking
                 if (session != null && lastSessionId != session.id) {
                     tv.currentSession = session
                     lastSessionId = session.id
