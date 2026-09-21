@@ -1275,6 +1275,7 @@ private fun TerminalKeyboardToolbar(
             modifier = Modifier.padding(vertical = 4.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
+            // 三行各 12 按钮，视觉平衡
             Row(
                 modifier = Modifier.padding(horizontal = 6.dp),
                 horizontalArrangement = Arrangement.spacedBy(3.dp)
@@ -1288,8 +1289,6 @@ private fun TerminalKeyboardToolbar(
                 KeyButton("$", { sendChar('$') }, effectiveContentColor)
                 KeyButton("(", { sendChar('(') }, effectiveContentColor)
                 KeyButton(")", { sendChar(')') }, effectiveContentColor)
-                KeyButton("{", { sendChar('{') }, effectiveContentColor)
-                KeyButton("}", { sendChar('}') }, effectiveContentColor)
                 KeyButton("[", { sendChar('[') }, effectiveContentColor)
                 KeyButton("]", { sendChar(']') }, effectiveContentColor)
                 KeyButton("⌫", { send(byteArrayOf(0x7F)) }, effectiveContentColor)
@@ -1305,10 +1304,11 @@ private fun TerminalKeyboardToolbar(
                 KeyButton("~", { sendChar('~') }, effectiveContentColor)
                 KeyButton("%", { sendChar('%') }, effectiveContentColor)
                 KeyButton("*", { sendChar('*') }, effectiveContentColor)
+                KeyButton("{", { sendChar('{') }, effectiveContentColor)
+                KeyButton("}", { sendChar('}') }, effectiveContentColor)
                 KeyButton("HOME", { sendEscape("[H") }, effectiveContentColor)
                 KeyButton("↑", { sendEscape("[A") }, effectiveContentColor)
                 KeyButton("END", { sendEscape("[F") }, effectiveContentColor)
-                KeyButton("PGUP", { sendEscape("[5~") }, effectiveContentColor)
             }
             Row(
                 modifier = Modifier.padding(horizontal = 6.dp),
@@ -1324,6 +1324,7 @@ private fun TerminalKeyboardToolbar(
                 KeyButton("←", { sendEscape("[D") }, effectiveContentColor)
                 KeyButton("↓", { sendEscape("[B") }, effectiveContentColor)
                 KeyButton("→", { sendEscape("[C") }, effectiveContentColor)
+                KeyButton("PGUP", { sendEscape("[5~") }, effectiveContentColor)
                 KeyButton("PGDN", { sendEscape("[6~") }, effectiveContentColor)
             }
         }
