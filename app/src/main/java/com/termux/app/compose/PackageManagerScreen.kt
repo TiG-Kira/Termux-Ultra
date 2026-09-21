@@ -591,6 +591,16 @@ fun PackageManagerScreen(
     var loadingAvailable by remember { mutableStateOf(false) }
     var showDetail by remember { mutableStateOf<PackageInfo?>(null) }
 
+    // 分类视图状态
+    val pkgPrefs = remember {
+        context.getSharedPreferences("app_settings", android.content.Context.MODE_PRIVATE)
+    }
+    val pkgViewMode by remember { mutableStateOf(pkgPrefs.getInt("KEY_PKG_VIEW_MODE", 0)) }
+    var navStack by remember {
+        mutableStateOf(listOf(PkgNavLevel(sectionKey = null, label = null)))
+    }
+    val currentSection: String? = navStack.lastOrNull()?.sectionKey
+
     // 观察 LiveUpdateState — 实时 log + 后台任务按钮 + 恢复请求
     val livePkgLog by LiveUpdateState.pkgLog.collectAsState()
     val pkgStateSnap by LiveUpdateState.pkgState.collectAsState()
@@ -664,6 +674,7 @@ fun PackageManagerScreen(
     BackHandler {
         when {
             searchQuery.isNotBlank() -> searchQuery = ""
+            navStack.size > 1 -> navStack = navStack.dropLast(1)
             else -> onBackPressed()
         }
     }
@@ -672,7 +683,8 @@ fun PackageManagerScreen(
         contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0),
         topBar = {
             TopAppBar(
-                title = "软件包管理",
+                title = if (navStack.size > 1) PkgRepo.sectionDisplayName(context, navStack.last().sectionKey ?: "")
+                         else "软件包管理",
                 scrollBehavior = scrollBehavior,
                 navigationIcon = {
                     Box(
@@ -681,6 +693,7 @@ fun PackageManagerScreen(
                             .clip(CircleShape)
                             .clickable {
                                 if (searchQuery.isNotBlank()) searchQuery = ""
+                                else if (navStack.size > 1) navStack = navStack.dropLast(1)
                                 else onBackPressed()
                             },
                         contentAlignment = Alignment.Center
@@ -813,12 +826,28 @@ fun PackageManagerScreen(
                         color = Color(0xFF2563EB)
                     )
                 } else {
-                    val list = if (searchQuery.isNotBlank()) {
+                    // 先拿到当前 tab 的包列表（搜索优先）
+                    val rawList = if (searchQuery.isNotBlank()) {
                         val q = searchQuery.lowercase()
                         val installedMatch = installedList.filter { it.name.lowercase().contains(q) }
                         val availableMatch = availableList.filter { it.name.lowercase().contains(q) }
                         (installedMatch + availableMatch).distinctBy { it.name }
                     } else if (selectedTab == 0) installedList else availableList
+
+                    // 分类模式: viewMode=0
+                    val showCategory = pkgViewMode == 0 && searchQuery.isBlank()
+
+                    val isCategoryRoot = showCategory && navStack.size == 1
+                    val isCategoryDetail = showCategory && navStack.size > 1
+
+                    // 在分类详情里 → 过滤当前 section 的包
+                    val displayList = if (isCategoryDetail) {
+                        val cur = currentSection
+                        rawList.filter { pkg -> pkg.resolveSection() == cur }
+                    } else {
+                        rawList
+                    }
+
                     LazyColumn(
                         state = listState,
                         modifier = Modifier.fillMaxSize().nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -828,26 +857,54 @@ fun PackageManagerScreen(
                             top = 4.dp, bottom = 16.dp
                         )
                     ) {
-                        if (list.isEmpty()) {
-                            item {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(top = 60.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        text = if (searchQuery.isNotBlank()) "未找到匹配的软件包"
-                                               else if (selectedTab == 0) "暂无已安装的包"
-                                               else "暂无未安装的包",
-                                        color = if (isDark) Color.White.copy(alpha = 0.5f)
-                                                else Color.Black.copy(alpha = 0.5f),
-                                        fontSize = 14.sp
+                        // === 分类根级: 显示分类网格 ===
+                        if (isCategoryRoot) {
+                            val sectionGroups = rawList
+                                .groupBy { pkg -> PkgRepo.normalizeSectionKey(pkg.resolveSection()) }
+                                .map { (k, v) -> k to v.size }
+                                .sortedByDescending { it.second }
+
+                            if (sectionGroups.isEmpty()) {
+                                item {
+                                    EmptyStateView(
+                                        message = if (selectedTab == 0)
+                                            context.getString(R.string.pkg_empty_installed)
+                                        else
+                                            context.getString(R.string.pkg_empty_available)
+                                    )
+                                }
+                            } else {
+                                items(sectionGroups) { (sectionKey, count) ->
+                                    CategoryEntry(
+                                        label = PkgRepo.sectionDisplayName(context, sectionKey),
+                                        count = count,
+                                        onClick = {
+                                            navStack = navStack + PkgNavLevel(
+                                                sectionKey = sectionKey,
+                                                label = PkgRepo.sectionDisplayName(context, sectionKey)
+                                            )
+                                        }
                                     )
                                 }
                             }
+                        // === 列表(普通/分类详情/搜索) ===
+                        } else if (displayList.isEmpty()) {
+                            item {
+                                EmptyStateView(
+                                    message = when {
+                                        searchQuery.isNotBlank() ->
+                                            context.getString(R.string.pkg_empty_search)
+                                        isCategoryDetail ->
+                                            context.getString(R.string.pkg_empty_section)
+                                        selectedTab == 0 ->
+                                            context.getString(R.string.pkg_empty_installed)
+                                        else ->
+                                            context.getString(R.string.pkg_empty_available)
+                                    }
+                                )
+                            }
                         } else {
-                            items(list) { pkg ->
+                            items(displayList) { pkg ->
                                 PackageCard(
                                     pkg = pkg,
                                     onClick = { showDetail = pkg }
@@ -993,6 +1050,94 @@ private fun PackageCard(
                     color = if (pkg.isInstalled) accentColor else grayColor
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun EmptyStateView(message: String) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 60.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(
+                painter = painterResource(R.drawable.ic_package),
+                contentDescription = null,
+                tint = if (isSystemInDarkTheme()) Color.White.copy(alpha = 0.4f)
+                       else Color.Black.copy(alpha = 0.4f),
+                modifier = Modifier.size(48.dp)
+            )
+            Spacer(Modifier.height(12.dp))
+            Text(
+                text = message,
+                color = if (isSystemInDarkTheme()) Color.White.copy(alpha = 0.5f)
+                        else Color.Black.copy(alpha = 0.5f),
+                fontSize = 14.sp
+            )
+        }
+    }
+}
+
+@Composable
+private fun CategoryEntry(
+    label: String,
+    count: Int,
+    onClick: () -> Unit
+) {
+    val isDark = isSystemInDarkTheme()
+    val textColor = if (isDark) Color.White else Color.Black
+    val subColor = if (isDark) Color.White.copy(alpha = 0.6f) else Color.Black.copy(alpha = 0.6f)
+
+    MiuixCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .background(
+                        color = Color(0xFF2563EB).copy(alpha = 0.12f),
+                        shape = RoundedCornerShape(12.dp)
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_folder),
+                    contentDescription = null,
+                    tint = Color(0xFF2563EB),
+                    modifier = Modifier.size(22.dp)
+                )
+            }
+            Spacer(Modifier.padding(4.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = label,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = textColor
+                )
+                Text(
+                    text = "$count 个软件包",
+                    fontSize = 13.sp,
+                    color = subColor
+                )
+            }
+            Icon(
+                painter = painterResource(R.drawable.ic_arrow_right),
+                contentDescription = null,
+                tint = subColor,
+                modifier = Modifier.size(20.dp)
+            )
         }
     }
 }
