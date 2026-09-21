@@ -203,6 +203,8 @@ fun SettingsScreen(
     val composeFontSize by com.termux.app.compose.terminal.ComposeTerminalSettings.fontSize.collectAsState()
     val composeCursorBlink by com.termux.app.compose.terminal.ComposeTerminalSettings.cursorBlink.collectAsState()
     val composeScrollbackLines by com.termux.app.compose.terminal.ComposeTerminalSettings.scrollbackLines.collectAsState()
+val composeCursorStyleName by com.termux.app.compose.terminal.ComposeTerminalSettings.cursorStyleName.collectAsState()
+val composeTextBlinking by com.termux.app.compose.terminal.ComposeTerminalSettings.textBlinking.collectAsState()
 
     // Official standalone APK detection. Keys match the add-on app package names; when a standalone
     // APK is installed, the integrated toggle is forced OFF and disabled, with the row shows
@@ -788,6 +790,29 @@ fun SettingsScreen(
                                 checked = composeCursorBlink,
                                 onCheckedChange = {
                                     com.termux.app.compose.terminal.ComposeTerminalSettings.setCursorBlink(it)
+                                },
+                                startAction = { SettingIcon(R.drawable.ic_terminal) }
+                            )
+                            OverlayDropdownPreference(
+                                title = context.getString(R.string.cursor_style),
+                                summary = context.getString(R.string.cursor_style_desc),
+                                items = listOf("Bar █", "Underline ▁", "Block ■"),
+                                selectedIndex = listOf("BAR", "UNDERLINE", "BLOCK").indexOf(composeCursorStyleName).coerceAtLeast(0),
+                                onSelectedIndexChange = { idx ->
+                                    com.termux.app.compose.terminal.ComposeTerminalSettings.setCursorStyle(
+                                        com.termux.app.compose.terminal.engine.TerminalCursorStyle.valueOf(
+                                            listOf("BAR", "UNDERLINE", "BLOCK")[idx]
+                                        )
+                                    )
+                                },
+                                startAction = { SettingIcon(R.drawable.ic_terminal) }
+                            )
+                            SwitchPreference(
+                                title = context.getString(R.string.text_blinking),
+                                summary = context.getString(R.string.text_blinking_desc),
+                                checked = composeTextBlinking,
+                                onCheckedChange = {
+                                    com.termux.app.compose.terminal.ComposeTerminalSettings.setTextBlinking(it)
                                 },
                                 startAction = { SettingIcon(R.drawable.ic_terminal) }
                             )

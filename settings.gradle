@@ -4,7 +4,6 @@ include ':terminal-emulator'
 include ':terminal-view'
 include ':termux-shared'
 include ':libterminal'
-include ':libterminal-pty'
 
 // Vendor add-ons (built as sub-projects from vendor/termux-addons)
 include ':termux-api'
