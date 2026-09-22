@@ -1,21 +1,65 @@
-name: Unit tests
+name: 单元测试
 
+# 独立工作流（不再塞进 ci.yml）：ci.yml 只跑 `:app:assembleDebug`，
+# 既不编译也不执行任何单元测试，导致 app/src/test、terminal-emulator/src/test
+# 下的测试长期处于「零验证」状态（含 test-only 依赖升级、Robolectric 配置等改动）。
+# 本工作流负责把各模块的 JVM 单元测试真正跑起来。
 on:
   push:
     branches:
-      - master
-      - android-10
+      - main
+    # 纯文档改动（README / docs 站点）不值得占用测试资源。
+    # 注意：若将来给本工作流开启「必需状态检查（required status check）」，
+    # docs-only 的 PR 不会产生这个 check，会被永久卡在 pending，届时需去掉 paths-ignore。
+    paths-ignore:
+      - 'README.md'
+      - 'docs/**'
   pull_request:
     branches:
-      - master
-      - android-10
+      - main
+    paths-ignore:
+      - 'README.md'
+      - 'docs/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   testing:
-    runs-on: ubuntu-latest
+    name: "Unit tests"
+    runs-on: ubuntu-26.04
+    timeout-minutes: 45
     steps:
-    - name: Clone repository
-      uses: actions/checkout@v4
-    - name: Execute tests
-      run: |
-        ./gradlew test
+      - name: 检出代码
+        uses: actions/checkout@v7
+
+      - name: 设置 JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: gradle
+
+      # ./gradlew test 会执行各子模块的单元测试任务：
+      #   :app:testDebugUnitTest / :app:testReleaseUnitTest（JUnit4 + Robolectric 4.17）
+      #   :terminal-emulator、termux-shared 等库模块，以及 vendor/termux-addons 下的模块。
+      # TERMUX_WORKFLOW_CLI 与 ci.yml 保持一致，保证测试跑在和「编译」相同的构建配置上。
+      - name: 运行单元测试
+        run: |
+          export TERMUX_WORKFLOW_CLI=true
+          ./gradlew test
+
+      - name: 上传测试报告
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: unit-test-reports
+          if-no-files-found: ignore
+          path: |
+            **/build/reports/tests/**
+            **/build/test-results/**
