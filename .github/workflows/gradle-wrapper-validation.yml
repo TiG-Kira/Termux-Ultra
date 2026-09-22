@@ -1,19 +1,36 @@
 name: "Validate Gradle Wrapper"
 
+# 触发分支改为本仓库自己的 main（原文件写死上游 Termux 的 master / android-10，
+# 在本仓库里从未触发过，等于一个不存在的门禁）。
 on:
   push:
     branches:
-      - master
-      - android-10
+      - main
   pull_request:
     branches:
-      - master
-      - android-10
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   validation:
     name: "Validation"
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: gradle/wrapper-validation-action@v3
+      - name: 检出代码
+        uses: actions/checkout@v7
+
+      # 仓库里共有 6 个 gradle-wrapper.jar：根工程 1 个 + vendor/termux-addons 下 5 个。
+      # 本 action 会把它们全部找出来，逐个比对 Gradle 官方发布的 SHA-256 清单。
+      #
+      # 必须用 gradle/actions/wrapper-validation@v6，不能继续用 gradle/wrapper-validation-action@v3：
+      #   - v3.5.0（2024-07 发布，v3 线最后一个版本）的清单里没有 Gradle 9.7.1；
+      #     而根工程 wrapper 已被依赖升级带到 9.7.1（gradle-wrapper.jar sha256 = 7a9ce74c…），
+      #     用 @v3 只会判成「未知 wrapper」直接失败。
+      #   - v3 本身已是过渡版本，内部转发到 gradle/actions/wrapper-validation@v3。
+      # v6 的校验和清单已收录根工程 9.7.1 以及 5 个 vendored wrapper
+      # （termux-api 7.3.1 / termux-boot 8.5 / termux-styling 8.5 / termux-tasker 6.5 / termux-widget 7.2）。
+      - name: 校验全部 Wrapper 的校验和
+        uses: gradle/actions/wrapper-validation@v6
