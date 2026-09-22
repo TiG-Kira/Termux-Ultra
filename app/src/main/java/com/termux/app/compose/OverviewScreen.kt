@@ -1227,8 +1227,7 @@ private fun TipsAgentCard(
                 quickEntries.chunked(3).forEach { rowItems ->
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        verticalAlignment = Alignment.Vertical.Stretch
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         rowItems.forEach { entry ->
                             QuickEntryButton(
@@ -1274,6 +1273,7 @@ private fun QuickEntryButton(
             .clip(RoundedCornerShape(16.dp))
             .background(MiuixTheme.colorScheme.surface)
             .clickable(onClick = onClick)
+            .height(100.dp)
             .padding(vertical = 14.dp, horizontal = 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterVertically)
