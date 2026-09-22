@@ -18,6 +18,7 @@
 | 6 | 全量 `./gradlew assembleDebug` 编译验证 | ⚠️ **仍未做**，原因见 §7.2；但改为让 CI 矩阵去做（见下） |
 | 7 | 第三轮：在无法全量构建的前提下，把配置项/产物命名/工作流/日志裁剪全部**真实执行验证** | ✅ 见 §7.3，共 **125 项断言全绿** |
 | 8 | 第三轮：产物重命名 bug 做了**回归对照**（把旧代码改回去重跑） | ✅ 见 §7.4，旧代码下 3 项失败 → 证明修复真的改变了行为 |
+| 9 | ⚠️ **推上去让 CI 跑，当场抓到一个本机验不出的致命错误** | ✅ 见 §9，`ndk.abiFilters` 不能与 `splits.abi` 并存 → 已修 |
 
 ---
 
@@ -348,7 +349,8 @@ ABI 拆分场景实测输出（节选）：
 
 **这意味着下列内容仍属未验证，需要一次真实构建来确认：**
 
-1. AGP 9.1.0 是否接受"`ndk.abiFilters` 单架构 + `splits.abi` 单架构"的组合（有文档依据的标准用法，但未实测）。
+1. ~~AGP 9.1.0 是否接受"`ndk.abiFilters` 单架构 + `splits.abi` 单架构"的组合~~
+   → **CI 实测：不接受。** 4 个矩阵作业全部在配置期失败，详见 §9；已改为只用 `splits.abi`。
 2. `resConfigs "en","zh"` 与新增 R8 开关在真实配置期是否报错。
 3. Kotlin / Java 侧改动（`MainActivity.kt`、`LogManager.java`、`TermuxApplication.java`）能否编译。
 4. 20 个既有单测是否仍然全绿。
@@ -471,6 +473,137 @@ I/TrimHarness: Trimmed log file from 3162060 to 1048432 bytes
 | 3 | **universal 包默认策略** | 目前 release 事件仍构建 universal（与拆分前一致）；若确认不需要，把 `github.event_name == 'release' \|\|` 这段删掉即可只出分架构包 |
 | 4 | 单架构构建是否也设为本机默认 | 目前不指定 `termux.abi` 时行为完全不变，本机开发不受影响 |
 | 5 | 是否把 `opt-abi-split-20260922` 推到远端 / 开 PR | 建议推上去，让 CI 完成 §7.2 那 4 项验证 |
+
+---
+
+## 9. 【重要】推上去之后，CI 立刻抓到一个本机验不出的错误
+
+PR #128 推上去后 30 秒内就有结论：**4 个矩阵作业全部失败**，且都挂在 configure 阶段
+（`BUILD FAILED in 39s`，还没进编译）。日志：
+
+```
+* What went wrong:
+A problem occurred configuring project ':app'.
+> Conflicting configuration : 'arm64-v8a' in ndk abiFilters cannot be present
+  when splits abi filters are set : arm64-v8a
+```
+
+### 9.1 根因
+
+AGP **禁止** `defaultConfig.ndk.abiFilters` 与 `splits.abi` 同时存在。
+而我在实现单架构开关时把两个都设了（想用 `abiFilters` 限定 CMake 只编该 ABI，
+同时用 `splits` 收窄打包），于是任何带 `-Ptermux.abi=<单个架构>` 的构建在配置期就炸。
+
+这正好是 §7.2 里我明确列为「本机无法验证」的第 1 项 —— 本机没有 AGP 环境，
+桩 DSL 只能证明"配置值按预期算出来了"，证明不了"AGP 接受这组值"。
+**这次等于实锤了那条免责声明不是客套话。**
+
+### 9.2 修法
+
+去掉 `ndk.abiFilters`，**只用 `splits.abi` 收窄**：
+
+| 构建方式 | `ndk.abiFilters` | `splits.abi` | 结果 |
+|----------|------------------|--------------|------|
+| `-Ptermux.abi=arm64-v8a`（修复后） | 不设 | 开启，`include [arm64-v8a]`，`universalApk=false` | ✅ |
+| 同上（修复前） | `[arm64-v8a]` | 同上 | ❌ 配置期报 Conflicting configuration |
+
+未指定参数时行为完全不变（release 拆四架构 + universal，debug 打整包）——
+因为它本来就没设 `abiFilters`，上游原始实现用的也是纯 splits。
+
+### 9.3 `splits` 单独收窄会不会连原生编译一起收窄？—— **已用 CI 日志实测确认：会**
+
+AGP 的 CMake 任务本身是按 ABI 分的（`:app:configureCMakeDebug[arm64-v8a]` 这种），
+splits 列表决定生成哪些。CI run #492 四个作业的日志逐条核对：
+
+```
+  Debug APK (x86)          configureCMake→['x86']           buildCMake→['x86']
+  Debug APK (x86_64)       configureCMake→['x86_64']        buildCMake→['x86_64']
+  Debug APK (arm64-v8a)    configureCMake→['arm64-v8a']     buildCMake→['arm64-v8a']
+  Debug APK (armeabi-v7a)  configureCMake→['armeabi-v7a']   buildCMake→['armeabi-v7a']
+```
+
+每个作业**只出现一个 ABI** 的 CMake 任务 → 原生编译确实被收窄了，"拆架构省资源"成立。
+
+### 9.4 ⚠️ 但耗时数据推翻了"墙钟时间降到 1/4"的说法，这里必须更正
+
+我在 §3 和 PR 正文里写过"单作业耗时约为原来的 1/4"。**CI 实测不支持这个数字**，列出来：
+
+| | 拆分前（main，单作业全量，run #487） | 拆分后（本分支 run #492，4 作业并行） |
+|---|---|---|
+| arm64-v8a | — | 4 分 44 秒 |
+| armeabi-v7a | — | 7 分 06 秒 |
+| x86 | — | 11 分 44 秒 |
+| x86_64 | — | 11 分 39 秒 |
+| 单个作业 | **6 分 56 秒**（一次编完 4 个 ABI） | 4 m 44 s ~ 11 m 44 s |
+| runner 时间合计 | 约 7 分钟 | **约 35 分钟** |
+
+结论（说人话）：
+
+- **每个作业的原生编译量确实降到 1/4**（上面 CMake 任务已证实），峰值内存也更低——但这是不可测的，我没有实测内存数据，只能说"应当更低"。
+- **墙钟时间没有变快**：4 个作业并行，整体耗时取决于最慢那个（11 m 44 s），比原来单作业 6 m 56 s 还慢。
+- **CI 分钟数反而涨了约 5 倍**：每个作业都要各自付一遍 Gradle 配置、依赖解析和 Kotlin/Java 编译，这部分是 4 份重复劳动。
+- 上面这组对比还有一个干扰项：拆分前那次运行是 main 上的**热缓存**，本分支是**冷缓存**（`actions/cache` 按分支隔离）。热缓存下两个数字都会更小，但"4 份重复劳动"这个结构性问题不会消失。
+
+所以这个改造的真实收益是 **失败隔离 + 单作业资源峰值下降**，不是"更快"或"更省"。
+如果目标是省 CI 成本，更划算的做法是把矩阵收窄到实际要分发的架构（arm64-v8a + armeabi-v7a，x86/x86_64 通常只给模拟器用），
+或者把 Kotlin/Java 编译与原生编译拆成两个阶段共用产物。见 §8 待决策。
+
+### 9.4 同步改了什么
+
+- `app/build.gradle`：删掉 `defaultConfig` 里的 `ndk { abiFilters... }`，改为一段说明禁止这样写的注释（含 CI 报错原文）。
+- 桩 DSL 验证脚本：断言方向整个反过来 —— 由「断言 `abiFilters` 被收窄」改为「断言**任何场景都不设** `abiFilters`」（本地 38 项全绿）。
+- 提交 `f792791c`，已推到同一分支。
+
+---
+
+## 10. 第二个坑：同一个 commit，push 事件是红的、pull_request 事件是绿的
+
+修完 §9 之后出现一个更费解的现象：
+
+| 运行 | 触发事件 | 检出对象 | 结论 |
+|------|----------|----------|------|
+| #491 | `push` | `refs/remotes/origin/opt-abi-split-20260922`（分支本体） | ❌ failure |
+| #492 | `pull_request` | `refs/remotes/pull/128/merge`（与本分支**合并后**的树） | ✅ success |
+
+同一个 `head_sha`、同一份工作流，一半红一半绿。日志对比直接给出答案 —— **编译的不是同一棵树**：
+
+```
+#491  [command] git checkout --progress --force -B opt-abi-split-20260922 refs/remotes/origin/opt-abi-split-20260922
+#492  [command] git checkout --progress --force refs/remotes/pull/128/merge
+```
+
+而 #491 报的是与本批改动无关的既有编译错误：
+
+```
+Execution failed for task ':app:compileDebugKotlin'
+> Kotlin compiler: UNRESOLVED_REFERENCE
+   Unresolved reference 'Stretch'
+   Location: app/src/main/java/com/termux/app/compose/OverviewScreen.kt line 1231
+```
+
+`Alignment.Stretch` 根本不是 `androidx.compose.ui.Alignment` 的常量。上游已经在主线修了它：
+
+- `a67276bf fix(overview): 修复快捷入口 Row 的 verticalAlignment 引用`
+- `067f9889 fix(overview): 用固定高度替代 Stretch 实现快捷入口卡片等高`
+
+### 10.1 本机为什么没早发现
+
+因为本机的 `origin/main` ref **是陈旧的**（停在 `82f86fd0`），`git merge-base --is-ancestor origin/main HEAD` 一路返回"已包含最新主线"，
+于是我误判分支是最新的。校验方式不可靠就直接信了它。
+
+（顺带：这次 `git fetch` 的 SIGTERM 中断把 `.git/refs` 整个删掉了，仓库一度变成
+"not a git repository"。所有提交都已推到远端，所以没有丢东西 —— 恢复方式是
+把 `.git` 改名保留、从 GitHub 重新克隆一份 `.git` 放回来、再 `git checkout -f` 回分支，
+未提交的报告改动提前另存了副本。详见当日工作日志。）
+
+### 10.2 处理
+
+把主线合并进本分支（`d493f990`），并改用「拉 `refs/pull/128/merge` 与实际分支树做 diff」来交叉验证 ——
+直接证明了 merge 树里已经没有 `Stretch`，而分支树里有。
+
+> 给后面留个规矩：**判断"是否已同步主线"不能只靠 `merge-base`，要先确认 `origin/main` 这个 ref 本身是新写的。**
+> 另外，`pull_request` 事件编译的是合并树，它会掩盖"分支本身编不过"这类问题 ——
+> 看 CI 结论时要留意事件类型。
 
 ---
 
