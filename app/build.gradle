@@ -151,7 +151,7 @@ dependencies {
     implementation "androidx.lifecycle:lifecycle-runtime-ktx:2.8.5"
     implementation "androidx.lifecycle:lifecycle-viewmodel-compose:2.8.5"
     implementation "androidx.appcompat:appcompat:1.8.0"
-    implementation "androidx.core:core-ktx:1.15.0"
+    implementation "androidx.core:core-ktx:1.19.0"
     implementation "androidx.preference:preference-ktx:1.2.1"
 
     implementation "io.coil-kt:coil-compose:2.7.0"
