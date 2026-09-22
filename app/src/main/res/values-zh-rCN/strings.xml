@@ -348,12 +348,12 @@
     <!-- Navigation Bar Style -->
     <string name="navigation_bar_style">导航栏样式</string>
     <string name="navigation_bar_style_description">选择导航栏样式</string>
-    <string name="navigation_bar_default">默认</string>
+    <string name="navigation_bar_default">经典</string>
     <string name="navigation_bar_floating">浮动</string>
     <string name="navigation_bar_liquid_glass">玻璃</string>
     <string name="navigation_bar_os4">柔光</string>
     <string name="navigation_bar_restart_message">导航栏样式变更将在重启应用后生效。</string>
-    <string name="glass_nav_bar_fallback_toast">玻璃导航栏在当前设备渲染失败，已自动切换为默认导航栏。</string>
+    <string name="glass_nav_bar_fallback_toast">玻璃导航栏在当前设备渲染失败，已自动切换为经典导航栏。</string>
 
     <!-- PullToRefresh -->
     <string name="pull_down_to_refresh">下拉刷新</string>

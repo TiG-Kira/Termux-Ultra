@@ -35,6 +35,7 @@ import kotlinx.coroutines.launch
 import top.yukonga.miuix.kmp.basic.LinearProgressIndicator
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.TopAppBar
+import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.ScrollBehavior
@@ -83,7 +84,6 @@ data class SettingItem(
 fun SettingsScreen(
     onAboutClick: () -> Unit,
     navBarBottomPadding: androidx.compose.ui.unit.Dp = 0.dp,
-    scrollBehavior: top.yukonga.miuix.kmp.basic.ScrollBehavior,
     onTopBarContent: (@Composable () -> Unit) -> Unit,
     active: Boolean = true
 ) {
@@ -228,17 +228,18 @@ val composeTextBlinking by com.termux.app.compose.terminal.ComposeTerminalSettin
     }
 
     val navBarStyleOptions = listOf(
-        context.getString(R.string.navigation_bar_default),
         context.getString(R.string.navigation_bar_floating),
+        context.getString(R.string.navigation_bar_default),
         context.getString(R.string.navigation_bar_liquid_glass),
         context.getString(R.string.navigation_bar_os4)
     )
     var navBarSelectedIndex by remember {
         mutableStateOf(
-            when (prefs.getString("navigation_bar_style", "default")) {
-                "floating" -> 1
+            when (prefs.getString("navigation_bar_style", null)) {
+                "classic" -> 1
                 "liquid_glass" -> 2
                 "soft_light" -> 3
+                // 缺省与历史值（旧 default / 旧 floating）统一迁移为新的浮动玻璃底栏
                 else -> 0
             }
         )
@@ -538,6 +539,8 @@ val composeTextBlinking by com.termux.app.compose.terminal.ComposeTerminalSettin
             }
         }
     }
+    // 与「统一顶栏之前」一致：本页自持吸顶状态
+    val scrollBehavior = MiuixScrollBehavior()
     // 统一全局顶栏：仅当前激活页把本页的 TopAppBar 内容写入 onTopBarContent 槽
     SideEffect {
         if (active) {
@@ -605,10 +608,10 @@ val composeTextBlinking by com.termux.app.compose.terminal.ComposeTerminalSettin
                                 }
                                 navBarSelectedIndex = idx
                                 val style = when (idx) {
-                                    1 -> "floating"
+                                    1 -> "classic"
                                     2 -> "liquid_glass"
                                     3 -> "soft_light"
-                                    else -> "default"
+                                    else -> "glass"
                                 }
                                 prefs.edit().putString("navigation_bar_style", style).apply()
                                 showNavRestartPrompt = true
@@ -1433,10 +1436,10 @@ val composeTextBlinking by com.termux.app.compose.terminal.ComposeTerminalSettin
                 val idx = pendingNavStyleIndex
                 navBarSelectedIndex = idx
                 val style = when (idx) {
-                    1 -> "floating"
+                    1 -> "classic"
                     2 -> "liquid_glass"
                     3 -> "soft_light"
-                    else -> "default"
+                    else -> "glass"
                 }
                 prefs.edit().putString("navigation_bar_style", style).apply()
                 pendingNavStyleIndex = -1

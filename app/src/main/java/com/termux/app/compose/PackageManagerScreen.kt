@@ -663,6 +663,13 @@ fun PackageManagerScreen(
         }
     }
 
+    // 不透明的主题背景：详情页转场的交叉淡化期间（fadeIn/fadeOut 两侧 alpha 同时 <1）
+    // 若直接透出窗口底色，亮色模式下会出现黑色闪烁。垫一层背景色后转场始终在主题底色上进行。
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MiuixTheme.colorScheme.background)
+    ) {
     AnimatedContent(
         targetState = showDetail,
         transitionSpec = {
@@ -1013,6 +1020,7 @@ fun PackageManagerScreen(
                 }
             }
         }
+    }
     }
 }
 
