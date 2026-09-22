@@ -78,7 +78,10 @@ android {
         // 语言资源白名单：只保留中/英文，剔除 appcompat / material / androidx 等依赖自带的
         // 数十种语言资源（每种都会占用 resources.arsc 与 res/ 空间）。
         // 注意：新增界面语言时必须同步追加到此处，否则该语言会回退到默认（英文）。
-        resConfigs "en", "zh"
+        // ⚠️ AGP 9.x 的 resConfigs 按「完整限定符」匹配，"zh" 只匹配 values-zh，
+        //    不会带上 values-zh-rCN —— 必须把 zh-rCN 显式列出，否则整个中文目录被
+        //    过滤掉，应用在任何 locale 下都只会显示英文（PR #128 引入的回归，实测）。
+        resConfigs "en", "zh", "zh-rCN"
 
         manifestPlaceholders.TERMUX_PACKAGE_NAME = "com.termux"
         manifestPlaceholders.TERMUX_APP_NAME = "Termux Ultra"
@@ -206,6 +209,8 @@ dependencies {
     implementation fileTree(dir: 'libs', include: ['*.jar'])
     coreLibraryDesugaring "com.android.tools:desugar_jdk_libs:2.1.5"
     implementation "top.yukonga.miuix.kmp:miuix-ui-android:0.9.4"
+    // 玻璃导航栏（GlassNavigationBar，vendor 于 miuix PR #423 的 miuix-glass 模块）依赖 miuix-blur
+    implementation "top.yukonga.miuix.kmp:miuix-blur-android:0.9.4"
     implementation "top.yukonga.miuix.kmp:miuix-icons-android:0.9.4"
         implementation "top.yukonga.miuix.kmp:miuix-preference-android:0.9.4"
 
