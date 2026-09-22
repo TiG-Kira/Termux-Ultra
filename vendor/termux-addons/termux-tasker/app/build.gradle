@@ -20,4 +20,10 @@ dependencies {
     // AppTheme extends Theme.AppCompat.Light.DarkActionBar
     implementation 'androidx.appcompat:appcompat:1.8.0'
     implementation 'com.google.android.material:material:1.14.0'
+
+    // 本模块自带的 app/src/test/java/com/termux/tasker/ExampleUnitTest.java 用了 JUnit，
+    // 但上游从未声明过该依赖（上游也从不跑单元测试），导致
+    // :termux-tasker:compileDebugUnitTestJavaWithJavac 直接编译失败，
+    // 进而让整个 `./gradlew test` 跑不起来。版本与其它模块保持一致（4.13.2）。
+    testImplementation 'junit:junit:4.13.2'
 }
