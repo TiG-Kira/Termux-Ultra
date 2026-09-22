@@ -1228,7 +1228,7 @@ private fun TipsAgentCard(
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        verticalAlignment = Alignment.Stretch
+                        verticalAlignment = Alignment.Vertical.Stretch
                     ) {
                         rowItems.forEach { entry ->
                             QuickEntryButton(
