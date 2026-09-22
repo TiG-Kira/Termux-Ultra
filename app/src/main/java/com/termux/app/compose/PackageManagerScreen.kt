@@ -664,11 +664,17 @@ fun PackageManagerScreen(
     }
 
     // 不透明的主题背景：详情页转场的交叉淡化期间（fadeIn/fadeOut 两侧 alpha 同时 <1）
-    // 若直接透出窗口底色，亮色模式下会出现黑色闪烁。垫一层背景色后转场始终在主题底色上进行。
+    // 若直接透出窗口底色，会出现颜色闪烁。垫一层背景色后转场始终在主题底色上进行。
+    // 注意：miuix 暗色模式下 colorScheme.background 是 0xFF242424 灰色，surface 才是纯黑；
+    // 而 Scaffold / Card 等组件用的是 surface，所以这里必须跟 surface 对齐，否则
+    // 交叉淡化时会漏出一层灰底。亮色下 background=白、surface=近白，差异可忽略，
+    // 统一取 background 即可。
+    val transitionBg = if (isSystemInDarkTheme()) MiuixTheme.colorScheme.surface
+                       else MiuixTheme.colorScheme.background
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(MiuixTheme.colorScheme.background)
+            .background(transitionBg)
     ) {
     AnimatedContent(
         targetState = showDetail,
