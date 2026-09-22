@@ -14,11 +14,6 @@ updates:
     interval: daily
   commit-message:
     prefix: "chore(deps)"
-  ignore:
-    # Kotlin 三件套需要统一升级
-    # compose + serialization + ksp 都要升到同一 Kotlin 版本
-    # 等 ksp 有升级 PR 后再一起合
-    - dependency-name: "org.jetbrains.kotlin.plugin.compose"
-      versions: [">=2.4.0"]
-    - dependency-name: "org.jetbrains.kotlin.plugin.serialization"
-      versions: [">=2.4.0"]
+# 注：Kotlin 三件套（kotlin-gradle-plugin / plugin.compose / plugin.serialization）
+# 必须升到同一 Kotlin 版本，请放在一起合并，不要单独合其中任何一个。
+# KSP 自 2.3.x 起改用独立版本号、与 Kotlin 主版本解耦，无需跟随（2.3.12 即当前最新版）。
