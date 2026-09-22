@@ -35,6 +35,15 @@ description: Termux Ultra 官方文档 — 使用手册、功能讲解与插件�
   </a>
 </div>
 
+## 可视化看板
+
+<div class="cards">
+  <a class="card" href="{{ '/okr/' | relative_url }}">
+    <span class="card-title">📊 团队 OKR 雷达图</span>
+    <span class="card-desc">按开源仓库 8 大能力域（终端内核、插件生态、AI 助手、远程容器、界面动效、工程基建、文档本地化、社区开源）对比产品 / 技术 / 设计三组团队的目标与实际达成度，含整体完成率、最强与最弱维度、环比趋势，达成情况按超额 / 接近 / 不足着色。</span>
+  </a>
+</div>
+
 ## 快速开始
 
 1. 到 [GitHub Releases](https://github.com/TiG-Kira/Termux-Ultra/releases) 下载对应架构的 APK。

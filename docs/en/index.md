@@ -35,6 +35,15 @@ description: Termux Ultra official documentation — user manual, feature guide,
   </a>
 </div>
 
+## Dashboards
+
+<div class="cards">
+  <a class="card" href="{{ '/okr/' | relative_url }}">
+    <span class="card-title">📊 Team OKR Radar</span>
+    <span class="card-desc">Compares target vs actual achievement across the repository's eight capability areas (terminal core, plugin ecosystem, AI assistant, remote &amp; containers, UI motion, engineering infra, docs &amp; i18n, community) for the product / engineering / design teams — with overall completion rate, strongest and weakest areas, and quarter-over-quarter trend, colour-coded by over / near / under target.</span>
+  </a>
+</div>
+
 ## Quick start
 
 1. Download the APK for your architecture from [GitHub Releases](https://github.com/TiG-Kira/Termux-Ultra/releases).
