@@ -36,7 +36,7 @@ import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.InputField
-import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
+import top.yukonga.miuix.kmp.basic.ScrollBehavior
 import top.yukonga.miuix.kmp.basic.PullToRefresh
 import top.yukonga.miuix.kmp.basic.SearchBar
 import top.yukonga.miuix.kmp.basic.Scaffold
@@ -59,7 +59,10 @@ fun ComposeTerminalListScreen(
     onNewTerminal: () -> Unit,
     isWakeLockEnabled: Boolean = false,
     onToggleWakeLock: () -> Unit = {},
-    navBarBottomPadding: Dp = 92.dp
+    navBarBottomPadding: Dp = 92.dp,
+    scrollBehavior: top.yukonga.miuix.kmp.basic.ScrollBehavior,
+    onTopBarContent: (@Composable () -> Unit) -> Unit,
+    active: Boolean = true
 ) {
     val sessionManager = remember { ComposeSessionManager.getInstance(context) }
     val allSessions by sessionManager.sessions.collectAsState()
@@ -73,59 +76,63 @@ fun ComposeTerminalListScreen(
     var searchQuery by remember { mutableStateOf("") }
     var isRefreshing by remember { mutableStateOf(false) }
 
-    val scrollBehavior = MiuixScrollBehavior()
-
     /** 刷新会话列表（StateFlow 会自动 propagate，但手动触发 PullToRefresh 动画） */
     fun refreshNow() {
         // StateFlow 已经自动更新，这里只是触发动画
     }
 
+    // 统一全局顶栏：仅当前激活页把本页的 TopAppBar 内容写入 onTopBarContent 槽
+    SideEffect {
+        if (active) {
+            onTopBarContent {
+                TopAppBar(
+                    title = stringResource(R.string.terminal),
+                    scrollBehavior = scrollBehavior,
+                    actions = {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_lock),
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp),
+                                tint = MiuixTheme.colorScheme.onSurface
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Switch(
+                                checked = isWakeLockEnabled,
+                                onCheckedChange = { onToggleWakeLock() }
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            IconButton(onClick = {
+                                // Compose 模式：直接用 ComposeSessionManager 创建会话，不依赖 Java 版 onNewTerminal。
+                                // 效仿 Java 版策略：只创建未初始化的终端条目（不拉起进程、不跳转），
+                                // 待用户手动点击该终端卡片进入终端控制台时再初始化。
+                                val createdSession = sessionManager.createDefaultSession(startImmediately = false)
+                                val count = sessionManager.sessions.value.indexOfFirst { it.session.id == createdSession.id }
+                                createdSession.sessionName.value = if (com.termux.app.LocaleHelper.isChinese(context)) {
+                                    context.getString(R.string.session_count_plus, count + 1)
+                                } else {
+                                    context.getString(R.string.session_count_plus, count + 1)
+                                }
+                            }) {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_add),
+                                    contentDescription = stringResource(R.string.new_terminal),
+                                    modifier = Modifier.size(24.dp),
+                                    tint = MiuixTheme.colorScheme.onSurface
+                                )
+                            }
+                        }
+                    }
+                )
+            }
+        }
+    }
+
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0),
-        topBar = {
-            TopAppBar(
-                title = stringResource(R.string.terminal),
-                scrollBehavior = scrollBehavior,
-                actions = {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_lock),
-                            contentDescription = null,
-                            modifier = Modifier.size(20.dp),
-                            tint = MiuixTheme.colorScheme.onSurface
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Switch(
-                            checked = isWakeLockEnabled,
-                            onCheckedChange = { onToggleWakeLock() }
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        IconButton(onClick = {
-                            // Compose 模式：直接用 ComposeSessionManager 创建会话，不依赖 Java 版 onNewTerminal。
-                            // 效仿 Java 版策略：只创建未初始化的终端条目（不拉起进程、不跳转），
-                            // 待用户手动点击该终端卡片进入终端控制台时再初始化。
-                            val createdSession = sessionManager.createDefaultSession(startImmediately = false)
-                            val count = sessionManager.sessions.value.indexOfFirst { it.session.id == createdSession.id }
-                            createdSession.sessionName.value = if (com.termux.app.LocaleHelper.isChinese(context)) {
-                                context.getString(R.string.session_count_plus, count + 1)
-                            } else {
-                                context.getString(R.string.session_count_plus, count + 1)
-                            }
-                        }) {
-                            Icon(
-                                painter = painterResource(R.drawable.ic_add),
-                                contentDescription = stringResource(R.string.new_terminal),
-                                modifier = Modifier.size(24.dp),
-                                tint = MiuixTheme.colorScheme.onSurface
-                            )
-                        }
-                    }
-                }
-            )
-        },
     ) { padding ->
         Column(
             modifier = Modifier

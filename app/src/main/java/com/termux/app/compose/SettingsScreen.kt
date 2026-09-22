@@ -37,7 +37,7 @@ import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Icon
-import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
+import top.yukonga.miuix.kmp.basic.ScrollBehavior
 import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
@@ -82,7 +82,10 @@ data class SettingItem(
 @Composable
 fun SettingsScreen(
     onAboutClick: () -> Unit,
-    navBarBottomPadding: androidx.compose.ui.unit.Dp = 0.dp
+    navBarBottomPadding: androidx.compose.ui.unit.Dp = 0.dp,
+    scrollBehavior: top.yukonga.miuix.kmp.basic.ScrollBehavior,
+    onTopBarContent: (@Composable () -> Unit) -> Unit,
+    active: Boolean = true
 ) {
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
@@ -253,8 +256,6 @@ val composeTextBlinking by com.termux.app.compose.terminal.ComposeTerminalSettin
     var pkgViewModeIndex by remember {
         mutableStateOf(prefs.getInt("KEY_PKG_VIEW_MODE", 0))
     }
-
-    val scrollBehavior = MiuixScrollBehavior()
 
     val restoreFileLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let {
@@ -537,13 +538,19 @@ val composeTextBlinking by com.termux.app.compose.terminal.ComposeTerminalSettin
             }
         }
     }
-                            Scaffold(
+    // 统一全局顶栏：仅当前激活页把本页的 TopAppBar 内容写入 onTopBarContent 槽
+    SideEffect {
+        if (active) {
+            onTopBarContent {
+                TopAppBar(title = context.getString(R.string.settings_title), scrollBehavior = scrollBehavior)
+            }
+        }
+    }
+
+    Scaffold(
         modifier = Modifier.fillMaxSize(),
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         snackbarHost = { Box(modifier = Modifier.fillMaxSize().padding(bottom = navBarBottomPadding), contentAlignment = Alignment.BottomCenter) { SnackbarHost(state = snackbarHostState) } },
-        topBar = {
-                                TopAppBar(title = context.getString(R.string.settings_title), scrollBehavior = scrollBehavior)
-        }
     ) { padding ->
         LazyColumn(
             modifier = Modifier
