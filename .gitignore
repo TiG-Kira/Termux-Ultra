@@ -39,8 +39,8 @@ window_dump.xml
 # 误提交的编译输出（.class 不应入库）
 *.class
 
-# 误提交的工具输出目录
-top/
+# 误提交的工具输出目录（仅仓库根；不带斜杠会误伤 app/src/main/java/top/ 下的 vendored miuix glass 包）
+/top/
 
 
 memory
