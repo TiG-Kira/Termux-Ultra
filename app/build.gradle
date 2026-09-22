@@ -17,7 +17,6 @@ android {
     compileSdkVersion project.properties.compileSdkVersion.toInteger()
     ndkVersion = System.getenv("JITPACK_NDK_VERSION") ?: project.properties.ndkVersion
     def appVersionName = System.getenv("TERMUX_APP_VERSION_NAME") ?: ""
-    def apkVersionTag = System.getenv("TERMUX_APK_VERSION_TAG") ?: ""
     def splitAPKsForDebugBuilds = System.getenv("TERMUX_SPLIT_APKS_FOR_DEBUG_BUILDS") ?: "1"
     def workflowCliBuild = System.getenv("TERMUX_WORKFLOW_CLI") == "true"
     def splitAPKsForReleaseBuilds = System.getenv("TERMUX_SPLIT_APKS_FOR_RELEASE_BUILDS") ?: "0"
@@ -302,53 +301,6 @@ implementation "io.coil-kt:coil:2.7.0"
     // 4.16+ 才支持较新的 class 文件版本。
     testImplementation "org.robolectric:robolectric:4.17"
     testImplementation "androidx.test:core:1.6.1"
-}
-
-tasks.whenTaskAdded { task ->
-    if (task.name == 'packageDebug' || task.name == 'packageRelease') {
-        task.doLast {
-            String buildType = task.name == 'packageRelease' ? 'release' : 'debug'
-            File outDir = file("$buildDir/outputs/apk/$buildType")
-            if (!outDir.exists()) return
-            String tag = System.getenv("TERMUX_APK_VERSION_TAG")
-            // splits OFF: app-<type>.apk（整包）
-            // splits  ON: app-<abi>-<type>.apk，另有 app-universal-<type>.apk
-            // 上面两种在 CI 里都统一重命名成 termux-app_<tag>_<abi>.apk。
-            outDir.listFiles().each { File apk ->
-                String name = apk.name
-                if (!name.endsWith(".apk")) return
-                // 仅跳过「本脚本已经重命名过」的产物，保证重跑（up-to-date）时幂等。
-                // 注意：这里不能把 app- 前缀整体排除 —— AGP 产出的拆分包就叫
-                // app-<abi>-<type>.apk，排除掉的话重命名逻辑等于永远不会执行。
-                if (name.startsWith("termux-app_") || name.startsWith("termux-ultra_")) return
-
-                String suffix = "-${buildType}.apk"
-                String abi
-                if (name == "app-${buildType}.apk" || name == "app-universal-${buildType}.apk") {
-                    // 未拆分整包 / 显式 universal 拆分包，两者都视作 universal
-                    abi = "universal"
-                } else if (name.startsWith("app-") && name.endsWith(suffix)) {
-                    // app-<abi>-<type>.apk → 截出中间的 <abi>
-                    abi = name.substring("app-".length(), name.length() - suffix.length())
-                } else {
-                    return   // unknown naming, leave alone
-                }
-                if (!abi) return
-
-                String newName
-                if (tag != null && !tag.isEmpty()) {
-                    // CI workflow naming: termux-app_<version-tag>_<abi>.apk
-                    newName = "termux-app_${tag}_${abi}.apk"
-                } else {
-                    // Local naming: restore default app- prefix
-                    newName = "app-${buildType}-${abi}.apk"
-                }
-                File dest = new File(outDir, newName)
-                if (dest.exists()) dest.delete()
-                apk.renameTo(dest)
-            }
-        }
-    }
 }
 
 afterEvaluate {

@@ -64,8 +64,7 @@ jobs:
   # ── 2. 按架构并行构建 ─────────────────────────────────────────────
   # 每个 ABI 一个独立作业：CMake 只为该 ABI 配置与编译，四项原生构建互不干扰，
   # 单作业的内存峰值约 1/4、墙钟时间也降到 1/4 左右；4 个 APK 同时产出。
-  # -Ptermux.abi=<abi> 只影响本作业，产物名由 app/build.gradle 统一改成
-  # termux-app_<tag>_<abi>.apk。
+  # -Ptermux.abi=<abi> 只影响本作业，产物保持 AGP 默认命名 app-<abi>-release.apk。
   build:
     needs: preflight
     if: needs.preflight.outputs.skip == 'false'
@@ -105,8 +104,6 @@ jobs:
         env:
           # 关键：TERMUX_WORKFLOW_CLI=false，否则会打 CLI 版本！
           TERMUX_WORKFLOW_CLI: "false"
-          # 让产物重命名成 termux-app_<tag>_<abi>.apk
-          TERMUX_APK_VERSION_TAG: ${{ needs.preflight.outputs.tag }}
         run: |
           ./gradlew :app:assembleRelease -Ptermux.abi=${{ matrix.abi }} --console=plain
 
@@ -151,7 +148,6 @@ jobs:
       - name: 编译 universal Release APK
         env:
           TERMUX_WORKFLOW_CLI: "false"
-          TERMUX_APK_VERSION_TAG: ${{ needs.preflight.outputs.tag }}
         run: |
           # -Ptermux.abi=universal → 关闭 ABI 拆分，四个架构一起打进一个包
           ./gradlew :app:assembleRelease -Ptermux.abi=universal --console=plain
