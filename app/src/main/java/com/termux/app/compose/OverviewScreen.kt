@@ -932,6 +932,7 @@ fun OverviewScreen(
                     onSessionClick = onSessionClick,
                     onStopAllSessions = onStopAllSessions,
                     onNewTerminal = onNewTerminal,
+                    onNewTerminalAndOpenConsole = onNewTerminalAndOpenConsole,
                     onExecuteScript = onExecuteScript,
                     selectedCardId = selectedCardId,
                     onCardSelected = { selectedCardId = it },
@@ -956,7 +957,8 @@ private fun TipsAgentCard(
     isWakeLockEnabled: Boolean,
     runningSessionsCount: Int,
     onExecuteScript: (String, String) -> Unit,
-    onEditClick: () -> Unit
+    onEditClick: () -> Unit,
+    onNewTerminalAndOpenConsole: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val isDark = isSystemInDarkTheme()
@@ -4154,6 +4156,7 @@ private fun CardItem(
     onSessionClick: (TermuxSession) -> Unit,
     onStopAllSessions: () -> Unit,
     onNewTerminal: () -> Unit,
+    onNewTerminalAndOpenConsole: () -> Unit = {},
     onExecuteScript: (String, String) -> Unit,
     selectedCardId: String?,
     onCardSelected: (String) -> Unit,
@@ -4171,7 +4174,8 @@ private fun CardItem(
                 onEditClick = {
                     onCardSelected(card.id)
                     onShowCardSettings()
-                }
+                },
+                onNewTerminalAndOpenConsole = onNewTerminalAndOpenConsole
             )
         }
         OverviewCardType.SESSIONS -> {
