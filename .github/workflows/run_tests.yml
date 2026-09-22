@@ -81,7 +81,7 @@ jobs:
               match($0, /skipped="[0-9]+"/)  { n=substr($0,RSTART+9,RLENGTH-10);  s+=n }
               END { printf "| 用例 | 失败 | 错误 | 跳过 |\n|---|---|---|---|\n| %d | %d | %d | %d |\n", t, f, e, s }
             ' "${xmls[@]}"
-          } >> "$GITHUB_STEP_SUMMARY"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: 上传测试报告
         if: failure()
