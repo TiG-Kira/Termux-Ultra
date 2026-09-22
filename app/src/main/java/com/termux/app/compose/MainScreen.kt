@@ -6,8 +6,11 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.DecayAnimationSpec
 import androidx.compose.animation.core.animate
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.rememberSplineBasedDecay
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
@@ -78,9 +81,21 @@ fun MainScreen(
     onRefreshSessions: () -> Unit = {}
 ) {
     val scope = rememberCoroutineScope()
-    // 单一、全局的 TopAppBar：TopAppBarState 按选中页重建（吸顶状态存在 state 里），保证切页后吸顶状态复位
+    // 单一、全局的 TopAppBar：TopAppBarState 按选中页重建（吸顶状态存在 state 里），保证切页后吸顶状态复位。
+    // 注意：MiuixScrollBehavior 内部按 (state, canScroll, snapSpec, flingSpec) remember，
+    // 默认参数 canScroll={true} 和 snapAnimationSpec=spring(...) 每次重组都会新建实例，
+    // 导致 ScrollBehavior 每次重组都被重建 → nestedScroll 连接与吸顶 snap 动画被反复打断，
+    // 表现为"吸顶后小标题间歇性消失"。这里显式 remember 稳定这三个参数。
     val topAppBarState = remember(selectedTab) { TopAppBarState(0f, 0f, 0f) }
-    val scrollBehavior = MiuixScrollBehavior(topAppBarState)
+    val canScrollAlways: () -> Boolean = remember { val f: () -> Boolean = { true }; f }
+    val snapSpec = remember { spring<Float>(stiffness = 2500f) }
+    val flingSpec: DecayAnimationSpec<Float> = rememberSplineBasedDecay()
+    val scrollBehavior = MiuixScrollBehavior(
+        state = topAppBarState,
+        canScroll = canScrollAlways,
+        snapAnimationSpec = snapSpec,
+        flingAnimationSpec = flingSpec,
+    )
     // 各页面把各自的 TopAppBar 内容写入此槽，由 MainScreen 的 Scaffold.topBar 统一渲染
     val topBarContent = remember {
         mutableStateOf<@Composable () -> Unit>({ MainTopBar(selectedTab, showVnc, scrollBehavior) })
