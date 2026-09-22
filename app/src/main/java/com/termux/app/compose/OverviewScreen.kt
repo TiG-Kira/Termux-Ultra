@@ -1227,7 +1227,8 @@ private fun TipsAgentCard(
                 quickEntries.chunked(3).forEach { rowItems ->
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.Stretch
                     ) {
                         rowItems.forEach { entry ->
                             QuickEntryButton(
@@ -1275,7 +1276,7 @@ private fun QuickEntryButton(
             .clickable(onClick = onClick)
             .padding(vertical = 14.dp, horizontal = 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterVertically)
     ) {
         Box(
             modifier = Modifier

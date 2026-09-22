@@ -292,6 +292,8 @@ fun GitHubLoginStatusIcon(onNavigateToAccount: () -> Unit) {
 
     Box(
         modifier = Modifier
+            .size(44.dp)
+            .clip(CircleShape)
             .clickable {
                 if (session == null) beginLogin() else onNavigateToAccount()
             }
