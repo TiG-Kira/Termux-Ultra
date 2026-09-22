@@ -43,6 +43,7 @@ import com.termux.app.ssh.connectToSsh
 import top.yukonga.miuix.kmp.basic.CircularProgressIndicator
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.TopAppBar
+import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.ScrollBehavior
@@ -63,7 +64,6 @@ fun RemoteScreen(
     onGoToFiles: () -> Unit = {},
     onGoToSettings: () -> Unit = {},
     navBarBottomPadding: androidx.compose.ui.unit.Dp = 0.dp,
-    scrollBehavior: top.yukonga.miuix.kmp.basic.ScrollBehavior,
     onTopBarContent: (@Composable () -> Unit) -> Unit,
     active: Boolean = true
 ) {
@@ -119,6 +119,8 @@ fun RemoteScreen(
         config.screenWidthDp.dp.toPx()
     }
 
+    // 与「统一顶栏之前」一致：本页自持吸顶状态
+    val scrollBehavior = MiuixScrollBehavior()
     // 统一全局顶栏：远程/SSH 页特殊 —— TopAppBar 外层保留左右滑动手势（滑向设置/文件页），
     // 整体（手势包装 + TopAppBar）写入全局顶栏槽，手势在全局顶栏上依然生效
     SideEffect {

@@ -42,6 +42,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.TopAppBar
+import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.ScrollBehavior
@@ -71,7 +72,6 @@ private const val ROOT_PATH = "/data/data/com.termux"
 fun FileManagerScreen(
     onOpenFile: (String, String) -> Unit = { _, _ -> },
     navBarBottomPadding: androidx.compose.ui.unit.Dp = 0.dp,
-    scrollBehavior: top.yukonga.miuix.kmp.basic.ScrollBehavior,
     onTopBarContent: (@Composable () -> Unit) -> Unit,
     active: Boolean = true
 ) {
@@ -283,6 +283,8 @@ fun FileManagerScreen(
         }
     }
 
+    // 与「统一顶栏之前」一致：本页自持吸顶状态
+    val scrollBehavior = MiuixScrollBehavior()
     // 统一全局顶栏：仅当前激活页把本页的 TopAppBar 内容写入 onTopBarContent 槽
     SideEffect {
         if (active) {

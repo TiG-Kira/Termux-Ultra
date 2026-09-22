@@ -6,7 +6,10 @@
     android:sharedUserId="${TERMUX_PACKAGE_NAME}"
     android:sharedUserLabel="@string/shared_user_label">
 
-         via HyperOSDetector gating. Override the merger's minSdk check here. -->
+    <!-- miuix-blur 声明 minSdk 33（AGSL shader）；应用 minSdk 26。
+         浮动玻璃底栏在代码中按 SDK_INT >= 33 门控，低版本自动回退经典底栏，
+         因此此处放行合并检查是安全的。 -->
+    <uses-sdk tools:overrideLibrary="top.yukonga.miuix.kmp.blur" />
 
     <uses-feature
         android:name="android.hardware.touchscreen"

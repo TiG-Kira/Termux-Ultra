@@ -50,14 +50,16 @@ import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.basic.NavigationBar
 import top.yukonga.miuix.kmp.basic.NavigationBarItem
-import top.yukonga.miuix.kmp.basic.FloatingNavigationBar
-import top.yukonga.miuix.kmp.basic.FloatingNavigationBarItem
 import top.yukonga.miuix.kmp.basic.SnackbarHost
 import top.yukonga.miuix.kmp.basic.SnackbarHostState
 import top.yukonga.miuix.kmp.basic.SnackbarDuration
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.ScrollBehavior
 import top.yukonga.miuix.kmp.basic.TopAppBarState
+import top.yukonga.miuix.kmp.blur.layerBackdrop as miuixLayerBackdrop
+import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop as rememberMiuixLayerBackdrop
+import top.yukonga.miuix.kmp.glass.GlassNavigationBar
+import top.yukonga.miuix.kmp.glass.GlassNavigationItem
 import com.termux.R
 import com.termux.shared.termux.shell.command.runner.terminal.TermuxSession
 
@@ -118,12 +120,16 @@ fun MainScreen(
     var skipNextTransition by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
-    val navBarStyle = remember {
-        context.getSharedPreferences("app_settings", Context.MODE_PRIVATE)
-            .getString("navigation_bar_style", "default") ?: "default"
-    }
     val navPrefs = remember { context.getSharedPreferences("app_settings", Context.MODE_PRIVATE) }
-    val useFloatingNav = navBarStyle == "floating"
+    // 导航栏样式：glass=浮动玻璃（新版默认）、classic=经典（旧默认）、liquid_glass=玻璃、soft_light=柔光。
+    // 历史值迁移：旧 "default"（原默认）与旧 "floating"（已删除）统一迁到新的浮动玻璃底栏。
+    val navBarStyle = remember {
+        when (val stored = navPrefs.getString("navigation_bar_style", null)) {
+            "classic", "liquid_glass", "soft_light" -> stored
+            else -> "glass"
+        }
+    }
+    val useGlassNav = navBarStyle == "glass" && android.os.Build.VERSION.SDK_INT >= 33
     val useLiquidGlassNav = navBarStyle == "liquid_glass"
     val useSoftLightNav = navBarStyle == "soft_light"
     var glassNavFailed by remember { mutableStateOf(false) }
@@ -139,9 +145,9 @@ fun MainScreen(
 
     val navStyle = when {
         useLiquidGlassNav && !glassNavFailed -> 2
-        useFloatingNav -> 1
         useSoftLightNav -> 3
-        else -> 0
+        useGlassNav -> 0
+        else -> 1
     }
 
     // 页面可用性过滤：根据设备 API 支持程度隐藏无可用功能的页面入口。
@@ -157,23 +163,22 @@ fun MainScreen(
         listOf(0, 1, 2, 3, 4).filter { ApiCompat.isPageAvailable(pageForTab(it)) }
     }
 
-    val navStyleForHeight = when (navStyle) {
-        2 -> NavStyle.GLASS
-        3 -> NavStyle.SOFT_LIGHT
-        1 -> NavStyle.FLOATING
-        else -> NavStyle.DEFAULT
-    }
-    val navContainerHeight = getNavContainerHeight(availableTabs.size, navStyleForHeight)
-    val totalNavHeight = if (navStyle == 0) {
-        navContainerHeight + systemNavBarsHeight
-    } else {
-        navContainerHeight
+    // 经典底栏（miuix NavigationBar）自身高度
+    val classicNavHeight = 56.dp
+    // 浮动玻璃底栏：GlassNavigationBarDefaults.Height(54dp) + 底部留白(12dp)
+    val glassNavTotalHeight = 54.dp + 12.dp
+    val navContainerHeight = getNavContainerHeight(availableTabs.size, NavStyle.GLASS)
+    val totalNavHeight = when (navStyle) {
+        // 浮动玻璃：悬浮于系统导航栏之上
+        0 -> glassNavTotalHeight + systemNavBarsHeight
+        // 经典：贴合系统导航栏
+        1 -> classicNavHeight + systemNavBarsHeight
+        // 玻璃/柔光：底部留白已含在 navContainerHeight 内
+        else -> navContainerHeight
     }
     val snackbarBottomPadding = when (navStyle) {
-        // 浮动导航栏使用 offset(y = bottomMargin - 4.dp) 定位
-        // 实际底部距屏幕底部约 4.dp，所以总高度 = systemBars + containerHeight + 4.dp
-        1 -> systemNavBarsHeight + navContainerHeight + 16.dp
-        // 玻璃/柔光/默认导航栏：总高度已包含 bottomMargin
+        0 -> glassNavTotalHeight + systemNavBarsHeight + 8.dp
+        1 -> classicNavHeight + systemNavBarsHeight + 12.dp
         else -> systemNavBarsHeight + navContainerHeight + 12.dp
     }
 
@@ -208,6 +213,8 @@ fun MainScreen(
     }
 
     val liquidGlassBackdrop = rememberLayerBackdrop()
+    // 浮动玻璃底栏的取景层（miuix-blur）：底栏透过它折射页面内容
+    val glassNavBackdrop = rememberMiuixLayerBackdrop()
 
     val direction = if (selectedTab > previousTab) 1 else -1
     val isRemoteWithVnc = selectedTab == 3 && showVnc
@@ -401,51 +408,46 @@ fun MainScreen(
                         }
                     }
                 }
-                1 -> {
-                    FloatingNavigationBar() {
-                        if (0 in availableTabs) {
-                            FloatingNavigationBarItem(
-                                icon = ImageVector.vectorResource(R.drawable.ic_overview),
-                                label = stringResource(R.string.overview),
-                                selected = selectedTab == 0,
-                                onClick = { previousTab = selectedTab; onTabChange(0) }
+                0 -> {
+                    val tabIcons = mapOf(
+                        0 to R.drawable.ic_overview,
+                        1 to R.drawable.ic_terminal,
+                        2 to R.drawable.ic_files,
+                        3 to R.drawable.ic_vnc,
+                        4 to R.drawable.ic_settings
+                    )
+                    val tabLabels = mapOf(
+                        0 to stringResource(R.string.overview),
+                        1 to stringResource(R.string.terminal),
+                        2 to stringResource(R.string.files),
+                        3 to stringResource(R.string.remote),
+                        4 to stringResource(R.string.settings)
+                    )
+                    GlassNavigationBar(
+                        items = availableTabs.map { tab ->
+                            GlassNavigationItem(
+                                icon = ImageVector.vectorResource(tabIcons.getValue(tab)),
+                                label = tabLabels.getValue(tab)
                             )
-                        }
-                        if (1 in availableTabs) {
-                            FloatingNavigationBarItem(
-                                icon = ImageVector.vectorResource(R.drawable.ic_terminal),
-                                label = stringResource(R.string.terminal),
-                                selected = selectedTab == 1,
-                                onClick = { previousTab = selectedTab; onTabChange(1) }
-                            )
-                        }
-                        if (2 in availableTabs) {
-                            FloatingNavigationBarItem(
-                                icon = ImageVector.vectorResource(R.drawable.ic_files),
-                                label = stringResource(R.string.files),
-                                selected = selectedTab == 2,
-                                onClick = { previousTab = selectedTab; onTabChange(2) }
-                            )
-                        }
-                        if (3 in availableTabs) {
-                            FloatingNavigationBarItem(
-                                icon = ImageVector.vectorResource(R.drawable.ic_vnc),
-                                label = stringResource(R.string.remote),
-                                selected = selectedTab == 3,
-                                onClick = { previousTab = selectedTab; onTabChange(3) }
-                            )
-                        }
-                        if (4 in availableTabs) {
-                            FloatingNavigationBarItem(
-                                icon = ImageVector.vectorResource(R.drawable.ic_settings),
-                                label = stringResource(R.string.settings),
-                                selected = selectedTab == 4,
-                                onClick = { previousTab = selectedTab; onTabChange(4) }
-                            )
-                        }
-                    }
+                        },
+                        selectedIndex = availableTabs.indexOf(selectedTab).coerceAtLeast(0),
+                        onSelect = { index ->
+                            val actualTab = availableTabs.getOrElse(index) { selectedTab }
+                            if (actualTab != selectedTab) {
+                                previousTab = selectedTab
+                                onTabChange(actualTab)
+                            }
+                        },
+                        backdrop = glassNavBackdrop,
+                        modifier = Modifier.padding(
+                            start = 16.dp,
+                            end = 16.dp,
+                            bottom = systemNavBarsHeight + 12.dp
+                        )
+                    )
                 }
-                else -> {
+                // 经典底栏：miuix 原生 NavigationBar（原默认样式，现更名为经典）
+                1 -> {
                     NavigationBar() {
                         if (0 in availableTabs) {
                             NavigationBarItem(
@@ -500,10 +502,10 @@ fun MainScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .then(
-                    if (useLiquidGlassNav || useSoftLightNav) {
-                        Modifier.layerBackdrop(liquidGlassBackdrop)
-                    } else {
-                        Modifier
+                    when {
+                        useLiquidGlassNav || useSoftLightNav -> Modifier.layerBackdrop(liquidGlassBackdrop)
+                        useGlassNav -> Modifier.miuixLayerBackdrop(glassNavBackdrop)
+                        else -> Modifier
                     }
                 )
                 .padding(contentPadding)
@@ -690,7 +692,6 @@ fun MainScreen(
                         onTabChange(4)
                     },
                     navBarBottomPadding = totalNavHeight,
-                    scrollBehavior = scrollBehavior,
                     onTopBarContent = { topBarContent.value = it },
                     active = swipeTargetTab == selectedTab
                 )
@@ -747,7 +748,6 @@ fun MainScreen(
                         onTabChange(4)
                     },
                     navBarBottomPadding = totalNavHeight,
-                    scrollBehavior = scrollBehavior,
                     onTopBarContent = { topBarContent.value = it },
                     active = tab == selectedTab
                 )
@@ -803,7 +803,6 @@ private fun PageContentForTab(
     onGoToFiles: () -> Unit,
     onGoToSettings: () -> Unit,
     navBarBottomPadding: Dp,
-    scrollBehavior: ScrollBehavior,
     onTopBarContent: (@Composable () -> Unit) -> Unit,
     active: Boolean = true
 ) {
@@ -824,7 +823,6 @@ private fun PageContentForTab(
             onRefresh = onRefreshSessions,
             onEditModeChanged = onOverviewEditModeChanged,
             navBarBottomPadding = navBarBottomPadding,
-            scrollBehavior = scrollBehavior,
             onTopBarContent = onTopBarContent,
             active = active
         )
@@ -837,7 +835,6 @@ private fun PageContentForTab(
                     isWakeLockEnabled = isWakeLockEnabled,
                     onToggleWakeLock = onToggleWakeLock,
                     navBarBottomPadding = navBarBottomPadding,
-                    scrollBehavior = scrollBehavior,
                     onTopBarContent = onTopBarContent,
                     active = active
                 )
@@ -852,7 +849,6 @@ private fun PageContentForTab(
                     onToggleWakeLock = onToggleWakeLock,
                     onRefresh = onRefreshSessions,
                     navBarBottomPadding = navBarBottomPadding,
-                    scrollBehavior = scrollBehavior,
                     onTopBarContent = onTopBarContent,
                     active = active
                 )
@@ -861,7 +857,6 @@ private fun PageContentForTab(
         2 -> FileManagerScreen(
             onOpenFile = onExecuteScript,
             navBarBottomPadding = navBarBottomPadding,
-            scrollBehavior = scrollBehavior,
             onTopBarContent = onTopBarContent,
             active = active
         )
@@ -872,14 +867,12 @@ private fun PageContentForTab(
             onGoToFiles = onGoToFiles,
             onGoToSettings = onGoToSettings,
             navBarBottomPadding = navBarBottomPadding,
-            scrollBehavior = scrollBehavior,
             onTopBarContent = onTopBarContent,
             active = active
         )
         4 -> SettingsScreen(
             onAboutClick = onAboutClick,
             navBarBottomPadding = navBarBottomPadding,
-            scrollBehavior = scrollBehavior,
             onTopBarContent = onTopBarContent,
             active = active
         )

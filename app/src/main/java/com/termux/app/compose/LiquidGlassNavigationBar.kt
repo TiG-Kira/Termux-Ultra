@@ -93,10 +93,8 @@ data class ResponsiveNavDimensions(
 )
 
 enum class NavStyle {
-    DEFAULT,
     GLASS,
-    SOFT_LIGHT,
-    FLOATING
+    SOFT_LIGHT
 }
 
 @Composable
@@ -118,8 +116,7 @@ fun computeNavDimensions(
     val maxIconSize = 22.dp
 
     val gap = when (style) {
-        NavStyle.GLASS, NavStyle.SOFT_LIGHT, NavStyle.DEFAULT -> 4.dp
-        NavStyle.FLOATING -> 6.dp
+        NavStyle.GLASS, NavStyle.SOFT_LIGHT -> 4.dp
     }
 
     // SpaceEvenly 布局间距：两端和之间都有间距，共 itemCount + 1 个间距
@@ -138,27 +135,18 @@ fun computeNavDimensions(
     val horizontalPadding = when (style) {
         NavStyle.GLASS -> 6.dp
         NavStyle.SOFT_LIGHT -> 6.dp
-        NavStyle.FLOATING -> 4.dp
-        NavStyle.DEFAULT -> 5.dp
     }
     val verticalPadding = when (style) {
         NavStyle.GLASS -> 4.dp
         NavStyle.SOFT_LIGHT -> 3.dp
-        NavStyle.FLOATING -> 0.dp
-        NavStyle.DEFAULT -> 3.dp
     }
     val bottomMargin = when (style) {
         NavStyle.GLASS -> 24.dp
         NavStyle.SOFT_LIGHT -> 20.dp
-        NavStyle.FLOATING -> 24.dp
-        NavStyle.DEFAULT -> 16.dp
     }
     val sideMargin = 24.dp
 
-    val totalHeight = when (style) {
-        NavStyle.GLASS, NavStyle.SOFT_LIGHT, NavStyle.FLOATING -> containerHeight + bottomMargin
-        NavStyle.DEFAULT -> containerHeight + bottomMargin
-    }
+    val totalHeight = containerHeight + bottomMargin
 
     return ResponsiveNavDimensions(
         itemWidth = itemWidth,
@@ -186,11 +174,7 @@ fun getNavContainerHeight(
     itemCount: Int,
     style: NavStyle
 ): Dp {
-    val dims = computeNavDimensions(itemCount, style)
-    return when (style) {
-        NavStyle.DEFAULT -> 56.dp
-        else -> dims.totalHeight
-    }
+    return computeNavDimensions(itemCount, style).totalHeight
 }
 
 @Composable

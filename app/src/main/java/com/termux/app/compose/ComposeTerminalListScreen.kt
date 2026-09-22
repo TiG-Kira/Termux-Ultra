@@ -46,6 +46,7 @@ import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.basic.TopAppBar
+import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
@@ -60,7 +61,6 @@ fun ComposeTerminalListScreen(
     isWakeLockEnabled: Boolean = false,
     onToggleWakeLock: () -> Unit = {},
     navBarBottomPadding: Dp = 92.dp,
-    scrollBehavior: top.yukonga.miuix.kmp.basic.ScrollBehavior,
     onTopBarContent: (@Composable () -> Unit) -> Unit,
     active: Boolean = true
 ) {
@@ -81,6 +81,8 @@ fun ComposeTerminalListScreen(
         // StateFlow 已经自动更新，这里只是触发动画
     }
 
+    // 与「统一顶栏之前」一致：本页自持吸顶状态
+    val scrollBehavior = MiuixScrollBehavior()
     // 统一全局顶栏：仅当前激活页把本页的 TopAppBar 内容写入 onTopBarContent 槽
     SideEffect {
         if (active) {
