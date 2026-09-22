@@ -44,7 +44,7 @@ import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
-import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
+import top.yukonga.miuix.kmp.basic.ScrollBehavior
 import top.yukonga.miuix.kmp.basic.Switch
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
@@ -70,7 +70,10 @@ private const val ROOT_PATH = "/data/data/com.termux"
 @Composable
 fun FileManagerScreen(
     onOpenFile: (String, String) -> Unit = { _, _ -> },
-    navBarBottomPadding: androidx.compose.ui.unit.Dp = 0.dp
+    navBarBottomPadding: androidx.compose.ui.unit.Dp = 0.dp,
+    scrollBehavior: top.yukonga.miuix.kmp.basic.ScrollBehavior,
+    onTopBarContent: (@Composable () -> Unit) -> Unit,
+    active: Boolean = true
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -150,7 +153,6 @@ fun FileManagerScreen(
         }
     }
 
-    val scrollBehavior = MiuixScrollBehavior()
     val canGoUp = currentPath.parentFile != null && !currentPath.absolutePath.equals(ROOT_PATH)
 
     BackHandler(enabled = canGoUp) {
@@ -281,10 +283,10 @@ fun FileManagerScreen(
         }
     }
 
-    Scaffold(
-        modifier = Modifier.fillMaxSize(),
-        contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        topBar = {
+    // 统一全局顶栏：仅当前激活页把本页的 TopAppBar 内容写入 onTopBarContent 槽
+    SideEffect {
+        if (active) {
+            onTopBarContent {
             TopAppBar(
                 title = if (isInSelectionMode) {
                     "${selectedFiles.size} ${"项"}"
@@ -464,7 +466,13 @@ fun FileManagerScreen(
                     }
                 }
             )
+            }
         }
+    }
+
+    Scaffold(
+        modifier = Modifier.fillMaxSize(),
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
     ) { padding ->
         LazyColumn(
             modifier = Modifier

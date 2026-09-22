@@ -44,6 +44,7 @@ import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import kotlinx.coroutines.launch
 import top.yukonga.miuix.kmp.basic.Scaffold
+import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.basic.NavigationBar
 import top.yukonga.miuix.kmp.basic.NavigationBarItem
 import top.yukonga.miuix.kmp.basic.FloatingNavigationBar
@@ -51,6 +52,9 @@ import top.yukonga.miuix.kmp.basic.FloatingNavigationBarItem
 import top.yukonga.miuix.kmp.basic.SnackbarHost
 import top.yukonga.miuix.kmp.basic.SnackbarHostState
 import top.yukonga.miuix.kmp.basic.SnackbarDuration
+import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
+import top.yukonga.miuix.kmp.basic.ScrollBehavior
+import top.yukonga.miuix.kmp.basic.TopAppBarState
 import com.termux.R
 import com.termux.shared.termux.shell.command.runner.terminal.TermuxSession
 
@@ -74,6 +78,13 @@ fun MainScreen(
     onRefreshSessions: () -> Unit = {}
 ) {
     val scope = rememberCoroutineScope()
+    // 单一、全局的 TopAppBar：TopAppBarState 按选中页重建（吸顶状态存在 state 里），保证切页后吸顶状态复位
+    val topAppBarState = remember(selectedTab) { TopAppBarState(0f, 0f, 0f) }
+    val scrollBehavior = MiuixScrollBehavior(topAppBarState)
+    // 各页面把各自的 TopAppBar 内容写入此槽，由 MainScreen 的 Scaffold.topBar 统一渲染
+    val topBarContent = remember {
+        mutableStateOf<@Composable () -> Unit>({ MainTopBar(selectedTab, showVnc, scrollBehavior) })
+    }
     val snackbarHostState = remember { SnackbarHostState() }
     var remoteSubTab by remember { mutableStateOf(0) }
     var previousTab by remember { mutableStateOf(selectedTab) }
@@ -240,6 +251,7 @@ fun MainScreen(
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        topBar = { topBarContent.value() },
         bottomBar = {
             when (navStyle) {
                 2 -> {
@@ -662,7 +674,10 @@ fun MainScreen(
                         previousTab = swipeTargetTab!!
                         onTabChange(4)
                     },
-                    navBarBottomPadding = totalNavHeight
+                    navBarBottomPadding = totalNavHeight,
+                    scrollBehavior = scrollBehavior,
+                    onTopBarContent = { topBarContent.value = it },
+                    active = swipeTargetTab == selectedTab
                 )
             }
 
@@ -716,7 +731,10 @@ fun MainScreen(
                         previousTab = tab
                         onTabChange(4)
                     },
-                    navBarBottomPadding = totalNavHeight
+                    navBarBottomPadding = totalNavHeight,
+                    scrollBehavior = scrollBehavior,
+                    onTopBarContent = { topBarContent.value = it },
+                    active = tab == selectedTab
                 )
             }
         }
@@ -769,7 +787,10 @@ private fun PageContentForTab(
     onRemoteSubTabChange: (Int) -> Unit,
     onGoToFiles: () -> Unit,
     onGoToSettings: () -> Unit,
-    navBarBottomPadding: Dp
+    navBarBottomPadding: Dp,
+    scrollBehavior: ScrollBehavior,
+    onTopBarContent: (@Composable () -> Unit) -> Unit,
+    active: Boolean = true
 ) {
     when (tab) {
         0 -> OverviewScreen(
@@ -787,7 +808,10 @@ private fun PageContentForTab(
             onExecuteScript = onExecuteScript,
             onRefresh = onRefreshSessions,
             onEditModeChanged = onOverviewEditModeChanged,
-            navBarBottomPadding = navBarBottomPadding
+            navBarBottomPadding = navBarBottomPadding,
+            scrollBehavior = scrollBehavior,
+            onTopBarContent = onTopBarContent,
+            active = active
         )
         1 -> {
             val runtimeCore = TerminalRuntimeCore.getCurrent(context)
@@ -797,7 +821,10 @@ private fun PageContentForTab(
                     onNewTerminal = onNewTerminal,
                     isWakeLockEnabled = isWakeLockEnabled,
                     onToggleWakeLock = onToggleWakeLock,
-                    navBarBottomPadding = navBarBottomPadding
+                    navBarBottomPadding = navBarBottomPadding,
+                    scrollBehavior = scrollBehavior,
+                    onTopBarContent = onTopBarContent,
+                    active = active
                 )
             } else {
                 TerminalListScreen(
@@ -809,13 +836,19 @@ private fun PageContentForTab(
                     isWakeLockEnabled = isWakeLockEnabled,
                     onToggleWakeLock = onToggleWakeLock,
                     onRefresh = onRefreshSessions,
-                    navBarBottomPadding = navBarBottomPadding
+                    navBarBottomPadding = navBarBottomPadding,
+                    scrollBehavior = scrollBehavior,
+                    onTopBarContent = onTopBarContent,
+                    active = active
                 )
             }
         }
         2 -> FileManagerScreen(
             onOpenFile = onExecuteScript,
-            navBarBottomPadding = navBarBottomPadding
+            navBarBottomPadding = navBarBottomPadding,
+            scrollBehavior = scrollBehavior,
+            onTopBarContent = onTopBarContent,
+            active = active
         )
         3 -> com.termux.app.remote.RemoteScreen(
             showVnc = showVnc,
@@ -823,11 +856,33 @@ private fun PageContentForTab(
             onTabChange = onRemoteSubTabChange,
             onGoToFiles = onGoToFiles,
             onGoToSettings = onGoToSettings,
-            navBarBottomPadding = navBarBottomPadding
+            navBarBottomPadding = navBarBottomPadding,
+            scrollBehavior = scrollBehavior,
+            onTopBarContent = onTopBarContent,
+            active = active
         )
         4 -> SettingsScreen(
             onAboutClick = onAboutClick,
-            navBarBottomPadding = navBarBottomPadding
+            navBarBottomPadding = navBarBottomPadding,
+            scrollBehavior = scrollBehavior,
+            onTopBarContent = onTopBarContent,
+            active = active
         )
     }
+}
+
+/**
+ * 默认（首帧回退）的全局顶栏：仅展示当前页标题，保证切页动画期间顶栏不为空。
+ * 各页面在组合阶段通过 [topBarContent] 槽覆盖为带导航图标与操作按钮的完整顶栏。
+ */
+@Composable
+private fun MainTopBar(tab: Int, showVnc: Boolean, scrollBehavior: ScrollBehavior) {
+    val title = when (tab) {
+        0 -> stringResource(R.string.overview)
+        1 -> stringResource(R.string.terminal)
+        2 -> stringResource(R.string.files)
+        3 -> if (showVnc) stringResource(R.string.remote) else stringResource(R.string.ssh)
+        else -> stringResource(R.string.settings)
+    }
+    TopAppBar(title = title, scrollBehavior = scrollBehavior)
 }

@@ -46,7 +46,7 @@ import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
-import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
+import top.yukonga.miuix.kmp.basic.ScrollBehavior
 import top.yukonga.miuix.kmp.basic.Switch
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
@@ -74,7 +74,10 @@ fun TerminalListScreen(
     isWakeLockEnabled: Boolean,
     onToggleWakeLock: () -> Unit,
     onRefresh: () -> Unit = {},
-    navBarBottomPadding: androidx.compose.ui.unit.Dp = 0.dp
+    navBarBottomPadding: androidx.compose.ui.unit.Dp = 0.dp,
+    scrollBehavior: top.yukonga.miuix.kmp.basic.ScrollBehavior,
+    onTopBarContent: (@Composable () -> Unit) -> Unit,
+    active: Boolean = true
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -200,43 +203,47 @@ fun TerminalListScreen(
         }
     }
 
-    val scrollBehavior = MiuixScrollBehavior()
+    // 统一全局顶栏：仅当前激活页把本页的 TopAppBar 内容写入 onTopBarContent 槽
+    SideEffect {
+        if (active) {
+            onTopBarContent {
+                TopAppBar(
+                    title = stringResource(R.string.terminal),
+                    scrollBehavior = scrollBehavior,
+                    actions = {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_lock),
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp),
+                                tint = MiuixTheme.colorScheme.onSurface
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            top.yukonga.miuix.kmp.basic.Switch(
+                                checked = isWakeLockEnabled,
+                                onCheckedChange = { onToggleWakeLock() }
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            IconButton(onClick = onNewTerminal) {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_add),
+                                    contentDescription = stringResource(R.string.new_terminal),
+                                    modifier = Modifier.size(24.dp),
+                                    tint = MiuixTheme.colorScheme.onSurface
+                                )
+                            }
+                        }
+                    }
+                )
+            }
+        }
+    }
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        topBar = {
-            TopAppBar(
-                title = stringResource(R.string.terminal),
-                scrollBehavior = scrollBehavior,
-                actions = {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_lock),
-                            contentDescription = null,
-                            modifier = Modifier.size(20.dp),
-                            tint = MiuixTheme.colorScheme.onSurface
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        top.yukonga.miuix.kmp.basic.Switch(
-                            checked = isWakeLockEnabled,
-                            onCheckedChange = { onToggleWakeLock() }
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        IconButton(onClick = onNewTerminal) {
-                            Icon(
-                                painter = painterResource(R.drawable.ic_add),
-                                contentDescription = stringResource(R.string.new_terminal),
-                                modifier = Modifier.size(24.dp),
-                                tint = MiuixTheme.colorScheme.onSurface
-                            )
-                        }
-                    }
-                }
-            )
-        },
     ) { padding ->
         Column(
             modifier = Modifier

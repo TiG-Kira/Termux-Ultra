@@ -64,6 +64,7 @@ import androidx.compose.material.icons.rounded.Archive
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -103,7 +104,7 @@ import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.HorizontalDivider
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
-import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
+import top.yukonga.miuix.kmp.basic.ScrollBehavior
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.Switch
 import top.yukonga.miuix.kmp.basic.Text
@@ -393,7 +394,10 @@ fun OverviewScreen(
     onExecuteScript: (String, String) -> Unit = { _, _ -> },
     onRefresh: () -> Unit = {},
     onEditModeChanged: (Boolean) -> Unit = {},
-    navBarBottomPadding: androidx.compose.ui.unit.Dp = 0.dp
+    navBarBottomPadding: androidx.compose.ui.unit.Dp = 0.dp,
+    scrollBehavior: top.yukonga.miuix.kmp.basic.ScrollBehavior,
+    onTopBarContent: (@Composable () -> Unit) -> Unit,
+    active: Boolean = true
 ) {
     val context = LocalContext.current
     val isDarkTheme = isSystemInDarkTheme()
@@ -540,7 +544,6 @@ fun OverviewScreen(
         }
     }
     
-    val scrollBehavior = MiuixScrollBehavior()
     val lazyGridState = rememberLazyGridState()
     
     
@@ -841,51 +844,57 @@ fun OverviewScreen(
     }
     
     
+    // 统一全局顶栏：仅当前激活页把本页的 TopAppBar 内容写入 onTopBarContent 槽
+    SideEffect {
+        if (active) {
+            onTopBarContent {
+                TopAppBar(
+                    title = stringResource(R.string.overview_title),
+                    scrollBehavior = scrollBehavior,
+                    navigationIcon = {
+                        GitHubLoginStatusIcon(
+                            onNavigateToAccount = {
+                                context.startActivity(
+                                    Intent(context, com.termux.app.activities.GitHubAccountActivity::class.java)
+                                )
+                            }
+                        )
+                    },
+
+                    actions = {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            IconButton(onClick = {
+                                showAddCardDialog = true
+                            }) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Add,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(24.dp),
+                                    tint = MiuixTheme.colorScheme.onSurface
+                                )
+                            }
+                            IconButton(onClick = {
+                                isEditMode = !isEditMode
+                            }) {
+                                Icon(
+                                    imageVector = if (isEditMode) Icons.Rounded.Check else Icons.Rounded.Edit,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(24.dp),
+                                    tint = MiuixTheme.colorScheme.onSurface
+                                )
+                            }
+                        }
+                    }
+                )
+            }
+        }
+    }
+
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0),
-        topBar = {
-            TopAppBar(
-                title = stringResource(R.string.overview_title),
-                scrollBehavior = scrollBehavior,
-                navigationIcon = {
-                    GitHubLoginStatusIcon(
-                        onNavigateToAccount = {
-                            context.startActivity(
-                                Intent(context, com.termux.app.activities.GitHubAccountActivity::class.java)
-                            )
-                        }
-                    )
-                },
-
-                actions = {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        IconButton(onClick = {
-                            showAddCardDialog = true
-                        }) {
-                            Icon(
-                                imageVector = Icons.Rounded.Add,
-                                contentDescription = null,
-                                modifier = Modifier.size(24.dp),
-                                tint = MiuixTheme.colorScheme.onSurface
-                            )
-                        }
-                        IconButton(onClick = {
-                            isEditMode = !isEditMode
-                        }) {
-                            Icon(
-                                imageVector = if (isEditMode) Icons.Rounded.Check else Icons.Rounded.Edit,
-                                contentDescription = null,
-                                modifier = Modifier.size(24.dp),
-                                tint = MiuixTheme.colorScheme.onSurface
-                            )
-                        }
-                    }
-                }
-            )
-        }
     ) { padding ->
         val orderedCards = remember(filteredCards) {
             calculateWaterfallOrder(filteredCards)
@@ -1227,8 +1236,7 @@ private fun TipsAgentCard(
                 quickEntries.chunked(3).forEach { rowItems ->
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        verticalAlignment = Alignment.Stretch
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         rowItems.forEach { entry ->
                             QuickEntryButton(
@@ -1274,6 +1282,7 @@ private fun QuickEntryButton(
             .clip(RoundedCornerShape(16.dp))
             .background(MiuixTheme.colorScheme.surface)
             .clickable(onClick = onClick)
+            .height(100.dp)
             .padding(vertical = 14.dp, horizontal = 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterVertically)

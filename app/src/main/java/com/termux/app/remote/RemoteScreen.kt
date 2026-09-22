@@ -44,7 +44,7 @@ import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
-import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
+import top.yukonga.miuix.kmp.basic.ScrollBehavior
 import top.yukonga.miuix.kmp.basic.TabRowWithContour
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
@@ -61,7 +61,10 @@ fun RemoteScreen(
     onTabChange: (Int) -> Unit = {},
     onGoToFiles: () -> Unit = {},
     onGoToSettings: () -> Unit = {},
-    navBarBottomPadding: androidx.compose.ui.unit.Dp = 0.dp
+    navBarBottomPadding: androidx.compose.ui.unit.Dp = 0.dp,
+    scrollBehavior: top.yukonga.miuix.kmp.basic.ScrollBehavior,
+    onTopBarContent: (@Composable () -> Unit) -> Unit,
+    active: Boolean = true
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -102,8 +105,6 @@ fun RemoteScreen(
         context.getString(R.string.ssh)
     }
 
-    val scrollBehavior = MiuixScrollBehavior()
-
     val activeConnections = if (!showVnc || selectedTabIndex == 1) {
         sshConnections
     } else {
@@ -117,9 +118,11 @@ fun RemoteScreen(
         config.screenWidthDp.dp.toPx()
     }
 
-    Scaffold(
-        modifier = Modifier.fillMaxSize(),
-        topBar = {
+    // 统一全局顶栏：远程/SSH 页特殊 —— TopAppBar 外层保留左右滑动手势（滑向设置/文件页），
+    // 整体（手势包装 + TopAppBar）写入全局顶栏槽，手势在全局顶栏上依然生效
+    SideEffect {
+        if (active) {
+            onTopBarContent {
             Box(
                 modifier = Modifier
                     .pointerInput(Unit) {
@@ -253,7 +256,12 @@ fun RemoteScreen(
                     }
                 )
             }
+            }
         }
+    }
+
+    Scaffold(
+        modifier = Modifier.fillMaxSize(),
     ) { padding ->
         Box(
             modifier = Modifier
