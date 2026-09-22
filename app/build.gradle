@@ -96,14 +96,13 @@ android {
             }
         }
 
-        // 单架构构建：限定 NDK/CMake 只编这一个 ABI（其余三个 ABI 的原生编译、
-        // 打包全部跳过），打包时也只处理该 ABI 的 so。
-        if (singleAbiBuild) {
-            ndk {
-                abiFilters.clear()
-                abiFilters.add(targetAbi)
-            }
-        }
+        // 单架构构建**不要**在这里写 ndk.abiFilters —— AGP 明确禁止它与
+        // splits.abi 同时出现，配置期就会抛：
+        //     Conflicting configuration : 'arm64-v8a' in ndk abiFilters cannot be
+        //     present when splits abi filters are set : arm64-v8a
+        // （这是 CI 用 PR #128 跑出来的，本机没有 AGP 环境所以验不出来。）
+        // 好在只设 splits.abi 就够了：AGP 会按 splits 列表决定要配置/编译哪些 ABI
+        // （CMake 任务本身是按 ABI 拆的），所以只列一个 ABI 时原生编译也只跑这一个。
     }
 
     signingConfigs {
