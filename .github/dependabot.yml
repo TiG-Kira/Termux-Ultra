@@ -14,6 +14,13 @@ updates:
     interval: daily
   commit-message:
     prefix: "chore(deps)"
-# 注：Kotlin 三件套（kotlin-gradle-plugin / plugin.compose / plugin.serialization）
-# 必须升到同一 Kotlin 版本，请放在一起合并，不要单独合其中任何一个。
-# KSP 自 2.3.x 起改用独立版本号、与 Kotlin 主版本解耦，无需跟随（2.3.12 即当前最新版）。
+  groups:
+    # Kotlin 工具链必须整组升级：KGP 负责编译、compose/serialization 是编译器插件，
+    # 三者的 Kotlin 版本必须一致，单独升任意一个都可能破坏构建。
+    # 用 groups 让 dependabot 只开一个 PR，从机制上杜绝"分开升级"。
+    kotlin-toolchain:
+      patterns:
+        - "org.jetbrains.kotlin:kotlin-gradle-plugin"
+        - "org.jetbrains.kotlin.plugin.compose"
+        - "org.jetbrains.kotlin.plugin.serialization"
+# 注：KSP 自 2.3.x 起改用独立版本号、与 Kotlin 主版本解耦，无需跟随（2.3.12 即当前最新版）。
