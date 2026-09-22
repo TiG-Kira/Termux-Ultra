@@ -80,6 +80,27 @@ public class TermuxApplication extends Application {
         // Initialize LogManager first
         com.termux.app.utils.LogManager.init(this);
 
+        // 系统内存紧张时释放可重建的缓存（当前主要是 LogManager 解析后的日志条目缓存）。
+        // 此前项目没有任何 onTrimMemory / onLowMemory 处理，缓存只能等进程被杀才释放。
+        registerComponentCallbacks(new android.content.ComponentCallbacks2() {
+            @Override
+            public void onTrimMemory(int level) {
+                // level 数值越大越紧急；RUNNING_LOW(10) 及以上都视作内存压力信号
+                if (level >= android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW) {
+                    releaseReclaimableCaches();
+                }
+            }
+
+            @Override
+            public void onLowMemory() {
+                releaseReclaimableCaches();
+            }
+
+            @Override
+            public void onConfigurationChanged(android.content.res.Configuration newConfig) {
+            }
+        });
+
         // Check one-shot fallback flag: if user chose Fallback in last crash dialog,
         // enter terminal-lock mode on next launch and consume the flag.
         // 必须在主线程执行，因为决定了是否设置 crash recovery 标记
@@ -321,6 +342,20 @@ public class TermuxApplication extends Application {
                 Logger.logError(LOG_TAG, "API listener socket failed: " + e.getMessage());
             }
         }, "TermuxAPI-Listener").start();
+    }
+
+    /**
+     * 释放所有「可重建」的内存缓存。当前包含
+     * {@link com.termux.app.utils.LogManager} 解析后的日志条目缓存（LogManager 唯一的常驻大头）。
+     *
+     * 调用点在系统内存回调（onTrimMemory / onLowMemory）里，必须保证不抛异常、不做耗时操作。
+     */
+    private static void releaseReclaimableCaches() {
+        try {
+            com.termux.app.utils.LogManager.getInstance().clearMemoryCache();
+        } catch (Throwable ignored) {
+            // LogManager 尚未初始化时忽略
+        }
     }
 
     private void setLogLevel() {

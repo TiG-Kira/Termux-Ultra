@@ -7,10 +7,14 @@ import android.util.Log;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.io.OutputStreamWriter;
+import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
@@ -29,6 +33,16 @@ public class LogManager {
     private static final String TAG = "LogManager";
     private static final String LOG_FILE_NAME = "app_log.txt";
     private static final String LOG_DIR_NAME = "logs";
+
+    /**
+     * 日志文件大小上限（字节）。超过后按「保留末尾」方式裁剪，避免长期运行后
+     * 日志文件无限增长占满用户存储（配合 {@link #cleanOldLogs(int)} 的按天清理双保险）。
+     */
+    private static final long MAX_LOG_FILE_SIZE = 2 * 1024 * 1024L; // 2 MB
+    /** 裁剪后保留的文件尾部大小（字节）。 */
+    private static final long TRIM_KEEP_SIZE = 1024 * 1024L; // 1 MB
+    /** 每写入 N 条日志检查一次文件大小，避免每条日志都做一次 stat 系统调用。 */
+    private static final int SIZE_CHECK_WRITE_INTERVAL = 64;
 
     public static final int LEVEL_INFO = 0;
     public static final int LEVEL_WARNING = 1;
@@ -67,6 +81,9 @@ public class LogManager {
     private long cachedFileModTime;
     private int cachedLevelFilter = -1;
 
+    /** 距上次文件大小检查的写入条数，用于降低 stat 调用频率。 */
+    private int writesSinceSizeCheck = 0;
+
     private LogManager(Context context) {
         this.appContext = context.getApplicationContext();
         File logDir = new File(appContext.getFilesDir(), LOG_DIR_NAME);
@@ -76,7 +93,11 @@ public class LogManager {
         logFile = new File(logDir, LOG_FILE_NAME);
         // cleanOldLogs 涉及读+重写整个日志文件（磁盘 I/O），放到后台线程异步执行，
         // 避免在 Application.onCreate() 主线程阻塞冷启动。
-        new Thread(() -> cleanOldLogs(3), "LogManager-Cleanup").start();
+        // 先做一次大小兜底裁剪，兼容历史版本遗留的超大日志文件（避免首次解析时内存峰值过高）。
+        new Thread(() -> {
+            trimLogFileIfNeeded();
+            cleanOldLogs(3);
+        }, "LogManager-Cleanup").start();
     }
 
     public static synchronized void init(Context context) {
@@ -135,12 +156,95 @@ public class LogManager {
         // 写入文件
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(logFile, true))) {
             writer.write(logEntry.toString());
-            // 写后立即使缓存失效，避免 UI 读到过期数据
-            cachedLogs = null;
-            cachedFileModTime = 0;
         } catch (IOException e) {
             Log.e(TAG, "Failed to write log", e);
         }
+        afterWrite();
+    }
+
+    /**
+     * 写入后的收尾工作：使读取缓存失效，并按间隔检查/裁剪日志文件大小。
+     * 每次写入都会清缓存（保证 UI 读到最新数据），但只每
+     * {@link #SIZE_CHECK_WRITE_INTERVAL} 条做一次文件大小检查（避免频繁 stat）。
+     */
+    private void afterWrite() {
+        // 写后立即使缓存失效，避免 UI 读到过期数据
+        cachedLogs = null;
+        cachedFileModTime = 0;
+
+        if (++writesSinceSizeCheck >= SIZE_CHECK_WRITE_INTERVAL) {
+            writesSinceSizeCheck = 0;
+            trimLogFileIfNeeded();
+        }
+    }
+
+    /**
+     * 日志文件超过 {@link #MAX_LOG_FILE_SIZE} 时，仅保留文件末尾 {@link #TRIM_KEEP_SIZE}
+     * 字节的**完整行**，防止日志文件无限增长占满用户存储。
+     *
+     * 采用「从尾部随机定位 + 流式按行复制」的方式实现，不会把整个文件读入内存
+     * （对比 cleanOldLogs 的全量解析，这里刻意避免大文件造成的内存峰值）。
+     * 全程以 UTF-8 按行处理，避免按字节截断破坏多字节字符（中文日志）。
+     */
+    private synchronized void trimLogFileIfNeeded() {
+        if (!logFile.exists() || logFile.length() <= MAX_LOG_FILE_SIZE) {
+            return;
+        }
+
+        final long fileLength = logFile.length();
+        File tmpFile = new File(logFile.getParentFile(), LOG_FILE_NAME + ".trim.tmp");
+
+        try (FileInputStream fis = new FileInputStream(logFile);
+             BufferedWriter writer = new BufferedWriter(
+                 new OutputStreamWriter(new FileOutputStream(tmpFile, false), StandardCharsets.UTF_8))) {
+
+            long start = Math.max(0, fileLength - TRIM_KEEP_SIZE);
+            if (start > 0) {
+                long skipped = 0;
+                while (skipped < start) {
+                    long s = fis.skip(start - skipped);
+                    if (s <= 0) break;
+                    skipped += s;
+                }
+                // 定位点可能落在某一行中间，丢弃该不完整行的剩余部分，
+                // 保证裁剪后的文件以完整行开头（否则解析时会得到半条日志）。
+                int b;
+                while ((b = fis.read()) != -1 && b != '\n') {
+                    // skip partial line
+                }
+            }
+
+            try (BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(fis, StandardCharsets.UTF_8))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    writer.write(line);
+                    writer.write('\n');
+                }
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to trim log file", e);
+            //noinspection ResultOfMethodCallIgnored
+            tmpFile.delete();
+            return;
+        }
+
+        // 同目录内 rename 替换原文件
+        if (!tmpFile.renameTo(logFile)) {
+            //noinspection ResultOfMethodCallIgnored
+            logFile.delete();
+            if (!tmpFile.renameTo(logFile)) {
+                Log.w(TAG, "Failed to replace trimmed log file");
+                //noinspection ResultOfMethodCallIgnored
+                tmpFile.delete();
+                return;
+            }
+        }
+
+        cachedLogs = null;
+        cachedFileModTime = 0;
+        writesSinceSizeCheck = 0;
+        Log.i(TAG, "Trimmed log file from " + fileLength + " to " + logFile.length() + " bytes");
     }
 
     /**
@@ -253,10 +357,8 @@ public class LogManager {
 
             try (BufferedWriter writer = new BufferedWriter(new FileWriter(logFile, true))) {
                 writer.write(logEntry.toString());
-                // 写后立即使缓存失效，避免 UI 读到过期数据
-                cachedLogs = null;
-                cachedFileModTime = 0;
             }
+            afterWrite();
         } catch (Exception e) {
             // 不记录完整异常栈，避免 logcat 收集形成循环
             Log.w(TAG, "Skipped unparseable logcat line: " + e.getClass().getSimpleName());
@@ -515,14 +617,26 @@ public class LogManager {
         try (FileWriter writer = new FileWriter(logFile, false)) {
             writer.write("");
             // 清除缓存
-            cachedLogs = null;
-            cachedFileModTime = 0;
-            cachedLevelFilter = -1;
+            clearMemoryCache();
+            writesSinceSizeCheck = 0;
             return true;
         } catch (IOException e) {
             Log.e(TAG, "Failed to clear logs", e);
             return false;
         }
+    }
+
+    /**
+     * 清空内存中的日志读取缓存（{@link #cachedLogs}）。
+     *
+     * 该缓存保存的是完整解析后的日志条目列表，是 LogManager 唯一的常驻内存大头。
+     * 清空后下次 {@link #getLogs} 会重新从文件解析（结果一致，仅多一次磁盘读取）。
+     * 供 Application 在系统内存紧张（{@code onTrimMemory}）时主动释放。
+     */
+    public synchronized void clearMemoryCache() {
+        cachedLogs = null;
+        cachedFileModTime = 0;
+        cachedLevelFilter = -1;
     }
 
     /**
@@ -567,8 +681,7 @@ public class LogManager {
 
             Log.i(TAG, "Cleaned old logs: kept " + filteredEntries.size() + " entries from " + allEntries.size());
             // 文件已修改，清除缓存
-            cachedLogs = null;
-            cachedFileModTime = 0;
+            clearMemoryCache();
         } catch (Exception e) {
             Log.e(TAG, "Failed to clean old logs", e);
         }

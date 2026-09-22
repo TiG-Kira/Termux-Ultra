@@ -22,6 +22,40 @@ android {
     def workflowCliBuild = System.getenv("TERMUX_WORKFLOW_CLI") == "true"
     def splitAPKsForReleaseBuilds = System.getenv("TERMUX_SPLIT_APKS_FOR_RELEASE_BUILDS") ?: "0"
 
+    // R8 代码收缩 / 资源收缩开关。
+    // 默认关闭 —— 开启后 R8 会删除「无静态引用」的类、方法与资源，而本项目存在
+    // Gson 反射字段、Class.forName、getDeclaredField、JNI 等动态引用点，
+    // 必须先在真机上完整回归一遍（尤其 AI/插件/终端/下载几条链路）再考虑默认启用。
+    // 启用方式：./gradlew assembleRelease -Ptermux.enableR8=true
+    //（CI 可设环境变量 TERMUX_ENABLE_R8=true）
+    // keep 规则已整理在 app/proguard-rules.pro，开启前请先读该文件顶部说明。
+    def enableR8 = (project.findProperty("termux.enableR8")
+        ?: System.getenv("TERMUX_ENABLE_R8")
+        ?: "false").toString().toBoolean()
+
+    // ── 单架构构建开关 ─────────────────────────────────────────────────
+    // 用途：把「一次编译四个 ABI」拆成「一个 ABI 一次编译」，用于 CI 矩阵并行构建，
+    //       既缩短单作业耗时，也把每个作业的 CMake / dex 内存峰值压到 1/4。
+    //
+    // 用法：./gradlew :app:assembleRelease -Ptermux.abi=arm64-v8a
+    //      环境变量等价写法：TERMUX_ABI=arm64-v8a ./gradlew :app:assembleRelease
+    //
+    // 取值：
+    //   arm64-v8a / armeabi-v7a / x86 / x86_64 —— 只编译并打包该架构（产物
+    //       app-<abi>-<buildType>.apk，不含 universal 包）；
+    //   universal —— 关闭 ABI 拆分，把全部架构打进一个包（app-<buildType>.apk）。
+    //
+    // 不指定时保持原行为：release 拆四架构 + universal，debug 打整包
+    // （CI 仍可用 TERMUX_FORCE_SPLITS=1 强制 debug 也拆）。
+    def supportedAbis = ['arm64-v8a', 'armeabi-v7a', 'x86', 'x86_64']
+    def targetAbi = (project.findProperty("termux.abi") ?: System.getenv("TERMUX_ABI") ?: "").toString().trim()
+    if (targetAbi && targetAbi != "universal" && !supportedAbis.contains(targetAbi)) {
+        throw new GradleException(
+            "不支持的 -Ptermux.abi 取值：'${targetAbi}'；可用：${supportedAbis.join(' / ')} / universal")
+    }
+    // 是否「只编一个架构」；universal 是显式的反例（要全架构，但不拆分）
+    def singleAbiBuild = targetAbi && targetAbi != "universal"
+
     defaultConfig {
         applicationId "com.termux"
         minSdkVersion project.properties.minSdkVersion.toInteger()
@@ -41,6 +75,11 @@ android {
         if (appVersionName) versionName = appVersionName
         if (workflowCliBuild) versionName = "${versionName}-CLI"
 
+        // 语言资源白名单：只保留中/英文，剔除 appcompat / material / androidx 等依赖自带的
+        // 数十种语言资源（每种都会占用 resources.arsc 与 res/ 空间）。
+        // 注意：新增界面语言时必须同步追加到此处，否则该语言会回退到默认（英文）。
+        resConfigs "en", "zh"
+
         manifestPlaceholders.TERMUX_PACKAGE_NAME = "com.termux"
         manifestPlaceholders.TERMUX_APP_NAME = "Termux Ultra"
         manifestPlaceholders.TERMUX_API_APP_NAME = "Termux:API"
@@ -57,20 +96,12 @@ android {
             }
         }
 
-        // ABI splits: enabled for release builds by default, or whenever the
-        // CI sets TERMUX_FORCE_SPLITS=1. Local debug builds keep the fast
-        // single-universal-APK behaviour unless overridden.
-        def forceSplits = System.getenv("TERMUX_FORCE_SPLITS") == "1"
-        def isReleaseBuild = gradle.startParameter.taskNames.any {
-            it.toLowerCase().contains('release')
-        }
-        def enableSplits = isReleaseBuild || forceSplits
-        splits {
-            abi {
-                enable enableSplits
-                reset ()
-                include 'x86', 'x86_64', 'armeabi-v7a', 'arm64-v8a'
-                universalApk true
+        // 单架构构建：限定 NDK/CMake 只编这一个 ABI（其余三个 ABI 的原生编译、
+        // 打包全部跳过），打包时也只处理该 ABI 的 so。
+        if (singleAbiBuild) {
+            ndk {
+                abiFilters.clear()
+                abiFilters.add(targetAbi)
             }
         }
     }
@@ -84,13 +115,36 @@ android {
         }
     }
 
+    // ABI 拆分策略（放在 android 顶层：splits 是 android 扩展的属性）：
+    //   - 指定单个架构（-Ptermux.abi=arm64-v8a）→ 拆分开启，只含该架构，无 universal；
+    //   - 指定 universal（-Ptermux.abi=universal）→ 拆分关闭，全部架构打进一个包；
+    //   - 未指定 → release 拆四架构 + universal；debug 打整包（可用 TERMUX_FORCE_SPLITS=1 强制拆）。
+    def forceSplits = System.getenv("TERMUX_FORCE_SPLITS") == "1"
+    def isReleaseBuild = gradle.startParameter.taskNames.any {
+        it.toLowerCase().contains('release')
+    }
+    splits {
+        abi {
+            enable singleAbiBuild ? true : ((!targetAbi) && (isReleaseBuild || forceSplits))
+            reset ()
+            if (singleAbiBuild) {
+                include targetAbi
+            } else {
+                include 'x86', 'x86_64', 'armeabi-v7a', 'arm64-v8a'
+            }
+            // 单架构构建没有「全架构包」的概念，避免产出误导性的 app-universal-*.apk
+            universalApk !singleAbiBuild
+        }
+    }
+
     testOptions {
         unitTests.returnDefaultValues = true
     }
 
     buildTypes {
         release {
-            minifyEnabled false
+            minifyEnabled enableR8
+            shrinkResources enableR8
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
             signingConfig signingConfigs.release
         }
@@ -120,10 +174,26 @@ android {
     }
 
     packaging {
+        // ⚠️ 不要改成 false / 不要设 extractNativeLibs="false"
+        // Termux 的 bootstrap 以 libtermux-bootstrap.so 形式打包，运行时由 Java 侧
+        // 把它当普通 zip 文件从 nativeLibraryDir 读出并解压成 prefix 环境。
+        // 因此 so 必须处于「已解压到 nativeLibraryDir」的状态，即
+        // useLegacyPackaging=true + android:extractNativeLibs="true" 是硬性前提。
+        // 改为 false 会导致 bootstrap 安装失败、Termux 无法使用。
         jniLibs.useLegacyPackaging = true
+
         resources.excludes += "META-INF/LICENSE.md"
         resources.excludes += "META-INF/LICENSE-notice.md"
         resources.excludes += "META-INF/DEPENDENCIES"
+        // 许可证 / 元数据类文件，运行时不需要
+        resources.excludes += "META-INF/AL2.0"
+        resources.excludes += "META-INF/LGPL2.1"
+        resources.excludes += "META-INF/*.version"
+        resources.excludes += "META-INF/*.kotlin_module"
+        // Kotlin 协程调试探针，release 运行时用不到
+        resources.excludes += "DebugProbesKt.bin"
+        // 部分库自带的示例/文档
+        resources.excludes += "META-INF/native-image/**"
     }
 
     sourceSets {
@@ -237,26 +307,29 @@ tasks.whenTaskAdded { task ->
             File outDir = file("$buildDir/outputs/apk/$buildType")
             if (!outDir.exists()) return
             String tag = System.getenv("TERMUX_APK_VERSION_TAG")
-            // splits OFF: a single app-<type>.apk (universal).
-            // splits  ON: app-<abi>-<type>.apk (universal included with -universal-).
+            // splits OFF: app-<type>.apk（整包）
+            // splits  ON: app-<abi>-<type>.apk，另有 app-universal-<type>.apk
+            // 上面两种在 CI 里都统一重命名成 termux-app_<tag>_<abi>.apk。
             outDir.listFiles().each { File apk ->
                 String name = apk.name
                 if (!name.endsWith(".apk")) return
-                // Skip already-renamed files (idempotent across up-to-date runs)
-                if (name.startsWith("app-") || name.startsWith("termux-ultra_") || name.startsWith("termux-app_")) return
+                // 仅跳过「本脚本已经重命名过」的产物，保证重跑（up-to-date）时幂等。
+                // 注意：这里不能把 app- 前缀整体排除 —— AGP 产出的拆分包就叫
+                // app-<abi>-<type>.apk，排除掉的话重命名逻辑等于永远不会执行。
+                if (name.startsWith("termux-app_") || name.startsWith("termux-ultra_")) return
 
+                String suffix = "-${buildType}.apk"
                 String abi
-                if (name.contains("-universal-" + buildType)) {
+                if (name == "app-${buildType}.apk" || name == "app-universal-${buildType}.apk") {
+                    // 未拆分整包 / 显式 universal 拆分包，两者都视作 universal
                     abi = "universal"
-                } else if (name == "app-" + buildType + ".apk") {
-                    abi = "universal"
-                } else if (name.startsWith("app-")) {
-                    // app-<abi>-<type>.apk  →  strip leading "app-" and trailing "-<type>.apk"
-                    abi = name.substring(4)                         // drop "app-"
-                    abi = abi.substring(0, abi.length() - buildType.length() - 5)  // drop "-<type>.apk" = -(6+4) chars
+                } else if (name.startsWith("app-") && name.endsWith(suffix)) {
+                    // app-<abi>-<type>.apk → 截出中间的 <abi>
+                    abi = name.substring("app-".length(), name.length() - suffix.length())
                 } else {
                     return   // unknown naming, leave alone
                 }
+                if (!abi) return
 
                 String newName
                 if (tag != null && !tag.isEmpty()) {

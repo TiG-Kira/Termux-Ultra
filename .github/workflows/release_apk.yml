@@ -9,6 +9,17 @@ on:
         description: "要附加 APK 的 Release tag（workflow_dispatch 时必填；release 事件自动取触发 tag）"
         required: false
         type: string
+      build_universal:
+        description: "手动触发时是否额外构建 universal 全架构包（release 事件下始终构建）"
+        required: false
+        type: boolean
+        default: false
+
+# 同一 tag 的发布构建串行化：不取消进行中的运行，避免构建到一半被打断、
+# 结果 Release 上只挂了一半架构的包。
+concurrency:
+  group: release-apk-${{ github.event.release.tag_name || inputs.tag || github.ref }}
+  cancel-in-progress: false
 
 permissions:
   contents: write
@@ -17,21 +28,14 @@ env:
   JKS_BASE64: MIIK3gIBAzCCCogGCSqGSIb3DQEHAaCCCnkEggp1MIIKcTCCBbgGCSqGSIb3DQEHAaCCBakEggWlMIIFoTCCBZ0GCyqGSIb3DQEMCgECoIIFQDCCBTwwZgYJKoZIhvcNAQUNMFkwOAYJKoZIhvcNAQUMMCsEFKirVzvoI+iRemFEY8ijhWi9RcHtAgInEAIBIDAMBggqhkiG9w0CCQUAMB0GCWCGSAFlAwQBKgQQE5pCcJR2hWYr6nTA48yzrwSCBNBCzmyfIOcy0MsK1nJxVBlIt8fl7Jrb+4pBDIBBJ17Eiez+GJbRlUwqav0HWIJdmTgap0CSvOcyju9zu7GEqsMwpbuod0lSeDdPSUCVBshyBlSxJaJ9I1FhVuDcWP+bV0Ox5ewVkpiX+f3RlEeB30hnyBzVIpzRRQ/aAozO2JToTMCPpGZpwhVaex4fDr/0SSYhFFEaZhSm/klwgcdOqwmUDKBa5zP4WV2uzCeblPdUud5tP9qB4R6v1fUmjOrlYSwTUxbkRD0yZ22RL3YSV8pQqSulHnngG7hAiX/Pi6wAPVsJiZOxQDqwsrj2n/3MxOQLQglxYGnfK4OvXdd4Z0rRSjFKMItyUGmGwJUsXgrVmZXYZl/yNsmxrUYp16bzcWbhsZfi75hHJalEOJRZ57LlVYjs/JhEwAIjn61D13S63u8x4OuwQcfgDxVPwRhwEMEvaEn7mx8By7rGTXtQeFvSPg5LtvExEbLa1YLwrJg7/iQSRHrTkl5uSUkgLHjJZ7M2zLalvvWD2yh3CSni/bQxMg/M8KCpaaweit68WLxmkZ07Ch9zUr7+lNlVWDj8WSplUg91y7Cb8/JvOVAwuFQZQbaokW7jXVkNSRBufRS3RHnY6hWAWig6x3Q1OwEdwYADdDC15L5gJYwlykxgGWUQZv96yoJUYcoxqSh7ttOUss/DT24yGzTiHy6ww/e7+Zd2uA8Jt/azYLtYvletdTLWm+f9YwOu7Npt+rkpDdEsXOS65+7pQesSvXTRm4WJf6mhlQ2CwNNxnytujx5iObTi01IljeoElqo1IsEKPdluxssAPP7v09DGAmpQ90w0lPjl4Jypw9aGnPgafYQ3sitg3nCxc/ij+xDCOaP0jOIeTtKkx2qE4Db3k2dBmr8mKApE8CA3fdomJdvIG3fjKCDCzgrNJ541azzNEQlQSi9V3XebGxVDTKo+ymR1xR9JZWXgHSWuFPPet8jl2BX2f9Y+650QgN6nRiT6+uEppro/RpqY/v+R94VE2zZ2ftEkgQQMx2WWe4cU6ppzZ50kb1BjhEldqJo2JX9banm3x080eo6kQFAstYfDegifdT0WQPv07bhoKlnybBvd+Ta1xjZSRZ+EgMxOWw07vao50nzaRVQ1oAi+rqgQ17aBVnhVrjYS+Eqok7S3ot7kxp79vr16E8HQsL4pwvAXR46svL+q8symu3TNehyPB+igN1nUd9unDCbgiUf4sL0oerZgBZvJ8rMcvmp7oILILN9qftu39k4x1HHvAV0nZIzf+GQqZZSc99JpTSJvVIsjYrT1WdmFVW1HxmjrrG5N3dHWGnjSWQV23Z29RRZp0a7AOlWH3uorH8n6zxfaopPwBvB0P6eOBaTSNplGdoR/PSWg+Cx6Z6TXizdiWUDRFK+qGiJ67OVLZFTcnkasOaPDQI401+d3gAO/XAYRR4Y0zK252sH+Xeaxgso2py5SQ8QOpw0sNE/cQyRptlSaaJrz6QIzugu013rLPKw/nNFukStu3IvyqgA9CAtpAT4qukae1Z62qR70uPRx46hyUNhANNOh5wGz/8O3nE/OhQzWpzgj3u6UjHv1cYCd2PU0sbmBsNXZEkDFidEi8j0efSTRC6Gd1GCYTYuwcIhnyLzWOkvbgvn7VTFKMCUGCSqGSIb3DQEJFDEYHhYAawBpAC0AdABlAHIAbQBpAG4AYQBsMCEGCSqGSIb3DQEJFTEUBBJUaW1lIDE3ODQzNTg0NjI5NDYwggSxBgkqhkiG9w0BBwagggSiMIIEngIBADCCBJcGCSqGSIb3DQEHATBmBgkqhkiG9w0BBQ0wWTA4BgkqhkiG9w0BBQwwKwQU5nuF5g8ZCnUdx52zEbLIh6YmDj4CAicQAgEgMAwGCCqGSIb3DQIJBQAwHQYJYIZIAWUDBAEqBBDh2bKdNEEqBayrCgsBVHD0gIIEIIR1chdKTsGyvUBDkFGcHW3lfkzQ4PR4pNh+rkdRa90vyuJYpqXVpTE72j6aJKTwlvVZ1gt0ntapKexxpGWe6GNSezbW5v2uX4awVocxE+ulIPAJHxSxl9emoED2E6GZ6ovSpGT/MU+aDAmZBPe+B3Y73T69XQHFyV4eSP2WYKF8p6tN/FnC4bITtdBuR2lbGLhd4z8JpTUuIf7t9GGEOBnpTFUUoBf8wE0iDkCKWjwzX/wciyvmjMLZlvvoZpyxM8PbdCKiAg0PIi105C9J3KT4+RUw8IrczxOL4rJZ9l3CSIFlh8spQwtiUMH+fM5z1XOC3/NJ49+hPGhdvtrIHlufdw61+4Yr7ViObvO7nxzcqeWsT26sGgdFsfhiVw9TrdBLTUb83P9z9dpGhQtYMsME+WPKqmLGGlROp8hhFW9xT4qc5qPC8s/l4zVN3jFqDeH7tNv0Iu2U8rMobDrh/utW2idfiJ/H0YZBQ3iZIzZpNtWtYNPGmUXDN3g/lg/9Uhr89HnW5XZ+lrvJ6M+r325tPdQv9JAZ8JIHvjBUj9lyTjxDjVEvUHqO2H54VCdjRbmMhIpLm0KqxnA97EGxxqZKbubYL5xJedwscHWxvGN85U5DqpL5R3I1rjkUnK3xKLORjNKKv7gAugvsDylClz2qzyfpA6qcz8jWqeS5LTVYe9fsWImyd7ZZg4gxG4wKkAyt0d2rXExzCQzTIwm31OGIs+IkvKOXVMGZhUuSKHT6YqmedZndSEx9uQGNSkrXq1uVjIwlgqJpCRPVOJS3BYsag4ONDbKsY4OwsBiW4z+00xUuzgShJ259rT7LPNENc034BVrze5w0hChSJL29vwJCAKyRViGnT19vZVkoQmiK9AV0Wve6r9ESvgU7GKm3/WZuanfrBpwTpoAEcspOr3+0oqzRcfe975xs4qfV84gteARC29ZoDn2l1XuJa8jH6sVf4vqXsWRK42xemN39v9reiRkdzdxrOdNLAqf9+zDGMA58mAeA3pNaoyHqQgQx5bohNHvw0tbPJXoPaL+u/i92+OQLGcID1K14kgE8hW7tigsJVVd3a2ra9xv3jf+Eey0OeuJU1pxN+FfxXM5u4b5rsy9yTU4GHJb27LDayAcodv87Fj6QLnLk3tBQzDhRc3ltO8v7cBCU5FQWviocVD00MCHW7UxumCbcicSWAGnLOSfSsKiqTdV3WPvMH552gQc9Q7y1LWzxoE68JUhLBHg1GA8uq8ufoYa/Nymp0y5XlrRIzqzTztyEoompzkDJBlsAxXNB/3rzgjSAkLihF6Dqb0nizUlKeezuJJKcN0doT2EE5Ba+bdxRu5uoz6s5NmVlq/6RtroNcNwAvYuQsNrGbT5eZPR/ZaPnKm7csFzK3D+cBl4mF/hC5YJdM1el5TBNMDEwDQYJYIZIAWUDBAIBBQAEICd0JR57nE0iC2OjBh89VI2EDs8ezuZPhgP8l4aiuvS9BBQTw5p+yS/RjnHMsWghc8GiHIhmCAICJxA=
 
 jobs:
-  release-build:
+  # ── 1. 预检：Release 里是否已经有 APK ───────────────────────────────
+  # 拆成独立作业后这个 API 调用只做一次，后续所有构建作业都看它的输出决定是否跳过。
+  preflight:
     runs-on: ubuntu-26.04
+    outputs:
+      tag: ${{ steps.check.outputs.tag }}
+      skip: ${{ steps.check.outputs.skip }}
     steps:
-      - name: 检出 main 主线
-        uses: actions/checkout@v7
-        with:
-          ref: main
-
-      - name: 设置 JDK 21
-        uses: actions/setup-java@v4
-        with:
-          java-version: '21'
-          distribution: 'temurin'
-          cache: gradle
-
       - name: 检查 Release 是否已附带 APK
         id: check
         env:
@@ -57,53 +61,148 @@ jobs:
             echo "skip=false" >> "$GITHUB_OUTPUT"
           fi
 
+  # ── 2. 按架构并行构建 ─────────────────────────────────────────────
+  # 每个 ABI 一个独立作业：CMake 只为该 ABI 配置与编译，四项原生构建互不干扰，
+  # 单作业的内存峰值约 1/4、墙钟时间也降到 1/4 左右；4 个 APK 同时产出。
+  # -Ptermux.abi=<abi> 只影响本作业，产物名由 app/build.gradle 统一改成
+  # termux-app_<tag>_<abi>.apk。
+  build:
+    needs: preflight
+    if: needs.preflight.outputs.skip == 'false'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 60
+    strategy:
+      # 某一架构编译失败时不取消其它架构：能一眼区分「某架构特有问题」
+      # 还是「全架构共性问题」。
+      fail-fast: false
+      matrix:
+        abi:
+          - arm64-v8a
+          - armeabi-v7a
+          - x86
+          - x86_64
+    steps:
+      - name: 检出 main 主线
+        uses: actions/checkout@v7
+        with:
+          ref: main
+
+      - name: 设置 JDK 21
+        uses: actions/setup-java@v6
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: gradle
+
       - name: 解码 JKS 到 app 目录
-        if: steps.check.outputs.skip == 'false'
         run: |
           # app/build.gradle 中 storeFile 使用的是相对 app 模块目录的路径
           echo "$JKS_BASE64" | base64 -d > app/ki-terminal-release.jks
           test -s app/ki-terminal-release.jks
           echo "JKS 写入完成：$(stat -c%s app/ki-terminal-release.jks) 字节"
 
-      - name: 编译 Release APK（拆架构）
-        if: steps.check.outputs.skip == 'false'
-        run: |
+      - name: 编译 ${{ matrix.abi }} Release APK
+        env:
           # 关键：TERMUX_WORKFLOW_CLI=false，否则会打 CLI 版本！
-          export TERMUX_WORKFLOW_CLI=false
-          # 强制启用 ABI splits，产出 arm64-v8a / armeabi-v7a / x86 / x86_64 + universal
-          export TERMUX_FORCE_SPLITS=1
-          ./gradlew :app:assembleRelease
-
-      - name: 收集产物
-        if: steps.check.outputs.skip == 'false'
-        id: collect
+          TERMUX_WORKFLOW_CLI: "false"
+          # 让产物重命名成 termux-app_<tag>_<abi>.apk
+          TERMUX_APK_VERSION_TAG: ${{ needs.preflight.outputs.tag }}
         run: |
-          APK_DIR="app/build/outputs/apk/release"
-          echo "APK 目录内容："
-          ls -lh "$APK_DIR"
-          # 列出所有产物路径供后续上传
-          echo "paths<<EOF" >> "$GITHUB_OUTPUT"
-          find "$APK_DIR" -maxdepth 1 -name "*.apk" | sort >> "$GITHUB_OUTPUT"
-          echo "EOF" >> "$GITHUB_OUTPUT"
+          ./gradlew :app:assembleRelease -Ptermux.abi=${{ matrix.abi }} --console=plain
+
+      - name: 列出产物
+        run: ls -lh app/build/outputs/apk/release/
+
+      - name: 上传 ${{ matrix.abi }} 产物
+        uses: actions/upload-artifact@v7
+        with:
+          name: apk-${{ matrix.abi }}
+          archive: false
+          if-no-files-found: error
+          path: app/build/outputs/apk/release/*.apk
+
+  # ── 3. universal 全架构整包（可选） ────────────────────────────────
+  # 默认在「发布 Release」事件下仍然构建，保持与拆分前一致的产物集合；
+  # 手动触发时由 inputs.build_universal 决定（默认 false，只想要分架构包时可省掉这趟）。
+  build_universal:
+    needs: preflight
+    if: needs.preflight.outputs.skip == 'false' && (github.event_name == 'release' || inputs.build_universal == true)
+    runs-on: ubuntu-26.04
+    timeout-minutes: 120
+    steps:
+      - name: 检出 main 主线
+        uses: actions/checkout@v7
+        with:
+          ref: main
+
+      - name: 设置 JDK 21
+        uses: actions/setup-java@v6
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: 解码 JKS 到 app 目录
+        run: |
+          echo "$JKS_BASE64" | base64 -d > app/ki-terminal-release.jks
+          test -s app/ki-terminal-release.jks
+          echo "JKS 写入完成：$(stat -c%s app/ki-terminal-release.jks) 字节"
+
+      - name: 编译 universal Release APK
+        env:
+          TERMUX_WORKFLOW_CLI: "false"
+          TERMUX_APK_VERSION_TAG: ${{ needs.preflight.outputs.tag }}
+        run: |
+          # -Ptermux.abi=universal → 关闭 ABI 拆分，四个架构一起打进一个包
+          ./gradlew :app:assembleRelease -Ptermux.abi=universal --console=plain
+
+      - name: 列出产物
+        run: ls -lh app/build/outputs/apk/release/
+
+      - name: 上传 universal 产物
+        uses: actions/upload-artifact@v7
+        with:
+          name: apk-universal
+          archive: false
+          if-no-files-found: error
+          path: app/build/outputs/apk/release/*.apk
+
+  # ── 4. 汇总上传到 Release ──────────────────────────────────────────
+  publish:
+    needs: [preflight, build, build_universal]
+    # 预检未跳过、分架构全部成功、且 universal 未失败（被跳过不算失败）才发布，
+    # 避免只上传了一半架构就发出去。
+    if: always() && needs.preflight.outputs.skip == 'false' && needs.build.result == 'success' && (needs.build_universal.result == 'success' || needs.build_universal.result == 'skipped')
+    runs-on: ubuntu-26.04
+    steps:
+      - name: 下载全部 APK 产物
+        uses: actions/download-artifact@v8
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: 列出待上传文件
+        run: ls -lh dist/
 
       - name: 上传 APK 到 Release
-        if: steps.check.outputs.skip == 'false'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          tag="${{ steps.check.outputs.tag }}"
+          tag="${{ needs.preflight.outputs.tag }}"
           upload_url="https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/tags/${tag}"
           # 从 API 拿 upload_url（带 ?name= 参数模板）
           upload_base=$(curl -s -H "Authorization: token $GITHUB_TOKEN" "$upload_url" \
             | jq -r '.upload_url' | sed 's/{?name,label}//')
           echo "upload_base=$upload_base"
 
-          # steps.collect.outputs.paths 是多行文本（heredoc 写入 GITHUB_OUTPUT），
-          # 用 while read 逐行遍历，避免 shell 把多行内联展开成语法错误。
-          echo "${{ steps.collect.outputs.paths }}" | while IFS= read -r apk; do
-            # 跳过空行
-            [ -z "$apk" ] && continue
-            [ ! -f "$apk" ] && { echo "⚠️  跳过不存在的路径: $apk"; continue; }
+          shopt -s nullglob
+          apks=(dist/*.apk)
+          if [ ${#apks[@]} -eq 0 ]; then
+            echo "::error::dist/ 下没有任何 APK 产物，无法发布"
+            exit 1
+          fi
+
+          for apk in "${apks[@]}"; do
             name=$(basename "$apk")
             size=$(stat -c%s "$apk")
             echo "上传 $name ($size bytes) ..."

@@ -75,17 +75,21 @@ class MainActivity : FragmentActivity() {
     }
 
     /**
-     * 会话列表 & 服务状态的后台轮询周期（毫秒）。
+     * 会话列表 & 服务状态的前台轮询周期（毫秒）。
      *
-     * 用户在后台运行 Termux 会话时，会话可能自行结束（例如脚本执行完毕、exit、被系统杀死），
-     * 如果没有定期刷新，MainScreen 终端列表卡片会一直显示过期的会话数量。
-     * 这里采用 2 秒轮询（比 UtilityCenterActivity 的 3 秒更积极），
-     * 让用户切回应用时能立刻看到最新状态。
+     * 会话可能自行结束（例如脚本执行完毕、exit、被系统杀死），如果没有定期刷新，
+     * MainScreen 终端列表卡片会一直显示过期的会话数量。这里采用 2 秒轮询
+     * （比 UtilityCenterActivity 的 3 秒更积极），让用户切回应用时能立刻看到最新状态。
+     *
+     * 注意：轮询**仅在 Activity 处于前台（STARTED）时运行**，onStop 会停止，
+     * 避免应用退到后台后仍每 2 秒唤醒主线程造成持续耗电。
      */
     private val sessionRefreshPeriodMs: Long = 2000
     private val sessionRefreshCallback = object : Runnable {
         override fun run() {
-            if (!isDestroyed) {
+            // 仅在前台可见时继续轮询：进入后台后立即停止，避免每 2 秒唤醒主线程
+            // （唤醒 CPU / 刷新 Compose 状态）造成的纯后台耗电。
+            if (!isDestroyed && isVisible) {
                 try {
                     updateSessions()
                     updateWakeLockState()
@@ -97,17 +101,27 @@ class MainActivity : FragmentActivity() {
         }
     }
 
+    /** 启动前台会话刷新轮询（幂等：先移除旧回调避免重复调度）。 */
+    private fun startSessionRefreshLoop() {
+        if (termuxService == null) return
+        handler.removeCallbacks(sessionRefreshCallback)
+        handler.postDelayed(sessionRefreshCallback, sessionRefreshPeriodMs)
+    }
+
+    /** 停止会话刷新轮询，用于进入后台时释放定时唤醒。 */
+    private fun stopSessionRefreshLoop() {
+        handler.removeCallbacks(sessionRefreshCallback)
+    }
+
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(className: ComponentName, service: IBinder) {
             val binder = service as TermuxService.LocalBinder
             termuxService = binder.service
             updateSessions()
             updateWakeLockState()
-            // 服务绑定后开启后台会话列表轮询，保证即使 Termux 在后台运行
-            // （会话自行结束/exit/被系统杀死）时终端卡片也能实时更新。
-            // 先移除已有回调，避免重复调度。
-            handler.removeCallbacks(sessionRefreshCallback)
-            handler.postDelayed(sessionRefreshCallback, sessionRefreshPeriodMs)
+            // 服务绑定后开启会话列表轮询（仅前台可见时运行），保证会话
+            // 自行结束/exit/被系统杀死时终端卡片能及时更新。
+            if (isVisible) startSessionRefreshLoop()
         }
 
         override fun onServiceDisconnected(arg0: ComponentName) {
@@ -321,6 +335,9 @@ class MainActivity : FragmentActivity() {
                 com.termux.app.compose.StopConfirmDialog.start(this, isQuitApp = true)
             }, 300)
         }
+
+        // 进入前台：恢复会话列表轮询
+        startSessionRefreshLoop()
     }
 
     override fun onResume() {
@@ -332,11 +349,8 @@ class MainActivity : FragmentActivity() {
             val prefs = getSharedPreferences("app_settings", Context.MODE_PRIVATE)
             val currentShowVnc = prefs.getBoolean("vnc_enabled", false)
             appViewModel.updateShowVnc(currentShowVnc)
-            // 确保后台轮询仍在运行（onStop/系统回收可能导致 handler 回调被暂停或清理）
-            if (termuxService != null) {
-                handler.removeCallbacks(sessionRefreshCallback)
-                handler.postDelayed(sessionRefreshCallback, sessionRefreshPeriodMs)
-            }
+            // 确保前台刷新轮询在运行（onStop 时会停止，回到前台重新启动）
+            startSessionRefreshLoop()
         } catch (t: Throwable) {
             // 记录异常日志
             try {
@@ -355,9 +369,9 @@ class MainActivity : FragmentActivity() {
     override fun onStop() {
         super.onStop()
         isVisible = false
-        // Activity 进入后台时保留轮询，方便用户过一会儿回来时已经是最新状态；
-        // 但如果进程被系统回收，则由 onDestroy 统一清理回调。
-        // 这里不主动停止轮询。
+        // Activity 进入后台时停止轮询：会话列表只在用户可见时才有刷新意义，
+        // 后台持续 2 秒轮询会持续唤醒主线程，纯属耗电。回到前台由 onStart 重新启动。
+        stopSessionRefreshLoop()
     }
 
     override fun onNewIntent(intent: Intent) {
