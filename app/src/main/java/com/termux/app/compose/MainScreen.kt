@@ -63,6 +63,7 @@ fun MainScreen(
     sessions: List<TermuxSession>,
     onSessionClick: (TermuxSession) -> Unit,
     onNewTerminal: () -> Unit,
+    onNewTerminalAndOpenConsole: () -> Unit,
     onStopTerminal: (TermuxSession) -> Unit,
     onRenameTerminal: (TermuxSession, String) -> Unit,
     onExecuteScript: (String, String) -> Unit,
@@ -642,6 +643,7 @@ fun MainScreen(
                     sessions = sessions,
                     onSessionClick = onSessionClick,
                     onNewTerminal = onNewTerminal,
+                    onNewTerminalAndOpenConsole = onNewTerminalAndOpenConsole,
                     onStopTerminal = onStopTerminal,
                     onRenameTerminal = onRenameTerminal,
                     onExecuteScript = onExecuteScript,
@@ -695,6 +697,7 @@ fun MainScreen(
                     sessions = sessions,
                     onSessionClick = onSessionClick,
                     onNewTerminal = onNewTerminal,
+                    onNewTerminalAndOpenConsole = onNewTerminalAndOpenConsole,
                     onStopTerminal = onStopTerminal,
                     onRenameTerminal = onRenameTerminal,
                     onExecuteScript = onExecuteScript,
@@ -753,6 +756,7 @@ private fun PageContentForTab(
     sessions: List<TermuxSession>,
     onSessionClick: (TermuxSession) -> Unit,
     onNewTerminal: () -> Unit,
+    onNewTerminalAndOpenConsole: () -> Unit,
     onStopTerminal: (TermuxSession) -> Unit,
     onRenameTerminal: (TermuxSession, String) -> Unit,
     onExecuteScript: (String, String) -> Unit,
@@ -772,6 +776,7 @@ private fun PageContentForTab(
             sessions = sessions,
             onSessionClick = onSessionClick,
             onNewTerminal = onNewTerminal,
+            onNewTerminalAndOpenConsole = onNewTerminalAndOpenConsole,
             onStopAllSessions = {
                 sessions.filter { it.getTerminalSession().isRunning }.forEach { session ->
                     onStopTerminal(session)

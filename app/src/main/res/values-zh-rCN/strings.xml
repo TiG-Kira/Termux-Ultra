@@ -1266,6 +1266,7 @@
     <string name="common_select_all">全选</string>
     <string name="common_empty">空</string>
     <string name="quick_entry">快捷入口</string>
+    <string name="quick_entry_qemu">QEMU</string>
     <string name="migration_complete">迁移完成</string>
     <string name="one_click_migration">一键迁移</string>
     <string name="script_detection">脚本安全检测</string>

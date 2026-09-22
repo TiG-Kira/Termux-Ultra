@@ -6,6 +6,7 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -217,4 +218,131 @@ private fun LoginAvatar(avatarUrl: String?) {
             )
         }
     }
+}
+
+/**
+ * 总览页 TopAppBar 左侧的用户登录状态入口。
+ *
+ * 逻辑与设置页 [GitHubAccountCard] 完全一致：
+ * - 未登录 / 取不到头像 → 抽象人头像，点击弹出 GitHub 设备码登录；
+ * - 已登录 → 显示 GitHub 头像，点击进入账户详情页。
+ */
+@Composable
+fun GitHubLoginStatusIcon(onNavigateToAccount: () -> Unit) {
+    val context = LocalContext.current
+    // 每次重组都从存储读一次并不划算，但登录/注销都会回到本页，
+    // 因此用 Lifecycle 的 ON_RESUME 作为刷新时机，保证状态与存储一致。
+    var session by remember { mutableStateOf(GitHubSessionStore.load(context)) }
+    var showLoginSheet by remember { mutableStateOf(false) }
+    var statusText by remember { mutableStateOf(context.getString(R.string.github_login_preparing)) }
+    var deviceAuth by remember { mutableStateOf<GitHubDeviceAuth?>(null) }
+    var runner by remember { mutableStateOf<GitHubLoginRunner?>(null) }
+
+    DisposableEffect(Unit) {
+        onDispose { runner?.cancel() }
+    }
+
+    // 从账户页返回（含注销）或任何回到本页的时机，同步一次登录态
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                session = GitHubSessionStore.load(context)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    // 从账户页返回（含注销）时刷新登录态
+    val accountLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) {
+        session = GitHubSessionStore.load(context)
+    }
+
+    fun beginLogin() {
+        deviceAuth = null
+        statusText = context.getString(R.string.github_login_preparing)
+        showLoginSheet = true
+        val login = GitHubLoginRunner(context)
+        runner = login
+        login.start(
+            onStatus = { statusText = it },
+            onDeviceAuth = {
+                deviceAuth = it
+                statusText = context.getString(R.string.github_login_waiting_device)
+            },
+            onSuccess = { result ->
+                session = result
+                runner = null
+                showLoginSheet = false
+            },
+            onFailure = { message ->
+                runner = null
+                showLoginSheet = false
+                Toast.makeText(
+                    context,
+                    context.getString(R.string.github_login_failed, message),
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        )
+    }
+
+    Box(
+        modifier = Modifier
+            .clickable {
+                if (session == null) beginLogin() else onNavigateToAccount()
+            }
+            .padding(2.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        LoginAvatar(session?.user?.avatarUrl)
+    }
+
+    OverlayDialog(
+        show = showLoginSheet,
+        onDismissRequest = {
+            showLoginSheet = false
+            runner?.cancel()
+        },
+        title = stringResource(R.string.github_login_dialog_title),
+        content = {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = statusText,
+                    fontSize = 14.sp,
+                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                )
+                deviceAuth?.takeIf { it.userCode.isNotBlank() }?.let { auth ->
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = stringResource(R.string.github_login_device_hint, auth.userCode),
+                        fontSize = 14.sp
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = stringResource(R.string.github_login_device_tip),
+                        fontSize = 12.sp,
+                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                    )
+                    TextButton(
+                        text = stringResource(R.string.github_login_open_device_page),
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = { openDevicePage(context, auth.verificationUri) }
+                    )
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+                TextButton(
+                    text = stringResource(R.string.cancel),
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = {
+                        showLoginSheet = false
+                        runner?.cancel()
+                    }
+                )
+            }
+        }
+    )
 }
