@@ -1,5 +1,7 @@
 name: 编译
 
+# 每个 ABI 一个独立作业并行编译：单作业只编一份原生代码（CMake 只为该 ABI 配置），
+# 内存峰值与耗时约为原来的 1/4；某一架构失败也不会连累其它架构出包。
 on:
   push:
     paths-ignore:
@@ -12,27 +14,47 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
+    name: "Debug APK (${{ matrix.abi }})"
     runs-on: ubuntu-26.04
+    timeout-minutes: 60
+    strategy:
+      # 单架构失败时其余架构继续跑完，便于区分「某架构特有问题」与「全架构共性问题」
+      fail-fast: false
+      matrix:
+        abi:
+          - arm64-v8a
+          - armeabi-v7a
+          - x86
+          - x86_64
     steps:
       - name: 检出代码
         uses: actions/checkout@v7
 
+      # 与 run_tests.yml 保持一致直接用 v6：v4 已被 GitHub 标记弃用，
+      # runner 上会被强制跑在 Node 24。
       - name: 设置 JDK 21
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           java-version: '21'
           distribution: 'temurin'
           cache: gradle
 
-      - name: 编译
+      # -Ptermux.abi=<abi> 让 NDK/CMake 只编译该架构，产出 app-<abi>-debug.apk
+      - name: 编译 ${{ matrix.abi }} Debug APK
         run: |
           export TERMUX_WORKFLOW_CLI=true
-          ./gradlew :app:assembleDebug
+          ./gradlew :app:assembleDebug -Ptermux.abi=${{ matrix.abi }} --console=plain
 
-      - name: 上传 Debug APK
+      - name: 上传 ${{ matrix.abi }} Debug APK
         uses: actions/upload-artifact@v7
         with:
+          name: termux-ultra-debug-${{ matrix.abi }}
           archive: false
-          path: app/build/outputs/apk/debug/**.apk
+          if-no-files-found: error
+          path: app/build/outputs/apk/debug/*.apk
