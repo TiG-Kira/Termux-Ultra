@@ -386,6 +386,7 @@ fun OverviewScreen(
     sessions: List<TermuxSession>,
     onSessionClick: (TermuxSession) -> Unit,
     onNewTerminal: () -> Unit,
+    onNewTerminalAndOpenConsole: () -> Unit = {},
     onStopAllSessions: () -> Unit,
     isWakeLockEnabled: Boolean,
     onToggleWakeLock: () -> Unit,
@@ -847,7 +848,16 @@ fun OverviewScreen(
             TopAppBar(
                 title = stringResource(R.string.overview_title),
                 scrollBehavior = scrollBehavior,
-                
+                navigationIcon = {
+                    GitHubLoginStatusIcon(
+                        onNavigateToAccount = {
+                            context.startActivity(
+                                Intent(context, com.termux.app.activities.GitHubAccountActivity::class.java)
+                            )
+                        }
+                    )
+                },
+
                 actions = {
                     Row(
                         verticalAlignment = Alignment.CenterVertically
@@ -1146,14 +1156,26 @@ private fun TipsAgentCard(
             )
             Spacer(Modifier.height(8.dp))
 
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                QuickEntryButton(
-                    modifier = Modifier.weight(1f),
+            // ===== 快捷入口：一行 3 个，数据驱动自动换行，并优化卡片样式 =====
+            val quickEntries = listOf(
+                QuickEntryData(
+                    icon = Icons.Rounded.Add,
+                    iconColor = Color(0xFF22C55E),
+                    iconBgColor = Color(0xFF22C55E).copy(alpha = 0.12f),
+                    label = stringResource(R.string.action_new_session),
+                    onClick = onNewTerminalAndOpenConsole
+                ),
+                QuickEntryData(
+                    icon = Icons.Rounded.Monitor,
+                    iconColor = Color(0xFF6366F1),
+                    iconBgColor = Color(0xFF6366F1).copy(alpha = 0.12f),
+                    label = stringResource(R.string.quick_entry_qemu),
+                    onClick = {
+                        val intent = Intent(context, com.termux.app.activities.QemuVmActivity::class.java)
+                        context.startActivity(intent)
+                    }
+                ),
+                QuickEntryData(
                     icon = Icons.Rounded.Archive,
                     iconColor = Color(0xFF2563EB),
                     iconBgColor = Color(0xFF2563EB).copy(alpha = 0.12f),
@@ -1162,9 +1184,8 @@ private fun TipsAgentCard(
                         val intent = Intent(context, com.termux.app.activities.PackageManagerActivity::class.java)
                         context.startActivity(intent)
                     }
-                )
-                QuickEntryButton(
-                    modifier = Modifier.weight(1f),
+                ),
+                QuickEntryData(
                     icon = Icons.Rounded.Palette,
                     iconColor = Color(0xFFEC4899),
                     iconBgColor = Color(0xFFEC4899).copy(alpha = 0.12f),
@@ -1175,17 +1196,15 @@ private fun TipsAgentCard(
                             context.startActivity(intent)
                         }
                     }
-                )
-                QuickEntryButton(
-                    modifier = Modifier.weight(1f),
+                ),
+                QuickEntryData(
                     icon = Icons.Rounded.Edit,
                     iconColor = Color(0xFF0EA5E9),
                     iconBgColor = Color(0xFF0EA5E9).copy(alpha = 0.12f),
                     label = "编辑文本",
                     onClick = { val intent = Intent(context, com.termux.app.activities.TextEditorHomeActivity::class.java); context.startActivity(intent) }
-                )
-                QuickEntryButton(
-                    modifier = Modifier.weight(1f),
+                ),
+                QuickEntryData(
                     icon = Icons.Rounded.AutoAwesome,
                     iconColor = Color(0xFF7C3AED),
                     iconBgColor = Color(0xFF7C3AED).copy(alpha = 0.12f),
@@ -1195,11 +1214,48 @@ private fun TipsAgentCard(
                         context.startActivity(intent)
                     }
                 )
+            )
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                quickEntries.chunked(3).forEach { rowItems ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        rowItems.forEach { entry ->
+                            QuickEntryButton(
+                                modifier = Modifier.weight(1f),
+                                icon = entry.icon,
+                                iconColor = entry.iconColor,
+                                iconBgColor = entry.iconBgColor,
+                                label = entry.label,
+                                onClick = entry.onClick
+                            )
+                        }
+                        // 末行不足 3 个时用空白占位，保证对齐
+                        repeat(3 - rowItems.size) {
+                            Spacer(Modifier.weight(1f))
+                        }
+                    }
+                }
             }
             Spacer(Modifier.height(16.dp))
         }
     }
 }
+
+private data class QuickEntryData(
+    val icon: ImageVector,
+    val iconColor: Color,
+    val iconBgColor: Color,
+    val label: String,
+    val onClick: () -> Unit
+)
 
 @Composable
 private fun QuickEntryButton(
@@ -1212,14 +1268,16 @@ private fun QuickEntryButton(
 ) {
     Column(
         modifier = modifier
+            .clip(RoundedCornerShape(16.dp))
+            .background(MiuixTheme.colorScheme.surface)
             .clickable(onClick = onClick)
-            .padding(vertical = 6.dp),
+            .padding(vertical = 14.dp, horizontal = 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(6.dp)
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Box(
             modifier = Modifier
-                .size(44.dp)
+                .size(46.dp)
                 .clip(RoundedCornerShape(14.dp))
                 .background(iconBgColor),
             contentAlignment = Alignment.Center
@@ -1228,12 +1286,12 @@ private fun QuickEntryButton(
                 imageVector = icon,
                 contentDescription = null,
                 tint = iconColor,
-                modifier = Modifier.size(22.dp)
+                modifier = Modifier.size(24.dp)
             )
         }
         Text(
             text = label,
-            fontSize = 11.sp,
+            fontSize = 12.sp,
             fontWeight = FontWeight.Medium,
             color = MiuixTheme.colorScheme.onSurfaceVariantSummary
         )

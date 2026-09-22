@@ -1270,6 +1270,7 @@
     <string name="common_select_all">Select All</string>
     <string name="common_empty">Empty</string>
     <string name="quick_entry">Quick Entry</string>
+    <string name="quick_entry_qemu">QEMU</string>
     <string name="migration_complete">Migration Complete</string>
     <string name="one_click_migration">One-click Migration</string>
     <string name="script_detection">Script Security Check</string>

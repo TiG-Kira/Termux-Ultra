@@ -214,6 +214,41 @@ class MainActivity : FragmentActivity() {
                                     handler.postDelayed({ updateSessions() }, 500)
                                 }
                             },
+                            onNewTerminalAndOpenConsole = {
+                                // 新建会话并直接进入该会话的控制台。
+                                if (com.termux.app.compose.TerminalRuntimeCore.isComposeMode(this)) {
+                                    val composeSessionManager =
+                                        com.termux.app.compose.terminal.ComposeSessionManager.getInstance(this)
+                                    val sessionName = if (LocaleHelper.isChinese(this)) {
+                                        "会话 ${composeSessionManager.sessions.value.size + 1}"
+                                    } else {
+                                        "Session ${composeSessionManager.sessions.value.size + 1}"
+                                    }
+                                    val newSession =
+                                        composeSessionManager.createDefaultSession(startImmediately = true)
+                                    newSession.sessionName.value = sessionName
+                                    composeSessionManager.switchTo(newSession.id)
+                                    val intent = Intent(this, TermuxActivity::class.java)
+                                    startActivity(intent)
+                                } else {
+                                    val sessionCount = sessions.size
+                                    val sessionName = if (LocaleHelper.isChinese(this)) {
+                                        "会话 ${sessionCount + 1}"
+                                    } else {
+                                        "Session ${sessionCount + 1}"
+                                    }
+                                    val newSession = termuxService?.createTermuxSession(
+                                        null, null, null, null, false, sessionName
+                                    )
+                                    updateSessions()
+                                    handler.postDelayed({ updateSessions() }, 500)
+                                    if (newSession != null) {
+                                        val intent = Intent(this, TermuxActivity::class.java)
+                                        intent.putExtra("sessionHandle", newSession.getTerminalSession().mHandle)
+                                        startActivity(intent)
+                                    }
+                                }
+                            },
                             onStopTerminal = { session ->
                                 termuxService?.removeTermuxSession(session.getTerminalSession())
                                 updateSessions()
