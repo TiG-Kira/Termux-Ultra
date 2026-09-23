@@ -347,6 +347,7 @@ fun MainScreen(
                         }
                     }
                 }
+                0 -> {
                     val tabIcons = mapOf(
                         0 to R.drawable.ic_overview,
                         1 to R.drawable.ic_terminal,
