@@ -135,45 +135,20 @@ fun GitHubAccountCard() {
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 8.dp)
             .clip(RoundedCornerShape(16.dp))
-            .clickable {
+    ) {
+        ArrowPreference(
+            title = session?.user?.login ?: stringResource(R.string.github_login_title),
+            summary = if (session == null) {
+                stringResource(R.string.github_login_summary)
+            } else {
+                stringResource(R.string.github_login_summary_signed_in)
+            },
+            onClick = {
                 if (session == null) beginLogin()
                 else accountLauncher.launch(Intent(context, GitHubAccountActivity::class.java))
-            }
-    ) {
-        Row(
-            modifier = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            LoginAvatar(session?.user?.avatarUrl)
-            Column(
-                modifier = Modifier
-                    .padding(start = 12.dp)
-                    .weight(1f)
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = session?.user?.login ?: stringResource(R.string.github_login_title),
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MiuixTheme.colorScheme.onSurface
-                    )
-                    if (session != null) {
-                        Spacer(Modifier.width(6.dp))
-                        RepoAdminBadge(session)
-                    }
-                }
-                Spacer(Modifier.height(2.dp))
-                Text(
-                    text = if (session == null) {
-                        stringResource(R.string.github_login_summary)
-                    } else {
-                        stringResource(R.string.github_login_summary_signed_in)
-                    },
-                    fontSize = 12.sp,
-                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                )
-            }
-        }
+            },
+            startAction = { AvatarWithAdminBadge(session?.user?.avatarUrl, session) }
+        )
     }
 
     OverlayDialog(
