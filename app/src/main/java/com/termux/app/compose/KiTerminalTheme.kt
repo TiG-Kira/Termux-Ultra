@@ -16,8 +16,8 @@ import top.yukonga.miuix.kmp.theme.ThemeController
 
 @Composable
 fun KiTerminalTheme(
-    statusBarColor: Color = Color.Transparent,
-    navigationBarColor: Color = Color.Transparent,
+    statusBarColor: Color = Color.Unspecified,
+    navigationBarColor: Color = Color.Unspecified,
     isTerminalDark: Boolean = false,
     manageSystemBars: Boolean = true,
     content: @Composable () -> Unit
@@ -27,8 +27,14 @@ fun KiTerminalTheme(
     if (!view.isInEditMode && manageSystemBars) {
         SideEffect {
             val window = (view.context as Activity).window
-            window.statusBarColor = statusBarColor.toArgb()
-            window.navigationBarColor = navigationBarColor.toArgb()
+            // 显式传入了具体颜色才覆盖 window 属性；
+            // 否则让 Manifest theme / Activity onCreate 里的设置生效。
+            if (statusBarColor != Color.Unspecified) {
+                window.statusBarColor = statusBarColor.toArgb()
+            }
+            if (navigationBarColor != Color.Unspecified) {
+                window.navigationBarColor = navigationBarColor.toArgb()
+            }
             val controller = WindowCompat.getInsetsController(window, view)
             controller.isAppearanceLightStatusBars = if (isTerminalDark) false else !darkTheme
             controller.isAppearanceLightNavigationBars = if (isTerminalDark) false else !darkTheme
