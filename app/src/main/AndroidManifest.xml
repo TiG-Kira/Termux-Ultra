@@ -117,6 +117,14 @@
             android:name=".app.activities.GitHubFeedbackActivity"
             android:label="@string/github_feedback_page_title"
             android:exported="false" />
+        <activity
+            android:name=".app.activities.GitHubPullRequestsActivity"
+            android:label="@string/github_prs_title"
+            android:exported="false" />
+        <activity
+            android:name=".app.activities.GitHubPullRequestDetailActivity"
+            android:label="@string/github_pr_detail_title"
+            android:exported="false" />
 
         <activity
             android:name=".app.activities.AiTermuxActivity"

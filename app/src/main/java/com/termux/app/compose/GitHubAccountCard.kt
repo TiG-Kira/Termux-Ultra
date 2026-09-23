@@ -9,11 +9,14 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -25,9 +28,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
@@ -38,8 +44,15 @@ import com.termux.R
 import com.termux.app.activities.GitHubAccountActivity
 import com.termux.app.github.GitHubDeviceAuth
 import com.termux.app.github.GitHubLoginRunner
+import com.termux.app.github.GitHubApi
 import com.termux.app.github.GitHubSession
 import com.termux.app.github.GitHubSessionStore
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.Text
@@ -122,20 +135,45 @@ fun GitHubAccountCard() {
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 8.dp)
             .clip(RoundedCornerShape(16.dp))
-    ) {
-        ArrowPreference(
-            title = session?.user?.login ?: stringResource(R.string.github_login_title),
-            summary = if (session == null) {
-                stringResource(R.string.github_login_summary)
-            } else {
-                stringResource(R.string.github_login_summary_signed_in)
-            },
-            onClick = {
+            .clickable {
                 if (session == null) beginLogin()
                 else accountLauncher.launch(Intent(context, GitHubAccountActivity::class.java))
-            },
-            startAction = { LoginAvatar(session?.user?.avatarUrl) }
-        )
+            }
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            LoginAvatar(session?.user?.avatarUrl)
+            Column(
+                modifier = Modifier
+                    .padding(start = 12.dp)
+                    .weight(1f)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = session?.user?.login ?: stringResource(R.string.github_login_title),
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MiuixTheme.colorScheme.onSurface
+                    )
+                    if (session != null) {
+                        Spacer(Modifier.width(6.dp))
+                        RepoAdminBadge(session)
+                    }
+                }
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = if (session == null) {
+                        stringResource(R.string.github_login_summary)
+                    } else {
+                        stringResource(R.string.github_login_summary_signed_in)
+                    },
+                    fontSize = 12.sp,
+                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                )
+            }
+        }
     }
 
     OverlayDialog(
@@ -347,4 +385,58 @@ fun GitHubLoginStatusIcon(onNavigateToAccount: () -> Unit) {
             }
         }
     )
+}
+
+// ============================================================================
+// 仓库管理员 Badge（供 GitHubAccountCard / GitHubAccountActivity 复用）
+// ============================================================================
+
+/**
+ * 异步检测当前登录用户在目标仓库的角色，若为管理员则显示 Badge。
+ * 未登录或查询失败时静默返回 null，不会抛出异常。
+ */
+@Composable
+fun RepoAdminBadge(session: com.termux.app.github.GitHubSession?) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var role by remember { mutableStateOf<com.termux.app.github.RepoRole?>(null) }
+    var checkedLogin by remember { mutableStateOf<String?>(null) }
+
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    DisposableEffect(session?.user?.login, lifecycleOwner) {
+        if (session == null) { role = null; checkedLogin = null; return@DisposableEffect onDispose { } }
+        if (checkedLogin == session.user.login) return@DisposableEffect onDispose { }
+        val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO)
+        scope.launch {
+            runCatching {
+                com.termux.app.github.GitHubApi(session.token).fetchRepoPermission(session.user.login)
+            }.onSuccess { perm ->
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    role = perm.myRole
+                    checkedLogin = session.user.login
+                }
+            }.onFailure {
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    checkedLogin = session.user.login // 仅避免重复请求
+                }
+            }
+        }
+        onDispose { scope.cancel() }
+    }
+
+    val r = role
+    if (r == null || !r.isAdminLike()) return
+
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(Color(0xFF1A56DB))
+            .padding(horizontal = 8.dp, vertical = 3.dp)
+    ) {
+        Text(
+            text = stringResource(R.string.github_admin_badge),
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            color = Color.White
+        )
+    }
 }
