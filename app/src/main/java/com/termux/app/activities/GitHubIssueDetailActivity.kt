@@ -30,18 +30,19 @@ import com.termux.app.compose.BackButton
 import com.termux.app.compose.CommentCard
 import com.termux.app.compose.IssueStateBadge
 import com.termux.app.compose.KiTerminalTheme
+import com.termux.app.compose.LeadIcon
+import com.termux.app.compose.gitHubIssueUrl
+import com.termux.app.compose.openGitHubInPreferredApp
 import com.termux.app.compose.MarkdownContent
 import com.termux.app.compose.NavigationHelper
 import com.termux.app.github.GitHubApi
 import com.termux.app.github.GitHubIssueDetail
 import com.termux.app.github.GitHubSessionStore
-import com.termux.app.github.IssueStateKind
-import com.termux.app.github.RepoPermission
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import top.yukonga.miuix.kmp.basic.*
-import top.yukonga.miuix.kmp.overlay.OverlayDialog
+import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 /**
@@ -76,15 +77,10 @@ class GitHubIssueDetailActivity : ComponentActivity() {
                     var detail by remember { mutableStateOf<GitHubIssueDetail?>(null) }
                     var loading by remember { mutableStateOf(true) }
                     var error by remember { mutableStateOf<String?>(null) }
-                    var perm by remember { mutableStateOf<RepoPermission?>(null) }
                     val scope = rememberCoroutineScope()
 
                     var commentDraft by remember { mutableStateOf("") }
                     var submittingComment by remember { mutableStateOf(false) }
-
-                    var showConfirmCloseResolved by remember { mutableStateOf(false) }
-                    var showConfirmCloseUnresolved by remember { mutableStateOf(false) }
-                    var busy by remember { mutableStateOf(false) }
 
                     fun loadAll() {
                         val token = session?.token ?: return
@@ -92,10 +88,8 @@ class GitHubIssueDetailActivity : ComponentActivity() {
                         scope.launch(Dispatchers.IO) {
                             val a = GitHubApi(token)
                             val issueResult = runCatching { a.fetchIssueDetail(issueNumber) }
-                            val permResult = runCatching { a.fetchRepoPermission(session.user.login) }
                             withContext(Dispatchers.Main) {
                                 issueResult.onSuccess { detail = it }.onFailure { error = it.message ?: it.javaClass.simpleName }
-                                permResult.onSuccess { perm = it }
                                 loading = false
                             }
                         }
@@ -123,34 +117,6 @@ class GitHubIssueDetailActivity : ComponentActivity() {
                         }
                     }
 
-                    fun doCloseIssue(resolved: Boolean) {
-                        val a = api ?: return
-                        busy = true
-                        scope.launch(Dispatchers.IO) {
-                            val reason = if (resolved) "completed" else "not_planned"
-                            runCatching { a.closeIssue(issueNumber, reason) }
-                                .onSuccess {
-                                    withContext(Dispatchers.Main) {
-                                        busy = false; showConfirmCloseResolved = false; showConfirmCloseUnresolved = false
-                                        Toast.makeText(context, R.string.github_action_success_issue_closed, Toast.LENGTH_SHORT).show(); loadAll()
-                                    }
-                                }
-                                .onFailure { e ->
-                                    withContext(Dispatchers.Main) { busy = false; Toast.makeText(context, context.getString(R.string.github_action_failed, e.message ?: e.javaClass.simpleName), Toast.LENGTH_LONG).show() }
-                                }
-                        }
-                    }
-
-                    fun doReopenIssue() {
-                        val a = api ?: return
-                        busy = true
-                        scope.launch(Dispatchers.IO) {
-                            runCatching { a.reopenIssue(issueNumber) }
-                                .onSuccess { withContext(Dispatchers.Main) { busy = false; Toast.makeText(context, R.string.github_action_success_issue_reopened, Toast.LENGTH_SHORT).show(); loadAll() } }
-                                .onFailure { e -> withContext(Dispatchers.Main) { busy = false; Toast.makeText(context, context.getString(R.string.github_action_failed, e.message ?: e.javaClass.simpleName), Toast.LENGTH_LONG).show() } }
-                        }
-                    }
-
                     LaunchedEffect(Unit) { loadAll() }
 
                     Scaffold(
@@ -162,7 +128,7 @@ class GitHubIssueDetailActivity : ComponentActivity() {
                             loading -> Loading(padding)
                             error != null -> LoadFailed(padding, error!!) { loadAll() }
                             detail != null -> {
-                                val d = detail!!; val canManage = perm?.canManage == true
+                                val d = detail!!
                                 LazyColumn(
                                     modifier = Modifier.fillMaxSize().padding(padding).nestedScroll(scrollBehavior.nestedScrollConnection),
                                     contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = systemNavBarsHeight + 26.dp),
@@ -191,25 +157,15 @@ class GitHubIssueDetailActivity : ComponentActivity() {
                                         }
                                     }
 
-                                    if (canManage) {
-                                        item { SmallTitle(text = stringResource(R.string.github_issue_actions_section)) }
-                                        item {
-                                            Card(Modifier.fillMaxWidth()) {
-                                                Column(Modifier.padding(16.dp)) {
-                                                    when {
-                                                        d.issue.kind == IssueStateKind.OPEN -> {
-                                                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                                                                Button(onClick = { showConfirmCloseResolved = true }, enabled = !busy, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.github_close_issue_resolved), color = Color.White, fontSize = 13.sp) }
-                                                                Button(onClick = { showConfirmCloseUnresolved = true }, enabled = !busy, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.github_close_issue_unresolved), color = Color.White, fontSize = 13.sp) }
-                                                            }
-                                                        }
-                                                        else -> {
-                                                            TextButton(text = stringResource(R.string.github_reopen_issue_button), onClick = { doReopenIssue() }, enabled = !busy, modifier = Modifier.fillMaxWidth())
-                                                        }
-                                                    }
-                                                    if (busy) { Spacer(Modifier.height(8.dp)); LinearProgressIndicator(Modifier.fillMaxWidth()) }
-                                                }
-                                            }
+                                    item { SmallTitle(text = stringResource(R.string.github_manage_on_github_section)) }
+                                    item {
+                                        Card(Modifier.fillMaxWidth()) {
+                                            ArrowPreference(
+                                                title = stringResource(R.string.github_jump_to_github),
+                                                summary = stringResource(R.string.github_jump_to_github_summary),
+                                                onClick = { openGitHubInPreferredApp(context, gitHubIssueUrl(issueNumber)) },
+                                                startAction = { LeadIcon(R.drawable.ic_github) }
+                                            )
                                         }
                                     }
 
@@ -236,24 +192,6 @@ class GitHubIssueDetailActivity : ComponentActivity() {
                         }
                     }
 
-                    if (showConfirmCloseResolved) {
-                        OverlayDialog(show = true, onDismissRequest = { showConfirmCloseResolved = false }, title = stringResource(R.string.github_action_confirm_close_issue_title), summary = stringResource(R.string.github_action_confirm_close_issue_summary)) {
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                                TextButton(text = stringResource(R.string.cancel), onClick = { showConfirmCloseResolved = false })
-                                Spacer(Modifier.width(12.dp))
-                                TextButton(text = stringResource(R.string.github_close_issue_resolved), onClick = { doCloseIssue(resolved = true) })
-                            }
-                        }
-                    }
-                    if (showConfirmCloseUnresolved) {
-                        OverlayDialog(show = true, onDismissRequest = { showConfirmCloseUnresolved = false }, title = stringResource(R.string.github_action_confirm_close_issue_title), summary = stringResource(R.string.github_action_confirm_close_issue_summary)) {
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                                TextButton(text = stringResource(R.string.cancel), onClick = { showConfirmCloseUnresolved = false })
-                                Spacer(Modifier.width(12.dp))
-                                TextButton(text = stringResource(R.string.github_close_issue_unresolved), onClick = { doCloseIssue(resolved = false) })
-                            }
-                        }
-                    }
                 }
             }
         }

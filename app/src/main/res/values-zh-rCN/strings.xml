@@ -1390,6 +1390,10 @@
     <string name="github_pr_conflicting">存在冲突</string>
     <string name="github_actions_section">管理员操作</string>
     <string name="github_issue_actions_section">管理员操作</string>
+    <string name="github_manage_on_github_section">更多操作</string>
+    <string name="github_jump_to_github">跳转到 GitHub 处理</string>
+    <string name="github_jump_to_github_summary">合并、关闭、重新打开等操作请在 GitHub 上完成</string>
+    <string name="github_open_failed">无法打开链接</string>
     <string name="github_merge_button">合并</string>
     <string name="github_squash_button">压缩并合并</string>
     <string name="github_rebase_button">变基并合并</string>
