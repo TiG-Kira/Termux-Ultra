@@ -14,16 +14,4 @@
         <item name="android:windowContentOverlay">@null</item>
     </style>
 
-    <!-- 主页窗口主题（夜间模式覆盖）。
-         父类 Theme.Termux（AppCompat.Light.NoActionBar）本身不跟随暗模式，所以这里重新指定：
-         状态栏/导航栏颜色取自 @color/hyper_surface（夜间 = #1C1B1F），图标设为浅色，
-         与 Compose TopAppBar 背景完全对齐。 -->
-    <style name="Theme.Termux.Main" parent="@style/Theme.Termux">
-        <item name="android:windowBackground">@color/hyper_surface</item>
-        <item name="android:statusBarColor">@color/hyper_surface</item>
-        <item name="android:navigationBarColor">@color/hyper_surface</item>
-        <item name="android:windowLightStatusBar">false</item>
-        <item name="android:windowLightNavigationBar">false</item>
-    </style>
-
 </resources>

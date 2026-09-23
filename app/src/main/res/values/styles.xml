@@ -79,15 +79,10 @@
     </style>
 
     <!-- 主页窗口主题。
-         继承 Theme.Termux 继承 AppCompat.Light.NoActionBar（父类不会跟随系统暗模式，
-         所以在这里把状态栏/导航栏显式指向 @color/hyper_surface，让两栏颜色与 Compose TopAppBar
-         背景完全对齐。windowLightStatusBar / windowLightNavigationBar 跟随 values-night 覆盖。 -->
+         全透明两栏 + 无半透明蒙版已由父类 Theme.Termux 统一处理，这里只覆盖 windowBackground。
+         状态栏/导航栏图标的明暗由 KiTerminalTheme 按亮暗模式动态设置。 -->
     <style name="Theme.Termux.Main" parent="@style/Theme.Termux">
         <item name="android:windowBackground">@color/hyper_surface</item>
-        <item name="android:statusBarColor">@color/hyper_surface</item>
-        <item name="android:navigationBarColor">@color/hyper_surface</item>
-        <item name="android:windowLightStatusBar">true</item>
-        <item name="android:windowLightNavigationBar">true</item>
     </style>
 
     <style name="Theme.Termux.Transparent" parent="@style/Theme.MaterialComponents.DayNight.NoActionBar">
