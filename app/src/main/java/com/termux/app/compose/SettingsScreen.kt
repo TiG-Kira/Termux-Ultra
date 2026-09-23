@@ -230,16 +230,14 @@ val composeTextBlinking by com.termux.app.compose.terminal.ComposeTerminalSettin
     val navBarStyleOptions = listOf(
         context.getString(R.string.navigation_bar_floating),
         context.getString(R.string.navigation_bar_default),
-        context.getString(R.string.navigation_bar_liquid_glass),
-        context.getString(R.string.navigation_bar_os4)
+        context.getString(R.string.navigation_bar_liquid_glass)
     )
     var navBarSelectedIndex by remember {
         mutableStateOf(
             when (prefs.getString("navigation_bar_style", null)) {
                 "classic" -> 1
                 "liquid_glass" -> 2
-                "soft_light" -> 3
-                // 缺省与历史值（旧 default / 旧 floating）统一迁移为新的浮动玻璃底栏
+                // 旧 "soft_light"（柔光，已移除）以及历史值（旧 default / 旧 floating）统一迁到新的浮动玻璃底栏
                 else -> 0
             }
         )
@@ -599,7 +597,7 @@ val composeTextBlinking by com.termux.app.compose.terminal.ComposeTerminalSettin
                             items = navBarStyleOptions,
                             selectedIndex = navBarSelectedIndex,
                             onSelectedIndexChange = { idx ->
-                                if (idx == 2 || idx == 3) {
+                                if (idx == 2) {
                                     if (!ApiCompat.isFeatureUsable(context, ApiCompat.Feature.GLASS_NAVIGATION_BAR)) {
                                         pendingNavStyleIndex = idx
                                         showCriticalNavDialog = true
@@ -610,7 +608,6 @@ val composeTextBlinking by com.termux.app.compose.terminal.ComposeTerminalSettin
                                 val style = when (idx) {
                                     1 -> "classic"
                                     2 -> "liquid_glass"
-                                    3 -> "soft_light"
                                     else -> "glass"
                                 }
                                 prefs.edit().putString("navigation_bar_style", style).apply()
@@ -1438,7 +1435,6 @@ val composeTextBlinking by com.termux.app.compose.terminal.ComposeTerminalSettin
                 val style = when (idx) {
                     1 -> "classic"
                     2 -> "liquid_glass"
-                    3 -> "soft_light"
                     else -> "glass"
                 }
                 prefs.edit().putString("navigation_bar_style", style).apply()

@@ -131,7 +131,9 @@ fun computeNavDimensions(
     val cornerRadius = containerHeight * 0.65f
     val horizontalPadding = 6.dp
     val verticalPadding = 4.dp
-    val bottomMargin = 24.dp
+    // 底部留白由调用方 Modifier.padding(bottom = systemNavBarsHeight) 统一控制，
+    // 这里设为 0，避免硬编码机型相关值。
+    val bottomMargin = 0.dp
     val sideMargin = 24.dp
 
     val totalHeight = containerHeight + bottomMargin
