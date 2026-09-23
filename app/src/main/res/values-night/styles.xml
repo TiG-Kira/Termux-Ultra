@@ -6,9 +6,9 @@
         <item name="android:navigationBarColor">?colorSurface</item>
     </style>
 
-    <!-- Theme.Termux.AppBase 暗色覆盖：状态栏颜色取 hyper_surface(#1C1B1F)，图标白色 -->
+    <!-- Theme.Termux.AppBase 暗色覆盖：同样透明状态栏，让 TopAppBar 颜色透上来；图标白色 -->
     <style name="Theme.Termux.AppBase" parent="Theme.AppCompat.DayNight.NoActionBar">
-        <item name="android:statusBarColor">@color/hyper_surface</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:windowLightStatusBar">false</item>
         <item name="android:enforceStatusBarContrast">false</item>
     </style>

@@ -57,12 +57,12 @@
     </style>
 
 
-    <!-- AppCompat DayNight 基础主题。给主页/Oobe/日志管理等 Compose 页面用，
-         状态栏/导航栏颜色跟随系统亮暗模式对齐 Compose TopAppBar 的 hyper_surface。
-         KiTerminalTheme 不再覆盖 statusBarColor（默认 Color.Unspecified），
-         直接吃这里的主题值。 -->
+    <!-- AppCompat DayNight 基础主题。给主页/Oobe/日志管理等 Compose 页面用。
+         所有这些 Activity 都调用 setDecorFitsSystemWindows(false)，内容延伸到状态栏，
+         TopAppBar 画在状态栏位置 → statusBarColor 必须透明，让 TopAppBar 自然对齐。
+         图标明暗由 KiTerminalTheme SideEffect 里的 controller.isAppearanceLightStatusBars 按亮暗模式设置。 -->
     <style name="Theme.Termux.AppBase" parent="Theme.AppCompat.DayNight.NoActionBar">
-        <item name="android:statusBarColor">@color/hyper_surface</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:windowLightStatusBar">true</item>
         <item name="android:enforceStatusBarContrast">false</item>
     </style>
