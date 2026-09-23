@@ -272,6 +272,7 @@ class GitHubAccountActivity : ComponentActivity() {
                                 onClick = {
                                     showLogout = false
                                     GitHubSessionStore.clear(context)
+                                    RepoRoleCache.invalidate()
                                     // 关闭本页，让设置页在 ON_RESUME 时重新读取登录态
                                     finish()
                                 }

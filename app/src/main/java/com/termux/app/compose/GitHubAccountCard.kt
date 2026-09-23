@@ -9,9 +9,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -20,6 +18,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -48,12 +48,14 @@ import com.termux.app.github.GitHubLoginRunner
 import com.termux.app.github.GitHubApi
 import com.termux.app.github.GitHubSession
 import com.termux.app.github.GitHubSessionStore
+import com.termux.app.github.RepoRole
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.Text
@@ -388,35 +390,79 @@ fun GitHubLoginStatusIcon(onNavigateToAccount: () -> Unit) {
 // ============================================================================
 
 /**
+ * 仓库角色检测结果缓存（进程级）。
+ *
+ * [RepoAdminBadge] 用在设置页的 GitHub 卡片和账户页的用户卡片里，两处都位于 LazyColumn ——
+ * 条目滑出屏幕即被销毁、滑回来又重新组合，组合内的 `remember` 随之丢失，
+ * 于是每滑一次就多打一次 GitHub 权限接口。
+ *
+ * 这里把「检测结果」从组合里搬出来，按 **Activity 实例 + 登录用户名** 缓存成一条 StateFlow：
+ * - 同一个 Activity 内滑动 / 反复重组 → 复用同一条 flow，不再请求；
+ * - 重新进入该 Activity（新实例）→ key 变了，才有一次新的检测；
+ * - 换了登录用户 → login 变了，同样重新检测。
+ *
+ * 请求在缓存自己的协程域里跑，**不随组合销毁而取消**：
+ * 否则「请求还在飞时把卡片滑出屏幕」会让这次请求白跑、滑回来又要重来。
+ * 同一 key 的并发触发会被去重，只打一次接口。
+ */
+object RepoRoleCache {
+    private val lock = Any()
+    private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val states = mutableMapOf<String, MutableStateFlow<RepoRole?>>()
+    private val requested = mutableSetOf<String>()
+
+    /**
+     * 取某个「Activity 实例 + 用户」的结果流（不存在则创建）。
+     * 用 identityHashCode 而非 Activity 引用做 key —— 避免缓存持有 Activity 导致泄漏。
+     */
+    fun roleFlow(owner: Any, login: String): StateFlow<RepoRole?> = flowOf(owner, login)
+
+    /** 异步落地一次检测（同 key 幂等）；结果写入 flow，订阅方自动收到 */
+    fun refresh(owner: Any, login: String, token: String) {
+        val isNew = synchronized(lock) { requested.add(keyOf(owner, login)) }
+        if (!isNew) return
+        ioScope.launch {
+            // 失败也写入 null，避免失败场景下随滑动无限重试
+            val role = runCatching { GitHubApi(token).fetchRepoPermission(login) }
+                .getOrNull()
+                ?.myRole
+            flowOf(owner, login).value = role
+        }
+    }
+
+    /** 注销时清空，避免下一个账号沿用上一个账号的管理员判定 */
+    fun invalidate() = synchronized(lock) {
+        states.clear()
+        requested.clear()
+    }
+
+    private fun keyOf(owner: Any, login: String) = "${System.identityHashCode(owner)}:$login"
+
+    private fun flowOf(owner: Any, login: String): MutableStateFlow<RepoRole?> = synchronized(lock) {
+        states.getOrPut(keyOf(owner, login)) { MutableStateFlow(null) }
+    }
+}
+
+/**
  * 异步检测当前登录用户在目标仓库的角色，若为管理员则显示 Badge。
- * 未登录或查询失败时静默返回 null，不会抛出异常。
+ * 未登录或查询失败时不显示 Badge，也不抛异常。
+ *
+ * 检测结果由 [RepoRoleCache] 持久化：同一 Activity 内反复重组 / 滑动不会重复请求。
  */
 @Composable
-fun RepoAdminBadge(session: com.termux.app.github.GitHubSession?) {
-    val context = androidx.compose.ui.platform.LocalContext.current
-    var role by remember { mutableStateOf<com.termux.app.github.RepoRole?>(null) }
-    var checkedLogin by remember { mutableStateOf<String?>(null) }
+fun RepoAdminBadge(session: GitHubSession?) {
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val login = session?.user?.login
+    val token = session?.token
 
-    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
-    DisposableEffect(session?.user?.login, lifecycleOwner) {
-        if (session == null) { role = null; checkedLogin = null; return@DisposableEffect onDispose { } }
-        if (checkedLogin == session.user.login) return@DisposableEffect onDispose { }
-        val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO)
-        scope.launch {
-            runCatching {
-                com.termux.app.github.GitHubApi(session.token).fetchRepoPermission(session.user.login)
-            }.onSuccess { perm ->
-                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                    role = perm.myRole
-                    checkedLogin = session.user.login
-                }
-            }.onFailure {
-                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                    checkedLogin = session.user.login // 仅避免重复请求
-                }
-            }
-        }
-        onDispose { scope.cancel() }
+    // 组合滑出再滑回来时 LaunchedEffect 会重跑，但 refresh() 对同一 key 幂等，不会重复打接口
+    val flow = remember(lifecycleOwner, login) {
+        if (login == null) MutableStateFlow<RepoRole?>(null) else RepoRoleCache.roleFlow(lifecycleOwner, login)
+    }
+    val role by flow.collectAsState()
+
+    LaunchedEffect(lifecycleOwner, login, token) {
+        if (login != null && token != null) RepoRoleCache.refresh(lifecycleOwner, login, token)
     }
 
     val r = role
