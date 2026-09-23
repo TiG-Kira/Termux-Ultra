@@ -347,68 +347,6 @@ fun MainScreen(
                         }
                     }
                 }
-                3 -> {
-                    val softLightDims = computeNavDimensions(availableTabs.size, NavStyle.SOFT_LIGHT)
-                    SoftLightNavigationBarWithIndicator(
-                        selectedIndex = availableTabs.indexOf(selectedTab).coerceAtLeast(0),
-                        itemCount = availableTabs.size,
-                        backdrop = liquidGlassBackdrop,
-                        onIndexChange = { index ->
-                            val actualTab = availableTabs.getOrElse(index) { selectedTab }
-                            if (actualTab != selectedTab) {
-                                previousTab = selectedTab
-                                onTabChange(actualTab)
-                            }
-                        }
-                    ) {
-                        if (0 in availableTabs) {
-                            SoftLightNavigationBarItem(
-                                icon = ImageVector.vectorResource(R.drawable.ic_overview),
-                                label = stringResource(R.string.overview),
-                                selected = selectedTab == 0,
-                                onClick = { previousTab = selectedTab; onTabChange(0) },
-                                dims = softLightDims
-                            )
-                        }
-                        if (1 in availableTabs) {
-                            SoftLightNavigationBarItem(
-                                icon = ImageVector.vectorResource(R.drawable.ic_terminal),
-                                label = stringResource(R.string.terminal),
-                                selected = selectedTab == 1,
-                                onClick = { previousTab = selectedTab; onTabChange(1) },
-                                dims = softLightDims
-                            )
-                        }
-                        if (2 in availableTabs) {
-                            SoftLightNavigationBarItem(
-                                icon = ImageVector.vectorResource(R.drawable.ic_files),
-                                label = stringResource(R.string.files),
-                                selected = selectedTab == 2,
-                                onClick = { previousTab = selectedTab; onTabChange(2) },
-                                dims = softLightDims
-                            )
-                        }
-                        if (3 in availableTabs) {
-                            SoftLightNavigationBarItem(
-                                icon = ImageVector.vectorResource(R.drawable.ic_vnc),
-                                label = stringResource(R.string.remote),
-                                selected = selectedTab == 3,
-                                onClick = { previousTab = selectedTab; onTabChange(3) },
-                                dims = softLightDims
-                            )
-                        }
-                        if (4 in availableTabs) {
-                            SoftLightNavigationBarItem(
-                                icon = ImageVector.vectorResource(R.drawable.ic_settings),
-                                label = stringResource(R.string.settings),
-                                selected = selectedTab == 4,
-                                onClick = { previousTab = selectedTab; onTabChange(4) },
-                                dims = softLightDims
-                            )
-                        }
-                    }
-                }
-                0 -> {
                     val tabIcons = mapOf(
                         0 to R.drawable.ic_overview,
                         1 to R.drawable.ic_terminal,
@@ -503,7 +441,7 @@ fun MainScreen(
                 .fillMaxSize()
                 .then(
                     when {
-                        useLiquidGlassNav || useSoftLightNav -> Modifier.layerBackdrop(liquidGlassBackdrop)
+                        useLiquidGlassNav -> Modifier.layerBackdrop(liquidGlassBackdrop)
                         useGlassNav -> Modifier.miuixLayerBackdrop(glassNavBackdrop)
                         else -> Modifier
                     }
