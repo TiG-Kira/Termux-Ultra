@@ -64,7 +64,9 @@ jobs:
       CONFIGURATION: ${{ inputs.configuration || 'debugRuntimeClasspath' }}
       DUMP_SCRIPT: .github/scripts/dump-app-deps.gradle
       GUARD_SCRIPT: .github/scripts/dependency-guard.py
-      WORK_DIR: ${{ runner.temp }}/depguard
+      # 注意：runner 上下文在 job 级 env 不可用，必须改用 github 上下文（runner.temp 只能出现在 step 级）。
+      # 所有临时产物统一落到 WORK_DIR 下，保证 dump 步骤的输出与 analyze 步骤的读取路径一致。
+      WORK_DIR: ${{ github.workspace }}/depguard-tmp
 
     steps:
       - name: 检出代码
@@ -124,7 +126,7 @@ jobs:
       - name: 解析当前分支依赖图
         if: steps.prepare.outputs.has-manifest-changes == 'true'
         env:
-          DUMP_DEPS_OUTPUT: ${{ runner.temp }}/depguard/head-deps.txt
+          DUMP_DEPS_OUTPUT: ${{ env.WORK_DIR }}/head-deps.txt
           DUMP_DEPS_CONFIGURATION: ${{ env.CONFIGURATION }}
           TERMUX_WORKFLOW_CLI: 'true'
         run: |
@@ -136,7 +138,7 @@ jobs:
       - name: 解析基线依赖图
         if: steps.prepare.outputs.has-manifest-changes == 'true'
         env:
-          DUMP_DEPS_OUTPUT: ${{ runner.temp }}/depguard/base-deps.txt
+          DUMP_DEPS_OUTPUT: ${{ env.WORK_DIR }}/base-deps.txt
           DUMP_DEPS_CONFIGURATION: ${{ env.CONFIGURATION }}
           TERMUX_WORKFLOW_CLI: 'true'
         run: |
