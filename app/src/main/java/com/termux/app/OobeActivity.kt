@@ -62,6 +62,13 @@ class OobeActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // 主题里已移除 windowTranslucentStatus/Navigation（那两个标志会盖半透明蒙版），
+        // 边到边改为显式开启 —— 与其它使用 KiTerminalTheme 的页面保持一致。
+        // OobeScreen 依赖 statusBars 内边距做顶部留白，必须保持延伸到状态栏，否则会多出一段空白。
+        window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_TRANSLUCENT_NAVIGATION)
+        androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, false)
+        window.navigationBarColor = android.graphics.Color.TRANSPARENT
+
         isUpgrade = intent.getBooleanExtra(EXTRA_IS_UPGRADE, false)
         Log.d("OobeActivity", "isUpgrade=$isUpgrade")
 
