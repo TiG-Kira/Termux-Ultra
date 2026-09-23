@@ -6,47 +6,12 @@
         <item name="android:navigationBarColor">?colorSurface</item>
     </style>
 
-    <!-- 主页窗口主题的父类——Theme.Termux 的暗色覆盖。
-         原来 values/Theme.Termux 的 statusBarColor=transparent + windowBackground=black
-         会导致 SmallTopAppBar 模式下（状态栏透明）透出纯黑，与 Compose TopAppBar
-         背景（hyper_surface = #1C1B1F）不一致。此处把两栏 + windowBackground
-         全部对齐 hyper_surface，亮暗模式均由资源自动切换。 -->
-    <style name="Theme.Termux" parent="@style/Theme.AppCompat.Light.NoActionBar">
-        <item name="android:statusBarColor">@color/hyper_surface</item>
-        <item name="android:navigationBarColor">@color/hyper_surface</item>
-        <item name="android:windowBackground">@color/hyper_surface</item>
-        <item name="android:windowLightStatusBar">false</item>
-        <item name="android:windowLightNavigationBar">false</item>
-        <!-- 保留原父类的对比度关闭，避免系统自动加半透明蒙版 -->
-        <item name="android:enforceStatusBarContrast">false</item>
-        <item name="android:enforceNavigationBarContrast">false</item>
-        <!-- 保留原父类的 colorPrimary/accent 等属性，避免影响其他 UI -->
-        <item name="colorPrimary">#FF000000</item>
-        <item name="colorAccent">#FDFDFD</item>
-        <item name="alertDialogTheme">@style/TermuxAlertDialogStyle</item>
-        <item name="android:windowActionModeOverlay">true</item>
-        <item name="android:windowAllowReturnTransitionOverlap">true</item>
-        <item name="android:windowAllowEnterTransitionOverlap">true</item>
-    </style>
-
     <!-- HyperCeiler-style About page theme (dark override) -->
     <style name="Theme.Termux.About" parent="@style/Theme.MaterialComponents.DayNight.NoActionBar">
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:windowBackground">#1C1B1F</item>
         <item name="android:windowContentOverlay">@null</item>
-    </style>
-
-    <!-- 主页窗口主题（夜间模式覆盖）。
-         父类 Theme.Termux（AppCompat.Light.NoActionBar）本身不跟随暗模式，所以这里重新指定：
-         状态栏/导航栏颜色取自 @color/hyper_surface（夜间 = #1C1B1F），图标设为浅色，
-         与 Compose TopAppBar 背景完全对齐。 -->
-    <style name="Theme.Termux.Main" parent="@style/Theme.Termux">
-        <item name="android:windowBackground">@color/hyper_surface</item>
-        <item name="android:statusBarColor">@color/hyper_surface</item>
-        <item name="android:navigationBarColor">@color/hyper_surface</item>
-        <item name="android:windowLightStatusBar">false</item>
-        <item name="android:windowLightNavigationBar">false</item>
     </style>
 
 </resources>

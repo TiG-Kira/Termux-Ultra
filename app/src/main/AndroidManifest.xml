@@ -63,9 +63,7 @@
         android:requestLegacyExternalStorage="true"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="false"
-        <!-- 默认主题：DayNight 自动跟随系统亮暗模式，所有 Compose UI 页面都用它。
-             只有终端控制台 TermuxActivity 显式覆盖为 Theme.Termux（黑色背景专用）。 -->
-        android:theme="@style/Theme.AppCompat.DayNight.NoActionBar"
+        android:theme="@style/Theme.Termux"
         android:networkSecurityConfig="@xml/network_security_config"
         android:usesCleartextTraffic="true">
 
