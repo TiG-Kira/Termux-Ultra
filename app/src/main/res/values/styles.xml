@@ -62,7 +62,7 @@
          KiTerminalTheme 不再覆盖 statusBarColor（默认 Color.Unspecified），
          直接吃这里的主题值。 -->
     <style name="Theme.Termux.AppBase" parent="Theme.AppCompat.DayNight.NoActionBar">
-        <item name="android:statusBarColor">@color/hyper_surface</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:windowLightStatusBar">true</item>
         <item name="android:enforceStatusBarContrast">false</item>
     </style>

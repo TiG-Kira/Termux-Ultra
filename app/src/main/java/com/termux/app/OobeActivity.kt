@@ -67,6 +67,7 @@ class OobeActivity : ComponentActivity() {
         // OobeScreen 依赖 statusBars 内边距做顶部留白，必须保持延伸到状态栏，否则会多出一段空白。
         window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_TRANSLUCENT_NAVIGATION)
         androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, false)
+        window.statusBarColor = android.graphics.Color.TRANSPARENT
         window.navigationBarColor = android.graphics.Color.TRANSPARENT
 
         isUpgrade = intent.getBooleanExtra(EXTRA_IS_UPGRADE, false)
