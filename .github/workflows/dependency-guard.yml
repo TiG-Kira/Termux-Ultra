@@ -33,9 +33,9 @@ on:
       verdict:
         description: '判定结果：clean / polluted / unknown'
         value: ${{ jobs.guard.outputs.verdict }}
-      run-unit-tests:
+      run_unit_tests:
         description: '后续是否仍需跑单元测试；false 表示本工作流已跑过（或无需跑）'
-        value: ${{ jobs.guard.outputs.run-unit-tests }}
+        value: ${{ jobs.guard.outputs.run_unit_tests }}
   workflow_dispatch:
     inputs:
       base-sha:
@@ -59,7 +59,7 @@ jobs:
     outputs:
       polluted: ${{ steps.finalize.outputs.polluted }}
       verdict: ${{ steps.finalize.outputs.verdict }}
-      run-unit-tests: ${{ steps.finalize.outputs.run-unit-tests }}
+      run_unit_tests: ${{ steps.finalize.outputs.run_unit_tests }}
     env:
       CONFIGURATION: ${{ inputs.configuration || 'debugRuntimeClasspath' }}
       DUMP_SCRIPT: .github/scripts/dump-app-deps.gradle
@@ -226,14 +226,14 @@ jobs:
             # 无污染（或压根没动清单）：常规流程继续，单元测试照跑
             echo "polluted=false" >> "$GITHUB_OUTPUT"
             echo "verdict=$VERDICT" >> "$GITHUB_OUTPUT"
-            echo "run-unit-tests=true" >> "$GITHUB_OUTPUT"
+            echo "run_unit_tests=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
           # 有污染：测试已经在本作业跑过了，后续不必重复跑
           echo "polluted=true" >> "$GITHUB_OUTPUT"
           echo "verdict=$VERDICT" >> "$GITHUB_OUTPUT"
-          echo "run-unit-tests=false" >> "$GITHUB_OUTPUT"
+          echo "run_unit_tests=false" >> "$GITHUB_OUTPUT"
 
           if [ "$TESTS_PASSED" = "false" ]; then
             echo "::error title=依赖污染::污染已确认且单元测试失败，本检查判定为失败"
