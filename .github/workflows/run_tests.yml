@@ -49,8 +49,8 @@ jobs:
     name: "Unit tests"
     needs: dependency-guard
     # always() 是必须的：上游作业被跳过时（例如没有依赖清单改动），这里仍要照常跑测试。
-    # 只有上游明确给出 run-unit-tests=false（即污染已检出且测试已在其内部跑过）才跳过。
-    if: always() && needs.dependency-guard.outputs.run-unit-tests != 'false'
+    # 只有上游明确给出 run_unit_tests=false（即污染已检出且测试已在其内部跑过）才跳过。
+    if: always() && needs.dependency-guard.outputs.run_unit_tests != 'false'
     runs-on: ubuntu-26.04
     timeout-minutes: 45
     steps:
