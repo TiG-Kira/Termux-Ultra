@@ -400,24 +400,6 @@ fun OverviewScreen(
     active: Boolean = true
 ) {
     val context = LocalContext.current
-    val isDarkTheme = isSystemInDarkTheme()
-    LaunchedEffect(isDarkTheme) {
-        val activity = context as? android.app.Activity
-        if (activity != null) {
-            @Suppress("DEPRECATION")
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                activity.window?.apply {
-                    statusBarColor = android.graphics.Color.parseColor(
-                        if (isDarkTheme) "#1C1C1E" else "#F2F2F7"
-                    )
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                        decorView.systemUiVisibility = 
-                            if (isDarkTheme) 0 else android.view.View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
-                    }
-                }
-            }
-        }
-    }
     val coroutineScope = rememberCoroutineScope()
     val cardManager = remember { OverviewCardManager.getInstance(context) }
     var isEditMode by remember { mutableStateOf(false) }
