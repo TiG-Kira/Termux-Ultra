@@ -574,6 +574,34 @@ val composeTextBlinking by com.termux.app.compose.terminal.ComposeTerminalSettin
     val sec_system = context.getString(R.string.system_category)
     val sec_backup = context.getString(R.string.backup_category)
 
+    // 将 SettingItem 转换为 SearchableSetting 的扩展函数
+    fun SettingItem.toSearchable(section: String): SearchableSetting {
+        return SearchableSetting(
+            section = section,
+            title = this.title,
+            summary = this.description,
+            keywords = listOf(this.title, this.description),
+            render = {
+                if (this.hasSwitch) {
+                    SwitchPreference(
+                        title = this.title,
+                        summary = this.description,
+                        checked = this.switchValue,
+                        onCheckedChange = this.onSwitchChange,
+                        startAction = { SettingIcon(this.iconRes, contentDescription = this.title) }
+                    )
+                } else {
+                    ArrowPreference(
+                        title = this.title,
+                        summary = this.description,
+                        onClick = this.action,
+                        startAction = { SettingIcon(this.iconRes, contentDescription = this.title) }
+                    )
+                }
+            }
+        )
+    }
+
     val searchableItems = listOf(
         // ===== Appearance =====
         SearchableSetting(sec_appearance, context.getString(R.string.language), context.getString(R.string.language_description),
@@ -642,10 +670,16 @@ val composeTextBlinking by com.termux.app.compose.terminal.ComposeTerminalSettin
             render = {
                 SwitchPreference(
                     title = context.getString(R.string.vnc),
-                    summary = if (vncEnabled) context.getString(R.string.vnc_summary) else context.getString(R.string.vnc_not_running),
+                    summary = context.getString(R.string.vnc_description),
                     checked = vncEnabled,
-                    onCheckedChange = { vncEnabled = it; prefs.edit().putBoolean("vnc_enabled", it).apply() },
-                    startAction = { SettingIcon(R.drawable.ic_monitor, contentDescription = context.getString(R.string.vnc)) }
+                    onCheckedChange = {
+                        vncEnabled = it
+                        prefs.edit().putBoolean("vnc_enabled", it).apply()
+                        val intent = context.packageManager.getLaunchIntentForPackage(context.packageName)
+                        intent?.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                        context.startActivity(intent)
+                    },
+                    startAction = { SettingIcon(R.drawable.ic_vnc, contentDescription = context.getString(R.string.vnc)) }
                 )
             }),
 
@@ -674,7 +708,7 @@ val composeTextBlinking by com.termux.app.compose.terminal.ComposeTerminalSettin
                     startAction = { SettingIcon(R.drawable.ic_terminal) }
                 )
             }),
-        SearchableSetting(sec_terminal, context.getString(R.string.enable_softkeyboard), context.getString(R.string.enable_softkeyboard_desc),
+        SearchableSetting(sec_terminal, context.getString(R.string.enable_softkeyboard), if (softKeyboardEnabled) context.getString(R.string.enabled) else context.getString(R.string.disabled),
             keywords = listOf("软键盘", "softkeyboard", "键盘", "keyboard"),
             render = {
                 SwitchPreference(
@@ -915,33 +949,7 @@ val composeTextBlinking by com.termux.app.compose.terminal.ComposeTerminalSettin
         *systemSettings.map { it.toSearchable(sec_system) },
     )
 
-    // 将 SettingItem 转换为 SearchableSetting 的扩展函数
-    fun SettingItem.toSearchable(section: String): SearchableSetting {
-        return SearchableSetting(
-            section = section,
-            title = this.title,
-            summary = this.description,
-            keywords = listOf(this.title, this.description),
-            render = {
-                if (this.hasSwitch) {
-                    SwitchPreference(
-                        title = this.title,
-                        summary = this.description,
-                        checked = this.switchValue,
-                        onCheckedChange = this.onSwitchChange,
-                        startAction = { SettingIcon(this.iconRes, contentDescription = this.title) }
-                    )
-                } else {
-                    ArrowPreference(
-                        title = this.title,
-                        summary = this.description,
-                        onClick = this.action,
-                        startAction = { SettingIcon(this.iconRes, contentDescription = this.title) }
-                    )
-                }
-            }
-        )
-    }
+
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
