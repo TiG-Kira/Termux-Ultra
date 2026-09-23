@@ -944,10 +944,11 @@ val composeTextBlinking by com.termux.app.compose.terminal.ComposeTerminalSettin
             }),
 
         // SettingsGroupCard 里的条目（动态展开）
-        *dataSettings.map { it.toSearchable(sec_backup) },
-        *toolConfigItems.map { it.toSearchable(sec_tool_config) },
-        *systemSettings.map { it.toSearchable(sec_system) },
-    )
+    ) + buildList {
+        addAll(dataSettings.map { it.toSearchable(sec_backup) })
+        addAll(toolConfigItems.map { it.toSearchable(sec_tool_config) })
+        addAll(systemSettings.map { it.toSearchable(sec_system) })
+    }
 
 
 
@@ -999,7 +1000,7 @@ val composeTextBlinking by com.termux.app.compose.terminal.ComposeTerminalSettin
                             )
                         }
                     }
-                )
+                ) { }
             }
 
             if (searchQuery.isBlank()) {
