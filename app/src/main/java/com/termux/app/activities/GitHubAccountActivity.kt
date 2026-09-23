@@ -2,21 +2,19 @@ package com.termux.app.activities
 
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
@@ -31,7 +29,6 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.core.view.WindowCompat
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner
-import coil.compose.AsyncImage
 import com.termux.R
 import com.termux.app.compose.*
 import com.termux.app.compose.NavigationHelper
@@ -146,38 +143,15 @@ class GitHubAccountActivity : ComponentActivity() {
                             ),
                             verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            // 用户信息头
+                            // 用户信息头：点击用浏览器打开该用户的 GitHub 主页
                             item {
                                 Card(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp))) {
-                                    Row(
-                                        Modifier.padding(16.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        AsyncImage(
-                                            model = session.user.avatarUrl,
-                                            contentDescription = session.user.login,
-                                            modifier = Modifier
-                                                .size(56.dp)
-                                                .clip(CircleShape)
-                                                .background(MiuixTheme.colorScheme.surfaceVariant)
-                                        )
-                                        Column(
-                                            Modifier.padding(start = 12.dp).weight(1f)
-                                        ) {
-                                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                                Text(
-                                                    session.user.name ?: session.user.login,
-                                                    style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.Bold, color = MiuixTheme.colorScheme.onSurface)
-                                                )
-                                                Spacer(Modifier.width(6.dp))
-                                                RepoAdminBadge(session)
-                                            }
-                                            Text(
-                                                "@${session.user.login}",
-                                                style = TextStyle(fontSize = 13.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
-                                            )
-                                        }
-                                    }
+                                    ArrowPreference(
+                                        title = session.user.name ?: session.user.login,
+                                        summary = "@${session.user.login}",
+                                        onClick = { openUserProfile(context, session.user.login) },
+                                        startAction = { AvatarWithAdminBadge(session.user.avatarUrl, session) }
+                                    )
                                 }
                             }
 
@@ -311,5 +285,15 @@ class GitHubAccountActivity : ComponentActivity() {
 
     companion object {
         private const val TAG = "GitHubAccountActivity"
+
+        /** 用浏览器打开指定用户的 GitHub 主页 */
+        private fun openUserProfile(context: Context, login: String) {
+            runCatching {
+                context.startActivity(
+                    Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/$login"))
+                        .addCategory(Intent.CATEGORY_BROWSABLE)
+                )
+            }
+        }
     }
 }

@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -202,6 +203,26 @@ private fun openDevicePage(context: Context, uri: String) {
         context.startActivity(
             Intent(Intent.ACTION_VIEW, android.net.Uri.parse(uri)).addCategory(Intent.CATEGORY_BROWSABLE)
         )
+    }
+}
+
+/**
+ * [ArrowPreference] 的 startAction：圆形头像 + 头像正下方的管理员 Badge。
+ *
+ * 管理员 tag 放在头像底部（而不是标题右侧），避免挤压标题空间；
+ * 非管理员时只渲染头像，宽度与头像一致，不与其它入口的图标错位。
+ */
+@Composable
+fun AvatarWithAdminBadge(avatarUrl: String?, session: GitHubSession?) {
+    Column(
+        modifier = Modifier.widthIn(min = 40.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        LoginAvatar(avatarUrl)
+        if (session != null) {
+            Spacer(modifier = Modifier.height(3.dp))
+            RepoAdminBadge(session)
+        }
     }
 }
 
@@ -401,15 +422,16 @@ fun RepoAdminBadge(session: com.termux.app.github.GitHubSession?) {
     val r = role
     if (r == null || !r.isAdminLike()) return
 
+    // 尺寸刻意做小：这个 Badge 要塞在 40dp 头像的正下方，宽度过大会把标题挤掉
     Box(
         modifier = Modifier
-            .clip(RoundedCornerShape(8.dp))
+            .clip(RoundedCornerShape(6.dp))
             .background(Color(0xFF1A56DB))
-            .padding(horizontal = 8.dp, vertical = 3.dp)
+            .padding(horizontal = 6.dp, vertical = 2.dp)
     ) {
         Text(
             text = stringResource(R.string.github_admin_badge),
-            fontSize = 11.sp,
+            fontSize = 10.sp,
             fontWeight = FontWeight.Bold,
             color = Color.White
         )
