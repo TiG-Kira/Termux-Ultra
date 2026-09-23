@@ -1341,7 +1341,7 @@
 
     <!-- Package Manager Enhance -->
     <string name="pkg_view_mode">软件包管理显示方式</string>
-    <string name="pkg_view_mode_desc">切换分类视图或列表视图</string>
+    <string name="pkg_view_mode_desc">更改软件包管理页面的展示方式</string>
     <string name="pkg_view_mode_category">分类视图</string>
     <string name="pkg_view_mode_list">列表视图</string>
     <string name="pkg_empty_installed">还没有安装任何软件包</string>

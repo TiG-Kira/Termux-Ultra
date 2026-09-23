@@ -631,9 +631,7 @@ val composeTextBlinking by com.termux.app.compose.terminal.ComposeTerminalSettin
                         )
                             OverlayDropdownPreference(
                             title = context.getString(R.string.pkg_view_mode),
-                            summary = if (pkgViewModeIndex == 0)
-                                context.getString(R.string.pkg_view_mode_category)
-                                else context.getString(R.string.pkg_view_mode_list),
+                            summary = context.getString(R.string.pkg_view_mode_desc),
                             items = listOf(
                                 context.getString(R.string.pkg_view_mode_category),
                                 context.getString(R.string.pkg_view_mode_list)
