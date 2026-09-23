@@ -78,7 +78,11 @@ import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.theme.MiuixTheme
+import top.yukonga.miuix.kmp.preference.ArrowPreference
 import java.io.File
+
+private val AccentBlue = Color(0xFF2563EB)
+private val GrayColor = Color(0xFF6B7280)
 
 object AppShell {
 
@@ -1035,57 +1039,31 @@ private fun PackageCard(
     pkg: PackageInfo,
     onClick: () -> Unit
 ) {
-    val isDark = isSystemInDarkTheme()
-    val textColor = if (isDark) Color.White else Color.Black
-    val subColor = if (isDark) Color.White.copy(alpha = 0.6f) else Color.Black.copy(alpha = 0.6f)
-    val accentColor = Color(0xFF2563EB)
-    val grayColor = Color(0xFF6B7280)
-
     MiuixCard(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onClick() }
+        modifier = Modifier.fillMaxWidth()
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = pkg.name,
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = textColor,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Spacer(Modifier.height(2.dp))
-                Text(
-                    text = pkg.version.ifBlank { "未知版本" },
-                    fontSize = 13.sp,
-                    color = subColor,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-            Box(
-                modifier = Modifier
-                    .background(
-                        color = if (pkg.isInstalled) accentColor.copy(alpha = 0.12f)
-                               else grayColor.copy(alpha = 0.12f),
-                        shape = RoundedCornerShape(12.dp)
+        ArrowPreference(
+            title = pkg.name,
+            summary = pkg.version.ifBlank { "未知版本" },
+            onClick = onClick,
+            endActions = {
+                Box(
+                    modifier = Modifier
+                        .background(
+                            color = if (pkg.isInstalled) AccentBlue.copy(alpha = 0.12f)
+                                   else GrayColor.copy(alpha = 0.12f),
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                        .padding(horizontal = 10.dp, vertical = 4.dp)
+                ) {
+                    Text(
+                        text = if (pkg.isInstalled) "已安装" else "可安装",
+                        fontSize = 12.sp,
+                        color = if (pkg.isInstalled) AccentBlue else GrayColor
                     )
-                    .padding(horizontal = 10.dp, vertical = 4.dp)
-            ) {
-                Text(
-                    text = if (pkg.isInstalled) "已安装" else "可安装",
-                    fontSize = 12.sp,
-                    color = if (pkg.isInstalled) accentColor else grayColor
-                )
+                }
             }
-        }
+        )
     }
 }
 
@@ -1122,57 +1100,21 @@ private fun CategoryEntry(
     count: Int,
     onClick: () -> Unit
 ) {
-    val isDark = isSystemInDarkTheme()
-    val textColor = if (isDark) Color.White else Color.Black
-    val subColor = if (isDark) Color.White.copy(alpha = 0.6f) else Color.Black.copy(alpha = 0.6f)
-
     MiuixCard(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onClick() }
+        modifier = Modifier.fillMaxWidth()
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .background(
-                        color = Color(0xFF2563EB).copy(alpha = 0.12f),
-                        shape = RoundedCornerShape(12.dp)
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
+        ArrowPreference(
+            title = label,
+            summary = "$count 个软件包",
+            onClick = onClick,
+            startAction = {
                 Icon(
                     painter = painterResource(R.drawable.ic_folder),
                     contentDescription = null,
-                    tint = Color(0xFF2563EB),
+                    tint = AccentBlue,
                     modifier = Modifier.size(22.dp)
                 )
             }
-            Spacer(Modifier.padding(4.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = label,
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = textColor
-                )
-                Text(
-                    text = "$count 个软件包",
-                    fontSize = 13.sp,
-                    color = subColor
-                )
-            }
-            Icon(
-                painter = painterResource(R.drawable.ic_arrow_right),
-                contentDescription = null,
-                tint = subColor,
-                modifier = Modifier.size(20.dp)
-            )
-        }
+        )
     }
 }

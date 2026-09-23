@@ -62,6 +62,11 @@ import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.preference.ArrowPreference
+import androidx.compose.foundation.layout.offset
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.CheckCircleOutline
+import androidx.compose.material.icons.rounded.ErrorOutline
+import androidx.compose.ui.draw.alpha
 import com.termux.R
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
@@ -216,6 +221,14 @@ fun PackageDetailScreen(
         }
     }
 
+    fun computeCanInstall(target: PackageInfo): Boolean {
+        // 依赖项：源内不存在（depDetails 为 null）才视为无法满足；源内存在将随安装一并装好
+        val hasUnsatisfiedDep = target.depends.any { depName -> depDetails[depName] == null }
+        // 冲突项：当前已安装才算冲突未满足
+        val hasInstalledConflict = target.conflicts.any { confName -> confName in installedNames }
+        return !hasUnsatisfiedDep && !hasInstalledConflict
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -266,10 +279,19 @@ fun PackageDetailScreen(
                 .padding(innerPadding)
         ) {
             if (isLoading) {
-                CircularProgressIndicator(
+                Column(
                     modifier = Modifier.align(Alignment.Center),
-                    color = AccentBlue
-                )
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    CircularProgressIndicator(color = AccentBlue)
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        text = "正在检查依赖和冲突项",
+                        fontSize = 13.sp,
+                        color = colorScheme.onSurfaceVariantSummary
+                    )
+                }
             } else {
                 val d = detail ?: pkg
 
@@ -284,6 +306,16 @@ fun PackageDetailScreen(
                     ),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
+                    // 安装状态卡 — 仅未安装的软件包显示，置于 TopAppBar 下方、描述上方
+                    if (!d.isInstalled) {
+                        item {
+                            PackageInstallStatusCard(
+                                pkgName = d.name,
+                                canInstall = computeCanInstall(d)
+                            )
+                        }
+                    }
+
                     // Description card
                     if (d.description.isNotBlank()) {
                         item {
@@ -483,6 +515,7 @@ fun PackageDetailScreen(
             // Bottom install/uninstall button
             if (!isLoading) {
                 val d = detail ?: pkg
+                val canInstall = computeCanInstall(d)
                 Box(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
@@ -509,6 +542,7 @@ fun PackageDetailScreen(
                         Button(
                             onClick = { startOperation(isInstall = true) },
                             modifier = Modifier.fillMaxWidth(),
+                            enabled = canInstall,
                             colors = ButtonDefaults.buttonColors(
                                 color = AccentBlue
                             )
@@ -673,6 +707,72 @@ fun PackageDetailScreen(
                     }
                 }
             )
+        }
+    }
+}
+
+/**
+ * 软件包详情页安装状态卡（对齐 TerminalListScreen.ServiceStatusCard 竖向模式，但不提供收缩按钮）。
+ * 仅未安装的软件包显示，置于 TopAppBar 下方、描述上方。
+ * - 可安装：绿底 + 右下角对号，标题“已准备好安装”
+ * - 不可安装：红底 + 右下角感叹号，标题“暂时无法安装”
+ */
+@Composable
+private fun PackageInstallStatusCard(
+    pkgName: String,
+    canInstall: Boolean
+) {
+    val isDark = isSystemInDarkTheme()
+    val textColor = if (isDark) Color.White else Color.Black
+    val (cardColor, iconColor, icon) = if (canInstall) {
+        Triple(
+            if (isDark) Color(0xFF1A3825) else Color(0xFFDFFAE4),
+            Color(0xFF36D167),
+            Icons.Rounded.CheckCircleOutline
+        )
+    } else {
+        Triple(
+            if (isDark) Color(0xFF3B1414) else Color(0xFFFFEBEE),
+            Color(0xFFFF5252),
+            Icons.Rounded.ErrorOutline
+        )
+    }
+    val title = if (canInstall) "已准备好安装" else "暂时无法安装"
+    val desc = if (canInstall) {
+        "点击安装按钮开始安装$pkgName，如有需要的依赖也将一并安装"
+    } else {
+        "$pkgName 有依赖或冲突项无法满足，请检查"
+    }
+
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Box(modifier = Modifier.fillMaxWidth().background(cardColor)) {
+            // 右下角半透明水印图标（同 ServiceStatusCard 竖向模式）
+            Box(
+                modifier = Modifier.fillMaxSize().offset(35.dp, 35.dp),
+                contentAlignment = Alignment.BottomEnd
+            ) {
+                Icon(
+                    modifier = Modifier.size(120.dp).alpha(0.8f),
+                    imageVector = icon,
+                    tint = iconColor,
+                    contentDescription = null
+                )
+            }
+            Column(modifier = Modifier.fillMaxWidth().padding(18.dp)) {
+                Text(
+                    text = title,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = textColor
+                )
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = desc,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = textColor.copy(alpha = 0.8f)
+                )
+            }
         }
     }
 }
