@@ -31,6 +31,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.res.painterResource
 import com.termux.R
+import com.termux.app.github.GitHubConfig
 import com.termux.app.github.GitHubIssue
 import com.termux.app.github.IssueStateKind
 import top.yukonga.miuix.kmp.basic.Card
@@ -197,6 +198,47 @@ fun LeadIcon(iconRes: Int) {
             modifier = Modifier.size(24.dp),
             tint = MiuixTheme.colorScheme.onSurface
         )
+    }
+}
+
+// ============================================================================
+// 跳转到 GitHub 处理（优先唤起 GitHub App，自带登录态）
+// ============================================================================
+
+/** GitHub 官方 Android App 包名 */
+private const val GITHUB_APP_PACKAGE = "com.github.android"
+
+/** 话题（Issue）在 GitHub 上的页面地址 */
+fun gitHubIssueUrl(number: Int): String =
+    "https://github.com/${GitHubConfig.REPO_OWNER}/${GitHubConfig.REPO_NAME}/issues/$number"
+
+/** 合并请求（PR）在 GitHub 上的页面地址；PR 在 GitHub 上同样是 issue 号，但 /pull/ 会直接落到 PR 视图 */
+fun gitHubPullUrl(number: Int): String =
+    "https://github.com/${GitHubConfig.REPO_OWNER}/${GitHubConfig.REPO_NAME}/pull/$number"
+
+/**
+ * 打开 GitHub 上的 PR / Issue 页面，把合并、关闭、重新打开等管理动作交回 GitHub 侧完成。
+ *
+ * 优先唤起 GitHub App —— App 内已保存用户登录态，点开即可直接操作，无需再次登录；
+ * 未安装 GitHub App 时回退到浏览器。
+ */
+fun openGitHubInPreferredApp(context: android.content.Context, url: String) {
+    val uri = android.net.Uri.parse(url)
+    val browserIntent = android.content.Intent(android.content.Intent.ACTION_VIEW, uri)
+        .addCategory(android.content.Intent.CATEGORY_BROWSABLE)
+
+    // Android 11+ 有包可见性限制，已在 AndroidManifest 里用 <queries> 声明 com.github.android
+    val appIntent = android.content.Intent(browserIntent).setPackage(GITHUB_APP_PACKAGE)
+    val canUseApp = runCatching { appIntent.resolveActivity(context.packageManager) != null }
+        .getOrDefault(false)
+
+    val target = if (canUseApp) appIntent else browserIntent
+    runCatching { context.startActivity(target) }.onFailure {
+        android.widget.Toast.makeText(
+            context,
+            context.getString(R.string.github_open_failed),
+            android.widget.Toast.LENGTH_SHORT
+        ).show()
     }
 }
 

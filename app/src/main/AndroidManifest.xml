@@ -18,6 +18,13 @@
         android:name="android.software.leanback"
         android:required="false" />
 
+    <!-- Android 11+ 包可见性：声明后才能检测/唤起 GitHub 官方 App（com.github.android），
+         否则 resolveActivity 一律返回 null，只能回退浏览器。当前 targetSdk 28 尚未受限，
+         先声明好以免后续抬升 targetSdk 时静默失效。 -->
+    <queries>
+        <package android:name="com.github.android" />
+    </queries>
+
     <permission
         android:name="${TERMUX_PACKAGE_NAME}.permission.RUN_COMMAND"
         android:description="@string/permission_run_command_description"

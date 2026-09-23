@@ -29,6 +29,9 @@ import com.termux.R
 import com.termux.app.compose.BackButton
 import com.termux.app.compose.CommentCard
 import com.termux.app.compose.KiTerminalTheme
+import com.termux.app.compose.LeadIcon
+import com.termux.app.compose.gitHubPullUrl
+import com.termux.app.compose.openGitHubInPreferredApp
 import com.termux.app.compose.MarkdownContent
 import com.termux.app.compose.NavigationHelper
 import com.termux.app.compose.PullRequestStateBadge
@@ -37,13 +40,11 @@ import com.termux.app.github.GitHubIssue
 import com.termux.app.github.GitHubPullRequestDetail
 import com.termux.app.github.GitHubSessionStore
 import com.termux.app.github.MergeableState
-import com.termux.app.github.MergeMethod
-import com.termux.app.github.RepoPermission
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import top.yukonga.miuix.kmp.basic.*
-import top.yukonga.miuix.kmp.overlay.OverlayDialog
+import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 /** PR 详情页：正文（Markdown）+ 回复列表 + 管理员合并/关闭操作 */
@@ -73,15 +74,10 @@ class GitHubPullRequestDetailActivity : ComponentActivity() {
                     var detail by remember { mutableStateOf<GitHubPullRequestDetail?>(null) }
                     var loading by remember { mutableStateOf(true) }
                     var error by remember { mutableStateOf<String?>(null) }
-                    var perm by remember { mutableStateOf<RepoPermission?>(null) }
                     val scope = rememberCoroutineScope()
 
                     var commentDraft by remember { mutableStateOf("") }
                     var submittingComment by remember { mutableStateOf(false) }
-
-                    var showConfirmMerge by remember { mutableStateOf<MergeMethod?>(null) }
-                    var showConfirmClose by remember { mutableStateOf(false) }
-                    var busy by remember { mutableStateOf(false) }
 
                     fun loadAll() {
                         val token = session?.token ?: return
@@ -89,10 +85,8 @@ class GitHubPullRequestDetailActivity : ComponentActivity() {
                         scope.launch(Dispatchers.IO) {
                             val a = GitHubApi(token)
                             val prResult = runCatching { a.fetchPullRequestDetail(prNumber) }
-                            val permResult = runCatching { a.fetchRepoPermission(session.user.login) }
                             withContext(Dispatchers.Main) {
                                 prResult.onSuccess { detail = it }.onFailure { error = it.message ?: it.javaClass.simpleName }
-                                permResult.onSuccess { perm = it }
                                 loading = false
                             }
                         }
@@ -121,40 +115,6 @@ class GitHubPullRequestDetailActivity : ComponentActivity() {
                         }
                     }
 
-                    fun doMerge(method: MergeMethod) {
-                        val a = api ?: return
-                        busy = true
-                        scope.launch(Dispatchers.IO) {
-                            runCatching { a.mergePullRequest(prNumber, method) }
-                                .onSuccess {
-                                    withContext(Dispatchers.Main) { busy = false; showConfirmMerge = null; Toast.makeText(context, R.string.github_action_success_pr_merged, Toast.LENGTH_SHORT).show(); loadAll() }
-                                }
-                                .onFailure { e ->
-                                    withContext(Dispatchers.Main) { busy = false; Toast.makeText(context, context.getString(R.string.github_action_failed, e.message ?: e.javaClass.simpleName), Toast.LENGTH_LONG).show() }
-                                }
-                        }
-                    }
-
-                    fun doClosePr() {
-                        val a = api ?: return
-                        busy = true
-                        scope.launch(Dispatchers.IO) {
-                            runCatching { a.closePullRequest(prNumber) }
-                                .onSuccess { withContext(Dispatchers.Main) { busy = false; showConfirmClose = false; Toast.makeText(context, R.string.github_action_success_pr_closed, Toast.LENGTH_SHORT).show(); loadAll() } }
-                                .onFailure { e -> withContext(Dispatchers.Main) { busy = false; Toast.makeText(context, context.getString(R.string.github_action_failed, e.message ?: e.javaClass.simpleName), Toast.LENGTH_LONG).show() } }
-                        }
-                    }
-
-                    fun doReopenPr() {
-                        val a = api ?: return
-                        busy = true
-                        scope.launch(Dispatchers.IO) {
-                            runCatching { a.reopenPullRequest(prNumber) }
-                                .onSuccess { withContext(Dispatchers.Main) { busy = false; Toast.makeText(context, R.string.github_action_success_pr_reopened, Toast.LENGTH_SHORT).show(); loadAll() } }
-                                .onFailure { e -> withContext(Dispatchers.Main) { busy = false; Toast.makeText(context, context.getString(R.string.github_action_failed, e.message ?: e.javaClass.simpleName), Toast.LENGTH_LONG).show() } }
-                        }
-                    }
-
                     LaunchedEffect(Unit) { loadAll() }
 
                     Scaffold(
@@ -166,7 +126,7 @@ class GitHubPullRequestDetailActivity : ComponentActivity() {
                             loading -> Loading(padding)
                             error != null -> LoadFailed(padding, error!!) { loadAll() }
                             detail != null -> {
-                                val d = detail!!; val canManage = perm?.canManage == true
+                                val d = detail!!
                                 LazyColumn(
                                     modifier = Modifier.fillMaxSize().padding(padding).nestedScroll(scrollBehavior.nestedScrollConnection),
                                     contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = systemNavBarsHeight + 26.dp),
@@ -203,29 +163,15 @@ class GitHubPullRequestDetailActivity : ComponentActivity() {
                                         }
                                     }
 
-                                    if (canManage && !d.pr.merged) {
-                                        item { SmallTitle(text = stringResource(R.string.github_actions_section)) }
-                                        item {
-                                            Card(Modifier.fillMaxWidth()) {
-                                                Column(Modifier.padding(16.dp)) {
-                                                    when {
-                                                        d.pr.isOpen -> {
-                                                            Button(onClick = { showConfirmMerge = MergeMethod.MERGE }, enabled = !busy && d.pr.mergeable != MergeableState.CONFLICTING, modifier = Modifier.fillMaxWidth()) { Text(text = stringResource(R.string.github_merge_button), color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold) }
-                                                            Spacer(Modifier.height(8.dp))
-                                                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                                                                Button(onClick = { showConfirmMerge = MergeMethod.SQUASH }, enabled = !busy, modifier = Modifier.weight(1f)) { Text(text = stringResource(R.string.github_squash_button), color = Color.White, fontSize = 13.sp) }
-                                                                Button(onClick = { showConfirmMerge = MergeMethod.REBASE }, enabled = !busy, modifier = Modifier.weight(1f)) { Text(text = stringResource(R.string.github_rebase_button), color = Color.White, fontSize = 13.sp) }
-                                                            }
-                                                            Spacer(Modifier.height(12.dp))
-                                                            TextButton(text = stringResource(R.string.github_close_pr_button), onClick = { showConfirmClose = true }, enabled = !busy, modifier = Modifier.fillMaxWidth())
-                                                        }
-                                                        d.pr.isClosed -> {
-                                                            TextButton(text = stringResource(R.string.github_reopen_pr_button), onClick = { doReopenPr() }, enabled = !busy, modifier = Modifier.fillMaxWidth())
-                                                        }
-                                                    }
-                                                    if (busy) { Spacer(Modifier.height(8.dp)); LinearProgressIndicator(Modifier.fillMaxWidth()) }
-                                                }
-                                            }
+                                    item { SmallTitle(text = stringResource(R.string.github_manage_on_github_section)) }
+                                    item {
+                                        Card(Modifier.fillMaxWidth()) {
+                                            ArrowPreference(
+                                                title = stringResource(R.string.github_jump_to_github),
+                                                summary = stringResource(R.string.github_jump_to_github_summary),
+                                                onClick = { openGitHubInPreferredApp(context, gitHubPullUrl(prNumber)) },
+                                                startAction = { LeadIcon(R.drawable.ic_github) }
+                                            )
                                         }
                                     }
 
@@ -256,33 +202,6 @@ class GitHubPullRequestDetailActivity : ComponentActivity() {
                         }
                     }
 
-                    val confirmMethod = showConfirmMerge
-                    if (confirmMethod != null) {
-                        OverlayDialog(
-                            show = true, onDismissRequest = { showConfirmMerge = null },
-                            title = stringResource(R.string.github_action_confirm_merge_title),
-                            summary = stringResource(R.string.github_action_confirm_merge_summary, confirmMethod.display)
-                        ) {
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                                TextButton(text = stringResource(R.string.cancel), onClick = { showConfirmMerge = null })
-                                Spacer(Modifier.width(12.dp))
-                                TextButton(text = stringResource(R.string.github_confirm), onClick = { doMerge(confirmMethod) })
-                            }
-                        }
-                    }
-                    if (showConfirmClose) {
-                        OverlayDialog(
-                            show = true, onDismissRequest = { showConfirmClose = false },
-                            title = stringResource(R.string.github_action_confirm_close_pr_title),
-                            summary = stringResource(R.string.github_action_confirm_close_pr_summary)
-                        ) {
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                                TextButton(text = stringResource(R.string.cancel), onClick = { showConfirmClose = false })
-                                Spacer(Modifier.width(12.dp))
-                                TextButton(text = stringResource(R.string.github_close_pr_button), onClick = { doClosePr() })
-                            }
-                        }
-                    }
                 }
             }
         }
