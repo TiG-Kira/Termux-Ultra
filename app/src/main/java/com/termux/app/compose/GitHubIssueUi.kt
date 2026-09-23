@@ -199,3 +199,153 @@ fun LeadIcon(iconRes: Int) {
         )
     }
 }
+
+// ============================================================================
+// Pull Request 相关 UI（与 IssueFeed / IssueCard 平行的轻量组件）
+// ============================================================================
+
+/** PR 三态状态徽章：Open / Merged / Closed */
+@Composable
+fun PullRequestStateBadge(state: String, merged: Boolean) {
+    val (bg, fg, textRes) = when {
+        merged -> Triple(Color(0xFFFBEADB), Color(0xFF9A6700), R.string.github_pr_state_merged)
+        state.equals("open", true) ->
+            Triple(Color(0xFFE6F4EA), Color(0xFF1E7E34), R.string.github_pr_state_open)
+        else ->
+            Triple(Color(0xFFF1F1F1), Color(0xFF7A7A7A), R.string.github_pr_state_closed)
+    }
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(bg)
+            .padding(horizontal = 8.dp, vertical = 4.dp)
+    ) {
+        Text(
+            text = stringResource(textRes),
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold,
+            color = fg
+        )
+    }
+}
+
+/** 单个 PR 卡片：标题 + 状态 + 作者 + 回复数 + 可合并标记 */
+@Composable
+fun PullRequestCard(pr: com.termux.app.github.GitHubPullRequest, onClick: () -> Unit) {
+    val muted = MiuixTheme.colorScheme.onSurfaceVariantSummary
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .clickable(onClick = onClick)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = "#${pr.number}  ${pr.title}",
+                style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Bold, color = MiuixTheme.colorScheme.onSurface)
+            )
+            Spacer(Modifier.height(8.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                PullRequestStateBadge(pr.state, pr.merged)
+                if (pr.isOpen) {
+                    Spacer(Modifier.width(8.dp))
+                    when (pr.mergeable) {
+                        com.termux.app.github.MergeableState.MERGEABLE -> {
+                            Text(
+                                text = stringResource(R.string.github_pr_mergeable),
+                                style = TextStyle(fontSize = 12.sp, color = Color(0xFF1E7E34), fontWeight = FontWeight.Bold)
+                            )
+                        }
+                        com.termux.app.github.MergeableState.CONFLICTING -> {
+                            Text(
+                                text = stringResource(R.string.github_pr_conflicting),
+                                style = TextStyle(fontSize = 12.sp, color = Color(0xFF9A6700), fontWeight = FontWeight.Bold)
+                            )
+                        }
+                        else -> Unit
+                    }
+                }
+            }
+            Spacer(Modifier.height(6.dp))
+            Text(
+                text = stringResource(R.string.github_issue_author, pr.authorLogin),
+                style = TextStyle(fontSize = 12.sp, color = muted)
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = stringResource(R.string.github_issue_created_at, pr.createdAt.take(10)),
+                style = TextStyle(fontSize = 12.sp, color = muted)
+            )
+        }
+    }
+}
+
+/** PR 列表的统一布局（与 IssueFeed 平行） */
+@Composable
+fun PullRequestFeed(
+    modifier: Modifier,
+    prs: List<com.termux.app.github.GitHubPullRequest>,
+    loading: Boolean,
+    error: String?,
+    onRetry: () -> Unit,
+    onPrClick: (com.termux.app.github.GitHubPullRequest) -> Unit,
+    contentPadding: PaddingValues
+) {
+    LazyColumn(
+        modifier = modifier,
+        contentPadding = contentPadding,
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        if (loading) {
+            item { CenterNote(stringResource(R.string.github_loading)) }
+            return@LazyColumn
+        }
+        if (error != null) {
+            item {
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = stringResource(R.string.github_load_failed, error),
+                        style = TextStyle(fontSize = 14.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary),
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    TextButton(text = stringResource(R.string.github_retry), onClick = onRetry)
+                }
+            }
+            return@LazyColumn
+        }
+        if (prs.isEmpty()) {
+            item { CenterNote(stringResource(R.string.github_pr_empty)) }
+            return@LazyColumn
+        }
+        items(prs, key = { it.number }) { PullRequestCard(pr = it, onClick = { onPrClick(it) }) }
+    }
+}
+
+/** 通用回复卡片——供 Issue 详情 & PR 详情共用 */
+@Composable
+fun CommentCard(comment: com.termux.app.github.GitHubComment) {
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    comment.authorLogin,
+                    style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Bold, color = MiuixTheme.colorScheme.onSurface)
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    comment.createdAt.take(10),
+                    style = TextStyle(fontSize = 12.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+                )
+            }
+            Spacer(Modifier.height(8.dp))
+            MarkdownContent(
+                text = comment.body.ifBlank { stringResource(R.string.github_issue_no_body) },
+                bodyFontSizeSp = 13
+            )
+        }
+    }
+}

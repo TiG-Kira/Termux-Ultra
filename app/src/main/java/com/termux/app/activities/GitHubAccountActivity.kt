@@ -164,10 +164,14 @@ class GitHubAccountActivity : ComponentActivity() {
                                         Column(
                                             Modifier.padding(start = 12.dp).weight(1f)
                                         ) {
-                                            Text(
-                                                session.user.name ?: session.user.login,
-                                                style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.Bold, color = MiuixTheme.colorScheme.onSurface)
-                                            )
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Text(
+                                                    session.user.name ?: session.user.login,
+                                                    style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.Bold, color = MiuixTheme.colorScheme.onSurface)
+                                                )
+                                                Spacer(Modifier.width(6.dp))
+                                                RepoAdminBadge(session)
+                                            }
                                             Text(
                                                 "@${session.user.login}",
                                                 style = TextStyle(fontSize = 13.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
@@ -201,6 +205,20 @@ class GitHubAccountActivity : ComponentActivity() {
                                             context.startActivity(Intent(context, GitHubIssuesActivity::class.java))
                                         },
                                         startAction = { LeadIcon(R.drawable.ic_info) }
+                                    )
+                                }
+                            }
+
+                            // 查看合并请求（PR）
+                            item {
+                                Card(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp))) {
+                                    ArrowPreference(
+                                        title = stringResource(R.string.github_pr_entry),
+                                        summary = stringResource(R.string.github_pr_entry_summary),
+                                        onClick = {
+                                            context.startActivity(Intent(context, GitHubPullRequestsActivity::class.java))
+                                        },
+                                        startAction = { LeadIcon(R.drawable.ic_code) }
                                     )
                                 }
                             }
