@@ -27,8 +27,15 @@ fun KiTerminalTheme(
     if (!view.isInEditMode && manageSystemBars) {
         SideEffect {
             val window = (view.context as Activity).window
-            window.statusBarColor = statusBarColor.toArgb()
-            window.navigationBarColor = navigationBarColor.toArgb()
+            // 只有显式传入非透明色才覆盖 Activity 主题。
+            // 这样 Theme.Termux.Main 里的 statusBarColor/navigationBarColor = @color/hyper_surface
+            // （会跟随亮/暗模式自动选 #F7F7F7 / #1C1B1F）才能正常生效。
+            if (statusBarColor != Color.Transparent) {
+                window.statusBarColor = statusBarColor.toArgb()
+            }
+            if (navigationBarColor != Color.Transparent) {
+                window.navigationBarColor = navigationBarColor.toArgb()
+            }
             val controller = WindowCompat.getInsetsController(window, view)
             controller.isAppearanceLightStatusBars = if (isTerminalDark) false else !darkTheme
             controller.isAppearanceLightNavigationBars = if (isTerminalDark) false else !darkTheme
