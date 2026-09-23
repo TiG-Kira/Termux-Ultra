@@ -43,7 +43,7 @@ jobs:
     permissions:
       contents: read
     with:
-      base-sha: ${{ github.event.pull_request.base.sha }}
+      base_sha: ${{ github.event.pull_request.base.sha }}
 
   testing:
     name: "Unit tests"
