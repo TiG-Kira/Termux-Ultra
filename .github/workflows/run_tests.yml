@@ -30,8 +30,27 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # 依赖污染检查：必须排在单元测试之前。
+  # 若检出污染，它会在自己内部把 `./gradlew test` 跑一遍：
+  #   - 通过 -> 只告警不失败，并让下面的 testing 作业跳过（避免重复跑）
+  #   - 不通过 -> 该作业直接失败，PR 变红
+  # 若没有污染（或压根没动依赖清单），testing 作业照常执行。
+  # 注意：CI 无法在两个独立工作流之间可靠排序，所以用 needs 放在同一工作流内是唯一无竞态的做法；
+  # ci.yml（编译）等其它工作流仍与本工作流并行，不受影响也不被跳过。
+  dependency-guard:
+    name: "依赖污染检查"
+    uses: ./.github/workflows/dependency-guard.yml
+    permissions:
+      contents: read
+    with:
+      base-sha: ${{ github.event.pull_request.base.sha }}
+
   testing:
     name: "Unit tests"
+    needs: dependency-guard
+    # always() 是必须的：上游作业被跳过时（例如没有依赖清单改动），这里仍要照常跑测试。
+    # 只有上游明确给出 run-unit-tests=false（即污染已检出且测试已在其内部跑过）才跳过。
+    if: always() && needs.dependency-guard.outputs.run-unit-tests != 'false'
     runs-on: ubuntu-26.04
     timeout-minutes: 45
     steps:

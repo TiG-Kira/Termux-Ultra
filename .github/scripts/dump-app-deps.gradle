@@ -1,0 +1,60 @@
+// Gradle 初始化脚本（用 -I 传入，不改动项目自身的构建脚本）。
+//
+// 作用：解析 :app 的指定 classpath，把解析后的「模块坐标:版本」写成扁平清单，
+// 供 CI 做「依赖图基线对比」。
+//
+// 为什么需要它：dependabot 只改 vendor 子模块的 build.gradle 时，diff 上完全看不出
+// 对主 app 的影响 —— 但 :app 依赖 project(':termux-api')，Gradle 单版本策略取最高版本，
+// 会把主 app 的传递依赖一起顶上去（#143：biometric 1.2.0-alpha05 -> 1.4.0-alpha07，
+// FingerprintDialogFragment 被挪进 androidx.biometric.internal.*，VncActivity 启动即崩）。
+// 编译照过、运行时才炸，所以只能靠真正解析依赖图来发现。
+//
+// 用法：
+//   DUMP_DEPS_OUTPUT=/tmp/head-deps.txt \
+//   DUMP_DEPS_CONFIGURATION=debugRuntimeClasspath \
+//   ./gradlew -I .github/scripts/dump-app-deps.gradle :app:dumpAppResolvedDeps --console=plain
+
+gradle.projectsEvaluated {
+    def appProject = gradle.rootProject.findProject(':app')
+    if (appProject == null) {
+        throw new GradleException('[dump-app-deps] 未找到 :app 模块')
+    }
+
+    def configurationName = (System.getenv('DUMP_DEPS_CONFIGURATION') ?: 'debugRuntimeClasspath').trim()
+    def outputPath = (System.getenv('DUMP_DEPS_OUTPUT') ?: '').trim()
+    if (outputPath.isEmpty()) {
+        throw new GradleException('[dump-app-deps] 必须通过环境变量 DUMP_DEPS_OUTPUT 指定输出文件')
+    }
+
+    appProject.tasks.register('dumpAppResolvedDeps') {
+        // 依赖解析属于外部输入，禁止被 UP-TO-DATE 命中
+        outputs.upToDateWhen { false }
+
+        doLast {
+            def configuration = appProject.configurations.findByName(configurationName)
+            if (configuration == null) {
+                throw new GradleException("[dump-app-deps] :app 不存在配置 ${configurationName}")
+            }
+            if (!configuration.canBeResolved) {
+                throw new GradleException("[dump-app-deps] 配置 ${configurationName} 不可解析（canBeResolved=false）")
+            }
+
+            // resolvedConfiguration 已应用冲突解决（同一模块只保留胜出版本），
+            // 正好对应「:app 实际打包进去的是什么版本」。
+            def coordinates = new TreeSet<String>()
+            configuration.resolvedConfiguration.lenientConfiguration.allModuleDependencies.each { dep ->
+                def group = dep.moduleGroup
+                def name = dep.moduleName
+                def version = dep.moduleVersion
+                if (group && name && version && version != 'unspecified') {
+                    coordinates.add("${group}:${name}:${version}")
+                }
+            }
+
+            def outFile = new File(outputPath)
+            outFile.parentFile?.mkdirs()
+            outFile.setText(coordinates.join('\n') + '\n', 'UTF-8')
+            logger.lifecycle("[dump-app-deps] 写出 ${coordinates.size()} 条坐标 -> ${outFile.absolutePath}")
+        }
+    }
+}
