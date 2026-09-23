@@ -121,17 +121,16 @@ fun MainScreen(
 
     val context = LocalContext.current
     val navPrefs = remember { context.getSharedPreferences("app_settings", Context.MODE_PRIVATE) }
-    // 导航栏样式：glass=浮动玻璃（新版默认）、classic=经典（旧默认）、liquid_glass=玻璃、soft_light=柔光。
-    // 历史值迁移：旧 "default"（原默认）与旧 "floating"（已删除）统一迁到新的浮动玻璃底栏。
+    // 导航栏样式：glass=浮动玻璃（新版默认）、classic=经典（旧默认）、liquid_glass=玻璃。
+    // 历史值迁移：旧 "default" / "floating" / "soft_light"（柔光，已移除）统一迁到新的浮动玻璃底栏。
     val navBarStyle = remember {
         when (val stored = navPrefs.getString("navigation_bar_style", null)) {
-            "classic", "liquid_glass", "soft_light" -> stored
+            "classic", "liquid_glass" -> stored
             else -> "glass"
         }
     }
     val useGlassNav = navBarStyle == "glass" && android.os.Build.VERSION.SDK_INT >= 33
     val useLiquidGlassNav = navBarStyle == "liquid_glass"
-    val useSoftLightNav = navBarStyle == "soft_light"
     var glassNavFailed by remember { mutableStateOf(false) }
 
     // Crash recovery: if the previous glass nav rendering attempt crashed (SIGSEGV etc.),
@@ -145,7 +144,6 @@ fun MainScreen(
 
     val navStyle = when {
         useLiquidGlassNav && !glassNavFailed -> 2
-        useSoftLightNav -> 3
         useGlassNav -> 0
         else -> 1
     }
@@ -165,15 +163,15 @@ fun MainScreen(
 
     // 经典底栏（miuix NavigationBar）自身高度
     val classicNavHeight = 56.dp
-    // 浮动玻璃底栏：GlassNavigationBarDefaults.Height(54dp) + 底部留白(12dp)
-    val glassNavTotalHeight = 54.dp + 12.dp
+    // 浮动玻璃底栏：GlassNavigationBarDefaults.Height(54dp) + 底部留白(24dp, 对齐液态玻璃)
+    val glassNavTotalHeight = 54.dp + 24.dp
     val navContainerHeight = getNavContainerHeight(availableTabs.size, NavStyle.GLASS)
     val totalNavHeight = when (navStyle) {
         // 浮动玻璃：悬浮于系统导航栏之上
         0 -> glassNavTotalHeight + systemNavBarsHeight
         // 经典：贴合系统导航栏
         1 -> classicNavHeight + systemNavBarsHeight
-        // 玻璃/柔光：底部留白已含在 navContainerHeight 内
+        // 玻璃：底部留白已含在 navContainerHeight 内
         else -> navContainerHeight
     }
     val snackbarBottomPadding = when (navStyle) {
@@ -440,9 +438,9 @@ fun MainScreen(
                         },
                         backdrop = glassNavBackdrop,
                         modifier = Modifier.padding(
-                            start = 16.dp,
-                            end = 16.dp,
-                            bottom = systemNavBarsHeight + 12.dp
+                            start = 24.dp,
+                            end = 24.dp,
+                            bottom = systemNavBarsHeight + 24.dp
                         )
                     )
                 }
