@@ -64,10 +64,25 @@
         <item name="android:windowBackground">@color/hyper_surface</item>
     </style>
 
-    <!-- 主页窗口主题。继承 Theme.Termux（保持 windowTranslucentStatus），
-         仅覆盖 windowBackground 为 DayNight surface。 -->
+    <!-- 主页窗口主题。
+         父类 Theme.Termux 带着 windowTranslucentStatus / windowTranslucentNavigation，
+         这两个 API 19 时代的遗留标志会让系统**无视 statusBarColor / navigationBarColor**，
+         在状态栏与导航栏上强行盖一层半透明蒙版（各 ROM 深浅不一，观感脏）。
+         KiTerminalTheme 已经在运行时把两栏设成 Transparent，正是被这两个标志顶掉了。
+
+         这里改走现代 edge-to-edge 写法（边到边由 WindowCompat.setDecorFitsSystemWindows(false) 负责）：
+         关掉半透明标志 + 两栏设全透明 + 关掉 Android 10+ 的对比度自动补色
+         （enforceStatusBarContrast / enforceNavigationBarContrast 默认 true，
+         在栏色透明时同样会补一层半透明底色）。
+         状态栏/导航栏图标的明暗由 KiTerminalTheme 按亮暗模式动态设置。 -->
     <style name="Theme.Termux.Main" parent="@style/Theme.Termux">
         <item name="android:windowBackground">@color/hyper_surface</item>
+        <item name="android:windowTranslucentStatus">false</item>
+        <item name="android:windowTranslucentNavigation">false</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:enforceStatusBarContrast">false</item>
+        <item name="android:enforceNavigationBarContrast">false</item>
     </style>
 
     <style name="Theme.Termux.Transparent" parent="@style/Theme.MaterialComponents.DayNight.NoActionBar">
