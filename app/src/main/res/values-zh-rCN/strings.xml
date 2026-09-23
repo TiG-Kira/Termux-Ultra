@@ -1302,6 +1302,10 @@
     <string name="refresh_sources">刷新软件源</string>
     <string name="index_update_failed">包索引更新失败，可能网络异常</string>
     <string name="pkg_manager_busy">包管理器被占用</string>
+    <string name="pkg_view_mode">软件包管理显示方式</string>
+    <string name="pkg_view_mode_desc">更改软件包管理页面的展示方式</string>
+    <string name="pkg_view_mode_category">分类视图</string>
+    <string name="pkg_view_mode_list">列表视图</string>
     <string name="dangerous_action_confirm">危险操作，需要确认</string>
     <string name="prefs_about_cat_devs">开发者与贡献者</string>
     <string name="prefs_about_cat_device">设备信息</string>

@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -49,7 +50,6 @@ import kotlinx.coroutines.launch
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.HorizontalDivider
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
@@ -61,18 +61,32 @@ import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
+import top.yukonga.miuix.kmp.preference.ArrowPreference
 import com.termux.R
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 private val AccentBlue = Color(0xFF2563EB)
 private val DangerRed = Color(0xFFDC2626)
+private val SuccessGreen = Color(0xFF16A34A)
+
+private enum class DepStatus(val text: String, val color: Color) {
+    INSTALLED("已安装", SuccessGreen),
+    WILL_INSTALL("将安装", AccentBlue),
+    NOT_SATISFIED("不满足", DangerRed)
+}
+
+private enum class ConfStatus(val text: String, val color: Color) {
+    SATISFIED("已满足", SuccessGreen),
+    NOT_SATISFIED("不满足", DangerRed)
+}
 
 @Composable
 fun PackageDetailScreen(
     pkg: PackageInfo,
     navBarBottomPadding: androidx.compose.ui.unit.Dp = 0.dp,
     onBack: () -> Unit,
-    onChanged: (Boolean) -> Unit
+    onChanged: (Boolean) -> Unit,
+    onOpenPackageDetail: ((PackageInfo) -> Unit)? = null
 ) {
     val context = LocalContext.current
     val listState = rememberLazyListState()
@@ -90,6 +104,11 @@ fun PackageDetailScreen(
     var progressLog by remember { mutableStateOf("") }
     var progressSuccess by remember { mutableStateOf<Boolean?>(null) }
     var pendingAction by remember { mutableStateOf<(() -> Unit)?>(null) }
+
+    // 预加载依赖/冲突包详情 + 已安装包名
+    var installedNames by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var depDetails by remember { mutableStateOf<Map<String, PackageInfo?>>(emptyMap()) }
+    var confDetails by remember { mutableStateOf<Map<String, PackageInfo?>>(emptyMap()) }
 
     // 观察 LiveUpdateState 的实时 log 和后台恢复请求
     val livePkgLog by LiveUpdateState.pkgLog.collectAsState()
@@ -116,7 +135,20 @@ fun PackageDetailScreen(
 
     LaunchedEffect(pkg.name) {
         isLoading = true
-        detail = PkgRepo.getDetail(context, pkg.name) ?: pkg
+        val d = PkgRepo.getDetail(context, pkg.name) ?: pkg
+        detail = d
+
+        // 并行加载已安装包名和依赖/冲突详情
+        val installed = PkgRepo.getInstalled(context).map { it.name }.toSet()
+        installedNames = installed
+
+        depDetails = d.depends.associate { depName ->
+            depName to PkgRepo.getDetail(context, depName)
+        }
+        confDetails = d.conflicts.associate { confName ->
+            confName to PkgRepo.getDetail(context, confName)
+        }
+
         isLoading = false
     }
 
@@ -240,7 +272,6 @@ fun PackageDetailScreen(
                 )
             } else {
                 val d = detail ?: pkg
-                val subColor = colorScheme.onSurfaceVariantSummary
 
                 LazyColumn(
                     state = listState,
@@ -274,139 +305,148 @@ fun PackageDetailScreen(
                         }
                     }
 
-                    // Info card: Homepage, Maintainer, Size, License
-                    val infoRows = mutableListOf<Pair<String, String>>()
-                    if (d.homepage.isNotBlank()) infoRows.add("主页" to d.homepage)
-                    if (d.maintainer.isNotBlank()) infoRows.add("维护者" to d.maintainer)
-                    if (d.size.isNotBlank()) infoRows.add("大小" to d.size)
-                    if (d.license.isNotBlank()) infoRows.add("许可证" to d.license)
+                    // Info section — 每个信息独立一张卡片
+                    val infoFields = mutableListOf<Pair<String, String>>()
+                    if (d.homepage.isNotBlank()) infoFields.add("主页" to d.homepage)
+                    if (d.maintainer.isNotBlank()) infoFields.add("维护者" to d.maintainer)
+                    if (d.size.isNotBlank()) infoFields.add("大小" to d.size)
+                    if (d.license.isNotBlank()) infoFields.add("许可证" to d.license)
 
-                    if (infoRows.isNotEmpty()) {
+                    if (infoFields.isNotEmpty()) {
                         item {
                             SmallTitle(
                                 text = stringResource(R.string.log_level_info),
                                 modifier = Modifier.padding(top = 6.dp)
                             )
+                        }
+                        items(infoFields) { (label, value) ->
+                            val isHomepage = label == "主页"
+                            val isLongUrl = value.length > 40
+                            val summaryText = if (isHomepage && isLongUrl) value.take(38) + "…" else value
                             Card(
-                                modifier = Modifier.fillMaxWidth(),
-                                insideMargin = PaddingValues(horizontal = 16.dp, vertical = 4.dp)
+                                modifier = Modifier.fillMaxWidth()
                             ) {
-                                Column {
-                                    infoRows.forEachIndexed { index, (label, value) ->
-                                        Row(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .clickable(enabled = label == "主页") { openHomepage(value) }
-                                                .padding(vertical = 10.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Text(
-                                                text = label,
-                                                fontSize = 14.sp,
-                                                color = subColor,
-                                                modifier = Modifier.width(56.dp)
-                                            )
-                                            Text(
-                                                text = value,
-                                                fontSize = 14.sp,
-                                                color = colorScheme.onSurface,
-                                                modifier = Modifier.weight(1f),
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis
-                                            )
-                                            if (label == "主页") {
-                                                Icon(
-                                                    painter = painterResource(R.drawable.ic_link),
-                                                    contentDescription = null,
-                                                    tint = subColor,
-                                                    modifier = Modifier.size(18.dp)
-                                                )
-                                            }
-                                        }
-                                        if (index != infoRows.lastIndex) {
-                                            HorizontalDivider(
-                                                modifier = Modifier.padding(vertical = 4.dp),
-                                                color = colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f)
+                                ArrowPreference(
+                                    title = label,
+                                    summary = summaryText,
+                                    onClick = {
+                                        if (isHomepage) openHomepage(value)
+                                    },
+                                    startAction = if (isHomepage) {
+                                        {
+                                            Icon(
+                                                painter = painterResource(R.drawable.ic_link),
+                                                contentDescription = null,
+                                                tint = colorScheme.onSurfaceVariantSummary,
+                                                modifier = Modifier.size(20.dp)
                                             )
                                         }
-                                    }
-                                }
+                                    } else null
+                                )
                             }
                         }
                     }
 
-                    // Dependencies card
+                    // Dependencies section — 每个依赖一张卡片
                     if (d.depends.isNotEmpty()) {
                         item {
                             SmallTitle(
                                 text = "依赖",
                                 modifier = Modifier.padding(top = 6.dp)
                             )
+                        }
+                        items(d.depends) { depName ->
+                            val depInfo = depDetails[depName]
+                            val status = when {
+                                depInfo == null -> DepStatus.NOT_SATISFIED
+                                depName in installedNames -> DepStatus.INSTALLED
+                                else -> DepStatus.WILL_INSTALL
+                            }
+                            val summaryLine = if (depInfo != null) {
+                                val versionPart = depInfo.version.takeIf { it.isNotBlank() }?.let { "v$it" } ?: ""
+                                val sectionPart = depInfo.section.takeIf { it.isNotBlank() }
+                                val parts = listOfNotNull(versionPart, sectionPart)
+                                parts.joinToString(" · ").ifBlank { "暂无相关信息" }
+                            } else {
+                                "暂无相关信息"
+                            }
+
                             Card(
-                                modifier = Modifier.fillMaxWidth(),
-                                insideMargin = PaddingValues(horizontal = 16.dp, vertical = 4.dp)
+                                modifier = Modifier.fillMaxWidth()
                             ) {
-                                Column {
-                                    d.depends.forEachIndexed { index, dep ->
-                                        Row(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(vertical = 10.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Text(
-                                                text = dep,
-                                                fontSize = 14.sp,
-                                                color = colorScheme.onSurface,
-                                                modifier = Modifier.weight(1f)
+                                ArrowPreference(
+                                    title = depName,
+                                    summary = summaryLine,
+                                    onClick = {
+                                        if (depInfo != null) {
+                                            onOpenPackageDetail?.invoke(
+                                                depInfo.copy(isInstalled = depName in installedNames)
                                             )
+                                        } else {
+                                            Toast.makeText(context, "源内没有此软件包", Toast.LENGTH_SHORT).show()
                                         }
-                                        if (index != d.depends.lastIndex) {
-                                            HorizontalDivider(
-                                                modifier = Modifier.padding(vertical = 4.dp),
-                                                color = colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f)
-                                            )
-                                        }
+                                    },
+                                    endActions = {
+                                        Text(
+                                            text = status.text,
+                                            fontSize = 13.sp,
+                                            color = status.color,
+                                            fontWeight = FontWeight.Medium
+                                        )
                                     }
-                                }
+                                )
                             }
                         }
                     }
 
-                    // Conflicts card
+                    // Conflicts section — 每个冲突一张卡片
                     if (d.conflicts.isNotEmpty()) {
                         item {
                             SmallTitle(
                                 text = "冲突",
                                 modifier = Modifier.padding(top = 6.dp)
                             )
+                        }
+                        items(d.conflicts) { confName ->
+                            val confInfo = confDetails[confName]
+                            val status = if (confName in installedNames) {
+                                ConfStatus.NOT_SATISFIED
+                            } else {
+                                ConfStatus.SATISFIED
+                            }
+                            val summaryLine = if (confInfo != null) {
+                                val versionPart = confInfo.version.takeIf { it.isNotBlank() }?.let { "v$it" } ?: ""
+                                val sectionPart = confInfo.section.takeIf { it.isNotBlank() }
+                                val parts = listOfNotNull(versionPart, sectionPart)
+                                parts.joinToString(" · ").ifBlank { "暂无相关信息" }
+                            } else {
+                                "暂无相关信息"
+                            }
+
                             Card(
-                                modifier = Modifier.fillMaxWidth(),
-                                insideMargin = PaddingValues(horizontal = 16.dp, vertical = 4.dp)
+                                modifier = Modifier.fillMaxWidth()
                             ) {
-                                Column {
-                                    d.conflicts.forEachIndexed { index, conf ->
-                                        Row(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(vertical = 10.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Text(
-                                                text = conf,
-                                                fontSize = 14.sp,
-                                                color = DangerRed,
-                                                modifier = Modifier.weight(1f)
+                                ArrowPreference(
+                                    title = confName,
+                                    summary = summaryLine,
+                                    onClick = {
+                                        if (confInfo != null) {
+                                            onOpenPackageDetail?.invoke(
+                                                confInfo.copy(isInstalled = confName in installedNames)
                                             )
+                                        } else {
+                                            Toast.makeText(context, "源内没有此软件包", Toast.LENGTH_SHORT).show()
                                         }
-                                        if (index != d.conflicts.lastIndex) {
-                                            HorizontalDivider(
-                                                modifier = Modifier.padding(vertical = 4.dp),
-                                                color = colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f)
-                                            )
-                                        }
+                                    },
+                                    endActions = {
+                                        Text(
+                                            text = status.text,
+                                            fontSize = 13.sp,
+                                            color = status.color,
+                                            fontWeight = FontWeight.Medium
+                                        )
                                     }
-                                }
+                                )
                             }
                         }
                     }

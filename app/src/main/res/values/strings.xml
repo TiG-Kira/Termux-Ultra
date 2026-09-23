@@ -1340,10 +1340,10 @@
     <string name="action_delete">删除</string>
 
     <!-- Package Manager Enhance -->
-    <string name="pkg_view_mode">软件包管理显示方式</string>
-    <string name="pkg_view_mode_desc">更改软件包管理页面的展示方式</string>
-    <string name="pkg_view_mode_category">分类视图</string>
-    <string name="pkg_view_mode_list">列表视图</string>
+    <string name="pkg_view_mode">Package Manager Display</string>
+    <string name="pkg_view_mode_desc">Change the display mode of the package management page</string>
+    <string name="pkg_view_mode_category">Category View</string>
+    <string name="pkg_view_mode_list">List View</string>
     <string name="pkg_empty_installed">还没有安装任何软件包</string>
     <string name="pkg_empty_installed_hint">前往「未安装」页面挑选第一个包吧</string>
     <string name="pkg_empty_available">所有可用包都已安装 🎉</string>
