@@ -306,42 +306,69 @@ fun PackageDetailScreen(
                     }
 
                     // Info section — 每个信息独立一张卡片
-                    val infoFields = mutableListOf<Pair<String, String>>()
-                    if (d.homepage.isNotBlank()) infoFields.add("主页" to d.homepage)
-                    if (d.maintainer.isNotBlank()) infoFields.add("维护者" to d.maintainer)
-                    if (d.size.isNotBlank()) infoFields.add("大小" to d.size)
-                    if (d.license.isNotBlank()) infoFields.add("许可证" to d.license)
-
-                    if (infoFields.isNotEmpty()) {
+                    if (d.homepage.isNotBlank() || d.maintainer.isNotBlank() ||
+                        d.size.isNotBlank() || d.license.isNotBlank()) {
                         item {
                             SmallTitle(
                                 text = stringResource(R.string.log_level_info),
                                 modifier = Modifier.padding(top = 6.dp)
                             )
                         }
-                        items(infoFields) { (label, value) ->
-                            val isHomepage = label == "主页"
-                            val isLongUrl = value.length > 40
-                            val summaryText = if (isHomepage && isLongUrl) value.take(38) + "…" else value
+                    }
+
+                    // Homepage — 可跳转，用 ArrowPreference
+                    if (d.homepage.isNotBlank()) {
+                        item {
+                            val isLongUrl = d.homepage.length > 40
+                            val summaryText = if (isLongUrl) d.homepage.take(38) + "…" else d.homepage
                             Card(
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 ArrowPreference(
-                                    title = label,
+                                    title = "主页",
                                     summary = summaryText,
-                                    onClick = {
-                                        if (isHomepage) openHomepage(value)
-                                    },
-                                    startAction = if (isHomepage) {
-                                        {
-                                            Icon(
-                                                painter = painterResource(R.drawable.ic_link),
-                                                contentDescription = null,
-                                                tint = colorScheme.onSurfaceVariantSummary,
-                                                modifier = Modifier.size(20.dp)
-                                            )
-                                        }
-                                    } else null
+                                    onClick = { openHomepage(d.homepage) },
+                                    startAction = {
+                                        Icon(
+                                            painter = painterResource(R.drawable.ic_link),
+                                            contentDescription = null,
+                                            tint = colorScheme.onSurfaceVariantSummary,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+                                )
+                            }
+                        }
+                    }
+
+                    // Maintainer / Size / License — 不可跳转，只 Card + 文本
+                    val plainInfoFields = mutableListOf<Pair<String, String>>()
+                    if (d.maintainer.isNotBlank()) plainInfoFields.add("维护者" to d.maintainer)
+                    if (d.size.isNotBlank()) plainInfoFields.add("大小" to d.size)
+                    if (d.license.isNotBlank()) plainInfoFields.add("许可证" to d.license)
+
+                    items(plainInfoFields) { (label, value) ->
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            insideMargin = PaddingValues(horizontal = 16.dp, vertical = 14.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = label,
+                                    fontSize = 14.sp,
+                                    color = colorScheme.onSurfaceVariantSummary,
+                                    modifier = Modifier.width(72.dp)
+                                )
+                                Text(
+                                    text = value,
+                                    fontSize = 14.sp,
+                                    color = colorScheme.onSurface,
+                                    modifier = Modifier.weight(1f),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                             }
                         }
