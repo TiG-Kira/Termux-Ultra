@@ -57,6 +57,16 @@
     </style>
 
 
+    <!-- AppCompat DayNight 基础主题。给主页/Oobe/日志管理等 Compose 页面用，
+         状态栏/导航栏颜色跟随系统亮暗模式对齐 Compose TopAppBar 的 hyper_surface。
+         KiTerminalTheme 不再覆盖 statusBarColor（默认 Color.Unspecified），
+         直接吃这里的主题值。 -->
+    <style name="Theme.Termux.AppBase" parent="Theme.AppCompat.DayNight.NoActionBar">
+        <item name="android:statusBarColor">@color/hyper_surface</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:enforceStatusBarContrast">false</item>
+    </style>
+
     <style name="TermuxAlertDialogStyle" parent="@android:style/Theme.Material.Light.Dialog.Alert">
         <!-- Seen in buttons on alert dialog: -->
         <item name="android:colorAccent">#212121</item>
