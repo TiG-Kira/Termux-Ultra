@@ -1,0 +1,242 @@
+name: 依赖污染检查
+
+# 来源：#143 事故。dependabot 只改了 vendor 子模块的 build.gradle，
+# diff 上完全看不出问题，但 :app 依赖 project(':termux-api')，Gradle 单版本策略取最高版本，
+# 把主 app 的传递依赖一起顶上去 —— 编译照过，运行时才炸
+# （androidx.biometric 1.4.0-alpha07 把 FingerprintDialogFragment 挪进了 internal 包，
+#  VncActivity.onCreate 直接 NoClassDefFoundError）。
+#
+# 所以这里**不看 diff**，而是真正解析 :app 的依赖图并与基线对比。
+# 不局限于 Dependabot：任何 PR 只要动了依赖清单就会走这套判定。
+#
+# 编排说明：
+# 本工作流以 workflow_call 形式被「单元测试」工作流当作**第一个作业**调用。
+# GitHub Actions 无法在「两个独立工作流之间」可靠地排序并传递跳过指令
+# （只能用轮询 API，存在竞态），所以唯一无竞态的做法是用 needs 放在同一工作流内。
+# 结果就是：它一定在单元测试之前跑完；ci.yml（编译）等其它工作流照常并行、不被跳过。
+on:
+  workflow_call:
+    inputs:
+      base-sha:
+        description: '对比基线（一般传 PR 的 base.sha），留空则回退到默认分支'
+        required: false
+        type: string
+      configuration:
+        description: '要解析的 :app 配置'
+        required: false
+        type: string
+        default: 'debugRuntimeClasspath'
+    outputs:
+      polluted:
+        description: '是否检出依赖污染（true / false）'
+        value: ${{ jobs.guard.outputs.polluted }}
+      verdict:
+        description: '判定结果：clean / polluted / unknown'
+        value: ${{ jobs.guard.outputs.verdict }}
+      run-unit-tests:
+        description: '后续是否仍需跑单元测试；false 表示本工作流已跑过（或无需跑）'
+        value: ${{ jobs.guard.outputs.run-unit-tests }}
+  workflow_dispatch:
+    inputs:
+      base-sha:
+        description: '对比基线 commit，留空则回退到默认分支'
+        required: false
+        type: string
+      configuration:
+        description: '要解析的 :app 配置'
+        required: false
+        type: string
+        default: 'debugRuntimeClasspath'
+
+permissions:
+  contents: read
+
+jobs:
+  guard:
+    name: "依赖图对比"
+    runs-on: ubuntu-26.04
+    timeout-minutes: 45
+    outputs:
+      polluted: ${{ steps.finalize.outputs.polluted }}
+      verdict: ${{ steps.finalize.outputs.verdict }}
+      run-unit-tests: ${{ steps.finalize.outputs.run-unit-tests }}
+    env:
+      CONFIGURATION: ${{ inputs.configuration || 'debugRuntimeClasspath' }}
+      DUMP_SCRIPT: .github/scripts/dump-app-deps.gradle
+      GUARD_SCRIPT: .github/scripts/dependency-guard.py
+      WORK_DIR: ${{ runner.temp }}/depguard
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v7
+        with:
+          # 需要拿到 base 才能算「变更了什么」并解析基线依赖图
+          fetch-depth: 0
+
+      - name: 解析基线与变更文件
+        id: prepare
+        env:
+          INPUT_BASE_SHA: ${{ inputs.base-sha }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$WORK_DIR"
+
+          BASE_SHA="${INPUT_BASE_SHA:-${PR_BASE_SHA:-}}"
+          if [ -z "$BASE_SHA" ]; then
+            echo "未拿到 base.sha，回退到默认分支 HEAD"
+            BASE_SHA="$(gh api "repos/$GITHUB_REPOSITORY/commits/${{ github.event.repository.default_branch }}" --jq .sha)"
+          fi
+          git fetch --no-tags --depth=1 origin "$BASE_SHA" || echo "::warning::拉取基线 $BASE_SHA 失败"
+          echo "base-sha=$BASE_SHA" >> "$GITHUB_OUTPUT"
+
+          git diff --name-only "$BASE_SHA" HEAD > "$WORK_DIR/changed-files.txt" || true
+          echo "--- 本次变更文件 ---"
+          cat "$WORK_DIR/changed-files.txt"
+
+          # 只有依赖清单类文件才可能影响依赖图，其余直接放行
+          MANIFEST_RE='(^|/)(build\.gradle|build\.gradle\.kts|settings\.gradle|settings\.gradle\.kts|gradle\.properties|gradle-wrapper\.properties|.*\.versions\.toml)$'
+          grep -E "$MANIFEST_RE" "$WORK_DIR/changed-files.txt" > "$WORK_DIR/manifests.txt" || true
+
+          if [ ! -s "$WORK_DIR/manifests.txt" ]; then
+            echo "本次没有依赖清单改动，跳过依赖图对比"
+            echo "has-manifest-changes=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "has-manifest-changes=true" >> "$GITHUB_OUTPUT"
+
+          # 清单文件的 diff 文本，用于抽取「声明改动了哪些坐标」
+          : > "$WORK_DIR/manifests.diff"
+          while IFS= read -r f; do
+            git diff "$BASE_SHA" HEAD -- "$f" >> "$WORK_DIR/manifests.diff" || true
+          done < "$WORK_DIR/manifests.txt"
+
+      - name: 设置 JDK 21
+        if: steps.prepare.outputs.has-manifest-changes == 'true'
+        uses: actions/setup-java@v6
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: gradle
+
+      # 解析当前分支（PR head）的 :app 依赖图
+      - name: 解析当前分支依赖图
+        if: steps.prepare.outputs.has-manifest-changes == 'true'
+        env:
+          DUMP_DEPS_OUTPUT: ${{ runner.temp }}/depguard/head-deps.txt
+          DUMP_DEPS_CONFIGURATION: ${{ env.CONFIGURATION }}
+          TERMUX_WORKFLOW_CLI: 'true'
+        run: |
+          set -euo pipefail
+          ./gradlew -I "$DUMP_SCRIPT" :app:dumpAppResolvedDeps --console=plain
+          wc -l < "$DUMP_DEPS_OUTPUT"
+
+      # 用 worktree 检出基线再解析一次。解析失败不致命 —— 后面会退化成 unknown 并放行测试。
+      - name: 解析基线依赖图
+        if: steps.prepare.outputs.has-manifest-changes == 'true'
+        env:
+          DUMP_DEPS_OUTPUT: ${{ runner.temp }}/depguard/base-deps.txt
+          DUMP_DEPS_CONFIGURATION: ${{ env.CONFIGURATION }}
+          TERMUX_WORKFLOW_CLI: 'true'
+        run: |
+          set -uo pipefail
+          BASE_SHA="${{ steps.prepare.outputs.base-sha }}"
+          WT="$WORK_DIR/base"
+          if ! git worktree add "$WT" "$BASE_SHA"; then
+            echo "::warning::无法为基线 $BASE_SHA 建立 worktree，跳过基线解析"
+            exit 0
+          fi
+          git config --global --add safe.directory "$WT" || true
+          cd "$WT"
+          if ! ./gradlew -I "$GITHUB_WORKSPACE/$DUMP_SCRIPT" :app:dumpAppResolvedDeps --console=plain; then
+            echo "::warning::基线依赖图解析失败，判定将退化为 unknown"
+            rm -f "$DUMP_DEPS_OUTPUT"
+          fi
+
+      - name: 判定依赖污染
+        id: analyze
+        if: steps.prepare.outputs.has-manifest-changes == 'true'
+        run: |
+          set -uo pipefail
+          python3 "$GUARD_SCRIPT" \
+            --base-deps "$WORK_DIR/base-deps.txt" \
+            --head-deps "$WORK_DIR/head-deps.txt" \
+            --changed-files "$WORK_DIR/manifests.txt" \
+            --diff "$WORK_DIR/manifests.diff" \
+            --summary-out "$WORK_DIR/summary.md" \
+            --annotations-out "$WORK_DIR/annotations.txt" \
+            --github-out "$GITHUB_OUTPUT"
+          {
+            echo "### 依赖污染检查"
+            echo
+            cat "$WORK_DIR/summary.md"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 抛出污染注解
+        if: steps.prepare.outputs.has-manifest-changes == 'true' && steps.analyze.outputs.polluted == 'true'
+        run: |
+          set -uo pipefail
+          echo "::warning title=依赖污染::检测到 :app 的依赖图发生声明之外的变化，详见作业摘要"
+          while IFS= read -r msg; do
+            [ -n "$msg" ] && echo "::warning title=依赖污染::$msg"
+          done < "$WORK_DIR/annotations.txt"
+
+      # 有污染就立刻在这里跑一遍单元测试：
+      # - 通过 -> 本作业仍然成功（只告警不失败），并让后续的单元测试作业跳过
+      # - 不通过 -> 本作业直接失败，PR 变红
+      - name: 污染时立即运行单元测试
+        id: tests
+        if: steps.analyze.outputs.polluted == 'true'
+        env:
+          TERMUX_WORKFLOW_CLI: 'true'
+        run: |
+          set -uo pipefail
+          if ./gradlew test; then
+            echo "passed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "passed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: 上传测试报告
+        if: steps.tests.outputs.passed == 'false'
+        uses: actions/upload-artifact@v7
+        with:
+          name: dependency-guard-test-reports
+          if-no-files-found: ignore
+          path: |
+            **/build/reports/tests/**
+            **/build/test-results/**
+
+      - name: 汇总结论
+        id: finalize
+        if: always()
+        env:
+          HAS_MANIFEST_CHANGES: ${{ steps.prepare.outputs.has-manifest-changes }}
+          POLLUTED: ${{ steps.analyze.outputs.polluted }}
+          VERDICT: ${{ steps.analyze.outputs.verdict }}
+          TESTS_PASSED: ${{ steps.tests.outputs.passed }}
+        run: |
+          set -uo pipefail
+          POLLUTED="${POLLUTED:-false}"
+          VERDICT="${VERDICT:-${HAS_MANIFEST_CHANGES:+unknown}}"
+          VERDICT="${VERDICT:-clean}"
+
+          if [ "$POLLUTED" != "true" ]; then
+            # 无污染（或压根没动清单）：常规流程继续，单元测试照跑
+            echo "polluted=false" >> "$GITHUB_OUTPUT"
+            echo "verdict=$VERDICT" >> "$GITHUB_OUTPUT"
+            echo "run-unit-tests=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # 有污染：测试已经在本作业跑过了，后续不必重复跑
+          echo "polluted=true" >> "$GITHUB_OUTPUT"
+          echo "verdict=$VERDICT" >> "$GITHUB_OUTPUT"
+          echo "run-unit-tests=false" >> "$GITHUB_OUTPUT"
+
+          if [ "$TESTS_PASSED" = "false" ]; then
+            echo "::error title=依赖污染::污染已确认且单元测试失败，本检查判定为失败"
+            exit 1
+          fi
+          echo "::warning title=依赖污染::污染已检出但单元测试通过：仅告警，不判定失败，后续单元测试已跳过"
