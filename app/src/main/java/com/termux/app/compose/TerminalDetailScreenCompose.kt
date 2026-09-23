@@ -422,20 +422,15 @@ fun TerminalDetailScreenCompose(
         if (act != null) {
             val window = act.window
             val controller = androidx.core.view.WindowCompat.getInsetsController(window, window.decorView)
-            if (!isCompact) {
-                // TopAppBar visible: status bar matches TopAppBar background, fully opaque
-                window.statusBarColor = android.graphics.Color.argb(
-                    255,
-                    (topBarOpaqueBg.red * 255).toInt(),
-                    (topBarOpaqueBg.green * 255).toInt(),
-                    (topBarOpaqueBg.blue * 255).toInt()
-                )
-                controller.isAppearanceLightStatusBars = topBarOpaqueBg.luminance() > 0.5f
-            } else {
-                // SmallTopAppBar mode: status bar transparent
-                window.statusBarColor = android.graphics.Color.TRANSPARENT
-                controller.isAppearanceLightStatusBars = !isTerminalDark
-            }
+            // 无论 TopAppBar 是否折叠，状态栏都对齐 hyper_surface（topBarOpaqueBg），
+            // 避免 SmallTopAppBar 模式下透明状态栏透出 windowBackground 导致颜色不一致。
+            window.statusBarColor = android.graphics.Color.argb(
+                255,
+                (topBarOpaqueBg.red * 255).toInt(),
+                (topBarOpaqueBg.green * 255).toInt(),
+                (topBarOpaqueBg.blue * 255).toInt()
+            )
+            controller.isAppearanceLightStatusBars = topBarOpaqueBg.luminance() > 0.5f
             controller.isAppearanceLightNavigationBars = !isTerminalDark
         }
     }
