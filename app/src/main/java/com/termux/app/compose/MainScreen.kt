@@ -163,16 +163,17 @@ fun MainScreen(
 
     // 经典底栏（miuix NavigationBar）自身高度
     val classicNavHeight = 56.dp
-    // 浮动玻璃底栏：GlassNavigationBarDefaults.Height(54dp) + 底部留白(24dp, 对齐液态玻璃)
-    val glassNavTotalHeight = 54.dp + 24.dp
+    // 浮动玻璃底栏：GlassNavigationBarDefaults.Height(54dp)，底部留白不再硬编码，
+    // 由 Modifier.padding(bottom = systemNavBarsHeight) 动态贴系统导航栏上边缘
+    val glassNavTotalHeight = 54.dp
     val navContainerHeight = getNavContainerHeight(availableTabs.size, NavStyle.GLASS)
     val totalNavHeight = when (navStyle) {
-        // 浮动玻璃：悬浮于系统导航栏之上
+        // 浮动玻璃：动态贴系统导航栏上边缘
         0 -> glassNavTotalHeight + systemNavBarsHeight
         // 经典：贴合系统导航栏
         1 -> classicNavHeight + systemNavBarsHeight
-        // 玻璃：底部留白已含在 navContainerHeight 内
-        else -> navContainerHeight
+        // 液态玻璃：容器高度 + 动态贴系统导航栏上边缘
+        else -> systemNavBarsHeight + navContainerHeight
     }
     val snackbarBottomPadding = when (navStyle) {
         0 -> glassNavTotalHeight + systemNavBarsHeight + 8.dp
@@ -280,6 +281,7 @@ fun MainScreen(
                         selectedIndex = availableTabs.indexOf(selectedTab).coerceAtLeast(0),
                         itemCount = availableTabs.size,
                         backdrop = liquidGlassBackdrop,
+                        modifier = Modifier.padding(bottom = systemNavBarsHeight),
                         onIndexChange = { index ->
                             val actualTab = availableTabs.getOrElse(index) { selectedTab }
                             if (actualTab != selectedTab) {
@@ -440,7 +442,7 @@ fun MainScreen(
                         modifier = Modifier.padding(
                             start = 24.dp,
                             end = 24.dp,
-                            bottom = systemNavBarsHeight + 24.dp
+                            bottom = systemNavBarsHeight
                         )
                     )
                 }
