@@ -48,6 +48,8 @@ import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.basic.SnackbarHost
 import top.yukonga.miuix.kmp.basic.SnackbarHostState
 import top.yukonga.miuix.kmp.basic.SnackbarDuration
+import top.yukonga.miuix.kmp.basic.InputField
+import top.yukonga.miuix.kmp.basic.SearchBar
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.ui.res.stringResource
@@ -78,6 +80,15 @@ data class SettingItem(
     val hasSwitch: Boolean = false,
     val switchValue: Boolean = false,
     val onSwitchChange: (Boolean) -> Unit = {}
+)
+
+/** 搜索用设置项元数据 */
+private data class SearchableSetting(
+    val section: String,
+    val title: String,
+    val summary: String,
+    val keywords: List<String>,
+    val render: @Composable () -> Unit
 )
 
 @Composable
@@ -128,6 +139,10 @@ fun SettingsScreen(
     var editingSkill by remember { mutableStateOf<CustomSkill?>(null) }
     var showSystemPromptFilePicker by remember { mutableStateOf(false) }
     var showSystemPromptRestoreConfirm by remember { mutableStateOf(false) }
+
+    // 设置页搜索
+    var searchQuery by remember { mutableStateOf("") }
+    var searchExpanded by remember { mutableStateOf(false) }
     var systemPromptSource by remember { mutableStateOf("") }
     val prefs = remember { context.getSharedPreferences("app_settings", Context.MODE_PRIVATE) }
     var vncEnabled by remember { mutableStateOf(prefs.getBoolean("vnc_enabled", false)) }
@@ -548,6 +563,386 @@ val composeTextBlinking by com.termux.app.compose.terminal.ComposeTerminalSettin
         }
     }
 
+    // ===== 搜索索引：所有可搜索设置项（独立 Card 展示 + 保留交互）=====
+    val sec_appearance = context.getString(R.string.appearance)
+    val sec_remote = context.getString(R.string.remote)
+    val sec_terminal = context.getString(R.string.terminal)
+    val sec_tools = context.getString(R.string.integrated_tools_category)
+    val sec_ai = "Termux Agent"
+    val sec_tool_config = context.getString(R.string.tool_config_category)
+    val sec_security = context.getString(R.string.security_settings)
+    val sec_system = context.getString(R.string.system_category)
+    val sec_backup = context.getString(R.string.backup_category)
+
+    val searchableItems = listOf(
+        // ===== Appearance =====
+        SearchableSetting(sec_appearance, context.getString(R.string.language), context.getString(R.string.language_description),
+            keywords = listOf("语言", "language", "中文", "英文", "locale"),
+            render = {
+                OverlayDropdownPreference(
+                    title = context.getString(R.string.language),
+                    summary = context.getString(R.string.language_description),
+                    items = languageOptions,
+                    selectedIndex = languageSelectedIndex,
+                    onSelectedIndexChange = { idx ->
+                        languageSelectedIndex = idx
+                        if (idx == 0) LocaleHelper.setChinese(context) else LocaleHelper.setEnglish(context)
+                        showRestartPrompt = true
+                    },
+                    startAction = { SettingIcon(R.drawable.ic_language, contentDescription = context.getString(R.string.language)) }
+                )
+            }),
+        SearchableSetting(sec_appearance, context.getString(R.string.navigation_bar_style), context.getString(R.string.navigation_bar_style_description),
+            keywords = listOf("导航栏", "navigation", "navbar", "玻璃", "classic", "liquid"),
+            render = {
+                OverlayDropdownPreference(
+                    title = context.getString(R.string.navigation_bar_style),
+                    summary = context.getString(R.string.navigation_bar_style_description),
+                    items = navBarStyleOptions,
+                    selectedIndex = navBarSelectedIndex,
+                    onSelectedIndexChange = { idx ->
+                        if (idx == 2 && !ApiCompat.isFeatureUsable(context, ApiCompat.Feature.GLASS_NAVIGATION_BAR)) {
+                            pendingNavStyleIndex = idx; showCriticalNavDialog = true; return@OverlayDropdownPreference
+                        }
+                        navBarSelectedIndex = idx
+                        val style = when (idx) { 1 -> "classic"; 2 -> "liquid_glass"; else -> "glass" }
+                        prefs.edit().putString("navigation_bar_style", style).apply()
+                        showNavRestartPrompt = true
+                    },
+                    startAction = { SettingIcon(R.drawable.ic_navigation, contentDescription = context.getString(R.string.navigation_bar_style)) }
+                )
+            }),
+        SearchableSetting(sec_appearance, context.getString(R.string.horizontal_tip_layout), context.getString(R.string.overview_horizontal_cards_desc),
+            keywords = listOf("横排", "布局", "layout", "horizontal", "cards"),
+            render = {
+                SwitchPreference(
+                    title = context.getString(R.string.horizontal_tip_layout),
+                    summary = context.getString(R.string.overview_horizontal_cards_desc),
+                    checked = cardLayoutMode == 1,
+                    onCheckedChange = { cardLayoutMode = if (it) 1 else 0; prefs.edit().putInt("KEY_CARD_LAYOUT_MODE", cardLayoutMode).apply() },
+                    startAction = { SettingIcon(R.drawable.ic_swap, contentDescription = context.getString(R.string.horizontal_tip_layout)) }
+                )
+            }),
+        SearchableSetting(sec_appearance, context.getString(R.string.pkg_view_mode), context.getString(R.string.pkg_view_mode_desc),
+            keywords = listOf("软件包", "包管理", "package", "分类", "列表", "view mode"),
+            render = {
+                OverlayDropdownPreference(
+                    title = context.getString(R.string.pkg_view_mode),
+                    summary = context.getString(R.string.pkg_view_mode_desc),
+                    items = listOf(context.getString(R.string.pkg_view_mode_category), context.getString(R.string.pkg_view_mode_list)),
+                    selectedIndex = pkgViewModeIndex,
+                    onSelectedIndexChange = { idx -> pkgViewModeIndex = idx; prefs.edit().putInt("KEY_PKG_VIEW_MODE", idx).apply() },
+                    startAction = { SettingIcon(R.drawable.ic_folder, contentDescription = context.getString(R.string.pkg_view_mode)) }
+                )
+            }),
+
+        // ===== Remote =====
+        SearchableSetting(sec_remote, context.getString(R.string.vnc), context.getString(R.string.vnc_description),
+            keywords = listOf("vnc", "远程", "remote", "桌面"),
+            render = {
+                SwitchPreference(
+                    title = context.getString(R.string.vnc),
+                    summary = if (vncEnabled) context.getString(R.string.vnc_summary) else context.getString(R.string.vnc_not_running),
+                    checked = vncEnabled,
+                    onCheckedChange = { vncEnabled = it; prefs.edit().putBoolean("vnc_enabled", it).apply() },
+                    startAction = { SettingIcon(R.drawable.ic_monitor, contentDescription = context.getString(R.string.vnc)) }
+                )
+            }),
+
+        // ===== Terminal =====
+        SearchableSetting(sec_terminal, context.getString(R.string.terminal_runtime_core), context.getString(R.string.runtime_core_switch_desc),
+            keywords = listOf("运行核心", "runtime", "kotlin", "compose", "java", "ndk", "内核"),
+            render = {
+                val runtimeCoreItems = TerminalRuntimeCore.Core.entries.map { it.displayName(context) }
+                val currentCoreIndex = TerminalRuntimeCore.Core.entries.indexOf(runtimeCore)
+                OverlayDropdownPreference(
+                    title = context.getString(R.string.terminal_runtime_core),
+                    summary = context.getString(R.string.runtime_core_switch_desc),
+                    items = runtimeCoreItems,
+                    selectedIndex = currentCoreIndex,
+                    onSelectedIndexChange = { idx ->
+                        val selected = TerminalRuntimeCore.Core.entries[idx]
+                        if (selected == TerminalRuntimeCore.Core.KOTLIN_COMPOSE && !TerminalRuntimeCore.isComposeSupported) return@OverlayDropdownPreference
+                        if (selected != runtimeCore) {
+                            TerminalRuntimeCore.killAllSessions(context)
+                            TerminalRuntimeCore.applyPluginState(context, selected)
+                            TerminalRuntimeCore.setCurrent(context, selected)
+                            runtimeCore = selected
+                            showSnackbar(context.getString(R.string.switched_core_selected, selected.displayName(context)))
+                        }
+                    },
+                    startAction = { SettingIcon(R.drawable.ic_terminal) }
+                )
+            }),
+        SearchableSetting(sec_terminal, context.getString(R.string.enable_softkeyboard), context.getString(R.string.enable_softkeyboard_desc),
+            keywords = listOf("软键盘", "softkeyboard", "键盘", "keyboard"),
+            render = {
+                SwitchPreference(
+                    title = context.getString(R.string.enable_softkeyboard),
+                    summary = if (softKeyboardEnabled) context.getString(R.string.enabled) else context.getString(R.string.disabled),
+                    checked = softKeyboardEnabled,
+                    onCheckedChange = { softKeyboardEnabled = it; terminalPrefs?.setSoftKeyboardEnabled(it) },
+                    startAction = { SettingIcon(R.drawable.ic_keyboard) }
+                )
+            }),
+        SearchableSetting(sec_terminal, context.getString(R.string.log_level), context.getString(R.string.log_level_desc),
+            keywords = listOf("日志", "log", "调试", "debug", "verbose"),
+            render = {
+                OverlayDropdownPreference(
+                    title = context.getString(R.string.log_level),
+                    summary = context.getString(R.string.log_level_desc),
+                    items = listOf(context.getString(R.string.off), context.getString(R.string.normal), context.getString(R.string.debug), context.getString(R.string.verbose)),
+                    selectedIndex = logLevel.coerceIn(0, 3),
+                    onSelectedIndexChange = { idx -> logLevel = idx; terminalPrefs?.setLogLevel(context, idx) },
+                    startAction = { SettingIcon(R.drawable.ic_bug) }
+                )
+            }),
+        SearchableSetting(sec_terminal, context.getString(R.string.font_size), context.getString(R.string.font_size_desc),
+            keywords = listOf("字体", "font", "字号", "大小"),
+            render = {
+                OverlayDropdownPreference(
+                    title = context.getString(R.string.font_size),
+                    summary = context.getString(R.string.font_size_desc),
+                    items = listOf("10sp", "12sp", "14sp", "16sp", "18sp", "20sp", "24sp"),
+                    selectedIndex = listOf(10, 12, 14, 16, 18, 20, 24).indexOf(composeFontSize).coerceAtLeast(0),
+                    onSelectedIndexChange = { idx ->
+                        com.termux.app.compose.terminal.ComposeTerminalSettings.setFontSize(listOf(10, 12, 14, 16, 18, 20, 24)[idx])
+                    },
+                    startAction = { SettingIcon(R.drawable.ic_text_size) }
+                )
+            }),
+        SearchableSetting(sec_terminal, context.getString(R.string.cursor_style), context.getString(R.string.cursor_style_desc),
+            keywords = listOf("光标", "cursor", "闪烁", "blink"),
+            render = {
+                OverlayDropdownPreference(
+                    title = context.getString(R.string.cursor_style),
+                    summary = context.getString(R.string.cursor_style_desc),
+                    items = listOf("Bar I", "Underline ▁", "Block ■"),
+                    selectedIndex = listOf("BAR", "UNDERLINE", "BLOCK").indexOf(composeCursorStyleName).coerceAtLeast(0),
+                    onSelectedIndexChange = { idx ->
+                        com.termux.app.compose.terminal.ComposeTerminalSettings.setCursorStyle(
+                            com.termux.app.compose.terminal.engine.TerminalCursorStyle.valueOf(listOf("BAR", "UNDERLINE", "BLOCK")[idx])
+                        )
+                    },
+                    startAction = { SettingIcon(R.drawable.ic_terminal) }
+                )
+            }),
+        SearchableSetting(sec_terminal, stringResource(R.string.editor_tools), "",
+            keywords = listOf("编辑器", "editor", "vim", "文本编辑"),
+            render = {
+                var editorToolIndex by remember { mutableStateOf(prefs.getString("editor_tool", "internal")?.let { if (it == "vim") 1 else 0 } ?: 0) }
+                OverlayDropdownPreference(
+                    title = stringResource(R.string.editor_tools),
+                    summary = if (editorToolIndex == 0) "内置文本编辑器" else "Vim (终端中)",
+                    items = listOf("内置", "Vim"),
+                    selectedIndex = editorToolIndex,
+                    onSelectedIndexChange = { idx ->
+                        editorToolIndex = idx
+                        prefs.edit().putString("editor_tool", if (idx == 0) "internal" else "vim").apply()
+                    },
+                    startAction = { SettingIcon(R.drawable.ic_edit) }
+                )
+            }),
+
+        // ===== Integrated Tools =====
+        SearchableSetting(sec_tools, context.getString(R.string.termux_api_tool), context.getString(R.string.termux_api_tool_summary),
+            keywords = listOf("termux-api", "api", "termux api"),
+            render = {
+                IntegratedToolSwitch(
+                    title = context.getString(R.string.termux_api_tool),
+                    summary = if (apiStandaloneInstalled) replacedSummary else context.getString(R.string.termux_api_tool_summary),
+                    iconRes = R.drawable.ic_terminal,
+                    checked = termuxApiEnabled,
+                    onCheckedChange = {
+                        termuxApiEnabled = it
+                        IntegratedTools.setEnabled(context, IntegratedTools.Tool.TERMUX_API, it)
+                        IntegratedTools.applyComponentState(context, IntegratedTools.Tool.TERMUX_API, it)
+                    },
+                    enabled = !apiStandaloneInstalled,
+                    onDisabledClick = { IntegratedTools.showStandaloneConflictPrompt(context, IntegratedTools.Tool.TERMUX_API) }
+                )
+            }),
+        SearchableSetting(sec_tools, context.getString(R.string.termux_boot_tool), context.getString(R.string.termux_boot_tool_summary),
+            keywords = listOf("termux-boot", "boot", "开机"),
+            render = {
+                IntegratedToolSwitch(
+                    title = context.getString(R.string.termux_boot_tool),
+                    summary = if (bootStandaloneInstalled) replacedSummary else context.getString(R.string.termux_boot_tool_summary),
+                    iconRes = R.drawable.ic_launch,
+                    checked = termuxBootEnabled,
+                    onCheckedChange = {
+                        termuxBootEnabled = it
+                        IntegratedTools.setEnabled(context, IntegratedTools.Tool.TERMUX_BOOT, it)
+                        IntegratedTools.applyComponentState(context, IntegratedTools.Tool.TERMUX_BOOT, it)
+                    },
+                    enabled = !bootStandaloneInstalled,
+                    onDisabledClick = { IntegratedTools.showStandaloneConflictPrompt(context, IntegratedTools.Tool.TERMUX_BOOT) }
+                )
+            }),
+        SearchableSetting(sec_tools, context.getString(R.string.termux_tasker_tool), context.getString(R.string.termux_tasker_tool_summary),
+            keywords = listOf("termux-tasker", "tasker", "自动化"),
+            render = {
+                IntegratedToolSwitch(
+                    title = context.getString(R.string.termux_tasker_tool),
+                    summary = if (taskerStandaloneInstalled) replacedSummary else context.getString(R.string.termux_tasker_tool_summary),
+                    iconRes = R.drawable.ic_tools,
+                    checked = termuxTaskerEnabled,
+                    onCheckedChange = {
+                        termuxTaskerEnabled = it
+                        IntegratedTools.setEnabled(context, IntegratedTools.Tool.TERMUX_TASKER, it)
+                        IntegratedTools.applyComponentState(context, IntegratedTools.Tool.TERMUX_TASKER, it)
+                    },
+                    enabled = !taskerStandaloneInstalled,
+                    onDisabledClick = { IntegratedTools.showStandaloneConflictPrompt(context, IntegratedTools.Tool.TERMUX_TASKER) }
+                )
+            }),
+        SearchableSetting(sec_tools, context.getString(R.string.termux_styling_tool), context.getString(R.string.termux_styling_tool_summary),
+            keywords = listOf("termux-styling", "styling", "主题", "theme"),
+            render = {
+                IntegratedToolSwitch(
+                    title = context.getString(R.string.termux_styling_tool),
+                    summary = if (stylingStandaloneInstalled) replacedSummary else context.getString(R.string.termux_styling_tool_summary),
+                    iconRes = R.drawable.ic_palette,
+                    checked = termuxStylingEnabled,
+                    onCheckedChange = {
+                        termuxStylingEnabled = it
+                        IntegratedTools.setEnabled(context, IntegratedTools.Tool.TERMUX_STYLING, it)
+                        IntegratedTools.applyComponentState(context, IntegratedTools.Tool.TERMUX_STYLING, it)
+                    },
+                    enabled = !stylingStandaloneInstalled,
+                    onDisabledClick = { IntegratedTools.showStandaloneConflictPrompt(context, IntegratedTools.Tool.TERMUX_STYLING) }
+                )
+            }),
+        SearchableSetting(sec_tools, context.getString(R.string.termux_widget_tool), context.getString(R.string.termux_widget_tool_summary),
+            keywords = listOf("termux-widget", "widget", "小部件"),
+            render = {
+                IntegratedToolSwitch(
+                    title = context.getString(R.string.termux_widget_tool),
+                    summary = if (widgetStandaloneInstalled) replacedSummary else context.getString(R.string.termux_widget_tool_summary),
+                    iconRes = R.drawable.ic_star,
+                    checked = termuxWidgetEnabled,
+                    onCheckedChange = {
+                        termuxWidgetEnabled = it
+                        IntegratedTools.setEnabled(context, IntegratedTools.Tool.TERMUX_WIDGET, it)
+                        IntegratedTools.applyComponentState(context, IntegratedTools.Tool.TERMUX_WIDGET, it)
+                    },
+                    enabled = !widgetStandaloneInstalled,
+                    onDisabledClick = { IntegratedTools.showStandaloneConflictPrompt(context, IntegratedTools.Tool.TERMUX_WIDGET) }
+                )
+            }),
+
+        // ===== AI Agent =====
+        SearchableSetting(sec_ai, "Termux Agent", context.getString(R.string.agent_entry_card_desc),
+            keywords = listOf("agent", "ai", "智能体", "大模型", "llm"),
+            render = {
+                SwitchPreference(
+                    title = "Termux Agent",
+                    summary = context.getString(R.string.agent_entry_card_desc),
+                    checked = aiTermuxEnabled,
+                    onCheckedChange = { aiTermuxEnabled = it; prefs.edit().putBoolean("ai_termux_enabled", it).apply() },
+                    startAction = { SettingIcon(R.drawable.ic_lightbulb, contentDescription = "Termux Agent") }
+                )
+            }),
+        SearchableSetting(sec_ai, context.getString(R.string.trust_whitelist), "",
+            keywords = listOf("白名单", "whitelist", "信任", "trust"),
+            render = {
+                val whitelistCount = autoExecConfig.autoExecSkills.size
+                val whitelistSummary = when {
+                    unlimitedMode -> context.getString(R.string.unrestricted_opened)
+                    whitelistCount == 0 -> context.getString(R.string.whitelist_off)
+                    else -> context.getString(R.string.whitelist_count_selected, whitelistCount)
+                }
+                ArrowPreference(
+                    title = context.getString(R.string.trust_whitelist),
+                    summary = whitelistSummary,
+                    enabled = !unlimitedMode,
+                    onClick = { showWhitelistDialog = true },
+                    startAction = { SettingIcon(R.drawable.ic_shield, contentDescription = context.getString(R.string.trust_whitelist)) }
+                )
+            }),
+        SearchableSetting(sec_ai, context.getString(R.string.reconfigure_ai), context.getString(R.string.back_to_config_desc),
+            keywords = listOf("重新配置", "reconfigure", "重新设置"),
+            render = {
+                ArrowPreference(
+                    title = context.getString(R.string.reconfigure_ai),
+                    summary = context.getString(R.string.back_to_config_desc),
+                    onClick = {
+                        val intent = Intent(context, com.termux.app.activities.AiTermuxActivity::class.java)
+                        intent.putExtra("force_setup", true); context.startActivity(intent)
+                    },
+                    startAction = { SettingIcon(R.drawable.ic_refresh, contentDescription = context.getString(R.string.reconfigure_ai)) }
+                )
+            }),
+        SearchableSetting(sec_ai, context.getString(R.string.clear_chat_history), context.getString(R.string.clear_agent_history_desc),
+            keywords = listOf("清除", "clear", "历史", "history", "聊天记录"),
+            render = {
+                ArrowPreference(
+                    title = context.getString(R.string.clear_chat_history),
+                    summary = context.getString(R.string.clear_agent_history_desc),
+                    onClick = { showAiClearConfirm = true },
+                    startAction = { SettingIcon(R.drawable.ic_delete, contentDescription = context.getString(R.string.clear_chat_history)) }
+                )
+            }),
+
+        // ===== Security =====
+        SearchableSetting(sec_security, context.getString(R.string.protection_level_title), "",
+            keywords = listOf("保护", "protection", "vortex", "guard", "安全等级"),
+            render = {
+                val protectionItems = RiskConfirmManager.ProtectionLevel.entries.map { level ->
+                    DropdownItem(text = level.displayName, summary = level.description)
+                }
+                WindowSpinnerPreference(
+                    title = context.getString(R.string.protection_level_title),
+                    summary = protectionLevel.description,
+                    items = protectionItems,
+                    selectedIndex = protectionLevelIndex,
+                    onSelectedIndexChange = { idx ->
+                        val newLevel = RiskConfirmManager.ProtectionLevel.entries[idx]
+                        if (newLevel == RiskConfirmManager.ProtectionLevel.OFF || newLevel == RiskConfirmManager.ProtectionLevel.WARN_ONLY) {
+                            RiskConfirmManager.showDisableWarning(context, newLevel)
+                        } else {
+                            protectionLevelIndex = idx; protectionLevel = newLevel
+                            RiskConfirmManager.setProtectionLevel(context, newLevel); riskConfirmEnabled = true
+                        }
+                    },
+                    startAction = { SettingIcon(R.drawable.ic_shield, contentDescription = context.getString(R.string.protection_level_title)) }
+                )
+            }),
+
+        // SettingsGroupCard 里的条目（动态展开）
+        *dataSettings.map { it.toSearchable(sec_backup) },
+        *toolConfigItems.map { it.toSearchable(sec_tool_config) },
+        *systemSettings.map { it.toSearchable(sec_system) },
+    )
+
+    // 将 SettingItem 转换为 SearchableSetting 的扩展函数
+    fun SettingItem.toSearchable(section: String): SearchableSetting {
+        return SearchableSetting(
+            section = section,
+            title = this.title,
+            summary = this.description,
+            keywords = listOf(this.title, this.description),
+            render = {
+                if (this.hasSwitch) {
+                    SwitchPreference(
+                        title = this.title,
+                        summary = this.description,
+                        checked = this.switchValue,
+                        onCheckedChange = this.onSwitchChange,
+                        startAction = { SettingIcon(this.iconRes, contentDescription = this.title) }
+                    )
+                } else {
+                    ArrowPreference(
+                        title = this.title,
+                        summary = this.description,
+                        onClick = this.action,
+                        startAction = { SettingIcon(this.iconRes, contentDescription = this.title) }
+                    )
+                }
+            }
+        )
+    }
+
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
@@ -560,6 +955,46 @@ val composeTextBlinking by com.termux.app.compose.terminal.ComposeTerminalSettin
                 .nestedScroll(scrollBehavior.nestedScrollConnection),
             contentPadding = PaddingValues(bottom = navBarBottomPadding + 16.dp)
         ) {
+            // ---------- 搜索栏（永远在最顶部）----------
+            item(key = "search_bar") {
+                SearchBar(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = if (searchExpanded) 8.dp else 0.dp),
+                    inputField = {
+                        InputField(
+                            query = searchQuery,
+                            onQueryChange = { searchQuery = it },
+                            onSearch = { },
+                            expanded = searchExpanded,
+                            onExpandedChange = {
+                                searchExpanded = it
+                                if (!it) searchQuery = ""
+                            },
+                            label = "搜索设置项"
+                        )
+                    },
+                    expanded = searchExpanded,
+                    onExpandedChange = {
+                        searchExpanded = it
+                        if (!it) searchQuery = ""
+                    },
+                    outsideEndAction = {
+                        if (searchExpanded) {
+                            Text(
+                                modifier = Modifier
+                                    .padding(start = 12.dp)
+                                    .clickable(interactionSource = null, indication = null) {
+                                        searchExpanded = false
+                                        searchQuery = ""
+                                    },
+                                text = stringResource(R.string.cancel),
+                                color = MiuixTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                )
+            }
+
+            if (searchQuery.isBlank()) {
             // ---------- GitHub 账户 ----------
             item(key = "github_account") { GitHubAccountCard() }
 
@@ -1390,6 +1825,46 @@ val composeTextBlinking by com.termux.app.compose.terminal.ComposeTerminalSettin
 
             // Extra bottom spacing for comfortable scroll
             item(key = "spacer_bottom") { Spacer(Modifier.height(16.dp)) }
+            } else {
+                // ---------- 搜索结果 ----------
+                val q = searchQuery.trim()
+                val matched = searchableItems.filter { item ->
+                    item.title.contains(q, ignoreCase = true) ||
+                    item.summary.contains(q, ignoreCase = true) ||
+                    item.section.contains(q, ignoreCase = true) ||
+                    item.keywords.any { it.contains(q, ignoreCase = true) }
+                }
+                if (matched.isEmpty()) {
+                    item(key = "search_empty") {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 80.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "没有找到匹配的设置项",
+                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                            )
+                        }
+                    }
+                } else {
+                    items(matched, key = { "search_${it.section}_${it.title}" }) { entry ->
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                                    .clip(RoundedCornerShape(16.dp))
+                            ) {
+                                Column {
+                                    entry.render()
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
 
     // ---------- Language restart prompt ----------
