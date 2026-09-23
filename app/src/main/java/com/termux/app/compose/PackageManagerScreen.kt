@@ -340,7 +340,8 @@ object PkgRepo {
             maintainer = fields["Maintainer"] ?: "",
             conflicts = conflicts,
             license = fields["License"] ?: "",
-            size = fields["Size"] ?: ""
+            size = fields["Size"] ?: "",
+            section = fields["Section"] ?: ""
         )
     }
 
@@ -693,6 +694,7 @@ fun PackageManagerScreen(
                 pkg = detail,
                 navBarBottomPadding = navBarBottomPadding,
                 onBack = { showDetail = null },
+                onOpenPackageDetail = { showDetail = it },
                 onChanged = { success ->
                     scope.launch {
                         installedList = PkgRepo.getInstalled(context)
