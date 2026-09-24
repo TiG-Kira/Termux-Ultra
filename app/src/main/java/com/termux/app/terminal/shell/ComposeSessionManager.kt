@@ -82,13 +82,11 @@ class ComposeSessionManager private constructor(private val context: Context) {
             processFactory = processFactory
         )
 
-        // 观察会话 uiEvent，维护 pidState / sessionExited 兼容属性的实时更新
+        // 观察会话运行态，维护 pidState / sessionExited 兼容属性的实时更新
         scope.launch {
-            session.uiEvent.collect {
-                TerminalSessionCompat.updateFromUi(sessionId, session.isRunning)
+            session.isRunningFlow.collect { isRunning ->
+                TerminalSessionCompat.updateFromUi(sessionId, isRunning)
             }
-            // uiEvent 关闭后（会话完全结束）做最后一次状态刷新
-            TerminalSessionCompat.updateFromUi(sessionId, session.isRunning)
         }
 
         synchronized(sessionsLock) {

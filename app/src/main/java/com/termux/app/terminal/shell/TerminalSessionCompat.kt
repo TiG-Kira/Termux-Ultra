@@ -35,14 +35,19 @@ object TerminalSessionCompat {
     }
 
     /**
-     * 每次会话 uiEvent（屏幕刷新）触发时调用：
+     * 每次会话运行态（isRunningFlow）变化时调用：
      * - isRunning=true  → pidState 保持真实 pid（由 setPid 已设置）
      * - isRunning=false → pidState 置 -1，sessionExited 置 true
      */
     fun updateFromUi(sessionId: Int, isRunning: Boolean) {
+        // 仅标记"已启动过"（pidState 为正数）的会话为结束，
+        // 避免未初始化会话被 StateFlow 初值（false）误判为已结束。
         if (!isRunning) {
-            pidStateRegistry[sessionId]?.value = -1
-            exitedRegistry[sessionId]?.value = true
+            val state = pidStateRegistry[sessionId] ?: return
+            if (state.value > 0) {
+                state.value = -1
+                exitedRegistry[sessionId]?.value = true
+            }
         }
     }
 
