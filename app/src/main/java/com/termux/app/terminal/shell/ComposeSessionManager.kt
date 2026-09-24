@@ -1,10 +1,8 @@
-package com.awkoo.libterminal
+package com.termux.app.terminal.shell
 
 import android.content.Context
 import com.awkoo.libterminal.engine.TerminalSession
-import com.awkoo.libterminal.engine.TerminalSessionCompat
 import com.awkoo.libterminal.process.ITerminalProcess
-import com.awkoo.libterminal.process.TermuxProcessBridge
 import com.termux.shared.termux.shell.command.environment.TermuxShellEnvironment
 import com.termux.shared.compat.ShellEnvironmentCompat
 import kotlinx.coroutines.CoroutineScope

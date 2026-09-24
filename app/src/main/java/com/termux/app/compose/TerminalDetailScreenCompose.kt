@@ -82,12 +82,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.termux.R
-import com.awkoo.libterminal.ComposeSessionManager
+import com.termux.app.terminal.shell.ComposeSessionManager
 import com.termux.app.terminal.shell.ComposeTerminalSettings
 import com.termux.app.terminal.shell.ComposeTerminalScreen
 import com.awkoo.libterminal.engine.TerminalSession as LibTerminalSession
-import com.awkoo.libterminal.engine.pid
-import com.awkoo.libterminal.engine.sessionExited
+import com.termux.app.terminal.shell.pid
+import com.termux.app.terminal.shell.sessionExited
 import com.termux.shared.view.KeyboardUtils
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch

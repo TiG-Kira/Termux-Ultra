@@ -385,7 +385,7 @@ fun executeQuickCommand(context: Context, command: QuickCommand) {
     // activity.currentSession 恒为 null。必须改用 ComposeSessionManager 中的活跃会话，
     // 否则快捷指令在 Nova 模式下会静默失效。
     if (TerminalRuntimeCore.isComposeMode(context)) {
-        val composeSession = com.awkoo.libterminal.ComposeSessionManager
+        val composeSession = com.termux.app.terminal.shell.ComposeSessionManager
             .getInstance(context).currentSession
         if (composeSession != null && composeSession.isRunning) {
             composeSession.write(text)

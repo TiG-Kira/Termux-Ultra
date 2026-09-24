@@ -1,7 +1,8 @@
-package com.awkoo.libterminal.process
+package com.termux.app.terminal.shell
 
 import android.system.Os
 import android.system.OsConstants
+import com.awkoo.libterminal.process.ITerminalProcess
 import com.termux.terminal.JNI
 import java.io.FileDescriptor
 import java.io.FileInputStream

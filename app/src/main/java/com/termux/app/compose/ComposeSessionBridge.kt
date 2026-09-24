@@ -9,7 +9,7 @@ import com.termux.shared.compat.TermuxSessionCompat
 import com.termux.shared.termux.shell.command.environment.TermuxShellEnvironment
 import com.termux.shared.compat.ShellEnvironmentCompat
 import com.termux.shared.termux.terminal.TermuxTerminalSessionClientBase
-import com.awkoo.libterminal.ComposeSessionManager
+import com.termux.app.terminal.shell.ComposeSessionManager
 import com.awkoo.libterminal.engine.TerminalSession as LibEngineSession
 import com.termux.terminal.TerminalSession as JavaTerminalSession
 import java.util.concurrent.ConcurrentHashMap
