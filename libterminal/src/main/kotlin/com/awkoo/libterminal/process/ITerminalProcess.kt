@@ -22,4 +22,11 @@ interface ITerminalProcess {
 
     /** 释放资源（关闭文件描述符等） */
     fun close()
+
+    /**
+     * 非正常退出时的人类可读原因（如 SSH 认证失败、连接中断）。
+     * 仅 [waitFor] 返回非零后在进程被 [close] 前可读；本地进程恒为 null。
+     */
+    val failureReason: String?
+        get() = null
 }
