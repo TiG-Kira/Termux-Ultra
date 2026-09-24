@@ -86,6 +86,7 @@ import com.termux.app.terminal.shell.ComposeSessionManager
 import com.termux.app.terminal.shell.ComposeTerminalSettings
 import com.termux.app.terminal.shell.ComposeTerminalScreen
 import com.awkoo.libterminal.engine.TerminalSession as LibTerminalSession
+import com.awkoo.libterminal.view.TerminalView as LibTerminalView
 import com.termux.app.terminal.shell.pid
 import com.termux.app.terminal.shell.sessionExited
 import com.termux.shared.view.KeyboardUtils
@@ -169,6 +170,21 @@ fun TerminalDetailScreenCompose(
     var renameValue by remember { mutableStateOf("") }
     var showSessionList by remember { mutableStateOf(false) }
     var showQuickCommandSheet by remember { mutableStateOf(false) }
+
+    val terminalViewRef = remember { mutableStateOf<LibTerminalView?>(null) }
+
+    val terminalActive = !(showSessionList || showContextMenu || showRenameDialog)
+    LaunchedEffect(terminalActive) {
+        if (!terminalActive) {
+            terminalViewRef.value?.hideIme()
+            terminalViewRef.value?.clearFocus()
+        }
+    }
+    LaunchedEffect(allSessions.size) {
+        if (allSessions.isNotEmpty() && terminalActive) {
+            terminalViewRef.value?.toggleIme(true)
+        }
+    }
 
     val rawSessionName by currentSession.sessionName.collectAsState(initial = "")
     val oscTitle by currentSession.titleState.collectAsState(initial = null)
@@ -910,6 +926,7 @@ fun TerminalDetailScreenCompose(
                 ComposeTerminalScreen(
                     session = currentSession,
                     modifier = Modifier.fillMaxSize(),
+                    terminalViewRef = terminalViewRef,
                     useLightTheme = false,
                     textSize = textSize,
                     cursorBlink = cursorBlink,

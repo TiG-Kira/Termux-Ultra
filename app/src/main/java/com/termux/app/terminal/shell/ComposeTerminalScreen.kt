@@ -6,6 +6,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -25,6 +26,7 @@ import com.awkoo.libterminal.view.TerminalView as LibTerminalView
 fun ComposeTerminalScreen(
     session: TerminalSession?,
     modifier: Modifier = Modifier,
+    terminalViewRef: MutableState<LibTerminalView?>,
     useLightTheme: Boolean = false,
     textSize: Int = 14,
     cursorBlink: Boolean = true,
@@ -56,6 +58,7 @@ fun ComposeTerminalScreen(
                     this.textBlinking = textBlinking
                 }.also { tv ->
                     terminalView = tv
+                    terminalViewRef.value = tv
                 }
             },
             update = { tv ->
@@ -78,6 +81,7 @@ fun ComposeTerminalScreen(
         onDispose {
             terminalView?.dispose()
             terminalView = null
+            terminalViewRef.value = null
         }
     }
 }
