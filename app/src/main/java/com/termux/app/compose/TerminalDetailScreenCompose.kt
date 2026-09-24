@@ -205,10 +205,14 @@ fun TerminalDetailScreenCompose(
     val currentSessionIsDead = currentSession.pid == -1 || sessionExited
     val sessionExitCode = currentSession.exitStatus
 
-    // Termux 标准关会话逻辑：死会话内按 Enter（[Process completed - press Enter]）→ 从列表移除
+    // 对齐经典引擎 removeFinishedSession：死会话内按 Enter → 移除该会话；
+    // 若无剩余会话则返回（对应经典 finishActivity），否则 killSession 已切换到其余会话
     LaunchedEffect(removeRequested) {
         if (removeRequested) {
             sessionManager.killSession(currentSession.id)
+            if (sessionManager.sessions.value.isEmpty()) {
+                onBack()
+            }
         }
     }
 

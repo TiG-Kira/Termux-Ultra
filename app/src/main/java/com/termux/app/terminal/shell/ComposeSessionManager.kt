@@ -169,11 +169,13 @@ class ComposeSessionManager private constructor(private val context: Context) {
     }
 
     /**
-     * 结束指定会话。如果关闭的是当前会话，自动切换到列表中下一个可用的（或上一个）。
+     * 结束指定会话。如果关闭的是当前会话，自动接管原索引处的会话（越界取末尾）。
      */
     fun killSession(sessionId: Int) {
+        var removedIndex = -1
         val info = synchronized(sessionsLock) {
-            _sessions.value.firstOrNull { it.session.id == sessionId }
+            removedIndex = _sessions.value.indexOfFirst { it.session.id == sessionId }
+            _sessions.value.getOrNull(removedIndex)
         } ?: return
         info.session.finishIfRunning()
 
@@ -182,7 +184,9 @@ class ComposeSessionManager private constructor(private val context: Context) {
             _sessions.value = remaining
 
             if (_currentSessionId.value == sessionId) {
-                _currentSessionId.value = remaining.firstOrNull()?.session?.id ?: -1
+                // 对齐经典 removeFinishedSession：优先接管原索引处会话，越界取末尾
+                val index = if (removedIndex >= remaining.size) remaining.size - 1 else removedIndex
+                _currentSessionId.value = remaining.getOrNull(index)?.session?.id ?: -1
             }
         }
         notifySessionsChanged()
