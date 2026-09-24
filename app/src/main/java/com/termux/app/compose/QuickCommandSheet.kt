@@ -387,7 +387,7 @@ fun executeQuickCommand(context: Context, command: QuickCommand) {
     if (TerminalRuntimeCore.isComposeMode(context)) {
         val composeSession = com.termux.app.terminal.shell.ComposeSessionManager
             .getInstance(context).currentSession
-        if (composeSession != null && composeSession.isRunning) {
+        if (composeSession != null && composeSession.isRunning.value) {
             composeSession.write(text)
         }
         return

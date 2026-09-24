@@ -44,15 +44,10 @@ class TerminalSession(
         }
     }
 
-    /** 进程是否仍在运行：绑定成功后为 true，进程退出后置 false。 */
-    @Volatile
-    var isRunning: Boolean = false
-        private set
+    /** 进程是否仍在运行：绑定成功后为 true，进程退出后置 false。App 可订阅监听结束/删除线。 */
+    val isRunning = MutableStateFlow(false)
 
-    /** 运行状态的可观察版本，供宿主（app）订阅进程启动/退出。 */
-    val isRunningFlow = MutableStateFlow(false)
-
-    /** 进程退出状态，仅在 [isRunning] 为 false 时有效。 */
+    /** 进程退出状态，仅在 [isRunning]（值为 false）时有效。 */
     /** Shell 进程的退出码，仅在进程结束后有效。 */
     @Volatile
     var exitStatus: Int = 0
@@ -69,7 +64,7 @@ class TerminalSession(
 
     /** 通知伪终端新尺寸，并执行文本重排或重新初始化模拟器。 */
     internal fun updateSize(columns: Int, rows: Int, cellWidthPixels: Int, cellHeightPixels: Int) {
-        if (isRunning) {
+        if (isRunning.value) {
             process?.resize(columns, rows, cellWidthPixels, cellHeightPixels)
         }
         synchronized(emulator) {
@@ -85,8 +80,7 @@ class TerminalSession(
             emulator.mCellHeightPixels
         )
         this.process = p
-        this.isRunning = true
-        isRunningFlow.value = true
+        isRunning.value = true
 
         launchInputReader(p)
         launchOutputWriter(p)
@@ -175,8 +169,7 @@ class TerminalSession(
 
     private inline fun handleProcessExit(exitCode: Int) {
         exitStatus = exitCode
-        isRunning = false
-        isRunningFlow.value = false
+        isRunning.value = false
 
         synchronized(emulator) {
             while (true) {
@@ -205,7 +198,7 @@ class TerminalSession(
 
     /** 向 Shell 进程写入数据。 */
     fun write(data: ByteArray) {
-        if (this.isRunning) {
+        if (isRunning.value) {
             terminalWriteChannel.trySend(data)
         } else if (
             data.size == 1 &&

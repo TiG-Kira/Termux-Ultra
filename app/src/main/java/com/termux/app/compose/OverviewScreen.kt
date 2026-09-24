@@ -441,12 +441,12 @@ fun OverviewScreen(
         mutableStateOf(emptyList<com.termux.app.terminal.shell.ComposeSessionManager.SessionInfo>())
     }
     val unifiedRunningCount = if (isComposeRuntime) {
-        composeSessionInfos.count { it.session.isRunning }
+        composeSessionInfos.count { it.session.isRunning.value }
     } else {
         runningSessions.size
     }
     val unifiedStoppedCount = if (isComposeRuntime) {
-        composeSessionInfos.count { !it.session.isRunning }
+        composeSessionInfos.count { !it.session.isRunning.value }
     } else {
         stoppedSessions.size
     }
