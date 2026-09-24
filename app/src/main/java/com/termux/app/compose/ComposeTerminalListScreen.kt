@@ -27,8 +27,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.termux.R
 import com.termux.app.TermuxActivity
-import com.awkoo.libterminal.ComposeSessionManager
-import com.awkoo.libterminal.engine.pidState
+import com.termux.app.terminal.shell.ComposeSessionManager
+import com.termux.app.terminal.shell.pidState
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import top.yukonga.miuix.kmp.basic.ButtonDefaults

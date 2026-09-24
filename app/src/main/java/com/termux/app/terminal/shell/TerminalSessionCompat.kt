@@ -1,5 +1,6 @@
-package com.awkoo.libterminal.engine
+package com.termux.app.terminal.shell
 
+import com.awkoo.libterminal.engine.TerminalSession
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import java.util.Collections

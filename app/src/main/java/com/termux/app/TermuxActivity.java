@@ -667,9 +667,9 @@ public final class TermuxActivity extends ComponentActivity implements ServiceCo
                 // 就被关闭，导致无法进入终端）。
                 // 效仿 Java 版空会话自动 addNewSession 开启服务的策略：
                 // Compose 侧无任何会话时新建默认会话并立即启动，服务随前台通知保活。
-                if (com.awkoo.libterminal.ComposeSessionManager.getInstance(this)
+                if (com.termux.app.terminal.shell.ComposeSessionManager.getInstance(this)
                         .getSessions().getValue().isEmpty()) {
-                    com.awkoo.libterminal.ComposeSessionManager.getInstance(this)
+                    com.termux.app.terminal.shell.ComposeSessionManager.getInstance(this)
                         .createDefaultSession(true, false);
                 }
             } else if (mIsVisible) {

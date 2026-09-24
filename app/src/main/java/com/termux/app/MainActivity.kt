@@ -208,7 +208,7 @@ class MainActivity : FragmentActivity() {
                                 // 且效仿 Java 版策略：只创建未初始化的终端条目，不跳转。
                                 if (com.termux.app.compose.TerminalRuntimeCore.isComposeMode(this)) {
                                     val composeSessionManager =
-                                        com.awkoo.libterminal.ComposeSessionManager.getInstance(this)
+                                        com.termux.app.terminal.shell.ComposeSessionManager.getInstance(this)
                                     val sessionName = if (LocaleHelper.isChinese(this)) {
                                         "会话 ${composeSessionManager.sessions.value.size + 1}"
                                     } else {
@@ -233,7 +233,7 @@ class MainActivity : FragmentActivity() {
                                 // 新建会话并直接进入该会话的控制台。
                                 if (com.termux.app.compose.TerminalRuntimeCore.isComposeMode(this)) {
                                     val composeSessionManager =
-                                        com.awkoo.libterminal.ComposeSessionManager.getInstance(this)
+                                        com.termux.app.terminal.shell.ComposeSessionManager.getInstance(this)
                                     val sessionName = if (LocaleHelper.isChinese(this)) {
                                         "会话 ${composeSessionManager.sessions.value.size + 1}"
                                     } else {

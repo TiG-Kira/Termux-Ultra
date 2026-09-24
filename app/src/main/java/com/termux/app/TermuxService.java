@@ -228,7 +228,7 @@ public final class TermuxService extends Service implements TermuxTaskCompat.Ter
 
         // Compose 会话创建/关闭时刷新前台通知，保证 LiveUpdate 通知中的会话数量
         // 对 Compose 直建的会话（主页/终端页新建）也保持准确
-        com.awkoo.libterminal.ComposeSessionManager.setOnSessionsChanged(() -> {
+        com.termux.app.terminal.shell.ComposeSessionManager.setOnSessionsChanged(() -> {
             try {
                 updateNotification();
             } catch (Throwable t) {
@@ -356,7 +356,7 @@ public final class TermuxService extends Service implements TermuxTaskCompat.Ter
         // 不注销会一直持有这个已经销毁的 Service（连带 Context / WakeLock /
         // mTermuxSessions），之后每次会话变化还会回调它去重建通知。
         try {
-            com.awkoo.libterminal.ComposeSessionManager.setOnSessionsChanged(null);
+            com.termux.app.terminal.shell.ComposeSessionManager.setOnSessionsChanged(null);
         } catch (Throwable t) {
             Logger.logDebug(LOG_TAG, "Failed to unregister Compose sessions callback: " + t.getMessage());
         }
@@ -1368,7 +1368,7 @@ public synchronized int removeTermuxSession(TerminalSession sessionToRemove) {
         int sessionCount = getTermuxSessionsSize();
         if (com.termux.app.compose.TerminalRuntimeCore.isComposeMode(this)) {
             try {
-                sessionCount = com.awkoo.libterminal.ComposeSessionManager
+                sessionCount = com.termux.app.terminal.shell.ComposeSessionManager
                     .getInstance(this).getSessions().getValue().size();
             } catch (Throwable t) {
                 Logger.logDebug(LOG_TAG, "Failed to count Compose sessions: " + t.getMessage());
