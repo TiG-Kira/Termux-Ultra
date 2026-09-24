@@ -708,6 +708,7 @@ public final class TermuxService extends Service implements TermuxTaskCompat.Ter
 
         Logger.logDebug(LOG_TAG, "Executing background \"" + executionCommand.getCommandIdAndLabelLogString() + "\" TermuxTaskCompat command");
 
+        createTermuxTask(executionCommand);
     }
 
     /** Create a {@link TermuxTaskCompat}. */
