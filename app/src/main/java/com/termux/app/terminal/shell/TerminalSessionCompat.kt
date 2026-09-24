@@ -35,7 +35,7 @@ object TerminalSessionCompat {
     }
 
     /**
-     * 每次会话运行态（isRunningFlow）变化时调用：
+     * 每次会话运行态（isRunning）变化时调用：
      * - isRunning=true  → pidState 保持真实 pid（由 setPid 已设置）
      * - isRunning=false → pidState 置 -1，sessionExited 置 true
      */

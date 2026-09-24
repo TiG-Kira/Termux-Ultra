@@ -84,7 +84,7 @@ class ComposeSessionManager private constructor(private val context: Context) {
 
         // 观察会话运行态，维护 pidState / sessionExited 兼容属性的实时更新
         scope.launch {
-            session.isRunningFlow.collect { isRunning ->
+            session.isRunning.collect { isRunning ->
                 TerminalSessionCompat.updateFromUi(sessionId, isRunning)
             }
         }

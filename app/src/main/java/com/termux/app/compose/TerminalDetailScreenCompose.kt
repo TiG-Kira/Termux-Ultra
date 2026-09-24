@@ -1051,12 +1051,12 @@ fun TerminalDetailScreenCompose(
                                         imageVector = Icons.Rounded.Delete,
                                         contentDescription = null,
                                         modifier = Modifier.size(20.dp),
-                                        tint = if (currentSession.isRunning) Color(0xFFFF5252)
+                                        tint = if (currentSession.isRunning.value) Color(0xFFFF5252)
                                         else MiuixTheme.colorScheme.onSurface.copy(alpha = 0.4f)
                                     )
                                 },
-                                text = if (currentSession.isRunning) context.getString(R.string.kill_process_pid, currentSession.pid) else context.getString(R.string.process_not_running),
-                                enabled = currentSession.isRunning,
+                                text = if (currentSession.isRunning.value) context.getString(R.string.kill_process_pid, currentSession.pid) else context.getString(R.string.process_not_running),
+                                enabled = currentSession.isRunning.value,
                                 onClick = { killSessionProcess() }
                             )
 
