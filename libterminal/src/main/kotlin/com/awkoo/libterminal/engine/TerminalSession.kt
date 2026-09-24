@@ -49,6 +49,9 @@ class TerminalSession(
     var isRunning: Boolean = false
         private set
 
+    /** 运行状态的可观察版本，供宿主（app）订阅进程启动/退出。 */
+    val isRunningFlow = MutableStateFlow(false)
+
     /** 进程退出状态，仅在 [isRunning] 为 false 时有效。 */
     /** Shell 进程的退出码，仅在进程结束后有效。 */
     @Volatile
@@ -83,6 +86,7 @@ class TerminalSession(
         )
         this.process = p
         this.isRunning = true
+        isRunningFlow.value = true
 
         launchInputReader(p)
         launchOutputWriter(p)
@@ -172,6 +176,7 @@ class TerminalSession(
     private inline fun handleProcessExit(exitCode: Int) {
         exitStatus = exitCode
         isRunning = false
+        isRunningFlow.value = false
 
         synchronized(emulator) {
             while (true) {
@@ -254,8 +259,8 @@ class TerminalSession(
         write(mUtf8InputBuffer.copyOf(bufferPosition))
     }
 
-    /** 屏幕变更通知事件流，供 view 层与宿主（app）订阅重绘或状态刷新。 */
-    val uiEvent = MutableSharedFlow<Unit>(
+    /** 屏幕变更通知事件流，供模块内 view 层订阅重绘。 */
+    internal val uiEvent = MutableSharedFlow<Unit>(
         replay = 0,
         extraBufferCapacity = 1,
         onBufferOverflow = BufferOverflow.DROP_OLDEST
