@@ -545,9 +545,6 @@ class TerminalView(
 
     init {
         isVerticalScrollBarEnabled = true
-        isFocusable = true
-        isFocusableInTouchMode = true
-        defaultFocusHighlightEnabled = false
     }
 
     private val Int.dp: Int

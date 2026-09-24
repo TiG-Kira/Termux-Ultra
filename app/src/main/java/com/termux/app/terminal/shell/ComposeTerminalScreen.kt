@@ -45,6 +45,9 @@ fun ComposeTerminalScreen(
         AndroidView(
             factory = { ctx ->
                 LibTerminalView(ctx).apply {
+                    isFocusable = true
+                    isFocusableInTouchMode = true
+                    defaultFocusHighlightEnabled = false
                     this.textSize = textSize
                     this.typeface = typeface ?: android.graphics.Typeface.MONOSPACE
                     this.colorScheme = resolvedScheme
