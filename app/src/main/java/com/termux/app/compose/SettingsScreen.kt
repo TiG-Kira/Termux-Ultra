@@ -212,12 +212,12 @@ fun SettingsScreen(
 
     // Terminal settings - Kotlin+Compose mode（订阅 ComposeTerminalSettings StateFlow，
     // 单一事实来源：写入经 setter 持久化到 SP，显示实时同步，重进设置页不回退）
-    com.awkoo.libterminal.ComposeTerminalSettings.init(context)
-    val composeFontSize by com.awkoo.libterminal.ComposeTerminalSettings.fontSize.collectAsState()
-    val composeCursorBlink by com.awkoo.libterminal.ComposeTerminalSettings.cursorBlink.collectAsState()
-    val composeScrollbackLines by com.awkoo.libterminal.ComposeTerminalSettings.scrollbackLines.collectAsState()
-val composeCursorStyleName by com.awkoo.libterminal.ComposeTerminalSettings.cursorStyleName.collectAsState()
-val composeTextBlinking by com.awkoo.libterminal.ComposeTerminalSettings.textBlinking.collectAsState()
+    com.termux.app.terminal.shell.ComposeTerminalSettings.init(context)
+    val composeFontSize by com.termux.app.terminal.shell.ComposeTerminalSettings.fontSize.collectAsState()
+    val composeCursorBlink by com.termux.app.terminal.shell.ComposeTerminalSettings.cursorBlink.collectAsState()
+    val composeScrollbackLines by com.termux.app.terminal.shell.ComposeTerminalSettings.scrollbackLines.collectAsState()
+val composeCursorStyleName by com.termux.app.terminal.shell.ComposeTerminalSettings.cursorStyleName.collectAsState()
+val composeTextBlinking by com.termux.app.terminal.shell.ComposeTerminalSettings.textBlinking.collectAsState()
 
     // Official standalone APK detection. Keys match the add-on app package names; when a standalone
     // APK is installed, the integrated toggle is forced OFF and disabled, with the row shows
@@ -740,7 +740,7 @@ val composeTextBlinking by com.awkoo.libterminal.ComposeTerminalSettings.textBli
                     items = listOf("10sp", "12sp", "14sp", "16sp", "18sp", "20sp", "24sp"),
                     selectedIndex = listOf(10, 12, 14, 16, 18, 20, 24).indexOf(composeFontSize).coerceAtLeast(0),
                     onSelectedIndexChange = { idx ->
-                        com.awkoo.libterminal.ComposeTerminalSettings.setFontSize(listOf(10, 12, 14, 16, 18, 20, 24)[idx])
+                        com.termux.app.terminal.shell.ComposeTerminalSettings.setFontSize(listOf(10, 12, 14, 16, 18, 20, 24)[idx])
                     },
                     startAction = { SettingIcon(R.drawable.ic_text_size) }
                 )
@@ -754,7 +754,7 @@ val composeTextBlinking by com.awkoo.libterminal.ComposeTerminalSettings.textBli
                     items = listOf("Bar I", "Underline ▁", "Block ■"),
                     selectedIndex = listOf("BAR", "UNDERLINE", "BLOCK").indexOf(composeCursorStyleName).coerceAtLeast(0),
                     onSelectedIndexChange = { idx ->
-                        com.awkoo.libterminal.ComposeTerminalSettings.setCursorStyle(
+                        com.termux.app.terminal.shell.ComposeTerminalSettings.setCursorStyle(
                             com.awkoo.libterminal.engine.TerminalCursorStyle.valueOf(listOf("BAR", "UNDERLINE", "BLOCK")[idx])
                         )
                     },
@@ -1248,7 +1248,7 @@ val composeTextBlinking by com.awkoo.libterminal.ComposeTerminalSettings.textBli
                                 items = listOf("10sp", "12sp", "14sp", "16sp", "18sp", "20sp", "24sp"),
                                 selectedIndex = listOf(10, 12, 14, 16, 18, 20, 24).indexOf(composeFontSize).coerceAtLeast(0),
                                 onSelectedIndexChange = { idx ->
-                                    com.awkoo.libterminal.ComposeTerminalSettings.setFontSize(
+                                    com.termux.app.terminal.shell.ComposeTerminalSettings.setFontSize(
                                         listOf(10, 12, 14, 16, 18, 20, 24)[idx]
                                     )
                                 },
@@ -1259,7 +1259,7 @@ val composeTextBlinking by com.awkoo.libterminal.ComposeTerminalSettings.textBli
                                 summary = if (composeCursorBlink) context.getString(R.string.enabled) else context.getString(R.string.disabled),
                                 checked = composeCursorBlink,
                                 onCheckedChange = {
-                                    com.awkoo.libterminal.ComposeTerminalSettings.setCursorBlink(it)
+                                    com.termux.app.terminal.shell.ComposeTerminalSettings.setCursorBlink(it)
                                 },
                                 startAction = { SettingIcon(R.drawable.ic_terminal) }
                             )
@@ -1269,7 +1269,7 @@ val composeTextBlinking by com.awkoo.libterminal.ComposeTerminalSettings.textBli
                                 items = listOf("Bar I", "Underline ▁", "Block ■"),
                                 selectedIndex = listOf("BAR", "UNDERLINE", "BLOCK").indexOf(composeCursorStyleName).coerceAtLeast(0),
                                 onSelectedIndexChange = { idx ->
-                                    com.awkoo.libterminal.ComposeTerminalSettings.setCursorStyle(
+                                    com.termux.app.terminal.shell.ComposeTerminalSettings.setCursorStyle(
                                         com.awkoo.libterminal.engine.TerminalCursorStyle.valueOf(
                                             listOf("BAR", "UNDERLINE", "BLOCK")[idx]
                                         )
@@ -1282,7 +1282,7 @@ val composeTextBlinking by com.awkoo.libterminal.ComposeTerminalSettings.textBli
                                 summary = context.getString(R.string.text_blinking_desc),
                                 checked = composeTextBlinking,
                                 onCheckedChange = {
-                                    com.awkoo.libterminal.ComposeTerminalSettings.setTextBlinking(it)
+                                    com.termux.app.terminal.shell.ComposeTerminalSettings.setTextBlinking(it)
                                 },
                                 startAction = { SettingIcon(R.drawable.ic_terminal) }
                             )
@@ -1292,7 +1292,7 @@ val composeTextBlinking by com.awkoo.libterminal.ComposeTerminalSettings.textBli
                                 items = listOf(context.getString(R.string.lines_1000), context.getString(R.string.lines_5000), context.getString(R.string.lines_10000), context.getString(R.string.lines_50000)),
                                 selectedIndex = listOf(1000, 5000, 10000, 50000).indexOf(composeScrollbackLines).coerceAtLeast(0),
                                 onSelectedIndexChange = { idx ->
-                                    com.awkoo.libterminal.ComposeTerminalSettings.setScrollbackLines(
+                                    com.termux.app.terminal.shell.ComposeTerminalSettings.setScrollbackLines(
                                         listOf(1000, 5000, 10000, 50000)[idx]
                                     )
                                 },

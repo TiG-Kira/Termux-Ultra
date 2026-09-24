@@ -1,10 +1,9 @@
-package com.awkoo.libterminal
+package com.termux.app.terminal.shell
 
 import android.content.Context
 import android.content.SharedPreferences
 import android.graphics.Typeface
 import com.awkoo.libterminal.color.TerminalColorScheme
-import com.awkoo.libterminal.color.TerminalThemes
 import com.awkoo.libterminal.engine.TerminalCursorStyle
 import com.termux.shared.termux.TermuxConstants
 import kotlinx.coroutines.flow.MutableStateFlow

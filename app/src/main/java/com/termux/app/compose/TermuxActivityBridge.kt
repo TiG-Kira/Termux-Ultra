@@ -6,7 +6,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner
 import com.termux.app.TermuxActivity
 import com.awkoo.libterminal.ComposeSessionManager
-import com.awkoo.libterminal.ComposeTerminalSettings
+import com.termux.app.terminal.shell.ComposeTerminalSettings
 import com.awkoo.libterminal.engine.pid
 
 /**
