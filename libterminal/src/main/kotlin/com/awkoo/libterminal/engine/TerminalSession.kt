@@ -254,8 +254,8 @@ class TerminalSession(
         write(mUtf8InputBuffer.copyOf(bufferPosition))
     }
 
-    /** 屏幕变更通知事件流，供模块内 view 层订阅重绘。 */
-    internal val uiEvent = MutableSharedFlow<Unit>(
+    /** 屏幕变更通知事件流，供 view 层与宿主（app）订阅重绘或状态刷新。 */
+    val uiEvent = MutableSharedFlow<Unit>(
         replay = 0,
         extraBufferCapacity = 1,
         onBufferOverflow = BufferOverflow.DROP_OLDEST
