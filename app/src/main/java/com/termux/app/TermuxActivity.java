@@ -1412,8 +1412,8 @@ public final class TermuxActivity extends ComponentActivity implements ServiceCo
         // Compose 模式：Styling 页/termux-reload 写盘后，Compose 终端直接从
         // ~/.termux/colors.properties 与 font.ttf 重新加载（与 Java 模式共用主题，双向同步）
         if (com.termux.app.compose.TerminalRuntimeCore.isComposeMode(this)) {
-            com.awkoo.libterminal.ComposeTerminalSettings.INSTANCE.init(this);
-            com.awkoo.libterminal.ComposeTerminalSettings.INSTANCE.reloadFromStylingDisk();
+            com.termux.app.terminal.shell.ComposeTerminalSettings.INSTANCE.init(this);
+            com.termux.app.terminal.shell.ComposeTerminalSettings.INSTANCE.reloadFromStylingDisk();
         }
 
         if (mProperties!= null) {

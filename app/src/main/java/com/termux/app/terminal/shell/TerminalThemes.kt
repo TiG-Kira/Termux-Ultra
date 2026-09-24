@@ -1,4 +1,6 @@
-package com.awkoo.libterminal.color
+package com.termux.app.terminal.shell
+
+import com.awkoo.libterminal.color.TerminalColorScheme
 
 /**
  * 预设终端配色方案。

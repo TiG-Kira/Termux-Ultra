@@ -83,7 +83,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.termux.R
 import com.awkoo.libterminal.ComposeSessionManager
-import com.awkoo.libterminal.ComposeTerminalSettings
+import com.termux.app.terminal.shell.ComposeTerminalSettings
 import com.termux.app.terminal.shell.ComposeTerminalScreen
 import com.awkoo.libterminal.engine.TerminalSession as LibTerminalSession
 import com.awkoo.libterminal.engine.pid
