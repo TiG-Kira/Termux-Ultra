@@ -122,7 +122,7 @@ object ComposeSessionBridge {
     /** 以 optimistic 方式判断 Compose 会话是否仍存活。 */
     fun isComposeSessionAlive(handle: String?): Boolean {
         if (handle == null) return false
-        return registry[handle]?.composeSession?.isRunning.value == true
+        return registry[handle]?.composeSession?.isRunning?.value == true
     }
 
     /** Compose 写转发器实现：把对 Java 镜像的写入转发到真正的 Compose 会话。 */
