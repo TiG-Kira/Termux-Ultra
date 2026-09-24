@@ -27,7 +27,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.google.android.material.snackbar.Snackbar
-import com.termux.app.compose.terminal.color.TerminalColorScheme
+import com.awkoo.libterminal.color.TerminalColorScheme
 import com.termux.R
 import com.termux.app.utils.SnackbarHelper
 import top.yukonga.miuix.kmp.basic.*

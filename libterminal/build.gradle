@@ -4,7 +4,7 @@ plugins {
 }
 
 android {
-    namespace "com.termux.app.compose.terminal"
+    namespace "com.awkoo.libterminal"
     compileSdkVersion project.properties.compileSdkVersion.toInteger()
 
     defaultConfig {

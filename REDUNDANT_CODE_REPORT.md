@@ -134,7 +134,7 @@ private/internal 的函数、字段、常量、类型，可见范围内零引用
 | `app/src/main/java/com/termux/app/compose/AiTermuxModels.kt` | 1204 | KEY_CONFIG | 未使用属性/常量 | kotlin private property KEY_CONFIG 全仓无引用 |
 | `app/src/main/java/com/termux/app/compose/MainScreen.kt` | 72 | SWIPE_VELOCITY_THRESHOLD | 未使用属性/常量 | kotlin private property SWIPE_VELOCITY_THRESHOLD 全仓无引用 |
 | `app/src/main/java/com/termux/app/plugin/PluginWebViewActivity.kt` | 48 | EXTRA_URL | 未使用属性/常量 | kotlin private property EXTRA_URL 全仓无引用 |
-| `libterminal/src/main/kotlin/com/termux/app/compose/terminal/view/render/TerminalBlinker.kt` | 17 | blinkerName | 未使用属性/常量 | kotlin private property blinkerName 全仓无引用 |
+| `libterminal/src/main/kotlin/com/awkoo/libterminal/view/render/TerminalBlinker.kt` | 17 | blinkerName | 未使用属性/常量 | kotlin private property blinkerName 全仓无引用 |
 | `app/src/main/java/com/termux/app/compose/OverviewScreen.kt` | 3003 | CpuMonitor | 未使用类型 | kotlin private type CpuMonitor 全仓无引用 |
 | `app/src/main/java/com/termux/app/plugin/PluginManager.kt` | 373 | cleanupDeadSessions | 未使用函数 | kotlin internal function cleanupDeadSessions 全仓无引用 |
 

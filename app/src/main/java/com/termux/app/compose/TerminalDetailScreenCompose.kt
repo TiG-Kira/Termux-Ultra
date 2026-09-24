@@ -82,12 +82,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.termux.R
-import com.termux.app.compose.terminal.ComposeSessionManager
-import com.termux.app.compose.terminal.ComposeTerminalSettings
-import com.termux.app.compose.terminal.ComposeTerminalScreen
-import com.termux.app.compose.terminal.engine.TerminalSession as LibTerminalSession
-import com.termux.app.compose.terminal.engine.pid
-import com.termux.app.compose.terminal.engine.sessionExited
+import com.awkoo.libterminal.ComposeSessionManager
+import com.awkoo.libterminal.ComposeTerminalSettings
+import com.awkoo.libterminal.ComposeTerminalScreen
+import com.awkoo.libterminal.engine.TerminalSession as LibTerminalSession
+import com.awkoo.libterminal.engine.pid
+import com.awkoo.libterminal.engine.sessionExited
 import com.termux.shared.view.KeyboardUtils
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -137,8 +137,8 @@ fun TerminalDetailScreenCompose(
     val cursorBlink by ComposeTerminalSettings.cursorBlink.collectAsState()
     val cursorStyleName by ComposeTerminalSettings.cursorStyleName.collectAsState()
     val cursorStyle = run {
-        try { com.termux.app.compose.terminal.engine.TerminalCursorStyle.valueOf(cursorStyleName) }
-        catch (_: Throwable) { com.termux.app.compose.terminal.engine.TerminalCursorStyle.BAR }
+        try { com.awkoo.libterminal.engine.TerminalCursorStyle.valueOf(cursorStyleName) }
+        catch (_: Throwable) { com.awkoo.libterminal.engine.TerminalCursorStyle.BAR }
     }
     val textBlinking by ComposeTerminalSettings.textBlinking.collectAsState()
     val colorScheme by ComposeTerminalSettings.colorScheme.collectAsState()

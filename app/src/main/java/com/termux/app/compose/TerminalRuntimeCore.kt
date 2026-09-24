@@ -96,7 +96,7 @@ object TerminalRuntimeCore {
     fun killAllSessions(context: Context) {
         // Compose 侧清理
         try {
-            com.termux.app.compose.terminal.ComposeSessionManager.getInstance(context).killAllSessions()
+            com.awkoo.libterminal.ComposeSessionManager.getInstance(context).killAllSessions()
         } catch (_: Exception) {}
         try {
             com.termux.app.compose.ComposeSessionBridge.clearAll()
