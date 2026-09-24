@@ -1385,7 +1385,6 @@ val composeTextBlinking by com.termux.app.terminal.shell.ComposeTerminalSettings
 // ---------- Integrated Tools ----------
             item(key = "section_tools") { SmallTitle(text = context.getString(R.string.integrated_tools_category)) }
             item(key = "card_integrated_tools") {
-                val isComposeMode = runtimeCore == TerminalRuntimeCore.Core.KOTLIN_COMPOSE
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1409,8 +1408,7 @@ val composeTextBlinking by com.termux.app.terminal.shell.ComposeTerminalSettings
                                 IntegratedTools.showStandaloneConflictPrompt(context, IntegratedTools.Tool.TERMUX_API)
                             }
                         )
-                        if (!isComposeMode) {
-                                IntegratedToolSwitch(
+                        IntegratedToolSwitch(
                             title = context.getString(R.string.termux_boot_tool),
                             summary = if (bootStandaloneInstalled) replacedSummary
                                       else context.getString(R.string.termux_boot_tool_summary),
@@ -1458,7 +1456,6 @@ val composeTextBlinking by com.termux.app.terminal.shell.ComposeTerminalSettings
                                 IntegratedTools.showStandaloneConflictPrompt(context, IntegratedTools.Tool.TERMUX_WIDGET)
                             }
                         )
-                        }
 
                         // Styling always available regardless of runtime core
                         IntegratedToolSwitch(
