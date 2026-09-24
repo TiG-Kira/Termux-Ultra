@@ -5,9 +5,9 @@ import androidx.activity.compose.setContent
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner
 import com.termux.app.TermuxActivity
-import com.termux.app.compose.terminal.ComposeSessionManager
-import com.termux.app.compose.terminal.ComposeTerminalSettings
-import com.termux.app.compose.terminal.engine.pid
+import com.awkoo.libterminal.ComposeSessionManager
+import com.awkoo.libterminal.ComposeTerminalSettings
+import com.awkoo.libterminal.engine.pid
 
 /**
  * Bridge helpers used by [TermuxActivity] (Java) to invoke Compose-only
@@ -112,7 +112,7 @@ object TermuxActivityBridge {
     private fun resolveSessionFromIntent(
         activity: TermuxActivity,
         sessionManager: ComposeSessionManager
-    ): com.termux.app.compose.terminal.engine.TerminalSession {
+    ): com.awkoo.libterminal.engine.TerminalSession {
         val handle = try { activity.intent.getStringExtra("sessionHandle") } catch (_: Throwable) { null }
         val sessionId = ComposeSessionBridge.resolveComposeSessionId(handle)
         if (sessionId != null) {

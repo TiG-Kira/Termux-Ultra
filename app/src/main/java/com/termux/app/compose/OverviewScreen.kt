@@ -113,7 +113,7 @@ import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.theme.MiuixTheme
-import com.termux.app.compose.terminal.engine.pid
+import com.awkoo.libterminal.engine.pid
 
 // ============================================================
 // Data Models
@@ -434,11 +434,11 @@ fun OverviewScreen(
     val isComposeRuntime = TerminalRuntimeCore.isComposeMode(context)
     val composeSessionInfos by if (isComposeRuntime) {
         val mgr = remember(context) {
-            com.termux.app.compose.terminal.ComposeSessionManager.getInstance(context)
+            com.awkoo.libterminal.ComposeSessionManager.getInstance(context)
         }
         mgr.sessions.collectAsState()
     } else {
-        mutableStateOf(emptyList<com.termux.app.compose.terminal.ComposeSessionManager.SessionInfo>())
+        mutableStateOf(emptyList<com.awkoo.libterminal.ComposeSessionManager.SessionInfo>())
     }
     val unifiedRunningCount = if (isComposeRuntime) {
         composeSessionInfos.count { it.session.isRunning }
