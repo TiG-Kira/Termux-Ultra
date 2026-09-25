@@ -32,7 +32,6 @@ import androidx.annotation.Nullable;
 
 import com.google.android.material.button.MaterialButton;
 import com.termux.shared.R;
-import com.termux.shared.termux.terminal.io.TerminalExtraKeys;
 import com.termux.shared.theme.ThemeUtils;
 
 /**
@@ -68,9 +67,6 @@ import com.termux.shared.theme.ThemeUtils;
  * and calls {@link ExtraKeysView#reload(ExtraKeysInfo).
  * The {@link ExtraKeysInfo} is created by TermuxAppSharedProperties.setExtraKeys().
  * Then its got and the view height is adjusted in TermuxActivity.setTerminalToolbarHeight().
- * The client used is TermuxTerminalExtraKeys, which extends
- * {@link TerminalExtraKeys } to handle Termux app specific logic and
- * leave the rest to the super class.
  */
 public final class ExtraKeysView extends GridLayout {
 
