@@ -14,6 +14,11 @@ import androidx.compose.animation.rememberSplineBasedDecay
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Dashboard
+import androidx.compose.material.icons.rounded.Folder
+import androidx.compose.material.icons.rounded.DesktopWindows
+import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -292,7 +297,7 @@ fun MainScreen(
                     ) { onPositioned ->
                         if (0 in availableTabs) {
                             LiquidGlassNavigationBarItem(
-                                icon = ImageVector.vectorResource(R.drawable.ic_overview),
+                                icon = Icons.Rounded.Dashboard,
                                 label = stringResource(R.string.overview),
                                 selected = selectedTab == 0,
                                 onClick = { previousTab = selectedTab; onTabChange(0) },
@@ -303,7 +308,7 @@ fun MainScreen(
                         }
                         if (1 in availableTabs) {
                             LiquidGlassNavigationBarItem(
-                                icon = ImageVector.vectorResource(R.drawable.ic_terminal),
+                                icon = ImageVector.vectorResource(R.drawable.ic_nav_terminal),
                                 label = stringResource(R.string.terminal),
                                 selected = selectedTab == 1,
                                 onClick = { previousTab = selectedTab; onTabChange(1) },
@@ -314,7 +319,7 @@ fun MainScreen(
                         }
                         if (2 in availableTabs) {
                             LiquidGlassNavigationBarItem(
-                                icon = ImageVector.vectorResource(R.drawable.ic_files),
+                                icon = Icons.Rounded.Folder,
                                 label = stringResource(R.string.files),
                                 selected = selectedTab == 2,
                                 onClick = { previousTab = selectedTab; onTabChange(2) },
@@ -325,7 +330,7 @@ fun MainScreen(
                         }
                         if (3 in availableTabs) {
                             LiquidGlassNavigationBarItem(
-                                icon = ImageVector.vectorResource(R.drawable.ic_vnc),
+                                icon = Icons.Rounded.DesktopWindows,
                                 label = stringResource(R.string.remote),
                                 selected = selectedTab == 3,
                                 onClick = { previousTab = selectedTab; onTabChange(3) },
@@ -336,7 +341,7 @@ fun MainScreen(
                         }
                         if (4 in availableTabs) {
                             LiquidGlassNavigationBarItem(
-                                icon = ImageVector.vectorResource(R.drawable.ic_settings),
+                                icon = Icons.Rounded.Settings,
                                 label = stringResource(R.string.settings),
                                 selected = selectedTab == 4,
                                 onClick = { previousTab = selectedTab; onTabChange(4) },
@@ -349,11 +354,11 @@ fun MainScreen(
                 }
                 0 -> {
                     val tabIcons = mapOf(
-                        0 to R.drawable.ic_overview,
-                        1 to R.drawable.ic_terminal,
-                        2 to R.drawable.ic_files,
-                        3 to R.drawable.ic_vnc,
-                        4 to R.drawable.ic_settings
+                        0 to Icons.Rounded.Dashboard,
+                        1 to ImageVector.vectorResource(R.drawable.ic_nav_terminal),
+                        2 to Icons.Rounded.Folder,
+                        3 to Icons.Rounded.DesktopWindows,
+                        4 to Icons.Rounded.Settings
                     )
                     val tabLabels = mapOf(
                         0 to stringResource(R.string.overview),
@@ -365,7 +370,7 @@ fun MainScreen(
                     GlassNavigationBar(
                         items = availableTabs.map { tab ->
                             GlassNavigationItem(
-                                icon = ImageVector.vectorResource(tabIcons.getValue(tab)),
+                                icon = tabIcons.getValue(tab),
                                 label = tabLabels.getValue(tab)
                             )
                         },
@@ -390,7 +395,7 @@ fun MainScreen(
                     NavigationBar() {
                         if (0 in availableTabs) {
                             NavigationBarItem(
-                                icon = ImageVector.vectorResource(R.drawable.ic_overview),
+                                icon = Icons.Rounded.Dashboard,
                                 label = stringResource(R.string.overview),
                                 selected = selectedTab == 0,
                                 onClick = { previousTab = selectedTab; onTabChange(0) }
@@ -398,7 +403,7 @@ fun MainScreen(
                         }
                         if (1 in availableTabs) {
                             NavigationBarItem(
-                                icon = ImageVector.vectorResource(R.drawable.ic_terminal),
+                                icon = ImageVector.vectorResource(R.drawable.ic_nav_terminal),
                                 label = stringResource(R.string.terminal),
                                 selected = selectedTab == 1,
                                 onClick = { previousTab = selectedTab; onTabChange(1) }
@@ -406,7 +411,7 @@ fun MainScreen(
                         }
                         if (2 in availableTabs) {
                             NavigationBarItem(
-                                icon = ImageVector.vectorResource(R.drawable.ic_files),
+                                icon = Icons.Rounded.Folder,
                                 label = stringResource(R.string.files),
                                 selected = selectedTab == 2,
                                 onClick = { previousTab = selectedTab; onTabChange(2) }
@@ -414,7 +419,7 @@ fun MainScreen(
                         }
                         if (3 in availableTabs) {
                             NavigationBarItem(
-                                icon = ImageVector.vectorResource(R.drawable.ic_vnc),
+                                icon = Icons.Rounded.DesktopWindows,
                                 label = stringResource(R.string.remote),
                                 selected = selectedTab == 3,
                                 onClick = { previousTab = selectedTab; onTabChange(3) }
@@ -422,7 +427,7 @@ fun MainScreen(
                         }
                         if (4 in availableTabs) {
                             NavigationBarItem(
-                                icon = ImageVector.vectorResource(R.drawable.ic_settings),
+                                icon = Icons.Rounded.Settings,
                                 label = stringResource(R.string.settings),
                                 selected = selectedTab == 4,
                                 onClick = { previousTab = selectedTab; onTabChange(4) }
