@@ -47,6 +47,8 @@ class StorageActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
+        // 缺这一行时状态栏会保留主题里的半透明遮罩，与其它页面不一致
+        window.statusBarColor = android.graphics.Color.TRANSPARENT
         setContent {
             val navDispatcher = com.termux.app.compose.NavigationHelper.createDispatcher()
             val navDispatcherOwner = com.termux.app.compose.NavigationHelper.createOwner(navDispatcher)

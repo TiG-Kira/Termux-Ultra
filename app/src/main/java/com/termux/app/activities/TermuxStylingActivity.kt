@@ -18,6 +18,8 @@ class TermuxStylingActivity : ComponentActivity() {
         window.clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_NAVIGATION)
         WindowCompat.setDecorFitsSystemWindows(window, false)
         window.navigationBarColor = android.graphics.Color.TRANSPARENT
+        // 缺这一行时状态栏会保留主题里的半透明遮罩，与其它页面不一致
+        window.statusBarColor = android.graphics.Color.TRANSPARENT
         setContent {
             val navDispatcher = NavigationHelper.createDispatcher()
             val navDispatcherOwner = NavigationHelper.createOwner(navDispatcher)
