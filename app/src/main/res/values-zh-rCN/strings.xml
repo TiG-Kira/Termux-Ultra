@@ -1032,6 +1032,13 @@
     <string name="sessions_closed">会话已关闭</string>
     <string name="process_not_running">进程未运行</string>
     <string name="toggle_soft_keyboard">切换软键盘</string>
+    <string name="enable_softkeyboard">启用软键盘</string>
+    <string name="enable_soft_keyboard_no_hw">使用物理键盘时禁用软键盘</string>
+    <string name="soft_keyboard_only_if_no_hardware_desc">在检测到物理键盘时自动禁用软键盘</string>
+    <string name="terminal_key_logging">终端按键日志</string>
+    <string name="terminal_key_logging_desc">记录硬件按键与应用层输入（不含输入法文本）</string>
+    <string name="soft_keyboard_disabled_by_settings">当前设置已禁用软键盘</string>
+    <string name="soft_keyboard_disabled_by_hardware">检测到物理键盘，软键盘未弹出</string>
     <string name="rename_session">重命名会话</string>
     <string name="log_level">日志级别</string>
     <string name="font_size">字体大小</string>

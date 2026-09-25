@@ -1184,6 +1184,13 @@
     <string name="sessions_closed">Sessions closed</string>
     <string name="process_not_running">Process not running</string>
     <string name="toggle_soft_keyboard">Toggle soft keyboard</string>
+    <string name="enable_softkeyboard">Enable soft keyboard</string>
+    <string name="enable_soft_keyboard_no_hw">Disable soft keyboard when using a physical keyboard</string>
+    <string name="soft_keyboard_only_if_no_hardware_desc">Automatically disable the soft keyboard when a physical keyboard is detected</string>
+    <string name="terminal_key_logging">Terminal key logging</string>
+    <string name="terminal_key_logging_desc">Log hardware key events and app-initiated input (IME text input is not captured)</string>
+    <string name="soft_keyboard_disabled_by_settings">Soft keyboard is disabled in settings</string>
+    <string name="soft_keyboard_disabled_by_hardware">Hardware keyboard detected, soft keyboard not shown</string>
     <string name="rename_session">Rename session</string>
     <string name="log_level">Log level</string>
     <string name="font_size">Font size</string>

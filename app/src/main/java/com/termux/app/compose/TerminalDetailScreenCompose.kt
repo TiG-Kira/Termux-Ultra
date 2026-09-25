@@ -146,6 +146,7 @@ fun TerminalDetailScreenCompose(
     val stylingColorScheme by ComposeTerminalSettings.stylingColorScheme.collectAsState()
     val stylingTypeface by ComposeTerminalSettings.stylingTypeface.collectAsState()
     val softKeyboardEnabled by ComposeTerminalSettings.softKeyboard.collectAsState()
+    val softKeyboardOnlyIfNoHardware by ComposeTerminalSettings.softKeyboardOnlyIfNoHardware.collectAsState()
     val isKeepScreenOn by ComposeTerminalSettings.keepScreenOn.collectAsState()
     val showToolbar by ComposeTerminalSettings.showToolbar.collectAsState()
 
@@ -272,6 +273,19 @@ fun TerminalDetailScreenCompose(
     fun toggleKeyboard() {
         KeyboardUtils.toggleSoftKeyboard(context)
         updateInteractionTime()
+    }
+
+    /** 长按快捷命令面板不受软键盘禁用设置影响，短按需先过设置约束。 */
+    fun toggleKeyboardRespectingSettings() {
+        if (!softKeyboardEnabled) {
+            showSnack(context.getString(R.string.soft_keyboard_disabled_by_settings))
+            return
+        }
+        if (softKeyboardOnlyIfNoHardware && hasHardwareKeyboard(context)) {
+            showSnack(context.getString(R.string.soft_keyboard_disabled_by_hardware))
+            return
+        }
+        toggleKeyboard()
     }
 
     fun toggleKeepScreenOn() {
@@ -562,29 +576,27 @@ fun TerminalDetailScreenCompose(
                 tint = effectiveTopBarContentColor
             )
         }
-        if (softKeyboardEnabled) {
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .combinedClickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = topBarIndication,
-                        onClick = { updateInteractionTime(); toggleKeyboard() },
-                        onLongClick = {
-                            updateInteractionTime()
-                            showQuickCommandSheet = true
-                        }
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_keyboard),
-                    contentDescription = null,
-                    modifier = Modifier.size(22.dp),
-                    tint = effectiveTopBarContentColor
-                )
-            }
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .clip(CircleShape)
+                .combinedClickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = topBarIndication,
+                    onClick = { updateInteractionTime(); toggleKeyboardRespectingSettings() },
+                    onLongClick = {
+                        updateInteractionTime()
+                        showQuickCommandSheet = true
+                    }
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                painter = painterResource(R.drawable.ic_keyboard),
+                contentDescription = null,
+                modifier = Modifier.size(22.dp),
+                tint = effectiveTopBarContentColor
+            )
         }
         OverlayIconDropdownMenu(
             entry = addSessionEntry,
@@ -651,29 +663,27 @@ fun TerminalDetailScreenCompose(
                 tint = effectiveTopBarContentColor
             )
         }
-        if (softKeyboardEnabled) {
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .combinedClickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = topBarIndication,
-                        onClick = { updateInteractionTime(); toggleKeyboard() },
-                        onLongClick = {
-                            updateInteractionTime()
-                            showQuickCommandSheet = true
-                        }
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_keyboard),
-                    contentDescription = null,
-                    modifier = Modifier.size(22.dp),
-                    tint = effectiveTopBarContentColor
-                )
-            }
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .clip(CircleShape)
+                .combinedClickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = topBarIndication,
+                    onClick = { updateInteractionTime(); toggleKeyboardRespectingSettings() },
+                    onLongClick = {
+                        updateInteractionTime()
+                        showQuickCommandSheet = true
+                    }
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                painter = painterResource(R.drawable.ic_keyboard),
+                contentDescription = null,
+                modifier = Modifier.size(22.dp),
+                tint = effectiveTopBarContentColor
+            )
         }
         OverlayIconDropdownMenu(
             entry = addSessionEntry,
@@ -1108,7 +1118,7 @@ fun TerminalDetailScreenCompose(
                                     )
                                 },
                                 text = context.getString(R.string.toggle_soft_keyboard),
-                                onClick = { toggleKeyboard(); showContextMenu = false }
+                                onClick = { showContextMenu = false; toggleKeyboardRespectingSettings() }
                             )
                             ContextMenuItem(
                                 icon = {
@@ -1401,4 +1411,9 @@ private fun SpecialKeyButton(
             maxLines = 1
         )
     }
+}
+
+private fun hasHardwareKeyboard(context: android.content.Context): Boolean {
+    return context.resources.configuration.keyboard !=
+        android.content.res.Configuration.KEYBOARD_NOKEYS
 }
