@@ -16,7 +16,7 @@ import java.io.File
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
- * Compose 模式下的终端会话管理器。
+ * 终端会话管理器。
  *
  * 单例，全局持久持有所有终端会话。会话创建后，即使 Activity 退出也不会被 kill
  *（除非显式调用 killSession 或 killAllSessions）。
@@ -184,7 +184,7 @@ class ComposeSessionManager private constructor(private val context: Context) {
             _sessions.value = remaining
 
             if (_currentSessionId.value == sessionId) {
-                // 对齐经典 removeFinishedSession：优先接管原索引处会话，越界取末尾
+                // 优先接管原索引处会话，越界取末尾
                 val index = if (removedIndex >= remaining.size) remaining.size - 1 else removedIndex
                 _currentSessionId.value = remaining.getOrNull(index)?.session?.id ?: -1
             }

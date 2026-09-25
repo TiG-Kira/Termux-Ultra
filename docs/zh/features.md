@@ -2,7 +2,7 @@
 title: 功能讲解
 lang: zh
 ref: features
-description: Termux Ultra 架构总览、双终端引擎、Miuix UI、集成工具机制、插件系统能力矩阵与权限模型、AI 助手、VorteX Guard 安全引擎、VNC/SSH 实现与技术栈。
+description: Termux Ultra 架构总览、终端引擎、Miuix UI、集成工具机制、插件系统能力矩阵与权限模型、AI 助手、VorteX Guard 安全引擎、VNC/SSH 实现与技术栈。
 ---
 
 ## 1. 架构总览
@@ -11,7 +11,7 @@ Termux Ultra 在保留 Termux 原生终端能力的基础上，叠加了一整�
 
 | 子系统 | 位置 | 职责 |
 |--------|------|------|
-| 终端核心 | `terminal-emulator`、`terminal-view`、`libterminal` | 终端仿真、屏幕渲染、Nova 引擎 |
+| 终端核心 | `libterminal` | 终端仿真、屏幕渲染 |
 | 应用主体 | `app/src/main/java/com/termux/app/` | `TermuxActivity`、`TermuxService`、通知系统 |
 | Compose UI | `app/.../app/compose/` | 主页、文件、远程、资源、设置、AI 助手 |
 | 插件系统 | `app/.../app/plugin/` | 插件装载、权限、Action 桥、Compose 渲染 |
@@ -21,14 +21,9 @@ Termux Ultra 在保留 Termux 原生终端能力的基础上，叠加了一整�
 | 集成插件 | `vendor/termux-addons/` | API / Boot / Styling / Tasker / Widget 源码 |
 | 共享库 | `termux-shared/` | 跨模块常量与工具（`TermuxConstants`） |
 
-## 2. 双终端引擎：经典 vs Nova
+## 2. 终端引擎
 
-可在 `设置` 中一键切换。
-
-- **经典引擎**：上游 Termux 的 `terminal-emulator` 实现，兼容性最稳。
-- **Nova 引擎（LibTerminal）**：全新终端核心，性能与兼容性大幅提升。当前版本 **3.1.1**（自 3.0.0 起迭代）。
-
-Nova 引擎在滚动、大批量输出、转义序列处理上表现更优；若遇到个别程序的渲染异常，回退经典引擎即可。
+**LibTerminal** 是终端核心引擎，负责终端仿真与屏幕渲染。当前版本 **3.1.1**（自 3.0.0 起迭代），在滚动、大批量输出、转义序列处理上表现优异。
 
 ## 3. UI：Jetpack Compose + Miuix
 
@@ -160,7 +155,7 @@ UI 全面采用 Jetpack Compose，设计语言为 **Miuix（HyperOS 风格）**�
 | 语言 | Kotlin、Java、C/C++ |
 | UI | Jetpack Compose 1.8.3、Material 3 1.3.0、Miuix KMP 0.9.4（ui / icons / preference） |
 | 架构组件 | AndroidX、Lifecycle 2.8.5、ViewModel、Navigation、Room 2.7.2、DataBinding |
-| 终端 | terminal-emulator、terminal-view、libterminal（Nova） |
+| 终端 | libterminal |
 | VNC | AVNC、libvncserver、libjpeg-turbo、wolfssl |
 | SSH | connectbot sshlib 2.2.36 |
 | 图片加载 | Coil Compose 2.7.0 |

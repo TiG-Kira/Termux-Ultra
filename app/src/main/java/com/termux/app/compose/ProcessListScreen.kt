@@ -184,7 +184,7 @@ fun ProcessListScreen(
             val gpu = try { readGpuUsage() } catch (_: Exception) { 0f }
             val rawList = try { readProcessList() } catch (_: Exception) { emptyList() }
             val detailed = buildDetailedProcessList(rawList)
-            // Compose 状态回到主线程再写，避免跨线程快照写入
+            // 状态回到主线程再写，避免跨线程快照写入
             withContext(Dispatchers.Main.immediate) {
                 cpuUsage = cpu
                 gpuUsage = gpu

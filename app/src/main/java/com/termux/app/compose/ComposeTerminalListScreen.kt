@@ -51,7 +51,7 @@ import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 /**
- * Compose 模式专用的终端会话列表页。
+ * 终端会话列表页。
  * 100% 复刻 Java 版 TerminalListScreen 的 UI 结构。
  */
 @Composable
@@ -107,7 +107,7 @@ fun ComposeTerminalListScreen(
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             IconButton(onClick = {
-                                // Compose 模式：直接用 ComposeSessionManager 创建会话，不依赖 Java 版 onNewTerminal。
+                                // 直接用 ComposeSessionManager 创建会话，不依赖 Java 版 onNewTerminal。
                                 // 效仿 Java 版策略：只创建未初始化的终端条目（不拉起进程、不跳转），
                                 // 待用户手动点击该终端卡片进入终端控制台时再初始化。
                                 val createdSession = sessionManager.createDefaultSession(startImmediately = false)
@@ -394,7 +394,7 @@ fun ComposeTerminalListScreen(
 }
 
 /**
- * Compose 模式的终端卡片，1:1 复刻 Java 版 TerminalCard。
+ * 终端卡片，1:1 复刻 Java 版 TerminalCard。
  *
  * 方形 aspectRatio(1f)，圆角 20dp，左上角终端图标+名称+状态，右下角重命名+停止按钮。
  */

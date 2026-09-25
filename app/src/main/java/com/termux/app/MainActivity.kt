@@ -87,7 +87,7 @@ class MainActivity : FragmentActivity() {
     private val sessionRefreshCallback = object : Runnable {
         override fun run() {
             // 仅在前台可见时继续轮询：进入后台后立即停止，避免每 2 秒唤醒主线程
-            // （唤醒 CPU / 刷新 Compose 状态）造成的纯后台耗电。
+            // （唤醒 CPU / 刷新状态）造成的纯后台耗电。
             if (!isDestroyed && isVisible) {
                 try {
                     updateSessions()
@@ -165,7 +165,7 @@ class MainActivity : FragmentActivity() {
                 selectedTab = 1
             }
 
-            // 外部页面（如 Compose 终端页"应用设置"）请求直接打开主页设置 tab
+            // 外部页面（如终端页"应用设置"）请求直接打开主页设置 tab
             if (i != null && i.getBooleanExtra(EXTRA_OPEN_SETTINGS_TAB, false)) {
                 i.removeExtra(EXTRA_OPEN_SETTINGS_TAB)
                 selectedTab = SETTINGS_TAB_INDEX
@@ -197,7 +197,7 @@ class MainActivity : FragmentActivity() {
                                 startActivity(intent)
                             },
                             onNewTerminal = {
-                                // 单一 Nova 引擎：走 ComposeSessionManager 创建未初始化会话。
+                                // 走 ComposeSessionManager 创建未初始化会话。
                                 // 不依赖 TermuxService 连接状态（服务绑定异步，未连接时
                                 // termuxService?.createTermuxSession 会静默失败无法拉起新会话）；
                                 // 且效仿 Java 版策略：只创建未初始化的终端条目，不跳转。
@@ -344,7 +344,7 @@ class MainActivity : FragmentActivity() {
         // 防止外部/系统重新派发的 ACTION_SERVICE_EXECUTE 等 intent 被错误地当成新会话请求
         setIntent(intent)
 
-        // 外部页面（如 Compose 终端页"应用设置"）请求直接打开主页设置 tab
+        // 外部页面（如终端页"应用设置"）请求直接打开主页设置 tab
         if (intent.getBooleanExtra(EXTRA_OPEN_SETTINGS_TAB, false)) {
             intent.removeExtra(EXTRA_OPEN_SETTINGS_TAB)
             selectedTab = SETTINGS_TAB_INDEX
@@ -387,7 +387,7 @@ class MainActivity : FragmentActivity() {
     }
 
     private fun toggleWakeLock() {
-        // 服务未绑定时回退用 UI 状态判断方向，保证 Compose 模式下服务绑定滞后时开关依然生效
+        // 服务未绑定时回退用 UI 状态判断方向，保证服务绑定滞后时开关依然生效
         val held = termuxService?.isWakeLockHeld() ?: isWakeLockEnabled
         val intent = Intent(this, TermuxService::class.java)
         intent.action = if (held) {

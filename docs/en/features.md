@@ -2,7 +2,7 @@
 title: Features
 lang: en
 ref: features
-description: Termux Ultra architecture, dual terminal engines, Miuix UI, integrated-tool mechanism, plugin capability matrix and permission model, AI assistant, VorteX Guard security engine, VNC/SSH internals, and tech stack.
+description: Termux Ultra architecture, terminal engine, Miuix UI, integrated-tool mechanism, plugin capability matrix and permission model, AI assistant, VorteX Guard security engine, VNC/SSH internals, and tech stack.
 ---
 
 ## 1. Architecture overview
@@ -11,7 +11,7 @@ Termux Ultra keeps the native Termux terminal and layers a set of enhanced subsy
 
 | Subsystem | Location | Responsibility |
 |-----------|----------|----------------|
-| Terminal core | `terminal-emulator`, `terminal-view`, `libterminal` | Terminal emulation, screen rendering, Nova engine |
+| Terminal core | `libterminal` | Terminal emulation and screen rendering |
 | App shell | `app/src/main/java/com/termux/app/` | `TermuxActivity`, `TermuxService`, notification system |
 | Compose UI | `app/.../app/compose/` | Home, files, remote, resources, settings, AI assistant |
 | Plugin system | `app/.../app/plugin/` | Plugin loading, permissions, action bridge, Compose rendering |
@@ -21,14 +21,9 @@ Termux Ultra keeps the native Termux terminal and layers a set of enhanced subsy
 | Integrated plugins | `vendor/termux-addons/` | API / Boot / Styling / Tasker / Widget sources |
 | Shared library | `termux-shared/` | Cross-module constants and utilities (`TermuxConstants`) |
 
-## 2. Dual terminal engines: Classic vs Nova
+## 2. Terminal engine
 
-Switchable with one tap in `Settings`.
-
-- **Classic engine**: upstream Termux's `terminal-emulator`, the most conservative choice for compatibility.
-- **Nova engine (LibTerminal)**: a brand-new terminal core with substantially better performance and compatibility. Current version **3.1.1** (evolved from 3.0.0).
-
-Nova is noticeably better at scrolling, bulk output, and escape sequence handling. Fall back to the classic engine if a specific program renders incorrectly.
+**LibTerminal** is the terminal core engine, handling terminal emulation and screen rendering. Current version **3.1.1** (evolved from 3.0.0). It excels at scrolling, bulk output, and escape sequence handling.
 
 ## 3. UI: Jetpack Compose + Miuix
 
@@ -160,7 +155,7 @@ Native CMake targets: `native-vnc`, `vncclient`, `turbojpeg-static`, `wolfssl`, 
 | Languages | Kotlin, Java, C/C++ |
 | UI | Jetpack Compose 1.8.3, Material 3 1.3.0, Miuix KMP 0.9.4 (ui / icons / preference) |
 | Architecture | AndroidX, Lifecycle 2.8.5, ViewModel, Navigation, Room 2.7.2, DataBinding |
-| Terminal | terminal-emulator, terminal-view, libterminal (Nova) |
+| Terminal | libterminal |
 | VNC | AVNC, libvncserver, libjpeg-turbo, wolfssl |
 | SSH | connectbot sshlib 2.2.36 |
 | Image loading | Coil Compose 2.7.0 |

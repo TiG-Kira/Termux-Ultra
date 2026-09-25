@@ -44,11 +44,11 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.window.WindowDialog
 
 // ================================================================
-// nova 模式: OverlayBottomSheet (依赖 Scaffold 提供 MiuixPopupHost)
+// Overlay 模式: OverlayBottomSheet (依赖 Scaffold 提供 MiuixPopupHost)
 // ================================================================
 
 /**
- * 快捷指令 OverlayBottomSheet（新星模式）。
+ * 快捷指令 OverlayBottomSheet（Overlay 模式）。
  * 必须放在 Scaffold 内部使用。
  */
 @Composable
@@ -100,11 +100,11 @@ fun QuickCommandSheet(
 }
 
 // ================================================================
-// 经典模式: WindowDialog (独立窗口，不依赖 Scaffold)
+// WindowDialog 模式: WindowDialog (独立窗口，不依赖 Scaffold)
 // ================================================================
 
 /**
- * 快捷指令 WindowDialog（经典模式）。
+ * 快捷指令 WindowDialog（WindowDialog 模式）。
  * 独立窗口，不依赖 Scaffold 的 MiuixPopupHost。
  * 放在 TerminalTopBar（56dp ComposeView）里也能正常全屏弹出。
  *
@@ -295,8 +295,8 @@ private fun AddQuickCommandDialog(
     var command by remember { mutableStateOf("") }
     var autoExecute by remember { mutableStateOf(true) }
 
-    // 用 miuix WindowDialog（独立窗口），nova / 经典两种模式都能用，
-    // 不依赖 Scaffold 的 MiuixPopupHost，避免经典模式下 "添加 +" 无响应。
+    // 用 miuix WindowDialog（独立窗口），Overlay / WindowDialog 两种承载方式都能用，
+    // 不依赖 Scaffold 的 MiuixPopupHost，避免 WindowDialog 承载时 "添加 +" 无响应。
     WindowDialog(
         show = true,
         title = "添加快捷指令",
@@ -381,7 +381,7 @@ fun executeQuickCommand(context: Context, command: QuickCommand) {
     val activity = findActivityFromContext(context, TermuxActivity::class.java) ?: return
     val text = buildQuickCommandText(command)
 
-    // 单一 Nova 引擎：快捷指令写入 ComposeSessionManager 的当前活跃会话
+    // 快捷指令写入 ComposeSessionManager 的当前活跃会话
     val composeSession = com.termux.app.terminal.shell.ComposeSessionManager
         .getInstance(context).currentSession
     if (composeSession != null && composeSession.isRunning.value) {

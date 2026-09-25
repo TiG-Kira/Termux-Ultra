@@ -10,9 +10,9 @@ import com.termux.app.terminal.shell.ComposeTerminalSettings
 import com.termux.app.terminal.shell.pid
 
 /**
- * Bridge helpers used by [TermuxActivity] (Java) to invoke Compose-only
- * APIs (setContent, KiTerminalTheme, etc.) that are awkward or impossible
- * to call directly from Java.
+* Bridge helpers used by [TermuxActivity] (Java) to invoke the Compose-based
+     * terminal UI (setContent, KiTerminalTheme, etc.) that are awkward or
+     * impossible to call directly from Java.
  */
 object TermuxActivityBridge {
 
@@ -20,7 +20,7 @@ object TermuxActivityBridge {
      * Replace the current Activity window content with the Compose-based
      * TerminalDetailScreenCompose, wrapped by KiTerminalTheme (Miuix theme).
      *
-     * 单一 Nova 引擎下会话由 ComposeSessionManager 单例持久管理：
+     * 会话由 ComposeSessionManager 单例持久管理：
      * - 首次调用：创建新 shell 会话
      * - 后续调用（已有会话）：直接显示当前会话，不新建
      * - onBack 只退出 Activity，不 kill 会话（保持后台运行）
@@ -39,13 +39,13 @@ object TermuxActivityBridge {
     ) {
         val sessionManager = ComposeSessionManager.getInstance(activity)
 
-        // 每次进入 Compose 终端都重新从 ~/.termux/colors.properties 与 font.ttf 读取 Styling，
+        // 每次进入终端都重新从 ~/.termux/colors.properties 与 font.ttf 读取 Styling，
         // 保证与 Java 模式的主题/字体始终保持同步（即使此前在设置页改过主题）
         ComposeTerminalSettings.init(activity)
         ComposeTerminalSettings.reloadFromStylingDisk()
 
-        // 优先处理 Java 接口传入的镜像句柄（第三方页面"新会话/tmux 执行"等），
-        // 使 Compose 终端直接展示对应的 Compose 会话；无句柄时维持原有行为。
+        // 优先处理 Java 接口传入的会话句柄（第三方页面"新会话/tmux 执行"等），
+        // 使终端直接展示对应的会话；无句柄时维持原有行为。
         val targetSession = resolveSessionFromIntent(activity, sessionManager)
 
         // 效仿 Java 版策略：未初始化的会话（新建后未进入过，pid=0）在用户手动点击进入
@@ -80,7 +80,7 @@ object TermuxActivityBridge {
     }
 
     /**
-     * 根据 Activity Intent 中携带的 "sessionHandle"（Nova 会话句柄）解析目标 Compose 会话；
+     * 根据 Activity Intent 中携带的 "sessionHandle"（适配会话句柄）解析目标终端会话；
      * 无句柄/解析失败时退回：当前会话 → 第一个会话 → 新建默认 shell。
      */
     private fun resolveSessionFromIntent(
@@ -90,8 +90,8 @@ object TermuxActivityBridge {
         val handle = try { activity.intent.getStringExtra("sessionHandle") } catch (_: Throwable) { null }
         if (handle != null) {
             val terminal = activity.termuxService?.termuxSessions?.firstOrNull { handle == it.getTerminalSession().mHandle }?.getTerminalSession()
-            if (terminal is com.termux.app.terminal.shell.NovaTerminalSessionAdapter) {
-                sessionManager.sessions.value.firstOrNull { it.session.id == terminal.novaId }?.session?.let {
+            if (terminal is com.termux.app.terminal.shell.TerminalSessionAdapter) {
+                sessionManager.sessions.value.firstOrNull { it.session.id == terminal.sessionId }?.session?.let {
                     return it
                 }
             }

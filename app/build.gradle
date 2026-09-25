@@ -65,7 +65,7 @@ android {
         // 注意：termux_core_version 字符串已在 strings.xml 中定义
         buildConfigField "String", "TERMUX_CORE_VERSION", "\"0.119.0\""
 
-        // 新星引擎 (LibTerminal) 核心版本号（来自 Maven Central）
+        // libterminal 核心版本号（来自 Maven Central）
         buildConfigField "String", "LIBTERMINAL_VERSION", "\"4.0.0\""
 
         // Workflow CLI build flag (set by GitHub Actions)

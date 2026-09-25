@@ -49,8 +49,8 @@ public class TermuxSession {
     /**
      * Wrap an already-created {@link TerminalSession} into a {@link TermuxSession}.
      *
-     * 供 Compose/Nova 引擎使用：shell 进程已由 ComposeSessionManager 直接拉起，
-     * 这里只把会话句柄（可为 {@link com.termux.app.terminal.shell.NovaTerminalSessionAdapter}
+     * 供终端会话适配使用：shell 进程已由 ComposeSessionManager 直接拉起，
+     * 这里只把会话句柄（可为 {@link com.termux.app.terminal.shell.TerminalSessionAdapter}
      * 之类的外观实现）与 {@link ExecutionCommand} 关联起来，不再重复执行
      * {@link #execute(Context, ExecutionCommand, TerminalSessionClient,
      * TermuxSessionClient, IShellEnvironment, HashMap, boolean)} 的进程启动逻辑。

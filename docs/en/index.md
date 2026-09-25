@@ -27,7 +27,7 @@ description: Termux Ultra official documentation — user manual, feature guide,
   </a>
   <a class="card" href="{{ '/en/features/' | relative_url }}">
     <span class="card-title">🧩 Features</span>
-    <span class="card-desc">Architecture, dual terminal engines (Classic / Nova), Miuix UI, integrated-tool mechanism, plugin capability matrix and permission model, AI assistant, and the security engine.</span>
+    <span class="card-desc">Architecture, terminal engine (LibTerminal), Miuix UI, integrated-tool mechanism, plugin capability matrix and permission model, AI assistant, and the security engine.</span>
   </a>
   <a class="card" href="{{ '/en/plugins/' | relative_url }}">
     <span class="card-title">🔌 Plugin Development</span>

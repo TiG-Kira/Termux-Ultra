@@ -17,7 +17,7 @@ import com.awkoo.libterminal.engine.TerminalCursorStyle
 import com.awkoo.libterminal.view.TerminalView as LibTerminalView
 
 /**
- * Compose 模式下的终端渲染屏幕。
+ * 终端渲染屏幕。
  *
  * 使用 AndroidView 包装 libterminal 的 TerminalView，
  * 绑定 TerminalSession，实现终端显示与交互。

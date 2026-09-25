@@ -90,9 +90,9 @@ Interaction details:
 - **Memory monitoring and protection**: freezes sessions when memory pressure is high, preventing data loss.
 - **Session keep-alive hints**: on Android 12+ this works together with `tmux` for background persistence.
 
-### Switching terminal engines
+### Terminal engine
 
-In `Settings` you can switch between the **classic engine** and the **Nova engine (LibTerminal)** with one tap. Nova offers substantially better performance and compatibility; fall back to the classic engine if a program renders incorrectly.
+**LibTerminal** is the terminal core engine, handling terminal emulation and screen rendering with substantially better performance and compatibility.
 
 ### Terminal appearance
 
