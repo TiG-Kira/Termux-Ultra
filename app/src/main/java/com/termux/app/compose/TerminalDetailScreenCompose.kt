@@ -473,13 +473,10 @@ fun TerminalDetailScreenCompose(
             val window = act.window
             val controller = androidx.core.view.WindowCompat.getInsetsController(window, window.decorView)
             if (!isCompact) {
-                // TopAppBar visible: status bar matches TopAppBar background, fully opaque
-                window.statusBarColor = android.graphics.Color.argb(
-                    255,
-                    (topBarOpaqueBg.red * 255).toInt(),
-                    (topBarOpaqueBg.green * 255).toInt(),
-                    (topBarOpaqueBg.blue * 255).toInt()
-                )
+                // TopAppBar 模式：状态栏同样透明，底色由顶栏 Column 背景绘制。
+                // 若锁成 opaque 窗口色，对话框暗色遮罩只会压暗应用内容，
+                // 状态栏一条纯白漏在外面（浅色主题下尤其明显）。
+                window.statusBarColor = android.graphics.Color.TRANSPARENT
                 controller.isAppearanceLightStatusBars = topBarOpaqueBg.luminance() > 0.5f
             } else {
                 // SmallTopAppBar mode: status bar transparent
