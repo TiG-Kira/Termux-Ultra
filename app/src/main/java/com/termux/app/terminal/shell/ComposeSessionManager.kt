@@ -71,7 +71,10 @@ class ComposeSessionManager private constructor(private val context: Context) {
         TerminalSessionCompat.registerSession(sessionId)
 
         val processFactory: (Int, Int, Int, Int) -> ITerminalProcess = { rows, cols, cw, ch ->
-            val bridge = TermuxProcessBridge(shellPath, cwd, args, env, rows, cols, cw, ch)
+            val bridge = TermuxProcessBridge(
+                shellPath, cwd, args, env, rows, cols, cw, ch,
+                onInputCommand = { command -> TerminalSessionCompat.setLastCommand(sessionId, command) }
+            )
             TerminalSessionCompat.setPid(sessionId, bridge.pid)
             bridge
         }

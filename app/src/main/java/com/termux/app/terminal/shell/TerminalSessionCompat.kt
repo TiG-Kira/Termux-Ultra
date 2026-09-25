@@ -24,9 +24,13 @@ object TerminalSessionCompat {
     /** sessionId -> sessionExited (MutableStateFlow<Boolean>)。进程结束瞬间置 true。 */
     private val exitedRegistry = Collections.synchronizedMap(WeakHashMap<Int, MutableStateFlow<Boolean>>())
 
+    /** sessionId -> 最近执行的命令（MutableStateFlow<String>），由 PTY 写入侧记录器回填。 */
+    private val lastCommandRegistry = Collections.synchronizedMap(WeakHashMap<Int, MutableStateFlow<String>>())
+
     fun registerSession(sessionId: Int) {
         pidStateRegistry[sessionId] = MutableStateFlow(0)
         exitedRegistry[sessionId] = MutableStateFlow(false)
+        lastCommandRegistry[sessionId] = MutableStateFlow("")
     }
 
     fun setPid(sessionId: Int, pid: Int) {
@@ -51,11 +55,17 @@ object TerminalSessionCompat {
         }
     }
 
+    /** 记录一次完整命令（回车结束时由 PtyInputRecorder 回调）。 */
+    fun setLastCommand(sessionId: Int, command: String) {
+        lastCommandRegistry[sessionId]?.value = command
+    }
+
     /** 清理注册表（供 killSession / killAllSessions 在 ComposeSessionManager 中可选调用）。 */
     fun unregister(sessionId: Int) {
         pidRegistry.remove(sessionId)
         pidStateRegistry.remove(sessionId)
         exitedRegistry.remove(sessionId)
+        lastCommandRegistry.remove(sessionId)
     }
 
     // --- 读取 API（供 TerminalSession 扩展属性使用） ---
@@ -74,6 +84,10 @@ object TerminalSessionCompat {
 
     internal fun getExited(sessionId: Int): StateFlow<Boolean> {
         return exitedRegistry[sessionId] ?: MutableStateFlow(true)
+    }
+
+    internal fun getLastCommand(sessionId: Int): StateFlow<String> {
+        return lastCommandRegistry[sessionId] ?: MutableStateFlow("")
     }
 }
 
@@ -97,3 +111,7 @@ val TerminalSession.shellPid: Int
 /** 会话是否已结束（进程退出瞬间变 true，配合 collectAsState 可让 UI 立即感知）。 */
 val TerminalSession.sessionExited: StateFlow<Boolean>
     get() = TerminalSessionCompat.getExited(id)
+
+/** 最近执行的命令：回车提交时更新，为空表示尚未有输入。 */
+val TerminalSession.lastCommandState: StateFlow<String>
+    get() = TerminalSessionCompat.getLastCommand(id)
