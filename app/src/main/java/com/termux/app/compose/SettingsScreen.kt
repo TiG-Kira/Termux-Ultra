@@ -764,7 +764,7 @@ val composeKeyLogging by com.termux.app.terminal.shell.ComposeTerminalSettings.k
                     onCheckedChange = {
                         com.termux.app.terminal.shell.ComposeTerminalSettings.setSoftKeyboardOnlyIfNoHardware(it)
                     },
-                    startAction = { SettingIcon(R.drawable.ic_keyboard_mini) }
+                    startAction = { SettingIcon(R.drawable.ic_keyboard_disabled) }
                 )
             }),
         SearchableSetting(sec_terminal, context.getString(R.string.terminal_key_logging), context.getString(R.string.terminal_key_logging_desc),
@@ -777,7 +777,7 @@ val composeKeyLogging by com.termux.app.terminal.shell.ComposeTerminalSettings.k
                     onCheckedChange = {
                         com.termux.app.terminal.shell.ComposeTerminalSettings.setKeyLogging(it)
                     },
-                    startAction = { SettingIcon(R.drawable.ic_bug) }
+                    startAction = { SettingIcon(R.drawable.ic_bug_keyboard) }
                 )
             }),
 
@@ -1234,7 +1234,7 @@ val composeKeyLogging by com.termux.app.terminal.shell.ComposeTerminalSettings.k
                                 onCheckedChange = {
                                     com.termux.app.terminal.shell.ComposeTerminalSettings.setSoftKeyboardOnlyIfNoHardware(it)
                                 },
-                                startAction = { SettingIcon(R.drawable.ic_keyboard_mini) }
+                                startAction = { SettingIcon(R.drawable.ic_keyboard_disabled) }
                             )
                             SwitchPreference(
                                 title = context.getString(R.string.terminal_key_logging),
@@ -1243,7 +1243,7 @@ val composeKeyLogging by com.termux.app.terminal.shell.ComposeTerminalSettings.k
                                 onCheckedChange = {
                                     com.termux.app.terminal.shell.ComposeTerminalSettings.setKeyLogging(it)
                                 },
-                                startAction = { SettingIcon(R.drawable.ic_bug) }
+                                startAction = { SettingIcon(R.drawable.ic_bug_keyboard) }
                             )
                             OverlayDropdownPreference(
                                 title = context.getString(R.string.log_level),
