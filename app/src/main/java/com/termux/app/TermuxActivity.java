@@ -68,6 +68,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.compose.ui.platform.ComposeView;
 import androidx.core.content.ContextCompat;
+import androidx.core.view.WindowCompat;
 import androidx.drawerlayout.widget.DrawerLayout;
 import androidx.viewpager.widget.ViewPager;
 
@@ -290,6 +291,8 @@ public final class TermuxActivity extends ComponentActivity implements ServiceCo
 
         setTermuxTerminalViewAndClients();
         setTerminalToolbarView(savedInstanceState);
+
+        WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
 
         // Step 3: Replace window content with Compose-based TerminalDetailScreen.
         // TerminalView has already been extracted and detached; it will be re-hosted
