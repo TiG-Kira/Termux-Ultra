@@ -68,8 +68,9 @@ jobs:
 
       # ./gradlew test 会执行各子模块的单元测试任务：
       #   :app:testDebugUnitTest（JUnit4 + Robolectric 4.17）
-      #   :terminal-emulator / :termux-shared / :terminal-view / :libterminal
+      #   :terminal-emulator / :termux-shared / :terminal-view
       #   以及 vendor/termux-addons 下的 :termux-api / :termux-styling / :termux-tasker / :termux-widget
+      #   （libterminal 已改为 Maven Central 依赖 io.github.awkox:libterminal:4.0.0，不再作为子模块）
       # TERMUX_WORKFLOW_CLI 与 ci.yml 保持一致，保证测试跑在和「编译」相同的构建配置上。
       - name: 运行单元测试
         run: |
