@@ -93,7 +93,7 @@ object GlassNavigationBarDefaults {
     val Height: Dp = 54.dp
 
     /** Size of an icon. */
-    val IconSize: Dp = 28.dp
+    val IconSize: Dp = 30.dp
 
     /** Caption size in dp, matching the source's footnote3 dimension resource. */
     val LabelSize: Dp = 11.dp
