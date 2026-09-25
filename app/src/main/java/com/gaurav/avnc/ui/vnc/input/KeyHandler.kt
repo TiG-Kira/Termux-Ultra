@@ -8,7 +8,6 @@
 
 package com.gaurav.avnc.ui.vnc.input
 
-import android.os.Build
 import android.view.KeyCharacterMap
 import android.view.KeyEvent
 import com.gaurav.avnc.util.AppPreferences
@@ -527,13 +526,9 @@ class KeyHandler(private val dispatcher: Dispatcher, prefs: AppPreferences) {
         if (string.length == 1) {
             // Simple & most frequent case
             block(string[0].code)
-        } else if (Build.VERSION.SDK_INT >= 24) {
+        } else {
             for (cp in string.codePoints())
                 block(cp)
-        } else {
-            // Fallback to simple conversion (will be incorrect for non-MBP code points)
-            for (c in string)
-                block(c.code)
         }
     }
 }

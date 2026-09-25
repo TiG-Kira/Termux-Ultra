@@ -4,12 +4,10 @@ import android.app.Notification;
 import android.app.PendingIntent;
 import android.content.Context;
 import android.graphics.drawable.Icon;
-import android.os.Build;
 
 import androidx.annotation.Nullable;
 
 import com.termux.shared.R;
-import com.termux.shared.android.resource.ResourceUtils;
 import com.termux.shared.notification.NotificationUtils;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants;
@@ -86,16 +84,8 @@ public class TermuxNotificationUtils {
         // is shown with termuxPackageContext and termux-app package would have a different id and
         // when android tries to load the drawable an exception would be thrown and notification will
         // not be thrown.
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            // Set Icon instead of drawable resource id
-            builder.setSmallIcon(Icon.createWithResource(currentPackageContext, R.drawable.ic_error_notification));
-        } else {
-            // Set drawable resource id used by termux-app package
-            Integer iconResId = ResourceUtils.getDrawableResourceId(termuxPackageContext, "ic_error_notification",
-                termuxPackageContext.getPackageName(), true);
-            if (iconResId != null)
-                builder.setSmallIcon(iconResId);
-        }
+        // Set Icon instead of drawable resource id
+        builder.setSmallIcon(Icon.createWithResource(currentPackageContext, R.drawable.ic_error_notification));
 
         // Set background color for small notification icon
         builder.setColor(0xFF607D8B);

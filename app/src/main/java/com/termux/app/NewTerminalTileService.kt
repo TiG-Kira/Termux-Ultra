@@ -40,11 +40,7 @@ class NewTerminalTileService : TileService() {
         try {
             val serviceIntent = Intent(this, TermuxService::class.java)
             // 直接 startService：TermuxService.onStartCommand 自己处理启动逻辑
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                startForegroundService(serviceIntent)
-            } else {
-                startService(serviceIntent)
-            }
+            startForegroundService(serviceIntent)
         } catch (e: Exception) {
             android.util.Log.w("NewTerminalTile", "TermuxService 启动失败: ${e.message}")
             // 即使服务启动失败也继续尝试启动 Activity，Activity 里会再尝试绑定
@@ -60,8 +56,6 @@ class NewTerminalTileService : TileService() {
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             startActivityAndCollapse(intent)
-        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            startActivity(intent)
         } else {
             startActivity(intent)
         }

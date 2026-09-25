@@ -25,7 +25,6 @@
 
 package com.termux.shared.file.filesystem;
 
-import android.os.Build;
 import android.system.StructStat;
 
 import androidx.annotation.NonNull;
@@ -301,21 +300,12 @@ public class FileAttributes {
         this.st_blksize = structStat.st_blksize;
         this.st_blocks = structStat.st_blocks;
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
-            this.st_atime_sec = structStat.st_atim.tv_sec;
-            this.st_atime_nsec = structStat.st_atim.tv_nsec;
-            this.st_mtime_sec = structStat.st_mtim.tv_sec;
-            this.st_mtime_nsec = structStat.st_mtim.tv_nsec;
-            this.st_ctime_sec = structStat.st_ctim.tv_sec;
-            this.st_ctime_nsec = structStat.st_ctim.tv_nsec;
-        } else {
-            this.st_atime_sec = structStat.st_atime;
-            this.st_atime_nsec = 0;
-            this.st_mtime_sec = structStat.st_mtime;
-            this.st_mtime_nsec = 0;
-            this.st_ctime_sec = structStat.st_ctime;
-            this.st_ctime_nsec = 0;
-        }
+        this.st_atime_sec = structStat.st_atim.tv_sec;
+        this.st_atime_nsec = structStat.st_atim.tv_nsec;
+        this.st_mtime_sec = structStat.st_mtim.tv_sec;
+        this.st_mtime_nsec = structStat.st_mtim.tv_nsec;
+        this.st_ctime_sec = structStat.st_ctim.tv_sec;
+        this.st_ctime_nsec = structStat.st_ctim.tv_nsec;
     }
 
     public String getFileString() {

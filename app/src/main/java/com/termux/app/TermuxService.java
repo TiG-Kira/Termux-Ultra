@@ -1269,9 +1269,7 @@ public synchronized int removeTermuxSession(TerminalSession sessionToRemove) {
 
     /** 所有通知开关关闭时的最小化前台通知（Android 强制要求前台服务必须有 notification）。 */
     private Notification buildMinimalNotification(PendingIntent contentIntent, int piFlags) {
-        Notification.Builder builder = (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
-            ? new Notification.Builder(this, TermuxConstants.TERMUX_APP_NOTIFICATION_CHANNEL_ID)
-            : new Notification.Builder(this);
+        Notification.Builder builder = new Notification.Builder(this, TermuxConstants.TERMUX_APP_NOTIFICATION_CHANNEL_ID);
 
         builder.setContentTitle("Termux");
         builder.setContentText("运行中");
@@ -1286,9 +1284,7 @@ public synchronized int removeTermuxSession(TerminalSession sessionToRemove) {
 
     /** 档 1：包管理器进度通知（带 ProgressStyle + 药丸"操作进行:XX%"）。 */
     private Notification buildPkgNotification(LiveUpdateState.PkgState pkg, PendingIntent contentIntent, int piFlags, boolean liveUpdateEnabled) {
-        Notification.Builder builder = (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
-            ? new Notification.Builder(this, TermuxConstants.TERMUX_APP_NOTIFICATION_CHANNEL_ID)
-            : new Notification.Builder(this);
+        Notification.Builder builder = new Notification.Builder(this, TermuxConstants.TERMUX_APP_NOTIFICATION_CHANNEL_ID);
 
         String title = "正在执行软件包更改";
         String body;
@@ -1334,9 +1330,7 @@ public synchronized int removeTermuxSession(TerminalSession sessionToRemove) {
 
     /** 档 2：Agent 执行通知（药丸"思考中" + 停止按钮）。 */
     private Notification buildAgentNotification(PendingIntent contentIntent, int piFlags, boolean liveUpdateEnabled) {
-        Notification.Builder builder = (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
-            ? new Notification.Builder(this, TermuxConstants.TERMUX_APP_NOTIFICATION_CHANNEL_ID)
-            : new Notification.Builder(this);
+        Notification.Builder builder = new Notification.Builder(this, TermuxConstants.TERMUX_APP_NOTIFICATION_CHANNEL_ID);
 
         builder.setContentTitle("Termux Agent");
         builder.setContentText("Agent 正在执行任务");
@@ -1422,9 +1416,7 @@ public synchronized int removeTermuxSession(TerminalSession sessionToRemove) {
         int priority = sessionsCleared ? Notification.PRIORITY_LOW :
             (wakeLockHeld ? Notification.PRIORITY_HIGH : Notification.PRIORITY_LOW);
 
-        Notification.Builder builder = (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
-            ? new Notification.Builder(this, TermuxConstants.TERMUX_APP_NOTIFICATION_CHANNEL_ID)
-            : new Notification.Builder(this);
+        Notification.Builder builder = new Notification.Builder(this, TermuxConstants.TERMUX_APP_NOTIFICATION_CHANNEL_ID);
 
         builder.setContentTitle(title);
         builder.setContentText(body);
@@ -1475,8 +1467,6 @@ public synchronized int removeTermuxSession(TerminalSession sessionToRemove) {
     }
 
     private void setupNotificationChannel() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return;
-
         NotificationUtils.setupNotificationChannel(this, TermuxConstants.TERMUX_APP_NOTIFICATION_CHANNEL_ID,
             TermuxConstants.TERMUX_APP_NOTIFICATION_CHANNEL_NAME, NotificationManager.IMPORTANCE_DEFAULT);
     }
@@ -1635,23 +1625,14 @@ public synchronized int removeTermuxSession(TerminalSession sessionToRemove) {
             AlarmManager alarmManager = (AlarmManager) getSystemService(Context.ALARM_SERVICE);
             Intent intent = new Intent(this, TermuxService.class);
             intent.setAction(TERMUX_SERVICE.ACTION_SERVICE_EXECUTE);
-            int flags = Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ? PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE : PendingIntent.FLAG_UPDATE_CURRENT;
+            int flags = PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE;
             PendingIntent pendingIntent = PendingIntent.getService(this, 0, intent, flags);
 
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                alarmManager.setExactAndAllowWhileIdle(
-                        AlarmManager.ELAPSED_REALTIME_WAKEUP,
-                        SystemClock.elapsedRealtime() + 60 * 1000,
-                        pendingIntent
-                );
-            } else {
-                alarmManager.setRepeating(
-                        AlarmManager.ELAPSED_REALTIME_WAKEUP,
-                        SystemClock.elapsedRealtime() + 60 * 1000,
-                        60 * 1000,
-                        pendingIntent
-                );
-            }
+            alarmManager.setExactAndAllowWhileIdle(
+                    AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                    SystemClock.elapsedRealtime() + 60 * 1000,
+                    pendingIntent
+            );
         } catch (Exception e) {
             Logger.logStackTraceWithMessage(LOG_TAG, "Failed to schedule AlarmManager", e);
         }
@@ -1662,7 +1643,7 @@ public synchronized int removeTermuxSession(TerminalSession sessionToRemove) {
             AlarmManager alarmManager = (AlarmManager) getSystemService(Context.ALARM_SERVICE);
             Intent intent = new Intent(this, TermuxService.class);
             intent.setAction(TERMUX_SERVICE.ACTION_SERVICE_EXECUTE);
-            int flags = Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ? PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE : PendingIntent.FLAG_UPDATE_CURRENT;
+            int flags = PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE;
             PendingIntent pendingIntent = PendingIntent.getService(this, 0, intent, flags);
             alarmManager.cancel(pendingIntent);
         } catch (Exception e) {

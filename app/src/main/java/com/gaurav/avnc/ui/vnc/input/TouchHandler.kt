@@ -10,7 +10,6 @@ package com.gaurav.avnc.ui.vnc.input
 
 import android.content.Context
 import android.graphics.PointF
-import android.os.Build
 import android.view.GestureDetector
 import android.view.GestureDetector.SimpleOnGestureListener
 import android.view.HapticFeedbackConstants
@@ -86,7 +85,7 @@ class TouchHandler(private val frameView: FrameView, private val dispatcher: Dis
     private val mousePassthrough = pref.input.mousePassthrough
 
     private fun handleMouseEvent(e: MotionEvent): Boolean {
-        if (Build.VERSION.SDK_INT < 23 || !mousePassthrough || !e.isFromSource(InputDevice.SOURCE_MOUSE))
+        if (!mousePassthrough || !e.isFromSource(InputDevice.SOURCE_MOUSE))
             return false
 
         val p = e.point()
@@ -108,9 +107,6 @@ class TouchHandler(private val frameView: FrameView, private val dispatcher: Dis
     }
 
     private fun handleCapturedPointerEvent(e: MotionEvent): Boolean {
-        if (Build.VERSION.SDK_INT < 26)
-            return false
-
         val screenDensity = frameView.context.resources.displayMetrics.density
         val dx: Float
         val dy: Float

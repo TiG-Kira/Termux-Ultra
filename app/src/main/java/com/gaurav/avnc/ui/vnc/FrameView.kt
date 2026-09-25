@@ -11,7 +11,6 @@ package com.gaurav.avnc.ui.vnc
 import android.annotation.SuppressLint
 import android.content.Context
 import android.opengl.GLSurfaceView
-import android.os.Build
 import android.util.AttributeSet
 import android.view.KeyEvent
 import android.view.MotionEvent
@@ -69,7 +68,7 @@ class FrameView(context: Context?, attrs: AttributeSet? = null) : GLSurfaceView(
         renderMode = RENDERMODE_WHEN_DIRTY
 
         // Hide local cursor if requested and supported
-        if (Build.VERSION.SDK_INT >= 24 && viewModel.pref.input.hideLocalCursor)
+        if (viewModel.pref.input.hideLocalCursor)
             pointerIcon = PointerIcon.getSystemIcon(context, PointerIcon.TYPE_NULL)
     }
 

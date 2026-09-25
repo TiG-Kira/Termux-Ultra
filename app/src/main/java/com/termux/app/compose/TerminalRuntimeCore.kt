@@ -2,7 +2,6 @@ package com.termux.app.compose
 
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import com.termux.shared.termux.TermuxConstants
 
 /**
@@ -10,19 +9,12 @@ import com.termux.shared.termux.TermuxConstants
  *
  * 两种模式：
  * - JAVA_NDK: 使用现有的 Java + NDK terminal-emulator / terminal-view 模块（默认）
- * - KOTLIN_COMPOSE: 使用新的 Kotlin + Compose libterminal 方案（实验性，插件不可用，需 Android 9+）
+ * - KOTLIN_COMPOSE: 使用新的 Kotlin + Compose libterminal 方案（实验性，需 Android 9+）
  */
 object TerminalRuntimeCore {
 
     const val PREFS_NAME = "app_settings"
     const val KEY_RUNTIME_CORE = "terminal_runtime_core"
-
-    /** Kotlin+Compose 模式所需的最低 SDK 版本（Android 9 Pie）。 */
-    const val MIN_SDK_FOR_COMPOSE = 28
-
-    /** 当前设备是否支持切换到 Kotlin+Compose 模式。 */
-    val isComposeSupported: Boolean
-        get() = Build.VERSION.SDK_INT >= MIN_SDK_FOR_COMPOSE
 
     enum class Core(val value: String) {
         JAVA_NDK("java_ndk"),
@@ -41,18 +33,10 @@ object TerminalRuntimeCore {
 
     fun getCurrent(context: Context): Core {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val stored = Core.fromValue(prefs.getString(KEY_RUNTIME_CORE, Core.JAVA_NDK.value) ?: Core.JAVA_NDK.value)
-        // SDK < 28 时强制回退到 Java+NDK
-        if (stored == Core.KOTLIN_COMPOSE && !isComposeSupported) {
-            prefs.edit().putString(KEY_RUNTIME_CORE, Core.JAVA_NDK.value).apply()
-            return Core.JAVA_NDK
-        }
-        return stored
+        return Core.fromValue(prefs.getString(KEY_RUNTIME_CORE, Core.JAVA_NDK.value) ?: Core.JAVA_NDK.value)
     }
 
     fun setCurrent(context: Context, core: Core) {
-        // SDK < 28 时拒绝切换到 Kotlin+Compose
-        if (core == Core.KOTLIN_COMPOSE && !isComposeSupported) return
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .edit()
             .putString(KEY_RUNTIME_CORE, core.value)
@@ -64,10 +48,8 @@ object TerminalRuntimeCore {
 
     /** 是否使用 Compose 核心（Java+NDK=false, Kotlin+Compose=true）。 */
     @JvmStatic
-    fun isComposeMode(context: Context): Boolean {
-        if (!isComposeSupported) return false
-        return getCurrent(context) == Core.KOTLIN_COMPOSE
-    }
+    fun isComposeMode(context: Context): Boolean =
+        getCurrent(context) == Core.KOTLIN_COMPOSE
 
     /** Java+NDK 模式下可用的插件，Kotlin+Compose 模式下会被禁用。 */
     private val DISABLED_IN_COMPOSE_MODE = listOf(

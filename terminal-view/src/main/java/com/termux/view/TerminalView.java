@@ -1,14 +1,12 @@
 package com.termux.view;
 
 import android.annotation.SuppressLint;
-import android.annotation.TargetApi;
 import android.app.Activity;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Typeface;
-import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
@@ -35,7 +33,6 @@ import android.view.inputmethod.InputConnection;
 import android.widget.Scroller;
 
 import androidx.annotation.Nullable;
-import androidx.annotation.RequiresApi;
 
 import com.termux.terminal.KeyHandler;
 import com.termux.terminal.TerminalEmulator;
@@ -96,7 +93,6 @@ public final class TerminalView extends View {
      * {@link #autofill(AutofillValue)} so that AutoFill UI isn't shown anymore by calling
      * {@link #resetAutoFill()}.
      */
-    @RequiresApi(api = Build.VERSION_CODES.O)
     private int mAutoFillType = AUTOFILL_TYPE_NONE;
 
     /**
@@ -110,7 +106,6 @@ public final class TerminalView extends View {
      * The updated value set will automatically be restored to {@link #IMPORTANT_FOR_AUTOFILL_NO} in
      * {@link #autofill(AutofillValue)} by calling {@link #resetAutoFill()}.
      */
-    @RequiresApi(api = Build.VERSION_CODES.O)
     private int mAutoFillImportance = IMPORTANT_FOR_AUTOFILL_NO;
 
     /**
@@ -601,7 +596,6 @@ public final class TerminalView extends View {
 
     @SuppressLint("ClickableViewAccessibility")
     @Override
-    @TargetApi(23)
     public boolean onTouchEvent(MotionEvent event) {
         if (mEmulator == null) return true;
         final int action = event.getAction();
@@ -1060,7 +1054,6 @@ public final class TerminalView extends View {
     /**
      * Define functions required for AutoFill API
      */
-    @RequiresApi(api = Build.VERSION_CODES.O)
     @Override
     public void autofill(AutofillValue value) {
         if (value.isText()) {
@@ -1070,31 +1063,26 @@ public final class TerminalView extends View {
         resetAutoFill();
     }
 
-    @RequiresApi(api = Build.VERSION_CODES.O)
     @Override
     public int getAutofillType() {
         return mAutoFillType;
     }
 
-    @RequiresApi(api = Build.VERSION_CODES.O)
     @Override
     public String[] getAutofillHints() {
         return mAutoFillHints;
     }
 
-    @RequiresApi(api = Build.VERSION_CODES.O)
     @Override
     public AutofillValue getAutofillValue() {
         return AutofillValue.forText("");
     }
 
-    @RequiresApi(api = Build.VERSION_CODES.O)
     @Override
     public int getImportantForAutofill() {
         return mAutoFillImportance;
     }
 
-    @RequiresApi(api = Build.VERSION_CODES.O)
     private synchronized void resetAutoFill() {
         // Restore none type so that AutoFill UI isn't shown anymore.
         mAutoFillType = AUTOFILL_TYPE_NONE;
@@ -1103,8 +1091,6 @@ public final class TerminalView extends View {
     }
 
     public AutofillManager getAutoFillManagerService() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return null;
-
         try {
             Context context = getContext();
             if (context == null) return null;
@@ -1116,8 +1102,6 @@ public final class TerminalView extends View {
     }
 
     public boolean isAutoFillEnabled() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return false;
-
         try {
             AutofillManager autofillManager = getAutoFillManagerService();
             return autofillManager != null && autofillManager.isEnabled();
@@ -1128,19 +1112,14 @@ public final class TerminalView extends View {
     }
 
     public synchronized void requestAutoFillUsername() {
-        requestAutoFill(
-            Build.VERSION.SDK_INT >= Build.VERSION_CODES.O ? new String[]{View.AUTOFILL_HINT_USERNAME} :
-                null);
+        requestAutoFill(new String[]{View.AUTOFILL_HINT_USERNAME});
     }
 
     public synchronized void requestAutoFillPassword() {
-        requestAutoFill(
-            Build.VERSION.SDK_INT >= Build.VERSION_CODES.O ? new String[]{View.AUTOFILL_HINT_PASSWORD} :
-            null);
+        requestAutoFill(new String[]{View.AUTOFILL_HINT_PASSWORD});
     }
 
     public synchronized void requestAutoFill(String[] autoFillHints) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return;
         if (autoFillHints == null || autoFillHints.length < 1) return;
 
         try {
@@ -1161,7 +1140,6 @@ public final class TerminalView extends View {
     }
 
     public synchronized void cancelRequestAutoFill() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return;
         if (mAutoFillType == AUTOFILL_TYPE_NONE) return;
 
         try {
@@ -1456,7 +1434,6 @@ public final class TerminalView extends View {
      * Define functions required for long hold toolbar.
      */
     private final Runnable mShowFloatingToolbar = new Runnable() {
-        @RequiresApi(api = Build.VERSION_CODES.M)
         @Override
         public void run() {
             if (getTextSelectionActionMode() != null) {
@@ -1465,7 +1442,6 @@ public final class TerminalView extends View {
         }
     };
 
-    @RequiresApi(api = Build.VERSION_CODES.M)
     private void showFloatingToolbar() {
         if (getTextSelectionActionMode() != null) {
             int delay = ViewConfiguration.getDoubleTapTimeout();
@@ -1473,7 +1449,6 @@ public final class TerminalView extends View {
         }
     }
 
-    @RequiresApi(api = Build.VERSION_CODES.M)
     void hideFloatingToolbar() {
         if (getTextSelectionActionMode() != null) {
             removeCallbacks(mShowFloatingToolbar);
@@ -1482,7 +1457,7 @@ public final class TerminalView extends View {
     }
 
     public void updateFloatingToolbarVisibility(MotionEvent event) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && getTextSelectionActionMode() != null) {
+        if (getTextSelectionActionMode() != null) {
             switch (event.getActionMasked()) {
                 case MotionEvent.ACTION_MOVE:
                     hideFloatingToolbar();

@@ -5,7 +5,6 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import androidx.core.app.NotificationCompat
 import com.google.android.material.snackbar.Snackbar
 import com.termux.R
@@ -360,21 +359,14 @@ object FallbackHelper {
     private fun showNotification(context: Context, title: String, message: String) {
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager ?: return
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHANNEL_ID,
-                context.getString(R.string.low_android_warning_title),
-                NotificationManager.IMPORTANCE_HIGH
-            )
-            nm.createNotificationChannel(channel)
-        }
+        val channel = NotificationChannel(
+            CHANNEL_ID,
+            context.getString(R.string.low_android_warning_title),
+            NotificationManager.IMPORTANCE_HIGH
+        )
+        nm.createNotificationChannel(channel)
 
-        val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            NotificationCompat.Builder(context, CHANNEL_ID)
-        } else {
-            @Suppress("DEPRECATION")
-            NotificationCompat.Builder(context)
-        }
+        val builder = NotificationCompat.Builder(context, CHANNEL_ID)
 
         builder
             .setSmallIcon(R.drawable.ic_warning)
