@@ -8,6 +8,7 @@ import androidx.compose.animation.core.FastOutLinearInEasing
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
@@ -384,20 +385,29 @@ fun TerminalDetailScreenCompose(
             lastInteractionTime = System.currentTimeMillis()
             lastInteractionFromTopBar = true
             coroutineScope.launch {
-                animate(initialValue = smallTitleAlpha, targetValue = 0f, animationSpec = tween(100, easing = FastOutLinearInEasing)) { value, _ ->
-                    smallTitleAlpha = value
+                try {
+                    animate(initialValue = smallTitleAlpha, targetValue = 0f, animationSpec = tween(100, easing = FastOutLinearInEasing)) { value, _ ->
+                        smallTitleAlpha = value
+                    }
+                    topBarSlideProgress = 1f
+                    isCompact = false
+                    isTopBarCollapsed = false
+                    delay(200)
+                    animate(initialValue = 1f, targetValue = 0f, animationSpec = tween(220, easing = FastOutSlowInEasing)) { value, _ ->
+                        topBarSlideProgress = value
+                    }
+                    showLargeContent = true
+                    delay(150)
+                } finally {
+                    // 协程被取消时落到完整展开态，避免停在「已收起颜色 + 未收起底色」的白条中间态
+                    isCompact = false
+                    showLargeContent = true
+                    topBarSlideProgress = 0f
+                    isTopBarCollapsed = false
+                    smallTitleAlpha = 0f
+                    useLargeButtons = true
+                    isTopBarTransitioning = false
                 }
-                topBarSlideProgress = 1f
-                isCompact = false
-                isTopBarCollapsed = false
-                delay(200)
-                animate(initialValue = 1f, targetValue = 0f, animationSpec = tween(220, easing = FastOutSlowInEasing)) { value, _ ->
-                    topBarSlideProgress = value
-                }
-                showLargeContent = true
-                delay(150)
-                isTopBarTransitioning = false
-                useLargeButtons = true
             }
         } else {
             showLargeContent = true
@@ -414,20 +424,27 @@ fun TerminalDetailScreenCompose(
             useLargeButtons = true
             showNewSessionLabel = false
             coroutineScope.launch {
-                showLargeContent = false
-                delay(100)
-                animate(initialValue = topBarSlideProgress, targetValue = 1f, animationSpec = tween(220, easing = FastOutSlowInEasing)) { value, _ ->
-                    topBarSlideProgress = value
-                }
-                isCompact = true
-                delay(200)
-                if (isTopBarCollapsed) {
-                    animate(initialValue = smallTitleAlpha, targetValue = 1f, animationSpec = tween(120)) { value, _ ->
-                        smallTitleAlpha = value
+                try {
+                    showLargeContent = false
+                    delay(100)
+                    animate(initialValue = topBarSlideProgress, targetValue = 1f, animationSpec = tween(220, easing = FastOutSlowInEasing)) { value, _ ->
+                        topBarSlideProgress = value
                     }
+                    isCompact = true
+                    delay(200)
+                    if (isTopBarCollapsed) {
+                        animate(initialValue = smallTitleAlpha, targetValue = 1f, animationSpec = tween(120)) { value, _ ->
+                            smallTitleAlpha = value
+                        }
+                    }
+                } finally {
+                    // 协程被取消时落到完整收缩态，避免顶栏停在实体白底 + 白图标的中间态
+                    isCompact = true
+                    showLargeContent = false
+                    topBarSlideProgress = 1f
+                    useLargeButtons = false
+                    isTopBarTransitioning = false
                 }
-                isTopBarTransitioning = false
-                useLargeButtons = false
             }
         }
     }
@@ -839,12 +856,13 @@ fun TerminalDetailScreenCompose(
                 )
             },
             topBar = {
-                val bgAlpha by animateFloatAsState(
-                    targetValue = if (!isCompact) 1f else 0f,
+                // 收缩态用终端实际背景色：顶栏透明到底会让窗口默认底色（浅色主题为白）
+                // 从透明处漏出，白色图标又叠在白底上导致整条顶栏看不见
+                val topBarColor by animateColorAsState(
+                    targetValue = if (isCompact) terminalBgColor else topBarOpaqueBg,
                     animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
                     label = "topBarBg"
                 )
-                val topBarColor = topBarOpaqueBg.copy(alpha = topBarOpaqueBg.alpha * bgAlpha)
                 val titleAlpha by animateFloatAsState(
                     targetValue = if (showLargeContent) 1f else 0f,
                     animationSpec = tween(
