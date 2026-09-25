@@ -276,7 +276,7 @@ implementation "io.coil-kt:coil:2.7.0"
 
     implementation "com.google.android.material:material:1.14.0"
     implementation "org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0"
-    implementation "org.connectbot:sshlib:2.2.36"
+    implementation "org.connectbot:sshlib:2.2.48"
 
     implementation "com.squareup.okhttp3:okhttp:5.5.0"
 
