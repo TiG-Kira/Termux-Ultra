@@ -65,8 +65,8 @@ android {
         // 注意：termux_core_version 字符串已在 strings.xml 中定义
         buildConfigField "String", "TERMUX_CORE_VERSION", "\"0.119.0\""
 
-        // 新星引擎 (LibTerminal) 核心版本号
-        buildConfigField "String", "LIBTERMINAL_VERSION", "\"3.1.1\""
+        // 新星引擎 (LibTerminal) 核心版本号（来自 Maven Central）
+        buildConfigField "String", "LIBTERMINAL_VERSION", "\"4.0.0\""
 
         // Workflow CLI build flag (set by GitHub Actions)
         buildConfigField "boolean", "WORKFLOW_CLI", "${workflowCliBuild}"
@@ -245,7 +245,8 @@ implementation "io.coil-kt:coil:2.7.0"
     }
 
     implementation project(':terminal-view')
-    implementation project(':libterminal')
+    // LibTerminal 引擎改从 Maven Central 引入（io.github.awkox:libterminal，与上游 ~/at 同步）
+    implementation "io.github.awkox:libterminal:4.0.0"
 
     implementation project(':termux-shared')
     // Integrated Termux add-on tools
