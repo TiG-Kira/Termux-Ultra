@@ -8,7 +8,6 @@ import android.content.SharedPreferences
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.os.BatteryManager
-import android.os.Build
 import android.location.LocationManager
 import com.google.gson.Gson
 import com.google.gson.JsonObject
@@ -2415,40 +2414,27 @@ object SkillExecutor {
         return try {
             val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
 
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                val network = cm.activeNetwork
-                val caps = network?.let { cm.getNetworkCapabilities(it) }
-                if (caps == null) return "无网络连接"
+            val network = cm.activeNetwork
+            val caps = network?.let { cm.getNetworkCapabilities(it) }
+            if (caps == null) return "无网络连接"
 
-                val type = when {
-                    caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> "Wi-Fi"
-                    caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> "蜂窝移动数据"
-                    caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) -> "以太网"
-                    caps.hasTransport(NetworkCapabilities.TRANSPORT_BLUETOOTH) -> "蓝牙"
-                    caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN) -> "VPN"
-                    else -> "其他"
-                }
-                val connected = caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-                val validated = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M)
-                    caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED) else connected
+            val type = when {
+                caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> "Wi-Fi"
+                caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> "蜂窝移动数据"
+                caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) -> "以太网"
+                caps.hasTransport(NetworkCapabilities.TRANSPORT_BLUETOOTH) -> "蓝牙"
+                caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN) -> "VPN"
+                else -> "其他"
+            }
+            val connected = caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+            val validated = caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
 
-                buildString {
-                    appendLine("类型: $type")
-                    appendLine("已连接: ${if (connected) "是" else "否"}")
-                    appendLine("网络可用: ${if (validated) "是" else "否"}")
-                    if (caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED))
-                        appendLine("非计费网络: 是")
-                }
-            } else {
-                val info = cm.activeNetworkInfo
-                if (info == null || !info.isConnected) return "无网络连接"
-
-                buildString {
-                    appendLine("类型: ${info.typeName}")
-                    appendLine("已连接: 是")
-                    appendLine("网络可用: ${if (info.isAvailable) "是" else "否"}")
-                    if (info.subtypeName.isNotBlank()) appendLine("子类型: ${info.subtypeName}")
-                }
+            buildString {
+                appendLine("类型: $type")
+                appendLine("已连接: ${if (connected) "是" else "否"}")
+                appendLine("网络可用: ${if (validated) "是" else "否"}")
+                if (caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED))
+                    appendLine("非计费网络: 是")
             }
         } catch (e: Exception) {
             "查询网络状态失败: ${e.message}"

@@ -5,7 +5,6 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import android.os.Build
 import android.os.Process
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
@@ -3129,11 +3128,9 @@ private fun isTermuxProcess(name: String, pid: Int, sessionPids: Set<Int>): Bool
 // GPU detection using GraphicsStatsManager (API 24+) via reflection
 fun readGpuUsageFromStats(context: Context): Float {
     return try {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            val gpuStats = getGpuStatsFromManager(context)
-            if (gpuStats != null) {
-                return gpuStats
-            }
+        val gpuStats = getGpuStatsFromManager(context)
+        if (gpuStats != null) {
+            return gpuStats
         }
         -1f
     } catch (e: Exception) {

@@ -53,11 +53,9 @@ public class AndroidUtils {
             AndroidUtils.appendPropertyToMarkdown(markdownString,"FILES_DIR", filesDir);
 
 
-        if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            Long userId = PackageUtils.getUserIdForPackage(context);
-            if (userId == null || userId != 0)
-                AndroidUtils.appendPropertyToMarkdown(markdownString, "USER_ID", userId);
-        }
+        Long userId = PackageUtils.getUserIdForPackage(context);
+        if (userId == null || userId != 0)
+            AndroidUtils.appendPropertyToMarkdown(markdownString, "USER_ID", userId);
 
         AndroidUtils.appendPropertyToMarkdownIfSet(markdownString,"PROFILE_OWNER", PackageUtils.getProfileOwnerPackageNameForUser(context));
 

@@ -3,8 +3,6 @@ package com.termux.app;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.content.res.Configuration;
-import android.content.res.Resources;
-import android.os.Build;
 
 import java.util.Locale;
 
@@ -22,11 +20,7 @@ public class LocaleHelper {
     public static Context setLocale(Context context, String language) {
         saveLanguage(context, language);
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            return updateResources(context, language);
-        }
-
-        return updateResourcesLegacy(context, language);
+        return updateResources(context, language);
     }
 
     private static String getLanguage(Context context) {
@@ -51,19 +45,6 @@ public class LocaleHelper {
         configuration.setLocale(locale);
 
         return context.createConfigurationContext(configuration);
-    }
-
-    @SuppressWarnings("deprecation")
-    private static Context updateResourcesLegacy(Context context, String language) {
-        Locale locale = getLocaleFromString(language);
-        Locale.setDefault(locale);
-
-        Resources resources = context.getResources();
-        Configuration configuration = resources.getConfiguration();
-        configuration.locale = locale;
-
-        resources.updateConfiguration(configuration, resources.getDisplayMetrics());
-        return context;
     }
 
     private static Locale getLocaleFromString(String language) {

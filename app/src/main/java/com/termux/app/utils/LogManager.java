@@ -262,23 +262,13 @@ public class LogManager {
                 int pid = Process.myPid();
                 // 优先使用 --pid 仅读取当前进程日志；若不支持则回退到按 PID 过滤
                 ProcessBuilder pb;
-                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
-                    pb = new ProcessBuilder("logcat", "--pid=" + pid, "-v", "threadtime");
-                } else {
-                    pb = new ProcessBuilder("logcat", "-v", "threadtime");
-                }
+                pb = new ProcessBuilder("logcat", "--pid=" + pid, "-v", "threadtime");
                 pb.redirectErrorStream(true);
                 process = pb.start();
 
                 try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
                     String line;
                     while (logcatRunning.get() && (line = reader.readLine()) != null) {
-                        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.N) {
-                            // 低版本按 PID 过滤
-                            if (!line.contains(" " + pid + " ") && !line.startsWith(String.valueOf(pid) + " ")) {
-                                continue;
-                            }
-                        }
                         parseAndWriteLogcatLine(line);
                     }
                 }

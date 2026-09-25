@@ -8,13 +8,11 @@ import android.content.Intent;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
-import android.os.Build;
 import android.os.UserHandle;
 import android.os.UserManager;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.annotation.RequiresApi;
 
 import com.termux.shared.R;
 import com.termux.shared.data.DataUtils;
@@ -216,7 +214,7 @@ public class PackageUtils {
     public static String getApplicationInfoSeInfoForPackage(@NonNull final ApplicationInfo applicationInfo) {
         ReflectionUtils.bypassHiddenAPIReflectionRestrictions();
         try {
-            return (String) ReflectionUtils.invokeField(ApplicationInfo.class, Build.VERSION.SDK_INT < Build.VERSION_CODES.O ? "seinfo" : "seInfo", applicationInfo).value;
+            return (String) ReflectionUtils.invokeField(ApplicationInfo.class, "seInfo", applicationInfo).value;
         } catch (Exception e) {
             // ClassCastException may be thrown
             Logger.logStackTraceWithMessage(LOG_TAG, "Failed to get seInfo field value for ApplicationInfo class", e);
@@ -234,7 +232,6 @@ public class PackageUtils {
      */
     @Nullable
     public static String getApplicationInfoSeInfoUserForPackage(@NonNull final ApplicationInfo applicationInfo) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return null;
         ReflectionUtils.bypassHiddenAPIReflectionRestrictions();
         try {
             return (String) ReflectionUtils.invokeField(ApplicationInfo.class, "seInfoUser", applicationInfo).value;
@@ -593,7 +590,6 @@ public class PackageUtils {
      * @param context The {@link Context} for the package.
      * @return Returns the serial number. This will be {@code null} if failed to get it.
      */
-    @RequiresApi(api = Build.VERSION_CODES.N)
     @Nullable
     public static Long getUserIdForPackage(@NonNull Context context) {
         UserManager userManager = (UserManager) context.getSystemService(Context.USER_SERVICE);
@@ -608,7 +604,6 @@ public class PackageUtils {
      * @param context The {@link Context} for operations.
      * @return Returns {@code true} if the current user is the primary user, otherwise [@code false}.
      */
-    @RequiresApi(api = Build.VERSION_CODES.N)
     public static boolean isCurrentUserThePrimaryUser(@NonNull Context context) {
         Long userId = getUserIdForPackage(context);
         return userId != null && userId == 0;

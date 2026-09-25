@@ -5,7 +5,6 @@ import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.content.Context;
-import android.os.Build;
 
 import androidx.annotation.Nullable;
 
@@ -77,8 +76,7 @@ public class NotificationUtils {
 
         builder.setPriority(priority);
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
-            builder.setChannelId(channelId);
+        builder.setChannelId(channelId);
 
         builder = setNotificationDefaults(builder, notificationMode);
 
@@ -86,8 +84,7 @@ public class NotificationUtils {
     }
 
     /**
-     * Setup the notification channel if Android version is greater than or equal to
-     * {@link Build.VERSION_CODES#O}.
+     * Set up the notification channel.
      *
      * @param context The {@link Context} for operations.
      * @param channelId The id of the channel. Must be unique per package.
@@ -96,8 +93,6 @@ public class NotificationUtils {
      *                   posted to this channel are.
      */
     public static void setupNotificationChannel(final Context context, final String channelId, final CharSequence channelName, final int importance) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return;
-
         NotificationChannel channel = new NotificationChannel(channelId, channelName, importance);
 
         NotificationManager notificationManager = getNotificationManager(context);

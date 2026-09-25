@@ -696,7 +696,6 @@ val composeTextBlinking by com.termux.app.terminal.shell.ComposeTerminalSettings
                     selectedIndex = currentCoreIndex,
                     onSelectedIndexChange = { idx ->
                         val selected = TerminalRuntimeCore.Core.entries[idx]
-                        if (selected == TerminalRuntimeCore.Core.KOTLIN_COMPOSE && !TerminalRuntimeCore.isComposeSupported) return@OverlayDropdownPreference
                         if (selected != runtimeCore) {
                             TerminalRuntimeCore.killAllSessions(context)
                             TerminalRuntimeCore.applyPluginState(context, selected)
@@ -1148,7 +1147,6 @@ val composeTextBlinking by com.termux.app.terminal.shell.ComposeTerminalSettings
                     } catch (_: Exception) { "Welcome to Termux!" }
                 }
                 val isComposeMode = runtimeCore == TerminalRuntimeCore.Core.KOTLIN_COMPOSE
-                val composeSupported = TerminalRuntimeCore.isComposeSupported
                 val runtimeCoreItems = TerminalRuntimeCore.Core.entries.map { it.displayName(context) }
                 val currentCoreIndex = TerminalRuntimeCore.Core.entries.indexOf(runtimeCore)
                             Card(
@@ -1165,8 +1163,6 @@ val composeTextBlinking by com.termux.app.terminal.shell.ComposeTerminalSettings
                             selectedIndex = currentCoreIndex,
                             onSelectedIndexChange = { idx ->
                                 val selected = TerminalRuntimeCore.Core.entries[idx]
-                                // SDK < 28 时禁止选 Kotlin+Compose
-                                if (selected == TerminalRuntimeCore.Core.KOTLIN_COMPOSE && !composeSupported) return@OverlayDropdownPreference
                                 if (selected != runtimeCore) {
                                     TerminalRuntimeCore.killAllSessions(context)
                                     TerminalRuntimeCore.applyPluginState(context, selected)

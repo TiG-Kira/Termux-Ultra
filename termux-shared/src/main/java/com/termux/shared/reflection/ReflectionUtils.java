@@ -1,7 +1,5 @@
 package com.termux.shared.reflection;
 
-import android.os.Build;
-
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
@@ -16,7 +14,7 @@ import java.util.Arrays;
 
 public class ReflectionUtils {
 
-    private static boolean HIDDEN_API_REFLECTION_RESTRICTIONS_BYPASSED = Build.VERSION.SDK_INT < Build.VERSION_CODES.P;
+    private static boolean HIDDEN_API_REFLECTION_RESTRICTIONS_BYPASSED = false;
 
     private static final String LOG_TAG = "ReflectionUtils";
 
@@ -26,7 +24,7 @@ public class ReflectionUtils {
      * https://developer.android.com/guide/app-compatibility/restrictions-non-sdk-interfaces
      */
     public static void bypassHiddenAPIReflectionRestrictions() {
-        if (!HIDDEN_API_REFLECTION_RESTRICTIONS_BYPASSED && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+        if (!HIDDEN_API_REFLECTION_RESTRICTIONS_BYPASSED) {
             Logger.logDebug(LOG_TAG, "Bypassing android hidden api reflection restrictions");
             try {
                 HiddenApiBypass.addHiddenApiExemptions("");

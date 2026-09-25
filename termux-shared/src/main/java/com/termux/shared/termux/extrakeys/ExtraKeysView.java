@@ -2,7 +2,6 @@ package com.termux.shared.termux.extrakeys;
 
 import android.annotation.SuppressLint;
 import android.content.Context;
-import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
@@ -471,11 +470,7 @@ public final class ExtraKeysView extends GridLayout {
 
                 LayoutParams param = new GridLayout.LayoutParams();
                 param.width = 0;
-                if(Build.VERSION.SDK_INT == Build.VERSION_CODES.LOLLIPOP) {
-                   param.height = (int)(heightPx + 0.5);
-                } else {
-                    param.height = 0;
-                }
+                param.height = 0;
                 param.setMargins(0, 0, 0, 0);
                 param.columnSpec = GridLayout.spec(col, GridLayout.FILL, 1.f);
                 param.rowSpec = GridLayout.spec(row, GridLayout.FILL, 1.f);
@@ -503,14 +498,7 @@ public final class ExtraKeysView extends GridLayout {
         if (Settings.System.getInt(getContext().getContentResolver(),
             Settings.System.HAPTIC_FEEDBACK_ENABLED, 0) != 0) {
 
-            if (Build.VERSION.SDK_INT >= 28) {
-                button.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
-            } else {
-                // Perform haptic feedback only if no total silence mode enabled.
-                if (Settings.Global.getInt(getContext().getContentResolver(), "zen_mode", 0) != 2) {
-                    button.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
-                }
-            }
+            button.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
         }
     }
 

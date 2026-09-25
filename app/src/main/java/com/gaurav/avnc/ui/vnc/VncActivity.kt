@@ -15,7 +15,6 @@ import android.app.PictureInPictureParams
 import android.content.Context
 import android.content.Intent
 import android.content.res.Configuration
-import android.os.Build
 import android.os.Bundle
 import android.os.Parcelable
 import android.os.SystemClock
@@ -27,7 +26,6 @@ import android.view.WindowManager
 import android.view.inputmethod.InputMethodManager
 import android.widget.Toast
 import androidx.activity.viewModels
-import androidx.annotation.RequiresApi
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.os.BundleCompat
 import androidx.core.view.isVisible
@@ -403,9 +401,6 @@ class VncActivity : AppCompatActivity() {
     }
 
     private fun updatePointerCapture(capturePointer: Boolean) {
-        if (Build.VERSION.SDK_INT < 26)
-            return
-
         if (capturePointer) {
             binding.frameView.requestFocus()
             binding.frameView.requestPointerCapture()
@@ -475,13 +470,13 @@ class VncActivity : AppCompatActivity() {
 
         viewModel.preferredScreenOrientation.observe(this) { requestedOrientation = it }
 
-        if (Build.VERSION.SDK_INT >= 28 && viewModel.pref.viewer.drawBehindCutout) {
+        if (viewModel.pref.viewer.drawBehindCutout) {
             window.attributes = window.attributes.apply {
                 layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
             }
         }
 
-        if (Build.VERSION.SDK_INT >= 26 && isInPictureInPictureMode) {
+        if (isInPictureInPictureMode) {
             viewModel.inPiPMode.value = true
         }
     }
@@ -504,7 +499,6 @@ class VncActivity : AppCompatActivity() {
         enterPiPMode()
     }
 
-    @RequiresApi(26)
     override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean, newConfig: Configuration) {
         super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
         viewModel.inPiPMode.value = isInPictureInPictureMode
@@ -525,7 +519,7 @@ class VncActivity : AppCompatActivity() {
     private fun enterPiPMode() {
         val canEnter = viewModel.pref.viewer.pipEnabled && viewModel.connected && !viewModel.videoDisabled
 
-        if (canEnter && Build.VERSION.SDK_INT >= 26) {
+        if (canEnter) {
 
             var w = viewModel.frameState.fbWidth
             var h = viewModel.frameState.fbHeight

@@ -1,7 +1,6 @@
 package com.termux.app.compose
 
 import android.content.Context
-import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -218,7 +217,7 @@ private fun ViewerSettingsPage(
     var toolbarOpenWithButton by remember { mutableStateOf(prefs.getBoolean("toolbar_open_with_button", false)) }
     var toolbarShowGestureStyleToggle by remember { mutableStateOf(prefs.getBoolean("toolbar_show_gesture_style_toggle", true)) }
 
-    val hasPiPSupport = Build.VERSION.SDK_INT >= 26 &&
+    val hasPiPSupport =
         context.packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_PICTURE_IN_PICTURE)
 
     val orientationEntries = remember {
@@ -505,9 +504,6 @@ private fun InputSettingsPage(
     var kmRightAltToSuper by remember { mutableStateOf(prefs.getBoolean("km_right_alt_to_super", false)) }
     var kmLanguageSwitchToSuper by remember { mutableStateOf(prefs.getBoolean("km_language_switch_to_super", false)) }
     var kmBackToEscape by remember { mutableStateOf(prefs.getBoolean("km_back_to_escape", false)) }
-
-    val canChangePtrIcon = Build.VERSION.SDK_INT >= 24
-    val capturePointerSupported = Build.VERSION.SDK_INT >= 26
 
     val gestureStyleEntries = remember {
         listOf(
@@ -855,9 +851,7 @@ private fun InputSettingsPage(
                     )
                     SwitchPreference(
                         title = stringResource(R.string.pref_capture_pointer),
-                        summary = if (capturePointerSupported) null else stringResource(R.string.msg_pip_not_supported),
                         checked = capturePointer,
-                        enabled = capturePointerSupported,
                         onCheckedChange = {
                             capturePointer = it
                             prefs.edit().putBoolean("capture_pointer", it).apply()
@@ -873,9 +867,7 @@ private fun InputSettingsPage(
                 )
                 SwitchPreference(
                     title = stringResource(R.string.pref_hide_local_cursor),
-                    summary = if (canChangePtrIcon) null else stringResource(R.string.msg_ptr_hiding_not_supported),
                     checked = hideLocalCursor,
-                    enabled = canChangePtrIcon,
                     onCheckedChange = {
                         hideLocalCursor = it
                         prefs.edit().putBoolean("hide_local_cursor", it).apply()

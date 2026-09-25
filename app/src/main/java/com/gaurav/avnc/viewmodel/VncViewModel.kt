@@ -13,10 +13,8 @@ import android.content.pm.ActivityInfo
 import android.graphics.RectF
 import android.media.AudioAttributes
 import android.media.AudioFormat
-import android.media.AudioManager
 import android.media.AudioTrack
 import android.media.ToneGenerator
-import android.os.Build
 import android.util.Log
 import android.widget.Toast
 import androidx.lifecycle.MutableLiveData
@@ -253,24 +251,12 @@ class VncViewModel(app: Application) : BaseViewModel(app) {
                 .setEncoding(audioAndroidEncoding)
                 .build()
 
-            val track = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                AudioTrack.Builder()
-                    .setAudioAttributes(attributes)
-                    .setAudioFormat(format)
-                    .setBufferSizeInBytes(bufferSize)
-                    .setTransferMode(AudioTrack.MODE_STREAM)
-                    .build()
-            } else {
-                @Suppress("DEPRECATION")
-                AudioTrack(
-                    AudioManager.STREAM_MUSIC,
-                    audioSampleRate,
-                    audioAndroidChannels,
-                    audioAndroidEncoding,
-                    bufferSize,
-                    AudioTrack.MODE_STREAM
-                )
-            }
+            val track = AudioTrack.Builder()
+                .setAudioAttributes(attributes)
+                .setAudioFormat(format)
+                .setBufferSizeInBytes(bufferSize)
+                .setTransferMode(AudioTrack.MODE_STREAM)
+                .build()
 
             if (track.state != AudioTrack.STATE_INITIALIZED) {
                 Log.e(javaClass.simpleName, "AudioTrack not initialized (state=${track.state})")
