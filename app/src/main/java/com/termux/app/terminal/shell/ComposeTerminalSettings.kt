@@ -44,6 +44,7 @@ object ComposeTerminalSettings {
     const val DEFAULT_TEXT_BLINKING = true
     const val DEFAULT_SOFT_KEYBOARD_ONLY_IF_NO_HARDWARE = false
     const val DEFAULT_KEY_LOGGING = false
+    const val DEFAULT_USE_CUSTOM_KEYBOARD_LAYOUT = false
 
     // StateFlow - 所有终端组件订阅这些值
     private val _fontSize = MutableStateFlow(DEFAULT_FONT_SIZE)
@@ -99,6 +100,9 @@ object ComposeTerminalSettings {
     private val _keyLogging = MutableStateFlow(DEFAULT_KEY_LOGGING)
     val keyLogging: StateFlow<Boolean> = _keyLogging.asStateFlow()
 
+    private val _useCustomKeyboardLayout = MutableStateFlow(DEFAULT_USE_CUSTOM_KEYBOARD_LAYOUT)
+    val useCustomKeyboardLayout: StateFlow<Boolean> = _useCustomKeyboardLayout.asStateFlow()
+
     private var prefs: SharedPreferences? = null
 
     @Volatile
@@ -127,6 +131,7 @@ object ComposeTerminalSettings {
         _keepScreenOn.value = p.getBoolean("keep_screen_on", DEFAULT_KEEP_SCREEN_ON)
         _softKeyboardOnlyIfNoHardware.value = p.getBoolean("soft_keyboard_only_if_no_hardware", DEFAULT_SOFT_KEYBOARD_ONLY_IF_NO_HARDWARE)
         _keyLogging.value = p.getBoolean("key_logging", DEFAULT_KEY_LOGGING)
+        _useCustomKeyboardLayout.value = p.getBoolean("use_custom_keyboard_layout", DEFAULT_USE_CUSTOM_KEYBOARD_LAYOUT)
         // 同步解析 colorScheme
         _colorScheme.value = TerminalThemes.findByName(_colorSchemeName.value)?.terminalColorScheme
             ?: TerminalColorScheme.dark()
@@ -199,6 +204,11 @@ object ComposeTerminalSettings {
     fun setKeyLogging(value: Boolean) {
         _keyLogging.value = value
         edit { it.putBoolean("key_logging", value) }
+    }
+
+    fun setUseCustomKeyboardLayout(value: Boolean) {
+        _useCustomKeyboardLayout.value = value
+        edit { it.putBoolean("use_custom_keyboard_layout", value) }
     }
 
     private inline fun edit(block: (SharedPreferences.Editor) -> Unit) {
