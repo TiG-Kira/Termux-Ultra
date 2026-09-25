@@ -18,6 +18,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import com.awkoo.libterminal.color.TerminalColorScheme
 import com.awkoo.libterminal.engine.TerminalSession
 import com.awkoo.libterminal.engine.TerminalCursorStyle
+import com.awkoo.libterminal.view.ExtraKeysModifierSnapshot
 import com.awkoo.libterminal.view.TerminalView as LibTerminalView
 
 /**
@@ -37,7 +38,11 @@ fun ComposeTerminalScreen(
     cursorStyle: TerminalCursorStyle = TerminalCursorStyle.BAR,
     textBlinking: Boolean = true,
     colorScheme: TerminalColorScheme? = null,
-    typeface: android.graphics.Typeface? = null
+    typeface: android.graphics.Typeface? = null,
+    // 工具栏锁定的 CTRL/ALT 只有通过这个读针才能作用于输入法输入：libterminal 在
+    // InputConnection 的 inputCodePoint 中读取它，把 ctrl/alt 并入本次输入的修饰态。
+    // 刻意不给默认值——漏传就等于静默失去该能力，让调用方必须显式表态。
+    extraKeysModifierReader: () -> ExtraKeysModifierSnapshot
 ) {
     var terminalView by remember { mutableStateOf<LibTerminalView?>(null) }
     var lastSessionId by remember { mutableStateOf<Int?>(null) }
@@ -61,6 +66,7 @@ fun ComposeTerminalScreen(
                         this.cursorBlinking = cursorBlink
                         this.cursorStyle = cursorStyle
                         this.textBlinking = textBlinking
+                        this.extraKeysModifierReader = extraKeysModifierReader
                     }
                     addView(
                         tv,
@@ -81,6 +87,7 @@ fun ComposeTerminalScreen(
                 tv.cursorBlinking = cursorBlink
                 tv.cursorStyle = cursorStyle
                 tv.textBlinking = textBlinking
+                tv.extraKeysModifierReader = extraKeysModifierReader
                 if (session != null && lastSessionId != session.id) {
                     tv.currentSession = session
                     lastSessionId = session.id

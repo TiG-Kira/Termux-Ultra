@@ -1037,6 +1037,8 @@
     <string name="soft_keyboard_only_if_no_hardware_desc">在检测到物理键盘时自动禁用软键盘</string>
     <string name="terminal_key_logging">终端按键日志</string>
     <string name="terminal_key_logging_desc">记录硬件按键与应用层输入（不含输入法文本）</string>
+    <string name="use_custom_keyboard_layout">使用自定义键盘布局</string>
+    <string name="use_custom_keyboard_layout_desc">从 ~/.termux/termux.properties 的 extra-keys 属性读取布局，替代内置默认布局。重新进入终端后生效。</string>
     <string name="soft_keyboard_disabled_by_settings">当前设置已禁用软键盘</string>
     <string name="soft_keyboard_disabled_by_hardware">检测到物理键盘，软键盘未弹出</string>
     <string name="rename_session">重命名会话</string>

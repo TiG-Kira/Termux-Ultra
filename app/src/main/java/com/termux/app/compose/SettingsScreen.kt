@@ -221,6 +221,7 @@ val composeTextBlinking by com.termux.app.terminal.shell.ComposeTerminalSettings
 val composeSoftKeyboard by com.termux.app.terminal.shell.ComposeTerminalSettings.softKeyboard.collectAsState()
 val composeSoftKeyboardOnlyIfNoHardware by com.termux.app.terminal.shell.ComposeTerminalSettings.softKeyboardOnlyIfNoHardware.collectAsState()
 val composeKeyLogging by com.termux.app.terminal.shell.ComposeTerminalSettings.keyLogging.collectAsState()
+val composeUseCustomKeyboardLayout by com.termux.app.terminal.shell.ComposeTerminalSettings.useCustomKeyboardLayout.collectAsState()
 
     // Official standalone APK detection. Keys match the add-on app package names; when a standalone
     // APK is installed, the integrated toggle is forced OFF and disabled, with the row shows
@@ -785,6 +786,19 @@ val composeKeyLogging by com.termux.app.terminal.shell.ComposeTerminalSettings.k
                     startAction = { SettingIcon(Icons.Rounded.DeveloperMode) }
                 )
             }),
+        SearchableSetting(sec_terminal, context.getString(R.string.use_custom_keyboard_layout), context.getString(R.string.use_custom_keyboard_layout_desc),
+            keywords = listOf("键盘", "布局", "自定义", "keyboard layout", "custom"),
+            render = {
+                SwitchPreference(
+                    title = context.getString(R.string.use_custom_keyboard_layout),
+                    summary = context.getString(R.string.use_custom_keyboard_layout_desc),
+                    checked = composeUseCustomKeyboardLayout,
+                    onCheckedChange = {
+                        com.termux.app.terminal.shell.ComposeTerminalSettings.setUseCustomKeyboardLayout(it)
+                    },
+                    startAction = { SettingIcon(Icons.Rounded.Keyboard) }
+                )
+            }),
 
         // ===== Integrated Tools =====
         SearchableSetting(sec_tools, context.getString(R.string.termux_api_tool), context.getString(R.string.termux_api_tool_summary),
@@ -1249,6 +1263,15 @@ val composeKeyLogging by com.termux.app.terminal.shell.ComposeTerminalSettings.k
                                     com.termux.app.terminal.shell.ComposeTerminalSettings.setKeyLogging(it)
                                 },
                                 startAction = { SettingIcon(Icons.Rounded.DeveloperMode) }
+                            )
+                            SwitchPreference(
+                                title = context.getString(R.string.use_custom_keyboard_layout),
+                                summary = context.getString(R.string.use_custom_keyboard_layout_desc),
+                                checked = composeUseCustomKeyboardLayout,
+                                onCheckedChange = {
+                                    com.termux.app.terminal.shell.ComposeTerminalSettings.setUseCustomKeyboardLayout(it)
+                                },
+                                startAction = { SettingIcon(Icons.Rounded.Keyboard) }
                             )
                             OverlayDropdownPreference(
                                 title = context.getString(R.string.log_level),

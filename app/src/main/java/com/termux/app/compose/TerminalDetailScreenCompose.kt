@@ -1,5 +1,7 @@
 package com.termux.app.compose
 
+import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
@@ -17,6 +19,7 @@ import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -65,6 +68,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -85,8 +89,11 @@ import androidx.compose.ui.unit.sp
 import com.termux.R
 import com.termux.app.terminal.shell.ComposeSessionManager
 import com.termux.app.terminal.shell.ComposeTerminalSettings
+import com.termux.app.settings.properties.TermuxAppSharedProperties
+import com.termux.shared.termux.extrakeys.ExtraKeyButton
 import com.termux.app.terminal.shell.ComposeTerminalScreen
 import com.awkoo.libterminal.engine.TerminalSession as LibTerminalSession
+import com.awkoo.libterminal.view.ExtraKeysModifierSnapshot
 import com.awkoo.libterminal.view.TerminalView as LibTerminalView
 import com.termux.app.terminal.shell.pid
 import com.termux.app.terminal.shell.sessionExited
@@ -153,6 +160,9 @@ fun TerminalDetailScreenCompose(
 
     // Styling 磁盘主题优先于内置 color_scheme（与 Java 模式共用 ~/.termux/colors.properties）
     val effectiveColorScheme = stylingColorScheme ?: colorScheme
+
+    // 修饰键状态提升到这里，供工具栏写入、终端视图读取（extraKeysModifierReader）。
+    val extraKeysModifiers = remember { ExtraKeysModifierState() }
 
     var isCompact by remember { mutableStateOf(false) }
     var isTopBarTransitioning by remember { mutableStateOf(false) }
@@ -936,7 +946,9 @@ fun TerminalDetailScreenCompose(
                     ) {
                         TerminalKeyboardToolbar(
                             onSendKey = { bytes -> currentSession.write(bytes) },
-                            effectiveContentColor = MiuixTheme.colorScheme.onSurface
+                            effectiveContentColor = MiuixTheme.colorScheme.onSurface,
+                            modifiers = extraKeysModifiers,
+                            onToggleKeyboard = { toggleKeyboardRespectingSettings() }
                         )
                     }
                 }
@@ -963,7 +975,20 @@ fun TerminalDetailScreenCompose(
                     cursorStyle = cursorStyle,
                     textBlinking = textBlinking,
                     colorScheme = effectiveColorScheme,
-                    typeface = stylingTypeface
+                    typeface = stylingTypeface,
+                    extraKeysModifierReader = {
+                        // libterminal 为输入法/虚拟键盘来源的输入读取该快照（走 inputCodePoint）。
+                        // 读一次即消费粘滞态，于是粘滞的 CTRL/ALT 只作用于紧随其后的那一次输入；
+                        // 代价是若这一次输入最终没产出字节（如只按了 BACK），粘滞态会白丢一次，可接受。
+                        val snapshot = ExtraKeysModifierSnapshot(
+                            extraKeysModifiers.ctrl,
+                            extraKeysModifiers.alt,
+                            false,
+                            extraKeysModifiers.fn
+                        )
+                        extraKeysModifiers.clearSticky()
+                        snapshot
+                    }
                 )
             }
 
@@ -1267,48 +1292,277 @@ private fun ContextMenuItem(
     }
 }
 
+private sealed class ToolbarKey {
+    class Simple(val display: String, val onSend: () -> Unit) : ToolbarKey()
+    class ModifierKey(
+        val label: String,
+        val isSticky: () -> Boolean,
+        val isLocked: () -> Boolean,
+        val onTap: () -> Unit,
+        val onLongPress: () -> Unit
+    ) : ToolbarKey()
+}
+
+/**
+ * 工具栏修饰键状态。提升到工具栏之外是因为它不只服务于工具栏自己的按键：
+ * 终端的 extraKeysModifierReader 也要读它，粘滞/锁定的 CTRL/ALT 才能作用于输入法输入。
+ * ctrl/alt/fn 是「粘滞或锁定」的合成结果，即当前真正生效的修饰态。
+ */
+private class ExtraKeysModifierState {
+    var ctrlSticky by mutableStateOf(false)
+    var ctrlLocked by mutableStateOf(false)
+    var altSticky by mutableStateOf(false)
+    var altLocked by mutableStateOf(false)
+    var fnSticky by mutableStateOf(false)
+    var fnLocked by mutableStateOf(false)
+
+    val ctrl: Boolean get() = ctrlSticky || ctrlLocked
+    val alt: Boolean get() = altSticky || altLocked
+    val fn: Boolean get() = fnSticky || fnLocked
+
+    fun clearSticky() {
+        ctrlSticky = false
+        altSticky = false
+        fnSticky = false
+    }
+}
+
+private fun escSeq(seq: String) = byteArrayOf(0x1B) + seq.toByteArray(Charsets.UTF_8)
+
+// extra-keys 命名键 → 字节。escape 序列必须与 KeyHandler.getCode() 一致，
+// 否则方向键 / F 键在应用模式下的终端里会错位。
+private val EXTRA_KEY_BYTES: Map<String, ByteArray> = mapOf(
+    "SPACE" to byteArrayOf(0x20),
+    "ESC" to byteArrayOf(0x1B),
+    "TAB" to byteArrayOf(0x09),
+    "BKSP" to byteArrayOf(0x7F),
+    "ENTER" to byteArrayOf(0x0D),
+    "HOME" to escSeq("[H"),
+    "END" to escSeq("[F"),
+    "UP" to escSeq("[A"),
+    "DOWN" to escSeq("[B"),
+    "LEFT" to escSeq("[D"),
+    "RIGHT" to escSeq("[C"),
+    "INS" to escSeq("[2~"),
+    "DEL" to escSeq("[3~"),
+    "PGUP" to escSeq("[5~"),
+    "PGDN" to escSeq("[6~"),
+    "F1" to escSeq("OP"),
+    "F2" to escSeq("OQ"),
+    "F3" to escSeq("OR"),
+    "F4" to escSeq("OS"),
+    "F5" to escSeq("[15~"),
+    "F6" to escSeq("[17~"),
+    "F7" to escSeq("[18~"),
+    "F8" to escSeq("[19~"),
+    "F9" to escSeq("[20~"),
+    "F10" to escSeq("[21~"),
+    "F11" to escSeq("[23~"),
+    "F12" to escSeq("[24~")
+)
+
 @Composable
 private fun TerminalKeyboardToolbar(
     onSendKey: (ByteArray) -> Unit,
-    effectiveContentColor: Color
+    effectiveContentColor: Color,
+    modifiers: ExtraKeysModifierState,
+    onToggleKeyboard: () -> Unit = {}
 ) {
-    var ctrlActive by remember { mutableStateOf(false) }
-    var altActive by remember { mutableStateOf(false) }
-    var fnActive by remember { mutableStateOf(false) }
+    // rows 被 remember(useCustom) 缓存，里面的闭包会一直持有首次组合时的回调。
+    // 会话切换是原地替换（useCustom 不变），不取最新值就会把按键发给旧会话。
+    val currentSendKey by rememberUpdatedState(onSendKey)
+    val currentToggleKeyboard by rememberUpdatedState(onToggleKeyboard)
 
     val surfaceBg = MiuixTheme.colorScheme.surface.copy(alpha = 0.95f)
+    val context = LocalContext.current
 
+    // 点按修饰键 = 粘滞：仅作用于下一个按键，发送后自动复位；
+    // 长按修饰键 = 锁定：持续生效，直到再次长按解除。
+    // 旧实现只用点击切换、且每次发送都清空全部修饰态，导致组合键互相打架、长按形同虚设。
     fun send(bytes: ByteArray) {
-        onSendKey(bytes)
-        ctrlActive = false
-        altActive = false
-        fnActive = false
+        currentSendKey(bytes)
+        modifiers.clearSticky()
     }
 
-    fun sendChar(c: Char) {
-        when {
-            ctrlActive -> {
-                val ctrlCode = (c.lowercaseChar().toInt() - 'a'.toInt() + 1).coerceIn(1, 26).toByte()
-                send(byteArrayOf(ctrlCode))
-            }
-            altActive -> {
-                send(byteArrayOf(0x1B, c.toInt().toByte()))
-            }
-            else -> {
-                send(byteArrayOf(c.toInt().toByte()))
+    fun charBytes(c: Char, ctrl: Boolean, alt: Boolean): ByteArray = when {
+        ctrl && alt -> byteArrayOf(0x1B, (c.lowercaseChar().code and 0x1F).toByte())
+        ctrl -> byteArrayOf((c.lowercaseChar().code and 0x1F).toByte())
+        alt -> byteArrayOf(0x1B, c.code.toByte())
+        else -> byteArrayOf(c.code.toByte())
+    }
+
+    fun sendChar(c: Char) = send(charBytes(c, modifiers.ctrl, modifiers.alt))
+
+    fun sendEscape(seq: String) {
+        send(escSeq(seq))
+    }
+
+    // extra-keys 里的一个 token（命名键或字面量）+ 修饰态 → 待发送字节。
+    // 命名键本身已是完整 escape 序列，只给单字节控制键补 ALT 的 ESC 前缀
+    // （ALT+BKSP → ESC 0x7F、ALT+ENTER → ESC CR，与 KeyHandler.getCode() 一致）；
+    // 给方向键再套一层 ESC 只会得到非 xterm 序列，故不加。
+    fun tokenBytes(token: String, ctrl: Boolean, alt: Boolean): ByteArray {
+        EXTRA_KEY_BYTES[token]?.let { bytes ->
+            return if (alt && bytes.size == 1) byteArrayOf(0x1B) + bytes else bytes
+        }
+        if (token.length == 1) return charBytes(token[0], ctrl, alt)
+        // 多字符字面量原样发送：对字符串套 CTRL 位运算只会产出垃圾字节
+        return token.toByteArray(Charsets.UTF_8)
+    }
+
+    fun sendKeyName(key: String) {
+        send(tokenBytes(key, modifiers.ctrl, modifiers.alt))
+    }
+
+    // 宏：空格分隔的 token 依次发送，CTRL/ALT 只作用于紧随其后的单个 token。
+    fun sendMacro(rawTokens: List<String>) {
+        val tokens = rawTokens.filter { it.isNotBlank() }
+        var pendingCtrl = false
+        var pendingAlt = false
+        for (tok in tokens) {
+            when (tok) {
+                "CTRL" -> pendingCtrl = true
+                "ALT" -> pendingAlt = true
+                // FN/SHIFT 只切换 extra-keys 的显示行，Compose 工具栏没有对应行为
+                "FN", "SHIFT" -> Unit
+                else -> {
+                    send(tokenBytes(tok, pendingCtrl, pendingAlt))
+                    pendingCtrl = false
+                    pendingAlt = false
+                }
             }
         }
     }
 
-    fun sendEscape(seq: String) {
-        send(byteArrayOf(0x1B) + seq.toByteArray())
+    fun modifierKey(
+        label: String,
+        isSticky: () -> Boolean,
+        isLocked: () -> Boolean,
+        setSticky: (Boolean) -> Unit,
+        setLocked: (Boolean) -> Unit
+    ) = ToolbarKey.ModifierKey(
+        label = label,
+        isSticky = isSticky,
+        isLocked = isLocked,
+        // 已锁定时点按不再改动粘滞态，避免「锁定 + 粘滞」的无意义叠加。
+        onTap = { if (!isLocked()) setSticky(!isSticky()) },
+        onLongPress = { setLocked(!isLocked()) }
+    )
+
+    fun ctrlKey() = modifierKey("CTRL", { modifiers.ctrlSticky }, { modifiers.ctrlLocked }, { modifiers.ctrlSticky = it }, { modifiers.ctrlLocked = it })
+    fun altKey() = modifierKey("ALT", { modifiers.altSticky }, { modifiers.altLocked }, { modifiers.altSticky = it }, { modifiers.altLocked = it })
+    fun fnKey() = modifierKey("FN", { modifiers.fnSticky }, { modifiers.fnLocked }, { modifiers.fnSticky = it }, { modifiers.fnLocked = it })
+
+    // 内置默认布局。第二行刻意是 ↑ 在 } 位、} 在 HOME 位、HOME 在 ↑ 位，
+    // 看着像错位，但是用户指定的顺序，不要顺手「修正」。
+    fun buildDefaultLayout(): List<List<ToolbarKey>> = listOf(
+        listOf(
+            ToolbarKey.Simple("ESC") { send(byteArrayOf(0x1B)) },
+            ToolbarKey.Simple("<") { sendChar('<') },
+            ToolbarKey.Simple(">") { sendChar('>') },
+            ToolbarKey.Simple("\\") { sendChar('\\') },
+            ToolbarKey.Simple("=") { sendChar('=') },
+            ToolbarKey.Simple("^") { sendChar('^') },
+            ToolbarKey.Simple("$") { sendChar('$') },
+            ToolbarKey.Simple("(") { sendChar('(') },
+            ToolbarKey.Simple(")") { sendChar(')') },
+            ToolbarKey.Simple("[") { sendChar('[') },
+            ToolbarKey.Simple("]") { sendChar(']') },
+            ToolbarKey.Simple("⌫") { send(byteArrayOf(0x7F)) }
+        ),
+        listOf(
+            ToolbarKey.Simple("⇥") { send(byteArrayOf(0x09)) },
+            ToolbarKey.Simple("&") { sendChar('&') },
+            ToolbarKey.Simple(";") { sendChar(';') },
+            ToolbarKey.Simple("/") { sendChar('/') },
+            ToolbarKey.Simple("~") { sendChar('~') },
+            ToolbarKey.Simple("%") { sendChar('%') },
+            ToolbarKey.Simple("*") { sendChar('*') },
+            ToolbarKey.Simple("{") { sendChar('{') },
+            ToolbarKey.Simple("↑") { sendEscape("[A") },
+            ToolbarKey.Simple("}") { sendChar('}') },
+            ToolbarKey.Simple("HOME") { sendEscape("[H") },
+            ToolbarKey.Simple("END") { sendEscape("[F") }
+        ),
+        listOf(
+            ctrlKey(),
+            fnKey(),
+            altKey(),
+            ToolbarKey.Simple("|") { sendChar('|') },
+            ToolbarKey.Simple("-") { sendChar('-') },
+            ToolbarKey.Simple("+") { sendChar('+') },
+            ToolbarKey.Simple("\"") { sendChar('"') },
+            ToolbarKey.Simple("←") { sendEscape("[D") },
+            ToolbarKey.Simple("↓") { sendEscape("[B") },
+            ToolbarKey.Simple("→") { sendEscape("[C") },
+            ToolbarKey.Simple("PGUP") { sendEscape("[5~") },
+            ToolbarKey.Simple("PGDN") { sendEscape("[6~") }
+        )
+    )
+
+    // Termux 的 PASTE 键：把剪贴板文本写入终端，并消费掉粘滞修饰态，
+    // 否则粘滞的 CTRL/ALT 会污染粘贴之后的下一个按键。
+    fun sendClipboard() {
+        val clip = (context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager)?.primaryClip
+        val text = if (clip != null && clip.itemCount > 0) clip.getItemAt(0).coerceToText(context)?.toString() else null
+        if (text.isNullOrEmpty()) return
+        onSendKey(text.toByteArray(Charsets.UTF_8))
+        modifiers.clearSticky()
+    }
+
+    // 从 Termux 键盘布局配置文件（termux.properties 的 extra-keys）读取布局。
+    fun mapButton(btn: ExtraKeyButton): ToolbarKey {
+        val key = btn.getKey()
+        val display = btn.getDisplay()
+        if (!btn.isMacro()) {
+            return when (key) {
+                "CTRL" -> ctrlKey()
+                "ALT" -> altKey()
+                "FN" -> fnKey()
+                // DRAWER/SCROLL/SHIFT 是 Termux 自身界面的动作（抽屉、滚动模式、切换
+                // extra-keys 显示行），Compose 工具栏没有对应物：保留按键位还原配置出的
+                // 布局形状，但不发送任何字节——否则会把这些名字当字面量打进终端。
+                "DRAWER", "SCROLL", "SHIFT" -> ToolbarKey.Simple(display) { }
+                "KEYBOARD" -> ToolbarKey.Simple(display) { currentToggleKeyboard() }
+                "PASTE" -> ToolbarKey.Simple(display) { sendClipboard() }
+                else -> ToolbarKey.Simple(display) { sendKeyName(key) }
+            }
+        } else {
+            return ToolbarKey.Simple(display) { sendMacro(key.split(" ")) }
+        }
+    }
+
+    fun buildCustomLayout(matrix: Array<Array<ExtraKeyButton>>): List<List<ToolbarKey>> {
+        return matrix.map { row -> row.map { btn -> mapButton(btn) } }
+    }
+
+    val useCustom by com.termux.app.terminal.shell.ComposeTerminalSettings.useCustomKeyboardLayout.collectAsState()
+
+    val rows: List<List<ToolbarKey>> = remember(useCustom) {
+        if (useCustom) {
+            // 读取 Termux 键盘布局配置文件（~/.termux/termux.properties 的 extra-keys）。
+            // 不能走静态 TermuxAppSharedProperties.getProperties()：全仓库没有任何地方调用它的
+            // init()，该单例恒为 null，会静默退化成内置默认布局。这里自建 app 侧实例并显式
+            // 从磁盘加载，拿到的是与经典终端完全一致的解析结果（未配置时即 Termux 内置默认布局）。
+            // 单文件同步读取，与 app 启动路径一致，不值得为此引入异步状态。
+            val matrix = try {
+                TermuxAppSharedProperties(context)
+                    .apply { loadTermuxPropertiesFromDisk() }
+                    .getExtraKeysInfo()
+                    ?.getMatrix()
+            } catch (e: Exception) {
+                android.util.Log.w("TerminalKeyboardToolbar", "读取自定义键盘布局失败，回退内置默认布局", e)
+                null
+            }
+            if (matrix != null) buildCustomLayout(matrix) else buildDefaultLayout()
+        } else {
+            buildDefaultLayout()
+        }
     }
 
     val hScroll = rememberScrollState()
 
-    // 横向滚动放在最外层统一处理：滚动范围由最宽的一行决定，
-    // 三行保持同步滚动且都能滚到最右（此前三行共用一个 ScrollState，
-    // maxValue 被内容较窄的行钳制，导致第一行末尾按钮被屏幕边缘截断无法显示）。
+    // 横向滚动放在最外层统一处理：滚动范围由最宽的一行决定，三行保持同步滚动且都能滚到最右。
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -1320,57 +1574,25 @@ private fun TerminalKeyboardToolbar(
             modifier = Modifier.padding(vertical = 4.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            // 三行各 12 按钮，视觉平衡
-            Row(
-                modifier = Modifier.padding(horizontal = 6.dp),
-                horizontalArrangement = Arrangement.spacedBy(3.dp)
-            ) {
-                KeyButton("ESC", { send(byteArrayOf(0x1B)) }, effectiveContentColor)
-                KeyButton("<", { sendChar('<') }, effectiveContentColor)
-                KeyButton(">", { sendChar('>') }, effectiveContentColor)
-                KeyButton("\\", { sendChar('\\') }, effectiveContentColor)
-                KeyButton("=", { sendChar('=') }, effectiveContentColor)
-                KeyButton("^", { sendChar('^') }, effectiveContentColor)
-                KeyButton("$", { sendChar('$') }, effectiveContentColor)
-                KeyButton("(", { sendChar('(') }, effectiveContentColor)
-                KeyButton(")", { sendChar(')') }, effectiveContentColor)
-                KeyButton("[", { sendChar('[') }, effectiveContentColor)
-                KeyButton("]", { sendChar(']') }, effectiveContentColor)
-                KeyButton("⌫", { send(byteArrayOf(0x7F)) }, effectiveContentColor)
-            }
-            Row(
-                modifier = Modifier.padding(horizontal = 6.dp),
-                horizontalArrangement = Arrangement.spacedBy(3.dp)
-            ) {
-                KeyButton("⇥", { send(byteArrayOf(0x09)) }, effectiveContentColor)
-                KeyButton("&", { sendChar('&') }, effectiveContentColor)
-                KeyButton(";", { sendChar(';') }, effectiveContentColor)
-                KeyButton("/", { sendChar('/') }, effectiveContentColor)
-                KeyButton("~", { sendChar('~') }, effectiveContentColor)
-                KeyButton("%", { sendChar('%') }, effectiveContentColor)
-                KeyButton("*", { sendChar('*') }, effectiveContentColor)
-                KeyButton("{", { sendChar('{') }, effectiveContentColor)
-                KeyButton("}", { sendChar('}') }, effectiveContentColor)
-                KeyButton("HOME", { sendEscape("[H") }, effectiveContentColor)
-                KeyButton("↑", { sendEscape("[A") }, effectiveContentColor)
-                KeyButton("END", { sendEscape("[F") }, effectiveContentColor)
-            }
-            Row(
-                modifier = Modifier.padding(horizontal = 6.dp),
-                horizontalArrangement = Arrangement.spacedBy(3.dp)
-            ) {
-                SpecialKeyButton("CTRL", ctrlActive, { ctrlActive = !ctrlActive }, effectiveContentColor)
-                SpecialKeyButton("FN", fnActive, { fnActive = !fnActive }, effectiveContentColor)
-                SpecialKeyButton("ALT", altActive, { altActive = !altActive }, effectiveContentColor)
-                KeyButton("|", { sendChar('|') }, effectiveContentColor)
-                KeyButton("-", { sendChar('-') }, effectiveContentColor)
-                KeyButton("+", { sendChar('+') }, effectiveContentColor)
-                KeyButton("\"", { sendChar('"') }, effectiveContentColor)
-                KeyButton("←", { sendEscape("[D") }, effectiveContentColor)
-                KeyButton("↓", { sendEscape("[B") }, effectiveContentColor)
-                KeyButton("→", { sendEscape("[C") }, effectiveContentColor)
-                KeyButton("PGUP", { sendEscape("[5~") }, effectiveContentColor)
-                KeyButton("PGDN", { sendEscape("[6~") }, effectiveContentColor)
+            for (row in rows) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(3.dp)
+                ) {
+                    for (key in row) {
+                        when (key) {
+                            is ToolbarKey.Simple -> KeyButton(key.display, key.onSend, effectiveContentColor)
+                            is ToolbarKey.ModifierKey -> SpecialKeyButton(
+                                label = key.label,
+                                sticky = key.isSticky(),
+                                locked = key.isLocked(),
+                                onTap = key.onTap,
+                                onLongPress = key.onLongPress,
+                                effectiveContentColor = effectiveContentColor
+                            )
+                        }
+                    }
+                }
             }
         }
     }
@@ -1403,26 +1625,35 @@ private fun KeyButton(
 @Composable
 private fun SpecialKeyButton(
     label: String,
-    active: Boolean,
-    onClick: () -> Unit,
+    sticky: Boolean,
+    locked: Boolean,
+    onTap: () -> Unit,
+    onLongPress: () -> Unit,
     effectiveContentColor: Color = Color.White
 ) {
+    // 三态：未激活 / 粘滞（半透明，只作用于下一个按键）/ 锁定（实心 + 描边，持续生效到再次长按）。
+    val background = when {
+        locked -> MiuixTheme.colorScheme.primary
+        sticky -> MiuixTheme.colorScheme.primary.copy(alpha = 0.4f)
+        else -> MiuixTheme.colorScheme.surfaceVariant
+    }
     Box(
         modifier = Modifier
             .size(width = 36.dp, height = 32.dp)
             .clip(RoundedCornerShape(8.dp))
-            .background(
-                if (active) MiuixTheme.colorScheme.primary
-                else MiuixTheme.colorScheme.surfaceVariant
+            .background(background)
+            .then(
+                if (locked) Modifier.border(2.dp, MiuixTheme.colorScheme.onSurface, RoundedCornerShape(8.dp))
+                else Modifier
             )
-            .clickable { onClick() },
+            .combinedClickable(onClick = onTap, onLongClick = onLongPress),
         contentAlignment = Alignment.Center
     ) {
         Text(
             text = label,
             fontSize = 11.sp,
             fontWeight = FontWeight.Bold,
-            color = if (active) Color.White else effectiveContentColor,
+            color = if (locked) MiuixTheme.colorScheme.onPrimary else effectiveContentColor,
             maxLines = 1
         )
     }
