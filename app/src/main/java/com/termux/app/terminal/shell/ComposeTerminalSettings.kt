@@ -42,6 +42,8 @@ object ComposeTerminalSettings {
     const val DEFAULT_KEEP_SCREEN_ON = false
     const val DEFAULT_CURSOR_STYLE_NAME = "BAR"
     const val DEFAULT_TEXT_BLINKING = true
+    const val DEFAULT_SOFT_KEYBOARD_ONLY_IF_NO_HARDWARE = false
+    const val DEFAULT_KEY_LOGGING = false
 
     // StateFlow - 所有终端组件订阅这些值
     private val _fontSize = MutableStateFlow(DEFAULT_FONT_SIZE)
@@ -91,6 +93,12 @@ object ComposeTerminalSettings {
     private val _keepScreenOn = MutableStateFlow(DEFAULT_KEEP_SCREEN_ON)
     val keepScreenOn: StateFlow<Boolean> = _keepScreenOn.asStateFlow()
 
+    private val _softKeyboardOnlyIfNoHardware = MutableStateFlow(DEFAULT_SOFT_KEYBOARD_ONLY_IF_NO_HARDWARE)
+    val softKeyboardOnlyIfNoHardware: StateFlow<Boolean> = _softKeyboardOnlyIfNoHardware.asStateFlow()
+
+    private val _keyLogging = MutableStateFlow(DEFAULT_KEY_LOGGING)
+    val keyLogging: StateFlow<Boolean> = _keyLogging.asStateFlow()
+
     private var prefs: SharedPreferences? = null
 
     @Volatile
@@ -117,6 +125,8 @@ object ComposeTerminalSettings {
         _softKeyboard.value = p.getBoolean("soft_keyboard", DEFAULT_SOFT_KEYBOARD)
         _showToolbar.value = p.getBoolean("show_toolbar", DEFAULT_SHOW_TOOLBAR)
         _keepScreenOn.value = p.getBoolean("keep_screen_on", DEFAULT_KEEP_SCREEN_ON)
+        _softKeyboardOnlyIfNoHardware.value = p.getBoolean("soft_keyboard_only_if_no_hardware", DEFAULT_SOFT_KEYBOARD_ONLY_IF_NO_HARDWARE)
+        _keyLogging.value = p.getBoolean("key_logging", DEFAULT_KEY_LOGGING)
         // 同步解析 colorScheme
         _colorScheme.value = TerminalThemes.findByName(_colorSchemeName.value)?.terminalColorScheme
             ?: TerminalColorScheme.dark()
@@ -179,6 +189,16 @@ object ComposeTerminalSettings {
     fun setKeepScreenOn(value: Boolean) {
         _keepScreenOn.value = value
         edit { it.putBoolean("keep_screen_on", value) }
+    }
+
+    fun setSoftKeyboardOnlyIfNoHardware(value: Boolean) {
+        _softKeyboardOnlyIfNoHardware.value = value
+        edit { it.putBoolean("soft_keyboard_only_if_no_hardware", value) }
+    }
+
+    fun setKeyLogging(value: Boolean) {
+        _keyLogging.value = value
+        edit { it.putBoolean("key_logging", value) }
     }
 
     private inline fun edit(block: (SharedPreferences.Editor) -> Unit) {

@@ -1,5 +1,9 @@
 package com.termux.app.terminal.shell
 
+import android.content.Context
+import android.util.Log
+import android.view.KeyEvent
+import android.widget.FrameLayout
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
@@ -46,22 +50,31 @@ fun ComposeTerminalScreen(
 
         AndroidView(
             factory = { ctx ->
-                LibTerminalView(ctx).apply {
-                    isFocusable = true
-                    isFocusableInTouchMode = true
-                    defaultFocusHighlightEnabled = false
-                    this.textSize = textSize
-                    this.typeface = typeface ?: android.graphics.Typeface.MONOSPACE
-                    this.colorScheme = resolvedScheme
-                    this.cursorBlinking = cursorBlink
-                    this.cursorStyle = cursorStyle
-                    this.textBlinking = textBlinking
-                }.also { tv ->
+                KeyLoggingContainer(ctx).apply {
+                    val tv = LibTerminalView(ctx).apply {
+                        isFocusable = true
+                        isFocusableInTouchMode = true
+                        defaultFocusHighlightEnabled = false
+                        this.textSize = textSize
+                        this.typeface = typeface ?: android.graphics.Typeface.MONOSPACE
+                        this.colorScheme = resolvedScheme
+                        this.cursorBlinking = cursorBlink
+                        this.cursorStyle = cursorStyle
+                        this.textBlinking = textBlinking
+                    }
+                    addView(
+                        tv,
+                        FrameLayout.LayoutParams(
+                            FrameLayout.LayoutParams.MATCH_PARENT,
+                            FrameLayout.LayoutParams.MATCH_PARENT
+                        )
+                    )
                     terminalView = tv
                     terminalViewRef.value = tv
                 }
             },
-            update = { tv ->
+            update = { container ->
+                val tv = container.getChildAt(0) as LibTerminalView
                 tv.textSize = textSize
                 tv.typeface = typeface ?: android.graphics.Typeface.MONOSPACE
                 tv.colorScheme = resolvedScheme
@@ -83,5 +96,24 @@ fun ComposeTerminalScreen(
             terminalView = null
             terminalViewRef.value = null
         }
+    }
+}
+
+/**
+ * 硬件按键日志容器：libterminal 的 TerminalView 是 final 类且无输入回调接口，
+ * 只能在外层容器 dispatchKeyEvent 处截获流向终端的硬件按键事件。
+ * IME 软输入走 InputConnection，不经过 View 按键分发，无法在此记录。
+ */
+private class KeyLoggingContainer(context: Context) : FrameLayout(context) {
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (ComposeTerminalSettings.keyLogging.value) {
+            Log.d(
+                "TerminalKeyLogging",
+                "action=${event.action} keyCode=${event.keyCode} " +
+                    "repeat=${event.repeatCount} meta=0x${event.metaState.toString(16)}"
+            )
+        }
+        return super.dispatchKeyEvent(event)
     }
 }

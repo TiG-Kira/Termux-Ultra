@@ -213,6 +213,9 @@ fun SettingsScreen(
     val composeScrollbackLines by com.termux.app.terminal.shell.ComposeTerminalSettings.scrollbackLines.collectAsState()
 val composeCursorStyleName by com.termux.app.terminal.shell.ComposeTerminalSettings.cursorStyleName.collectAsState()
 val composeTextBlinking by com.termux.app.terminal.shell.ComposeTerminalSettings.textBlinking.collectAsState()
+val composeSoftKeyboard by com.termux.app.terminal.shell.ComposeTerminalSettings.softKeyboard.collectAsState()
+val composeSoftKeyboardOnlyIfNoHardware by com.termux.app.terminal.shell.ComposeTerminalSettings.softKeyboardOnlyIfNoHardware.collectAsState()
+val composeKeyLogging by com.termux.app.terminal.shell.ComposeTerminalSettings.keyLogging.collectAsState()
 
     // Official standalone APK detection. Keys match the add-on app package names; when a standalone
     // APK is installed, the integrated toggle is forced OFF and disabled, with the row shows
@@ -738,6 +741,45 @@ val composeTextBlinking by com.termux.app.terminal.shell.ComposeTerminalSettings
                     startAction = { SettingIcon(R.drawable.ic_edit) }
                 )
             }),
+        SearchableSetting(sec_terminal, context.getString(R.string.enable_softkeyboard), "",
+            keywords = listOf("软键盘", "键盘", "keyboard", "输入法"),
+            render = {
+                SwitchPreference(
+                    title = context.getString(R.string.enable_softkeyboard),
+                    summary = if (composeSoftKeyboard) context.getString(R.string.enabled) else context.getString(R.string.disabled),
+                    checked = composeSoftKeyboard,
+                    onCheckedChange = {
+                        com.termux.app.terminal.shell.ComposeTerminalSettings.setSoftKeyboard(it)
+                    },
+                    startAction = { SettingIcon(R.drawable.ic_keyboard) }
+                )
+            }),
+        SearchableSetting(sec_terminal, context.getString(R.string.enable_soft_keyboard_no_hw), context.getString(R.string.soft_keyboard_only_if_no_hardware_desc),
+            keywords = listOf("物理键盘", "硬件键盘", "hardware keyboard"),
+            render = {
+                SwitchPreference(
+                    title = context.getString(R.string.enable_soft_keyboard_no_hw),
+                    summary = context.getString(R.string.soft_keyboard_only_if_no_hardware_desc),
+                    checked = composeSoftKeyboardOnlyIfNoHardware,
+                    onCheckedChange = {
+                        com.termux.app.terminal.shell.ComposeTerminalSettings.setSoftKeyboardOnlyIfNoHardware(it)
+                    },
+                    startAction = { SettingIcon(R.drawable.ic_keyboard_mini) }
+                )
+            }),
+        SearchableSetting(sec_terminal, context.getString(R.string.terminal_key_logging), context.getString(R.string.terminal_key_logging_desc),
+            keywords = listOf("按键", "日志", "key logging", "debug"),
+            render = {
+                SwitchPreference(
+                    title = context.getString(R.string.terminal_key_logging),
+                    summary = context.getString(R.string.terminal_key_logging_desc),
+                    checked = composeKeyLogging,
+                    onCheckedChange = {
+                        com.termux.app.terminal.shell.ComposeTerminalSettings.setKeyLogging(it)
+                    },
+                    startAction = { SettingIcon(R.drawable.ic_bug) }
+                )
+            }),
 
         // ===== Integrated Tools =====
         SearchableSetting(sec_tools, context.getString(R.string.termux_api_tool), context.getString(R.string.termux_api_tool_summary),
@@ -1174,6 +1216,42 @@ val composeTextBlinking by com.termux.app.terminal.shell.ComposeTerminalSettings
                                     )
                                 },
                                 startAction = { SettingIcon(R.drawable.ic_screen_rotation) }
+                            )
+                            // 经典引擎终端设置项（PR168 迁移 libterminal 时移除，现接入 Nova 引擎）
+                            SwitchPreference(
+                                title = context.getString(R.string.enable_softkeyboard),
+                                summary = if (composeSoftKeyboard) context.getString(R.string.enabled) else context.getString(R.string.disabled),
+                                checked = composeSoftKeyboard,
+                                onCheckedChange = {
+                                    com.termux.app.terminal.shell.ComposeTerminalSettings.setSoftKeyboard(it)
+                                },
+                                startAction = { SettingIcon(R.drawable.ic_keyboard) }
+                            )
+                            SwitchPreference(
+                                title = context.getString(R.string.enable_soft_keyboard_no_hw),
+                                summary = context.getString(R.string.soft_keyboard_only_if_no_hardware_desc),
+                                checked = composeSoftKeyboardOnlyIfNoHardware,
+                                onCheckedChange = {
+                                    com.termux.app.terminal.shell.ComposeTerminalSettings.setSoftKeyboardOnlyIfNoHardware(it)
+                                },
+                                startAction = { SettingIcon(R.drawable.ic_keyboard_mini) }
+                            )
+                            SwitchPreference(
+                                title = context.getString(R.string.terminal_key_logging),
+                                summary = context.getString(R.string.terminal_key_logging_desc),
+                                checked = composeKeyLogging,
+                                onCheckedChange = {
+                                    com.termux.app.terminal.shell.ComposeTerminalSettings.setKeyLogging(it)
+                                },
+                                startAction = { SettingIcon(R.drawable.ic_bug) }
+                            )
+                            OverlayDropdownPreference(
+                                title = context.getString(R.string.log_level),
+                                summary = context.getString(R.string.log_level_desc),
+                                items = listOf(context.getString(R.string.off), context.getString(R.string.normal), context.getString(R.string.debug), context.getString(R.string.verbose)),
+                                selectedIndex = logLevel.coerceIn(0, 3),
+                                onSelectedIndexChange = { idx -> logLevel = idx; terminalPrefs?.setLogLevel(context, idx) },
+                                startAction = { SettingIcon(R.drawable.ic_bug) }
                             )
                         }
 
