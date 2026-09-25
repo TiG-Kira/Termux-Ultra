@@ -38,8 +38,8 @@ public class TerminalSession extends TerminalOutput {
     private static final int MSG_PROCESS_EXITED = 4;
 
     /**
-     * 写转发接口：当会话未附着到 PTY（Compose 模式下的镜像会话）时，
-     * 把针对该会话的写入转发到真正持有进程的 Compose 会话。
+     * 写转发接口：当会话未附着到 PTY（适配会话）时，
+     * 把针对该会话的写入转发到真正持有进程的底层终端会话。
      */
     public interface WriteForwarder {
         /** 转发一段写入数据。 */
@@ -56,10 +56,10 @@ public class TerminalSession extends TerminalOutput {
     }
 
     /**
-     * 运行核心设置项（Kotlin+Compose 模式）是否开启的状态镜像。
+     * 会话是否启用了写转发的状态标记。
      *
-     * 只有设置项为 Kotlin+Compose 时才允许把镜像会话的写入转发到 Compose 核心；
-     * 切回 Java+NDK 模式后清空该标记，转发立即失效。
+     * 启用后允许把未附着 PTY 的会话写入转发到底层终端会话；
+     * 清空后转发立即失效。
      */
     private static volatile boolean sComposeForwardingEnabled = false;
 
@@ -73,7 +73,7 @@ public class TerminalSession extends TerminalOutput {
 
     private volatile WriteForwarder mWriteForwarder;
 
-    /** 设置写转发器（仅 Compose 模式的镜像会话使用，Java 模式保持 null）。 */
+    /** 设置写转发器（未附着 PTY 的适配会话使用，普通会话保持 null）。 */
     public void setWriteForwarder(WriteForwarder forwarder) {
         mWriteForwarder = forwarder;
     }
@@ -247,8 +247,8 @@ public class TerminalSession extends TerminalOutput {
     @Override
     public void write(byte[] data, int offset, int count) {
         if (mShellPid <= 0) {
-            // 会话进程未附着到 PTY（Compose 模式镜像会话等）：
-            // 仅当运行核心设置项为 Kotlin+Compose 时，才把写入转发到真正的 Compose 会话
+            // 会话进程未附着到 PTY（适配会话等）：
+            // 仅当启用了写转发时，才把写入转交给底层终端会话
             if (sComposeForwardingEnabled) {
                 WriteForwarder forwarder = mWriteForwarder;
                 if (forwarder != null && count > 0) {
@@ -419,7 +419,7 @@ public class TerminalSession extends TerminalOutput {
             }
             return;
         }
-        // 镜像会话：运行核心为 Kotlin+Compose 时结束其对应的 Compose 会话进程
+        // 适配会话：结束其对应的底层终端会话进程
         if (sComposeForwardingEnabled) {
             WriteForwarder forwarder = mWriteForwarder;
             if (forwarder != null) {
@@ -450,8 +450,8 @@ public class TerminalSession extends TerminalOutput {
     }
 
     public synchronized boolean isRunning() {
-        // 镜像会话（未附着到 PTY）：运行核心为 Kotlin+Compose 时，以 Compose 会话实际状态为准；
-        // 切回 Java+NDK 后镜像不再转发，视为已结束。
+        // 适配会话（未附着到 PTY）：以底层终端会话的实际状态为准；
+        // 未启用写转发时视为已结束。
         if (mShellPid == 0 && sComposeForwardingEnabled && mWriteForwarder != null) {
             return mWriteForwarder.isAlive();
         }

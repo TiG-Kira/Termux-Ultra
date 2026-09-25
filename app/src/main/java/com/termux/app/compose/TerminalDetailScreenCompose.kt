@@ -205,8 +205,7 @@ fun TerminalDetailScreenCompose(
     val currentSessionIsDead = currentSession.pid == -1 || sessionExited
     val sessionExitCode = currentSession.exitStatus
 
-    // 对齐经典引擎 removeFinishedSession：死会话内按 Enter → 移除该会话；
-    // 若无剩余会话则返回（对应经典 finishActivity），否则 killSession 已切换到其余会话
+    // 死会话内按 Enter → 移除该会话；若无剩余会话则返回，否则已切换到其余会话
     LaunchedEffect(removeRequested) {
         if (removeRequested) {
             sessionManager.killSession(currentSession.id)
@@ -216,7 +215,7 @@ fun TerminalDetailScreenCompose(
         }
     }
 
-    // 当前会话切换后（会话列表点击 / 主页卡片点击 / 第三方镜像切换），未初始化的会话
+    // 当前会话切换后（会话列表点击 / 主页卡片点击 / 第三方句柄切换），未初始化的会话
     // 在真正进入终端控制台的那一刻才初始化（拉起进程），效仿 Java 版策略
     LaunchedEffect(currentSessionId) {
         val cs = allSessions.firstOrNull { it.session.id == currentSessionId }?.session

@@ -1159,7 +1159,7 @@
     <string name="file_empty">File is empty</string>
 
     <string name="core_name_classic">Classic</string>
-    <string name="core_name_nova">Nova</string>
+    <string name="core_name_libterminal">LibTerminal</string>
 
 
     <string name="train_local_model">Train local model</string>
@@ -1240,7 +1240,7 @@
     <string name="model_url_key">Model: %1$s | URL: %2$s | Key: %3$s</string>
     <string name="card_ended_code">Ended · exit code %1$s</string>
     <string name="custom_file">custom file</string>
-    <string name="libterminal_core_info">Nova Engine (LibTerminal) Core Version: %1$s</string>
+    <string name="libterminal_core_info">LibTerminal Core Version: %1$s</string>
     <string name="currently_using_source">Currently using: %1$s. Tap to switch back to the official default System Prompt</string>
     <string name="temperature_current">Temperature: current %1$.2f  (0 = strict, 1 = creative)</string>
     <string name="fallback_not_configured">Enabled: ⚠️ Tap \\"Configure Backup Online Params\\" below to complete API Key/URL/Model first</string>
@@ -1308,7 +1308,7 @@
     <string name="prefs_about_cat_version">版本信息</string>
     <string name="prefs_about_cat_legal">开源与许可</string>
     <string name="check_updates_summary">检查 GitHub 是否有新版本发布</string>
-    <string name="libterminal_core_title">新星引擎核心</string>
+    <string name="libterminal_core_title">LibTerminal Core</string>
     <string name="prefs_about_github">Termux Ultra GitHub</string>
     <string name="prefs_about_github_desc">访问 Termux Ultra 源代码仓库</string>
     <string name="prefs_about_termux_original">Termux 原版项目</string>

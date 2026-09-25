@@ -1117,7 +1117,7 @@ val composeTextBlinking by com.termux.app.terminal.shell.ComposeTerminalSettings
                 ) {
                     Column {
 
-                        // ===== 终端设置（单一 Nova/Compose 模式）=====
+                        // ===== 终端设置 =====
                         if (isComposeMode) {
                                 OverlayDropdownPreference(
                                 title = context.getString(R.string.font_size),
@@ -1177,7 +1177,7 @@ val composeTextBlinking by com.termux.app.terminal.shell.ComposeTerminalSettings
                             )
                         }
 
-                            // ===== 通用设置（经典+Nova）=====
+                            // ===== 通用设置 =====
                             var editorToolIndex by remember { mutableStateOf(prefs.getString("editor_tool", "internal")?.let { if (it == "vim") 1 else 0 } ?: 0) }
                             OverlayDropdownPreference(
                                 title = stringResource(R.string.editor_tools),

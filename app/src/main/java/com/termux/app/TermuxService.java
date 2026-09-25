@@ -56,7 +56,7 @@ import com.termux.shared.termux.terminal.TermuxTerminalSessionClientBase;
 import com.termux.shared.logger.Logger;
 import com.termux.app.compose.LiveUpdateState;
 import com.termux.app.compose.NotificationPrefs;
-import com.termux.app.terminal.shell.NovaTerminalSessionAdapter;
+import com.termux.app.terminal.shell.TerminalSessionAdapter;
 import com.termux.shared.notification.NotificationUtils;
 import com.termux.shared.android.PermissionUtils;
 import com.termux.shared.data.DataUtils;
@@ -218,10 +218,10 @@ public final class TermuxService extends Service implements TermuxTaskCompat.Ter
             Logger.logDebug(LOG_TAG, "Security hook skipped (level=OFF)");
         }
 
-        // 单一 Nova 引擎（libterminal）常态化：镜像写转发状态恒为启用
+        // 会话写转发状态恒为启用
         com.termux.terminal.TerminalSession.setComposeForwardingEnabled(true);
 
-        // 单一 Nova 引擎下 Boot/Tasker/Widget 插件恢复常开（不再随运行核心切换自动禁用）
+        // Boot/Tasker/Widget 插件常开
         com.termux.app.compose.IntegratedTools.Tool[] alwaysOnTools = new com.termux.app.compose.IntegratedTools.Tool[]{
             com.termux.app.compose.IntegratedTools.Tool.TERMUX_BOOT,
             com.termux.app.compose.IntegratedTools.Tool.TERMUX_TASKER,
@@ -231,7 +231,7 @@ public final class TermuxService extends Service implements TermuxTaskCompat.Ter
             com.termux.app.compose.IntegratedTools.INSTANCE.applyComponentState(this, tool, true);
         }
 
-        // Compose 会话创建/关闭时刷新前台通知，保证 LiveUpdate 通知中的会话数量
+        // 会话创建/关闭时刷新前台通知，保证 LiveUpdate 通知中的会话数量
         // 对 Compose 直建的会话（主页/终端页新建）也保持准确
         com.termux.app.terminal.shell.ComposeSessionManager.setOnSessionsChanged(() -> {
             try {
@@ -296,10 +296,10 @@ public final class TermuxService extends Service implements TermuxTaskCompat.Ter
                     actionQuitAppForce();
                     break;
                 case TERMUX_SERVICE.ACTION_KILL_SESSIONS:
-                    Logger.logDebug(LOG_TAG, "ACTION_KILL_SESSIONS intent received (switching runtime core)");
+                    Logger.logDebug(LOG_TAG, "ACTION_KILL_SESSIONS intent received");
                     killAllTermuxExecutionCommands();
-                    // 切换运行核心：显式清空所有会话（含 Compose 镜像会话——无真实进程，
-                    // 结束后不会触发 onSessionFinished 回调，需手动移除并刷新会话列表）
+                    // 显式清空所有会话（无真实进程的适配会话结束后不会触发
+                    // onSessionFinished 回调，需手动移除并刷新会话列表）
                     removeAllTermuxSessions();
                     runStopForeground();
                     updateNotification();
@@ -357,7 +357,7 @@ public final class TermuxService extends Service implements TermuxTaskCompat.Ter
         // 注销 LiveUpdateState 监听器
         LiveUpdateState.removeListener(mLiveUpdateListener);
 
-        // 注销 Compose 会话变更回调。ComposeSessionManager 是进程级单例，
+        // 注销会话变更回调。ComposeSessionManager 是进程级单例，
         // 不注销会一直持有这个已经销毁的 Service（连带 Context / WakeLock /
         // mTermuxSessions），之后每次会话变化还会回调它去重建通知。
         try {
@@ -861,16 +861,16 @@ public final class TermuxService extends Service implements TermuxTaskCompat.Ter
         if (Logger.getLogLevel() >= Logger.LOG_LEVEL_VERBOSE)
             Logger.logVerboseExtended(LOG_TAG, executionCommand.toString());
 
-        // Compose 模式：会话由 ComposeSessionManager 管理，这里通过 NovaTerminalSessionAdapter
+        // 会话由 ComposeSessionManager 管理，这里通过 TerminalSessionAdapter
         // 保持 Java 接口完全兼容——第三方页面（资源中心/工具中心等）无需改动即可直接调用
-        // 创建/写入/切换（会话本体即一个 Nova 会话，无镜像/注册表间接层）。
+        // 创建/写入/切换。
         if (com.termux.app.compose.TerminalRuntimeCore.isComposeMode(this)) {
-            TermuxSession novaSession = NovaTerminalSessionAdapter.create(this, executionCommand, sessionName);
-            if (novaSession == null) {
-                Logger.logError(LOG_TAG, "Failed to create Nova TermuxSession for:\n" + executionCommand.getCommandIdAndLabelLogString());
+            TermuxSession adapter = TerminalSessionAdapter.create(this, executionCommand, sessionName);
+            if (adapter == null) {
+                Logger.logError(LOG_TAG, "Failed to create TermuxSession for:\n" + executionCommand.getCommandIdAndLabelLogString());
                 return null;
             }
-            mTermuxSessions.add(novaSession);
+            mTermuxSessions.add(adapter);
 
             // Remove the execution command from the pending plugin execution commands list since it has
             // now been processed
@@ -887,7 +887,7 @@ public final class TermuxService extends Service implements TermuxTaskCompat.Ter
             updateNotification();
             TermuxActivity.updateTermuxActivityStyling(this);
 
-            return novaSession;
+            return adapter;
         }
 
         // If the execution command was started for a plugin, only then will the stdout be set
@@ -907,7 +907,7 @@ public final class TermuxService extends Service implements TermuxTaskCompat.Ter
 
         mTermuxSessions.add(newTermuxSession);
 
-        // ===== 新会话自动执行命令（经典引擎）=====
+        // ===== 新会话自动执行命令 =====
         try {
             android.content.SharedPreferences prefs = getSharedPreferences("termux_preferences", MODE_PRIVATE);
             String autoCmd = prefs.getString("auto_start_command", "");
@@ -1127,10 +1127,10 @@ public synchronized int removeTermuxSession(TerminalSession sessionToRemove) {
         }
     }
 
-    /** 新会话为 Nova 适配会话时，同步切换到对应的 Compose 会话（替代经典 client.setCurrentSession）。 */
+    /** 新会话为适配会话时，同步切换到对应的终端会话。 */
     private void switchToComposeSessionIfAdapter(TerminalSession session) {
-        if (session instanceof NovaTerminalSessionAdapter) {
-            ComposeSessionManager.getInstance(this).switchTo(((NovaTerminalSessionAdapter) session).getNovaId());
+        if (session instanceof TerminalSessionAdapter) {
+            ComposeSessionManager.getInstance(this).switchTo(((TerminalSessionAdapter) session).getSessionId());
         }
     }
 
@@ -1449,9 +1449,9 @@ public synchronized int removeTermuxSession(TerminalSession sessionToRemove) {
     }
 
     /**
-     * 清空所有会话与任务并刷新会话列表（切换运行核心时使用）。
-     * 含 Compose 镜像会话——无真实进程，结束后不会触发 onSessionFinished 回调，
-     * 必须手动从列表移除，否则切换回 Java 核心后会残留无效的会话卡片。
+     * 清空所有会话与任务并刷新会话列表。
+     * 适配会话无真实进程，结束后不会触发 onSessionFinished 回调，必须手动移除，
+     * 否则会残留无效的会话卡片。
      */
     public synchronized void removeAllTermuxSessions() {
         for (TermuxSession session : new ArrayList<>(mTermuxSessions)) {

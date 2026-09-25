@@ -27,7 +27,7 @@ description: Termux Ultra 官方文档 — 使用手册、功能讲解与插件�
   </a>
   <a class="card" href="{{ '/zh/features/' | relative_url }}">
     <span class="card-title">🧩 功能讲解</span>
-    <span class="card-desc">整体架构、双终端引擎（经典 / Nova）、Miuix UI、集成工具机制、插件系统能力矩阵与权限模型、AI 助手与安全增强引擎。</span>
+    <span class="card-desc">整体架构、终端引擎（LibTerminal）、Miuix UI、集成工具机制、插件系统能力矩阵与权限模型、AI 助手与安全增强引擎。</span>
   </a>
   <a class="card" href="{{ '/zh/plugins/' | relative_url }}">
     <span class="card-title">🔌 插件构建文档</span>

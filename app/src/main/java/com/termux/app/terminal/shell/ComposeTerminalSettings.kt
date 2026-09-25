@@ -13,7 +13,7 @@ import java.io.File
 import java.util.Properties
 
 /**
- * Kotlin+Compose 终端设置单例。
+ * 终端设置单例。
  *
  * 所有终端设置项都通过此对象读写：
  * - 写入：同时更新 SharedPreferences 和内部 StateFlow
@@ -25,7 +25,7 @@ import java.util.Properties
  * Styling 适配：与 Java 版共用 `~/.termux/colors.properties` 与 `~/.termux/font.ttf`，
  * 作为主题/字体的唯一事实来源（[stylingColorScheme]/[stylingTypeface]）。
  * - Java 模式切换主题（Styling 页/termux-reload）→ 写盘 → 广播 reload_style → Compose 刷新；
- * - Compose 模式切换主题（同一 Styling 页）→ 写盘 → 广播 reload_style → Java 刷新；
+ * - 切换主题（同一 Styling 页）→ 写盘 → 广播 reload_style → 刷新；
  * - 两种内核互相切换时，起始主题保持一致（都从磁盘读取）。
  */
 object ComposeTerminalSettings {

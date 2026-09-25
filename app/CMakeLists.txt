@@ -136,8 +136,7 @@ target_link_libraries(termux-bootstrap ${LIB_LOG})
 # 平移至 app 侧：termux.c（createSubprocess/setPtyWindowSize/waitFor/close/
 # chmod/setPtyUTF8Mode）+ native_crash_handler.c（JNI_OnLoad +
 # nativeSetupCrashHandler）。JNI 符号名（Java_com_termux_terminal_JNI_*）
-# 与类名保持不变，故 classic 引擎 TerminalSession 与 Nova TermuxProcessBridge
-# 均无需改动即可继续使用。
+# 与类名保持不变，TerminalSession 与 TermuxProcessBridge 均无需改动即可继续使用。
 ###############################################################################
 add_library(termux SHARED
     ${TERMUX_CPP_DIR}/termux.c

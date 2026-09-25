@@ -429,7 +429,7 @@ fun OverviewScreen(
     val runningSessions = sessions.filter { it.getTerminalSession().isRunning }
     val stoppedSessions = sessions.filter { !it.getTerminalSession().isRunning }
 
-    // Compose (Nova) engine session state — OverviewScreen 需同时识别两种引擎
+    // 终端会话状态（当前实现恒真）
     val isComposeRuntime = TerminalRuntimeCore.isComposeMode(context)
     val composeSessionInfos by if (isComposeRuntime) {
         val mgr = remember(context) {

@@ -24,7 +24,7 @@ import com.termux.app.terminal.shell.ComposeTerminalSettings;
 import com.termux.app.compose.RiskConfirmManager;
 import com.termux.app.compose.StopConfirmDialog;
 import com.termux.app.compose.TermuxActivityBridge;
-import com.termux.app.terminal.shell.NovaTerminalSessionAdapter;
+import com.termux.app.terminal.shell.TerminalSessionAdapter;
 import com.termux.app.utils.CrashUtils;
 import com.termux.shared.logger.Logger;
 import com.termux.shared.termux.TermuxConstants;
@@ -42,9 +42,8 @@ import java.util.List;
 import com.termux.shared.activities.ReportActivity;
 
 /**
- * Termux 终端控制台（单一 Nova/libterminal 引擎）。
+ * Termux 终端控制台（libterminal 引擎）。
  *
- * 阶段 3 起不再承载经典引擎 UI（TerminalView/会话 Clients/经典工具栏会话列表等全部退役）。
  * 窗口内容由 {@link TermuxActivityBridge#setTerminalDetailContent} 以 Compose +
  * {@code TerminalDetailScreenCompose} 呈现，会话由 {@link ComposeSessionManager} 单例管理。
  */
@@ -100,7 +99,7 @@ public final class TermuxActivity extends ComponentActivity implements ServiceCo
         // 容器级 imePadding 协同提供完整的 insets 语义（对齐上游 765af91）
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
 
-        // 单一 Nova 引擎：终端页由 Compose 呈现，会话由 ComposeSessionManager 单例管理
+        // 终端页由 Compose 呈现，会话由 ComposeSessionManager 单例管理
         TermuxActivityBridge.setTerminalDetailContent(
             this,
             () -> finishActivityIfNotFinishing()
@@ -160,14 +159,14 @@ public final class TermuxActivity extends ComponentActivity implements ServiceCo
             createNewComposeSessionIfBound();
         }
 
-        // 第三方页面通过 Java 接口创建新会话时，正在运行中的 Compose 终端
-        // 需同步切换到该会话（会话本体即 NovaTerminalSessionAdapter）。
+        // 第三方页面通过 Java 接口创建新会话时，正在运行中的终端控制台
+        // 需同步切换到该会话（会话本体即 TerminalSessionAdapter）。
         String composeHandle = intent != null ? intent.getStringExtra("sessionHandle") : null;
         if (composeHandle != null) {
             TerminalSession target = findSessionByHandle(composeHandle);
-            if (target instanceof NovaTerminalSessionAdapter) {
-                int novaId = ((NovaTerminalSessionAdapter) target).getNovaId();
-                ComposeSessionManager.getInstance(this).switchTo(novaId);
+            if (target instanceof TerminalSessionAdapter) {
+                int sessionId = ((TerminalSessionAdapter) target).getSessionId();
+                ComposeSessionManager.getInstance(this).switchTo(sessionId);
             }
         }
 
@@ -228,7 +227,7 @@ public final class TermuxActivity extends ComponentActivity implements ServiceCo
         mTermuxService = ((TermuxService.LocalBinder) service).service;
 
         if (mTermuxService.getTermuxSessionsSize() == 0) {
-            // Compose 模式：会话由 ComposeSessionManager 管理，Java 侧会话列表为空属正常。
+            // 会话由 ComposeSessionManager 管理，Java 侧会话列表为空属正常。
             // Compose 侧无任何会话时新建默认会话并立即启动（避免终端页刚进入就被关闭）。
             if (ComposeSessionManager.getInstance(this).getSessions().getValue().isEmpty()) {
                 ComposeSessionManager.getInstance(this).createDefaultSession(true, false);
@@ -242,13 +241,13 @@ public final class TermuxActivity extends ComponentActivity implements ServiceCo
             ComposeSessionManager.getInstance(this).createDefaultSession(true, false);
         }
 
-        // 通过 sessionHandle 进入指定 Compose 会话
+        // 通过 sessionHandle 进入指定终端会话
         String composeHandle = i != null ? i.getStringExtra("sessionHandle") : null;
         if (composeHandle != null) {
             TerminalSession target = findSessionByHandle(composeHandle);
-            if (target instanceof NovaTerminalSessionAdapter) {
-                int novaId = ((NovaTerminalSessionAdapter) target).getNovaId();
-                ComposeSessionManager.getInstance(this).switchTo(novaId);
+            if (target instanceof TerminalSessionAdapter) {
+                int sessionId = ((TerminalSessionAdapter) target).getSessionId();
+                ComposeSessionManager.getInstance(this).switchTo(sessionId);
             }
         }
 
@@ -354,8 +353,8 @@ public final class TermuxActivity extends ComponentActivity implements ServiceCo
         if (current == null) return null;
         for (TermuxSession termuxSession : mTermuxService.getTermuxSessions()) {
             TerminalSession terminalSession = termuxSession.getTerminalSession();
-            if (terminalSession instanceof NovaTerminalSessionAdapter
-                && ((NovaTerminalSessionAdapter) terminalSession).getNovaId() == current.getId()) {
+            if (terminalSession instanceof TerminalSessionAdapter
+                && ((TerminalSessionAdapter) terminalSession).getSessionId() == current.getId()) {
                 return terminalSession;
             }
         }
@@ -462,7 +461,7 @@ public final class TermuxActivity extends ComponentActivity implements ServiceCo
     }
 
     private void reloadActivityStyling() {
-        // Styling 页/termux-reload 写盘后，Compose 终端直接从
+        // Styling 页/termux-reload 写盘后，终端视图直接从
         // ~/.termux/colors.properties 与 font.ttf 重新加载（与 Java 模式共用主题，双向同步）
         ComposeTerminalSettings.INSTANCE.init(this);
         ComposeTerminalSettings.INSTANCE.reloadFromStylingDisk();
