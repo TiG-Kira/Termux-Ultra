@@ -1,5 +1,6 @@
 package com.awkoo.libterminal.engine
 
+import androidx.annotation.Keep
 import com.awkoo.libterminal.process.ITerminalProcess
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers

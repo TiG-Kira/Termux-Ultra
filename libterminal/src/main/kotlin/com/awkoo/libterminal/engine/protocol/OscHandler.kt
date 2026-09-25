@@ -6,7 +6,7 @@ import com.awkoo.libterminal.text.TextStyle
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlin.io.encoding.Base64
 
 /**
@@ -22,8 +22,8 @@ internal class OscHandler(
 ) {
 
     private val titleStack = ArrayDeque<String?>()
-    private val _titleState = MutableStateFlow<String?>(null)
-    val titleState = _titleState.asStateFlow()
+    val titleState: StateFlow<String?>
+        field = MutableStateFlow(null)
 
     val copiedText = MutableSharedFlow<String>(
         replay = 0,
@@ -33,18 +33,18 @@ internal class OscHandler(
 
     /** CSI 22：将当前标题压入栈中，栈深上限 20。 */
     fun pushTitle() {
-        titleStack.addLast(_titleState.value)
+        titleStack.addLast(titleState.value)
         if (titleStack.size > 20) titleStack.removeAt(0)
     }
 
     /** CSI 23：从栈中弹出标题恢复，栈空时忽略。 */
     fun popTitle() {
-        if (!titleStack.isEmpty()) this._titleState.value = titleStack.removeLast()
+        if (!titleStack.isEmpty()) this.titleState.value = titleStack.removeLast()
     }
 
     fun onOscCommand(value: Int, textParameter: String, bellOrStringTerminator: String) {
         when (value) {
-            0, 1, 2 -> this._titleState.value = textParameter
+            0, 1, 2 -> this.titleState.value = textParameter
             4 -> handleOscSetColor(textParameter)
             10, 11, 12 -> handleOscQuerySetColor(value, textParameter, bellOrStringTerminator)
             52 -> handleOscClipboard(textParameter)
