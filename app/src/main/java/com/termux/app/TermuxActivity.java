@@ -99,6 +99,16 @@ public final class TermuxActivity extends ComponentActivity implements ServiceCo
         // 容器级 imePadding 协同提供完整的 insets 语义（对齐上游 765af91）
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
 
+        // 本页继承 application 主题 Theme.Termux.AppBase，该主题只设了 statusBarColor，
+        // 导航栏色会落回 AppCompat 的不透明值，把 Compose 键盘底整个盖成一条黑带
+        // （状态栏正常、导航栏发黑即源于此）。补齐透明并关掉 Android 10+ 的对比度自动补色，
+        // 键盘底才能延展到导航栏（键盘的 background 画在 navigationBarsPadding() 之前）。
+        getWindow().clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_NAVIGATION);
+        getWindow().setNavigationBarColor(android.graphics.Color.TRANSPARENT);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            getWindow().setNavigationBarContrastEnforced(false);
+        }
+
         // 终端页由 Compose 呈现，会话由 ComposeSessionManager 单例管理
         TermuxActivityBridge.setTerminalDetailContent(
             this,
