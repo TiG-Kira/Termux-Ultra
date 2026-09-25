@@ -35,7 +35,7 @@ import androidx.annotation.Nullable;
 
 import com.termux.R;
 import com.termux.app.settings.properties.TermuxAppSharedProperties;
-import com.termux.app.terminal.TermuxTerminalSessionActivityClient;
+import com.termux.app.terminal.shell.ComposeSessionManager;
 import com.termux.shared.compat.ShellEnvironmentCompat;
 import com.termux.shared.compat.TermuxSessionCompat;
 import com.termux.shared.compat.TermuxTaskCompat;
@@ -56,6 +56,7 @@ import com.termux.shared.termux.terminal.TermuxTerminalSessionClientBase;
 import com.termux.shared.logger.Logger;
 import com.termux.app.compose.LiveUpdateState;
 import com.termux.app.compose.NotificationPrefs;
+import com.termux.app.terminal.shell.NovaTerminalSessionAdapter;
 import com.termux.shared.notification.NotificationUtils;
 import com.termux.shared.android.PermissionUtils;
 import com.termux.shared.data.DataUtils;
@@ -122,14 +123,9 @@ public final class TermuxService extends Service implements TermuxTaskCompat.Ter
     final List<ExecutionCommand> mPendingPluginExecutionCommands = new ArrayList<>();
 
     /** The full implementation of the {@link TerminalSessionClient} interface to be used by {@link TerminalSession}
-     * that holds activity references for activity related functions.
-     * Note that the service may often outlive the activity, so need to clear this reference.
+     * Note: phase 3 removed the activity-backed client; sessions use the basic client only.
      */
-    TermuxTerminalSessionActivityClient mTermuxTerminalSessionClient;
-
-    /** The basic implementation of the {@link TerminalSessionClient} interface to be used by {@link TerminalSession}
-     * that does not hold activity references.
-     */
+    @SuppressWarnings("unused")
     final TermuxTerminalSessionClientBase mTermuxTerminalSessionClientBase = new TermuxTerminalSessionClientBase();
 
     /** The wake lock and wifi lock are always acquired and released together. */
@@ -222,9 +218,18 @@ public final class TermuxService extends Service implements TermuxTaskCompat.Ter
             Logger.logDebug(LOG_TAG, "Security hook skipped (level=OFF)");
         }
 
-        // 按运行核心设置项同步镜像写转发状态（Kotlin+Compose 时启用，Java+NDK 时禁用）
-        com.termux.terminal.TerminalSession.setComposeForwardingEnabled(
-            com.termux.app.compose.TerminalRuntimeCore.isComposeMode(this));
+        // 单一 Nova 引擎（libterminal）常态化：镜像写转发状态恒为启用
+        com.termux.terminal.TerminalSession.setComposeForwardingEnabled(true);
+
+        // 单一 Nova 引擎下 Boot/Tasker/Widget 插件恢复常开（不再随运行核心切换自动禁用）
+        com.termux.app.compose.IntegratedTools.Tool[] alwaysOnTools = new com.termux.app.compose.IntegratedTools.Tool[]{
+            com.termux.app.compose.IntegratedTools.Tool.TERMUX_BOOT,
+            com.termux.app.compose.IntegratedTools.Tool.TERMUX_TASKER,
+            com.termux.app.compose.IntegratedTools.Tool.TERMUX_WIDGET};
+        for (com.termux.app.compose.IntegratedTools.Tool tool : alwaysOnTools) {
+            com.termux.app.compose.IntegratedTools.INSTANCE.setEnabled(this, tool, true);
+            com.termux.app.compose.IntegratedTools.INSTANCE.applyComponentState(this, tool, true);
+        }
 
         // Compose 会话创建/关闭时刷新前台通知，保证 LiveUpdate 通知中的会话数量
         // 对 Compose 直建的会话（主页/终端页新建）也保持准确
@@ -397,12 +402,6 @@ public final class TermuxService extends Service implements TermuxTaskCompat.Ter
     @Override
     public boolean onUnbind(Intent intent) {
         Logger.logVerbose(LOG_TAG, "onUnbind");
-
-        // Since we cannot rely on {@link TermuxActivity.onDestroy()} to always complete,
-        // we unset clients here as well if it failed, so that we do not leave service and session
-        // clients with references to the activity.
-        if (mTermuxTerminalSessionClient != null)
-            unsetTermuxTerminalSessionClient();
         return false;
     }
 
@@ -862,16 +861,16 @@ public final class TermuxService extends Service implements TermuxTaskCompat.Ter
         if (Logger.getLogLevel() >= Logger.LOG_LEVEL_VERBOSE)
             Logger.logVerboseExtended(LOG_TAG, executionCommand.toString());
 
-        // Compose 模式：会话由 ComposeSessionManager 管理。这里通过镜像句柄保持 Java 接口
-        // 完全兼容——第三方页面（资源中心/工具中心等）无需改动即可直接调用创建/写入/切换。
+        // Compose 模式：会话由 ComposeSessionManager 管理，这里通过 NovaTerminalSessionAdapter
+        // 保持 Java 接口完全兼容——第三方页面（资源中心/工具中心等）无需改动即可直接调用
+        // 创建/写入/切换（会话本体即一个 Nova 会话，无镜像/注册表间接层）。
         if (com.termux.app.compose.TerminalRuntimeCore.isComposeMode(this)) {
-            TermuxSession composeMirror = com.termux.app.compose.ComposeSessionBridge.INSTANCE
-                .createComposeMirrorSession(this, executionCommand, sessionName);
-            if (composeMirror == null) {
-                Logger.logError(LOG_TAG, "Failed to create Compose mirror TermuxSession for:\n" + executionCommand.getCommandIdAndLabelLogString());
+            TermuxSession novaSession = NovaTerminalSessionAdapter.create(this, executionCommand, sessionName);
+            if (novaSession == null) {
+                Logger.logError(LOG_TAG, "Failed to create Nova TermuxSession for:\n" + executionCommand.getCommandIdAndLabelLogString());
                 return null;
             }
-            mTermuxSessions.add(composeMirror);
+            mTermuxSessions.add(novaSession);
 
             // Remove the execution command from the pending plugin execution commands list since it has
             // now been processed
@@ -879,10 +878,6 @@ public final class TermuxService extends Service implements TermuxTaskCompat.Ter
                 mPendingPluginExecutionCommands.remove(executionCommand);
 
             mAllSessionsCleared = false;
-
-            // Notify UI that sessions list has been updated
-            if (mTermuxTerminalSessionClient != null)
-                mTermuxTerminalSessionClient.termuxSessionListNotifyUpdated();
 
             // Auto acquire WakeLock if session is running a server/listening program (VNC, SSH, etc.)
             if (isServerProgram(executionCommand)) {
@@ -892,7 +887,7 @@ public final class TermuxService extends Service implements TermuxTaskCompat.Ter
             updateNotification();
             TermuxActivity.updateTermuxActivityStyling(this);
 
-            return composeMirror;
+            return novaSession;
         }
 
         // If the execution command was started for a plugin, only then will the stdout be set
@@ -960,11 +955,6 @@ public final class TermuxService extends Service implements TermuxTaskCompat.Ter
         // A new foreground session was created => restore LiveUpdate notification format
         mAllSessionsCleared = false;
 
-        // Notify {@link TermuxSessionsListViewController} that sessions list has been updated if
-        // activity in is foreground
-        if (mTermuxTerminalSessionClient != null)
-            mTermuxTerminalSessionClient.termuxSessionListNotifyUpdated();
-
         // Auto acquire WakeLock if session is running a server/listening program (VNC, SSH, etc.)
         if (isServerProgram(executionCommand)) {
             actionAcquireWakeLock();
@@ -994,10 +984,6 @@ public final class TermuxService extends Service implements TermuxTaskCompat.Ter
         mTermuxSessions.add(session);
         Logger.logDebug(LOG_TAG, "registerPluginSession: 已添加插件会话 " + session.getTerminalSession().mSessionName + " (total=" + mTermuxSessions.size() + ")");
 
-        // 通知 UI
-        if (mTermuxTerminalSessionClient != null)
-            mTermuxTerminalSessionClient.termuxSessionListNotifyUpdated();
-
         // 插件持久化会话是一个普通 shell（login shell），设置 emulator 尺寸
         TerminalSession terminal = session.getTerminalSession();
         if (terminal.getEmulator() == null && terminal.getShellPid() > 0) {
@@ -1012,8 +998,6 @@ public synchronized int removeTermuxSession(TerminalSession sessionToRemove) {
         int index = getIndexOfSession(sessionToRemove);
 
         if (index >= 0) {
-            // Compose 模式镜像：同时结束并注销对应的 Compose 会话
-            com.termux.app.compose.ComposeSessionBridge.INSTANCE.removeByJavaMirror(sessionToRemove);
             mTermuxSessions.get(index).getTerminalSession().finishIfRunning();
             mTermuxSessions.remove(index);
         }
@@ -1037,8 +1021,6 @@ public synchronized int removeTermuxSession(TerminalSession sessionToRemove) {
             if (sessionName == null || sessionName.isEmpty()) {
                 sessionName = getString(R.string.terminal);
             }
-            // Compose 模式镜像：同时结束并注销对应的 Compose 会话
-            com.termux.app.compose.ComposeSessionBridge.INSTANCE.removeByJavaMirror(session.getTerminalSession());
             session.getTerminalSession().finishIfRunning();
             mTermuxSessions.remove(index);
             final String finalSessionName = sessionName;
@@ -1077,11 +1059,6 @@ public synchronized int removeTermuxSession(TerminalSession sessionToRemove) {
                 TermuxPluginUtils.processPluginExecutionCommandResult(this, LOG_TAG, executionCommand);
 
             mTermuxSessions.remove(termuxSession);
-
-            // Notify {@link TermuxSessionsListViewController} that sessions list has been updated if
-            // activity in is foreground
-            if (mTermuxTerminalSessionClient != null)
-                mTermuxTerminalSessionClient.termuxSessionListNotifyUpdated();
         }
 
         updateNotification();
@@ -1127,8 +1104,7 @@ public synchronized int removeTermuxSession(TerminalSession sessionToRemove) {
         switch (sessionAction) {
             case TERMUX_SERVICE.VALUE_EXTRA_SESSION_ACTION_SWITCH_TO_NEW_SESSION_AND_OPEN_ACTIVITY:
                 setCurrentStoredTerminalSession(newTerminalSession);
-                if (mTermuxTerminalSessionClient != null)
-                    mTermuxTerminalSessionClient.setCurrentSession(newTerminalSession);
+                switchToComposeSessionIfAdapter(newTerminalSession);
                 startTermuxActivity();
                 break;
             case TERMUX_SERVICE.VALUE_EXTRA_SESSION_ACTION_KEEP_CURRENT_SESSION_AND_OPEN_ACTIVITY:
@@ -1138,8 +1114,7 @@ public synchronized int removeTermuxSession(TerminalSession sessionToRemove) {
                 break;
             case TERMUX_SERVICE.VALUE_EXTRA_SESSION_ACTION_SWITCH_TO_NEW_SESSION_AND_DONT_OPEN_ACTIVITY:
                 setCurrentStoredTerminalSession(newTerminalSession);
-                if (mTermuxTerminalSessionClient != null)
-                    mTermuxTerminalSessionClient.setCurrentSession(newTerminalSession);
+                switchToComposeSessionIfAdapter(newTerminalSession);
                 break;
             case TERMUX_SERVICE.VALUE_EXTRA_SESSION_ACTION_KEEP_CURRENT_SESSION_AND_DONT_OPEN_ACTIVITY:
                 if (getTermuxSessionsSize() == 1)
@@ -1149,6 +1124,13 @@ public synchronized int removeTermuxSession(TerminalSession sessionToRemove) {
                 Logger.logError(LOG_TAG, "Invalid sessionAction: \"" + sessionAction + "\". Force using default sessionAction.");
                 handleSessionAction(TERMUX_SERVICE.VALUE_EXTRA_SESSION_ACTION_SWITCH_TO_NEW_SESSION_AND_OPEN_ACTIVITY, newTerminalSession);
                 break;
+        }
+    }
+
+    /** 新会话为 Nova 适配会话时，同步切换到对应的 Compose 会话（替代经典 client.setCurrentSession）。 */
+    private void switchToComposeSessionIfAdapter(TerminalSession session) {
+        if (session instanceof NovaTerminalSessionAdapter) {
+            ComposeSessionManager.getInstance(this).switchTo(((NovaTerminalSessionAdapter) session).getNovaId());
         }
     }
 
@@ -1171,48 +1153,10 @@ public synchronized int removeTermuxSession(TerminalSession sessionToRemove) {
 
 
 
-    /** If {@link TermuxActivity} has not bound to the {@link TermuxService} yet or is destroyed, then
-     * interface functions requiring the activity should not be available to the terminal sessions,
-     * so we just return the {@link #mTermuxTerminalSessionClientBase}. Once {@link TermuxActivity} bind
-     * callback is received, it should call {@link #setTermuxTerminalSessionClient} to set the
-     * {@link TermuxService#mTermuxTerminalSessionClient} so that further terminal sessions are directly
-     * passed the {@link TermuxTerminalSessionActivityClient} object which fully implements the
-     * {@link TerminalSessionClient} interface.
-     *
-     * @return Returns the {@link TermuxTerminalSessionActivityClient} if {@link TermuxActivity} has bound with
-     * {@link TermuxService}, otherwise {@link TermuxTerminalSessionClientBase}.
-     */
+    /** Returns the {@link TerminalSessionClient} to be used by terminal sessions.
+     * Phase 3 removed the activity-backed client; the basic (activity-free) client is always returned. */
     public synchronized TermuxTerminalSessionClientBase getTermuxTerminalSessionClient() {
-        if (mTermuxTerminalSessionClient != null)
-            return mTermuxTerminalSessionClient;
-        else
-            return mTermuxTerminalSessionClientBase;
-    }
-
-    /** This should be called when {@link TermuxActivity#onServiceConnected} is called to set the
-     * {@link TermuxService#mTermuxTerminalSessionClient} variable and update the {@link TerminalSession}
-     * and {@link TerminalEmulator} clients in case they were passed {@link TermuxTerminalSessionClientBase}
-     * earlier.
-     *
-     * @param termuxTerminalSessionClient The {@link TermuxTerminalSessionActivityClient} object that fully
-     * implements the {@link TerminalSessionClient} interface.
-     */
-    public synchronized void setTermuxTerminalSessionClient(TermuxTerminalSessionActivityClient termuxTerminalSessionClient) {
-        mTermuxTerminalSessionClient = termuxTerminalSessionClient;
-
-        for (int i = 0; i < mTermuxSessions.size(); i++)
-            mTermuxSessions.get(i).getTerminalSession().updateTerminalSessionClient(mTermuxTerminalSessionClient);
-    }
-
-    /** This should be called when {@link TermuxActivity} has been destroyed and in {@link #onUnbind(Intent)}
-     * so that the {@link TermuxService} and {@link TerminalSession} and {@link TerminalEmulator}
-     * clients do not hold an activity references.
-     */
-    public synchronized void unsetTermuxTerminalSessionClient() {
-        for (int i = 0; i < mTermuxSessions.size(); i++)
-            mTermuxSessions.get(i).getTerminalSession().updateTerminalSessionClient(mTermuxTerminalSessionClientBase);
-
-        mTermuxTerminalSessionClient = null;
+        return mTermuxTerminalSessionClientBase;
     }
 
 
@@ -1501,8 +1445,6 @@ public synchronized int removeTermuxSession(TerminalSession sessionToRemove) {
     public synchronized void updateSessionList(List<TermuxSession> newSessions) {
         mTermuxSessions.clear();
         mTermuxSessions.addAll(newSessions);
-        if (mTermuxTerminalSessionClient != null)
-            mTermuxTerminalSessionClient.termuxSessionListNotifyUpdated();
         updateNotification();
     }
 
@@ -1521,8 +1463,6 @@ public synchronized int removeTermuxSession(TerminalSession sessionToRemove) {
         }
         mTermuxSessions.clear();
         mTermuxTasks.clear();
-        if (mTermuxTerminalSessionClient != null)
-            mTermuxTerminalSessionClient.termuxSessionListNotifyUpdated();
         updateNotification();
     }
 

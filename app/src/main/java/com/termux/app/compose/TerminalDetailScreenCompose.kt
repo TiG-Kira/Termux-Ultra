@@ -813,7 +813,11 @@ fun TerminalDetailScreenCompose(
         }
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .imePadding()
+    ) {
         Scaffold(
             containerColor = Color.Transparent,
             contentWindowInsets = WindowInsets(0, 0, 0, 0),
@@ -904,9 +908,7 @@ fun TerminalDetailScreenCompose(
             bottomBar = {
                 if (showToolbar) {
                     Box(
-                        modifier = Modifier
-                            .navigationBarsPadding()
-                            .imePadding()
+                        modifier = Modifier.fillMaxWidth()
                     ) {
                         TerminalKeyboardToolbar(
                             onSendKey = { bytes -> currentSession.write(bytes) },
@@ -1288,7 +1290,6 @@ private fun TerminalKeyboardToolbar(
             .fillMaxWidth()
             .background(surfaceBg)
             .navigationBarsPadding()
-            .imePadding()
             .horizontalScroll(hScroll)
     ) {
         Column(

@@ -18,9 +18,9 @@ object TermuxActivityBridge {
 
     /**
      * Replace the current Activity window content with the Compose-based
-     * TerminalDetailScreen, wrapped by KiTerminalTheme (Miuix theme).
+     * TerminalDetailScreenCompose, wrapped by KiTerminalTheme (Miuix theme).
      *
-     * Compose 模式下，会话由 ComposeSessionManager 单例持久管理：
+     * 单一 Nova 引擎下会话由 ComposeSessionManager 单例持久管理：
      * - 首次调用：创建新 shell 会话
      * - 后续调用（已有会话）：直接显示当前会话，不新建
      * - onBack 只退出 Activity，不 kill 会话（保持后台运行）
@@ -28,35 +28,9 @@ object TermuxActivityBridge {
     @JvmStatic
     fun setTerminalDetailContent(
         activity: TermuxActivity,
-        terminalView: com.termux.view.TerminalView,
         onBack: Runnable,
     ) {
-        val isComposeMode = TerminalRuntimeCore.isComposeMode(activity)
-
-        if (isComposeMode) {
-            startComposeModeTerminal(activity, onBack)
-        } else {
-            // Java+NDK 模式（默认）
-            activity.setContent {
-                val navDispatcher = NavigationHelper.createDispatcher()
-                val navDispatcherOwner = NavigationHelper.createOwner(navDispatcher)
-                CompositionLocalProvider(
-                    LocalNavigationEventDispatcherOwner provides navDispatcherOwner
-                ) {
-                    KiTerminalTheme(
-                        manageSystemBars = false,
-                        content = {
-                            TerminalDetailScreen(
-                                activity = activity,
-                                terminalView = terminalView,
-                                onBack = { onBack.run() },
-                                overlayMode = false,
-                            )
-                        }
-                    )
-                }
-            }
-        }
+        startComposeModeTerminal(activity, onBack)
     }
 
     private fun startComposeModeTerminal(
@@ -106,7 +80,7 @@ object TermuxActivityBridge {
     }
 
     /**
-     * 根据 Activity Intent 中携带的 "sessionHandle"（Compose 镜像句柄）解析目标 Compose 会话；
+     * 根据 Activity Intent 中携带的 "sessionHandle"（Nova 会话句柄）解析目标 Compose 会话；
      * 无句柄/解析失败时退回：当前会话 → 第一个会话 → 新建默认 shell。
      */
     private fun resolveSessionFromIntent(
@@ -114,10 +88,12 @@ object TermuxActivityBridge {
         sessionManager: ComposeSessionManager
     ): com.awkoo.libterminal.engine.TerminalSession {
         val handle = try { activity.intent.getStringExtra("sessionHandle") } catch (_: Throwable) { null }
-        val sessionId = ComposeSessionBridge.resolveComposeSessionId(handle)
-        if (sessionId != null) {
-            sessionManager.sessions.value.firstOrNull { it.session.id == sessionId }?.session?.let {
-                return it
+        if (handle != null) {
+            val terminal = activity.termuxService?.termuxSessions?.firstOrNull { handle == it.getTerminalSession().mHandle }?.getTerminalSession()
+            if (terminal is com.termux.app.terminal.shell.NovaTerminalSessionAdapter) {
+                sessionManager.sessions.value.firstOrNull { it.session.id == terminal.novaId }?.session?.let {
+                    return it
+                }
             }
         }
         return sessionManager.currentSession

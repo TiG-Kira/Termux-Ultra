@@ -197,67 +197,36 @@ class MainActivity : FragmentActivity() {
                                 startActivity(intent)
                             },
                             onNewTerminal = {
-                                // Compose 模式：走 ComposeSessionManager 创建未初始化会话。
+                                // 单一 Nova 引擎：走 ComposeSessionManager 创建未初始化会话。
                                 // 不依赖 TermuxService 连接状态（服务绑定异步，未连接时
-                                // termuxService?.createTermuxSession 会静默失败导致无法拉起新会话）；
+                                // termuxService?.createTermuxSession 会静默失败无法拉起新会话）；
                                 // 且效仿 Java 版策略：只创建未初始化的终端条目，不跳转。
-                                if (com.termux.app.compose.TerminalRuntimeCore.isComposeMode(this)) {
-                                    val composeSessionManager =
-                                        com.termux.app.terminal.shell.ComposeSessionManager.getInstance(this)
-                                    val sessionName = if (LocaleHelper.isChinese(this)) {
-                                        "会话 ${composeSessionManager.sessions.value.size + 1}"
-                                    } else {
-                                        "Session ${composeSessionManager.sessions.value.size + 1}"
-                                    }
-                                    composeSessionManager
-                                        .createDefaultSession(startImmediately = false)
-                                        .sessionName.value = sessionName
+                                val composeSessionManager =
+                                    com.termux.app.terminal.shell.ComposeSessionManager.getInstance(this)
+                                val sessionName = if (LocaleHelper.isChinese(this)) {
+                                    "会话 ${composeSessionManager.sessions.value.size + 1}"
                                 } else {
-                                    val sessionCount = sessions.size
-                                    val sessionName = if (LocaleHelper.isChinese(this)) {
-                                        "会话 ${sessionCount + 1}"
-                                    } else {
-                                        "Session ${sessionCount + 1}"
-                                    }
-                                    termuxService?.createTermuxSession(null, null, null, null, false, sessionName)
-                                    updateSessions()
-                                    handler.postDelayed({ updateSessions() }, 500)
+                                    "Session ${composeSessionManager.sessions.value.size + 1}"
                                 }
+                                composeSessionManager
+                                    .createDefaultSession(startImmediately = false)
+                                    .sessionName.value = sessionName
                             },
                             onNewTerminalAndOpenConsole = {
                                 // 新建会话并直接进入该会话的控制台。
-                                if (com.termux.app.compose.TerminalRuntimeCore.isComposeMode(this)) {
-                                    val composeSessionManager =
-                                        com.termux.app.terminal.shell.ComposeSessionManager.getInstance(this)
-                                    val sessionName = if (LocaleHelper.isChinese(this)) {
-                                        "会话 ${composeSessionManager.sessions.value.size + 1}"
-                                    } else {
-                                        "Session ${composeSessionManager.sessions.value.size + 1}"
-                                    }
-                                    val newSession =
-                                        composeSessionManager.createDefaultSession(startImmediately = true)
-                                    newSession.sessionName.value = sessionName
-                                    composeSessionManager.switchTo(newSession.id)
-                                    val intent = Intent(this, TermuxActivity::class.java)
-                                    startActivity(intent)
+                                val composeSessionManager =
+                                    com.termux.app.terminal.shell.ComposeSessionManager.getInstance(this)
+                                val sessionName = if (LocaleHelper.isChinese(this)) {
+                                    "会话 ${composeSessionManager.sessions.value.size + 1}"
                                 } else {
-                                    val sessionCount = sessions.size
-                                    val sessionName = if (LocaleHelper.isChinese(this)) {
-                                        "会话 ${sessionCount + 1}"
-                                    } else {
-                                        "Session ${sessionCount + 1}"
-                                    }
-                                    val newSession = termuxService?.createTermuxSession(
-                                        null, null, null, null, false, sessionName
-                                    )
-                                    updateSessions()
-                                    handler.postDelayed({ updateSessions() }, 500)
-                                    if (newSession != null) {
-                                        val intent = Intent(this, TermuxActivity::class.java)
-                                        intent.putExtra("sessionHandle", newSession.getTerminalSession().mHandle)
-                                        startActivity(intent)
-                                    }
+                                    "Session ${composeSessionManager.sessions.value.size + 1}"
                                 }
+                                val newSession =
+                                    composeSessionManager.createDefaultSession(startImmediately = true)
+                                newSession.sessionName.value = sessionName
+                                composeSessionManager.switchTo(newSession.id)
+                                val intent = Intent(this, TermuxActivity::class.java)
+                                startActivity(intent)
                             },
                             onStopTerminal = { session ->
                                 termuxService?.removeTermuxSession(session.getTerminalSession())

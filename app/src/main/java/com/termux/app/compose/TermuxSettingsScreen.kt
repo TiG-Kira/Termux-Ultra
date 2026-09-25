@@ -42,8 +42,6 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
 enum class TermuxSettingsPage {
     MAIN,
     TERMINAL,
-    TERMINAL_VIEW,
-    TERMINAL_IO,
     DEBUGGING,
     PLUGIN_API,
     PLUGIN_FLOAT,
@@ -55,8 +53,6 @@ private fun getPageTitle(context: Context, page: TermuxSettingsPage): String {
     return when (page) {
         TermuxSettingsPage.MAIN -> context.getString(R.string.title_activity_termux_settings)
         TermuxSettingsPage.TERMINAL -> context.getString(R.string.termux_preferences_title)
-        TermuxSettingsPage.TERMINAL_VIEW -> context.getString(R.string.termux_terminal_view_preferences_title)
-        TermuxSettingsPage.TERMINAL_IO -> context.getString(R.string.termux_terminal_io_preferences_title)
         TermuxSettingsPage.DEBUGGING -> context.getString(R.string.termux_debugging_preferences_title)
         TermuxSettingsPage.PLUGIN_API -> context.getString(R.string.termux_api_preferences_title)
         TermuxSettingsPage.PLUGIN_FLOAT -> context.getString(R.string.termux_float_preferences_title)
@@ -78,8 +74,6 @@ fun TermuxSettingsScreen(
         when (currentPage) {
             TermuxSettingsPage.MAIN -> onBack()
             TermuxSettingsPage.TERMINAL -> { currentPage = TermuxSettingsPage.MAIN }
-            TermuxSettingsPage.TERMINAL_VIEW -> { currentPage = TermuxSettingsPage.TERMINAL }
-            TermuxSettingsPage.TERMINAL_IO -> { currentPage = TermuxSettingsPage.TERMINAL }
             TermuxSettingsPage.DEBUGGING -> { currentPage = TermuxSettingsPage.TERMINAL }
             TermuxSettingsPage.PLUGIN_API -> { currentPage = TermuxSettingsPage.MAIN }
             TermuxSettingsPage.PLUGIN_FLOAT -> { currentPage = TermuxSettingsPage.MAIN }
@@ -136,20 +130,6 @@ fun TermuxSettingsScreen(
                 TermuxSettingsPage.TERMINAL -> {
                     TerminalSettingsPage(
                         onNavigate = { currentPage = it },
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .nestedScroll(scrollBehavior.nestedScrollConnection)
-                    )
-                }
-                TermuxSettingsPage.TERMINAL_VIEW -> {
-                    TerminalViewSettingsPage(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .nestedScroll(scrollBehavior.nestedScrollConnection)
-                    )
-                }
-                TermuxSettingsPage.TERMINAL_IO -> {
-                    TerminalIoSettingsPage(
                         modifier = Modifier
                             .fillMaxSize()
                             .nestedScroll(scrollBehavior.nestedScrollConnection)
@@ -365,30 +345,6 @@ private fun TerminalSettingsPage(
         item {
             SettingCard {
                 ArrowPreference(
-                    title = stringResource(R.string.termux_terminal_io_preferences_title),
-                    summary = stringResource(R.string.termux_terminal_io_preferences_summary),
-                    onClick = { onNavigate(TermuxSettingsPage.TERMINAL_IO) },
-                    startAction = {
-                        SettingIcon(R.drawable.ic_keyboard)
-                    }
-                )
-                HorizontalDivider(
-                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f),
-                    modifier = Modifier.padding(start = 72.dp, end = 16.dp)
-                )
-                ArrowPreference(
-                    title = stringResource(R.string.termux_terminal_view_preferences_title),
-                    summary = stringResource(R.string.termux_terminal_view_preferences_summary),
-                    onClick = { onNavigate(TermuxSettingsPage.TERMINAL_VIEW) },
-                    startAction = {
-                        SettingIcon(R.drawable.ic_screen_rotation)
-                    }
-                )
-                HorizontalDivider(
-                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f),
-                    modifier = Modifier.padding(start = 72.dp, end = 16.dp)
-                )
-                ArrowPreference(
                     title = stringResource(R.string.termux_debugging_preferences_title),
                     summary = stringResource(R.string.termux_debugging_preferences_summary),
                     onClick = { onNavigate(TermuxSettingsPage.DEBUGGING) },
@@ -404,100 +360,11 @@ private fun TerminalSettingsPage(
 }
 
 @Composable
-private fun TerminalViewSettingsPage(
-    modifier: Modifier = Modifier
-) {
-    val context = LocalContext.current
-    val prefs = remember { TermuxAppSharedPreferences.build(context) }
-    var terminalMarginAdjustment by remember { mutableStateOf(prefs?.isTerminalMarginAdjustmentEnabled() ?: false) }
-
-    LazyColumn(
-        modifier = modifier,
-        contentPadding = PaddingValues(bottom = 16.dp)
-    ) {
-        item { SmallTitle(text = stringResource(R.string.termux_terminal_view_view_header)) }
-        item {
-            SettingCard {
-                SwitchPreference(
-                    title = stringResource(R.string.termux_terminal_view_terminal_margin_adjustment_title),
-                    summary = stringResource(R.string.terminal_margin_adjustment_desc),
-                    checked = terminalMarginAdjustment,
-                    onCheckedChange = {
-                        terminalMarginAdjustment = it
-                        prefs?.setTerminalMarginAdjustment(it)
-                    },
-                    startAction = {
-                        SettingIcon(R.drawable.ic_screen_rotation)
-                    }
-                )
-            }
-        }
-
-        item { Spacer(Modifier.height(16.dp)) }
-    }
-}
-
-@Composable
-private fun TerminalIoSettingsPage(
-    modifier: Modifier = Modifier
-) {
-    val context = LocalContext.current
-    val prefs = remember { TermuxAppSharedPreferences.build(context) }
-    var softKeyboardEnabled by remember { mutableStateOf(prefs?.isSoftKeyboardEnabled() ?: false) }
-    var softKeyboardOnlyIfNoHardware by remember { mutableStateOf(prefs?.isSoftKeyboardEnabledOnlyIfNoHardware() ?: false) }
-
-    LazyColumn(
-        modifier = modifier,
-        contentPadding = PaddingValues(bottom = 16.dp)
-    ) {
-        item { SmallTitle(text = stringResource(R.string.termux_keyboard_header)) }
-        item {
-            SettingCard {
-                SwitchPreference(
-                    title = stringResource(R.string.termux_soft_keyboard_enabled_title),
-                    summary = stringResource(
-                        if (softKeyboardEnabled) R.string.termux_soft_keyboard_enabled_on
-                        else R.string.termux_soft_keyboard_enabled_off
-                    ),
-                    checked = softKeyboardEnabled,
-                    onCheckedChange = {
-                        softKeyboardEnabled = it
-                        prefs?.setSoftKeyboardEnabled(it)
-                    },
-                    startAction = {
-                        SettingIcon(R.drawable.ic_keyboard)
-                    }
-                )
-                HorizontalDivider(
-                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f),
-                    modifier = Modifier.padding(start = 72.dp, end = 16.dp)
-                )
-                SwitchPreference(
-                    title = stringResource(R.string.termux_soft_keyboard_enabled_only_if_no_hardware_title),
-                    summary = stringResource(R.string.soft_keyboard_only_if_no_hardware_desc),
-                    checked = softKeyboardOnlyIfNoHardware,
-                    onCheckedChange = {
-                        softKeyboardOnlyIfNoHardware = it
-                        prefs?.setSoftKeyboardEnabledOnlyIfNoHardware(it)
-                    },
-                    startAction = {
-                        SettingIcon(R.drawable.ic_keyboard_disabled)
-                    }
-                )
-            }
-        }
-
-        item { Spacer(Modifier.height(16.dp)) }
-    }
-}
-
-@Composable
 private fun DebuggingSettingsPage(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     val prefs = remember { TermuxAppSharedPreferences.build(context) }
-    var keyLoggingEnabled by remember { mutableStateOf(prefs?.isTerminalViewKeyLoggingEnabled() ?: false) }
     var pluginErrorNotifications by remember { mutableStateOf(prefs?.arePluginErrorNotificationsEnabled(false) ?: true) }
     var crashReportNotifications by remember { mutableStateOf(prefs?.areCrashReportNotificationsEnabled(false) ?: true) }
     var logLevel by remember { mutableStateOf(prefs?.logLevel ?: Logger.DEFAULT_LOG_LEVEL) }
@@ -529,22 +396,6 @@ private fun DebuggingSettingsPage(
                     },
                     startAction = {
                         SettingIcon(R.drawable.ic_bug)
-                    }
-                )
-                HorizontalDivider(
-                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f),
-                    modifier = Modifier.padding(start = 72.dp, end = 16.dp)
-                )
-                SwitchPreference(
-                    title = stringResource(R.string.termux_terminal_view_key_logging_enabled_title),
-                    summary = stringResource(R.string.terminal_key_logging_desc),
-                    checked = keyLoggingEnabled,
-                    onCheckedChange = {
-                        keyLoggingEnabled = it
-                        prefs?.setTerminalViewKeyLoggingEnabled(it)
-                    },
-                    startAction = {
-                        SettingIcon(R.drawable.ic_bug_keyboard)
                     }
                 )
                 HorizontalDivider(

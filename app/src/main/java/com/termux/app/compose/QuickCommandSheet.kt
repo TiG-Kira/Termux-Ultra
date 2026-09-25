@@ -381,19 +381,10 @@ fun executeQuickCommand(context: Context, command: QuickCommand) {
     val activity = findActivityFromContext(context, TermuxActivity::class.java) ?: return
     val text = buildQuickCommandText(command)
 
-    // Nova（Kotlin+Compose）模式下，Java 侧会话列表为空、mTerminalView 不被使用，
-    // activity.currentSession 恒为 null。必须改用 ComposeSessionManager 中的活跃会话，
-    // 否则快捷指令在 Nova 模式下会静默失效。
-    if (TerminalRuntimeCore.isComposeMode(context)) {
-        val composeSession = com.termux.app.terminal.shell.ComposeSessionManager
-            .getInstance(context).currentSession
-        if (composeSession != null && composeSession.isRunning.value) {
-            composeSession.write(text)
-        }
-        return
+    // 单一 Nova 引擎：快捷指令写入 ComposeSessionManager 的当前活跃会话
+    val composeSession = com.termux.app.terminal.shell.ComposeSessionManager
+        .getInstance(context).currentSession
+    if (composeSession != null && composeSession.isRunning.value) {
+        composeSession.write(text)
     }
-
-    val session = activity.currentSession ?: return
-    if (!session.isRunning) return
-    session.write(text)
 }

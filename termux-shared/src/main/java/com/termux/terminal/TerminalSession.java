@@ -32,7 +32,7 @@ import java.util.concurrent.TimeUnit;
  * <p>
  * NOTE: The terminal session may outlive the EmulatorView, so be careful with callbacks!
  */
-public final class TerminalSession extends TerminalOutput {
+public class TerminalSession extends TerminalOutput {
 
     private static final int MSG_NEW_INPUT = 1;
     private static final int MSG_PROCESS_EXITED = 4;

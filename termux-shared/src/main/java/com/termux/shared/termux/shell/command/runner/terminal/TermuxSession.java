@@ -47,6 +47,27 @@ public class TermuxSession {
     }
 
     /**
+     * Wrap an already-created {@link TerminalSession} into a {@link TermuxSession}.
+     *
+     * 供 Compose/Nova 引擎使用：shell 进程已由 ComposeSessionManager 直接拉起，
+     * 这里只把会话句柄（可为 {@link com.termux.app.terminal.shell.NovaTerminalSessionAdapter}
+     * 之类的外观实现）与 {@link ExecutionCommand} 关联起来，不再重复执行
+     * {@link #execute(Context, ExecutionCommand, TerminalSessionClient,
+     * TermuxSessionClient, IShellEnvironment, HashMap, boolean)} 的进程启动逻辑。
+     *
+     * @param terminalSession    The session handle. Implementation is responsible for the
+     *                           underlying process lifecycle.
+     * @param executionCommand   The {@link ExecutionCommand} that describes this session.
+     * @param termuxSessionClient Optional exit callback; may be {@code null}.
+     * @param setStdoutOnExit    Whether to populate {@link ResultData#stdout} with the session
+     *                           transcript on {@link #finish()}.
+     */
+    public static TermuxSession wrap(@NonNull final TerminalSession terminalSession, @NonNull final ExecutionCommand executionCommand,
+                                     @Nullable final TermuxSessionClient termuxSessionClient, final boolean setStdoutOnExit) {
+        return new TermuxSession(terminalSession, executionCommand, termuxSessionClient, setStdoutOnExit);
+    }
+
+    /**
      * Start execution of an {@link ExecutionCommand} with {@link Runtime#exec(String[], String[], File)}.
      *
      * The {@link ExecutionCommand#executable}, must be set, {@link ExecutionCommand#commandLabel},

@@ -127,3 +127,19 @@ set_source_files_properties(${TERMUX_CPP_DIR}/termux-bootstrap-zip.S PROPERTIES 
 
 find_library(LIB_LOG log)
 target_link_libraries(termux-bootstrap ${LIB_LOG})
+
+
+###############################################################################
+# Termux PTY (libtermux.so)
+#
+# 原属于 terminal-emulator 模块的 ndkBuild(Android.mk) 原生层，PTY 宿主职责
+# 平移至 app 侧：termux.c（createSubprocess/setPtyWindowSize/waitFor/close/
+# chmod/setPtyUTF8Mode）+ native_crash_handler.c（JNI_OnLoad +
+# nativeSetupCrashHandler）。JNI 符号名（Java_com_termux_terminal_JNI_*）
+# 与类名保持不变，故 classic 引擎 TerminalSession 与 Nova TermuxProcessBridge
+# 均无需改动即可继续使用。
+###############################################################################
+add_library(termux SHARED
+    ${TERMUX_CPP_DIR}/termux.c
+    ${TERMUX_CPP_DIR}/native_crash_handler.c
+)

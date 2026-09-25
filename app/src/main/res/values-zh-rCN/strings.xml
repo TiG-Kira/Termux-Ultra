@@ -22,7 +22,7 @@
     <string name="terminal_list_title">终端会话</string>
     <string name="new_terminal">新建终端</string>
     <string name="no_terminal">没有运行中的终端</string>
-    <string name="terminal_1">终端 1</string>
+
     <string name="close_terminal">关闭终端</string>
     <string name="search">搜索</string>
     <string name="language_restart_title">需要重启</string>
@@ -65,26 +65,25 @@
     <string name="bootstrap_error_try_again">重试</string>
     <string name="bootstrap_installer_body">正在安装...</string>
 
-    <string name="msg_enabling_terminal_toolbar">启用终端工具栏</string>
-    <string name="msg_disabling_terminal_toolbar">禁用终端工具栏</string>
-    <string name="msg_terminal_reset">终端已重置</string>
+
+
 
     <string name="action_select_url">选择 URL</string>
     <string name="action_share_transcript">分享记录</string>
     <string name="action_share_selected_text">分享选中的文本</string>
     <string name="action_autofill_username">自动填充用户名</string>
     <string name="action_autofill_password">自动填充密码</string>
-    <string name="action_reset_terminal">重置终端</string>
+
     <string name="action_kill_process">终止进程 (PID: %d)</string>
-    <string name="action_style_terminal">样式终端</string>
+
     <string name="action_toggle_keep_screen_on">保持屏幕常亮</string>
     <string name="action_open_help">打开帮助</string>
     <string name="action_open_settings">打开设置</string>
     <string name="action_report_issue">报告问题</string>
     <string name="action_new_session">新会话</string>
-    <string name="action_toggle_soft_keyboard">切换软键盘</string>
-    <string name="title_create_named_session">创建命名会话</string>
-    <string name="action_create_named_session_confirm">创建</string>
+
+
+
     <string name="action_new_session_failsafe">安全模式</string>
 
     <string name="title_confirm_kill_process">确认终止进程</string>
@@ -94,14 +93,14 @@
 
     <string name="termux_preferences_title">终端</string>
     <string name="termux_preferences_summary">终端设置</string>
-    <string name="termux_api_preferences_title">Termux:API</string>
-    <string name="termux_api_preferences_summary">Termux:API 设置</string>
-    <string name="termux_float_preferences_title">Termux:Float</string>
-    <string name="termux_float_preferences_summary">Termux:Float 设置</string>
-    <string name="termux_tasker_preferences_title">Termux:Tasker</string>
-    <string name="termux_tasker_preferences_summary">Termux:Tasker 设置</string>
-    <string name="termux_widget_preferences_title">Termux:Widget</string>
-    <string name="termux_widget_preferences_summary">Termux:Widget 设置</string>
+
+
+
+
+
+
+
+
 
     <string name="termux_native_about_title">Termux 报告</string>
     <string name="termux_native_about_summary">查看Termux 生成的完整关于本机和软件的报告</string>
@@ -109,44 +108,40 @@
     <string name="about_preference_title">关于</string>
     <string name="donate_preference_title">捐赠</string>
 
-    <string name="termux_debugging_preferences_title">调试</string>
-    <string name="termux_debugging_preferences_summary">调试设置</string>
-    <string name="termux_terminal_io_preferences_title">终端 I/O</string>
-    <string name="termux_terminal_view_preferences_title">终端视图</string>
+
+
+
     <string name="termux_logging_header">日志</string>
     <string name="termux_log_level_title">日志级别</string>
     <string name="log_level_desc">调整 Termux 的输出日志级别，更详细的 Log 日志有助于分析问题</string>
-    <string name="termux_terminal_view_key_logging_enabled_off">按键日志已启用</string>
+
 
     <string name="copy_text">复制</string>
     <string name="paste_text">粘贴</string>
-    <string name="text_selection_more">更多</string>
+
     <string name="cut_text">剪切</string>
 
-    <string name="termux_terminal_view_key_logging_enabled_title">按键日志已启用</string>
-    <string name="terminal_key_logging_desc">记录按键相关 Log 日志</string>
-    <string name="termux_terminal_view_key_logging_enabled_on">已启用</string>
+
     <string name="termux_plugin_error_notifications_enabled_title">插件错误通知</string>
     <string name="termux_plugin_error_notifications_enabled_on">已启用</string>
     <string name="termux_plugin_error_notifications_enabled_off">已禁用</string>
     <string name="termux_crash_report_notifications_enabled_title">崩溃报告通知</string>
     <string name="termux_crash_report_notifications_enabled_on">已启用</string>
     <string name="termux_crash_report_notifications_enabled_off">已禁用</string>
-    <string name="termux_terminal_io_preferences_summary">终端 I/O 设置</string>
-    <string name="termux_terminal_view_preferences_summary">终端视图设置</string>
+
+
     <string name="termux_keyboard_header">键盘</string>
     <string name="termux_soft_keyboard_enabled_title">软键盘已启用</string>
     <string name="termux_soft_keyboard_enabled_on">已启用</string>
     <string name="termux_soft_keyboard_enabled_off">已禁用</string>
     <string name="termux_soft_keyboard_enabled_only_if_no_hardware_title">使用物理键盘时禁用软键盘</string>
-    <string name="soft_keyboard_only_if_no_hardware_desc">在检测到物理键盘时自动禁用软键盘</string>
+
     <string name="termux_soft_keyboard_enabled_only_if_no_hardware_on">已启用</string>
     <string name="termux_soft_keyboard_enabled_only_if_no_hardware_off">已禁用</string>
-    <string name="termux_terminal_view_view_header">视图</string>
-    <string name="termux_terminal_view_terminal_margin_adjustment_title">终端边距调整</string>
-    <string name="terminal_margin_adjustment_desc">优化终端边距</string>
-    <string name="termux_terminal_view_terminal_margin_adjustment_on">已启用</string>
-    <string name="termux_terminal_view_terminal_margin_adjustment_off">已禁用</string>
+
+
+
+
 
     <string name="terminal">终端</string>
     <string name="vnc">VNC</string>
@@ -162,8 +157,8 @@
     <string name="notification_task">任务</string>
     <string name="notification_tasks">任务</string>
     <string name="notification_wake_lock_held">保持唤醒</string>
-    <string name="title_rename_session">重命名会话</string>
-    <string name="action_rename_session_confirm">重命名</string>
+
+
     <string name="title_max_terminals_reached">已达到最大终端数</string>
     <string name="msg_max_terminals_reached">已达到最大终端数量</string>
     <string name="title_share_transcript">分享记录</string>
@@ -195,13 +190,13 @@
     <string name="rename">重命名</string>
     <string name="rename_terminal">重命名终端</string>
     <string name="terminal_name">终端名称</string>
-    <string name="terminal_sessions">终端会话</string>
-    <string name="terminal_new_session">新会话</string>
-    <string name="terminal_new_safe_session">新安全模式会话</string>
-    <string name="current_session">当前会话</string>
-    <string name="terminal_default_name">终端</string>
+
+
+
+
+
     <string name="files_title">文件</string>
-    <string name="terminal_title">终端</string>
+
     <string name="files">文件</string>
     <string name="settings">设置</string>
     <string name="about_title">关于</string>
@@ -213,16 +208,16 @@
     <string name="folder">文件夹</string>
     <string name="empty_folder">空文件夹</string>
     <string name="app_settings">应用</string>
-    <string name="terminal_settings">终端</string>
+
     <string name="add_on_settings">插件</string>
     <string name="help_settings">帮助</string>
-    <string name="terminal_settings_description">终端配置</string>
+
     <string name="appearance_title">外观</string>
     <string name="appearance_settings_description">视觉外观设置</string>
     <string name="style_title">样式</string>
     <string name="style_settings_description">终端样式</string>
-    <string name="terminal_view_title">终端视图</string>
-    <string name="terminal_view_settings_description">终端视图设置</string>
+
+
     <string name="termux_api">Termux:API</string>
     <string name="termux_api_description">API 访问</string>
     <string name="termux_float">Termux:Float</string>
@@ -477,9 +472,9 @@
     <string name="tmux_help_attach">回到任务容器：tmux attach -t my_task</string>
     <string name="collapse">收起</string>
     <string name="select_execution_method">选择执行方式</string>
-    <string name="execute_in_new_session">在新会话执行</string>
+
     <string name="execute_in_tmux">在 tmux 执行</string>
-    <string name="execute_in_running_session">在运行的会话内执行：</string>
+
     <string name="copy_to_session">复制到「%1$s」</string>
 
     <!-- 备份与恢复进度（使用 termux-backup / termux-restore） -->
@@ -698,9 +693,9 @@
 
     <!-- 终端 -->
     <string name="termux_core_version">0.118.3</string>
-    <string name="terminal_new_session_with_handle">新会话 [%1$s]</string>
-    <string name="terminal_session_ended">会话已结束</string>
-    <string name="terminal_session_ended_with_code">会话已结束 (退出代码: %1$d)</string>
+
+
+
 
     <!-- Termux Styling -->
     <string name="title_styling">外观样式</string>
@@ -924,10 +919,10 @@
     <string name="about_license">Termux Ultra 使用 GPL 3.0 以及 MIT 许可。\nTermux 团队拥有 Termux Ultra 终端模块的版权，VNC 功能模块的版权所属 ©2020 Gaurav Ujjwal，感谢开源贡献。</string>
     <string name="agent_permissions_examples">GET_CURRENT_SESSION、CLIPBOARD_READ、CLIPBOARD_WRITE、FILE_READ、FILE_WRITE、FILE_DELETE 等</string>
     <string name="fallback_desc">当本地大模型调用失败或无响应时，若已开启开关，会先提示错误原因，然后自动切换到该在线模型完成问答。参数与标准 OpenAI 兼容接口一致。</string>
-    <string name="session_dynamic_number">%1$s</string>
+
     <string name="custom_prompt_pick_md">请选择一个 .md 文件作为自定义 System Prompt。\n此文件将完全替代官方默认 System Prompt。</string>
     <string name="custom_extra_instructions_desc">自定义额外的系统指令，将附加在官方 System Prompt 之后。\n修改需谨慎，错误配置可能导致 AI 行为异常。</string>
-    <string name="runtime_core_switch_desc">切换引擎会导致功能有所变化，切换过程会关闭会话，请注意保存数据。</string>
+
     <string name="chat_history_full_desc">包含 System 系统提示在内的完整对话历史。仅显示 Termux Agent 保存的最近 100 条消息。</string>
     <string name="training_online_full_auto">在线全自动 · 配置了备用在线大模型：出题+批改+评分+自动把教训追加到 System Prompt（推荐）</string>
     <string name="unrestricted_mode_desc">放开所有安全限制，允许 Agent 执行任意命令、SSH 连接、ROOT 提权等，需生物验证二次确认</string>
@@ -985,7 +980,7 @@
     <string name="confirm_unrestricted">我已了解风险，确认开启无限制模式</string>
     <string name="session_count_plus">会话 %1$s</string>
     <string name="chat_history_header">=== 对话记录 ===</string>
-    <string name="enable_soft_keyboard_no_hw">使用物理键盘时禁用软键盘</string>
+
     <string name="file_picker_choice">请选择使用哪种文件选择器：</string>
     <string name="font_size_desc">更改终端控制台字体大小</string>
     <string name="api_key_empty">API Key 未填写</string>
@@ -1010,11 +1005,11 @@
     <string name="keep_screen_on_enabled">已开启屏幕常亮</string>
     <string name="keep_screen_on_disabled">已关闭屏幕常亮</string>
     <string name="file_empty">文件内容为空</string>
-    <string name="terminal_runtime_core">终端引擎</string>
+
     <string name="core_name_classic">经典</string>
     <string name="core_name_nova">新星</string>
-    <string name="terminal_margin_adjustment">终端边距调整</string>
-    <string name="terminal_key_logging">终端按键日志</string>
+
+
     <string name="train_local_model">训练本地模型</string>
     <string name="clear_chat_history">清空对话记录</string>
     <string name="full_chat_history">完整对话记录</string>
@@ -1022,7 +1017,7 @@
     <string name="disable_keep_screen_on">关闭屏幕常亮</string>
     <string name="keep_screen_on">保持屏幕常亮</string>
     <string name="share_session_dump">分享会话转储</string>
-    <string name="enable_softkeyboard">启用软键盘</string>
+
     <string name="scrollback_buffer">滚动缓冲区</string>
     <string name="trust_whitelist">信任白名单</string>
     <string name="not_set">(未填写)</string>
@@ -1072,7 +1067,7 @@
     <string name="disabled">未启用</string>
     <string name="custom">自定义</string>
     <string name="empty">(空)</string>
-    <string name="new_session_short">新会话</string>
+
     <string name="ended">已结束</string>
     <string name="attention">需注意</string>
     <string name="running">运行中</string>
@@ -1089,7 +1084,7 @@
     <string name="dismiss">消除</string>
     <string name="whitelist_count_selected">已选择 %1$s 个技能可自动执行</string>
     <string name="session_exit_code_label">会话已结束 (退出代码: %1$s)</string>
-    <string name="switched_core_selected">已切换到 %1$s，所有会话已关闭</string>
+
     <string name="model_url_key">模型：%1$s ｜ URL：%2$s ｜ Key：%3$s</string>
     <string name="card_ended_code">已结束 · 退出代码 %1$s</string>
     <string name="custom_file">自定义文件</string>
@@ -1421,5 +1416,15 @@
     <string name="github_comment_submitted">评论已发送</string>
     <string name="github_confirm">确认</string>
     <string name="github_permission_checking">正在检测权限…</string>
-</resources>
+<string name="termux_api_preferences_title">Termux:API</string>
+<string name="termux_api_preferences_summary">Termux:API 设置</string>
+<string name="termux_float_preferences_title">Termux:Float</string>
+<string name="termux_float_preferences_summary">Termux:Float 设置</string>
+<string name="termux_tasker_preferences_title">Termux:Tasker</string>
+<string name="termux_tasker_preferences_summary">Termux:Tasker 设置</string>
+<string name="termux_widget_preferences_title">Termux:Widget</string>
+<string name="termux_widget_preferences_summary">Termux:Widget 设置</string>
+<string name="termux_debugging_preferences_title">调试</string>
+<string name="termux_debugging_preferences_summary">调试设置</string>
 
+</resources>

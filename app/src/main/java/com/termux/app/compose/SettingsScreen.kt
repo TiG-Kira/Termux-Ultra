@@ -199,15 +199,10 @@ fun SettingsScreen(
     var termuxTaskerEnabled by remember { mutableStateOf(IntegratedTools.isEnabled(context, IntegratedTools.Tool.TERMUX_TASKER)) }
     var termuxWidgetEnabled by remember { mutableStateOf(IntegratedTools.isEnabled(context, IntegratedTools.Tool.TERMUX_WIDGET)) }
 
-    // Terminal runtime core
-    var runtimeCore by remember { mutableStateOf(TerminalRuntimeCore.getCurrent(context)) }
 
-    // Terminal settings - Java+NDK mode
+
+    // Terminal settings（通用项：日志级别等还被 Logger 消费）
     val terminalPrefs = remember { TermuxAppSharedPreferences.build(context) }
-    var softKeyboardEnabled by remember { mutableStateOf(terminalPrefs?.isSoftKeyboardEnabled() ?: false) }
-    var softKeyboardOnlyIfNoHardware by remember { mutableStateOf(terminalPrefs?.isSoftKeyboardEnabledOnlyIfNoHardware() ?: false) }
-    var terminalMarginAdjustment by remember { mutableStateOf(terminalPrefs?.isTerminalMarginAdjustmentEnabled() ?: false) }
-    var keyLoggingEnabled by remember { mutableStateOf(terminalPrefs?.isTerminalViewKeyLoggingEnabled() ?: false) }
     var logLevel by remember { mutableStateOf(terminalPrefs?.logLevel ?: Logger.DEFAULT_LOG_LEVEL) }
 
     // Terminal settings - Kotlin+Compose mode（订阅 ComposeTerminalSettings StateFlow，
@@ -684,40 +679,7 @@ val composeTextBlinking by com.termux.app.terminal.shell.ComposeTerminalSettings
             }),
 
         // ===== Terminal =====
-        SearchableSetting(sec_terminal, context.getString(R.string.terminal_runtime_core), context.getString(R.string.runtime_core_switch_desc),
-            keywords = listOf("运行核心", "runtime", "kotlin", "compose", "java", "ndk", "内核"),
-            render = {
-                val runtimeCoreItems = TerminalRuntimeCore.Core.entries.map { it.displayName(context) }
-                val currentCoreIndex = TerminalRuntimeCore.Core.entries.indexOf(runtimeCore)
-                OverlayDropdownPreference(
-                    title = context.getString(R.string.terminal_runtime_core),
-                    summary = context.getString(R.string.runtime_core_switch_desc),
-                    items = runtimeCoreItems,
-                    selectedIndex = currentCoreIndex,
-                    onSelectedIndexChange = { idx ->
-                        val selected = TerminalRuntimeCore.Core.entries[idx]
-                        if (selected != runtimeCore) {
-                            TerminalRuntimeCore.killAllSessions(context)
-                            TerminalRuntimeCore.applyPluginState(context, selected)
-                            TerminalRuntimeCore.setCurrent(context, selected)
-                            runtimeCore = selected
-                            showSnackbar(context.getString(R.string.switched_core_selected, selected.displayName(context)))
-                        }
-                    },
-                    startAction = { SettingIcon(R.drawable.ic_terminal) }
-                )
-            }),
-        SearchableSetting(sec_terminal, context.getString(R.string.enable_softkeyboard), if (softKeyboardEnabled) context.getString(R.string.enabled) else context.getString(R.string.disabled),
-            keywords = listOf("软键盘", "softkeyboard", "键盘", "keyboard"),
-            render = {
-                SwitchPreference(
-                    title = context.getString(R.string.enable_softkeyboard),
-                    summary = if (softKeyboardEnabled) context.getString(R.string.enabled) else context.getString(R.string.disabled),
-                    checked = softKeyboardEnabled,
-                    onCheckedChange = { softKeyboardEnabled = it; terminalPrefs?.setSoftKeyboardEnabled(it) },
-                    startAction = { SettingIcon(R.drawable.ic_keyboard) }
-                )
-            }),
+
         SearchableSetting(sec_terminal, context.getString(R.string.log_level), context.getString(R.string.log_level_desc),
             keywords = listOf("日志", "log", "调试", "debug", "verbose"),
             render = {
@@ -1146,9 +1108,7 @@ val composeTextBlinking by com.termux.app.terminal.shell.ComposeTerminalSettings
                             ?: "Welcome to Termux!"
                     } catch (_: Exception) { "Welcome to Termux!" }
                 }
-                val isComposeMode = runtimeCore == TerminalRuntimeCore.Core.KOTLIN_COMPOSE
-                val runtimeCoreItems = TerminalRuntimeCore.Core.entries.map { it.displayName(context) }
-                val currentCoreIndex = TerminalRuntimeCore.Core.entries.indexOf(runtimeCore)
+                val isComposeMode = true
                             Card(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1156,87 +1116,8 @@ val composeTextBlinking by com.termux.app.terminal.shell.ComposeTerminalSettings
                         .clip(RoundedCornerShape(16.dp))
                 ) {
                     Column {
-                                OverlayDropdownPreference(
-                            title = context.getString(R.string.terminal_runtime_core),
-                            summary = context.getString(R.string.runtime_core_switch_desc),
-                            items = runtimeCoreItems,
-                            selectedIndex = currentCoreIndex,
-                            onSelectedIndexChange = { idx ->
-                                val selected = TerminalRuntimeCore.Core.entries[idx]
-                                if (selected != runtimeCore) {
-                                    TerminalRuntimeCore.killAllSessions(context)
-                                    TerminalRuntimeCore.applyPluginState(context, selected)
-                                    TerminalRuntimeCore.setCurrent(context, selected)
-                                    runtimeCore = selected
-                                    termuxApiEnabled = IntegratedTools.isEnabled(context, IntegratedTools.Tool.TERMUX_API)
-                                    termuxBootEnabled = IntegratedTools.isEnabled(context, IntegratedTools.Tool.TERMUX_BOOT)
-                                    termuxStylingEnabled = IntegratedTools.isEnabled(context, IntegratedTools.Tool.TERMUX_STYLING)
-                                    termuxTaskerEnabled = IntegratedTools.isEnabled(context, IntegratedTools.Tool.TERMUX_TASKER)
-                                    termuxWidgetEnabled = IntegratedTools.isEnabled(context, IntegratedTools.Tool.TERMUX_WIDGET)
-                                    showSnackbar(context.getString(R.string.switched_core_selected, selected.displayName(context)))
-                                }
-                            },
-                            startAction = {
-                                SettingIcon(R.drawable.ic_terminal)
-                            }
-                        )
 
-                        // ===== Java+NDK 模式设置 =====
-                        if (!isComposeMode) {
-                                SwitchPreference(
-                                title = context.getString(R.string.enable_softkeyboard),
-                                summary = if (softKeyboardEnabled) context.getString(R.string.enabled) else context.getString(R.string.disabled),
-                                checked = softKeyboardEnabled,
-                                onCheckedChange = {
-                                    softKeyboardEnabled = it
-                                    terminalPrefs?.setSoftKeyboardEnabled(it)
-                                },
-                                startAction = { SettingIcon(R.drawable.ic_keyboard) }
-                            )
-                            SwitchPreference(
-                                title = context.getString(R.string.enable_soft_keyboard_no_hw),
-                                summary = context.getString(R.string.soft_keyboard_only_if_no_hardware_desc),
-                                checked = softKeyboardOnlyIfNoHardware,
-                                onCheckedChange = {
-                                    softKeyboardOnlyIfNoHardware = it
-                                    terminalPrefs?.setSoftKeyboardEnabledOnlyIfNoHardware(it)
-                                },
-                                startAction = { SettingIcon(R.drawable.ic_keyboard_disabled) }
-                            )
-                            SwitchPreference(
-                                title = context.getString(R.string.terminal_margin_adjustment),
-                                summary = context.getString(R.string.terminal_margin_adjustment_desc),
-                                checked = terminalMarginAdjustment,
-                                onCheckedChange = {
-                                    terminalMarginAdjustment = it
-                                    terminalPrefs?.setTerminalMarginAdjustment(it)
-                                },
-                                startAction = { SettingIcon(R.drawable.ic_terminal) }
-                            )
-                            OverlayDropdownPreference(
-                                title = context.getString(R.string.log_level),
-                                summary = context.getString(R.string.log_level_desc),
-                                items = listOf(context.getString(R.string.off), context.getString(R.string.normal), context.getString(R.string.debug), context.getString(R.string.verbose)),
-                                selectedIndex = logLevel.coerceIn(0, 3),
-                                onSelectedIndexChange = { idx ->
-                                    logLevel = idx
-                                    terminalPrefs?.setLogLevel(context, idx)
-                                },
-                                startAction = { SettingIcon(R.drawable.ic_bug) }
-                            )
-                            SwitchPreference(
-                                title = context.getString(R.string.terminal_key_logging),
-                                summary = context.getString(R.string.terminal_key_logging_desc),
-                                checked = keyLoggingEnabled,
-                                onCheckedChange = {
-                                    keyLoggingEnabled = it
-                                    terminalPrefs?.setTerminalViewKeyLoggingEnabled(it)
-                                },
-                                startAction = { SettingIcon(R.drawable.ic_bug_keyboard) }
-                            )
-                        }
-
-                        // ===== Kotlin+Compose 模式设置 =====
+                        // ===== 终端设置（单一 Nova/Compose 模式）=====
                         if (isComposeMode) {
                                 OverlayDropdownPreference(
                                 title = context.getString(R.string.font_size),
@@ -1375,9 +1256,9 @@ val composeTextBlinking by com.termux.app.terminal.shell.ComposeTerminalSettings
 
             }
 
-                        
 
-                
+
+
 // ---------- Integrated Tools ----------
             item(key = "section_tools") { SmallTitle(text = context.getString(R.string.integrated_tools_category)) }
             item(key = "card_integrated_tools") {
@@ -2572,7 +2453,7 @@ val composeTextBlinking by com.termux.app.terminal.shell.ComposeTerminalSettings
                         }
                     }
                 }
-                
+
 }
             }
         }

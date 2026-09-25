@@ -310,8 +310,6 @@ Termux-Ultra/
 │   ├── extern/                 # 第三方原生库源码
 │   └── CMakeLists.txt          # 原生构建配置
 ├── vendor/termux-addons/       # 集成的 Termux 插件源码
-├── terminal-emulator/          # 终端模拟器模块
-├── terminal-view/              # 终端视图模块
 ├── termux-shared/              # 共享常量与工具库
 ├── art/                        # 图标与宣传图脚本
 ├── demo-plugin/                # 示例插件（ZIP 打包示例）
@@ -360,7 +358,7 @@ Termux-Ultra/
 | 语言 | Kotlin、Java、C/C++ |
 | UI | Jetpack Compose 1.8.3、Material 3 1.3.0、Miuix KMP 0.9.3（ui / icons / preference） |
 | 架构组件 | AndroidX、Lifecycle 2.8.5、ViewModel、Navigation、Room 2.7.2、DataBinding |
-| 终端 | terminal-emulator、terminal-view |
+| 终端 | libterminal（Maven Central）、内联 TermuxTerminalSession |
 | VNC | AVNC、libvncserver、libjpeg-turbo、wolfssl |
 | SSH | connectbot sshlib 2.2.36 |
 | 图片加载 | Coil Compose 2.7.0 |
