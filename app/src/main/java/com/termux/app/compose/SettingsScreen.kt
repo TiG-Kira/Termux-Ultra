@@ -66,6 +66,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
+import androidx.compose.ui.graphics.painter.Painter
 import com.termux.app.LocaleHelper
 import com.termux.app.compose.AiTermuxPrefs
 import com.termux.app.compose.AiLocalModel
@@ -768,7 +769,7 @@ val composeKeyLogging by com.termux.app.terminal.shell.ComposeTerminalSettings.k
                     onCheckedChange = {
                         com.termux.app.terminal.shell.ComposeTerminalSettings.setSoftKeyboardOnlyIfNoHardware(it)
                     },
-                    startAction = { SettingIcon(Icons.Rounded.KeyboardAlt) }
+                    startAction = { SettingIcon(painterResource(R.drawable.ic_keyboard_disabled)) }
                 )
             }),
         SearchableSetting(sec_terminal, context.getString(R.string.terminal_key_logging), context.getString(R.string.terminal_key_logging_desc),
@@ -1238,7 +1239,7 @@ val composeKeyLogging by com.termux.app.terminal.shell.ComposeTerminalSettings.k
                                 onCheckedChange = {
                                     com.termux.app.terminal.shell.ComposeTerminalSettings.setSoftKeyboardOnlyIfNoHardware(it)
                                 },
-                                startAction = { SettingIcon(Icons.Rounded.KeyboardAlt) }
+                                startAction = { SettingIcon(painterResource(R.drawable.ic_keyboard_disabled)) }
                             )
                             SwitchPreference(
                                 title = context.getString(R.string.terminal_key_logging),
@@ -3046,6 +3047,24 @@ private fun SettingIcon(icon: ImageVector, contentDescription: String? = null) {
     ) {
                                 Icon(
             painter = rememberVectorPainter(icon),
+            contentDescription = contentDescription,
+            modifier = Modifier.size(24.dp),
+            tint = MiuixTheme.colorScheme.onSurface
+        )
+    }
+}
+
+@Composable
+private fun SettingIcon(painter: Painter, contentDescription: String? = null) {
+    Box(
+        modifier = Modifier
+            .size(40.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(MiuixTheme.colorScheme.surfaceVariant),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            painter = painter,
             contentDescription = contentDescription,
             modifier = Modifier.size(24.dp),
             tint = MiuixTheme.colorScheme.onSurface
