@@ -257,7 +257,7 @@ implementation "io.coil-kt:coil:2.7.0"
     implementation("com.google.guava:guava:24.1-jre") {
         exclude group: 'com.google.guava', module: 'listenablefuture'
     }
-    implementation "com.google.code.gson:gson:2.10.1"
+    implementation "com.google.code.gson:gson:2.14.0"
 
     // AVNC dependencies
     implementation "androidx.activity:activity-ktx:1.10.1"
