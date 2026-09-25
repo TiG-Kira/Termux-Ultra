@@ -111,8 +111,8 @@ fun computeNavDimensions(
 
     val minItemWidth = 32.dp
     val maxItemWidth = 56.dp
-    val minIconSize = 16.dp
-    val maxIconSize = 22.dp
+    val minIconSize = 18.dp
+    val maxIconSize = 24.dp
 
     val gap = 4.dp
 

@@ -6,8 +6,8 @@
     <!-- 沿用 ic_terminal 造型，仅缩到 Material Symbols 的光学尺寸（约 20/24），
          避免同一个导航栏里它比 Material 图标看起来大一圈 -->
     <group
-        android:scaleX="0.84"
-        android:scaleY="0.84"
+        android:scaleX="0.92"
+        android:scaleY="0.92"
         android:pivotX="12"
         android:pivotY="12">
         <path
