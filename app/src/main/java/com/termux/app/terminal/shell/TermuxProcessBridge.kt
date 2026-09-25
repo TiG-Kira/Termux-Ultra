@@ -7,6 +7,7 @@ import com.termux.terminal.JNI
 import java.io.FileDescriptor
 import java.io.FileInputStream
 import java.io.FileOutputStream
+import java.io.OutputStream
 
 /**
  * Termux 原生 PTY 的 ITerminalProcess 桥接实现。
@@ -22,7 +23,8 @@ class TermuxProcessBridge(
     rows: Int,
     cols: Int,
     cellWidth: Int,
-    cellHeight: Int
+    cellHeight: Int,
+    private val onInputCommand: ((String) -> Unit)? = null
 ) : ITerminalProcess {
 
     private var terminalFd: Int = 0
@@ -35,6 +37,10 @@ class TermuxProcessBridge(
 
     private val _outputStream: FileOutputStream by lazy {
         FileOutputStream(fileDescriptor)
+    }
+
+    private val inputRecorder: OutputStream? by lazy {
+        onInputCommand?.let { PtyInputRecorder(_outputStream, it) }
     }
 
     init {
@@ -51,7 +57,8 @@ class TermuxProcessBridge(
 
     override val inputStream: java.io.InputStream get() = _inputStream
 
-    override val outputStream: java.io.OutputStream get() = _outputStream
+    override val outputStream: java.io.OutputStream
+        get() = inputRecorder ?: _outputStream
 
     override fun resize(columns: Int, rows: Int, cellWidthPixels: Int, cellHeightPixels: Int) {
         if (terminalFd != 0) {

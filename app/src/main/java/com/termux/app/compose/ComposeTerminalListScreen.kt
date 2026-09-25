@@ -29,6 +29,7 @@ import com.termux.R
 import com.termux.app.TermuxActivity
 import com.termux.app.terminal.shell.ComposeSessionManager
 import com.termux.app.terminal.shell.pidState
+import com.termux.app.terminal.shell.lastCommandState
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
@@ -435,6 +436,10 @@ private fun ComposeTerminalCard(
         else -> null
     }
 
+    val lastCommand by session.lastCommandState.collectAsState()
+    val lastCommandText: String? = if (sessionPid > 0 && lastCommand.isNotEmpty())
+        context.getString(R.string.last_command, lastCommand) else null
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -489,6 +494,18 @@ private fun ComposeTerminalCard(
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Normal,
                             color = if (isDead) Color(0xFFD32F2F) else MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                            lineHeight = 16.sp,
+                            modifier = Modifier.padding(top = 2.dp),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    if (lastCommandText != null) {
+                        Text(
+                            text = lastCommandText,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Normal,
+                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
                             lineHeight = 16.sp,
                             modifier = Modifier.padding(top = 2.dp),
                             maxLines = 1,
