@@ -476,8 +476,12 @@ fun TerminalDetailScreenCompose(
         lastInteractionFromTopBar = true
     }
 
+    // 键盘底色深浅。导航栏透明后，桌布透出来的是键盘底（工具栏展开时），
+    // 图标明暗得跟着键盘走，跟状态栏看 topBarOpaqueBg 是同一个道理。
+    val keyboardSurfaceIsLight = MiuixTheme.colorScheme.surface.luminance() > 0.5f
+
     // 状态栏颜色适配（照搬 Java 版 L286-301）
-    LaunchedEffect(isCompact, topBarOpaqueBg, isTerminalDark) {
+    LaunchedEffect(isCompact, topBarOpaqueBg, isTerminalDark, showToolbar, keyboardSurfaceIsLight) {
         val act = context as? android.app.Activity
         if (act != null) {
             val window = act.window
@@ -493,7 +497,10 @@ fun TerminalDetailScreenCompose(
                 window.statusBarColor = android.graphics.Color.TRANSPARENT
                 controller.isAppearanceLightStatusBars = !isTerminalDark
             }
-            controller.isAppearanceLightNavigationBars = !isTerminalDark
+            // 导航栏颜色由 TermuxActivity 在 onCreate 里设（首帧即生效，避免闪一下不透明）。
+            // 这里只调图标明暗：工具栏展开时该区域透出键盘底色，收起时透出终端底色。
+            controller.isAppearanceLightNavigationBars =
+                if (showToolbar) keyboardSurfaceIsLight else !isTerminalDark
         }
     }
 
