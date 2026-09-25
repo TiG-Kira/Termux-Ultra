@@ -78,6 +78,7 @@ data class CategoryStorage(
 )
 
 data class CleanableItem(
+    val category: StorageCategory,
     val name: String,
     val description: String,
     val sizeBytes: Long,
@@ -100,229 +101,6 @@ private fun formatSize(context: android.content.Context, bytes: Long): String {
         bytes < 1024 * 1024 -> context.getString(R.string.storage_size_kb, bytes / 1024.0)
         bytes < 1024L * 1024 * 1024 -> context.getString(R.string.storage_size_mb, bytes / (1024.0 * 1024.0))
         else -> context.getString(R.string.storage_size_gb, bytes / (1024.0 * 1024.0 * 1024.0))
-    }
-}
-
-private fun scanTermuxStorage(context: android.content.Context): List<CategoryStorage> {
-    val termuxDir = File("/data/data/${context.packageName}/files/home")
-    val termuxFilesDir = File("/data/data/${context.packageName}/files")
-    val externalDir = Environment.getExternalStorageDirectory()
-    val appCacheDir = context.cacheDir
-
-    val result = mutableMapOf<StorageCategory, Pair<Long, MutableList<CleanableItem>>>()
-    StorageCategory.entries.forEach { cat -> result[cat] = Pair(0L, mutableListOf()) }
-
-    fun addToCategory(category: StorageCategory, size: Long, item: CleanableItem? = null) {
-        val current = result[category]!!
-        result[category] = Pair(current.first + size, current.second).also {
-            if (item != null) it.second.add(item)
-        }
-    }
-
-    fun getDirSize(dir: File?): Long {
-        if (dir == null || !dir.exists()) return 0L
-        return try {
-            if (dir.isFile) dir.length()
-            else dir.walkTopDown()
-                .filter { file ->
-                    try { !java.nio.file.Files.isSymbolicLink(file.toPath()) } catch (_: Exception) { true }
-                }
-                .filter { it.isFile }
-                .sumOf { file ->
-                    runCatching { file.length() }.getOrDefault(0L)
-                }
-        } catch (_: Exception) {
-            0L
-        }
-    }
-
-    // 应用框架: APK + native libs
-    val apkFile = File(context.applicationInfo.sourceDir)
-    val apkSize = runCatching { apkFile.length() }.getOrDefault(0L)
-    addToCategory(StorageCategory.APP_FRAMEWORK, apkSize)
-
-    val nativeLibDir = File(context.applicationInfo.nativeLibraryDir ?: "")
-    addToCategory(StorageCategory.APP_FRAMEWORK, getDirSize(nativeLibDir))
-
-    // Termux 应用容器: files 目录下除 home 目录外的所有内部文件（prefix、配置等）
-    val termuxFilesSize = if (termuxFilesDir.exists() && termuxFilesDir.isDirectory) {
-        runCatching {
-            termuxFilesDir.listFiles()?.sumOf { file ->
-                if (file.name == "home") 0L
-                else getDirSize(file)
-            } ?: 0L
-        }.getOrDefault(0L)
-    } else 0L
-    addToCategory(StorageCategory.TERMUX_FILESYSTEM, termuxFilesSize)
-
-    // 用户文档: 外部存储中的 termux 相关
-    val termuxExternal = File(externalDir, "Termux")
-    val termuxExternalSize = getDirSize(termuxExternal)
-    addToCategory(StorageCategory.USER_DOCS, termuxExternalSize)
-
-    val downloadDir = File(externalDir, "Download/Termux")
-    addToCategory(StorageCategory.USER_DOCS, getDirSize(downloadDir))
-
-    // 容器: 检查常见容器路径
-    val containerPaths = listOf(
-        File(termuxDir, ".local/share/containers"),
-        File(termuxDir, "containers"),
-        File(termuxDir, ".docker")
-    )
-    containerPaths.forEach { path ->
-        if (path.exists()) {
-            addToCategory(StorageCategory.CONTAINERS, getDirSize(path))
-        }
-    }
-
-    // 虚拟机文件: 检查 QEMU/VM 相关路径
-    val vmPaths = listOf(
-        File(termuxDir, "vm"),
-        File(termuxDir, "qemu"),
-        File(externalDir, "Termux/VM")
-    )
-    vmPaths.forEach { path ->
-        if (path.exists()) {
-            addToCategory(StorageCategory.VM_FILES, getDirSize(path))
-        }
-    }
-
-    // 本地大模型: 设备端 AI 模型占用
-    addToCategory(StorageCategory.LOCAL_MODEL, AiLocalModel.getInstalledModelSize())
-
-    // === 计算 home 目录下已归类子目录的大小，用于后续扣除 ===
-    val alreadyClassifiedHomeSubDirs = listOfNotNull(
-        File(termuxDir, ".local/share/containers").takeIf { it.exists() }?.let { getDirSize(it) },
-        File(termuxDir, "containers").takeIf { it.exists() }?.let { getDirSize(it) },
-        File(termuxDir, ".docker").takeIf { it.exists() }?.let { getDirSize(it) },
-        File(termuxDir, "vm").takeIf { it.exists() }?.let { getDirSize(it) },
-        File(termuxDir, "qemu").takeIf { it.exists() }?.let { getDirSize(it) },
-        File(termuxDir, ".termux/logs").takeIf { it.exists() }?.let { getDirSize(it) },
-        File(termuxDir, ".thumbnails").takeIf { it.exists() }?.let { getDirSize(it) }
-    ).sum()
-
-    // home 目录下的常规用户文件（总大小 - 已归类子目录）
-    val homeTotalSize = getDirSize(termuxDir)
-    val homeRegularSize = (homeTotalSize - alreadyClassifiedHomeSubDirs).coerceAtLeast(0L)
-    if (homeRegularSize > 0) {
-        addToCategory(StorageCategory.USER_DOCS, homeRegularSize)
-    }
-
-    // === Android 标准目录（shared_prefs、databases、codeCache）归入 OTHER ===
-    val sharedPrefsDir = File("/data/data/${context.packageName}/shared_prefs")
-    val sharedPrefsSize = getDirSize(sharedPrefsDir)
-    if (sharedPrefsSize > 0) {
-        addToCategory(StorageCategory.OTHER, sharedPrefsSize)
-    }
-
-    val databasesDir = File("/data/data/${context.packageName}/databases")
-    val databasesSize = getDirSize(databasesDir)
-    if (databasesSize > 0) {
-        addToCategory(StorageCategory.OTHER, databasesSize)
-    }
-
-    val codeCacheDir = context.codeCacheDir
-    val codeCacheSize = getDirSize(codeCacheDir)
-    if (codeCacheSize > 0) {
-        addToCategory(StorageCategory.OTHER, codeCacheSize)
-    }
-
-    // 外部缓存目录也计入
-    context.externalCacheDir?.let { externalCache ->
-        val externalCacheSize = getDirSize(externalCache)
-        if (externalCacheSize > 0) {
-            addToCategory(StorageCategory.OTHER, externalCacheSize)
-        }
-    }
-
-    // 其它: 内部缓存
-    val cacheSize = getDirSize(appCacheDir)
-    addToCategory(StorageCategory.OTHER, cacheSize)
-    if (appCacheDir.exists() && cacheSize > 0) {
-        addToCategory(StorageCategory.OTHER, cacheSize, CleanableItem(
-            name = "缓存文件",
-            description = "应用缓存数据",
-            sizeBytes = cacheSize,
-            path = appCacheDir.absolutePath,
-            type = CleanableType.CACHE
-        ))
-    }
-
-    // 临时文件
-    val tempDir = File(appCacheDir, "temp")
-    if (tempDir.exists()) {
-        val tempSize = getDirSize(tempDir)
-        addToCategory(StorageCategory.OTHER, tempSize, CleanableItem(
-            name = "临时文件",
-            description = "临时下载和处理文件",
-            sizeBytes = tempSize,
-            path = tempDir.absolutePath,
-            type = CleanableType.TEMP
-        ))
-    }
-
-    // 日志文件
-    val logDir = File(termuxDir, ".termux/logs")
-    if (logDir.exists()) {
-        val logSize = getDirSize(logDir)
-        addToCategory(StorageCategory.OTHER, logSize, CleanableItem(
-            name = "日志文件",
-            description = "运行日志和崩溃报告",
-            sizeBytes = logSize,
-            path = logDir.absolutePath,
-            type = CleanableType.LOGS
-        ))
-    }
-
-    // 旧备份文件
-    val backupDir = File(externalDir, "TermuxBackup")
-    if (backupDir.exists()) {
-        val backupSize = getDirSize(backupDir)
-        addToCategory(StorageCategory.OTHER, backupSize, CleanableItem(
-            name = "旧备份文件",
-            description = "过期的 Termux 备份文件",
-            sizeBytes = backupSize,
-            path = backupDir.absolutePath,
-            type = CleanableType.BACKUP
-        ))
-    }
-
-    // 缩略图缓存
-    val thumbDir = File(termuxDir, ".thumbnails")
-    if (thumbDir.exists()) {
-        val thumbSize = getDirSize(thumbDir)
-        addToCategory(StorageCategory.OTHER, thumbSize, CleanableItem(
-            name = "缩略图缓存",
-            description = "文件管理器生成的缩略图",
-            sizeBytes = thumbSize,
-            path = thumbDir.absolutePath,
-            type = CleanableType.THUMBNAIL
-        ))
-    }
-
-    return result.map { (category, pair) ->
-        CategoryStorage(
-            category = category,
-            sizeBytes = pair.first,
-            cleanableItems = pair.second
-        )
-    }.sortedByDescending { it.sizeBytes }
-}
-
-
-/**
- * 获取与 Android 系统设置中一致的当前应用总占用（app + data，含缓存）。
- * 使用 StorageStatsManager 查询本 UID 的统计信息，避免文件大小累加导致的虚高。
- */
-private fun getAccurateAppStorageBytes(context: Context): Long {
-    return try {
-        val storageStatsManager = context.getSystemService(Context.STORAGE_STATS_SERVICE) as StorageStatsManager
-        val storageManager = context.getSystemService(Context.STORAGE_SERVICE) as StorageManager
-        val uuid = storageManager.getUuidForPath(Environment.getDataDirectory()) ?: StorageManager.UUID_DEFAULT
-        val stats = storageStatsManager.queryStatsForUid(uuid, Process.myUid())
-        stats.appBytes + stats.dataBytes
-    } catch (_: Exception) {
-        0L
     }
 }
 
@@ -357,11 +135,13 @@ fun StorageScreen(onBack: () -> Unit) {
 
     suspend fun scan() {
         isScanning = true
-        categories = withContext(Dispatchers.IO) {
-            scanTermuxStorage(context)
-        }
-        accurateUsedBytes = withContext(Dispatchers.IO) {
-            getAccurateAppStorageBytes(context)
+        // 扫描失败也要退出加载态，否则页面会永远停在「正在扫描」
+        val result = runCatching {
+            withContext(Dispatchers.IO) { StorageScanner.scan(context) }
+        }.getOrNull()
+        if (result != null) {
+            categories = result.categories
+            accurateUsedBytes = result.totalBytes
         }
         isScanning = false
     }
@@ -415,9 +195,9 @@ fun StorageScreen(onBack: () -> Unit) {
         scope.launch {
             val totalFreed = itemsToClean.sumOf { it.sizeBytes }
             selectedCleanablePaths = emptySet()
-            categories = withContext(Dispatchers.IO) {
-                scanTermuxStorage(context)
-            }
+            val rescanned = withContext(Dispatchers.IO) { StorageScanner.scan(context) }
+            categories = rescanned.categories
+            accurateUsedBytes = rescanned.totalBytes
             resultMessage = if (failedItems.isEmpty()) {
                 context.getString(R.string.storage_clean_success, formatSize(context, totalFreed))
             } else {
