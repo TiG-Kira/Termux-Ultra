@@ -62,6 +62,10 @@ import top.yukonga.miuix.kmp.preference.WindowSpinnerPreference
 import top.yukonga.miuix.kmp.basic.DropdownItem
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import com.termux.R
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.*
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import com.termux.app.LocaleHelper
 import com.termux.app.compose.AiTermuxPrefs
 import com.termux.app.compose.AiLocalModel
@@ -75,7 +79,7 @@ import java.io.File
 data class SettingItem(
     val title: String,
     val description: String,
-    val iconRes: Int,
+    val icon: ImageVector,
     val action: () -> Unit,
     val hasSwitch: Boolean = false,
     val switchValue: Boolean = false,
@@ -365,7 +369,7 @@ val composeKeyLogging by com.termux.app.terminal.shell.ComposeTerminalSettings.k
                             SettingItem(
             title = context.getString(R.string.vnc_settings),
             description = context.getString(R.string.vnc_settings_desc),
-            iconRes = R.drawable.ic_vnc_settings,
+            icon = Icons.Rounded.DesktopWindows,
             action = {
                 val intent = Intent(context, com.gaurav.avnc.ui.prefs.PrefsActivity::class.java)
                 context.startActivity(intent)
@@ -377,7 +381,7 @@ val composeKeyLogging by com.termux.app.terminal.shell.ComposeTerminalSettings.k
         SettingItem(
             title = context.getString(R.string.backup),
             description = context.getString(R.string.backup_description),
-            iconRes = R.drawable.ic_backup,
+            icon = Icons.Rounded.Backup,
             action = {
                 if (!isProcessing) {
                     isProcessing = true
@@ -433,7 +437,7 @@ val composeKeyLogging by com.termux.app.terminal.shell.ComposeTerminalSettings.k
         SettingItem(
             title = context.getString(R.string.restore),
             description = context.getString(R.string.restore_description),
-            iconRes = R.drawable.ic_restore,
+            icon = Icons.Rounded.Restore,
             action = {
                 launchRestore = true
             }
@@ -446,7 +450,7 @@ val composeKeyLogging by com.termux.app.terminal.shell.ComposeTerminalSettings.k
                 SettingItem(
                     title = context.getString(R.string.notification_management),
                     description = context.getString(R.string.notification_management_desc),
-                    iconRes = R.drawable.ic_notification_bell,
+                    icon = Icons.Rounded.Notifications,
                     action = {
                         val intent = Intent(context, com.termux.app.activities.NotificationManagerActivity::class.java)
                         context.startActivity(intent)
@@ -457,7 +461,7 @@ val composeKeyLogging by com.termux.app.terminal.shell.ComposeTerminalSettings.k
                 SettingItem(
                     title = context.getString(R.string.log_management),
                     description = context.getString(R.string.log_management_desc),
-                    iconRes = R.drawable.ic_bug,
+                    icon = Icons.Rounded.BugReport,
                     action = {
                         val intent = Intent(context, com.termux.app.activities.LogViewerActivity::class.java)
                         context.startActivity(intent)
@@ -468,7 +472,7 @@ val composeKeyLogging by com.termux.app.terminal.shell.ComposeTerminalSettings.k
                 SettingItem(
                     title = context.getString(R.string.storage_title),
                     description = context.getString(R.string.storage_description),
-                    iconRes = R.drawable.ic_storage,
+                    icon = Icons.Rounded.Storage,
                     action = {
                         val intent = Intent(context, com.termux.app.activities.StorageActivity::class.java)
                         context.startActivity(intent)
@@ -479,7 +483,7 @@ val composeKeyLogging by com.termux.app.terminal.shell.ComposeTerminalSettings.k
                 SettingItem(
                     title = context.getString(R.string.about_preference_title),
                     description = context.getString(R.string.about_description),
-                    iconRes = R.drawable.ic_info,
+                    icon = Icons.Rounded.Info,
                     action = { onAboutClick() }
                 )
             )
@@ -497,7 +501,7 @@ val composeKeyLogging by com.termux.app.terminal.shell.ComposeTerminalSettings.k
                 add(SettingItem(
                     title = context.getString(R.string.termux_api_help),
                     description = context.getString(R.string.termux_api_help_summary),
-                    iconRes = R.drawable.ic_terminal,
+                    icon = Icons.Rounded.Terminal,
                     action = { showApiHelpDialog = true }
                 ))
             }
@@ -505,7 +509,7 @@ val composeKeyLogging by com.termux.app.terminal.shell.ComposeTerminalSettings.k
                 add(SettingItem(
                     title = context.getString(R.string.termux_boot_help),
                     description = context.getString(R.string.termux_boot_help_summary),
-                    iconRes = R.drawable.ic_launch,
+                    icon = Icons.Rounded.Launch,
                     action = { showBootHelpDialog = true }
                 ))
             }
@@ -513,7 +517,7 @@ val composeKeyLogging by com.termux.app.terminal.shell.ComposeTerminalSettings.k
                 add(SettingItem(
                     title = context.getString(R.string.termux_styling_config),
                     description = context.getString(R.string.termux_styling_config_summary),
-                    iconRes = R.drawable.ic_palette,
+                    icon = Icons.Rounded.Palette,
                     action = {
                         val intent = Intent().apply {
                             component = ComponentName(context.packageName, "com.termux.app.activities.TermuxStylingActivity")
@@ -526,7 +530,7 @@ val composeKeyLogging by com.termux.app.terminal.shell.ComposeTerminalSettings.k
                 add(SettingItem(
                     title = context.getString(R.string.termux_tasker_config),
                     description = context.getString(R.string.termux_tasker_config_summary),
-                    iconRes = R.drawable.ic_tools,
+                    icon = Icons.Rounded.Tune,
                     action = {
                         val intent = Intent().apply {
                             component = ComponentName(context.packageName, "com.termux.app.activities.TermuxTaskerActivity")
@@ -539,7 +543,7 @@ val composeKeyLogging by com.termux.app.terminal.shell.ComposeTerminalSettings.k
                 add(SettingItem(
                     title = context.getString(R.string.termux_widget_config),
                     description = context.getString(R.string.termux_widget_config_summary),
-                    iconRes = R.drawable.ic_star,
+                    icon = Icons.Rounded.Star,
                     action = {
                         val intent = Intent().apply {
                             component = ComponentName(context.packageName, "com.termux.app.activities.TermuxWidgetActivity")
@@ -586,14 +590,14 @@ val composeKeyLogging by com.termux.app.terminal.shell.ComposeTerminalSettings.k
                         summary = this.description,
                         checked = this.switchValue,
                         onCheckedChange = this.onSwitchChange,
-                        startAction = { SettingIcon(this.iconRes, contentDescription = this.title) }
+                        startAction = { SettingIcon(this.icon, contentDescription = this.title) }
                     )
                 } else {
                     ArrowPreference(
                         title = this.title,
                         summary = this.description,
                         onClick = this.action,
-                        startAction = { SettingIcon(this.iconRes, contentDescription = this.title) }
+                        startAction = { SettingIcon(this.icon, contentDescription = this.title) }
                     )
                 }
             }
@@ -615,7 +619,7 @@ val composeKeyLogging by com.termux.app.terminal.shell.ComposeTerminalSettings.k
                         if (idx == 0) LocaleHelper.setChinese(context) else LocaleHelper.setEnglish(context)
                         showRestartPrompt = true
                     },
-                    startAction = { SettingIcon(R.drawable.ic_language, contentDescription = context.getString(R.string.language)) }
+                    startAction = { SettingIcon(Icons.Rounded.Language, contentDescription = context.getString(R.string.language)) }
                 )
             }),
         SearchableSetting(sec_appearance, context.getString(R.string.navigation_bar_style), context.getString(R.string.navigation_bar_style_description),
@@ -635,7 +639,7 @@ val composeKeyLogging by com.termux.app.terminal.shell.ComposeTerminalSettings.k
                         prefs.edit().putString("navigation_bar_style", style).apply()
                         showNavRestartPrompt = true
                     },
-                    startAction = { SettingIcon(R.drawable.ic_navigation, contentDescription = context.getString(R.string.navigation_bar_style)) }
+                    startAction = { SettingIcon(Icons.Rounded.Navigation, contentDescription = context.getString(R.string.navigation_bar_style)) }
                 )
             }),
         SearchableSetting(sec_appearance, context.getString(R.string.horizontal_tip_layout), context.getString(R.string.overview_horizontal_cards_desc),
@@ -646,7 +650,7 @@ val composeKeyLogging by com.termux.app.terminal.shell.ComposeTerminalSettings.k
                     summary = context.getString(R.string.overview_horizontal_cards_desc),
                     checked = cardLayoutMode == 1,
                     onCheckedChange = { cardLayoutMode = if (it) 1 else 0; prefs.edit().putInt("KEY_CARD_LAYOUT_MODE", cardLayoutMode).apply() },
-                    startAction = { SettingIcon(R.drawable.ic_swap, contentDescription = context.getString(R.string.horizontal_tip_layout)) }
+                    startAction = { SettingIcon(Icons.Rounded.SwapHoriz, contentDescription = context.getString(R.string.horizontal_tip_layout)) }
                 )
             }),
         SearchableSetting(sec_appearance, context.getString(R.string.pkg_view_mode), context.getString(R.string.pkg_view_mode_desc),
@@ -658,7 +662,7 @@ val composeKeyLogging by com.termux.app.terminal.shell.ComposeTerminalSettings.k
                     items = listOf(context.getString(R.string.pkg_view_mode_category), context.getString(R.string.pkg_view_mode_list)),
                     selectedIndex = pkgViewModeIndex,
                     onSelectedIndexChange = { idx -> pkgViewModeIndex = idx; prefs.edit().putInt("KEY_PKG_VIEW_MODE", idx).apply() },
-                    startAction = { SettingIcon(R.drawable.ic_folder, contentDescription = context.getString(R.string.pkg_view_mode)) }
+                    startAction = { SettingIcon(Icons.Rounded.Folder, contentDescription = context.getString(R.string.pkg_view_mode)) }
                 )
             }),
 
@@ -677,7 +681,7 @@ val composeKeyLogging by com.termux.app.terminal.shell.ComposeTerminalSettings.k
                         intent?.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
                         context.startActivity(intent)
                     },
-                    startAction = { SettingIcon(R.drawable.ic_vnc, contentDescription = context.getString(R.string.vnc)) }
+                    startAction = { SettingIcon(Icons.Rounded.DesktopWindows, contentDescription = context.getString(R.string.vnc)) }
                 )
             }),
 
@@ -692,7 +696,7 @@ val composeKeyLogging by com.termux.app.terminal.shell.ComposeTerminalSettings.k
                     items = listOf(context.getString(R.string.off), context.getString(R.string.normal), context.getString(R.string.debug), context.getString(R.string.verbose)),
                     selectedIndex = logLevel.coerceIn(0, 3),
                     onSelectedIndexChange = { idx -> logLevel = idx; terminalPrefs?.setLogLevel(context, idx) },
-                    startAction = { SettingIcon(R.drawable.ic_bug) }
+                    startAction = { SettingIcon(Icons.Rounded.BugReport) }
                 )
             }),
         SearchableSetting(sec_terminal, context.getString(R.string.font_size), context.getString(R.string.font_size_desc),
@@ -706,7 +710,7 @@ val composeKeyLogging by com.termux.app.terminal.shell.ComposeTerminalSettings.k
                     onSelectedIndexChange = { idx ->
                         com.termux.app.terminal.shell.ComposeTerminalSettings.setFontSize(listOf(10, 12, 14, 16, 18, 20, 24)[idx])
                     },
-                    startAction = { SettingIcon(R.drawable.ic_text_size) }
+                    startAction = { SettingIcon(Icons.Rounded.FormatSize) }
                 )
             }),
         SearchableSetting(sec_terminal, context.getString(R.string.cursor_style), context.getString(R.string.cursor_style_desc),
@@ -722,7 +726,7 @@ val composeKeyLogging by com.termux.app.terminal.shell.ComposeTerminalSettings.k
                             com.awkoo.libterminal.engine.TerminalCursorStyle.valueOf(listOf("BAR", "UNDERLINE", "BLOCK")[idx])
                         )
                     },
-                    startAction = { SettingIcon(R.drawable.ic_terminal) }
+                    startAction = { SettingIcon(Icons.Rounded.Terminal) }
                 )
             }),
         SearchableSetting(sec_terminal, stringResource(R.string.editor_tools), "",
@@ -738,7 +742,7 @@ val composeKeyLogging by com.termux.app.terminal.shell.ComposeTerminalSettings.k
                         editorToolIndex = idx
                         prefs.edit().putString("editor_tool", if (idx == 0) "internal" else "vim").apply()
                     },
-                    startAction = { SettingIcon(R.drawable.ic_edit) }
+                    startAction = { SettingIcon(Icons.Rounded.Edit) }
                 )
             }),
         SearchableSetting(sec_terminal, context.getString(R.string.enable_softkeyboard), "",
@@ -751,7 +755,7 @@ val composeKeyLogging by com.termux.app.terminal.shell.ComposeTerminalSettings.k
                     onCheckedChange = {
                         com.termux.app.terminal.shell.ComposeTerminalSettings.setSoftKeyboard(it)
                     },
-                    startAction = { SettingIcon(R.drawable.ic_keyboard) }
+                    startAction = { SettingIcon(Icons.Rounded.Keyboard) }
                 )
             }),
         SearchableSetting(sec_terminal, context.getString(R.string.enable_soft_keyboard_no_hw), context.getString(R.string.soft_keyboard_only_if_no_hardware_desc),
@@ -764,7 +768,7 @@ val composeKeyLogging by com.termux.app.terminal.shell.ComposeTerminalSettings.k
                     onCheckedChange = {
                         com.termux.app.terminal.shell.ComposeTerminalSettings.setSoftKeyboardOnlyIfNoHardware(it)
                     },
-                    startAction = { SettingIcon(R.drawable.ic_keyboard_disabled) }
+                    startAction = { SettingIcon(Icons.Rounded.KeyboardAlt) }
                 )
             }),
         SearchableSetting(sec_terminal, context.getString(R.string.terminal_key_logging), context.getString(R.string.terminal_key_logging_desc),
@@ -777,7 +781,7 @@ val composeKeyLogging by com.termux.app.terminal.shell.ComposeTerminalSettings.k
                     onCheckedChange = {
                         com.termux.app.terminal.shell.ComposeTerminalSettings.setKeyLogging(it)
                     },
-                    startAction = { SettingIcon(R.drawable.ic_bug_keyboard) }
+                    startAction = { SettingIcon(Icons.Rounded.DeveloperMode) }
                 )
             }),
 
@@ -788,7 +792,7 @@ val composeKeyLogging by com.termux.app.terminal.shell.ComposeTerminalSettings.k
                 IntegratedToolSwitch(
                     title = context.getString(R.string.termux_api_tool),
                     summary = if (apiStandaloneInstalled) replacedSummary else context.getString(R.string.termux_api_tool_summary),
-                    iconRes = R.drawable.ic_terminal,
+                    icon = Icons.Rounded.Terminal,
                     checked = termuxApiEnabled,
                     onCheckedChange = {
                         termuxApiEnabled = it
@@ -805,7 +809,7 @@ val composeKeyLogging by com.termux.app.terminal.shell.ComposeTerminalSettings.k
                 IntegratedToolSwitch(
                     title = context.getString(R.string.termux_boot_tool),
                     summary = if (bootStandaloneInstalled) replacedSummary else context.getString(R.string.termux_boot_tool_summary),
-                    iconRes = R.drawable.ic_launch,
+                    icon = Icons.Rounded.Launch,
                     checked = termuxBootEnabled,
                     onCheckedChange = {
                         termuxBootEnabled = it
@@ -822,7 +826,7 @@ val composeKeyLogging by com.termux.app.terminal.shell.ComposeTerminalSettings.k
                 IntegratedToolSwitch(
                     title = context.getString(R.string.termux_tasker_tool),
                     summary = if (taskerStandaloneInstalled) replacedSummary else context.getString(R.string.termux_tasker_tool_summary),
-                    iconRes = R.drawable.ic_tools,
+                    icon = Icons.Rounded.Tune,
                     checked = termuxTaskerEnabled,
                     onCheckedChange = {
                         termuxTaskerEnabled = it
@@ -839,7 +843,7 @@ val composeKeyLogging by com.termux.app.terminal.shell.ComposeTerminalSettings.k
                 IntegratedToolSwitch(
                     title = context.getString(R.string.termux_styling_tool),
                     summary = if (stylingStandaloneInstalled) replacedSummary else context.getString(R.string.termux_styling_tool_summary),
-                    iconRes = R.drawable.ic_palette,
+                    icon = Icons.Rounded.Palette,
                     checked = termuxStylingEnabled,
                     onCheckedChange = {
                         termuxStylingEnabled = it
@@ -856,7 +860,7 @@ val composeKeyLogging by com.termux.app.terminal.shell.ComposeTerminalSettings.k
                 IntegratedToolSwitch(
                     title = context.getString(R.string.termux_widget_tool),
                     summary = if (widgetStandaloneInstalled) replacedSummary else context.getString(R.string.termux_widget_tool_summary),
-                    iconRes = R.drawable.ic_star,
+                    icon = Icons.Rounded.Star,
                     checked = termuxWidgetEnabled,
                     onCheckedChange = {
                         termuxWidgetEnabled = it
@@ -877,7 +881,7 @@ val composeKeyLogging by com.termux.app.terminal.shell.ComposeTerminalSettings.k
                     summary = context.getString(R.string.agent_entry_card_desc),
                     checked = aiTermuxEnabled,
                     onCheckedChange = { aiTermuxEnabled = it; prefs.edit().putBoolean("ai_termux_enabled", it).apply() },
-                    startAction = { SettingIcon(R.drawable.ic_lightbulb, contentDescription = "Termux Agent") }
+                    startAction = { SettingIcon(Icons.Rounded.Lightbulb, contentDescription = "Termux Agent") }
                 )
             }),
         SearchableSetting(sec_ai, context.getString(R.string.trust_whitelist), "",
@@ -894,7 +898,7 @@ val composeKeyLogging by com.termux.app.terminal.shell.ComposeTerminalSettings.k
                     summary = whitelistSummary,
                     enabled = !unlimitedMode,
                     onClick = { showWhitelistDialog = true },
-                    startAction = { SettingIcon(R.drawable.ic_shield, contentDescription = context.getString(R.string.trust_whitelist)) }
+                    startAction = { SettingIcon(Icons.Rounded.Shield, contentDescription = context.getString(R.string.trust_whitelist)) }
                 )
             }),
         SearchableSetting(sec_ai, context.getString(R.string.reconfigure_ai), context.getString(R.string.back_to_config_desc),
@@ -907,7 +911,7 @@ val composeKeyLogging by com.termux.app.terminal.shell.ComposeTerminalSettings.k
                         val intent = Intent(context, com.termux.app.activities.AiTermuxActivity::class.java)
                         intent.putExtra("force_setup", true); context.startActivity(intent)
                     },
-                    startAction = { SettingIcon(R.drawable.ic_refresh, contentDescription = context.getString(R.string.reconfigure_ai)) }
+                    startAction = { SettingIcon(Icons.Rounded.Autorenew, contentDescription = context.getString(R.string.reconfigure_ai)) }
                 )
             }),
         SearchableSetting(sec_ai, context.getString(R.string.clear_chat_history), context.getString(R.string.clear_agent_history_desc),
@@ -917,7 +921,7 @@ val composeKeyLogging by com.termux.app.terminal.shell.ComposeTerminalSettings.k
                     title = context.getString(R.string.clear_chat_history),
                     summary = context.getString(R.string.clear_agent_history_desc),
                     onClick = { showAiClearConfirm = true },
-                    startAction = { SettingIcon(R.drawable.ic_delete, contentDescription = context.getString(R.string.clear_chat_history)) }
+                    startAction = { SettingIcon(Icons.Rounded.Delete, contentDescription = context.getString(R.string.clear_chat_history)) }
                 )
             }),
 
@@ -942,7 +946,7 @@ val composeKeyLogging by com.termux.app.terminal.shell.ComposeTerminalSettings.k
                             RiskConfirmManager.setProtectionLevel(context, newLevel); riskConfirmEnabled = true
                         }
                     },
-                    startAction = { SettingIcon(R.drawable.ic_shield, contentDescription = context.getString(R.string.protection_level_title)) }
+                    startAction = { SettingIcon(Icons.Rounded.Shield, contentDescription = context.getString(R.string.protection_level_title)) }
                 )
             }),
 
@@ -1035,7 +1039,7 @@ val composeKeyLogging by com.termux.app.terminal.shell.ComposeTerminalSettings.k
                                 showRestartPrompt = true
                             },
                             startAction = {
-                                SettingIcon(R.drawable.ic_language, contentDescription = context.getString(R.string.language))
+                                SettingIcon(Icons.Rounded.Language, contentDescription = context.getString(R.string.language))
                             }
                         )
                             OverlayDropdownPreference(
@@ -1061,7 +1065,7 @@ val composeKeyLogging by com.termux.app.terminal.shell.ComposeTerminalSettings.k
                                 showNavRestartPrompt = true
                             },
                             startAction = {
-                                SettingIcon(R.drawable.ic_navigation, contentDescription = context.getString(R.string.navigation_bar_style))
+                                SettingIcon(Icons.Rounded.Navigation, contentDescription = context.getString(R.string.navigation_bar_style))
                             }
                         )
                             SwitchPreference(
@@ -1073,7 +1077,7 @@ val composeKeyLogging by com.termux.app.terminal.shell.ComposeTerminalSettings.k
                                 prefs.edit().putInt("KEY_CARD_LAYOUT_MODE", cardLayoutMode).apply()
                             },
                             startAction = {
-                                SettingIcon(R.drawable.ic_swap, contentDescription = context.getString(R.string.horizontal_tip_layout))
+                                SettingIcon(Icons.Rounded.SwapHoriz, contentDescription = context.getString(R.string.horizontal_tip_layout))
                             }
                         )
                             OverlayDropdownPreference(
@@ -1089,7 +1093,7 @@ val composeKeyLogging by com.termux.app.terminal.shell.ComposeTerminalSettings.k
                                 prefs.edit().putInt("KEY_PKG_VIEW_MODE", idx).apply()
                             },
                             startAction = {
-                                SettingIcon(R.drawable.ic_folder, contentDescription = context.getString(R.string.pkg_view_mode))
+                                SettingIcon(Icons.Rounded.Folder, contentDescription = context.getString(R.string.pkg_view_mode))
                             }
                         )
                     }
@@ -1118,7 +1122,7 @@ val composeKeyLogging by com.termux.app.terminal.shell.ComposeTerminalSettings.k
                                 context.startActivity(intent)
                             },
                             startAction = {
-                                SettingIcon(R.drawable.ic_vnc, contentDescription = context.getString(R.string.vnc))
+                                SettingIcon(Icons.Rounded.DesktopWindows, contentDescription = context.getString(R.string.vnc))
                             }
                         )
                         remoteSettings.firstOrNull()?.let { item ->                            ArrowPreference(
@@ -1126,7 +1130,7 @@ val composeKeyLogging by com.termux.app.terminal.shell.ComposeTerminalSettings.k
                                 summary = item.description,
                                 onClick = item.action,
                                 startAction = {
-                                SettingIcon(item.iconRes, contentDescription = item.title)
+                                SettingIcon(item.icon, contentDescription = item.title)
                                 }
                             )
                         }
@@ -1171,7 +1175,7 @@ val composeKeyLogging by com.termux.app.terminal.shell.ComposeTerminalSettings.k
                                         listOf(10, 12, 14, 16, 18, 20, 24)[idx]
                                     )
                                 },
-                                startAction = { SettingIcon(R.drawable.ic_text_size) }
+                                startAction = { SettingIcon(Icons.Rounded.FormatSize) }
                             )
                             SwitchPreference(
                                 title = context.getString(R.string.cursor_blink),
@@ -1180,7 +1184,7 @@ val composeKeyLogging by com.termux.app.terminal.shell.ComposeTerminalSettings.k
                                 onCheckedChange = {
                                     com.termux.app.terminal.shell.ComposeTerminalSettings.setCursorBlink(it)
                                 },
-                                startAction = { SettingIcon(R.drawable.ic_terminal) }
+                                startAction = { SettingIcon(Icons.Rounded.Terminal) }
                             )
                             OverlayDropdownPreference(
                                 title = context.getString(R.string.cursor_style),
@@ -1194,7 +1198,7 @@ val composeKeyLogging by com.termux.app.terminal.shell.ComposeTerminalSettings.k
                                         )
                                     )
                                 },
-                                startAction = { SettingIcon(R.drawable.ic_terminal) }
+                                startAction = { SettingIcon(Icons.Rounded.Terminal) }
                             )
                             SwitchPreference(
                                 title = context.getString(R.string.text_blinking),
@@ -1203,7 +1207,7 @@ val composeKeyLogging by com.termux.app.terminal.shell.ComposeTerminalSettings.k
                                 onCheckedChange = {
                                     com.termux.app.terminal.shell.ComposeTerminalSettings.setTextBlinking(it)
                                 },
-                                startAction = { SettingIcon(R.drawable.ic_terminal) }
+                                startAction = { SettingIcon(Icons.Rounded.Terminal) }
                             )
                             OverlayDropdownPreference(
                                 title = context.getString(R.string.scrollback_buffer),
@@ -1215,7 +1219,7 @@ val composeKeyLogging by com.termux.app.terminal.shell.ComposeTerminalSettings.k
                                         listOf(1000, 5000, 10000, 50000)[idx]
                                     )
                                 },
-                                startAction = { SettingIcon(R.drawable.ic_screen_rotation) }
+                                startAction = { SettingIcon(Icons.Rounded.ScreenRotation) }
                             )
                             // 经典引擎终端设置项（PR168 迁移 libterminal 时移除，现接入 Nova 引擎）
                             SwitchPreference(
@@ -1225,7 +1229,7 @@ val composeKeyLogging by com.termux.app.terminal.shell.ComposeTerminalSettings.k
                                 onCheckedChange = {
                                     com.termux.app.terminal.shell.ComposeTerminalSettings.setSoftKeyboard(it)
                                 },
-                                startAction = { SettingIcon(R.drawable.ic_keyboard) }
+                                startAction = { SettingIcon(Icons.Rounded.Keyboard) }
                             )
                             SwitchPreference(
                                 title = context.getString(R.string.enable_soft_keyboard_no_hw),
@@ -1234,7 +1238,7 @@ val composeKeyLogging by com.termux.app.terminal.shell.ComposeTerminalSettings.k
                                 onCheckedChange = {
                                     com.termux.app.terminal.shell.ComposeTerminalSettings.setSoftKeyboardOnlyIfNoHardware(it)
                                 },
-                                startAction = { SettingIcon(R.drawable.ic_keyboard_disabled) }
+                                startAction = { SettingIcon(Icons.Rounded.KeyboardAlt) }
                             )
                             SwitchPreference(
                                 title = context.getString(R.string.terminal_key_logging),
@@ -1243,7 +1247,7 @@ val composeKeyLogging by com.termux.app.terminal.shell.ComposeTerminalSettings.k
                                 onCheckedChange = {
                                     com.termux.app.terminal.shell.ComposeTerminalSettings.setKeyLogging(it)
                                 },
-                                startAction = { SettingIcon(R.drawable.ic_bug_keyboard) }
+                                startAction = { SettingIcon(Icons.Rounded.DeveloperMode) }
                             )
                             OverlayDropdownPreference(
                                 title = context.getString(R.string.log_level),
@@ -1251,7 +1255,7 @@ val composeKeyLogging by com.termux.app.terminal.shell.ComposeTerminalSettings.k
                                 items = listOf(context.getString(R.string.off), context.getString(R.string.normal), context.getString(R.string.debug), context.getString(R.string.verbose)),
                                 selectedIndex = logLevel.coerceIn(0, 3),
                                 onSelectedIndexChange = { idx -> logLevel = idx; terminalPrefs?.setLogLevel(context, idx) },
-                                startAction = { SettingIcon(R.drawable.ic_bug) }
+                                startAction = { SettingIcon(Icons.Rounded.BugReport) }
                             )
                         }
 
@@ -1266,13 +1270,13 @@ val composeKeyLogging by com.termux.app.terminal.shell.ComposeTerminalSettings.k
                                     editorToolIndex = idx
                                     prefs.edit().putString("editor_tool", if (idx == 0) "internal" else "vim").apply()
                                 },
-                                startAction = { SettingIcon(R.drawable.ic_edit) }
+                                startAction = { SettingIcon(Icons.Rounded.Edit) }
                             )
                             ArrowPreference(
                                 title = stringResource(R.string.auto_execute_new_session),
                                 summary = if (startupCmdText.isBlank()) "设置每次启动新会话自动运行的指令" else "已设置：${startupCmdText.take(40)}${if (startupCmdText.length > 40) "..." else ""}",
                                 onClick = { showStartupCmdDialog = true },
-                                startAction = { SettingIcon(R.drawable.ic_terminal) }
+                                startAction = { SettingIcon(Icons.Rounded.Terminal) }
                             )
                             ArrowPreference(
                                 title = stringResource(R.string.edit_welcome_motd),
@@ -1293,7 +1297,7 @@ val composeKeyLogging by com.termux.app.terminal.shell.ComposeTerminalSettings.k
                                         context.startActivity(intent)
                                     }
                                 },
-                                startAction = { SettingIcon(R.drawable.ic_text_size) }
+                                startAction = { SettingIcon(Icons.Rounded.FormatSize) }
                             )
                         }
                     }
@@ -1351,7 +1355,7 @@ val composeKeyLogging by com.termux.app.terminal.shell.ComposeTerminalSettings.k
                             title = context.getString(R.string.termux_api_tool),
                             summary = if (apiStandaloneInstalled) replacedSummary
                                       else context.getString(R.string.termux_api_tool_summary),
-                            iconRes = R.drawable.ic_terminal,
+                            icon = Icons.Rounded.Terminal,
                             checked = termuxApiEnabled,
                             onCheckedChange = {
                                 termuxApiEnabled = it
@@ -1367,7 +1371,7 @@ val composeKeyLogging by com.termux.app.terminal.shell.ComposeTerminalSettings.k
                             title = context.getString(R.string.termux_boot_tool),
                             summary = if (bootStandaloneInstalled) replacedSummary
                                       else context.getString(R.string.termux_boot_tool_summary),
-                            iconRes = R.drawable.ic_launch,
+                            icon = Icons.Rounded.Launch,
                             checked = termuxBootEnabled,
                             onCheckedChange = {
                                 termuxBootEnabled = it
@@ -1383,7 +1387,7 @@ val composeKeyLogging by com.termux.app.terminal.shell.ComposeTerminalSettings.k
                             title = context.getString(R.string.termux_tasker_tool),
                             summary = if (taskerStandaloneInstalled) replacedSummary
                                       else context.getString(R.string.termux_tasker_tool_summary),
-                            iconRes = R.drawable.ic_tools,
+                            icon = Icons.Rounded.Tune,
                             checked = termuxTaskerEnabled,
                             onCheckedChange = {
                                 termuxTaskerEnabled = it
@@ -1399,7 +1403,7 @@ val composeKeyLogging by com.termux.app.terminal.shell.ComposeTerminalSettings.k
                             title = context.getString(R.string.termux_widget_tool),
                             summary = if (widgetStandaloneInstalled) replacedSummary
                                       else context.getString(R.string.termux_widget_tool_summary),
-                            iconRes = R.drawable.ic_star,
+                            icon = Icons.Rounded.Star,
                             checked = termuxWidgetEnabled,
                             onCheckedChange = {
                                 termuxWidgetEnabled = it
@@ -1417,7 +1421,7 @@ val composeKeyLogging by com.termux.app.terminal.shell.ComposeTerminalSettings.k
                             title = context.getString(R.string.termux_styling_tool),
                             summary = if (stylingStandaloneInstalled) replacedSummary
                                       else context.getString(R.string.termux_styling_tool_summary),
-                            iconRes = R.drawable.ic_palette,
+                            icon = Icons.Rounded.Palette,
                             checked = termuxStylingEnabled,
                             onCheckedChange = {
                                 termuxStylingEnabled = it
@@ -1452,7 +1456,7 @@ val composeKeyLogging by com.termux.app.terminal.shell.ComposeTerminalSettings.k
                                 prefs.edit().putBoolean("ai_termux_enabled", it).apply()
                             },
                             startAction = {
-                                SettingIcon(R.drawable.ic_lightbulb, contentDescription = "Termux Agent")
+                                SettingIcon(Icons.Rounded.Lightbulb, contentDescription = "Termux Agent")
                             }
                         )
                         if (aiTermuxEnabled) {                            val whitelistCount = autoExecConfig.autoExecSkills.size
@@ -1467,7 +1471,7 @@ val composeKeyLogging by com.termux.app.terminal.shell.ComposeTerminalSettings.k
                                 enabled = !unlimitedMode,
                                 onClick = { showWhitelistDialog = true },
                                 startAction = {
-                                SettingIcon(R.drawable.ic_shield, contentDescription = context.getString(R.string.trust_whitelist))
+                                SettingIcon(Icons.Rounded.Shield, contentDescription = context.getString(R.string.trust_whitelist))
                                 }
                             )
 
@@ -1483,7 +1487,7 @@ val composeKeyLogging by com.termux.app.terminal.shell.ComposeTerminalSettings.k
                                         context.startActivity(android.content.Intent(context, com.termux.app.activities.AiLocalTrainerActivity::class.java))
                                     },
                                     startAction = {
-                                SettingIcon(R.drawable.ic_tools, contentDescription = context.getString(R.string.train_local_model))
+                                SettingIcon(Icons.Rounded.Tune, contentDescription = context.getString(R.string.train_local_model))
                                     }
                                 )
                             }
@@ -1496,7 +1500,7 @@ val composeKeyLogging by com.termux.app.terminal.shell.ComposeTerminalSettings.k
                                     context.startActivity(intent)
                                 },
                                 startAction = {
-                                SettingIcon(R.drawable.ic_refresh, contentDescription = context.getString(R.string.reconfigure_ai))
+                                SettingIcon(Icons.Rounded.Autorenew, contentDescription = context.getString(R.string.reconfigure_ai))
                                 }
                             )
                             ArrowPreference(
@@ -1504,7 +1508,7 @@ val composeKeyLogging by com.termux.app.terminal.shell.ComposeTerminalSettings.k
                                 summary = context.getString(R.string.clear_agent_history_desc),
                                 onClick = { showAiClearConfirm = true },
                                 startAction = {
-                                SettingIcon(R.drawable.ic_delete, contentDescription = context.getString(R.string.clear_chat_history))
+                                SettingIcon(Icons.Rounded.Delete, contentDescription = context.getString(R.string.clear_chat_history))
                                 }
                             )
                             // 本地模式专属：备用在线大模型（fallback）
@@ -1524,7 +1528,7 @@ val composeKeyLogging by com.termux.app.terminal.shell.ComposeTerminalSettings.k
                                         AiTermuxPrefs.setFallbackOnlineEnabled(context, it)
                                     },
                                     startAction = {
-                                SettingIcon(R.drawable.ic_refresh, contentDescription = context.getString(R.string.backup_online_llm))
+                                SettingIcon(Icons.Rounded.Autorenew, contentDescription = context.getString(R.string.backup_online_llm))
                                     }
                                 )
                                 if (fallbackEnabled) {
@@ -1547,7 +1551,7 @@ val composeKeyLogging by com.termux.app.terminal.shell.ComposeTerminalSettings.k
                                             showFallbackEditor = true
                                         },
                                         startAction = {
-                                SettingIcon(R.drawable.ic_edit, contentDescription = context.getString(R.string.configure_backup_params))
+                                SettingIcon(Icons.Rounded.Edit, contentDescription = context.getString(R.string.configure_backup_params))
                                         }
                                     )
                                 }
@@ -1561,7 +1565,7 @@ val composeKeyLogging by com.termux.app.terminal.shell.ComposeTerminalSettings.k
                                     AiTermuxPrefs.setDeveloperMode(context, it)
                                 },
                                 startAction = {
-                                SettingIcon(R.drawable.ic_wrench, contentDescription = context.getString(R.string.developer_mode))
+                                SettingIcon(Icons.Rounded.Build, contentDescription = context.getString(R.string.developer_mode))
                                 }
                             )
                             if (aiDeveloperMode) {                                if (useCustomSystemPrompt) {
@@ -1573,7 +1577,7 @@ val composeKeyLogging by com.termux.app.terminal.shell.ComposeTerminalSettings.k
                                         ),
                                         onClick = { showSystemPromptRestoreConfirm = true },
                                         startAction = {
-                                SettingIcon(R.drawable.ic_restore, contentDescription = context.getString(R.string.use_official_prompt))
+                                SettingIcon(Icons.Rounded.Restore, contentDescription = context.getString(R.string.use_official_prompt))
                                         }
                                     )
                                 } else {
@@ -1582,7 +1586,7 @@ val composeKeyLogging by com.termux.app.terminal.shell.ComposeTerminalSettings.k
                                         summary = context.getString(R.string.load_prompt_from_file),
                                         onClick = { showSystemPromptFilePicker = true },
                                         startAction = {
-                                SettingIcon(R.drawable.ic_edit, contentDescription = context.getString(R.string.use_custom_prompt))
+                                SettingIcon(Icons.Rounded.Edit, contentDescription = context.getString(R.string.use_custom_prompt))
                                         }
                                     )
                                 }
@@ -1591,7 +1595,7 @@ val composeKeyLogging by com.termux.app.terminal.shell.ComposeTerminalSettings.k
                                     summary = context.getString(R.string.custom_skill_create_manage),
                                     onClick = { showCustomSkillManager = true },
                                     startAction = {
-                                SettingIcon(R.drawable.ic_code, contentDescription = context.getString(R.string.custom_skills))
+                                SettingIcon(Icons.Rounded.Code, contentDescription = context.getString(R.string.custom_skills))
                                     }
                                 )
                             ArrowPreference(
@@ -1599,7 +1603,7 @@ val composeKeyLogging by com.termux.app.terminal.shell.ComposeTerminalSettings.k
                                         summary = context.getString(R.string.view_full_history_desc),
                                         onClick = { showFullHistoryViewer = true },
                                         startAction = {
-                                SettingIcon(R.drawable.ic_files, contentDescription = context.getString(R.string.full_chat_history))
+                                SettingIcon(Icons.Rounded.FolderOpen, contentDescription = context.getString(R.string.full_chat_history))
                                         }
                                     )
                             SwitchPreference(
@@ -1619,7 +1623,7 @@ val composeKeyLogging by com.termux.app.terminal.shell.ComposeTerminalSettings.k
                                             }
                                         },
                                         startAction = {
-                                SettingIcon(R.drawable.ic_shield, contentDescription = context.getString(R.string.unrestricted_mode))
+                                SettingIcon(Icons.Rounded.Shield, contentDescription = context.getString(R.string.unrestricted_mode))
                                         }
                                     )
                                     if (unlimitedMode) {
@@ -1632,7 +1636,7 @@ val composeKeyLogging by com.termux.app.terminal.shell.ComposeTerminalSettings.k
                                                 AiTermuxPrefs.setRootAutoShell(context, it)
                                             },
                                             startAction = {
-                                SettingIcon(R.drawable.ic_root_skull, contentDescription = context.getString(R.string.root_exec_agent))
+                                SettingIcon(Icons.Rounded.AdminPanelSettings, contentDescription = context.getString(R.string.root_exec_agent))
                                             }
                                         )
                                     }
@@ -1683,7 +1687,7 @@ val composeKeyLogging by com.termux.app.terminal.shell.ComposeTerminalSettings.k
                                 }
                             },
                             startAction = {
-                                SettingIcon(R.drawable.ic_shield, contentDescription = context.getString(R.string.protection_level_title))
+                                SettingIcon(Icons.Rounded.Shield, contentDescription = context.getString(R.string.protection_level_title))
                             }
                         )
 
@@ -1717,7 +1721,7 @@ val composeKeyLogging by com.termux.app.terminal.shell.ComposeTerminalSettings.k
                             },
                             enabled = agentJudgeEnabled && hasAgentCfg,
                             startAction = {
-                                SettingIcon(R.drawable.ic_ai_agent, contentDescription = "Agent 脚本判定")
+                                SettingIcon(Icons.Rounded.SmartToy, contentDescription = "Agent 脚本判定")
                             }
                         )
                         // ---------- Agent 判定历史 ----------
@@ -1734,7 +1738,7 @@ val composeKeyLogging by com.termux.app.terminal.shell.ComposeTerminalSettings.k
                             },
                             onClick = { showAgentHistory = true },
                             startAction = {
-                                SettingIcon(R.drawable.ic_restore, contentDescription = "Agent 判定历史")
+                                SettingIcon(Icons.Rounded.Restore, contentDescription = "Agent 判定历史")
                             }
                         )
                         // ---------- Agent 判定历史 dialog ----------
@@ -3032,7 +3036,7 @@ private fun AgentHistoryItem(entry: com.termux.app.compose.AgentScriptJudge.Judg
 }
 
 @Composable
-private fun SettingIcon(iconRes: Int, contentDescription: String?) {
+private fun SettingIcon(icon: ImageVector, contentDescription: String? = null) {
                                 Box(
         modifier = Modifier
             .size(40.dp)
@@ -3041,7 +3045,7 @@ private fun SettingIcon(iconRes: Int, contentDescription: String?) {
         contentAlignment = Alignment.Center
     ) {
                                 Icon(
-            painter = painterResource(iconRes),
+            painter = rememberVectorPainter(icon),
             contentDescription = contentDescription,
             modifier = Modifier.size(24.dp),
             tint = MiuixTheme.colorScheme.onSurface
@@ -3066,7 +3070,7 @@ private fun SettingsGroupCard(items: List<SettingItem>) {
                         checked = item.switchValue,
                         onCheckedChange = item.onSwitchChange,
                         startAction = {
-                                SettingIcon(item.iconRes, contentDescription = item.title)
+                                SettingIcon(item.icon, contentDescription = item.title)
                         }
                     )
                 } else {
@@ -3075,7 +3079,7 @@ private fun SettingsGroupCard(items: List<SettingItem>) {
                         summary = item.description,
                         onClick = item.action,
                         startAction = {
-                                SettingIcon(item.iconRes, contentDescription = item.title)
+                                SettingIcon(item.icon, contentDescription = item.title)
                         }
                     )
                 }
@@ -3089,7 +3093,7 @@ private fun SettingsGroupCard(items: List<SettingItem>) {
 private fun IntegratedToolSwitch(
     title: String,
     summary: String,
-    iconRes: Int,
+    icon: ImageVector,
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
     enabled: Boolean = true,
@@ -3112,7 +3116,7 @@ private fun IntegratedToolSwitch(
                 else onDisabledClick?.invoke()
             },
             startAction = {
-                                SettingIcon(iconRes, contentDescription = title)
+                                SettingIcon(icon, contentDescription = title)
             }
         )
     }
