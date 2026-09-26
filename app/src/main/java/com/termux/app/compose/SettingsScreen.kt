@@ -18,6 +18,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -84,7 +85,8 @@ data class SettingItem(
     val action: () -> Unit,
     val hasSwitch: Boolean = false,
     val switchValue: Boolean = false,
-    val onSwitchChange: (Boolean) -> Unit = {}
+    val onSwitchChange: (Boolean) -> Unit = {},
+    val badgeIcon: ImageVector? = null
 )
 
 /** 搜索用设置项元数据 */
@@ -372,6 +374,7 @@ val composeUseCustomKeyboardLayout by com.termux.app.terminal.shell.ComposeTermi
             title = context.getString(R.string.vnc_settings),
             description = context.getString(R.string.vnc_settings_desc),
             icon = Icons.Rounded.DesktopWindows,
+            badgeIcon = Icons.Rounded.Settings,
             action = {
                 val intent = Intent(context, com.gaurav.avnc.ui.prefs.PrefsActivity::class.java)
                 context.startActivity(intent)
@@ -1145,7 +1148,7 @@ val composeUseCustomKeyboardLayout by com.termux.app.terminal.shell.ComposeTermi
                                 summary = item.description,
                                 onClick = item.action,
                                 startAction = {
-                                SettingIcon(item.icon, contentDescription = item.title)
+                                SettingIcon(item.icon, contentDescription = item.title, badge = item.badgeIcon)
                                 }
                             )
                         }
@@ -3060,20 +3063,44 @@ private fun AgentHistoryItem(entry: com.termux.app.compose.AgentScriptJudge.Judg
 }
 
 @Composable
-private fun SettingIcon(icon: ImageVector, contentDescription: String? = null) {
+private fun SettingIcon(icon: ImageVector, contentDescription: String? = null, badge: ImageVector? = null) {
                                 Box(
-        modifier = Modifier
-            .size(40.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .background(MiuixTheme.colorScheme.surfaceVariant),
-        contentAlignment = Alignment.Center
+        modifier = Modifier.size(40.dp)
     ) {
+                                Box(
+            modifier = Modifier
+                .matchParentSize()
+                .clip(RoundedCornerShape(12.dp))
+                .background(MiuixTheme.colorScheme.surfaceVariant),
+            contentAlignment = Alignment.Center
+        ) {
                                 Icon(
-            painter = rememberVectorPainter(icon),
-            contentDescription = contentDescription,
-            modifier = Modifier.size(24.dp),
-            tint = MiuixTheme.colorScheme.onSurface
-        )
+                painter = rememberVectorPainter(icon),
+                contentDescription = contentDescription,
+                modifier = Modifier.size(24.dp),
+                tint = MiuixTheme.colorScheme.onSurface
+            )
+        }
+        if (badge != null) {
+            // 主图标回答「是什么」，徽标回答「这一类动作是什么性质」，两者职责分开才不用为每个
+            // 「XX 设置」再造一个新图标。徽标挂在外层 Box：圆角底色带 clip，挂进去会被裁掉右下角。
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .offset(x = 4.dp, y = 4.dp)
+                    .size(18.dp)
+                    .clip(CircleShape)
+                    .background(MiuixTheme.colorScheme.surface),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    painter = rememberVectorPainter(badge),
+                    contentDescription = null,
+                    modifier = Modifier.size(12.dp),
+                    tint = MiuixTheme.colorScheme.onSurface
+                )
+            }
+        }
     }
 }
 
@@ -3112,7 +3139,7 @@ private fun SettingsGroupCard(items: List<SettingItem>) {
                         checked = item.switchValue,
                         onCheckedChange = item.onSwitchChange,
                         startAction = {
-                                SettingIcon(item.icon, contentDescription = item.title)
+                                SettingIcon(item.icon, contentDescription = item.title, badge = item.badgeIcon)
                         }
                     )
                 } else {
@@ -3121,7 +3148,7 @@ private fun SettingsGroupCard(items: List<SettingItem>) {
                         summary = item.description,
                         onClick = item.action,
                         startAction = {
-                                SettingIcon(item.icon, contentDescription = item.title)
+                                SettingIcon(item.icon, contentDescription = item.title, badge = item.badgeIcon)
                         }
                     )
                 }
