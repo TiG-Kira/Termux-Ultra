@@ -63,6 +63,13 @@
 # 缺这条 R8 会把 missing class 判定为错误并中断构建。
 -dontwarn com.google.protobuf.**
 
+# ---- libterminal: 外部 aar 存在反射 / native 回调 ----
+# libterminal aar 自带的 proguard.txt 是空模板，未提供 keep 规则。
+# 代码中 TerminalDetailScreenCompose.shareTranscript() 通过反射读取
+# com.awkoo.libterminal.engine.TerminalSession.emulator 字段；native 层也会按签名
+# 查找 Java 回调。该 aar 体积不大，整体保留以避免 R8 删除运行时需要的方法/字段。
+-keep class com.awkoo.libterminal.** { *; }
+
 # ---- 既有规则（保留） --------------------------------------------------------
 # Temp fix for androidx.window:window:1.0.0-alpha09 imported by termux-shared
 # https://issuetracker.google.com/issues/189001730
