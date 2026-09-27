@@ -389,6 +389,12 @@ object RiskConfirmManager {
         }
 
         handler.post {
+            // 主线程执行时再检查一次：如果在此之前已有新 agentSkipState 被其他路径设好
+            // （比如用户在 Loading 弹窗点了"跳过验证"），旧请求应该放弃并返回 false。
+            if (_agentSkipState.value != null && _agentSkipState.value?.requestId != requestId) {
+                resolveAgentSkipRequest(requestId, false)
+                return@post
+            }
             _agentSkipState.value = AgentSkipState(
                 command = command,
                 mode = mode,
@@ -526,10 +532,14 @@ object RiskConfirmManager {
     /**
      * 新弹窗顶掉旧弹窗前调用：把旧弹窗绑定的协程请求按「拒绝」结算。
      * 否则旧调用方会一直挂起，直到超时才恢复 —— 用户看到的是"点了没反应"。
+     * 同时结算旧的 agentSkipState（TIMEOUT/ABNORMAL 场景下可能已存在），
+     * 避免旧 callback 泄漏、旧 timeoutRunnable 残留覆盖新 state。
      */
     private fun preemptActiveRequest() {
         val id = _dialogState.value?.requestId
         if (!id.isNullOrEmpty()) resolveRequest(id, false)
+        val skipId = _agentSkipState.value?.requestId
+        if (!skipId.isNullOrEmpty()) resolveAgentSkipRequest(skipId, false)
     }
 
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -1452,18 +1462,22 @@ fun RiskConfirmDialogHost(
         }
     }
 
-    // 用 key 强制 content 分支变化（Loading ↔ 确认）时重建整个 Dialog，
-    // 避免同一个 WindowDialog 内 content 切换时残留"安全检测中"内容、确认帧渲染不出来。
-    key(agentLoading, state?.command, isSshPower, skipState?.requestId) {
     top.yukonga.miuix.kmp.window.WindowDialog(
         show = showDialog,
         onDismissRequest = {},
         title = dialogTitle,
         summary = dialogSummary,
         content = {
+            val contentKey = when {
+                agentSkipState != null -> "skip-${skipState?.requestId}"
+                isSshPower && state != null -> "ssh-${state?.requestId?.takeIf { it.isNotEmpty() } ?: state?.command?.hashCode()}"
+                state != null -> "confirm-${state?.requestId?.takeIf { it.isNotEmpty() } ?: state?.command?.hashCode()}"
+                else -> "loading"
+            }
+            key(contentKey) {
             when {
-                agentSkipState != null -> run {
-                    val skip = agentSkipState ?: return@run
+                agentSkipState != null -> {
+                    val skip = agentSkipState!!
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -1746,9 +1760,9 @@ fun RiskConfirmDialogHost(
                     }
                 }
             }
+            } // key(contentKey)
         }
     )
-    } // key(...) 闭合：强制 content 分支变化时重建 Dialog
 }
 
 fun hasBiometricAuthentication(activity: ComponentActivity): Boolean {
