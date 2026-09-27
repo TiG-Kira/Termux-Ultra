@@ -75,6 +75,10 @@ object SecuritySocketServer {
     private var judgePool: java.util.concurrent.ThreadPoolExecutor? = null
     @Volatile
     private var confirmExec: java.util.concurrent.ExecutorService? = null
+    // 脚本判定专用：handleCheckScript 本身已占一个 judgePool 线程，若判定再投回 judgePool，
+    // 单次检测就要吃掉两个线程，并发几个脚本就能把判定层打满（AbortPolicy → 直接拒绝命令）。
+    @Volatile
+    private var scriptDetectPool: java.util.concurrent.ExecutorService? = null
 
     // Agent 判定并发上限：Agent 判定慢（最长 10~30s），若大量脚本检查同时占池线程做
     // Agent 判定，会把判定层占满，后续请求排队、shell 长时间等待。
@@ -113,6 +117,9 @@ object SecuritySocketServer {
         ioPool = io
         judgePool = judge
         confirmExec = Executors.newSingleThreadExecutor(namedThreadFactory("sec-confirm"))
+        // 缓存池而非有界池：用户确认跳过后判定线程要被 cancel 掉落，但它跑的是阻塞 IO
+        // 中断不了，会继续挂到 Agent 超时为止；有界池会让这些残留线程堵住后续检测。
+        scriptDetectPool = Executors.newCachedThreadPool(namedThreadFactory("sec-script"))
 
         val ready = CountDownLatch(1)
         serverThread = Thread {
@@ -202,9 +209,11 @@ object SecuritySocketServer {
         try { ioPool?.shutdownNow() } catch (_: Exception) {}
         try { judgePool?.shutdownNow() } catch (_: Exception) {}
         try { confirmExec?.shutdownNow() } catch (_: Exception) {}
+        try { scriptDetectPool?.shutdownNow() } catch (_: Exception) {}
         ioPool = null
         judgePool = null
         confirmExec = null
+        scriptDetectPool = null
     }
 
     /** 协议解析结果：方法名 + 正文行（已去掉尾部的 END） */
@@ -461,20 +470,24 @@ object SecuritySocketServer {
 
         // 判定期间显示"安全检测中"加载弹窗（Agent 判定可能较慢）
         RiskConfirmManager.showAgentLoading("正在检测脚本安全性...")
+        // 领取跳过闸门：用户可能在判定过程中点「跳过验证」并二次确认
+        val skipGate = RiskConfirmManager.beginScriptCheck(command)
         val t0 = System.currentTimeMillis()
-        val result = try {
-            detectScript(context, scriptPath, scriptContent)
-        } catch (t: Throwable) {
-            Log.w(TAG, "CHECK_SCRIPT 判定异常，放行: ${t.message}")
-            DetectResult.Allow((t.message ?: t.javaClass.simpleName).take(200))
-        }
-        Log.i(TAG, "CHECK_SCRIPT: path=$scriptPath len=${scriptContent.length} done=${System.currentTimeMillis() - t0}ms")
-
         try {
+            val result = raceSkipOrDetect(context, scriptPath, scriptContent, skipGate)
+            if (result == null) {
+                // 用户已确认跳过：检测结果作废，不必再等 Agent 判定跑完
+                Log.i(TAG, "CHECK_SCRIPT: skip confirmed by user, allow (${System.currentTimeMillis() - t0}ms)")
+                writeResponse(writer, DetectResult.Allow("用户已确认跳过安全检测"))
+                return
+            }
+            Log.i(TAG, "CHECK_SCRIPT: path=$scriptPath len=${scriptContent.length} done=${System.currentTimeMillis() - t0}ms")
+
             if (result is DetectResult.Deny) {
                 // 危险脚本：按增强模式弹窗/snackbar 二次确认（附 Agent/本地判定原因）。
                 // 统一弹窗宿主会把 Loading 无缝切换为二次确认，避免两个 DialogWindow 叠加渲染失败
-                val pass = awaitUserConfirmation(context, command, result.reason, result.riskType)
+                val pass = skipConfirmed(skipGate) ||
+                    awaitUserConfirmation(context, command, result.reason, result.riskType)
                 writeResponse(writer, if (pass) DetectResult.Allow() else result)
             } else if (result is DetectResult.Allow && result.error != null && result.error.startsWith("AGENT_")) {
                 // Agent 判定有问题（超时/异常/ABNORMAL）但本地检测安全 → 跳过二次确认
@@ -485,6 +498,20 @@ object SecuritySocketServer {
                     "AGENT_TIMEOUT" -> RiskConfirmManager.AgentSkipState.Mode.TIMEOUT
                     "AGENT_ERROR"   -> RiskConfirmManager.AgentSkipState.Mode.ABNORMAL
                     else            -> RiskConfirmManager.AgentSkipState.Mode.ABNORMAL
+                }
+                // 用户已在「跳过验证」弹窗上确认 → 不再为 Agent 判定问题再弹一次
+                if (skipConfirmed(skipGate)) {
+                    writeResponse(writer, DetectResult.Allow())
+                    return
+                }
+                // 用户点开了「跳过验证」但还没表态：等他在那一个弹窗上的决定。
+                // 此处再发起一次确认会抢占掉用户正在看的弹窗，且那次抢占会被当成「拒绝」
+                if (RiskConfirmManager.hasPendingSkipConfirm()) {
+                    val pass = awaitPendingSkipDecision(skipGate)
+                    writeResponse(writer, if (pass) DetectResult.Allow() else DetectResult.Deny(
+                        reason = "Agent 判定${if (tag == "AGENT_TIMEOUT") "超时" else "异常"}，用户选择不跳过"
+                    ))
+                    return
                 }
                 // 先 hide loading → 让 DialogHost 切到跳过二次确认弹窗
                 RiskConfirmManager.hideAgentLoading()
@@ -501,10 +528,78 @@ object SecuritySocketServer {
                 writeResponse(writer, result)
             }
         } finally {
+            RiskConfirmManager.endScriptCheck(skipGate)
             // 二次确认结束（或无需确认）后再关闭 Loading，保证弹窗状态连续不闪烁
             RiskConfirmManager.hideAgentLoading()
         }
     }
+
+    /**
+     * 让「脚本检测结果」和「用户在检测弹窗上的跳过决策」竞速。
+     *
+     * @return null 表示用户已确认跳过：检测结果不再有意义，调用方应直接放行。
+     * 判定跑在独立线程上（Agent 判定是阻塞 IO，cancel 不掉），这里只是不再等它。
+     */
+    private fun raceSkipOrDetect(
+        context: Context,
+        scriptPath: String,
+        scriptContent: String,
+        skipGate: java.util.concurrent.CompletableFuture<Boolean>
+    ): DetectResult? {
+        val pool = scriptDetectPool
+        if (pool == null || pool.isShutdown) return detectScript(context, scriptPath, scriptContent)
+        // hook 侧 nc -w 90 就放弃了，整轮等待只能共用这一个预算：
+        // 竞速等掉多少，取结果时就只剩多少
+        val deadline = System.currentTimeMillis() + TimeUnit.SECONDS.toMillis(JUDGE_TIMEOUT_SECONDS)
+        val detect = try {
+            java.util.concurrent.CompletableFuture.supplyAsync(
+                java.util.function.Supplier { detectScript(context, scriptPath, scriptContent) },
+                pool
+            )
+        } catch (e: java.util.concurrent.RejectedExecutionException) {
+            Log.w(TAG, "CHECK_SCRIPT 判定池不可用，退回同步判定: ${e.message}")
+            return detectScript(context, scriptPath, scriptContent)
+        }
+        val winner = try {
+            java.util.concurrent.CompletableFuture.anyOf(detect, skipGate)
+                .get(remainingMillis(deadline), TimeUnit.MILLISECONDS)
+        } catch (e: java.util.concurrent.TimeoutException) {
+            // 判定没跑完、用户也没表态：与本文件「超时一律按拒绝」的约定保持一致，
+            // 放行等于替用户执行一条没被验证过的脚本
+            Log.w(TAG, "CHECK_SCRIPT 判定超时，deny: $scriptPath")
+            detect.cancel(false)
+            return DetectResult.Deny("安全检测超时，已阻止执行")
+        } catch (t: Throwable) {
+            Log.w(TAG, "CHECK_SCRIPT 竞速等待异常，放行: ${t.message}")
+            detect.cancel(false)
+            return DetectResult.Allow("安全检测异常，已放行")
+        }
+        if (winner is Boolean && winner) {
+            detect.cancel(false)
+            return null
+        }
+        return try {
+            detect.get(remainingMillis(deadline), TimeUnit.MILLISECONDS)
+        } catch (t: Throwable) {
+            Log.w(TAG, "CHECK_SCRIPT 取判定结果异常，放行: ${t.message}")
+            DetectResult.Allow("安全检测未完成，已放行")
+        }
+    }
+
+    private fun remainingMillis(deadlineMillis: Long): Long =
+        (deadlineMillis - System.currentTimeMillis()).coerceAtLeast(1L)
+
+    private fun skipConfirmed(skipGate: java.util.concurrent.CompletableFuture<Boolean>): Boolean =
+        skipGate.isDone && skipGate.getNow(false)
+
+    /** 等待用户在他已点开的那个「跳过验证」弹窗上表态（后台线程，阻塞是安全的）。 */
+    private fun awaitPendingSkipDecision(skipGate: java.util.concurrent.CompletableFuture<Boolean>): Boolean =
+        try {
+            skipGate.get(RiskConfirmManager.CONFIRM_WAIT_SECONDS.toLong(), TimeUnit.SECONDS)
+        } catch (t: Throwable) {
+            Log.w(TAG, "CHECK_SCRIPT 等待跳过决策失败: ${t.message}")
+            false
+        }
 
     private fun detectCommand(context: Context, command: String): DetectResult {
         val level = RiskConfirmManager.getProtectionLevel(context)

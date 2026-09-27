@@ -288,6 +288,34 @@ object RiskConfirmManager {
     internal val _agentSkipState = MutableStateFlow<AgentSkipState?>(null)
     val agentSkipState: StateFlow<AgentSkipState?> = _agentSkipState.asStateFlow()
 
+    // ===== 脚本检测「跳过」闸门 =====
+    // 「跳过验证」由 UI 线程发起、由 SecuritySocketServer 的判定线程消费；
+    // 判定线程拿这个 Future 和检测结果竞速，用户确认后不必再等 Agent 判定跑完。
+    private val skipGate =
+        java.util.concurrent.atomic.AtomicReference<java.util.concurrent.CompletableFuture<Boolean>?>(null)
+    /** 正在检测的脚本命令：二次确认弹窗要让用户看清「即将执行的是什么」 */
+    private val skipCheckCommand = java.util.concurrent.atomic.AtomicReference<String?>(null)
+
+    /** 判定线程在开始脚本检测前领取闸门，用它和检测结果竞速。 */
+    fun beginScriptCheck(command: String = ""): java.util.concurrent.CompletableFuture<Boolean> {
+        skipCheckCommand.set(command)
+        val gate = java.util.concurrent.CompletableFuture<Boolean>()
+        // 不结算仍在跑的旧闸门：那一次检测自己会在 finally 里释放它，
+        // 抢先 complete(false) 会让旧检测的跳过决策石沉大海
+        skipGate.set(gate)
+        return gate
+    }
+
+    /** 判定线程结束时释放自己那一轮闸门：已被下一次检测领走的闸门不能动。 */
+    fun endScriptCheck(gate: java.util.concurrent.CompletableFuture<Boolean>) {
+        if (skipGate.compareAndSet(gate, null)) {
+            gate.complete(false)
+        }
+    }
+
+    /** 是否已有等待用户表态的跳过确认弹窗（后台线程据此复用它，而不是再弹一个）。 */
+    fun hasPendingSkipConfirm(): Boolean = _agentSkipState.value != null
+
     /** 启动跳过二次确认（挂起协程等待结果） */
     suspend fun requestAgentSkipConfirm(
         context: Context,
@@ -309,7 +337,6 @@ object RiskConfirmManager {
                 preemptActiveRequest()
                 pendingRequests[requestId] = { confirmed ->
                     cancelPendingTimeout(timeoutRunnable)
-                    _agentSkipState.value = null
                     if (continuation.isActive) {
                         continuation.resumeWith(Result.success(confirmed))
                     }
@@ -381,10 +408,12 @@ object RiskConfirmManager {
         val handler = Handler(Looper.getMainLooper())
         val requestId = "skip-" + requestIdSeq.incrementAndGet()
 
-        preemptActiveRequest()
+        // 已有在途的跳过确认（通常是用户手动点「跳过验证」弹出的）→ 本请求直接放弃：
+        // 抢占会先结算掉那个弹窗，用户只看到弹窗闪一下就没了。
+        if (_agentSkipState.value != null) return false
+
         pendingRequests[requestId] = { confirmed ->
             result[0] = confirmed
-            _agentSkipState.value = null
             latch.countDown()
         }
 
@@ -415,18 +444,14 @@ object RiskConfirmManager {
         return result[0]
     }
 
-    /** 结算跳过确认请求 */
+    /** 结算跳过确认请求。
+     *  只关 requestId 自己那一个弹窗：用户手动跳过（SKIP）与后台 TIMEOUT/ABNORMAL
+     *  请求会同时在途，无条件清 state 会把用户正在确认的弹窗一起关掉。 */
     private fun resolveAgentSkipRequest(requestId: String, confirmed: Boolean) {
-        val callback = pendingRequests.remove(requestId)
-        if (callback != null) {
-            _agentSkipState.value = null
-            callback(confirmed)
-            return
-        }
-        // 阻塞式请求兜底：requestId 以 "skip-" 开头，也可能已经被 resolveRequest 吃掉
         if (_agentSkipState.value?.requestId == requestId) {
             _agentSkipState.value = null
         }
+        pendingRequests.remove(requestId)?.invoke(confirmed)
     }
 
     /** 用户点击"跳过验证"（Loading 弹窗上的按钮）。触发 SKIP 模式二次确认。
@@ -437,30 +462,32 @@ object RiskConfirmManager {
      *  2. 再 hide loading → showDialog 仍为 true（skipState 非 null）
      *  否则反过来 hide loading 会先让 showDialog 变 false → WindowDialog 消失闪烁。 */
     fun requestSkipFromLoading(context: Context, command: String = "") {
-        // 无限制模式直接放行，不需要二次确认
-        if (isUnlimitedModeActive(context)) {
-            _agentLoadingVisible.value = false
-            return
-        }
+        // 无限制模式【不】在此早退：shell 脚本拦截不受无限制模式影响
+        // （与 requestDetectedConfirmationBlocking 的约定一致），否则点「跳过验证」
+        // 只会让检测窗静默消失，永远拿不到二次确认。
         val level = getProtectionLevel(context)
         if (level == ProtectionLevel.OFF) {
+            // 保护关闭 = 不检测，跳过即放行；给一次可见反馈，避免「点了没反应」
             _agentLoadingVisible.value = false
+            emitSnackbar("保护已关闭，脚本已直接放行")
             return
         }
 
         val requestId = "skip-" + requestIdSeq.incrementAndGet()
+        val gate = skipGate.get()
 
         // 结算被顶掉的旧请求
         preemptActiveRequest()
 
-        // 注册 pendingRequest（让 confirmAgentSkip/cancelAgentSkip 能结算）
+        // 注册 pendingRequest（让 confirmAgentSkip/cancelAgentSkip 能结算），
+        // 并把用户决策回传给正在跑脚本检测的后台线程
         pendingRequests[requestId] = { confirmed ->
-            _agentSkipState.value = null
+            gate?.complete(confirmed)
         }
 
         // 先设 skipState → UI 层观察到后渲染二次确认弹窗
         _agentSkipState.value = AgentSkipState(
-            command = command,
+            command = command.ifBlank { skipCheckCommand.get().orEmpty() },
             mode = AgentSkipState.Mode.SKIP,
             detail = "",
             requestId = requestId
@@ -489,7 +516,7 @@ object RiskConfirmManager {
     /** 自动确认等待时限(秒)：倒计时、auto-deny、latch await 三者一致。
      * 超过此时限（弹窗异常/未及时点击）自动按 DENY 返回并写响应，
      * 绝不让 shell 长时间卡死（此前 60s/90s 不一致导致“超90s才恢复/一直不恢复”）。 */
-    private const val CONFIRM_WAIT_SECONDS = 25
+    internal const val CONFIRM_WAIT_SECONDS = 25
 
     /** 开始倒计时 */
     internal fun startCountdown() {

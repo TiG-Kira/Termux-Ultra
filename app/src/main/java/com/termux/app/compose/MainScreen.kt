@@ -720,7 +720,9 @@ fun MainScreen(
             DisableWarningMask()
         }
 
-        // 风险命令确认弹窗（主页不显示风险 Snackbar，由终端页独占）
+        // 风险命令确认弹窗（主页不显示风险 Snackbar，由终端页独占）。
+        // 这里是主页唯一的弹窗宿主：宿主内部持有 miuix WindowDialog，同一棵 Compose 树
+        // 装两份会同时挂两个 DialogWindow，切换时 z-order 冲突会让确认弹窗渲染不出来。
         RiskConfirmDialogHost(snackbarHostState, collectSnackbar = false)
 
     }
