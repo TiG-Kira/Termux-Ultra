@@ -26,7 +26,6 @@ import kotlinx.coroutines.flow.StateFlow
 import com.termux.app.activities.AboutActivity
 import com.termux.app.compose.KiTerminalTheme
 import com.termux.app.compose.MainScreen
-import com.termux.app.compose.RiskConfirmDialogHost
 import com.termux.shared.termux.TermuxConstants
 import com.termux.shared.termux.shell.command.runner.terminal.TermuxSession as SharedTermuxSession
 import com.termux.app.TermuxService
@@ -261,7 +260,6 @@ class MainActivity : FragmentActivity() {
                             onToggleWakeLock = { toggleWakeLock() },
                             onRefreshSessions = { updateSessions() }
                         )
-                    RiskConfirmDialogHost(collectSnackbarEvents = false)
                 }
                 }
             }
