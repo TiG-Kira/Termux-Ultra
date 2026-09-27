@@ -1,12 +1,12 @@
 # ============================================================================
 #  Termux Ultra — R8 / ProGuard 规则
 #
-#  默认构建【不启用】R8（app/build.gradle 中 minifyEnabled 由 termux.enableR8 控制）。
-#  启用方式：
-#      ./gradlew assembleRelease -Ptermux.enableR8=true
-#      或 CI 设置环境变量 TERMUX_ENABLE_R8=true
+#  release 构建默认【启用】R8（app/build.gradle 中 minifyEnabled 由 termux.enableR8 控制，默认 true）。
+#  关闭方式：
+#      ./gradlew assembleRelease -Ptermux.enableR8=false
+#      或 CI 设置环境变量 TERMUX_ENABLE_R8=false
 #
-#  启用前请先读完本文件，并在真机上回归以下链路：
+#  改动本文件或升级依赖后，请在真机上回归以下链路：
 #      终端会话、AI 助手（在线 + 本地 llama）、插件中心（安装/页面渲染）、
 #      VNC、SSH、QEMU 配置、资源页一键部署、日志查看器、备份恢复。
 # ============================================================================
@@ -55,6 +55,13 @@
 }
 # libtermux 在 native 崩溃时回调的 Java 类
 -keep class com.termux.shared.crash.** { *; }
+
+# ---- tink 引用了依赖图中不存在的 protobuf ----
+# sshlib 带来的 JVM 版 tink 1.20.0 依赖 com.google.protobuf，而 protobuf 并未进入
+# 本项目依赖图。security-crypto 只用到 tink 的 Aead 接口，protobuf 相关分支运行时
+# 不会被触达（即便触达，GitHubSessionStore 也有明文 prefs 兜底）。
+# 缺这条 R8 会把 missing class 判定为错误并中断构建。
+-dontwarn com.google.protobuf.**
 
 # ---- 既有规则（保留） --------------------------------------------------------
 # Temp fix for androidx.window:window:1.0.0-alpha09 imported by termux-shared
