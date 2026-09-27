@@ -313,8 +313,14 @@ object RiskConfirmManager {
         }
     }
 
-    /** 是否已有等待用户表态的跳过确认弹窗（后台线程据此复用它，而不是再弹一个）。 */
-    fun hasPendingSkipConfirm(): Boolean = _agentSkipState.value != null
+    // 当前弹窗属于哪一轮检测。判定线程必须核对归属：否则用户对着脚本 A 的弹窗点确认，
+    // 可能被当成脚本 B 的放行信号（B 若是危险脚本就直接执行了）。
+    private val pendingSkipGate =
+        java.util.concurrent.atomic.AtomicReference<java.util.concurrent.CompletableFuture<Boolean>?>(null)
+
+    /** 是否有等待用户表态、且属于这一轮检测的跳过确认弹窗（判定线程据此复用它，而不是再弹一个）。 */
+    fun hasPendingSkipConfirm(gate: java.util.concurrent.CompletableFuture<Boolean>): Boolean =
+        pendingSkipGate.get() === gate
 
     /** 启动跳过二次确认（挂起协程等待结果） */
     suspend fun requestAgentSkipConfirm(
@@ -430,6 +436,8 @@ object RiskConfirmManager {
                 detail = detail,
                 requestId = requestId
             )
+            // 这个弹窗不属于任何一轮脚本检测的闸门，别让上一轮的引用留在里面
+            pendingSkipGate.set(null)
         }
         handler.postDelayed({
             resolveAgentSkipRequest(requestId, false)
@@ -450,6 +458,7 @@ object RiskConfirmManager {
     private fun resolveAgentSkipRequest(requestId: String, confirmed: Boolean) {
         if (_agentSkipState.value?.requestId == requestId) {
             _agentSkipState.value = null
+            pendingSkipGate.set(null)
         }
         pendingRequests.remove(requestId)?.invoke(confirmed)
     }
@@ -492,6 +501,7 @@ object RiskConfirmManager {
             detail = "",
             requestId = requestId
         )
+        pendingSkipGate.set(gate)
 
         // 超时自动按拒绝结算
         val timeoutRunnable = Runnable { resolveAgentSkipRequest(requestId, false) }
