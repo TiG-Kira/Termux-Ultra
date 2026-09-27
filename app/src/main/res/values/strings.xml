@@ -739,6 +739,10 @@
     <string name="choose_font">Choose Font</string>
     <string name="no_license_available">No license information available for this style.</string>
     <string name="writing_failed">Failed to install file:\n\n</string>
+    <string name="font_need_download">Download</string>
+    <string name="font_downloading">Downloading font…</string>
+    <string name="font_download_failed">Failed to download font %1$s, check your network and retry</string>
+    <string name="font_missing_fallback">Font %1$s is unavailable, reverted to default font</string>
 
     <!-- Tasker -->
     <string name="title_tasker_settings">Tasker Settings</string>

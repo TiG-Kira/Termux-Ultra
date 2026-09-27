@@ -29,7 +29,9 @@ import androidx.compose.ui.unit.sp
 import com.google.android.material.snackbar.Snackbar
 import com.awkoo.libterminal.color.TerminalColorScheme
 import com.termux.R
+import com.termux.app.utils.FontDownloader
 import com.termux.app.utils.SnackbarHelper
+import kotlinx.coroutines.launch
 import top.yukonga.miuix.kmp.basic.*
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
@@ -104,7 +106,7 @@ private fun loadColorScheme(context: Context, fileName: String?): TerminalColors
 private fun loadFontTypeface(context: Context, fileName: String?): Typeface? {
     if (fileName == null || fileName == DEFAULT_FILENAME) return null
     return try {
-        context.assets.open("fonts/$fileName").use { input ->
+        TerminalFontCatalog.open(context, fileName)?.use { input ->
             val file = File.createTempFile("font_", ".ttf", context.cacheDir)
             file.deleteOnExit()
             file.outputStream().use { input.copyTo(it) }
@@ -148,7 +150,7 @@ fun TermuxStylingScreen(
     val scrollBehavior = MiuixScrollBehavior()
 
     val colorItems = remember { loadStyleItems(context, "colors", ".properties") }
-    val fontItems = remember { loadStyleItems(context, "fonts", ".ttf") }
+    val fontItems = remember { (listOf(DEFAULT_FILENAME) + TerminalFontCatalog.allFonts(context)).map(::StyleItem) }
 
     var showColorDialog by remember { mutableStateOf(false) }
     var showFontDialog by remember { mutableStateOf(false) }
@@ -156,6 +158,12 @@ fun TermuxStylingScreen(
     var showFontLicense by remember { mutableStateOf<StyleItem?>(null) }
     var currentColor by remember { mutableStateOf(getCurrentStyle(context, "colors.properties", "color")) }
     var currentFont by remember { mutableStateOf(getCurrentStyle(context, "font.ttf", "font")) }
+    var downloadingFont by remember { mutableStateOf<String?>(null) }
+    // 进入页面时补下载已选字体与用户主动选字体是两条独立路径，分开持有状态，
+    // 否则同时发生时后一个会把前一个的遮罩提前抹掉。
+    var restoringFont by remember { mutableStateOf<String?>(null) }
+    var pendingFonts by remember { mutableStateOf(pendingFontSet(context, fontItems)) }
+    val scope = rememberCoroutineScope()
 
     // Preview state: default to current saved style
     val currentColorItem = remember {
@@ -179,10 +187,58 @@ fun TermuxStylingScreen(
         currentColor = item.displayName
     }
 
-    fun selectFont(item: StyleItem) {
+    fun applyFont(item: StyleItem) {
         previewTypeface = loadFontTypeface(context, item.fileName.takeIf { it != DEFAULT_FILENAME })
         copyStyleFile(context, item, false)
         currentFont = item.displayName
+    }
+
+    // 未下载的字体先拉取再套用；下载失败时保留当前字体，避免终端落到没有字体文件的状态。
+    fun selectFont(item: StyleItem) {
+        if (item.fileName == DEFAULT_FILENAME || TerminalFontCatalog.isAvailable(context, item.fileName)) {
+            applyFont(item)
+            return
+        }
+        downloadingFont = item.fileName
+        scope.launch {
+            val result = FontDownloader.download(context, item.fileName)
+            downloadingFont = null
+            if (result.isSuccess) {
+                pendingFonts = pendingFontSet(context, fontItems)
+                applyFont(item)
+            } else {
+                SnackbarHelper.show(
+                    context,
+                    context.getString(R.string.font_download_failed, item.displayName),
+                    Snackbar.LENGTH_LONG
+                )
+            }
+        }
+    }
+
+    // 已选中但本地没有字体文件（升级后字体被移出 APK 的情况）时自动补下载，
+    // 补不回来就回退到默认字体，保证终端始终有可用字体。
+    LaunchedEffect(Unit) {
+        val savedFile = context.getSharedPreferences("termux_styling", Context.MODE_PRIVATE)
+            .getString("selected_font_file", null)
+        if (savedFile == null || TerminalFontCatalog.isAvailable(context, savedFile)) return@LaunchedEffect
+
+        restoringFont = savedFile
+        val result = FontDownloader.download(context, savedFile)
+        restoringFont = null
+        if (result.isSuccess) {
+            pendingFonts = pendingFontSet(context, fontItems)
+            previewTypeface = loadFontTypeface(context, savedFile)
+        } else {
+            copyStyleFile(context, StyleItem(DEFAULT_FILENAME), false)
+            previewTypeface = null
+            currentFont = DEFAULT_FILENAME
+            SnackbarHelper.show(
+                context,
+                context.getString(R.string.font_missing_fallback, StyleItem(savedFile).displayName),
+                Snackbar.LENGTH_LONG
+            )
+        }
     }
 
     Scaffold(
@@ -288,6 +344,7 @@ fun TermuxStylingScreen(
                         title = stringResource(R.string.choose_font),
                         items = fontItems,
                         currentItem = currentFont,
+                        pendingItems = pendingFonts,
                         onSelect = { item ->
                             selectFont(item)
                             showFontDialog = false
@@ -298,6 +355,14 @@ fun TermuxStylingScreen(
                     )
                 }
             )
+
+            (restoringFont ?: downloadingFont)?.let { fileName ->
+                OverlayDialog(
+                    show = true,
+                    onDismissRequest = { },
+                    content = { FontDownloadingContent(fileName) }
+                )
+            }
 
             showColorLicense?.let { item ->
                 OverlayDialog(
@@ -495,6 +560,12 @@ private fun loadStyleItems(context: Context, assetFolder: String, extension: Str
     return items
 }
 
+private fun pendingFontSet(context: Context, fontItems: List<StyleItem>): Set<String> =
+    fontItems
+        .filter { it.fileName != DEFAULT_FILENAME && !TerminalFontCatalog.isAvailable(context, it.fileName) }
+        .map { it.fileName }
+        .toSet()
+
 private fun getCurrentStyle(context: Context, fileName: String, styleType: String): String {
     val prefs = context.getSharedPreferences("termux_styling", Context.MODE_PRIVATE)
     val savedName = prefs.getString("selected_${styleType}_name", null)
@@ -535,11 +606,14 @@ private fun copyStyleFile(context: Context, item: StyleItem, isColors: Boolean) 
             if (isColors) {
                 out.write("# Using default color theme.".toByteArray(StandardCharsets.UTF_8))
             }
-        } else {
-            val assetFolder = if (isColors) "colors" else "fonts"
-            context.assets.open("$assetFolder/${item.fileName}").use { input ->
+        } else if (isColors) {
+            context.assets.open("colors/${item.fileName}").use { input ->
                 input.copyTo(out)
             }
+        } else {
+            val fontStream = TerminalFontCatalog.open(context, item.fileName)
+                ?: throw IllegalStateException("font unavailable: ${item.fileName}")
+            fontStream.use { input -> input.copyTo(out) }
         }
         atomicFile.finishWrite(out)
 
@@ -567,6 +641,7 @@ private fun StyleListContent(
     title: String,
     items: List<StyleItem>,
     currentItem: String,
+    pendingItems: Set<String> = emptySet(),
     onSelect: (StyleItem) -> Unit,
     onLongPress: (StyleItem) -> Unit
 ) {
@@ -598,6 +673,14 @@ private fun StyleListContent(
                     color = if (isSelected) MiuixTheme.colorScheme.primary else MiuixTheme.colorScheme.onSurface,
                     modifier = Modifier.weight(1f)
                 )
+                if (item.fileName in pendingItems) {
+                    Text(
+                        text = stringResource(R.string.font_need_download),
+                        fontSize = 12.sp,
+                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                    )
+                    Spacer(Modifier.width(8.dp))
+                }
                 if (isSelected) {
                     Icon(
                         imageVector = MiuixIcons.Back,
@@ -671,5 +754,27 @@ private fun LicenseContent(
                 onClick = { }
             )
         }
+    }
+}
+
+@Composable
+private fun FontDownloadingContent(fileName: String) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = stringResource(R.string.font_downloading),
+            fontSize = 16.sp,
+            color = MiuixTheme.colorScheme.onSurface
+        )
+        Spacer(Modifier.height(8.dp))
+        Text(
+            text = StyleItem(fileName).displayName,
+            fontSize = 14.sp,
+            color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+        )
     }
 }

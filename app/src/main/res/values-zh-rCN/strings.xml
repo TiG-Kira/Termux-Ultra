@@ -704,6 +704,10 @@
     <string name="choose_font">选择字体</string>
     <string name="no_license_available">此样式没有可用的许可证信息</string>
     <string name="writing_failed">安装文件失败：\n\n</string>
+    <string name="font_need_download">需下载</string>
+    <string name="font_downloading">正在下载字体…</string>
+    <string name="font_download_failed">字体 %1$s 下载失败，请检查网络后重试</string>
+    <string name="font_missing_fallback">字体 %1$s 已不可用，已回退为默认字体</string>
 
     <!-- Tasker Settings -->
     <string name="title_tasker_settings">Tasker 设置</string>
