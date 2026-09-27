@@ -21,16 +21,19 @@ android {
     def workflowCliBuild = System.getenv("TERMUX_WORKFLOW_CLI") == "true"
     def splitAPKsForReleaseBuilds = System.getenv("TERMUX_SPLIT_APKS_FOR_RELEASE_BUILDS") ?: "0"
 
-    // R8 代码收缩 / 资源收缩开关，release 默认开启。
-    // 关闭时第三方依赖里未被使用的部分（material-icons-extended 的数千个图标、
-    // guava / tink / rxjava 的未用分支）会整包进入 dex，实测占 APK 四分之一以上。
-    // 关闭方式：./gradlew assembleRelease -Ptermux.enableR8=false
-    //（CI 可设环境变量 TERMUX_ENABLE_R8=false）
-    // 本项目的动态引用点（Gson 字段反射、Class.forName、JNI 回调）已在
-    // app/proguard-rules.pro 中 keep，新增此类引用时需同步补规则。
+    // R8 代码收缩 / 资源收缩开关，release 默认【关闭】。
+    // 关闭原因：开启后动态引用点（Gson TypeToken 泛型签名、Class.forName、JNI 回调等）
+    // 需要逐一补 -keep 规则，且仍会偶发崩溃（见 crash report #VncConnectionManager），
+    // 维护成本高于其带来的体积收益。APK 减重改由「bootstrap 首次启动在线下载」承担
+    // （详见下方 bootstrap 相关逻辑），不再依赖 R8 收缩。
+    // 如需临时验证 R8 效果，可显式开启：
+    //   ./gradlew assembleRelease -Ptermux.enableR8=true
+    //   （CI 可设环境变量 TERMUX_ENABLE_R8=true）
+    // 开启时动态引用点（Gson 字段反射、Class.forName、JNI 回调）的 -keep 规则集中在
+    // app/proguard-rules.pro，新增此类引用需同步补规则。
     def enableR8 = (project.findProperty("termux.enableR8")
         ?: System.getenv("TERMUX_ENABLE_R8")
-        ?: "true").toString().toBoolean()
+        ?: "false").toString().toBoolean()
 
     // ── 单架构构建开关 ─────────────────────────────────────────────────
     // 用途：把「一次编译四个 ABI」拆成「一个 ABI 一次编译」，用于 CI 矩阵并行构建，
