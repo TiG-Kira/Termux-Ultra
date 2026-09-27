@@ -117,9 +117,14 @@ object SecuritySocketServer {
         ioPool = io
         judgePool = judge
         confirmExec = Executors.newSingleThreadExecutor(namedThreadFactory("sec-confirm"))
-        // 缓存池而非有界池：用户确认跳过后判定线程要被 cancel 掉落，但它跑的是阻塞 IO
-        // 中断不了，会继续挂到 Agent 超时为止；有界池会让这些残留线程堵住后续检测。
-        scriptDetectPool = Executors.newCachedThreadPool(namedThreadFactory("sec-script"))
+        // 不排队也不无界：被跳过的判定线程 cancel 不掉，会挂到 Agent 超时为止，
+        // 占满 4 个后让后续检测退回同步判定 —— 既不会被堵死，也不会无限建线程
+        scriptDetectPool = java.util.concurrent.ThreadPoolExecutor(
+            0, 4, 60L, TimeUnit.SECONDS,
+            java.util.concurrent.SynchronousQueue(),
+            namedThreadFactory("sec-script"),
+            java.util.concurrent.ThreadPoolExecutor.AbortPolicy()
+        )
 
         val ready = CountDownLatch(1)
         serverThread = Thread {
@@ -506,7 +511,7 @@ object SecuritySocketServer {
                 }
                 // 用户点开了「跳过验证」但还没表态：等他在那一个弹窗上的决定。
                 // 此处再发起一次确认会抢占掉用户正在看的弹窗，且那次抢占会被当成「拒绝」
-                if (RiskConfirmManager.hasPendingSkipConfirm()) {
+                if (RiskConfirmManager.hasPendingSkipConfirm(skipGate)) {
                     val pass = awaitPendingSkipDecision(skipGate)
                     writeResponse(writer, if (pass) DetectResult.Allow() else DetectResult.Deny(
                         reason = "Agent 判定${if (tag == "AGENT_TIMEOUT") "超时" else "异常"}，用户选择不跳过"
@@ -580,6 +585,12 @@ object SecuritySocketServer {
         }
         return try {
             detect.get(remainingMillis(deadline), TimeUnit.MILLISECONDS)
+        } catch (e: java.util.concurrent.TimeoutException) {
+            // 走得到这里说明用户点了「取消跳过」而判定又没做完，预算已耗尽；
+            // 与竞速超时同样按拒绝，否则等了 90s 反而放行
+            Log.w(TAG, "CHECK_SCRIPT 判定未在预算内完成，deny: $scriptPath")
+            detect.cancel(false)
+            DetectResult.Deny("安全检测超时，已阻止执行")
         } catch (t: Throwable) {
             Log.w(TAG, "CHECK_SCRIPT 取判定结果异常，放行: ${t.message}")
             DetectResult.Allow("安全检测未完成，已放行")
