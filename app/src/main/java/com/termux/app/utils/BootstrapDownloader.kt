@@ -27,6 +27,9 @@ object BootstrapDownloader {
     // 指向含有 app/bootstrap/*.zip 的固定 tag；bootstrap 内容变更时升版本（bootstrap-v2 …）。
     private const val REF = "bootstrap-v1"
 
+    // 缺少该目录段会让全部镜像 404；改 zip 仓库路径时必须同步。
+    private const val REMOTE_DIR = "app/bootstrap/"
+
     // arch -> 期望 SHA-256（与 app/bootstrap/*.zip 一致；改 zip 必须同步此处）。
     private val EXPECTED_SHA256 = mapOf(
         "aarch64" to "ea2aeba8819e517db711f8c32369e89e7c52cee73e07930ff91185e1ab93f4f3",
@@ -80,13 +83,15 @@ object BootstrapDownloader {
         var lastError: Exception? = null
         for (base in MIRROR_BASES) {
             try {
-                val bytes = fetchBytes(base + "bootstrap-$arch.zip")
+                val url = base + REMOTE_DIR + "bootstrap-$arch.zip"
+                val bytes = fetchBytes(url)
                 if (isValidBootstrap(bytes, expected)) {
                     Log.i(TAG, "bootstrap ($arch) downloaded and verified from $base")
                     return bytes
                 }
-                lastError = Exception("checksum/magic mismatch for $arch from $base")
-                Log.w(TAG, lastError.message)
+                val mismatch = "checksum/magic mismatch for $arch from $base"
+                lastError = Exception(mismatch)
+                Log.w(TAG, mismatch)
             } catch (e: Exception) {
                 lastError = e
                 Log.w(TAG, "mirror failed: $base (${e.message})")

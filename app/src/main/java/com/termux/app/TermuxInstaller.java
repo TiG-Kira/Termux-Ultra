@@ -122,8 +122,6 @@ final class TermuxInstaller {
                         return;
                     }
 
-                    Logger.logInfo(LOG_TAG, "Extracting bootstrap zip to prefix staging directory \"" + TERMUX_STAGING_PREFIX_DIR_PATH + "\".");
-
                     final byte[] buffer = new byte[8096];
                     final List<Pair<String, String>> symlinks = new ArrayList<>(50);
 
@@ -139,7 +137,7 @@ final class TermuxInstaller {
                         activity.runOnUiThread(onInstallStart);
                     }
 
-                    Logger.logInfo(LOG_TAG, "Bootstrap zip downloaded (" + zipBytes.length + " bytes), extracting...");
+                    Logger.logInfo(LOG_TAG, "Bootstrap zip downloaded (" + zipBytes.length + " bytes), extracting to prefix staging directory \"" + TERMUX_STAGING_PREFIX_DIR_PATH + "\".");
                     try (ZipInputStream zipInput = new ZipInputStream(new ByteArrayInputStream(zipBytes))) {
                         ZipEntry zipEntry;
                         while ((zipEntry = zipInput.getNextEntry()) != null) {
