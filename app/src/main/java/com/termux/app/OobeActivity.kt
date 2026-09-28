@@ -40,6 +40,8 @@ class OobeActivity : ComponentActivity() {
     private var permissionStatus by mutableStateOf("")
     private var isPermissionGranted by mutableStateOf(false)
     private var isBootstrapping by mutableStateOf(false)
+    private var isDownloading by mutableStateOf(false)
+    private var isInstalling by mutableStateOf(false)
     private var bootstrapComplete by mutableStateOf(false)
     private var bootstrapError by mutableStateOf<String?>(null)
     
@@ -107,6 +109,8 @@ class OobeActivity : ComponentActivity() {
                             permissionStatus = permissionStatus,
                             isPermissionGranted = isPermissionGranted,
                             isBootstrapping = isBootstrapping,
+                            isDownloading = isDownloading,
+                            isInstalling = isInstalling,
                             bootstrapComplete = bootstrapComplete,
                             bootstrapError = bootstrapError,
                             releaseNotes = releaseNotes,
@@ -179,18 +183,32 @@ class OobeActivity : ComponentActivity() {
 
     private fun performBootstrap() {
         isBootstrapping = true
+        isDownloading = true
+        isInstalling = false
         bootstrapError = null
-        
-        TermuxInstaller.setupBootstrapIfNeeded(this) {
-            // Bootstrap zip 解压成功后，立即建立 storage symlinks
-            try {
-                TermuxInstaller.setupStorageSymlinks(this)
-            } catch (_: Throwable) {}
-            runOnUiThread {
+
+        TermuxInstaller.setupBootstrapIfNeeded(
+            this,
+            { // whenDone：已在 UI 线程
+                // Bootstrap zip 解压成功后，立即建立 storage symlinks
+                try {
+                    TermuxInstaller.setupStorageSymlinks(this)
+                } catch (_: Throwable) {}
                 isBootstrapping = false
+                isDownloading = false
+                isInstalling = false
                 bootstrapComplete = true
-            }
-        }
+            },
+            { // onDownloadStart
+                isDownloading = true
+                isInstalling = false
+            },
+            { // onInstallStart
+                isDownloading = false
+                isInstalling = true
+            },
+            false // showProgressDialog：OOBE 用自有 Compose 进度与两阶段文案，不叠系统弹窗
+        )
     }
 
     private fun retryBootstrap() {

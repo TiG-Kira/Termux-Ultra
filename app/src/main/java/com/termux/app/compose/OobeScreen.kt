@@ -116,6 +116,8 @@ fun OobeScreen(
     permissionStatus: String,
     isPermissionGranted: Boolean,
     isBootstrapping: Boolean,
+    isDownloading: Boolean,
+    isInstalling: Boolean,
     bootstrapComplete: Boolean,
     bootstrapError: String?,
     releaseNotes: String?,
@@ -399,6 +401,8 @@ fun OobeScreen(
                             )
                             3 -> OobeInstallPage(
                                 isBootstrapping = isBootstrapping,
+                                isDownloading = isDownloading,
+                                isInstalling = isInstalling,
                                 bootstrapComplete = bootstrapComplete,
                                 bootstrapError = bootstrapError,
                                 onStartBootstrap = onStartBootstrap,
@@ -1215,6 +1219,8 @@ private fun PermissionItem(name: String, desc: String) {
 @Composable
 private fun OobeInstallPage(
     isBootstrapping: Boolean,
+    isDownloading: Boolean,
+    isInstalling: Boolean,
     bootstrapComplete: Boolean,
     bootstrapError: String?,
     onStartBootstrap: () -> Unit,
@@ -1294,6 +1300,40 @@ private fun OobeInstallPage(
             contentAlignment = Alignment.Center
         ) {
             when {
+                isDownloading -> {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        CircularProgressIndicator(modifier = Modifier.size(56.dp))
+                        Spacer(modifier = Modifier.height(24.dp))
+                        Text(
+                            text = "正在下载终端运行环境...",
+                            style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.Medium, color = MiuixTheme.colorScheme.onSurface)
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "首次启动需下载基础运行环境（约 30MB），请保持网络畅通",
+                            style = TextStyle(fontSize = 13.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+                        )
+                    }
+                }
+                isInstalling -> {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        CircularProgressIndicator(modifier = Modifier.size(56.dp))
+                        Spacer(modifier = Modifier.height(24.dp))
+                        Text(
+                            text = "正在安装终端运行环境...",
+                            style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.Medium, color = MiuixTheme.colorScheme.onSurface)
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "正在解压并配置文件，请稍候",
+                            style = TextStyle(fontSize = 13.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+                        )
+                    }
+                }
                 isBootstrapping -> {
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,

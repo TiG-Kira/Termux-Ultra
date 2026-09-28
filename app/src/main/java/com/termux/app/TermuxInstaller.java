@@ -10,6 +10,7 @@ import android.util.Pair;
 import android.view.WindowManager;
 
 import com.termux.R;
+import com.termux.app.utils.BootstrapDownloader;
 import com.termux.app.utils.CrashUtils;
 import com.termux.shared.file.FileUtils;
 import com.termux.shared.termux.file.TermuxFileUtils;
@@ -41,6 +42,12 @@ final class TermuxInstaller {
     private static final String LOG_TAG = "TermuxInstaller";
 
     static void setupBootstrapIfNeeded(final Activity activity, final Runnable whenDone) {
+        setupBootstrapIfNeeded(activity, whenDone, null, null, true);
+    }
+
+    static void setupBootstrapIfNeeded(final Activity activity, final Runnable whenDone,
+                                       final Runnable onDownloadStart, final Runnable onInstallStart,
+                                       final boolean showProgressDialog) {
         String bootstrapErrorMessage;
         Error filesDirectoryAccessibleError;
 
@@ -80,7 +87,9 @@ final class TermuxInstaller {
             Logger.logInfo(LOG_TAG, "The termux prefix directory \"" + TERMUX_PREFIX_DIR_PATH + "\" does not exist but another file exists at its destination.");
         }
 
-        final ProgressDialog progress = ProgressDialog.show(activity, null, activity.getString(R.string.bootstrap_installer_body), true, false);
+        final ProgressDialog progress = showProgressDialog
+            ? ProgressDialog.show(activity, null, activity.getString(R.string.bootstrap_installer_body), true, false)
+            : null;
         new Thread() {
             @Override
             public void run() {
@@ -118,7 +127,19 @@ final class TermuxInstaller {
                     final byte[] buffer = new byte[8096];
                     final List<Pair<String, String>> symlinks = new ArrayList<>(50);
 
-                    final byte[] zipBytes = loadZipBytes();
+                    final String bootstrapArch = BootstrapDownloader.getArchForAbi();
+                    if (onDownloadStart != null) {
+                        activity.runOnUiThread(onDownloadStart);
+                    }
+
+                    Logger.logInfo(LOG_TAG, "Downloading bootstrap zip for arch: " + bootstrapArch);
+                    final byte[] zipBytes = BootstrapDownloader.getBootstrapZip(bootstrapArch);
+
+                    if (onInstallStart != null) {
+                        activity.runOnUiThread(onInstallStart);
+                    }
+
+                    Logger.logInfo(LOG_TAG, "Bootstrap zip downloaded (" + zipBytes.length + " bytes), extracting...");
                     try (ZipInputStream zipInput = new ZipInputStream(new ByteArrayInputStream(zipBytes))) {
                         ZipEntry zipEntry;
                         while ((zipEntry = zipInput.getNextEntry()) != null) {
@@ -193,12 +214,9 @@ final class TermuxInstaller {
                     showBootstrapErrorDialog(activity, whenDone, Logger.getStackTracesMarkdownString(null, Logger.getStackTracesStringArray(e)));
 
                 } finally {
-                    activity.runOnUiThread(() -> {
-                        try {
-                            progress.dismiss();
-                        } catch (RuntimeException e) {
-                        }
-                    });
+                    if (progress != null) {
+                        activity.runOnUiThread(progress::dismiss);
+                    }
                 }
             }
         }.start();
@@ -296,12 +314,5 @@ final class TermuxInstaller {
     private static Error ensureDirectoryExists(File directory) {
         return FileUtils.createDirectoryFile(directory.getAbsolutePath());
     }
-
-    public static byte[] loadZipBytes() {
-        System.loadLibrary("termux-bootstrap");
-        return getZip();
-    }
-
-    public static native byte[] getZip();
 
 }
