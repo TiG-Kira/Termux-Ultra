@@ -96,10 +96,45 @@ STRIPPED="$WORK/stripped.apk"
 python3 "$SCRIPT_DIR/strip_so.py" "$INPUT" "$STRIPPED" "$STRIP_TOOL"
 echo ">> strip 后: $(stat -c%s "$STRIPPED") bytes（原 $(stat -c%s "$INPUT") bytes）"
 
-# 6. STEP2: AndResGuard（7zip 压缩 + 重签名 + zipalign）
+# 6. STEP1.5: DEX debug_info 瘦身（删除局部变量/栈帧标记，只保留行号表）
+#    先从 ZIP 中解压所有 classes*.dex → 逐个瘦身 → 写回 APK（保持 ZIP_STORED）
+STRIPPED_DEX="$WORK/stripped_dex.apk"
+python3 - <<PYEOF
+import os, sys, zipfile
+sys.path.insert(0, "$SCRIPT_DIR")
+from dex_strip import main as dex_strip_main  # noqa
+
+src = "$STRIPPED"
+dst = "$STRIPPED_DEX"
+
+with zipfile.ZipFile(src, 'r') as zin, zipfile.ZipFile(dst, 'w') as zout:
+    for info in zin.infolist():
+        data = zin.read(info.filename)
+        if info.filename.startswith('classes') and info.filename.endswith('.dex'):
+            # 瘦身 DEX
+            tmp_in  = "$WORK/_dex_in.dex"
+            tmp_out = "$WORK/_dex_out.dex"
+            open(tmp_in, 'wb').write(data)
+            sys.argv = ["dex_strip.py", tmp_in, tmp_out]
+            try:
+                dex_strip_main()
+                data = open(tmp_out, 'rb').read()
+                print(f"  [DEX] {info.filename}: {os.path.getsize(tmp_in):,} → {len(data):,} bytes")
+            except SystemExit:
+                print(f"  [DEX] {info.filename}: dex_strip 失败，原样保留", file=sys.stderr)
+            finally:
+                for f in (tmp_in, tmp_out):
+                    if os.path.exists(f): os.remove(f)
+        # 写回（保持原始 compression 方式；DEX 已经是 STORED）
+        zout.writestr(info, data)
+
+print(f">> DEX 瘦身完成 → $(stat -c%s "$dst") bytes")
+PYEOF
+
+# 7. STEP2: AndResGuard（7zip 压缩 + 重签名 + zipalign）
 AR_OUT="$WORK/ar"
 mkdir -p "$AR_OUT"
-java -jar "$JAR" "$STRIPPED" \
+java -jar "$JAR" "$STRIPPED_DEX" \
   -config "$CONFIG" \
   -out "$AR_OUT" \
   -signature "$KEYSTORE" "$STOREPASS" "$KEYPASS" "$ALIAS" \
