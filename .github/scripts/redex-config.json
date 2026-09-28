@@ -1,0 +1,20 @@
+{
+  "passes": [
+    "RebindRefsPass",
+    "BridgePass",
+    "InterDexPass",
+    "DedupBlocksPass",
+    "DedupMethodsPass",
+    "ShortenSrcStringsPass",
+    "StripDebugInfoPass"
+  ],
+  "interdex_options": {
+    "static_prune": false,
+    "emit_scroll_set": false,
+    "normal_primary_dex": false
+  },
+  "strip_debug_info_options": {
+    "strip_line_numbers": true,
+    "strip_local_variable_debug_info": true
+  }
+}

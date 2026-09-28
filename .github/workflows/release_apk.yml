@@ -25,6 +25,7 @@ permissions:
   contents: write
 
 env:
+  ENABLE_REDEX: "true"
   JKS_BASE64: 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
 
 jobs:
@@ -107,17 +108,27 @@ jobs:
         run: |
           ./gradlew :app:assembleRelease -Ptermux.abi=${{ matrix.abi }} --console=plain
 
-      # ── APK 体积优化（安全后处理：重打包 + zipalign + 重签）──
+      # ── ReDex 安装（可选，best-effort）──
+      # ENABLE_REDEX=false 时整段跳过；构建/运行失败仅告警并跳过，不阻塞发布。
+      - name: 安装/构建 ReDex（best-effort）
+        if: env.ENABLE_REDEX == 'true'
+        continue-on-error: true
+        run: bash .github/scripts/install_redex.sh
+
+      # ── APK 体积优化（可选 ReDex + 安全后处理：重打包 + zipalign + 重签）──
       # 安全约束：classes.dex / resources.arsc / *.so / AndroidManifest.xml 必须 STORED（未压缩），
       #          否则 ART 无法加载 DEX（闪退）/ targetSdk>=30 拒绝安装 / native lib 无法加载。
       #          图标 PNG 绝不可 7zip 压缩（PackageManager 无法 mmap → 图标丢失）。
       # 因此本步骤不含 AndResGuard 7zip（v2/v3 签名下近乎失效，且压坏 arsc/图标）。
-      # 安全收益有限（dex/arsc/.so 本就不能压）；真正大幅减重见 bootstrap 在线下载（独立规划项）。
+      # ReDex（可选）：仅做保守 DEX 优化（无混淆 / 无移除 / 无内联），REDEX_BIN 为空时自动跳过；
+      #          即便开启，dex/arsc/.so 本就不能压，安全收益有限；真正大幅减重见 bootstrap 在线下载。
       # 失败容忍：本步骤 continue-on-error，失败时原（Gradle 已签名）APK 原样上传到 Release。
-      - name: 优化 APK（安全重打包 + zipalign + 重签；失败则保留原包）
+      - name: 优化 APK（ReDex + 安全重打包 + zipalign + 重签；失败则保留原包）
         continue-on-error: true
         env:
           KEYSTORE: app/ki-terminal-release.jks
+          REDEX_BIN: ${{ env.REDEX_BIN }}
+          REDEX_CONFIG: .github/scripts/redex-config.json
         run: |
           # 安装优化所需工具（仅 strip 来自 binutils；zipalign/apksigner 由 Android build-tools 提供）
           if ! command -v strip >/dev/null 2>&1; then
@@ -174,17 +185,27 @@ jobs:
           # -Ptermux.abi=universal → 关闭 ABI 拆分，四个架构一起打进一个包
           ./gradlew :app:assembleRelease -Ptermux.abi=universal --console=plain
 
-      # ── APK 体积优化（安全后处理：重打包 + zipalign + 重签）──
+      # ── ReDex 安装（可选，best-effort）──
+      # ENABLE_REDEX=false 时整段跳过；构建/运行失败仅告警并跳过，不阻塞发布。
+      - name: 安装/构建 ReDex（best-effort）
+        if: env.ENABLE_REDEX == 'true'
+        continue-on-error: true
+        run: bash .github/scripts/install_redex.sh
+
+      # ── APK 体积优化（可选 ReDex + 安全后处理：重打包 + zipalign + 重签）──
       # 安全约束：classes.dex / resources.arsc / *.so / AndroidManifest.xml 必须 STORED（未压缩），
       #          否则 ART 无法加载 DEX（闪退）/ targetSdk>=30 拒绝安装 / native lib 无法加载。
       #          图标 PNG 绝不可 7zip 压缩（PackageManager 无法 mmap → 图标丢失）。
       # 因此本步骤不含 AndResGuard 7zip（v2/v3 签名下近乎失效，且压坏 arsc/图标）。
-      # 安全收益有限（dex/arsc/.so 本就不能压）；真正大幅减重见 bootstrap 在线下载（独立规划项）。
+      # ReDex（可选）：仅做保守 DEX 优化（无混淆 / 无移除 / 无内联），REDEX_BIN 为空时自动跳过；
+      #          即便开启，dex/arsc/.so 本就不能压，安全收益有限；真正大幅减重见 bootstrap 在线下载。
       # 失败容忍：本步骤 continue-on-error，失败时原（Gradle 已签名）APK 原样上传到 Release。
-      - name: 优化 APK（安全重打包 + zipalign + 重签；失败则保留原包）
+      - name: 优化 APK（ReDex + 安全重打包 + zipalign + 重签；失败则保留原包）
         continue-on-error: true
         env:
           KEYSTORE: app/ki-terminal-release.jks
+          REDEX_BIN: ${{ env.REDEX_BIN }}
+          REDEX_CONFIG: .github/scripts/redex-config.json
         run: |
           # 安装优化所需工具（仅 strip 来自 binutils；zipalign/apksigner 由 Android build-tools 提供）
           if ! command -v strip >/dev/null 2>&1; then

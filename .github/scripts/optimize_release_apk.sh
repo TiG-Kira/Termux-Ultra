@@ -7,7 +7,8 @@
 #     - resources.arsc 被压缩 → targetSdk>=30 安装失败（Failed parse ... stored uncompressed）
 #     - .so 被压缩 → native lib 无法加载 → 闪退
 #     - launcher 图标（res/mipmap-*/ic_launcher*.png）被 7zip(LZMA) 压缩 → PackageManager 无法 mmap → 图标丢失
-#   因此本脚本只做「安全」操作：
+#   因此本脚本只做「安全」操作（ReDex 为可选 STEP0，best-effort）：
+#     STEP0  (可选) ReDex：对 DEX 做保守优化（无混淆 / 无移除 / 无内联），REDEX_BIN 为空则跳过
 #     STEP1  strip_so.py：重打包（关键条目保持 STORED，其余 DEFLATE）+ 对 .so 做 strip --strip-debug
 #     STEP2  zipalign -p 4096（页对齐未压缩条目，满足 arsc 4 字节 / .so 页对齐要求）
 #     STEP3  apksigner 重签（v1+v2+v3，保证可安装、可增量更新）
@@ -72,12 +73,47 @@ fi
 echo ">> zipalign: $ZIPALIGN"
 echo ">> apksigner: $APKSIGNER"
 
+# 2b. 定位 aapt / aapt2（ReDex 解析资源需要），加入 PATH 供 ReDex 调用
+AAPT=""
+if [ -n "$SDK" ]; then
+  AAPT="$(ls -d "$SDK"/build-tools/*/aapt 2>/dev/null | sort -V | tail -1 || true)"
+  [ -z "$AAPT" ] && AAPT="$(ls -d "$SDK"/build-tools/*/aapt2 2>/dev/null | sort -V | tail -1 || true)"
+fi
+[ -z "$AAPT" ] && command -v aapt >/dev/null 2>&1 && AAPT="$(command -v aapt)"
+if [ -n "$AAPT" ]; then
+  export PATH="$(dirname "$AAPT"):$PATH"
+  echo ">> aapt: $AAPT"
+else
+  echo ">> 未找到 aapt（ReDex 可能因资源解析失败，届时由 best-effort 跳过）"
+fi
+
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
+# 可选阶段：ReDex 优化 DEX（best-effort，REDEX_BIN 为空 / 不可用 / 产出异常则回退）
+CURRENT="$INPUT"
+REDEX_BIN="${REDEX_BIN:-}"
+REDEX_CONFIG="${REDEX_CONFIG:-}"
+if [ -n "$REDEX_BIN" ] && [ -x "$REDEX_BIN" ] && [ -n "$REDEX_CONFIG" ] && [ -f "$REDEX_CONFIG" ]; then
+  REDEXED="$WORK/redexed.apk"
+  echo ">> ReDex 优化 DEX: $REDEX_BIN -c $REDEX_CONFIG"
+  if "$REDEX_BIN" -c "$REDEX_CONFIG" -o "$REDEXED" "$CURRENT" 2>&1 | tee "$WORK/redex.log"; then
+    if [ -s "$REDEXED" ]; then
+      CURRENT="$REDEXED"
+      echo ">> ReDex 完成: $(stat -c%s "$REDEXED") bytes"
+    else
+      echo "::warning::ReDex 产出为空，回退到未优化 DEX"
+    fi
+  else
+    echo "::warning::ReDex 执行失败，回退到未优化 DEX"
+  fi
+else
+  echo ">> 未提供 REDEX_BIN / REDEX_CONFIG，跳过 ReDex"
+fi
+
 # STEP1: 安全重打包（关键条目 STORED，其余 DEFLATE；丢弃旧 META-INF 签名）
 REPACKED="$WORK/repacked.apk"
-python3 "$SCRIPT_DIR/strip_so.py" "$INPUT" "$REPACKED" "${STRIP_TOOL:-}"
+python3 "$SCRIPT_DIR/strip_so.py" "$CURRENT" "$REPACKED" "${STRIP_TOOL:-}"
 echo ">> 重打包后: $(stat -c%s "$REPACKED") bytes（原 $(stat -c%s "$INPUT") bytes）"
 
 # STEP2: 页对齐（4096），使未压缩条目满足 arsc 4 字节 / .so 页对齐要求
