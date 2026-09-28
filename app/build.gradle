@@ -97,7 +97,7 @@ android {
         externalNativeBuild {
             cmake {
                 arguments "-DANDROID_STL=none"
-                targets "native-vnc", "vncclient", "turbojpeg-static", "wolfssl", "termux-bootstrap", "termux"
+                targets "native-vnc", "vncclient", "turbojpeg-static", "wolfssl", "termux"
             }
         }
 
@@ -178,14 +178,6 @@ android {
     }
 
     packaging {
-        // ⚠️ 不要改成 false / 不要设 extractNativeLibs="false"
-        // Termux 的 bootstrap 以 libtermux-bootstrap.so 形式打包，运行时由 Java 侧
-        // 把它当普通 zip 文件从 nativeLibraryDir 读出并解压成 prefix 环境。
-        // 因此 so 必须处于「已解压到 nativeLibraryDir」的状态，即
-        // useLegacyPackaging=true + android:extractNativeLibs="true" 是硬性前提。
-        // 改为 false 会导致 bootstrap 安装失败、Termux 无法使用。
-        jniLibs.useLegacyPackaging = true
-
         resources.excludes += "META-INF/LICENSE.md"
         resources.excludes += "META-INF/LICENSE-notice.md"
         resources.excludes += "META-INF/DEPENDENCIES"

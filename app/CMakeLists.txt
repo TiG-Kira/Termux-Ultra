@@ -112,21 +112,10 @@ find_library(LIB_GLES GLESv2)
 target_link_libraries(native-vnc ${LIB_GLES})
 
 
-###############################################################################
-# Termux Bootstrap
-###############################################################################
+# Termux Bootstrap 原生库已移除：bootstrap 改由 BootstrapDownloader 首启动在线下载并校验
+# （见 app/src/main/java/com/termux/app/TermuxInstaller.java），APK 不再烘焙 libtermux-bootstrap.so。
+# TERMUX_CPP_DIR 仍保留，供下方 termux(PTY) 等原生目标复用。
 set(TERMUX_CPP_DIR ${PROJECT_SOURCE_DIR}/src/main/cpp)
-
-add_library(termux-bootstrap SHARED
-    ${TERMUX_CPP_DIR}/termux-bootstrap.c
-    ${TERMUX_CPP_DIR}/termux-bootstrap-zip.S
-)
-
-target_include_directories(termux-bootstrap PRIVATE ${TERMUX_CPP_DIR})
-set_source_files_properties(${TERMUX_CPP_DIR}/termux-bootstrap-zip.S PROPERTIES COMPILE_FLAGS "-I\"${TERMUX_CPP_DIR}\"")
-
-find_library(LIB_LOG log)
-target_link_libraries(termux-bootstrap ${LIB_LOG})
 
 
 ###############################################################################
