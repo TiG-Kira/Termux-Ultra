@@ -226,6 +226,8 @@
 
     <string name="appearance_title">Appearance</string>
     <string name="appearance_settings_description">Visual appearance settings</string>
+    <string name="pref_material_you_title">Use Material You colors</string>
+    <string name="pref_material_you_summary">Tint the interface from your wallpaper so it matches the system theme (requires Android 12 or later)</string>
     <string name="style_title">Style</string>
     <string name="style_settings_description">Terminal styling</string>
 

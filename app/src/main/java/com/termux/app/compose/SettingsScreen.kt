@@ -225,6 +225,10 @@ val composeSoftKeyboardOnlyIfNoHardware by com.termux.app.terminal.shell.Compose
 val composeKeyLogging by com.termux.app.terminal.shell.ComposeTerminalSettings.keyLogging.collectAsState()
 val composeUseCustomKeyboardLayout by com.termux.app.terminal.shell.ComposeTerminalSettings.useCustomKeyboardLayout.collectAsState()
 
+    // Material You 动态取色：与上面终端设置同一套路（偏好即 StateFlow）
+    AppThemePrefs.init(context)
+    val materialYouEnabled by AppThemePrefs.materialYouEnabled.collectAsState()
+
     // Official standalone APK detection. Keys match the add-on app package names; when a standalone
     // APK is installed, the integrated toggle is forced OFF and disabled, with the row shows
     // "Replaced by the official standalone plugin" instead of the normal help summary.
@@ -611,6 +615,15 @@ val composeUseCustomKeyboardLayout by com.termux.app.terminal.shell.ComposeTermi
 
     val searchableItems = listOf(
         // ===== Appearance =====
+        SearchableSetting(sec_appearance, context.getString(R.string.pref_material_you_title), context.getString(R.string.pref_material_you_summary),
+            keywords = listOf("material you", "monet", "动态取色", "配色", "主题", "theme", "dynamic color"),
+            render = {
+                MaterialYouSwitch(
+                    context = context,
+                    checked = materialYouEnabled,
+                    onCheckedChange = { AppThemePrefs.setMaterialYouEnabled(context, it) }
+                )
+            }),
         SearchableSetting(sec_appearance, context.getString(R.string.language), context.getString(R.string.language_description),
             keywords = listOf("语言", "language", "中文", "英文", "locale"),
             render = {
@@ -1042,6 +1055,11 @@ val composeUseCustomKeyboardLayout by com.termux.app.terminal.shell.ComposeTermi
                         .clip(RoundedCornerShape(16.dp))
                 ) {
                     Column {
+                        MaterialYouSwitch(
+                            context = context,
+                            checked = materialYouEnabled,
+                            onCheckedChange = { AppThemePrefs.setMaterialYouEnabled(context, it) }
+                        )
                                 OverlayDropdownPreference(
                             title = context.getString(R.string.language),
                             summary = context.getString(R.string.language_description),
@@ -3120,6 +3138,25 @@ private fun SettingIcon(painter: Painter, contentDescription: String? = null) {
             tint = MiuixTheme.colorScheme.onSurface
         )
     }
+}
+
+/** Material You 动态取色开关；外观卡片与搜索结果共用同一份渲染。 */
+@Composable
+private fun MaterialYouSwitch(
+    context: Context,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    SwitchPreference(
+        title = context.getString(R.string.pref_material_you_title),
+        summary = context.getString(R.string.pref_material_you_summary),
+        checked = checked,
+        enabled = ApiCompat.isFeatureUsable(context, ApiCompat.Feature.MIUIX_DYNAMIC_COLOR),
+        onCheckedChange = onCheckedChange,
+        startAction = {
+            SettingIcon(Icons.Rounded.Palette, contentDescription = context.getString(R.string.pref_material_you_title))
+        }
+    )
 }
 
 @Composable
