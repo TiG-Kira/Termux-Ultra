@@ -139,7 +139,9 @@ UI 全面采用 Jetpack Compose，设计语言为 **Miuix（HyperOS 风格）**�
 | VNC | AVNC、libvncserver、libjpeg-turbo、wolfSSL | 手势缩放、多输入模式、特殊按键、色彩格式配置、自动扫描本地端口 |
 | SSH | connectbot sshlib `2.2.36` | 多连接配置管理、自动安装 `ssh`/`sshpass`、本地端口转发、主机密钥验证、多 IP 重试 |
 
-原生构建目标（CMake）：`native-vnc`、`vncclient`、`turbojpeg-static`、`wolfssl`、`termux-bootstrap`。
+原生构建目标（CMake）：`native-vnc`、`vncclient`、`turbojpeg-static`、`wolfssl`、`termux`。
+
+bootstrap 运行环境不再烘焙进 APK：首次启动时按设备架构在线下载对应 zip（多镜像回退 + SHA-256 校验）后解压，单架构包体积因此减少约 28MB。
 
 ## 9. LiveUpdate 实时通知
 

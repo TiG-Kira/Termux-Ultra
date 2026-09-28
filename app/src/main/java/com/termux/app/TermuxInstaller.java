@@ -41,13 +41,24 @@ final class TermuxInstaller {
 
     private static final String LOG_TAG = "TermuxInstaller";
 
+    /**
+     * bootstrap 过程回调。传非空实现时由调用方自己展示进度与错误（OOBE 用 Compose 页面），
+     * 不再弹系统 ProgressDialog / AlertDialog；传 null 沿用系统弹窗的旧行为。
+     */
+    public interface BootstrapCallback {
+        void onDownloadStart();
+
+        void onInstallStart();
+
+        void onError(String message);
+    }
+
     static void setupBootstrapIfNeeded(final Activity activity, final Runnable whenDone) {
-        setupBootstrapIfNeeded(activity, whenDone, null, null, true);
+        setupBootstrapIfNeeded(activity, whenDone, null);
     }
 
     static void setupBootstrapIfNeeded(final Activity activity, final Runnable whenDone,
-                                       final Runnable onDownloadStart, final Runnable onInstallStart,
-                                       final boolean showProgressDialog) {
+                                       final BootstrapCallback callback) {
         String bootstrapErrorMessage;
         Error filesDirectoryAccessibleError;
 
@@ -87,7 +98,7 @@ final class TermuxInstaller {
             Logger.logInfo(LOG_TAG, "The termux prefix directory \"" + TERMUX_PREFIX_DIR_PATH + "\" does not exist but another file exists at its destination.");
         }
 
-        final ProgressDialog progress = showProgressDialog
+        final ProgressDialog progress = callback == null
             ? ProgressDialog.show(activity, null, activity.getString(R.string.bootstrap_installer_body), true, false)
             : null;
         new Thread() {
@@ -100,25 +111,25 @@ final class TermuxInstaller {
 
                     error = FileUtils.deleteFile("termux prefix staging directory", TERMUX_STAGING_PREFIX_DIR_PATH, true);
                     if (error != null) {
-                        showBootstrapErrorDialog(activity, whenDone, Error.getErrorMarkdownString(error));
+                        reportBootstrapError(activity, whenDone, callback, Error.getErrorMarkdownString(error));
                         return;
                     }
 
                     error = FileUtils.deleteFile("termux prefix directory", TERMUX_PREFIX_DIR_PATH, true);
                     if (error != null) {
-                        showBootstrapErrorDialog(activity, whenDone, Error.getErrorMarkdownString(error));
+                        reportBootstrapError(activity, whenDone, callback, Error.getErrorMarkdownString(error));
                         return;
                     }
 
                     error = TermuxFileUtils.isTermuxPrefixStagingDirectoryAccessible(true, true);
                     if (error != null) {
-                        showBootstrapErrorDialog(activity, whenDone, Error.getErrorMarkdownString(error));
+                        reportBootstrapError(activity, whenDone, callback, Error.getErrorMarkdownString(error));
                         return;
                     }
 
                     error = TermuxFileUtils.isTermuxPrefixDirectoryAccessible(true, true);
                     if (error != null) {
-                        showBootstrapErrorDialog(activity, whenDone, Error.getErrorMarkdownString(error));
+                        reportBootstrapError(activity, whenDone, callback, Error.getErrorMarkdownString(error));
                         return;
                     }
 
@@ -126,15 +137,15 @@ final class TermuxInstaller {
                     final List<Pair<String, String>> symlinks = new ArrayList<>(50);
 
                     final String bootstrapArch = BootstrapDownloader.getArchForAbi();
-                    if (onDownloadStart != null) {
-                        activity.runOnUiThread(onDownloadStart);
+                    if (callback != null) {
+                        activity.runOnUiThread(callback::onDownloadStart);
                     }
 
                     Logger.logInfo(LOG_TAG, "Downloading bootstrap zip for arch: " + bootstrapArch);
                     final byte[] zipBytes = BootstrapDownloader.getBootstrapZip(bootstrapArch);
 
-                    if (onInstallStart != null) {
-                        activity.runOnUiThread(onInstallStart);
+                    if (callback != null) {
+                        activity.runOnUiThread(callback::onInstallStart);
                     }
 
                     Logger.logInfo(LOG_TAG, "Bootstrap zip downloaded (" + zipBytes.length + " bytes), extracting to prefix staging directory \"" + TERMUX_STAGING_PREFIX_DIR_PATH + "\".");
@@ -154,7 +165,7 @@ final class TermuxInstaller {
 
                                     error = ensureDirectoryExists(new File(newPath).getParentFile());
                                     if (error != null) {
-                                        showBootstrapErrorDialog(activity, whenDone, Error.getErrorMarkdownString(error));
+                                        reportBootstrapError(activity, whenDone, callback, Error.getErrorMarkdownString(error));
                                         return;
                                     }
                                 }
@@ -165,7 +176,7 @@ final class TermuxInstaller {
 
                                 error = ensureDirectoryExists(isDirectory ? targetFile : targetFile.getParentFile());
                                 if (error != null) {
-                                    showBootstrapErrorDialog(activity, whenDone, Error.getErrorMarkdownString(error));
+                                    reportBootstrapError(activity, whenDone, callback, Error.getErrorMarkdownString(error));
                                     return;
                                 }
 
@@ -209,22 +220,37 @@ final class TermuxInstaller {
                     activity.runOnUiThread(whenDone);
 
                 } catch (final Exception e) {
-                    showBootstrapErrorDialog(activity, whenDone, Logger.getStackTracesMarkdownString(null, Logger.getStackTracesStringArray(e)));
+                    reportBootstrapError(activity, whenDone, callback, Logger.getStackTracesMarkdownString(null, Logger.getStackTracesStringArray(e)));
 
                 } finally {
                     if (progress != null) {
-                        activity.runOnUiThread(progress::dismiss);
+                        activity.runOnUiThread(() -> {
+                            // 下载+安装耗时可达数分钟，Activity 可能已被销毁，此时 dismiss 会抛。
+                            try {
+                                progress.dismiss();
+                            } catch (RuntimeException ignored) {
+                            }
+                        });
                     }
                 }
             }
         }.start();
     }
 
-    public static void showBootstrapErrorDialog(Activity activity, Runnable whenDone, String message) {
+    /** 失败统一入口：有回调就交给调用方展示（OOBE 的 Compose 错误页），否则弹系统对话框。 */
+    private static void reportBootstrapError(Activity activity, Runnable whenDone,
+                                             BootstrapCallback callback, String message) {
         Logger.logErrorExtended(LOG_TAG, "Bootstrap Error:\n" + message);
-
         sendBootstrapCrashReportNotification(activity, message);
 
+        if (callback != null) {
+            activity.runOnUiThread(() -> callback.onError(message));
+        } else {
+            showBootstrapErrorDialog(activity, whenDone, message);
+        }
+    }
+
+    private static void showBootstrapErrorDialog(Activity activity, Runnable whenDone, String message) {
         activity.runOnUiThread(() -> {
             try {
                 new AlertDialog.Builder(activity).setTitle(R.string.bootstrap_error_title).setMessage(R.string.bootstrap_error_body)

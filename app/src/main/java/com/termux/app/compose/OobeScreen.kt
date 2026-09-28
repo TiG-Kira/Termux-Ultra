@@ -74,6 +74,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.res.stringResource
@@ -1382,7 +1383,9 @@ private fun OobeInstallPage(
                         Spacer(modifier = Modifier.height(16.dp))
                         Card(modifier = Modifier.fillMaxWidth()) {
                             Column(modifier = Modifier.padding(16.dp)) {
-                                Text(text = bootstrapError, style = TextStyle(fontSize = 13.sp, color = MiuixTheme.colorScheme.onSurface))
+                                // bootstrapError 是完整堆栈 markdown，截断以免撑爆页面；关键信息在前几行。
+                                Text(text = bootstrapError, style = TextStyle(fontSize = 13.sp, color = MiuixTheme.colorScheme.onSurface),
+                                    maxLines = 6, overflow = TextOverflow.Ellipsis)
                                 Spacer(modifier = Modifier.height(8.dp))
                                 Text(text = "可能原因：网络连接不稳定 / 存储空间不足 / 设备不支持", style = TextStyle(fontSize = 12.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary))
                             }

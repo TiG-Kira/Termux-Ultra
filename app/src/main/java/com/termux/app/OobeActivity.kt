@@ -187,6 +187,26 @@ class OobeActivity : ComponentActivity() {
         isInstalling = false
         bootstrapError = null
 
+        // OOBE 自带 Compose 进度与两阶段文案，用回调接住阶段与失败，避免叠系统弹窗。
+        val callback = object : TermuxInstaller.BootstrapCallback {
+            override fun onDownloadStart() {
+                isDownloading = true
+                isInstalling = false
+            }
+
+            override fun onInstallStart() {
+                isDownloading = false
+                isInstalling = true
+            }
+
+            override fun onError(message: String) {
+                isBootstrapping = false
+                isDownloading = false
+                isInstalling = false
+                bootstrapError = message
+            }
+        }
+
         TermuxInstaller.setupBootstrapIfNeeded(
             this,
             { // whenDone：已在 UI 线程
@@ -199,15 +219,7 @@ class OobeActivity : ComponentActivity() {
                 isInstalling = false
                 bootstrapComplete = true
             },
-            { // onDownloadStart
-                isDownloading = true
-                isInstalling = false
-            },
-            { // onInstallStart
-                isDownloading = false
-                isInstalling = true
-            },
-            false // showProgressDialog：OOBE 用自有 Compose 进度与两阶段文案，不叠系统弹窗
+            callback
         )
     }
 

@@ -277,7 +277,8 @@ Termux-Ultra/
 ├── app/                        # 主应用模块
 │   ├── src/main/
 │   │   ├── assets/             # 容器与部署脚本
-│   │   ├── cpp/                # CMake 原生构建（termux-bootstrap）
+│   │   ├── cpp/                # CMake 原生构建（PTY / native-crash-handler）
+│   │   ├── bootstrap/          # 各架构 bootstrap zip，首启动时在线下载
 │   │   ├── cpp_avnc/           # AVNC 原生 VNC 客户端
 │   │   ├── java/com/termux/    # 应用 Kotlin/Java 源码
 │   │   │   ├── app/            # 核心逻辑（TermuxActivity、TermuxService 等）
@@ -343,7 +344,9 @@ Termux-Ultra/
 - Debug：`app/build/outputs/apk/debug/termux-ultra_debug_universal.apk`
 - Release：`app/build/outputs/apk/release/` 下各架构 APK（`arm64-v8a`、`armeabi-v7a`、`x86`、`x86_64`）
 
-原生构建目标（CMake）：`native-vnc`、`vncclient`、`turbojpeg-static`、`wolfssl`、`termux-bootstrap`
+原生构建目标（CMake）：`native-vnc`、`vncclient`、`turbojpeg-static`、`wolfssl`、`termux`
+
+> bootstrap 运行环境不再烘焙进 APK，首次启动时由 `BootstrapDownloader` 按设备架构在线下载（多镜像回退 + SHA-256 校验）。
 
 > 构建时不要使用 `-q` 参数，以便观察构建进度。
 
