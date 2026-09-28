@@ -139,7 +139,9 @@ The former enhanced protection module was rewritten as **VorteX Guard Engine**: 
 | VNC | AVNC, libvncserver, libjpeg-turbo, wolfSSL | Pinch zoom, multiple input modes, special keys, color format config, automatic local port scan |
 | SSH | connectbot sshlib `2.2.36` | Multi-profile management, auto-install of `ssh`/`sshpass`, local port forwarding, host key verification, multi-IP retry |
 
-Native CMake targets: `native-vnc`, `vncclient`, `turbojpeg-static`, `wolfssl`, `termux-bootstrap`.
+Native CMake targets: `native-vnc`, `vncclient`, `turbojpeg-static`, `wolfssl`, `termux`.
+
+The bootstrap environment is no longer baked into the APK: on first launch the matching zip is downloaded per device ABI (multi-mirror fallback + SHA-256 verification) and extracted, cutting about 28 MB from each per-ABI package.
 
 ## 9. LiveUpdate notifications
 
