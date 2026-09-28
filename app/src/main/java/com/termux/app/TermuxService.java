@@ -221,15 +221,8 @@ public final class TermuxService extends Service implements TermuxTaskCompat.Ter
         // 会话写转发状态恒为启用
         com.termux.terminal.TerminalSession.setComposeForwardingEnabled(true);
 
-        // Boot/Tasker/Widget 插件常开
-        com.termux.app.compose.IntegratedTools.Tool[] alwaysOnTools = new com.termux.app.compose.IntegratedTools.Tool[]{
-            com.termux.app.compose.IntegratedTools.Tool.TERMUX_BOOT,
-            com.termux.app.compose.IntegratedTools.Tool.TERMUX_TASKER,
-            com.termux.app.compose.IntegratedTools.Tool.TERMUX_WIDGET};
-        for (com.termux.app.compose.IntegratedTools.Tool tool : alwaysOnTools) {
-            com.termux.app.compose.IntegratedTools.INSTANCE.setEnabled(this, tool, true);
-            com.termux.app.compose.IntegratedTools.INSTANCE.applyComponentState(this, tool, true);
-        }
+        // 集成插件（API/Boot/Styling/Tasker/Widget）默认保持关闭，由用户在设置中按需开启
+        // manifest 中这些组件已声明 android:enabled="false"，此处不再强制 enable
 
         // 会话创建/关闭时刷新前台通知，保证 LiveUpdate 通知中的会话数量
         // 对 Compose 直建的会话（主页/终端页新建）也保持准确

@@ -264,6 +264,7 @@
 
         <activity
             android:name=".app.activities.TermuxStylingActivity"
+            android:enabled="false"
             android:exported="false"
             android:label="@string/title_styling"
             android:theme="@style/Theme.AppCompat.DayNight.NoActionBar" />
