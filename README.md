@@ -275,10 +275,10 @@ Termux Ultra 与原版 Termux 及其所有插件共享 `sharedUserId`（`com.ter
 ```
 Termux-Ultra/
 ├── app/                        # 主应用模块
+│   ├── bootstrap/              # 各架构 bootstrap zip，首启动时在线下载
 │   ├── src/main/
 │   │   ├── assets/             # 容器与部署脚本
 │   │   ├── cpp/                # CMake 原生构建（PTY / native-crash-handler）
-│   │   ├── bootstrap/          # 各架构 bootstrap zip，首启动时在线下载
 │   │   ├── cpp_avnc/           # AVNC 原生 VNC 客户端
 │   │   ├── java/com/termux/    # 应用 Kotlin/Java 源码
 │   │   │   ├── app/            # 核心逻辑（TermuxActivity、TermuxService 等）

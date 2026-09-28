@@ -219,8 +219,10 @@ final class TermuxInstaller {
                     Logger.logInfo(LOG_TAG, "Bootstrap packages installed successfully.");
                     activity.runOnUiThread(whenDone);
 
-                } catch (final Exception e) {
-                    reportBootstrapError(activity, whenDone, callback, Logger.getStackTracesMarkdownString(null, Logger.getStackTracesStringArray(e)));
+                } catch (final Throwable t) {
+                    // 必须连 Error 一起兜住：zip 约 30MB 全量读进内存，低端机可能 OOM，
+                    // 只 catch Exception 会让回调不触发，OOBE 停在转圈且没有重试入口。
+                    reportBootstrapError(activity, whenDone, callback, Logger.getStackTracesMarkdownString(null, Logger.getStackTracesStringArray(t)));
 
                 } finally {
                     if (progress != null) {
