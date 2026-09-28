@@ -15,10 +15,11 @@ import java.util.concurrent.TimeUnit
  * APK 不再烘焙 libtermux-bootstrap.so，改为首启动按当前 ABI 从远端拉取对应架构的
  * bootstrap zip，校验（SHA-256 + zip 魔数 PK\x03\x04）后交给 TermuxInstaller 解压。
  *
- * 镜像源排序原则：把「服务端代抓 GitHub」的 relay 与独立 CDN 放前面，GitHub 直连
- * （raw.githubusercontent.com）垫底 —— 这样没有 GitHub 直连能力的用户会先命中 relay/CDN，
- * 而不会卡在前置的直连超时上。relay 源在各自服务端抓取 GitHub 内容再回传，因此即便
- * 用户侧无法直连 GitHub 也能正常下载。
+ * 镜像源排序原则：用「服务端代抓 GitHub」的 relay 代理放前面，GitHub 直连
+ * （raw.githubusercontent.com）垫底 —— 这样没有 GitHub 直连能力的用户会先命中 relay，
+ * 而不依赖直连。注意 jsDelivr 等公共 CDN 对单文件有体积上限（约 20–50MB），
+ * 我们的 bootstrap zip 约 28MB 会被拒绝（HTTP 403），故不纳入 CDN，只用 relay 代理。
+ * relay 在各自服务端抓取 GitHub 内容再回传，用户侧无需能直连 GitHub 即可下载。
  */
 object BootstrapDownloader {
     private const val TAG = "BootstrapDownloader"
@@ -34,13 +35,13 @@ object BootstrapDownloader {
         "x86_64"  to "b7fd0f2e3a4de534be3144f9f91acc768630fc463eaf134ab2e64c545e834f7a"
     )
 
-    // 顺序：CDN/relay 在前，GitHub 直连垫底。
+    // 顺序：GitHub 代抓 relay 在前，GitHub 直连垫底。relay 均服务端代抓 GitHub，
+    // 故无 GitHub 直连的用户也能下载；jsDelivr 因单文件体积上限已排除。
     private val MIRROR_BASES = listOf(
-        "https://fastly.jsdelivr.net/gh/TiG-Kira/Termux-Ultra@$REF/",
-        "https://cdn.jsdelivr.net/gh/TiG-Kira/Termux-Ultra@$REF/",
         "https://ghproxy.net/https://raw.githubusercontent.com/TiG-Kira/Termux-Ultra/$REF/",
         "https://ghfast.top/https://raw.githubusercontent.com/TiG-Kira/Termux-Ultra/$REF/",
         "https://mirror.ghproxy.com/https://raw.githubusercontent.com/TiG-Kira/Termux-Ultra/$REF/",
+        "https://gh.api.99988866.xyz/https://raw.githubusercontent.com/TiG-Kira/Termux-Ultra/$REF/",
         "https://raw.githubusercontent.com/TiG-Kira/Termux-Ultra/$REF/"
     )
 
