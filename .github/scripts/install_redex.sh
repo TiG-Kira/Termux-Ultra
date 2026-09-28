@@ -40,7 +40,7 @@ if ! autoreconf -ivf; then
   rm -rf "$SRC"
   exit 0
 fi
-if ! ./configure --prefix="$PREFIX"; then
+if ! ./configure --prefix="$PREFIX" --disable-tests --disable-kotlin-tests; then
   echo "::warning::configure 失败，跳过 ReDex"
   rm -rf "$SRC"
   exit 0

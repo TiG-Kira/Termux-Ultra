@@ -10,7 +10,7 @@
 #   因此本脚本只做「安全」操作（ReDex 为可选 STEP0，best-effort）：
 #     STEP0  (可选) ReDex：对 DEX 做保守优化（无混淆 / 无移除 / 无内联），REDEX_BIN 为空则跳过
 #     STEP1  strip_so.py：重打包（关键条目保持 STORED，其余 DEFLATE）+ 对 .so 做 strip --strip-debug
-#     STEP2  zipalign -p 4096（页对齐未压缩条目，满足 arsc 4 字节 / .so 页对齐要求）
+#     STEP2  zipalign -p 4（未压缩条目 4 字节对齐；.so 文件额外 4KB 页对齐）
 #     STEP3  apksigner 重签（v1+v2+v3，保证可安装、可增量更新）
 #   不使用 AndResGuard 的 7zip 压缩：v2/v3 签名下 7zip 本身近乎失效，
 #   且会把 resources.arsc / 图标 PNG 压坏（崩溃 + 丢图标），得不偿失。
@@ -116,9 +116,10 @@ REPACKED="$WORK/repacked.apk"
 python3 "$SCRIPT_DIR/strip_so.py" "$CURRENT" "$REPACKED" "${STRIP_TOOL:-}"
 echo ">> 重打包后: $(stat -c%s "$REPACKED") bytes（原 $(stat -c%s "$INPUT") bytes）"
 
-# STEP2: 页对齐（4096），使未压缩条目满足 arsc 4 字节 / .so 页对齐要求
+# STEP2: 未压缩条目 4 字节对齐，.so 文件 4KB 页对齐；
+#        绝不可用 4096 对齐所有条目——apksigner 后加的 v1 签名文件无法保持 4096 对齐。
 ALIGNED="$WORK/aligned.apk"
-"$ZIPALIGN" -p 4096 "$REPACKED" "$ALIGNED"
+"$ZIPALIGN" -p 4 "$REPACKED" "$ALIGNED"
 
 # STEP3: 重签（v1+v2+v3，保证可安装、可增量更新）
 SIGNED="$WORK/signed.apk"
@@ -131,7 +132,7 @@ SIGNED="$WORK/signed.apk"
   "$ALIGNED"
 
 # 校验通过后才覆盖原包：任一环节失败则 OUTPUT 保持不变 → CI 上传原 Gradle 已签名包
-"$ZIPALIGN" -c -p 4096 "$SIGNED" || { echo "ERROR: zipalign 校验失败" >&2; exit 1; }
+"$ZIPALIGN" -c -v -p 4 "$SIGNED" || { echo "ERROR: zipalign 校验失败" >&2; exit 1; }
 "$APKSIGNER" verify "$SIGNED" || { echo "ERROR: apksigner 校验失败" >&2; exit 1; }
 
 TMP_OUT="$OUTPUT.tmp.$$"
