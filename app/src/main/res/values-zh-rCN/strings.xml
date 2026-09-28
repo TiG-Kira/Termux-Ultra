@@ -214,6 +214,8 @@
 
     <string name="appearance_title">外观</string>
     <string name="appearance_settings_description">视觉外观设置</string>
+    <string name="pref_material_you_title">使用 Material You 配色</string>
+    <string name="pref_material_you_summary">跟随系统壁纸提取的主色动态调整界面配色，与系统主题色调保持一致（需 Android 12 及以上）</string>
     <string name="style_title">样式</string>
     <string name="style_settings_description">终端样式</string>
 
