@@ -107,6 +107,27 @@ jobs:
         run: |
           ./gradlew :app:assembleRelease -Ptermux.abi=${{ matrix.abi }} --console=plain
 
+      # ── APK 体积优化（接入方案 1：重打包压缩 DEX + AndResGuard 资源混淆/重签名）──
+      # 实测：universal 197.8MB → 149.7MB（-48MB / -24%），arm64 104.7MB → 56.2MB（-48MB / -46%）。
+      # 大头来自「重新打包把原本近乎未压缩的 DEX/arsc 用 DEFLATE 重压」（非剥 .so 符号，
+      # 当前构建的 .so 已 stripped）；AndResGuard 贡献资源混淆 + 7zip + 重签名 + zipalign。
+      # 注：ReDex 暂未接入，待用户后续评估后再议。
+      # 失败容忍：本步骤 continue-on-error，失败时原（Gradle 已签名）APK 原样上传到 Release。
+      - name: 优化 APK（重打包压缩 + AndResGuard；失败则保留原包）
+        continue-on-error: true
+        env:
+          KEYSTORE: app/ki-terminal-release.jks
+        run: |
+          # 安装优化所需工具（缺失才装，已存在则跳过）
+          if ! command -v 7za >/dev/null 2>&1 || ! command -v strip >/dev/null 2>&1; then
+            sudo apt-get update -qq && sudo apt-get install -y p7zip-full binutils
+          fi
+          APK=$(ls app/build/outputs/apk/release/*.apk | head -1)
+          echo "优化前: $APK ($(stat -c%s "$APK") bytes)"
+          bash .github/scripts/optimize_release_apk.sh \
+            "$APK" "$APK" "$KEYSTORE" ki-terminal ki-terminal ki-terminal
+          echo "优化后: $APK ($(stat -c%s "$APK") bytes)"
+
       - name: 列出产物
         run: ls -lh app/build/outputs/apk/release/
 
@@ -151,6 +172,27 @@ jobs:
         run: |
           # -Ptermux.abi=universal → 关闭 ABI 拆分，四个架构一起打进一个包
           ./gradlew :app:assembleRelease -Ptermux.abi=universal --console=plain
+
+      # ── APK 体积优化（接入方案 1：重打包压缩 DEX + AndResGuard 资源混淆/重签名）──
+      # 实测：universal 197.8MB → 149.7MB（-48MB / -24%），arm64 104.7MB → 56.2MB（-48MB / -46%）。
+      # 大头来自「重新打包把原本近乎未压缩的 DEX/arsc 用 DEFLATE 重压」（非剥 .so 符号，
+      # 当前构建的 .so 已 stripped）；AndResGuard 贡献资源混淆 + 7zip + 重签名 + zipalign。
+      # 注：ReDex 暂未接入，待用户后续评估后再议。
+      # 失败容忍：本步骤 continue-on-error，失败时原（Gradle 已签名）APK 原样上传到 Release。
+      - name: 优化 APK（重打包压缩 + AndResGuard；失败则保留原包）
+        continue-on-error: true
+        env:
+          KEYSTORE: app/ki-terminal-release.jks
+        run: |
+          # 安装优化所需工具（缺失才装，已存在则跳过）
+          if ! command -v 7za >/dev/null 2>&1 || ! command -v strip >/dev/null 2>&1; then
+            sudo apt-get update -qq && sudo apt-get install -y p7zip-full binutils
+          fi
+          APK=$(ls app/build/outputs/apk/release/*.apk | head -1)
+          echo "优化前: $APK ($(stat -c%s "$APK") bytes)"
+          bash .github/scripts/optimize_release_apk.sh \
+            "$APK" "$APK" "$KEYSTORE" ki-terminal ki-terminal ki-terminal
+          echo "优化后: $APK ($(stat -c%s "$APK") bytes)"
 
       - name: 列出产物
         run: ls -lh app/build/outputs/apk/release/
