@@ -1511,10 +1511,13 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
 
 @Composable
 private fun AiTermuxRoot(vm: AiTermuxViewModel, onBack: () -> Unit) {
-    if (!vm.config.isConfigured) {
-        AiSetupScreen(vm = vm, onBack = onBack)
+    var showSetup by remember { mutableStateOf(false) }
+    if (!vm.config.isConfigured || showSetup) {
+        AiSetupScreen(vm = vm, onBack = {
+            if (showSetup) showSetup = false else onBack()
+        })
     } else {
-        AiChatScreen(vm = vm, onBack = onBack)
+        AiChatScreen(vm = vm, onBack = onBack, onOpenSetup = { showSetup = true })
     }
 }
 
@@ -2187,6 +2190,7 @@ private fun AiSetupScreen(vm: AiTermuxViewModel, onBack: () -> Unit) {
 
             }
 
+            if (provider == "local") {
             item { SectionTitle("3. 温度 (%.1f)".format(temperature)) }
             item {
                 Slider(
@@ -2196,6 +2200,7 @@ private fun AiSetupScreen(vm: AiTermuxViewModel, onBack: () -> Unit) {
                     steps = 15,
                     modifier = Modifier.fillMaxWidth()
                 )
+            }
             }
 
             item { SectionTitle("4. 自定义 System Prompt（可选）") }
@@ -2469,7 +2474,7 @@ private fun ProviderChip(label: String, value: String, selected: String, isDark:
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun AiChatScreen(vm: AiTermuxViewModel, onBack: () -> Unit) {
+private fun AiChatScreen(vm: AiTermuxViewModel, onBack: () -> Unit, onOpenSetup: () -> Unit) {
     val ctx = LocalContext.current
     val scrollBehavior = MiuixScrollBehavior()
     val listState = rememberLazyListState()
@@ -2579,7 +2584,7 @@ private fun AiChatScreen(vm: AiTermuxViewModel, onBack: () -> Unit) {
                         }
                     },
                     actions = {
-                        AiChatTopActions(vm)
+                        AiChatTopActions(vm, onOpenSetup = onOpenSetup)
                     },
                 )
             },
@@ -2818,7 +2823,7 @@ private fun AiChatScreen(vm: AiTermuxViewModel, onBack: () -> Unit) {
 
 /** 对话页顶栏右侧操作：任务全量列表 + 更多操作菜单 */
 @Composable
-private fun AiChatTopActions(vm: AiTermuxViewModel) {
+private fun AiChatTopActions(vm: AiTermuxViewModel, onOpenSetup: () -> Unit) {
     val context = LocalContext.current
     val tasks by SkillExecutor.tasksFlow.collectAsState()
     var showTaskList by remember { mutableStateOf(false) }
@@ -2878,7 +2883,7 @@ private fun AiChatTopActions(vm: AiTermuxViewModel) {
             Column {
                 TopActionRow("Agent 设置") {
                     showMoreMenu = false
-                    context.startActivity(Intent(context, com.termux.app.activities.SettingsActivity::class.java))
+                    onOpenSetup()
                 }
                 TopActionRow("导出对话（分享）") {
                     showMoreMenu = false
@@ -2980,7 +2985,9 @@ private fun TopActionRow(text: String, danger: Boolean = false, onClick: () -> U
     TextButton(
         text = text,
         onClick = onClick,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
         colors = if (danger) {
             ButtonDefaults.textButtonColors(color = Color(0xFFF44336))
         } else {

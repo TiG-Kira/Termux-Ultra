@@ -1558,6 +1558,7 @@
     <string name="plugin_dream_failed">Generation failed: %1$s</string>
     <string name="plugin_dream_parse_failed">Could not parse the generated plugin. Raw output:</string>
     <string name="plugin_dream_empty_input">Describe what the plugin should do first</string>
+    <string name="plugin_dream_abort">Abort generation</string>
 
 
     <string name="plugin_installed_at_label">Installed at</string>

@@ -964,7 +964,7 @@ val composeUseCustomKeyboardLayout by com.termux.app.terminal.shell.ComposeTermi
                     startAction = { SettingIcon(Icons.Rounded.Delete, contentDescription = context.getString(R.string.clear_chat_history)) }
                 )
             }),
-        SearchableSetting(sec_ai, context.getString(R.string.agent_online_config), context.getString(R.string.agent_online_config_desc),
+        *if (isLocalMode) listOf(SearchableSetting(sec_ai, context.getString(R.string.agent_online_config), context.getString(R.string.agent_online_config_desc),
             keywords = listOf("在线", "online", "api", "key", "模型", "model", "地址", "url"),
             render = {
                 ArrowPreference(
@@ -973,7 +973,7 @@ val composeUseCustomKeyboardLayout by com.termux.app.terminal.shell.ComposeTermi
                     onClick = { showOnlineConfigEditor = true },
                     startAction = { SettingIcon(Icons.Rounded.Cloud, contentDescription = context.getString(R.string.agent_online_config)) }
                 )
-            }),
+            })).toTypedArray() else emptyArray(),
         SearchableSetting(sec_ai, context.getString(R.string.agent_profiles), context.getString(R.string.agent_profiles_desc),
             keywords = listOf("配置档", "profile", "多模型", "切换", "switch"),
             render = {
@@ -1583,6 +1583,7 @@ val composeUseCustomKeyboardLayout by com.termux.app.terminal.shell.ComposeTermi
                                 }
                             )
 
+                            if (isLocalMode) {
                             val onlineCfg = AiTermuxPrefs.getConfig(context).providerConfig
                             ArrowPreference(
                                 title = context.getString(R.string.agent_online_config),
@@ -1599,6 +1600,7 @@ val composeUseCustomKeyboardLayout by com.termux.app.terminal.shell.ComposeTermi
                                 SettingIcon(Icons.Rounded.Cloud, contentDescription = context.getString(R.string.agent_online_config))
                                 }
                             )
+                            }
 
                             ArrowPreference(
                                 title = context.getString(R.string.agent_profiles),
@@ -3479,18 +3481,6 @@ private fun AgentOnlineConfigDialog(show: Boolean, onDismiss: () -> Unit) {
                         modifier = Modifier.fillMaxWidth(),
                         label = stringResource(R.string.label_model),
                         useLabelAsPlaceholder = true
-                    )
-                    Text(
-                        text = stringResource(R.string.temperature_current, temperature),
-                        fontSize = 12.sp,
-                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                    )
-                    androidx.compose.material3.Slider(
-                        value = temperature,
-                        onValueChange = { temperature = it },
-                        valueRange = 0f..1.6f,
-                        steps = 31,
-                        modifier = Modifier.fillMaxWidth()
                     )
                 }
             }

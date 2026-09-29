@@ -179,14 +179,25 @@ fun PluginCenterScreen() {
     }
 
     fun openH5Home(plugin: InstalledPlugin) {
-        val h5Home = plugin.manifest.entryPoints?.h5Home
-        if (h5Home?.enabled == true) {
-            PluginWebViewActivity.start(
-                context = context,
-                pluginId = plugin.id,
-                entryPath = h5Home.entry,
-                title = h5Home.title ?: plugin.manifest.name
-            )
+        val home = plugin.manifest.entryPoints?.h5Home
+        if (home?.enabled == true) {
+            val title = home.title ?: plugin.manifest.name
+            val type = home.type
+            if (type == "compose") {
+                PluginComposeActivity.start(
+                    context = context,
+                    pluginId = plugin.id,
+                    entryPath = home.entry,
+                    title = title
+                )
+            } else {
+                PluginWebViewActivity.start(
+                    context = context,
+                    pluginId = plugin.id,
+                    entryPath = home.entry,
+                    title = title
+                )
+            }
         }
     }
 
