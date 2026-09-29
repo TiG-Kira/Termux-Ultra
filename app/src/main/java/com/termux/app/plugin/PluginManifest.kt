@@ -86,7 +86,9 @@ data class PluginSkillRef(
 data class PluginH5HomeRef(
     val enabled: Boolean = false,
     val entry: String = "web/index.html",
-    val title: String? = null
+    val title: String? = null,
+    /** h5 或 compose，默认 h5（向后兼容） */
+    val type: String = "h5"
 )
 
 data class PluginPageRef(
