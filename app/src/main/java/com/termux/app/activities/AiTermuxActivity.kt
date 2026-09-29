@@ -2985,7 +2985,9 @@ private fun TopActionRow(text: String, danger: Boolean = false, onClick: () -> U
     TextButton(
         text = text,
         onClick = onClick,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
         colors = if (danger) {
             ButtonDefaults.textButtonColors(color = Color(0xFFF44336))
         } else {
