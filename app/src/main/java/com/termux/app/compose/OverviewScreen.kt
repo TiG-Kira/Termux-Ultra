@@ -1151,24 +1151,20 @@ private fun TipsAgentCard(
             Spacer(Modifier.height(8.dp))
 
             // ===== 快捷入口：一行 3 个，数据驱动自动换行，并优化卡片样式 =====
-            // 三色循环：全部引用主题角色，随 Material You / 明暗模式自动变化
-            val quickEntryAccents = listOf(
-                MiuixTheme.colorScheme.primary,
-                MiuixTheme.colorScheme.secondary,
-                MiuixTheme.colorScheme.onTertiaryContainer
-            )
+            // 统一使用主题主色调，随 Material You / 明暗模式自动变化
+            val quickEntryAccent = MiuixTheme.colorScheme.primary
             val quickEntries = listOf(
                 QuickEntryData(
                     icon = Icons.Rounded.Add,
-                    iconColor = quickEntryAccents[0],
-                    iconBgColor = quickEntryAccents[0].copy(alpha = 0.12f),
+                    iconColor = quickEntryAccent,
+                    iconBgColor = quickEntryAccent.copy(alpha = 0.12f),
                     label = stringResource(R.string.action_new_session),
                     onClick = onNewTerminalAndOpenConsole
                 ),
                 QuickEntryData(
                     icon = Icons.Rounded.Monitor,
-                    iconColor = quickEntryAccents[1],
-                    iconBgColor = quickEntryAccents[1].copy(alpha = 0.12f),
+                    iconColor = quickEntryAccent,
+                    iconBgColor = quickEntryAccent.copy(alpha = 0.12f),
                     label = stringResource(R.string.quick_entry_qemu),
                     onClick = {
                         val intent = Intent(context, com.termux.app.activities.QemuVmActivity::class.java)
@@ -1177,8 +1173,8 @@ private fun TipsAgentCard(
                 ),
                 QuickEntryData(
                     icon = Icons.Rounded.Archive,
-                    iconColor = quickEntryAccents[2],
-                    iconBgColor = quickEntryAccents[2].copy(alpha = 0.12f),
+                    iconColor = quickEntryAccent,
+                    iconBgColor = quickEntryAccent.copy(alpha = 0.12f),
                     label = "软件包管理",
                     onClick = {
                         val intent = Intent(context, com.termux.app.activities.PackageManagerActivity::class.java)
@@ -1187,8 +1183,8 @@ private fun TipsAgentCard(
                 ),
                 QuickEntryData(
                     icon = Icons.Rounded.Palette,
-                    iconColor = quickEntryAccents[0],
-                    iconBgColor = quickEntryAccents[0].copy(alpha = 0.12f),
+                    iconColor = quickEntryAccent,
+                    iconBgColor = quickEntryAccent.copy(alpha = 0.12f),
                     label = "主题外观",
                     onClick = {
                         if (IntegratedTools.requireEnabled(context, IntegratedTools.Tool.TERMUX_STYLING)) {
@@ -1199,15 +1195,15 @@ private fun TipsAgentCard(
                 ),
                 QuickEntryData(
                     icon = Icons.Rounded.Edit,
-                    iconColor = quickEntryAccents[1],
-                    iconBgColor = quickEntryAccents[1].copy(alpha = 0.12f),
+                    iconColor = quickEntryAccent,
+                    iconBgColor = quickEntryAccent.copy(alpha = 0.12f),
                     label = "编辑文本",
                     onClick = { val intent = Intent(context, com.termux.app.activities.TextEditorHomeActivity::class.java); context.startActivity(intent) }
                 ),
                 QuickEntryData(
                     icon = Icons.Rounded.AutoAwesome,
-                    iconColor = quickEntryAccents[2],
-                    iconBgColor = quickEntryAccents[2].copy(alpha = 0.12f),
+                    iconColor = quickEntryAccent,
+                    iconBgColor = quickEntryAccent.copy(alpha = 0.12f),
                     label = stringResource(R.string.resources_center),
                     onClick = {
                         val intent = Intent(context, com.termux.app.activities.FeatureCenterActivity::class.java)
