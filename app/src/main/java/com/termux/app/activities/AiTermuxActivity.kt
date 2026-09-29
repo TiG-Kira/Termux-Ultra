@@ -2584,7 +2584,7 @@ private fun AiChatScreen(vm: AiTermuxViewModel, onBack: () -> Unit, onOpenSetup:
                         }
                     },
                     actions = {
-                        AiChatTopActions(vm)
+                        AiChatTopActions(vm, onOpenSetup = onOpenSetup)
                     },
                 )
             },
@@ -2823,7 +2823,7 @@ private fun AiChatScreen(vm: AiTermuxViewModel, onBack: () -> Unit, onOpenSetup:
 
 /** 对话页顶栏右侧操作：任务全量列表 + 更多操作菜单 */
 @Composable
-private fun AiChatTopActions(vm: AiTermuxViewModel) {
+private fun AiChatTopActions(vm: AiTermuxViewModel, onOpenSetup: () -> Unit) {
     val context = LocalContext.current
     val tasks by SkillExecutor.tasksFlow.collectAsState()
     var showTaskList by remember { mutableStateOf(false) }
