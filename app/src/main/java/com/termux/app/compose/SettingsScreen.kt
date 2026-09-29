@@ -132,10 +132,13 @@ fun SettingsScreen(
     var showWhitelistDialog by remember { mutableStateOf(false) }
     var tempWhitelistSkills by remember { mutableStateOf<Set<SkillType>>(emptySet()) }
 
-    // Whitelistable skills definition
+    // Whitelistable skills definition：与 SkillType.requiresClick() 中可白名单化的类型保持一致
     val whitelistSkillLabels = remember {
         listOf(
             SkillType.CAPTURE_OUTPUT to context.getString(R.string.capture_output_desc),
+            SkillType.SUB_AGENT to context.getString(R.string.whitelist_sub_agent_desc),
+            SkillType.SEARCH_AGENT to context.getString(R.string.whitelist_search_agent_desc),
+            SkillType.COMPILE_CODE to context.getString(R.string.whitelist_compile_code_desc),
         )
     }
     var showRestartPrompt by remember { mutableStateOf(false) }
@@ -171,6 +174,12 @@ fun SettingsScreen(
     var fbModel by remember { mutableStateOf("") }
     var fbTemp by remember { mutableStateOf(0.7f) }
     var showUnlimitedModeConfirm by remember { mutableStateOf(false) }
+
+    // Agent 在线主配置 / 模型配置档 / 对话参数 / 长期记忆（具体内容由各自的弹窗自持）
+    var showOnlineConfigEditor by remember { mutableStateOf(false) }
+    var showProfileManager by remember { mutableStateOf(false) }
+    var showChatParamsEditor by remember { mutableStateOf(false) }
+    var showMemoryEditor by remember { mutableStateOf(false) }
 
     // 高风险命令二次确认
     var riskConfirmEnabled by remember { mutableStateOf(RiskConfirmManager.isEnabled(context)) }
@@ -955,6 +964,60 @@ val composeUseCustomKeyboardLayout by com.termux.app.terminal.shell.ComposeTermi
                     startAction = { SettingIcon(Icons.Rounded.Delete, contentDescription = context.getString(R.string.clear_chat_history)) }
                 )
             }),
+        SearchableSetting(sec_ai, context.getString(R.string.agent_online_config), context.getString(R.string.agent_online_config_desc),
+            keywords = listOf("在线", "online", "api", "key", "模型", "model", "地址", "url"),
+            render = {
+                ArrowPreference(
+                    title = context.getString(R.string.agent_online_config),
+                    summary = context.getString(R.string.agent_online_config_desc),
+                    onClick = { showOnlineConfigEditor = true },
+                    startAction = { SettingIcon(Icons.Rounded.Cloud, contentDescription = context.getString(R.string.agent_online_config)) }
+                )
+            }),
+        SearchableSetting(sec_ai, context.getString(R.string.agent_profiles), context.getString(R.string.agent_profiles_desc),
+            keywords = listOf("配置档", "profile", "多模型", "切换", "switch"),
+            render = {
+                ArrowPreference(
+                    title = context.getString(R.string.agent_profiles),
+                    summary = context.getString(R.string.agent_profiles_desc),
+                    onClick = { showProfileManager = true },
+                    startAction = { SettingIcon(Icons.Rounded.Dashboard, contentDescription = context.getString(R.string.agent_profiles)) }
+                )
+            }),
+        SearchableSetting(sec_ai, context.getString(R.string.agent_chat_params), context.getString(R.string.agent_chat_params_desc),
+            keywords = listOf("上下文", "context", "压缩", "compress", "token", "参数"),
+            render = {
+                ArrowPreference(
+                    title = context.getString(R.string.agent_chat_params),
+                    summary = context.getString(R.string.agent_chat_params_desc),
+                    onClick = { showChatParamsEditor = true },
+                    startAction = { SettingIcon(Icons.Rounded.Settings, contentDescription = context.getString(R.string.agent_chat_params)) }
+                )
+            }),
+        SearchableSetting(sec_ai, context.getString(R.string.agent_memory), context.getString(R.string.agent_memory_desc),
+            keywords = listOf("记忆", "memory", "md", "偏好", "长期"),
+            render = {
+                ArrowPreference(
+                    title = context.getString(R.string.agent_memory),
+                    summary = context.getString(R.string.agent_memory_desc),
+                    onClick = { showMemoryEditor = true },
+                    startAction = { SettingIcon(Icons.Rounded.Psychology, contentDescription = context.getString(R.string.agent_memory)) }
+                )
+            }),
+        SearchableSetting(sec_ai, context.getString(R.string.developer_mode), context.getString(R.string.developer_mode_desc),
+            keywords = listOf("开发者", "developer", "调试", "debug", "无限制", "unrestricted"),
+            render = {
+                SwitchPreference(
+                    title = context.getString(R.string.developer_mode),
+                    summary = context.getString(R.string.developer_mode_desc),
+                    checked = aiDeveloperMode,
+                    onCheckedChange = {
+                        aiDeveloperMode = it
+                        AiTermuxPrefs.setDeveloperMode(context, it)
+                    },
+                    startAction = { SettingIcon(Icons.Rounded.Build, contentDescription = context.getString(R.string.developer_mode)) }
+                )
+            }),
 
         // ===== Security =====
         SearchableSetting(sec_security, context.getString(R.string.protection_level_title), "",
@@ -1517,6 +1580,50 @@ val composeUseCustomKeyboardLayout by com.termux.app.terminal.shell.ComposeTermi
                                 onClick = { showWhitelistDialog = true },
                                 startAction = {
                                 SettingIcon(Icons.Rounded.Shield, contentDescription = context.getString(R.string.trust_whitelist))
+                                }
+                            )
+
+                            val onlineCfg = AiTermuxPrefs.getConfig(context).providerConfig
+                            ArrowPreference(
+                                title = context.getString(R.string.agent_online_config),
+                                summary = if (onlineCfg.apiKey.isBlank()) {
+                                    context.getString(R.string.api_key_empty)
+                                } else {
+                                    context.getString(R.string.model_url_key,
+                                        onlineCfg.model.ifBlank { context.getString(R.string.not_set) },
+                                        onlineCfg.apiBaseUrl.ifBlank { context.getString(R.string.not_set) },
+                                        "********")
+                                },
+                                onClick = { showOnlineConfigEditor = true },
+                                startAction = {
+                                SettingIcon(Icons.Rounded.Cloud, contentDescription = context.getString(R.string.agent_online_config))
+                                }
+                            )
+
+                            ArrowPreference(
+                                title = context.getString(R.string.agent_profiles),
+                                summary = context.getString(R.string.agent_profiles_desc),
+                                onClick = { showProfileManager = true },
+                                startAction = {
+                                SettingIcon(Icons.Rounded.Dashboard, contentDescription = context.getString(R.string.agent_profiles))
+                                }
+                            )
+
+                            ArrowPreference(
+                                title = context.getString(R.string.agent_chat_params),
+                                summary = context.getString(R.string.agent_chat_params_desc),
+                                onClick = { showChatParamsEditor = true },
+                                startAction = {
+                                SettingIcon(Icons.Rounded.Settings, contentDescription = context.getString(R.string.agent_chat_params))
+                                }
+                            )
+
+                            ArrowPreference(
+                                title = context.getString(R.string.agent_memory),
+                                summary = context.getString(R.string.agent_memory_desc),
+                                onClick = { showMemoryEditor = true },
+                                startAction = {
+                                SettingIcon(Icons.Rounded.Psychology, contentDescription = context.getString(R.string.agent_memory))
                                 }
                             )
 
@@ -2403,6 +2510,12 @@ val composeUseCustomKeyboardLayout by com.termux.app.terminal.shell.ComposeTermi
         }
         }
     )
+
+    // ---------- AI Termux：在线主配置 / 模型配置档 / 对话参数 / 长期记忆 ----------
+    AgentOnlineConfigDialog(show = showOnlineConfigEditor, onDismiss = { showOnlineConfigEditor = false })
+    AgentProfileDialog(show = showProfileManager, onDismiss = { showProfileManager = false })
+    AgentChatParamsDialog(show = showChatParamsEditor, onDismiss = { showChatParamsEditor = false })
+    AgentMemoryDialog(show = showMemoryEditor, onDismiss = { showMemoryEditor = false })
 
     // ---------- AI Termux：选择 System Prompt 文件 ----------
     var showInternalPromptPicker by remember { mutableStateOf(false) }
@@ -3326,4 +3439,385 @@ private fun HelpContentWithCopyableCommands(
             }
         }
     }
+}
+
+/** Agent 在线模型配置弹窗：直接编辑当前生效的主配置 */
+@Composable
+private fun AgentOnlineConfigDialog(show: Boolean, onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    val cfg = AiTermuxPrefs.getConfig(context).providerConfig
+    var baseUrl by remember(show) { mutableStateOf(cfg.apiBaseUrl) }
+    var apiKey by remember(show) { mutableStateOf(cfg.apiKey) }
+    var model by remember(show) { mutableStateOf(cfg.model) }
+    var temperature by remember(show) { mutableStateOf(cfg.temperature) }
+
+    OverlayDialog(
+        title = stringResource(R.string.agent_online_config),
+        summary = stringResource(R.string.agent_online_config_desc),
+        show = show,
+        onDismissRequest = onDismiss,
+        content = {
+            Box(modifier = Modifier.heightIn(max = 480.dp).verticalScroll(rememberScrollState())) {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    TextField(
+                        value = baseUrl,
+                        onValueChange = { baseUrl = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = stringResource(R.string.label_base_url),
+                        useLabelAsPlaceholder = true
+                    )
+                    TextField(
+                        value = apiKey,
+                        onValueChange = { apiKey = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = stringResource(R.string.label_api_key),
+                        useLabelAsPlaceholder = true
+                    )
+                    TextField(
+                        value = model,
+                        onValueChange = { model = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = stringResource(R.string.label_model),
+                        useLabelAsPlaceholder = true
+                    )
+                    Text(
+                        text = stringResource(R.string.temperature_current, temperature),
+                        fontSize = 12.sp,
+                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                    )
+                    androidx.compose.material3.Slider(
+                        value = temperature,
+                        onValueChange = { temperature = it },
+                        valueRange = 0f..1.6f,
+                        steps = 31,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+            Row(horizontalArrangement = Arrangement.SpaceBetween) {
+                TextButton(
+                    text = stringResource(R.string.cancel),
+                    onClick = onDismiss,
+                    modifier = Modifier.weight(1f)
+                )
+                Spacer(Modifier.width(16.dp))
+                TextButton(
+                    text = stringResource(R.string.save),
+                    onClick = {
+                        val current = AiTermuxPrefs.getConfig(context)
+                        AiTermuxPrefs.saveConfig(
+                            context,
+                            current.copy(
+                                providerConfig = current.providerConfig.copy(
+                                    apiKey = apiKey.trim(),
+                                    apiBaseUrl = baseUrl.trim(),
+                                    model = model.trim(),
+                                    temperature = temperature
+                                )
+                            )
+                        )
+                        android.widget.Toast.makeText(context, R.string.agent_online_config_saved, android.widget.Toast.LENGTH_SHORT).show()
+                        onDismiss()
+                    },
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.textButtonColorsPrimary()
+                )
+            }
+        }
+    )
+}
+
+/** 模型配置档：列出已保存的 profile，可启用 / 删除 / 新建 */
+@Composable
+private fun AgentProfileDialog(show: Boolean, onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    var profiles by remember(show) { mutableStateOf(AiTermuxPrefs.getLlmProfiles(context)) }
+    var activeId by remember(show) { mutableStateOf(AiTermuxPrefs.getActiveLlmProfileId(context)) }
+    var editing by remember { mutableStateOf(false) }
+    var draftName by remember { mutableStateOf("") }
+    var draftKey by remember { mutableStateOf("") }
+    var draftUrl by remember { mutableStateOf("") }
+    var draftModel by remember { mutableStateOf("") }
+
+    OverlayDialog(
+        title = stringResource(R.string.agent_profiles),
+        summary = stringResource(R.string.agent_profiles_desc),
+        show = show,
+        onDismissRequest = onDismiss,
+        content = {
+            Box(modifier = Modifier.heightIn(max = 440.dp).verticalScroll(rememberScrollState())) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (!editing) {
+                        if (profiles.isEmpty()) {
+                            Text(
+                                text = stringResource(R.string.empty),
+                                fontSize = 13.sp,
+                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                            )
+                        }
+                        profiles.forEach { profile ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(text = profile.name, fontSize = 14.sp, color = MiuixTheme.colorScheme.onSurface)
+                                    Text(
+                                        text = "${profile.model} · ${profile.apiBaseUrl}",
+                                        fontSize = 12.sp,
+                                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                        maxLines = 1,
+                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                    )
+                                }
+                                if (profile.id == activeId) {
+                                    Text(
+                                        text = stringResource(R.string.profile_active_badge),
+                                        fontSize = 11.sp,
+                                        color = MiuixTheme.colorScheme.primary,
+                                        modifier = Modifier.padding(end = 8.dp)
+                                    )
+                                } else {
+                                    TextButton(
+                                        text = stringResource(R.string.profile_set_active),
+                                        onClick = {
+                                            AiTermuxPrefs.applyLlmProfile(context, profile)
+                                            AiTermuxPrefs.setActiveLlmProfileId(context, profile.id)
+                                            activeId = profile.id
+                                            android.widget.Toast.makeText(context, R.string.agent_online_config_saved, android.widget.Toast.LENGTH_SHORT).show()
+                                        }
+                                    )
+                                }
+                                TextButton(
+                                    text = stringResource(R.string.delete),
+                                    onClick = {
+                                        AiTermuxPrefs.deleteLlmProfile(context, profile.id)
+                                        profiles = AiTermuxPrefs.getLlmProfiles(context)
+                                        activeId = AiTermuxPrefs.getActiveLlmProfileId(context)
+                                    }
+                                )
+                            }
+                        }
+                    } else {
+                        TextField(
+                            value = draftName,
+                            onValueChange = { draftName = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = stringResource(R.string.profile_name),
+                            useLabelAsPlaceholder = true
+                        )
+                        TextField(
+                            value = draftUrl,
+                            onValueChange = { draftUrl = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = stringResource(R.string.label_base_url),
+                            useLabelAsPlaceholder = true
+                        )
+                        TextField(
+                            value = draftKey,
+                            onValueChange = { draftKey = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = stringResource(R.string.label_api_key),
+                            useLabelAsPlaceholder = true
+                        )
+                        TextField(
+                            value = draftModel,
+                            onValueChange = { draftModel = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = stringResource(R.string.label_model),
+                            useLabelAsPlaceholder = true
+                        )
+                    }
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+            Row(horizontalArrangement = Arrangement.SpaceBetween) {
+                TextButton(
+                    text = stringResource(R.string.cancel),
+                    onClick = { if (editing) editing = false else onDismiss() },
+                    modifier = Modifier.weight(1f)
+                )
+                Spacer(Modifier.width(16.dp))
+                TextButton(
+                    text = if (editing) stringResource(R.string.save) else stringResource(R.string.profile_new),
+                    onClick = {
+                        if (!editing) {
+                            val current = AiTermuxPrefs.getConfig(context).providerConfig
+                            draftName = ""
+                            draftKey = current.apiKey
+                            draftUrl = current.apiBaseUrl
+                            draftModel = current.model
+                            editing = true
+                        } else if (draftName.isNotBlank()) {
+                            val profile = LlmProfile(
+                                name = draftName.trim(),
+                                provider = "custom",
+                                apiKey = draftKey.trim(),
+                                apiBaseUrl = draftUrl.trim(),
+                                model = draftModel.trim()
+                            )
+                            AiTermuxPrefs.upsertLlmProfile(context, profile)
+                            AiTermuxPrefs.applyLlmProfile(context, profile)
+                            AiTermuxPrefs.setActiveLlmProfileId(context, profile.id)
+                            profiles = AiTermuxPrefs.getLlmProfiles(context)
+                            activeId = profile.id
+                            editing = false
+                        }
+                    },
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.textButtonColorsPrimary()
+                )
+            }
+        }
+    )
+}
+
+/** 对话参数：上下文条数、压缩阈值、保留条数、单轮 maxTokens */
+@Composable
+private fun AgentChatParamsDialog(show: Boolean, onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    var ctx by remember(show) { mutableStateOf(AiTermuxPrefs.getContextMessages(context)) }
+    var threshold by remember(show) { mutableStateOf(AiTermuxPrefs.getCompressThreshold(context)) }
+    var keepRecent by remember(show) { mutableStateOf(AiTermuxPrefs.getCompressKeepRecent(context)) }
+    var maxTokens by remember(show) { mutableStateOf(AiTermuxPrefs.getMaxTokens(context)) }
+
+    OverlayDialog(
+        title = stringResource(R.string.agent_chat_params),
+        summary = stringResource(R.string.agent_chat_params_desc),
+        show = show,
+        onDismissRequest = onDismiss,
+        content = {
+            Box(modifier = Modifier.heightIn(max = 480.dp).verticalScroll(rememberScrollState())) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    NumberField(
+                        label = stringResource(R.string.label_context_messages),
+                        value = ctx,
+                        onValueChange = { ctx = it },
+                        range = 4..100
+                    )
+                    NumberField(
+                        label = stringResource(R.string.label_compress_threshold),
+                        value = threshold,
+                        onValueChange = { threshold = it },
+                        range = 10..200
+                    )
+                    NumberField(
+                        label = stringResource(R.string.label_compress_keep_recent),
+                        value = keepRecent,
+                        onValueChange = { keepRecent = it },
+                        range = 2..100
+                    )
+                    NumberField(
+                        label = stringResource(R.string.label_max_tokens),
+                        value = maxTokens,
+                        onValueChange = { maxTokens = it },
+                        range = 1024..65536
+                    )
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+            Row(horizontalArrangement = Arrangement.SpaceBetween) {
+                TextButton(
+                    text = stringResource(R.string.cancel),
+                    onClick = onDismiss,
+                    modifier = Modifier.weight(1f)
+                )
+                Spacer(Modifier.width(16.dp))
+                TextButton(
+                    text = stringResource(R.string.save),
+                    onClick = {
+                        AiTermuxPrefs.setContextMessages(context, ctx)
+                        AiTermuxPrefs.setCompressThreshold(context, threshold)
+                        AiTermuxPrefs.setCompressKeepRecent(context, keepRecent)
+                        AiTermuxPrefs.setMaxTokens(context, maxTokens)
+                        onDismiss()
+                    },
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.textButtonColorsPrimary()
+                )
+            }
+        }
+    )
+}
+
+@Composable
+private fun NumberField(
+    label: String,
+    value: Int,
+    onValueChange: (Int) -> Unit,
+    range: IntRange
+) {
+    Column {
+        Text(text = label, fontSize = 13.sp, color = MiuixTheme.colorScheme.onSurface)
+        TextField(
+            value = value.toString(),
+            onValueChange = { raw ->
+                val parsed = raw.filter { it.isDigit() }.toIntOrNull() ?: return@TextField
+                onValueChange(parsed.coerceIn(range.first, range.last))
+            },
+            modifier = Modifier.fillMaxWidth(),
+            useLabelAsPlaceholder = true
+        )
+    }
+}
+
+/** 长期记忆：查看 / 编辑 / 清空 Agent 的 MEMORY.md */
+@Composable
+private fun AgentMemoryDialog(show: Boolean, onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    var text by remember(show) { mutableStateOf(AiTermuxPrefs.getMemory(context)) }
+
+    OverlayDialog(
+        title = stringResource(R.string.agent_memory),
+        summary = stringResource(R.string.agent_memory_desc),
+        show = show,
+        onDismissRequest = onDismiss,
+        content = {
+            Box(modifier = Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
+                Column {
+                    if (text.isBlank()) {
+                        Text(
+                            text = stringResource(R.string.agent_memory_empty),
+                            fontSize = 13.sp,
+                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                        )
+                        Spacer(Modifier.height(8.dp))
+                    }
+                    TextField(
+                        value = text,
+                        onValueChange = { text = it },
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 150.dp),
+                        label = stringResource(R.string.agent_memory),
+                        useLabelAsPlaceholder = true,
+                        maxLines = Int.MAX_VALUE,
+                        minLines = 6
+                    )
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+            Row(horizontalArrangement = Arrangement.SpaceBetween) {
+                TextButton(
+                    text = stringResource(R.string.clear),
+                    onClick = {
+                        AiTermuxPrefs.setMemory(context, "")
+                        text = ""
+                        android.widget.Toast.makeText(context, R.string.agent_memory_cleared, android.widget.Toast.LENGTH_SHORT).show()
+                    },
+                    modifier = Modifier.weight(1f)
+                )
+                Spacer(Modifier.width(16.dp))
+                TextButton(
+                    text = stringResource(R.string.save),
+                    onClick = {
+                        AiTermuxPrefs.setMemory(context, text)
+                        android.widget.Toast.makeText(context, R.string.agent_memory_saved, android.widget.Toast.LENGTH_SHORT).show()
+                        onDismiss()
+                    },
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.textButtonColorsPrimary()
+                )
+            }
+        }
+    )
 }
