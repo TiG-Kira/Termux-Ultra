@@ -1442,4 +1442,74 @@
 <string name="termux_debugging_preferences_title">调试</string>
 <string name="termux_debugging_preferences_summary">调试设置</string>
 
+
+    <!-- Termux Agent: 白名单 / 配置 -->
+    <string name="whitelist_sub_agent_desc">SUB_AGENT — 把多步骤或批量任务交给子 Agent</string>
+    <string name="whitelist_search_agent_desc">SEARCH_AGENT — 按名称、内容或类型批量搜索文件</string>
+    <string name="whitelist_compile_code_desc">COMPILE_CODE — 编译源码并返回编译结果</string>
+    <string name="agent_online_config">在线模型配置</string>
+    <string name="agent_online_config_desc">配置 Agent 使用的接口地址、密钥与模型</string>
+    <string name="agent_profiles">模型配置档</string>
+    <string name="agent_profiles_desc">保存并快速切换多套模型配置</string>
+    <string name="agent_chat_params">对话参数</string>
+    <string name="agent_chat_params_desc">上下文条数、压缩阈值与回复长度</string>
+    <string name="agent_memory">长期记忆（MEMORY.md）</string>
+    <string name="agent_memory_desc">查看、编辑或清空 Agent 记住的内容</string>
+    <string name="label_base_url">接口地址</string>
+    <string name="label_api_key">API Key</string>
+    <string name="label_model">模型</string>
+    <string name="label_temperature">温度</string>
+    <string name="label_context_messages">每轮携带的上下文条数</string>
+    <string name="label_compress_threshold">消息数超过此值自动压缩</string>
+    <string name="label_compress_keep_recent">压缩后保留的最近消息数</string>
+    <string name="label_max_tokens">单轮回复最大 token</string>
+    <string name="profile_name">配置档名称</string>
+    <string name="profile_set_active">启用</string>
+    <string name="profile_new">新建配置档</string>
+    <string name="profile_active_badge">使用中</string>
+    <string name="agent_online_config_saved">在线模型配置已保存</string>
+    <string name="agent_memory_cleared">长期记忆已清空</string>
+    <string name="agent_memory_saved">长期记忆已保存</string>
+    <string name="agent_memory_empty">还没有长期记忆，Agent 会把你的偏好记录在这里。</string>
+
+
+    <!-- 插件中心：翻新 UI、分享与 AI 生成 -->
+    <string name="plugin_details">详情</string>
+    <string name="plugin_share">分享</string>
+    <string name="plugin_open_home">打开</string>
+    <string name="plugin_author_unknown">未知作者</string>
+    <string name="plugin_permission_count">%1$d 项权限</string>
+    <string name="plugin_installed_at">安装于 %1$s</string>
+    <string name="plugin_filter_all">全部</string>
+    <string name="plugin_filter_enabled">已启用</string>
+    <string name="plugin_filter_pending">待处理</string>
+    <string name="plugin_search_hint">搜索插件</string>
+    <string name="plugin_share_meta">分享插件信息</string>
+    <string name="plugin_share_package">分享 .tup 文件</string>
+    <string name="plugin_share_title">分享插件</string>
+    <string name="plugin_export_failed">导出失败：%1$s</string>
+    <string name="plugin_dream">随心插件</string>
+    <string name="plugin_dream_desc">说出你的需求，让 Agent 直接写出来并装好</string>
+    <string name="plugin_dream_input_hint">这个插件要做什么？</string>
+    <string name="plugin_dream_generate">生成</string>
+    <string name="plugin_dream_generating">Agent 正在编写你的插件…</string>
+    <string name="plugin_dream_preview">生成结果</string>
+    <string name="plugin_dream_install">安装</string>
+    <string name="plugin_dream_retry">重新生成</string>
+    <string name="plugin_dream_files">%1$d 个文件</string>
+    <string name="plugin_dream_needs_online">请先配置在线模型（设置 → Termux Agent → 在线模型配置）</string>
+    <string name="plugin_dream_needs_fallback">本地模型无法生成插件。请在设置中开启并配置备用在线大模型，并在对话页切换到在线模型</string>
+    <string name="plugin_dream_using_fallback">将使用备用在线模型：%1$s</string>
+    <string name="plugin_dream_failed">生成失败：%1$s</string>
+    <string name="plugin_dream_parse_failed">无法解析生成的插件，原始输出如下：</string>
+    <string name="plugin_dream_empty_input">先描述一下插件要做什么</string>
+
+
+    <string name="plugin_installed_at_label">安装时间</string>
+    <string name="plugin_state_label">状态</string>
+    <string name="plugin_prompt_mode">模式</string>
+    <string name="plugin_prompt_append">追加</string>
+    <string name="plugin_prompt_modify">修改</string>
+    <string name="plugin_prompt_overwrite">覆盖</string>
+
 </resources>

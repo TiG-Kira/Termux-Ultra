@@ -96,28 +96,45 @@ object SkillExecutor {
                     else -> null
                 }
             }
-            SkillType.RUN_COMMAND -> {
-                val cmd = if (params.has("command")) params.get("command").asString else ""
-                if (cmd.isBlank()) return null
-                val result = RiskCommandDetector.detect(cmd)
-                if (result.isDangerous) {
-                    // 如果是 su/sudo，检查是否包装了其他危险命令
-                    if (result.riskType == RiskCommandDetector.RiskType.SU_SUDO) {
-                        val wrapped = extractWrappedCommandForCheck(cmd)
-                        if (wrapped != null) {
-                            val wrappedResult = RiskCommandDetector.detect(wrapped)
-                            if (wrappedResult.isDangerous && wrappedResult.riskType != RiskCommandDetector.RiskType.SU_SUDO) {
-                                return wrappedResult.description
-                            }
-                        }
-                    }
-                    result.description
-                } else null
-            }
+            SkillType.RUN_COMMAND,
+            SkillType.CUSTOM_COMMAND,
+            SkillType.CAPTURE_OUTPUT,
+            SkillType.COMPILE_CODE,
+            SkillType.SUB_AGENT -> detectCommandDanger(commandOf(skillType, params))
             SkillType.CLOSE_ALL_SESSIONS -> "将关闭所有正在运行的终端会话，未保存的内容会丢失"
             SkillType.EXIT_TERMUX -> "将退出 Termux 应用，所有运行中的进程会终止"
             else -> null
         }
+    }
+
+    /** 取出技能参数中真正会被执行的命令（不同技能字段名不同） */
+    private fun commandOf(skillType: SkillType, params: JsonObject): String {
+        val keys = if (skillType == SkillType.SUB_AGENT) {
+            listOf("commands", "command")
+        } else {
+            listOf("command")
+        }
+        for (key in keys) {
+            if (params.has(key)) return params.get(key).asString
+        }
+        return ""
+    }
+
+    /** 命令风险检测：su/sudo 会继续检查其包装的子命令 */
+    private fun detectCommandDanger(command: String): String? {
+        if (command.isBlank()) return null
+        val result = RiskCommandDetector.detect(command)
+        if (!result.isDangerous) return null
+        if (result.riskType == RiskCommandDetector.RiskType.SU_SUDO) {
+            val wrapped = extractWrappedCommandForCheck(command)
+            if (wrapped != null) {
+                val wrappedResult = RiskCommandDetector.detect(wrapped)
+                if (wrappedResult.isDangerous && wrappedResult.riskType != RiskCommandDetector.RiskType.SU_SUDO) {
+                    return wrappedResult.description
+                }
+            }
+        }
+        return result.description
     }
 
     /** 从 su/sudo 命令中提取被包装的子命令（用于 Agent 危险检测） */
@@ -141,6 +158,14 @@ object SkillExecutor {
         val results = mutableListOf<Pair<String, JsonObject>>()
         val seen = mutableSetOf<String>()
 
+        fun add(type: String?, params: JsonObject?) {
+            val raw = type?.trim()?.uppercase() ?: return
+            if (!isValidSkillType(raw)) return
+            val p = params ?: JsonObject()
+            val key = canonicalSkillKey(raw, p)
+            if (seen.add(key)) results.add(raw to p)
+        }
+
         // 策略 1: 匹配 ```skill / ```json / ```javascript 等代码块包裹的 JSON
         // 宽容的正则：允许 closing ``` 前没有换行符
         val blockPattern = Regex(
@@ -151,33 +176,36 @@ object SkillExecutor {
             val jsonStr = match.groupValues.getOrNull(1)?.trim() ?: continue
             try {
                 val json = JsonParser.parseString(jsonStr).asJsonObject
-                val skillType = json.get("skillType")?.asString
-                if (skillType != null && skillType.isNotBlank()) {
-                    val params = json.getAsJsonObject("params") ?: JsonObject()
-                    val key = "$skillType:${params}"
-                    if (key !in seen) {
-                        seen.add(key)
-                        results.add(skillType to params)
-                    }
-                }
+                add(json.get("skillType")?.asString, json.getAsJsonObject("params"))
             } catch (_: Exception) { }
         }
 
-        // 策略 2: 解析行业标准 <tool_call> / <tool_call> XML 格式
-        parseToolCallBlocks(content, results, seen)
+        // 策略 2: 解析行业标准 <tool_call> XML 格式
+        val toolCallPattern = Regex("""<tool_call>([\s\S]*?)</tool_call>""", RegexOption.DOT_MATCHES_ALL)
+        val namePattern = Regex("""<tool_name>\s*([\s\S]*?)\s*</tool_name>""", RegexOption.DOT_MATCHES_ALL)
+        val paramPattern = Regex(
+            """<parameter\s+name\s*=\s*["']([^"']+)["']\s*>([\s\S]*?)</parameter>""",
+            RegexOption.DOT_MATCHES_ALL
+        )
+        for (match in toolCallPattern.findAll(content)) {
+            val block = match.groupValues.getOrNull(1)?.trim() ?: continue
+            val nameMatch = namePattern.find(block) ?: continue
+            val params = JsonObject()
+            paramPattern.findAll(block).forEach { pm ->
+                val pname = pm.groupValues[1].trim()
+                val pval = pm.groupValues[2].trim()
+                runCatching { params.add(pname, JsonPrimitive(pval)) }
+            }
+            add(nameMatch.groupValues[1], params)
+        }
 
         // 策略 3: 直接在文本中查找包含 skillType 的 JSON 对象（兜底）
         if (results.isEmpty()) {
             val jsonPattern = Regex("""\{[^{}]*"skillType"[^{}]*\}""", RegexOption.DOT_MATCHES_ALL)
             for (match in jsonPattern.findAll(content)) {
                 try {
-                    val jsonStr = match.value.trim()
-                    val json = JsonParser.parseString(jsonStr).asJsonObject
-                    val skillType = json.get("skillType")?.asString
-                    if (skillType != null && skillType.isNotBlank()) {
-                        val params = json.getAsJsonObject("params") ?: JsonObject()
-                        results.add(skillType to params)
-                    }
+                    val json = JsonParser.parseString(match.value.trim()).asJsonObject
+                    add(json.get("skillType")?.asString, json.getAsJsonObject("params"))
                 } catch (_: Exception) { }
             }
         }
@@ -185,43 +213,17 @@ object SkillExecutor {
         return results
     }
 
-    /** 解析行业标准 <tool_call> / <tool_call> XML 格式的技能调用 */
-    private fun parseToolCallBlocks(
-        content: String,
-        results: MutableList<Pair<String, JsonObject>>,
-        seen: MutableSet<String>
-    ) {
-        val toolCallPattern = Regex(
-            """<tool_call>([\s\S]*?)</tool_call>""",
-            RegexOption.DOT_MATCHES_ALL
-        )
-        for (match in toolCallPattern.findAll(content)) {
-            val block = match.groupValues.getOrNull(1)?.trim() ?: continue
-            val namePattern = Regex(
-                """<tool_name>\s*([\s\S]*?)\s*</tool_name>""",
-                RegexOption.DOT_MATCHES_ALL
-            )
-            val nameMatch = namePattern.find(block) ?: continue
-            val skillType = nameMatch.groupValues[1].trim()
-            if (skillType.isBlank() || !isValidSkillType(skillType)) continue
-            var params = JsonObject()
-            val paramPattern = Regex(
-                """<parameter\s+name\s*=\s*["']([^"']+)["']\s*>([\s\S]*?)</parameter>""",
-                RegexOption.DOT_MATCHES_ALL
-            )
-            val jsonObject = JsonObject()
-            paramPattern.findAll(block).forEach { pm ->
-                val pname = pm.groupValues[1].trim()
-                val pval = pm.groupValues[2].trim()
-                try { jsonObject.add(pname, JsonPrimitive(pval)) } catch (_: Exception) { }
-            }
-            params = jsonObject
-            val key = """$skillType:${params}"""
-            if (key !in seen) {
-                seen.add(key)
-                results.add(skillType to params)
-            }
+    /**
+     * 技能去重键：XML 格式的参数全是字符串、JSON 格式可能带数字/布尔，
+     * 直接比较 JsonObject 会让同一调用的两种写法算出不同键，因此统一归一化。
+     */
+    private fun canonicalSkillKey(skillType: String, params: JsonObject): String {
+        val sb = StringBuilder(skillType)
+        params.entrySet().sortedBy { it.key }.forEach { (key, value) ->
+            sb.append('|').append(key).append('=')
+            sb.append(if (value.isJsonPrimitive) value.asString else value.toString())
         }
+        return sb.toString()
     }
 
     /** 解析 <new_tool> 块，提取 AI 自主创造的新技能 */
@@ -235,7 +237,7 @@ object SkillExecutor {
             val block = match.groupValues.getOrNull(1)?.trim() ?: continue
             val tool = mutableMapOf<String, String>()
             val tagPattern = Regex(
-                """<(tool_name\|description\|system_prompt\|skill_json\|implementation_type)>[\s\S]*?</\1>""",
+                """<(tool_name|description|system_prompt|skill_json|implementation_type)>[\s\S]*?</\1>""",
                 RegexOption.DOT_MATCHES_ALL
             )
             for (tagMatch in tagPattern.findAll(block)) {
@@ -2525,7 +2527,8 @@ object AiApiClient {
             val bodyObj = ChatCompletionRequest(
                 model = config.model,
                 messages = messages,
-                temperature = config.temperature
+                temperature = config.temperature,
+                max_tokens = config.maxTokens
             )
             val body = Gson().toJson(bodyObj)
 
@@ -2580,7 +2583,8 @@ object AiApiClient {
                 model = config.model,
                 messages = messages,
                 temperature = config.temperature,
-                stream = true
+                stream = true,
+                max_tokens = config.maxTokens
             )
             val body = Gson().toJson(bodyObj)
 

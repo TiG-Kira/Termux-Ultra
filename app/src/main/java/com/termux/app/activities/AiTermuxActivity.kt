@@ -34,6 +34,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Send
+import androidx.compose.material.icons.rounded.Checklist
+import androidx.compose.material.icons.rounded.DeleteSweep
+import androidx.compose.material.icons.rounded.MoreVert
+import androidx.compose.material.icons.rounded.Share
 import androidx.compose.runtime.*
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.MutableState
@@ -214,13 +218,19 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
 
     private var cancelled = false
 
-    private val autoExecSkills: Set<String> by lazy {
-        AiTermuxPrefs.getAutoExecSkills(getApplication())
-    }
+    /** 白名单每次实时读取：设置页改完回到对话页立即生效，不必重建 Activity */
+    private fun autoExecSkills(): Set<String> = AiTermuxPrefs.getAutoExecSkills(getApplication())
 
     fun cancelGeneration() {
         cancelled = true
         isStreaming = false
+        isLoading = false
+        LiveUpdateState.agentStop()
+        // 取消协程本身：否则正在执行的技能跑完后本轮循环会继续调用模型
+        generationJob?.cancel()
+        generationJob = null
+        // 停止时丢弃待确认的危险操作，避免回到页面后又被自动执行
+        pendingDanger.clear()
     }
 
     var termuxService by mutableStateOf<TermuxService?>(null)
@@ -306,10 +316,16 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
         AiTermuxPrefs.saveConfig(getApplication(), config)
     }
 
-    private fun runInScope(block: suspend () -> Unit) {
-        viewModelScope.launch(exceptionHandler) {
+    /** 当前进行中的生成任务。「停止」时真正取消协程，而不只是置标志位 */
+    private var generationJob: kotlinx.coroutines.Job? = null
+
+    private fun runInScope(block: suspend () -> Unit): kotlinx.coroutines.Job {
+        return viewModelScope.launch(exceptionHandler) {
             try {
                 block()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                // 用户主动停止，不属于错误
+                throw e
             } catch (e: Exception) {
                 android.util.Log.e("AiTermux", "未捕获异常", e)
                 isLoading = false
@@ -326,11 +342,6 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
         }
     }
 
-    /** 会话压缩阈值：超过此数量自动触发压缩 */
-    private val COMPRESS_THRESHOLD = 40
-    /** 压缩后保留的最近消息数量 */
-    private val COMPRESS_KEEP_RECENT = 12
-
     fun sendUserMessage(text: String) {
         val ctx = getApplication<android.app.Application>()
         if (text.isBlank()) return
@@ -344,7 +355,7 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
         synchronized(messages) { messages.add(userMsg) }
         AiTermuxPrefs.saveChatHistory(ctx, messages.toOpenAiMessages())
 
-        runInScope {
+        generationJob = runInScope {
             isLoading = true
             LiveUpdateState.agentStart()
             try {
@@ -359,8 +370,9 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
 
     /** 检查并压缩会话历史（如果消息太多） */
     private suspend fun checkAndCompressMessages(ctx: Context) {
+        val threshold = AiTermuxPrefs.getCompressThreshold(ctx)
         synchronized(messages) {
-            if (messages.size <= COMPRESS_THRESHOLD) return
+            if (messages.size <= threshold) return
         }
         try {
             val result = compressMessages(ctx)
@@ -376,11 +388,13 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
 
     /** 压缩会话历史：调用在线模型生成摘要，用摘要替换旧消息 */
     private suspend fun compressMessages(ctx: Context): CompressResult? {
+        val threshold = AiTermuxPrefs.getCompressThreshold(ctx)
+        val keepRecent = AiTermuxPrefs.getCompressKeepRecent(ctx)
         val msgSnapshot = synchronized(messages) { messages.toList() }
-        if (msgSnapshot.size <= COMPRESS_THRESHOLD) return null
+        if (msgSnapshot.size <= threshold) return null
 
-        // 将旧消息（排除最近的 COMPRESS_KEEP_RECENT 条）转为对话格式
-        val keepFrom = msgSnapshot.size - COMPRESS_KEEP_RECENT
+        // 将旧消息（排除最近的 keepRecent 条）转为对话格式
+        val keepFrom = msgSnapshot.size - keepRecent
         if (keepFrom <= 0) return null
         val oldMsgs = msgSnapshot.subList(0, keepFrom)
 
@@ -389,16 +403,16 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
         if (cfg.apiKey.isBlank() || cfg.baseUrl.isBlank()) {
             // 没有在线配置，直接截断（保留最近的消息）
             synchronized(messages) {
-                val toRemove = messages.size - COMPRESS_KEEP_RECENT
+                val toRemove = messages.size - keepRecent
                 if (toRemove > 0) {
                     repeat(toRemove) { messages.removeAt(0) }
                     messages.add(0, ChatMessage(
                         role = "assistant",
-                        content = "📎 历史会话已自动压缩（无在线模型可用，直接截断到最近 $COMPRESS_KEEP_RECENT 条）"
+                        content = "📎 历史会话已自动压缩（无在线模型可用，直接截断到最近 $keepRecent 条）"
                     ))
                 }
             }
-            return CompressResult(summary = "（无在线模型，直接截断）", keptRecent = COMPRESS_KEEP_RECENT)
+            return CompressResult(summary = "（无在线模型，直接截断）", keptRecent = keepRecent)
         }
 
         val providerCfg = AiProviderConfig(
@@ -435,7 +449,7 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
 
         // 执行压缩：移除旧消息，在开头插入摘要
         synchronized(messages) {
-            val toRemove = messages.size - COMPRESS_KEEP_RECENT
+            val toRemove = messages.size - keepRecent
             if (toRemove > 0) {
                 repeat(toRemove) { messages.removeAt(0) }
                 messages.add(0, ChatMessage(
@@ -445,7 +459,7 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
             }
         }
 
-        return CompressResult(summary = summary, keptRecent = COMPRESS_KEEP_RECENT)
+        return CompressResult(summary = summary, keptRecent = keepRecent)
     }
 
     /** 压缩结果数据类 */
@@ -468,7 +482,7 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
         synchronized(messages) { messages.add(userMsg) }
         AiTermuxPrefs.saveChatHistory(ctx, messages.toOpenAiMessages())
 
-        runInScope {
+        generationJob = runInScope {
             isLoading = true
             LiveUpdateState.agentStart()
             try {
@@ -498,12 +512,11 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
         val params = runCatching {
             com.google.gson.JsonParser.parseString(pending.second.toString()).asJsonObject
         }.getOrNull()
+        // 命令类技能要提取出真正的命令文本，否则风险检测会把「执行命令：xxx」整体当命令而漏判
         val command = params?.let {
-            when (pending.first) {
-                SkillType.RUN_COMMAND.name -> if (it.has("command")) it.get("command").asString else ""
-                else -> card.dangerousAction ?: ""
-            }
-        } ?: (card.dangerousAction ?: "")
+            listOf("command", "commands").firstOrNull { key -> it.has(key) }
+                ?.let { key -> it.get(key).asString }
+        }?.takeIf { it.isNotBlank() } ?: (card.dangerousAction ?: "")
 
         val detection = RiskCommandDetector.detect(command)
         if (detection.isDangerous) {
@@ -568,7 +581,7 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
         }
         AiTermuxPrefs.saveChatHistory(ctx, messages.toOpenAiMessages())
 
-        runInScope {
+        generationJob = runInScope {
             isLoading = true
             LiveUpdateState.agentStart()
             try {
@@ -626,7 +639,7 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
         }
         AiTermuxPrefs.saveChatHistory(ctx, messages.toOpenAiMessages())
 
-        runInScope {
+        generationJob = runInScope {
             isLoading = true
             LiveUpdateState.agentStart()
             try {
@@ -659,7 +672,7 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
         }
         AiTermuxPrefs.saveChatHistory(ctx, messages.toOpenAiMessages())
 
-        runInScope {
+        generationJob = runInScope {
             isLoading = true
             LiveUpdateState.agentStart()
             try {
@@ -700,47 +713,52 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
         var lastSkillKey: String? = null
         var consecutiveSameSkill = 0
         val maxConsecutiveSameSkill = 3
-        // [END_TURN] 容错计数：AI 连续多少轮未输出 [END_TURN] 才截断
-        var missingEndTurnRounds = 0
         // AI 文本回复历史：检测纯文本重复（AI 反复回答同样的问题）
         val recentAiReplies = mutableListOf<String>()
         val maxReplyHistory = 5
         var consecutiveSimilarReplies = 0
         val maxConsecutiveSimilarReplies = 3
 
+        // 每轮对话最多迭代次数：防止技能→结果→技能无限循环
+        val maxRounds = 20
+        // 上下文条数与 maxTokens 由设置页控制
+        val contextMessages = AiTermuxPrefs.getContextMessages(ctx)
+        val maxTokens = AiTermuxPrefs.getMaxTokens(ctx)
+
         // 构建一次 System Prompt，后续迭代复用
         val baseSystemPrompt = AiTermuxPrefs.buildFullSystemPrompt(ctx)
         // 备用在线模式专用：不含训练教训记忆块
         val baseSystemPromptNoLearned = AiTermuxPrefs.buildFullSystemPrompt(ctx, includeLearnedMemory = false, maxChars = 0)
-        // 重试时使用的精简 System Prompt
-        val retrySystemPrompt = """
+        // 重试时在完整 Prompt 之上追加纠正要求（保留技能清单，否则模型会凭空造技能名）
+        val correctionBlock = """
+## 纠正要求（本轮生效）
 你刚才的回复存在不规范之处。请不要全部推翻重写，而是：
 1. 仔细阅读 [检测到不规范输出] 消息中的问题描述
 2. 只纠正有问题的部分，保持之前正确的回复和技能卡片
 3. 在纠正位置继续输出剩余内容，不要从头开始
-4. 遵守输出规范：仅输出技能卡片（```skill 代码块）+ 一句自然语言说明
-5. 不要编造执行结果、不要声称操作已完成
-6. 不要添加技能结果、执行结果等伪造段落
-7. 如果之前被拦截过相同的技能卡片，不要重复输出
+4. 仅输出技能卡片 + 一句自然语言说明
+5. 不要编造执行结果、不要声称操作已完成、不要添加伪造的结果段落
+6. 如果之前被拦截过相同的技能卡片，不要重复输出
 """.trimIndent()
 
-        for (round in 1..20) {
+        for (round in 1..maxRounds) {
             if (cancelled) break
 
             // 根据用户选择决定使用本地还是在线模型（提前判断，用于选择是否包含教训）
             val forceLocal = config.providerConfig.provider == "local" && useLocalModel
             val forceOnline = config.providerConfig.provider == "local" && !useLocalModel
 
-            // 决定使用的 System Prompt：重试时用精简版；在线模式排除训练教训
-            val systemPrompt = when {
-                hallucinationRetryCount > 0 -> retrySystemPrompt
-                forceOnline -> baseSystemPromptNoLearned
-                else -> baseSystemPrompt
+            // 决定使用的 System Prompt：重试时追加纠正要求；在线模式排除训练教训
+            val baseForThisRound = if (forceOnline) baseSystemPromptNoLearned else baseSystemPrompt
+            val systemPrompt = if (hallucinationRetryCount > 0) {
+                "$baseForThisRound\n\n$correctionBlock"
+            } else {
+                baseForThisRound
             }
             val apiMsgs = mutableListOf<OpenAiMessage>()
             apiMsgs.add(OpenAiMessage("system", systemPrompt))
             synchronized(messages) {
-                messages.dropLast(1).takeLast(20).forEach {
+                messages.dropLast(1).takeLast(contextMessages).forEach {
                     if (it.role == "user" || it.role == "assistant") {
                         apiMsgs.add(OpenAiMessage(it.role, it.content))
                     }
@@ -775,10 +793,11 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
                     apiKey = fb.apiKey,
                     apiBaseUrl = fb.baseUrl,
                     model = fb.model,
-                    temperature = fb.temperature
+                    temperature = fb.temperature,
+                    maxTokens = maxTokens
                 )
             } else {
-                config.providerConfig
+                config.providerConfig.copy(maxTokens = maxTokens)
             }
 
             AiApiClient.chatStream(ctx, providerConfig, apiMsgs, { cancelled }, 
@@ -975,16 +994,16 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
             // === 假输出检测（传入预解析数量进行交叉验证）===
             val fakeCheck = SkillExecutor.detectFakeOutput(replyText, preParsedCount, ctx)
 
-            // 二次校验：如果预解析找到了技能块，放宽检测标准
+            // 二次校验：预解析到技能块时，只保留与「有卡片」场景真正相关的禁令。
+            // 禁令 4/6/7/8 判的是「没卡片却声称做过」，有卡片时天然不成立；
+            // 禁令 1 的「未识别到技能类型」是正则兜底误判，同样放行。
             val finalViolations = if (preParsedCount > 0 && fakeCheck.isFake) {
                 fakeCheck.violations.filter { v ->
-                    // 移除"无技能块"类禁令（4、6、7、8）
-                    v.contains("但未输出任何技能卡片").not() &&
-                    v.contains("自信式幻觉").not() &&
-                    v.contains("捏造不存在的技能").not() &&
-                    v.contains("逃避执行").not() &&
-                    // 移除"通用描述"类禁令1条目（当有技能卡时，"已执行"/"已完成"等是合法描述）
-                    v.contains("但未识别到技能类型").not()
+                    when (violationCode(v)) {
+                        4, 6, 7, 8 -> false
+                        1 -> !v.contains("未识别到技能类型")
+                        else -> true
+                    }
                 }
             } else {
                 fakeCheck.violations
@@ -1253,14 +1272,14 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
                 android.util.Log.d("AiTermux", "AI 回复完成（无技能），终止循环")
                 return
             }
-            // 有技能要执行，重置容错计数
-            missingEndTurnRounds = 0
-
             var needsUserInput = false
             val allResultTexts = mutableListOf<String>()
             var executedSkillTypes = mutableListOf<SkillType>()
 
             for ((skillTypeStr, params) in skillsToExecute) {
+                // 停止信号在技能之间也要生效：技能执行可能耗时几十秒，不能等它跑完才判定
+                if (cancelled) break
+
                 val st = runCatching { SkillType.valueOf(skillTypeStr) }.getOrNull()
                 val dangerReason = if (st != null) SkillExecutor.checkDangerous(ctx, st, params) else null
                 if (dangerReason != null && st != null) {
@@ -1352,7 +1371,7 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
                 withContext(Dispatchers.IO) { kotlinx.coroutines.delay(150) }
             }
 
-            if (needsUserInput) {
+            if (needsUserInput || cancelled) {
                 return
             }
 
@@ -1360,11 +1379,10 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
             // AI 已经生成了卡片并告知用户点击，不应再继续生成更多卡片
             val unlimitedModeActive = AiTermuxPrefs.isUnlimitedModeActive(ctx)
             if (executedSkillTypes.isNotEmpty() &&
-                executedSkillTypes.all { it.requiresClick(autoExecSkills, unlimitedModeActive) }) {
+                executedSkillTypes.all { it.requiresClick(autoExecSkills(), unlimitedModeActive) }) {
                 return
             }
 
-            val missingEndTurnWarning = ""  // 已移除 END_TURN 依赖，保留空字符串供兼容
             val allResultsText = allResultTexts.joinToString("\n")
             currentUserText = if (hasDuplicateViolation) {
                 "[技能执行完成，请根据以下执行结果继续回复用户：]\n$allResultsText\n\n[系统警告] 你违反了输出规范禁令第四条：禁止重复执行已执行过的技能。请直接回答用户的问题，不要再重复执行已完成的操作。"
@@ -1375,6 +1393,10 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
             }
         }
     }
+
+    /** 从「【禁令N】…」格式的违规描述中提取禁令编号 */
+    private fun violationCode(violation: String): Int? =
+        Regex("""【禁令(\d+)】""").find(violation)?.groupValues?.getOrNull(1)?.toIntOrNull()
 
     /**
      * 计算两个字符串的相似度（基于最长公共子序列比率）
@@ -1405,8 +1427,16 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
     }
 
     private fun buildDangerousActionDesc(type: SkillType, params: JsonObject): String {
+        val command = listOf("command", "commands")
+            .firstOrNull { params.has(it) }
+            ?.let { params.get(it).asString }
+            .orEmpty()
         return when (type) {
-            SkillType.RUN_COMMAND -> "执行命令：${if (params.has("command")) params.get("command").asString else ""}"
+            SkillType.RUN_COMMAND -> "执行命令：$command"
+            SkillType.CUSTOM_COMMAND -> "执行自定义命令：$command"
+            SkillType.CAPTURE_OUTPUT -> "执行并捕获输出：$command"
+            SkillType.COMPILE_CODE -> "执行编译命令：$command"
+            SkillType.SUB_AGENT -> "子 Agent 执行：$command"
             SkillType.FILE_DELETE -> "删除：${if (params.has("path")) params.get("path").asString else ""}"
             SkillType.CLOSE_ALL_SESSIONS -> "关闭全部会话"
             SkillType.EXIT_TERMUX -> "退出 Termux"
@@ -1424,6 +1454,56 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
         synchronized(messages) { messages.clear() }
         SkillExecutor.clearTasks()
         AiTermuxPrefs.clearChatHistory(ctx)
+    }
+
+    /** 重新生成最后一条回复：回退到最后一条用户消息并重发 */
+    fun regenerateLast() {
+        val lastUserText = synchronized(messages) {
+            while (messages.isNotEmpty() && messages.last().role == "assistant") {
+                messages.removeAt(messages.lastIndex)
+            }
+            val idx = messages.indexOfLast { it.role == "user" }
+            if (idx < 0) null else messages.removeAt(idx).content
+        } ?: return
+        val ctx = getApplication<android.app.Application>()
+        AiTermuxPrefs.saveChatHistory(ctx, messages.toOpenAiMessages())
+        sendUserMessage(lastUserText)
+    }
+
+    fun deleteMessage(messageId: String) {
+        val ctx = getApplication<android.app.Application>()
+        synchronized(messages) { messages.removeAll { it.id == messageId } }
+        AiTermuxPrefs.saveChatHistory(ctx, messages.toOpenAiMessages())
+    }
+
+    /** 导出整段对话为纯文本并调用系统分享 */
+    fun exportConversation(context: Context) {
+        val snapshot = synchronized(messages) { messages.toList() }
+        if (snapshot.isEmpty()) {
+            SnackbarHelper.show(context, "当前没有可导出的对话", Snackbar.LENGTH_SHORT)
+            return
+        }
+        val text = buildString {
+            appendLine("# Termux Agent 对话记录")
+            appendLine()
+            for (msg in snapshot) {
+                val label = when (msg.role) { "user" -> "用户"; "assistant" -> "AI"; else -> msg.role }
+                val body = msg.content.ifBlank { msg.skillCard?.title.orEmpty() }
+                if (body.isBlank()) continue
+                appendLine("**$label**: $body")
+                appendLine()
+            }
+        }
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_TEXT, text)
+            putExtra(Intent.EXTRA_TITLE, "Termux Agent 对话记录")
+        }
+        runCatching {
+            context.startActivity(Intent.createChooser(intent, "导出对话").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        }.onFailure {
+            SnackbarHelper.show(context, "导出失败: ${it.message}", Snackbar.LENGTH_LONG)
+        }
     }
 }
 
@@ -2498,6 +2578,9 @@ private fun AiChatScreen(vm: AiTermuxViewModel, onBack: () -> Unit) {
                             )
                         }
                     },
+                    actions = {
+                        AiChatTopActions(vm)
+                    },
                 )
             },
             bottomBar = {
@@ -2731,6 +2814,186 @@ private fun AiChatScreen(vm: AiTermuxViewModel, onBack: () -> Unit) {
 
     // 风险命令确认弹窗
     com.termux.app.compose.RiskConfirmDialogHost()
+}
+
+/** 对话页顶栏右侧操作：任务全量列表 + 更多操作菜单 */
+@Composable
+private fun AiChatTopActions(vm: AiTermuxViewModel) {
+    val context = LocalContext.current
+    val tasks by SkillExecutor.tasksFlow.collectAsState()
+    var showTaskList by remember { mutableStateOf(false) }
+    var showMoreMenu by remember { mutableStateOf(false) }
+    var showClearConfirm by remember { mutableStateOf(false) }
+    val pendingCount = tasks.count { it.status != "done" && it.status != "cancelled" }
+
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(end = 4.dp)) {
+        TopActionButton(Icons.Rounded.Checklist, "任务列表", badge = pendingCount > 0) { showTaskList = true }
+        TopActionButton(Icons.Rounded.MoreVert, "更多操作") { showMoreMenu = true }
+    }
+
+    OverlayDialog(
+        show = showTaskList,
+        onDismissRequest = { showTaskList = false },
+        title = "任务进度",
+        summary = if (tasks.isEmpty()) "当前没有任务" else "共 ${tasks.size} 个任务，其中 $pendingCount 个进行中",
+        content = {
+            if (tasks.isEmpty()) return@OverlayDialog
+            Box(modifier = Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    tasks.forEach { task ->
+                        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            val statusColor = when (task.status) {
+                                "done" -> MiuixTheme.colorScheme.primary
+                                "in_progress" -> Color(0xFFFF9800)
+                                "cancelled" -> MiuixTheme.colorScheme.onSurfaceVariantSummary
+                                else -> MiuixTheme.colorScheme.onSurface
+                            }
+                            Text(text = statusLabel(task.status), fontSize = 11.sp, color = statusColor)
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                text = task.title,
+                                fontSize = 13.sp,
+                                color = MiuixTheme.colorScheme.onSurface,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+            Row(horizontalArrangement = Arrangement.SpaceBetween) {
+                TextButton(text = "清空任务", onClick = { SkillExecutor.clearTasks(); showTaskList = false }, modifier = Modifier.weight(1f))
+                Spacer(Modifier.width(16.dp))
+                TextButton(text = "关闭", onClick = { showTaskList = false }, modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.textButtonColorsPrimary())
+            }
+        }
+    )
+
+    OverlayDialog(
+        show = showMoreMenu,
+        onDismissRequest = { showMoreMenu = false },
+        title = "更多操作",
+        content = {
+            Column {
+                TopActionRow("Agent 设置") {
+                    showMoreMenu = false
+                    context.startActivity(Intent(context, com.termux.app.activities.SettingsActivity::class.java))
+                }
+                TopActionRow("导出对话（分享）") {
+                    showMoreMenu = false
+                    vm.exportConversation(context)
+                }
+                TopActionRow("清空对话历史", danger = true) {
+                    showMoreMenu = false
+                    showClearConfirm = true
+                }
+            }
+        }
+    )
+
+    OverlayDialog(
+        show = showClearConfirm,
+        onDismissRequest = { showClearConfirm = false },
+        title = "清空对话历史",
+        summary = "将删除当前所有对话内容，此操作不可撤销。",
+        content = {
+            Row(horizontalArrangement = Arrangement.SpaceBetween) {
+                TextButton(text = "取消", onClick = { showClearConfirm = false }, modifier = Modifier.weight(1f))
+                Spacer(Modifier.width(16.dp))
+                TextButton(
+                    text = "清空",
+                    onClick = {
+                        vm.clearHistory()
+                        showClearConfirm = false
+                        SnackbarHelper.show(context, "对话历史已清空", Snackbar.LENGTH_SHORT)
+                    },
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.textButtonColors(color = Color(0xFFF44336))
+                )
+            }
+        }
+    )
+}
+
+/** 消息长按操作：复制 / 重新生成 / 删除 */
+@Composable
+private fun MessageActionDialog(
+    canRegenerate: Boolean,
+    onDismiss: () -> Unit,
+    onCopy: () -> Unit,
+    onRegenerate: () -> Unit,
+    onDelete: () -> Unit
+) {
+    OverlayDialog(
+        show = true,
+        onDismissRequest = onDismiss,
+        title = "消息操作",
+        content = {
+            Column {
+                TopActionRow("复制") { onCopy(); onDismiss() }
+                if (canRegenerate) {
+                    TopActionRow("重新生成") { onRegenerate(); onDismiss() }
+                }
+                TopActionRow("删除", danger = true) { onDelete(); onDismiss() }
+            }
+        }
+    )
+}
+
+@Composable
+private fun TopActionButton(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    description: String,
+    badge: Boolean = false,
+    onClick: () -> Unit
+) {
+    Box(contentAlignment = Alignment.Center) {
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .clip(CircleShape)
+                .clickable(onClick = onClick),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = description,
+                modifier = Modifier.size(22.dp),
+                tint = MiuixTheme.colorScheme.onSurface
+            )
+        }
+        if (badge) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .size(8.dp)
+                    .clip(CircleShape)
+                    .background(MiuixTheme.colorScheme.primary)
+            )
+        }
+    }
+}
+
+@Composable
+private fun TopActionRow(text: String, danger: Boolean = false, onClick: () -> Unit) {
+    TextButton(
+        text = text,
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        colors = if (danger) {
+            ButtonDefaults.textButtonColors(color = Color(0xFFF44336))
+        } else {
+            ButtonDefaults.textButtonColors()
+        }
+    )
+}
+
+private fun statusLabel(status: String): String = when (status) {
+    "done" -> "已完成"
+    "in_progress" -> "进行中"
+    "cancelled" -> "已取消"
+    else -> "待办"
 }
 
 @Composable
@@ -3133,6 +3396,7 @@ private fun ChatBubble(msg: ChatMessage, vm: AiTermuxViewModel) {
     val isUser = msg.role == "user"
     val isWarning = msg.isWarning
     var showRawResponse by remember { mutableStateOf(false) }
+    var showMessageMenu by remember { mutableStateOf(false) }
 
     // 空内容且只有卡片，不画文本气泡
     if (msg.content.isBlank() && msg.skillCard != null) {
@@ -3184,14 +3448,9 @@ private fun ChatBubble(msg: ChatMessage, vm: AiTermuxViewModel) {
                     .clip(corners)
                     .background(bg)
                     .then(
-                        if (!isUser && msg.content.isNotBlank()) {
+                        if (msg.content.isNotBlank()) {
                             Modifier.combinedClickable(
-                                onLongClick = {
-                                    val clipboard = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                                    val clip = android.content.ClipData.newPlainText("AI 回复", msg.content)
-                                    clipboard.setPrimaryClip(clip)
-                                    SnackbarHelper.show(ctx, "已复制", Snackbar.LENGTH_SHORT, null)
-                                },
+                                onLongClick = { showMessageMenu = true },
                                 onClick = {}
                             )
                         } else Modifier
@@ -3201,6 +3460,20 @@ private fun ChatBubble(msg: ChatMessage, vm: AiTermuxViewModel) {
                 Text(
                     text = parseMarkdown(msg.content, isDark),
                     style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp, color = textColor)
+                )
+            }
+
+            if (showMessageMenu) {
+                MessageActionDialog(
+                    canRegenerate = !isUser,
+                    onDismiss = { showMessageMenu = false },
+                    onCopy = {
+                        val clipboard = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                        clipboard.setPrimaryClip(android.content.ClipData.newPlainText("消息", msg.content))
+                        SnackbarHelper.show(ctx, "已复制", Snackbar.LENGTH_SHORT, null)
+                    },
+                    onRegenerate = { vm.regenerateLast() },
+                    onDelete = { vm.deleteMessage(msg.id) }
                 )
             }
         }

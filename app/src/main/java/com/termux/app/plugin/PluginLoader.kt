@@ -86,9 +86,15 @@ object PluginLoader {
     }
 
     private fun extractZip(sourceFile: File, targetDir: File) {
+        val root = targetDir.canonicalFile
         ZipFile(sourceFile).use { zip ->
             zip.entries().asSequence().forEach { entry ->
+                // Zip Slip 防护：entry.name 可能带 ../ 或绝对路径，必须确认解压后仍在插件目录内
                 val destFile = File(targetDir, entry.name)
+                val canonical = destFile.canonicalFile
+                if (canonical != root && !canonical.path.startsWith(root.path + File.separator)) {
+                    throw SecurityException("插件包含非法路径条目: ${entry.name}")
+                }
                 if (entry.isDirectory) {
                     destFile.mkdirs()
                 } else {

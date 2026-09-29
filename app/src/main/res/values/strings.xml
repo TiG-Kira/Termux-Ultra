@@ -1497,4 +1497,74 @@
 <string name="termux_debugging_preferences_title">Debugging</string>
 <string name="termux_debugging_preferences_summary">Debugging settings</string>
 
+
+    <!-- Termux Agent: whitelist / config -->
+    <string name="whitelist_sub_agent_desc">SUB_AGENT — delegate multi-step or batch tasks to a sub-agent</string>
+    <string name="whitelist_search_agent_desc">SEARCH_AGENT — batch search files by name, content or type</string>
+    <string name="whitelist_compile_code_desc">COMPILE_CODE — compile source code and return the result</string>
+    <string name="agent_online_config">Online model</string>
+    <string name="agent_online_config_desc">Base URL, API key and model used by the Agent</string>
+    <string name="agent_profiles">Model profiles</string>
+    <string name="agent_profiles_desc">Save and switch between several model configurations</string>
+    <string name="agent_chat_params">Conversation parameters</string>
+    <string name="agent_chat_params_desc">Context window, compression threshold and reply length</string>
+    <string name="agent_memory">Long-term memory (MEMORY.md)</string>
+    <string name="agent_memory_desc">View, edit or clear what the Agent remembers about you</string>
+    <string name="label_base_url">Base URL</string>
+    <string name="label_api_key">API Key</string>
+    <string name="label_model">Model</string>
+    <string name="label_temperature">Temperature</string>
+    <string name="label_context_messages">Context messages per turn</string>
+    <string name="label_compress_threshold">Auto-compress when messages exceed</string>
+    <string name="label_compress_keep_recent">Messages kept after compression</string>
+    <string name="label_max_tokens">Max tokens per reply</string>
+    <string name="profile_name">Profile name</string>
+    <string name="profile_set_active">Use</string>
+    <string name="profile_new">New profile</string>
+    <string name="profile_active_badge">In use</string>
+    <string name="agent_online_config_saved">Online model configuration saved</string>
+    <string name="agent_memory_cleared">Long-term memory cleared</string>
+    <string name="agent_memory_saved">Long-term memory saved</string>
+    <string name="agent_memory_empty">No long-term memory yet. The Agent stores your preferences here.</string>
+
+
+    <!-- Plugin center: revamped UI, share and AI generation -->
+    <string name="plugin_details">Details</string>
+    <string name="plugin_share">Share</string>
+    <string name="plugin_open_home">Open</string>
+    <string name="plugin_author_unknown">unknown author</string>
+    <string name="plugin_permission_count">%1$d permissions</string>
+    <string name="plugin_installed_at">Installed %1$s</string>
+    <string name="plugin_filter_all">All</string>
+    <string name="plugin_filter_enabled">Enabled</string>
+    <string name="plugin_filter_pending">Pending</string>
+    <string name="plugin_search_hint">Search plugins</string>
+    <string name="plugin_share_meta">Share info</string>
+    <string name="plugin_share_package">Share .tup file</string>
+    <string name="plugin_share_title">Share plugin</string>
+    <string name="plugin_export_failed">Export failed: %1$s</string>
+    <string name="plugin_dream">Dream plugin</string>
+    <string name="plugin_dream_desc">Describe what you need, let the Agent build it</string>
+    <string name="plugin_dream_input_hint">What should this plugin do?</string>
+    <string name="plugin_dream_generate">Generate</string>
+    <string name="plugin_dream_generating">Agent is writing your plugin…</string>
+    <string name="plugin_dream_preview">Preview</string>
+    <string name="plugin_dream_install">Install</string>
+    <string name="plugin_dream_retry">Try again</string>
+    <string name="plugin_dream_files">%1$d files</string>
+    <string name="plugin_dream_needs_online">Configure an online model first (Settings → Termux Agent → Online model)</string>
+    <string name="plugin_dream_needs_fallback">Local model cannot generate plugins. Enable and configure the backup online model, then switch the chat page to the online model</string>
+    <string name="plugin_dream_using_fallback">Using backup online model: %1$s</string>
+    <string name="plugin_dream_failed">Generation failed: %1$s</string>
+    <string name="plugin_dream_parse_failed">Could not parse the generated plugin. Raw output:</string>
+    <string name="plugin_dream_empty_input">Describe what the plugin should do first</string>
+
+
+    <string name="plugin_installed_at_label">Installed at</string>
+    <string name="plugin_state_label">State</string>
+    <string name="plugin_prompt_mode">Mode</string>
+    <string name="plugin_prompt_append">Append</string>
+    <string name="plugin_prompt_modify">Modify</string>
+    <string name="plugin_prompt_overwrite">Overwrite</string>
+
 </resources>
