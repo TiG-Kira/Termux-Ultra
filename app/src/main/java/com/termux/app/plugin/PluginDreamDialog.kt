@@ -191,7 +191,7 @@ fun PluginDreamDialog(onDismiss: () -> Unit, onInstalled: () -> Unit) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         CircularProgressIndicator(
                             modifier = Modifier.size(22.dp),
-                            strokeWidth = 2.5f
+                            strokeWidth = 2.5.dp
                         )
                         Spacer(Modifier.width(10.dp))
                         Text(

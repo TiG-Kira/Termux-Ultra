@@ -973,7 +973,7 @@ val composeUseCustomKeyboardLayout by com.termux.app.terminal.shell.ComposeTermi
                     onClick = { showOnlineConfigEditor = true },
                     startAction = { SettingIcon(Icons.Rounded.Cloud, contentDescription = context.getString(R.string.agent_online_config)) }
                 )
-            })) else emptyList(),
+            })).toTypedArray() else emptyArray(),
         SearchableSetting(sec_ai, context.getString(R.string.agent_profiles), context.getString(R.string.agent_profiles_desc),
             keywords = listOf("配置档", "profile", "多模型", "切换", "switch"),
             render = {
