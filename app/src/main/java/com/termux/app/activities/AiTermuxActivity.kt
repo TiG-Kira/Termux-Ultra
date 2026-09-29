@@ -1511,10 +1511,13 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
 
 @Composable
 private fun AiTermuxRoot(vm: AiTermuxViewModel, onBack: () -> Unit) {
-    if (!vm.config.isConfigured) {
-        AiSetupScreen(vm = vm, onBack = onBack)
+    var showSetup by remember { mutableStateOf(false) }
+    if (!vm.config.isConfigured || showSetup) {
+        AiSetupScreen(vm = vm, onBack = {
+            if (showSetup) showSetup = false else onBack()
+        })
     } else {
-        AiChatScreen(vm = vm, onBack = onBack)
+        AiChatScreen(vm = vm, onBack = onBack, onOpenSetup = { showSetup = true })
     }
 }
 
@@ -2471,7 +2474,7 @@ private fun ProviderChip(label: String, value: String, selected: String, isDark:
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun AiChatScreen(vm: AiTermuxViewModel, onBack: () -> Unit) {
+private fun AiChatScreen(vm: AiTermuxViewModel, onBack: () -> Unit, onOpenSetup: () -> Unit) {
     val ctx = LocalContext.current
     val scrollBehavior = MiuixScrollBehavior()
     val listState = rememberLazyListState()
@@ -2880,7 +2883,7 @@ private fun AiChatTopActions(vm: AiTermuxViewModel) {
             Column {
                 TopActionRow("Agent 设置") {
                     showMoreMenu = false
-                    context.startActivity(Intent(context, com.termux.app.activities.SettingsActivity::class.java))
+                    onOpenSetup()
                 }
                 TopActionRow("导出对话（分享）") {
                     showMoreMenu = false
