@@ -1151,18 +1151,24 @@ private fun TipsAgentCard(
             Spacer(Modifier.height(8.dp))
 
             // ===== 快捷入口：一行 3 个，数据驱动自动换行，并优化卡片样式 =====
+            // 三色循环：全部引用主题角色，随 Material You / 明暗模式自动变化
+            val quickEntryAccents = listOf(
+                MiuixTheme.colorScheme.primary,
+                MiuixTheme.colorScheme.secondary,
+                MiuixTheme.colorScheme.onTertiaryContainer
+            )
             val quickEntries = listOf(
                 QuickEntryData(
                     icon = Icons.Rounded.Add,
-                    iconColor = Color(0xFF22C55E),
-                    iconBgColor = Color(0xFF22C55E).copy(alpha = 0.12f),
+                    iconColor = quickEntryAccents[0],
+                    iconBgColor = quickEntryAccents[0].copy(alpha = 0.12f),
                     label = stringResource(R.string.action_new_session),
                     onClick = onNewTerminalAndOpenConsole
                 ),
                 QuickEntryData(
                     icon = Icons.Rounded.Monitor,
-                    iconColor = Color(0xFF6366F1),
-                    iconBgColor = Color(0xFF6366F1).copy(alpha = 0.12f),
+                    iconColor = quickEntryAccents[1],
+                    iconBgColor = quickEntryAccents[1].copy(alpha = 0.12f),
                     label = stringResource(R.string.quick_entry_qemu),
                     onClick = {
                         val intent = Intent(context, com.termux.app.activities.QemuVmActivity::class.java)
@@ -1171,8 +1177,8 @@ private fun TipsAgentCard(
                 ),
                 QuickEntryData(
                     icon = Icons.Rounded.Archive,
-                    iconColor = Color(0xFF2563EB),
-                    iconBgColor = Color(0xFF2563EB).copy(alpha = 0.12f),
+                    iconColor = quickEntryAccents[2],
+                    iconBgColor = quickEntryAccents[2].copy(alpha = 0.12f),
                     label = "软件包管理",
                     onClick = {
                         val intent = Intent(context, com.termux.app.activities.PackageManagerActivity::class.java)
@@ -1181,8 +1187,8 @@ private fun TipsAgentCard(
                 ),
                 QuickEntryData(
                     icon = Icons.Rounded.Palette,
-                    iconColor = Color(0xFFEC4899),
-                    iconBgColor = Color(0xFFEC4899).copy(alpha = 0.12f),
+                    iconColor = quickEntryAccents[0],
+                    iconBgColor = quickEntryAccents[0].copy(alpha = 0.12f),
                     label = "主题外观",
                     onClick = {
                         if (IntegratedTools.requireEnabled(context, IntegratedTools.Tool.TERMUX_STYLING)) {
@@ -1193,15 +1199,15 @@ private fun TipsAgentCard(
                 ),
                 QuickEntryData(
                     icon = Icons.Rounded.Edit,
-                    iconColor = Color(0xFF0EA5E9),
-                    iconBgColor = Color(0xFF0EA5E9).copy(alpha = 0.12f),
+                    iconColor = quickEntryAccents[1],
+                    iconBgColor = quickEntryAccents[1].copy(alpha = 0.12f),
                     label = "编辑文本",
                     onClick = { val intent = Intent(context, com.termux.app.activities.TextEditorHomeActivity::class.java); context.startActivity(intent) }
                 ),
                 QuickEntryData(
                     icon = Icons.Rounded.AutoAwesome,
-                    iconColor = Color(0xFF7C3AED),
-                    iconBgColor = Color(0xFF7C3AED).copy(alpha = 0.12f),
+                    iconColor = quickEntryAccents[2],
+                    iconBgColor = quickEntryAccents[2].copy(alpha = 0.12f),
                     label = stringResource(R.string.resources_center),
                     onClick = {
                         val intent = Intent(context, com.termux.app.activities.FeatureCenterActivity::class.java)
@@ -1806,9 +1812,8 @@ private fun OverviewCardContainer(
     clickEnabled: Boolean = true,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    val isDark = isSystemInDarkTheme()
     val isWide = card.size == CardSize.WIDE
-    val surfaceColor = backgroundColor ?: if (isDark) Color(0xFF1C1C1E) else Color(0xFFFAFAFA)
+    val surfaceColor = backgroundColor ?: MiuixTheme.colorScheme.surface
 
     Card(
         modifier = Modifier
@@ -2138,7 +2143,7 @@ private fun GpuMonitorCard(
     val peakUsage = MonitorHistory.getGpuPeak()
     val color = if (isGpuAvailable) getUsageColor(usage)
                   else MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.7f)
-    val gpuColor = Color(0xFFAF52DE)
+    val gpuColor = MiuixTheme.colorScheme.onSurfaceVariantSummary
     val displayColor = if (isGpuAvailable) color else gpuColor
     val ratio = if (isGpuAvailable) usage / 100f else 0f
     val loadLabel = if (isGpuAvailable) {
@@ -2442,7 +2447,7 @@ fun ProcessListCard(
     val sleepingCount = processes.count { it.isSleeping && !it.isBackgroundRunning && !it.isFrozen }
     val activeProcesses = processes.filter { !it.isFrozen }
     val frozenProcesses = processes.filter { it.isFrozen }
-    val processColor = Color(0xFF5AC8FA)
+    val processColor = MiuixTheme.colorScheme.primary
 
     OverviewCardContainer(
             card = card,
@@ -2493,8 +2498,8 @@ fun ProcessListCard(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                if (runningCount > 0) CardStatusBadge(text = "${stringResource(R.string.overview_running)} $runningCount", color = Color(0xFF34C759))
-                if (backgroundCount > 0) CardStatusBadge(text = "${stringResource(R.string.overview_background)} $backgroundCount", color = Color(0xFFFF9500))
+                if (runningCount > 0) CardStatusBadge(text = "${stringResource(R.string.overview_running)} $runningCount", color = MiuixTheme.colorScheme.primary)
+                if (backgroundCount > 0) CardStatusBadge(text = "${stringResource(R.string.overview_background)} $backgroundCount", color = MiuixTheme.colorScheme.secondary)
                 if (sleepingCount > 0) CardStatusBadge(text = "${stringResource(R.string.overview_sleeping)} $sleepingCount", color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
                 if (frozenCount > 0) CardStatusBadge(text = stringResource(R.string.overview_frozen_count, frozenCount), color = MiuixTheme.colorScheme.error)
             }
@@ -2618,8 +2623,8 @@ private fun ProcessListContent(
 private fun ProcessItemRow(process: ProcessInfo, compact: Boolean = false) {
     val stateColor = when {
         process.isFrozen -> MiuixTheme.colorScheme.error
-        process.isRunning -> Color(0xFF34C759)
-        process.isBackgroundRunning -> Color(0xFFFF9500)
+        process.isRunning -> MiuixTheme.colorScheme.primary
+        process.isBackgroundRunning -> MiuixTheme.colorScheme.secondary
         process.isSleeping -> MiuixTheme.colorScheme.onSurfaceVariantSummary
         else -> MiuixTheme.colorScheme.onSurfaceVariantSummary
     }
@@ -2714,8 +2719,8 @@ private fun ProcessItemRow(process: ProcessInfo, compact: Boolean = false) {
 private fun ProcessItemRow(process: ProcessInfo) {
     val stateColor = when {
         process.isFrozen -> MiuixTheme.colorScheme.error
-        process.isRunning -> Color(0xFF4CAF50)
-        process.isBackgroundRunning -> Color(0xFFFF9800)
+        process.isRunning -> MiuixTheme.colorScheme.primary
+        process.isBackgroundRunning -> MiuixTheme.colorScheme.secondary
         process.isSleeping -> MiuixTheme.colorScheme.onSurfaceVariantSummary
         else -> MiuixTheme.colorScheme.onSurfaceVariantSummary
     }
@@ -2779,8 +2784,8 @@ private fun ProcessItemRow(process: ProcessInfo) {
 private fun ProcessItemRowCompact(process: ProcessInfo) {
     val stateColor = when {
         process.isFrozen -> MiuixTheme.colorScheme.error
-        process.isRunning -> Color(0xFF4CAF50)
-        process.isBackgroundRunning -> Color(0xFFFF9800)
+        process.isRunning -> MiuixTheme.colorScheme.primary
+        process.isBackgroundRunning -> MiuixTheme.colorScheme.secondary
         process.isSleeping -> MiuixTheme.colorScheme.onSurfaceVariantSummary
         else -> MiuixTheme.colorScheme.onSurfaceVariantSummary
     }
@@ -2833,7 +2838,7 @@ fun StopAllCard(
     onEditClick: () -> Unit
 ) {
     var showConfirmDialog by remember { mutableStateOf(false) }
-    val accentColor = if (sessionCount > 0) Color(0xFFFF3B30) else MiuixTheme.colorScheme.onSurfaceVariantSummary
+    val accentColor = if (sessionCount > 0) MiuixTheme.colorScheme.error else MiuixTheme.colorScheme.onSurfaceVariantSummary
     val isWide = card.size == CardSize.WIDE
 
     OverviewCardContainer(
@@ -2968,12 +2973,13 @@ fun StopAllCard(
 // Helper Functions
 // ============================================================
 
+@Composable
 fun getUsageColor(usage: Float, maxValue: Float = 100f): Color {
     val ratio = if (maxValue > 0f) usage / maxValue else usage / 100f
     return when {
-        ratio < 0.5f -> Color(0xFF4CAF50)
-        ratio < 0.8f -> Color(0xFFFF9800)
-        else -> Color(0xFFF44336)
+        ratio < 0.5f -> MiuixTheme.colorScheme.primary
+        ratio < 0.8f -> MiuixTheme.colorScheme.secondary
+        else -> MiuixTheme.colorScheme.error
     }
 }
 
