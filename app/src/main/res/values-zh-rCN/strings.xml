@@ -1503,6 +1503,7 @@
     <string name="plugin_dream_failed">生成失败：%1$s</string>
     <string name="plugin_dream_parse_failed">无法解析生成的插件，原始输出如下：</string>
     <string name="plugin_dream_empty_input">先描述一下插件要做什么</string>
+    <string name="plugin_dream_abort">中止生成</string>
 
 
     <string name="plugin_installed_at_label">安装时间</string>

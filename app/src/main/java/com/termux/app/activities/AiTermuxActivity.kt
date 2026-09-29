@@ -2187,6 +2187,7 @@ private fun AiSetupScreen(vm: AiTermuxViewModel, onBack: () -> Unit) {
 
             }
 
+            if (provider == "local") {
             item { SectionTitle("3. 温度 (%.1f)".format(temperature)) }
             item {
                 Slider(
@@ -2196,6 +2197,7 @@ private fun AiSetupScreen(vm: AiTermuxViewModel, onBack: () -> Unit) {
                     steps = 15,
                     modifier = Modifier.fillMaxWidth()
                 )
+            }
             }
 
             item { SectionTitle("4. 自定义 System Prompt（可选）") }
@@ -2343,10 +2345,7 @@ private fun AiSetupScreen(vm: AiTermuxViewModel, onBack: () -> Unit) {
                         TextField(value = editModel, onValueChange = { editModel = it },
                             label = "Model", modifier = Modifier.fillMaxWidth(),
                             useLabelAsPlaceholder = true, singleLine = true)
-                        Text("温度 %.1f".format(editTemp), style = TextStyle(fontSize = 13.sp))
-                        Slider(value = editTemp,
-                            onValueChange = { editTemp = (it * 10).toInt() / 10f },
-                            valueRange = 0f..1.6f, steps = 15, modifier = Modifier.fillMaxWidth())
+                        // 在线模型（Profile 专属）不暴露温度调节入口
                         Row(modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
                             horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             TextButton(text = "取消", onClick = { showProfileEditor = false },

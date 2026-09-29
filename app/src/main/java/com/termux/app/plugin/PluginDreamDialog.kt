@@ -189,7 +189,10 @@ fun PluginDreamDialog(onDismiss: () -> Unit, onInstalled: () -> Unit) {
                 if (generating) {
                     Spacer(Modifier.height(12.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        CircularProgressIndicator(modifier = Modifier.size(18.dp))
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(22.dp),
+                            strokeWidth = 2.5f
+                        )
                         Spacer(Modifier.width(10.dp))
                         Text(
                             text = stringResource(R.string.plugin_dream_generating),
@@ -312,7 +315,7 @@ fun PluginDreamDialog(onDismiss: () -> Unit, onInstalled: () -> Unit) {
                         colors = ButtonDefaults.buttonColors(color = Color(0xFFF44336))
                     ) {
                         Text(
-                            text = stringResource(R.string.cancel),
+                            text = stringResource(R.string.plugin_dream_abort),
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color.White
