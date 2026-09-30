@@ -151,11 +151,13 @@ object PluginAgentGenerator {
         // entry 指向的文件必须都在包里，否则安装时才会失败，提前在这里拦住
         val present = files.map { it.path }.toSet()
         val missing = mutableListOf<String>()
-        manifest.entryPoints?.h5Home?.takeIf { it.enabled }?.entry?.let {
-            if (it !in present) missing.add(it)
+        manifest.entryPoints?.h5Home?.takeIf { it.enabled }?.let { home ->
+            val entry = home.effectiveEntry
+            if (entry !in present) missing.add(entry)
         }
         manifest.entryPoints?.pages?.forEach { page ->
-            page.entry?.let { if (it !in present) missing.add(it) }
+            val entry = page.effectiveEntry
+            if (entry != null && entry !in present) missing.add(entry)
         }
         if (missing.isNotEmpty()) {
             throw IllegalArgumentException("以下 entry 文件缺失: ${missing.joinToString("、")}")

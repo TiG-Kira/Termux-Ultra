@@ -1272,4 +1272,48 @@ object AiTermuxPrefs {
 
     // ---------- Unlimited Mode Alias ----------
     fun isUnlimitedMode(context: Context): Boolean = isUnlimitedModeActive(context)
+
+    /**
+     * 重置 Agent 所有状态：清除 LLM 配置、Profiles、对话历史、训练记忆、
+     * 降级模型配置等，回到未配置状态。
+     * 用户点击「重置配置状态」时调用。
+     */
+    fun resetAllAiState(context: Context) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().apply {
+            // 当前 LLM 配置
+            remove("provider")
+            remove("api_key")
+            remove("base_url")
+            remove("model")
+            remove("temperature")
+            remove("local_model_id")
+            remove("custom_system_prompt")
+            remove("use_custom_system_prompt")
+            // Profiles
+            remove(KEY_LLM_PROFILES)
+            remove(KEY_ACTIVE_PROFILE_ID)
+            // 对话历史
+            remove(KEY_CHAT_HISTORY)
+            remove(KEY_TEACHER_CHAT_HISTORY)
+            // 训练记忆
+            remove(KEY_MEMORY)
+            remove(KEY_LEARNED_MEMORY_BLOCK)
+            remove(KEY_LESSONS)
+            remove(KEY_LAST_TRAIN_SESSION)
+            remove(KEY_TRAIN_HINT_SHOWN)
+            // 降级在线模型
+            remove(KEY_FALLBACK_ONLINE_ENABLED)
+            remove(KEY_FALLBACK_ONLINE_API_KEY)
+            remove(KEY_FALLBACK_ONLINE_BASE_URL)
+            remove(KEY_FALLBACK_ONLINE_MODEL)
+            remove(KEY_FALLBACK_ONLINE_TEMPERATURE)
+            // 本地模型选择
+            remove(KEY_LOCAL_ENGINE_TYPE)
+            remove(KEY_OLLAMA_SELECTED_MODEL)
+            remove(KEY_OLLAMA_INSTALLED_MODELS)
+            // 让下次 getConfig 返回 needsReconfig = false，自然进入 SetupScreen
+            remove(KEY_NEEDS_RECONFIG)
+            apply()
+        }
+    }
 }
