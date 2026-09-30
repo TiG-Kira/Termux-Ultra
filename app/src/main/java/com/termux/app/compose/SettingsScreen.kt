@@ -129,6 +129,7 @@ fun SettingsScreen(
     var restoreMessage by remember { mutableStateOf("") }
     var launchRestore by remember { mutableStateOf(false) }
     var showAiClearConfirm by remember { mutableStateOf(false) }
+    var showResetConfigWarning by remember { mutableStateOf(false) }
     var showWhitelistDialog by remember { mutableStateOf(false) }
     var tempWhitelistSkills by remember { mutableStateOf<Set<SkillType>>(emptySet()) }
 
@@ -941,16 +942,13 @@ val composeUseCustomKeyboardLayout by com.termux.app.terminal.shell.ComposeTermi
                     startAction = { SettingIcon(Icons.Rounded.Shield, contentDescription = context.getString(R.string.trust_whitelist)) }
                 )
             }),
-        SearchableSetting(sec_ai, context.getString(R.string.reconfigure_ai), context.getString(R.string.back_to_config_desc),
-            keywords = listOf("重新配置", "reconfigure", "重新设置"),
+        SearchableSetting(sec_ai, context.getString(R.string.reconfigure_ai), context.getString(R.string.reset_config_desc),
+            keywords = listOf("重新配置", "重置", "reset", "reconfigure", "重新设置", "恢复"),
             render = {
                 ArrowPreference(
                     title = context.getString(R.string.reconfigure_ai),
-                    summary = context.getString(R.string.back_to_config_desc),
-                    onClick = {
-                        val intent = Intent(context, com.termux.app.activities.AiTermuxActivity::class.java)
-                        intent.putExtra("force_setup", true); context.startActivity(intent)
-                    },
+                    summary = context.getString(R.string.reset_config_desc),
+                    onClick = { showResetConfigWarning = true },
                     startAction = { SettingIcon(Icons.Rounded.Autorenew, contentDescription = context.getString(R.string.reconfigure_ai)) }
                 )
             }),
@@ -1647,12 +1645,8 @@ val composeUseCustomKeyboardLayout by com.termux.app.terminal.shell.ComposeTermi
                             }
                             ArrowPreference(
                                 title = context.getString(R.string.reconfigure_ai),
-                                summary = context.getString(R.string.back_to_config_desc),
-                                onClick = {
-                                    val intent = Intent(context, com.termux.app.activities.AiTermuxActivity::class.java)
-                                    intent.putExtra("force_setup", true)
-                                    context.startActivity(intent)
-                                },
+                                summary = context.getString(R.string.reset_config_desc),
+                                onClick = { showResetConfigWarning = true },
                                 startAction = {
                                 SettingIcon(Icons.Rounded.Autorenew, contentDescription = context.getString(R.string.reconfigure_ai))
                                 }
@@ -2274,6 +2268,48 @@ val composeUseCustomKeyboardLayout by com.termux.app.terminal.shell.ComposeTermi
                 )
             }
         }
+        )
+    }
+
+    // ---------- AI Termux：重置配置状态警告 ----------
+    if (showResetConfigWarning) {
+        OverlayDialog(
+            show = true,
+            title = context.getString(R.string.reset_config_warning_title),
+            summary = context.getString(R.string.reset_config_warning_message),
+            onDismissRequest = { showResetConfigWarning = false },
+            content = {
+                Column {
+                    Text(
+                        text = context.getString(R.string.reset_config_warning_hint),
+                        modifier = Modifier.padding(bottom = 12.dp),
+                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                    )
+                    Row(
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        TextButton(
+                            text = context.getString(R.string.cancel),
+                            onClick = { showResetConfigWarning = false },
+                            modifier = Modifier.weight(1f)
+                        )
+                        Spacer(Modifier.width(20.dp))
+                        TextButton(
+                            text = context.getString(R.string.reset_config_confirm_btn),
+                            onClick = {
+                                showResetConfigWarning = false
+                                AiTermuxPrefs.resetAllAiState(context)
+                                val intent = Intent(context, com.termux.app.activities.AiTermuxActivity::class.java)
+                                intent.putExtra("force_setup", true)
+                                context.startActivity(intent)
+                            },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.textButtonColors(color = Color(0xFFF44336))
+                        )
+                    }
+                }
+            }
         )
     }
 

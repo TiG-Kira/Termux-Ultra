@@ -69,6 +69,11 @@ README.md           可选
 h5      WebView 加载 HTML 页面（默认，向后兼容）
 compose 宿主原生渲染 Compose JSON DSL 页面
 
+**重要：h5Home.type=compose 时必须同时显式写 entry 字段指向 compose/home.json，不能省略。**
+完整示例：
+  "h5Home": { "enabled": true, "type": "compose", "entry": "compose/home.json", "title": "主页" }
+同时必须在 files 里生成 compose/home.json 文件，内容是合法的 Compose DSL JSON。
+
 ## pages[].type 可选值
 h5      WebView 加载 HTML
 compose 宿主原生渲染 Compose JSON DSL

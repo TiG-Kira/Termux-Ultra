@@ -1003,7 +1003,12 @@
     <string name="lines_50000">50000 行</string>
     <string name="lines_1000">1000 行</string>
     <string name="lines_5000">5000 行</string>
-    <string name="reconfigure_ai">重新配置 AI</string>
+    <string name="reconfigure_ai">重置配置状态</string>
+    <string name="reset_config_desc">清除当前 LLM 配置、Profiles、对话历史等，将 Agent 恢复到未配置状态</string>
+    <string name="reset_config_warning_title">确定重置 Agent 配置状态？</string>
+    <string name="reset_config_warning_message">这将清除所有 LLM 配置、Profiles、对话历史和训练记忆，且无法恢复。</string>
+    <string name="reset_config_warning_hint">如果只是想进入 Agent 设置页调整参数，请从 Agent 对话页面的「更多操作」菜单进入。</string>
+    <string name="reset_config_confirm_btn">全部重置并前往设置</string>
     <string name="backup_online_llm">备用在线大模型</string>
     <string name="clear_chat_title">清空对话记录？</string>
     <string name="add_custom_skill">添加自定义技能</string>

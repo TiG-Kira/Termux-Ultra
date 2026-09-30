@@ -137,18 +137,22 @@ object PluginLoader {
 
         // Compose DSL 页面入口文件校验（pages 子页 + compose 主页）
         manifest.entryPoints?.pages?.forEach { page ->
-            if (page.type == "compose" && !page.entry.isNullOrBlank()) {
-                val entryFile = File(pluginDir, page.entry)
+            val entry = page.effectiveEntry
+            if (page.type == "compose" && !entry.isNullOrBlank()) {
+                val entryFile = File(pluginDir, entry)
                 if (!entryFile.exists()) {
-                    throw IllegalStateException("插件 Compose 页面配置不存在: ${page.entry}")
+                    throw IllegalStateException("插件 Compose 页面配置不存在: $entry")
                 }
             }
         }
         val home = manifest.entryPoints?.h5Home
-        if (home?.enabled == true && home.type == "compose" && home.entry.isNotBlank()) {
-            val homeFile = File(pluginDir, home.entry)
-            if (!homeFile.exists()) {
-                throw IllegalStateException("插件 Compose 主页配置不存在: ${home.entry}")
+        if (home?.enabled == true && home.type == "compose") {
+            val entry = home.effectiveEntry
+            if (entry.isNotBlank()) {
+                val homeFile = File(pluginDir, entry)
+                if (!homeFile.exists()) {
+                    throw IllegalStateException("插件 Compose 主页配置不存在: $entry")
+                }
             }
         }
     }

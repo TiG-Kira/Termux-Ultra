@@ -182,19 +182,20 @@ fun PluginCenterScreen() {
         val home = plugin.manifest.entryPoints?.h5Home
         if (home?.enabled == true) {
             val title = home.title ?: plugin.manifest.name
+            val entry = home.effectiveEntry
             val type = home.type
             if (type == "compose") {
                 PluginComposeActivity.start(
                     context = context,
                     pluginId = plugin.id,
-                    entryPath = home.entry,
+                    entryPath = entry,
                     title = title
                 )
             } else {
                 PluginWebViewActivity.start(
                     context = context,
                     pluginId = plugin.id,
-                    entryPath = home.entry,
+                    entryPath = entry,
                     title = title
                 )
             }

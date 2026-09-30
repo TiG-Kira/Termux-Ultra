@@ -27,13 +27,13 @@ data class PluginManifest(
     fun getAllH5Entries(): List<Pair<String, String>> {
         val entries = mutableListOf<Pair<String, String>>()
         entryPoints?.h5Home?.let { h5 ->
-            if (h5.enabled && h5.entry.isNotBlank()) {
-                entries.add((h5.title ?: name) to h5.entry)
+            if (h5.enabled && h5.type == "h5" && h5.effectiveEntry.isNotBlank()) {
+                entries.add((h5.title ?: name) to h5.effectiveEntry)
             }
         }
         entryPoints?.pages?.forEach { page ->
-            if (page.type == "h5" && !page.entry.isNullOrBlank()) {
-                entries.add(page.title to page.entry.orEmpty())
+            if (page.type == "h5" && !page.effectiveEntry.isNullOrBlank()) {
+                entries.add(page.title to page.effectiveEntry.orEmpty())
             }
         }
         return entries
@@ -89,7 +89,13 @@ data class PluginH5HomeRef(
     val title: String? = null,
     /** h5 或 compose，默认 h5（向后兼容） */
     val type: String = "h5"
-)
+) {
+    /** 根据 type 推断真实 entry；当模型漏写 entry 时自动 fallback */
+    val effectiveEntry: String get() = when (type) {
+        "compose" -> if (entry == "web/index.html") "compose/home.json" else entry
+        else -> entry
+    }
+}
 
 data class PluginPageRef(
     val id: String,
@@ -97,7 +103,10 @@ data class PluginPageRef(
     val icon: String? = null,
     val type: String = "h5",
     val entry: String? = null
-)
+) {
+    /** 有 entry 则用 entry，否则不推断（子页没有统一默认路径） */
+    val effectiveEntry: String? get() = entry
+}
 
 data class PluginSystemPromptRef(
     val mode: String = "APPEND",

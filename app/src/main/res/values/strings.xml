@@ -1155,7 +1155,12 @@
     <string name="lines_50000">50000 lines</string>
     <string name="lines_1000">1000 lines</string>
     <string name="lines_5000">5000 lines</string>
-    <string name="reconfigure_ai">Reconfigure AI</string>
+    <string name="reconfigure_ai">Reset Agent State</string>
+    <string name="reset_config_desc">Clear current LLM config, profiles, chat history, etc. and reset Agent to unconfigured state</string>
+    <string name="reset_config_warning_title">Reset Agent configuration state?</string>
+    <string name="reset_config_warning_message">This will permanently erase all LLM config, profiles, chat history, and training memory. This cannot be undone.</string>
+    <string name="reset_config_warning_hint">If you only want to open the Agent setup page to adjust settings, use the \"More Actions\" menu from the Agent chat screen.</string>
+    <string name="reset_config_confirm_btn">Reset all &amp; go to setup</string>
     <string name="backup_online_llm">Backup online LLM</string>
     <string name="clear_chat_title">Clear chat history?</string>
     <string name="add_custom_skill">Add custom skill</string>
