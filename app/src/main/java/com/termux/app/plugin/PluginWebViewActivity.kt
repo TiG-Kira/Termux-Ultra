@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.view.WindowManager
 import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
@@ -77,7 +78,12 @@ class PluginWebViewActivity : ComponentActivity() {
         pluginConfig = PluginManager.getPluginConfig(this, pluginId)
         val title = intent.getStringExtra(EXTRA_TITLE) ?: plugin.manifest.name
 
+        // 与 compose 页面一致：状态栏/导航栏透明，让 h5 页面背景透出，
+        // 否则栏色沿用主题默认不透明色，与页面配色不一致（老问题）。
+        window.clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_NAVIGATION)
         WindowCompat.setDecorFitsSystemWindows(window, false)
+        window.statusBarColor = android.graphics.Color.TRANSPARENT
+        window.navigationBarColor = android.graphics.Color.TRANSPARENT
 
         setContent {
             KiTerminalTheme {
