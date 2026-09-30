@@ -1,6 +1,7 @@
 package com.termux.app.plugin
 
 import android.content.Context
+import android.util.Log
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -17,6 +18,8 @@ import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 
 object ComposeRenderer {
+
+    private const val TAG = "ComposeRenderer"
 
     @Composable
     fun RenderNode(
@@ -133,17 +136,29 @@ object ComposeRenderer {
         stateStore: MutableMap<String, Any?>
     ) {
         val source = node.props["itemsSource"] as? Map<*, *>
-        val itemTemplate = node.props["itemTemplate"] as? ComposeUiNode ?: return
+        // props 是 Map<String, Any?>，Gson 把 itemTemplate 这种嵌套对象反序列化为
+        // LinkedTreeMap 而非 ComposeUiNode，导致 as? ComposeUiNode 恒为 null、lazyColumn 整段不渲染。
+        // 这里把 Map 重新序列化后再解析成 ComposeUiNode，让模板真正生效。
+        val rawTemplate = node.props["itemTemplate"]
+        val itemTemplate = when (rawTemplate) {
+            is ComposeUiNode -> rawTemplate
+            is Map<*, *> -> ComposeUiNodeParser.parse(Gson().toJson(rawTemplate))
+            else -> null
+        } ?: return
 
         var items by remember { mutableStateOf<List<Map<String, Any?>>>(emptyList()) }
 
         LaunchedEffect(Unit) {
-            if (source?.get("type") == "shell") {
-                val cmd = source["command"] as? String ?: return@LaunchedEffect
-                val result = PluginManager.executeShellCommand(context, pluginId, cmd)
-                if (result.isSuccess) {
-                    items = parseShellOutput(result.getOrDefault(""))
+            runCatching {
+                if (source?.get("type") == "shell") {
+                    val cmd = source["command"] as? String ?: return@runCatching
+                    val result = PluginManager.executeShellCommand(context, pluginId, cmd)
+                    if (result.isSuccess) {
+                        items = parseShellOutput(result.getOrDefault(""))
+                    }
                 }
+            }.onFailure { e ->
+                Log.e(TAG, "lazyColumn 加载失败: $rawTemplate", e)
             }
         }
 
