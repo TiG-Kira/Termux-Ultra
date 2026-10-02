@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
+import android.view.KeyEvent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.FastOutLinearInEasing
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -22,10 +23,12 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -84,6 +87,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.termux.R
@@ -98,6 +102,7 @@ import com.awkoo.libterminal.view.TerminalView as LibTerminalView
 import com.termux.app.terminal.shell.pid
 import com.termux.app.terminal.shell.sessionExited
 import com.termux.shared.view.KeyboardUtils
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
@@ -955,6 +960,9 @@ fun TerminalDetailScreenCompose(
                             onSendKey = { bytes -> currentSession.write(bytes) },
                             effectiveContentColor = MiuixTheme.colorScheme.onSurface,
                             modifiers = extraKeysModifiers,
+                            onSendNamedKey = { keyCode, ctrl, alt ->
+                                terminalViewRef.value?.sendKeyEvent(keyCode, ctrl, alt)
+                            },
                             onToggleKeyboard = { toggleKeyboardRespectingSettings() }
                         )
                     }
@@ -1300,7 +1308,7 @@ private fun ContextMenuItem(
 }
 
 private sealed class ToolbarKey {
-    class Simple(val display: String, val onSend: () -> Unit) : ToolbarKey()
+    class Simple(val display: String, val repeats: Boolean = false, val onSend: () -> Unit) : ToolbarKey()
     class ModifierKey(
         val label: String,
         val isSticky: () -> Boolean,
@@ -1334,38 +1342,82 @@ private class ExtraKeysModifierState {
     }
 }
 
-private fun escSeq(seq: String) = byteArrayOf(0x1B) + seq.toByteArray(Charsets.UTF_8)
+/**
+ * 长按可连发的键，与原版 Termux 的 ExtraKeysConstants.PRIMARY_REPETITIVE_KEYS 保持一致。
+ * 只列 extra-keys 的规范键名：内置默认布局里的字面量键（如 `\`）长按连发会连打字符，
+ * 不是用户预期，普通可打印字符一律不连发。
+ */
+private val REPETITIVE_KEY_NAMES = setOf(
+    "UP", "DOWN", "LEFT", "RIGHT", "BKSP", "DEL", "PGUP", "PGDN"
+)
 
-// extra-keys 命名键 → 字节。escape 序列必须与 KeyHandler.getCode() 一致，
-// 否则方向键 / F 键在应用模式下的终端里会错位。
-private val EXTRA_KEY_BYTES: Map<String, ByteArray> = mapOf(
-    "SPACE" to byteArrayOf(0x20),
-    "ESC" to byteArrayOf(0x1B),
-    "TAB" to byteArrayOf(0x09),
-    "BKSP" to byteArrayOf(0x7F),
-    "ENTER" to byteArrayOf(0x0D),
-    "HOME" to escSeq("[H"),
-    "END" to escSeq("[F"),
-    "UP" to escSeq("[A"),
-    "DOWN" to escSeq("[B"),
-    "LEFT" to escSeq("[D"),
-    "RIGHT" to escSeq("[C"),
-    "INS" to escSeq("[2~"),
-    "DEL" to escSeq("[3~"),
-    "PGUP" to escSeq("[5~"),
-    "PGDN" to escSeq("[6~"),
-    "F1" to escSeq("OP"),
-    "F2" to escSeq("OQ"),
-    "F3" to escSeq("OR"),
-    "F4" to escSeq("OS"),
-    "F5" to escSeq("[15~"),
-    "F6" to escSeq("[17~"),
-    "F7" to escSeq("[18~"),
-    "F8" to escSeq("[19~"),
-    "F9" to escSeq("[20~"),
-    "F10" to escSeq("[21~"),
-    "F11" to escSeq("[23~"),
-    "F12" to escSeq("[24~")
+/** 单个按键的最小宽度：低于此值等分出来的键点不中，改用横向滚动。 */
+private val MIN_KEY_WIDTH = 28.dp
+
+/**
+ * 把 keyCode + 修饰态交给 libterminal 编码并写入当前会话。
+ *
+ * 走引擎的 TerminalView.onKeyDown 而不是自己拼字节：KeyInputProcessor 会读
+ * KeyEvent 的 metaState 取 ctrl/alt，再叠加 extraKeysModifierReader 快照，
+ * 最后由 KeySequenceEncoder 按终端当前 cursorApp 模式生成序列。
+ *
+ * 每次都同时派发 DOWN + UP：引擎的 onKeyDown 不检查 repeatCount，也没有按键按下状态表，
+ * 只处理单次事件，长按连发时每次循环都发一整对 DOWN/UP 才是它的预期用法。
+ */
+private fun LibTerminalView.sendKeyEvent(keyCode: Int, ctrl: Boolean, alt: Boolean) {
+    var metaState = 0
+    if (ctrl) metaState = metaState or KeyEvent.META_CTRL_ON or KeyEvent.META_CTRL_LEFT_ON
+    if (alt) metaState = metaState or KeyEvent.META_ALT_ON or KeyEvent.META_ALT_LEFT_ON
+    val now = android.os.SystemClock.uptimeMillis()
+    onKeyDown(keyCode, KeyEvent(now, now, KeyEvent.ACTION_DOWN, keyCode, 0, metaState))
+    onKeyUp(keyCode, KeyEvent(now, now, KeyEvent.ACTION_UP, keyCode, 0, metaState))
+}
+
+/** 长按多久后开始连发，接近系统 ViewConfiguration.getLongPressTimeout() 的量级。 */
+private const val REPEAT_START_DELAY = 400L
+
+/** 连发间隔，对齐原版 ExtraKeysView 的 DEFAULT_LONG_PRESS_REPEAT_DELAY。 */
+private const val REPEAT_INTERVAL = 80L
+
+/**
+ * extra-keys 规范键名 → Android keyCode。
+ *
+ * 这些键不再自己拼 escape 序列，而是构造 KeyEvent 交给 libterminal 的
+ * TerminalView.onKeyDown，由引擎的 KeySequenceEncoder 统一编码。原来在这里硬编码
+ * 序列有两个实打实的 bug：
+ *  1. 终端处于 application cursor mode（DECCKM，vim/less/tmux 会开）时，引擎按
+ *     buildCursor 发 `\eOH`/`\eOF`/`\eOA`，而硬编码只发 `\e[H`/`\e[F`/`\e[A`，按键无响应；
+ *  2. 修饰键组合（CTRL+HOME 应发 `\e[1;5H`）完全没被处理。
+ * 走引擎后这两种情况都由 KeySequenceEncoder 按终端当前模式与 keyMode 正确生成。
+ */
+private val EXTRA_KEY_TO_KEY_CODE: Map<String, Int> = mapOf(
+    "SPACE" to KeyEvent.KEYCODE_SPACE,
+    "ESC" to KeyEvent.KEYCODE_ESCAPE,
+    "TAB" to KeyEvent.KEYCODE_TAB,
+    "BKSP" to KeyEvent.KEYCODE_DEL,
+    "ENTER" to KeyEvent.KEYCODE_ENTER,
+    "HOME" to KeyEvent.KEYCODE_MOVE_HOME,
+    "END" to KeyEvent.KEYCODE_MOVE_END,
+    "UP" to KeyEvent.KEYCODE_DPAD_UP,
+    "DOWN" to KeyEvent.KEYCODE_DPAD_DOWN,
+    "LEFT" to KeyEvent.KEYCODE_DPAD_LEFT,
+    "RIGHT" to KeyEvent.KEYCODE_DPAD_RIGHT,
+    "INS" to KeyEvent.KEYCODE_INSERT,
+    "DEL" to KeyEvent.KEYCODE_FORWARD_DEL,
+    "PGUP" to KeyEvent.KEYCODE_PAGE_UP,
+    "PGDN" to KeyEvent.KEYCODE_PAGE_DOWN,
+    "F1" to KeyEvent.KEYCODE_F1,
+    "F2" to KeyEvent.KEYCODE_F2,
+    "F3" to KeyEvent.KEYCODE_F3,
+    "F4" to KeyEvent.KEYCODE_F4,
+    "F5" to KeyEvent.KEYCODE_F5,
+    "F6" to KeyEvent.KEYCODE_F6,
+    "F7" to KeyEvent.KEYCODE_F7,
+    "F8" to KeyEvent.KEYCODE_F8,
+    "F9" to KeyEvent.KEYCODE_F9,
+    "F10" to KeyEvent.KEYCODE_F10,
+    "F11" to KeyEvent.KEYCODE_F11,
+    "F12" to KeyEvent.KEYCODE_F12
 )
 
 @Composable
@@ -1373,11 +1425,13 @@ private fun TerminalKeyboardToolbar(
     onSendKey: (ByteArray) -> Unit,
     effectiveContentColor: Color,
     modifiers: ExtraKeysModifierState,
+    onSendNamedKey: (keyCode: Int, ctrl: Boolean, alt: Boolean) -> Unit = { _, _, _ -> },
     onToggleKeyboard: () -> Unit = {}
 ) {
     // rows 被 remember(useCustom) 缓存，里面的闭包会一直持有首次组合时的回调。
     // 会话切换是原地替换（useCustom 不变），不取最新值就会把按键发给旧会话。
     val currentSendKey by rememberUpdatedState(onSendKey)
+    val currentSendNamedKey by rememberUpdatedState(onSendNamedKey)
     val currentToggleKeyboard by rememberUpdatedState(onToggleKeyboard)
 
     val surfaceBg = MiuixTheme.colorScheme.surface.copy(alpha = 0.95f)
@@ -1386,8 +1440,9 @@ private fun TerminalKeyboardToolbar(
     // 点按修饰键 = 粘滞：仅作用于下一个按键，发送后自动复位；
     // 长按修饰键 = 锁定：持续生效，直到再次长按解除。
     // 旧实现只用点击切换、且每次发送都清空全部修饰态，导致组合键互相打架、长按形同虚设。
-    fun send(bytes: ByteArray) {
-        currentSendKey(bytes)
+    fun send(bytes: ByteArray?) {
+        // 命名键由引擎编码后自行写入会话，没有字节可发；此时只消费粘滞态。
+        if (bytes != null) currentSendKey(bytes)
         modifiers.clearSticky()
     }
 
@@ -1400,20 +1455,24 @@ private fun TerminalKeyboardToolbar(
 
     fun sendChar(c: Char) = send(charBytes(c, modifiers.ctrl, modifiers.alt))
 
-    fun sendEscape(seq: String) {
-        send(escSeq(seq))
+    // 命名键交给引擎编码：引擎会按终端当前的 cursorApp 模式与 keyMode 生成序列，
+    // 工具栏自己拼的固定序列在 application cursor mode 下会失效（见 EXTRA_KEY_TO_KEY_CODE）。
+    fun dispatchNamedKey(keyCode: Int, ctrl: Boolean, alt: Boolean) {
+        currentSendNamedKey(keyCode, ctrl, alt)
+        modifiers.clearSticky()
     }
 
     // extra-keys 里的一个 token（命名键或字面量）+ 修饰态 → 待发送字节。
-    // 命名键本身已是完整 escape 序列，只给单字节控制键补 ALT 的 ESC 前缀
-    // （ALT+BKSP → ESC 0x7F、ALT+ENTER → ESC CR，与 KeyHandler.getCode() 一致）；
-    // 给方向键再套一层 ESC 只会得到非 xterm 序列，故不加。
-    fun tokenBytes(token: String, ctrl: Boolean, alt: Boolean): ByteArray {
-        EXTRA_KEY_BYTES[token]?.let { bytes ->
-            return if (alt && bytes.size == 1) byteArrayOf(0x1B) + bytes else bytes
+    // 命名键（方向键 / HOME / END / F 键…）不在这里编码，交给引擎：见 EXTRA_KEY_TO_KEY_CODE
+    // 的注释。字面量键仍自行编码，单字符走 charBytes，多字符原样发送——
+    // 对字符串套 CTRL 位运算只会产出垃圾字节。
+    fun tokenBytes(token: String, ctrl: Boolean, alt: Boolean): ByteArray? {
+        val keyCode = EXTRA_KEY_TO_KEY_CODE[token]
+        if (keyCode != null) {
+            dispatchNamedKey(keyCode, ctrl, alt)
+            return null
         }
         if (token.length == 1) return charBytes(token[0], ctrl, alt)
-        // 多字符字面量原样发送：对字符串套 CTRL 位运算只会产出垃圾字节
         return token.toByteArray(Charsets.UTF_8)
     }
 
@@ -1460,6 +1519,13 @@ private fun TerminalKeyboardToolbar(
     fun altKey() = modifierKey("ALT", { modifiers.altSticky }, { modifiers.altLocked }, { modifiers.altSticky = it }, { modifiers.altLocked = it })
     fun fnKey() = modifierKey("FN", { modifiers.fnSticky }, { modifiers.fnLocked }, { modifiers.fnSticky = it }, { modifiers.fnLocked = it })
 
+    // 内置默认布局里的命名键：显示文本与规范键名分开，连发标记取自 REPETITIVE_KEY_NAMES，
+    // 使方向键 / 退格 / 翻页与用户自定义布局的长按行为一致。
+    fun namedKey(display: String, keyName: String) = ToolbarKey.Simple(
+        display,
+        repeats = keyName in REPETITIVE_KEY_NAMES
+    ) { sendKeyName(keyName) }
+
     // 内置默认布局。第二行刻意是 ↑ 在 } 位、} 在 HOME 位、HOME 在 ↑ 位，
     // 看着像错位，但是用户指定的顺序，不要顺手「修正」。
     fun buildDefaultLayout(): List<List<ToolbarKey>> = listOf(
@@ -1475,7 +1541,7 @@ private fun TerminalKeyboardToolbar(
             ToolbarKey.Simple(")") { sendChar(')') },
             ToolbarKey.Simple("[") { sendChar('[') },
             ToolbarKey.Simple("]") { sendChar(']') },
-            ToolbarKey.Simple("⌫") { send(byteArrayOf(0x7F)) }
+            namedKey("⌫", "BKSP")
         ),
         listOf(
             ToolbarKey.Simple("⇥") { send(byteArrayOf(0x09)) },
@@ -1486,10 +1552,10 @@ private fun TerminalKeyboardToolbar(
             ToolbarKey.Simple("%") { sendChar('%') },
             ToolbarKey.Simple("*") { sendChar('*') },
             ToolbarKey.Simple("{") { sendChar('{') },
-            ToolbarKey.Simple("↑") { sendEscape("[A") },
+            namedKey("↑", "UP"),
             ToolbarKey.Simple("}") { sendChar('}') },
-            ToolbarKey.Simple("HOME") { sendEscape("[H") },
-            ToolbarKey.Simple("END") { sendEscape("[F") }
+            namedKey("HOME", "HOME"),
+            namedKey("END", "END")
         ),
         listOf(
             ctrlKey(),
@@ -1499,11 +1565,11 @@ private fun TerminalKeyboardToolbar(
             ToolbarKey.Simple("-") { sendChar('-') },
             ToolbarKey.Simple("+") { sendChar('+') },
             ToolbarKey.Simple("\"") { sendChar('"') },
-            ToolbarKey.Simple("←") { sendEscape("[D") },
-            ToolbarKey.Simple("↓") { sendEscape("[B") },
-            ToolbarKey.Simple("→") { sendEscape("[C") },
-            ToolbarKey.Simple("PGUP") { sendEscape("[5~") },
-            ToolbarKey.Simple("PGDN") { sendEscape("[6~") }
+            namedKey("←", "LEFT"),
+            namedKey("↓", "DOWN"),
+            namedKey("→", "RIGHT"),
+            namedKey("PGUP", "PGUP"),
+            namedKey("PGDN", "PGDN")
         )
     )
 
@@ -1532,7 +1598,7 @@ private fun TerminalKeyboardToolbar(
                 "DRAWER", "SCROLL", "SHIFT" -> ToolbarKey.Simple(display) { }
                 "KEYBOARD" -> ToolbarKey.Simple(display) { currentToggleKeyboard() }
                 "PASTE" -> ToolbarKey.Simple(display) { sendClipboard() }
-                else -> ToolbarKey.Simple(display) { sendKeyName(key) }
+                else -> ToolbarKey.Simple(display, repeats = key in REPETITIVE_KEY_NAMES) { sendKeyName(key) }
             }
         } else {
             return ToolbarKey.Simple(display) { sendMacro(key.split(" ")) }
@@ -1569,34 +1635,64 @@ private fun TerminalKeyboardToolbar(
 
     val hScroll = rememberScrollState()
 
-    // 横向滚动放在最外层统一处理：滚动范围由最宽的一行决定，三行保持同步滚动且都能滚到最右。
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(surfaceBg)
-            .navigationBarsPadding()
-            .horizontalScroll(hScroll)
-    ) {
-        Column(
-            modifier = Modifier.padding(vertical = 4.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
+    // 键宽按最宽的一行等分，铺满可用宽度——对齐原版 Termux 的 GridLayout 等分行为。
+    // 旧实现每键固定 36.dp，10 列就是 10×36+9×3+12 = 399dp，比常见手机的 360dp 还宽，
+    // 第 10 列起被挤出屏幕（termux.properties 配更多列时更明显），用户只能横向拖动才看得到。
+    // 只有列数多到把键压到 MIN_KEY_WIDTH 以下时才退回横向滚动：那种密度下等分出来的键
+    // 已点不中，滚动比挤压更可用。
+    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+        // 先取出工具栏可用宽度：下方嵌套的 Box 也有 fillMaxWidth，直接写 maxWidth
+        // 会被内层作用域的同名属性遮蔽。
+        val toolbarWidth = maxWidth
+        val horizontalPadding = 6.dp
+        val gap = 3.dp
+        val maxColumns = rows.maxOfOrNull { it.size } ?: 0
+        val available = toolbarWidth - horizontalPadding * 2
+        val fitWidth = if (maxColumns > 0) {
+            (available - gap * (maxColumns - 1)) / maxColumns
+        } else {
+            available
+        }
+        val keyWidth = fitWidth.coerceAtLeast(MIN_KEY_WIDTH)
+        val needsScroll = keyWidth < fitWidth
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(surfaceBg)
+                .navigationBarsPadding()
+                .then(if (needsScroll) Modifier.horizontalScroll(hScroll) else Modifier)
         ) {
-            for (row in rows) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 6.dp),
-                    horizontalArrangement = Arrangement.spacedBy(3.dp)
-                ) {
-                    for (key in row) {
-                        when (key) {
-                            is ToolbarKey.Simple -> KeyButton(key.display, key.onSend, effectiveContentColor)
-                            is ToolbarKey.ModifierKey -> SpecialKeyButton(
-                                label = key.label,
-                                sticky = key.isSticky(),
-                                locked = key.isLocked(),
-                                onTap = key.onTap,
-                                onLongPress = key.onLongPress,
-                                effectiveContentColor = effectiveContentColor
-                            )
+            Column(
+                modifier = Modifier
+                    .width(if (needsScroll) keyWidth * maxColumns + gap * (maxColumns - 1) + horizontalPadding * 2 else toolbarWidth)
+                    .padding(vertical = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                for (row in rows) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = horizontalPadding),
+                        horizontalArrangement = Arrangement.spacedBy(gap)
+                    ) {
+                        for (key in row) {
+                            when (key) {
+                                is ToolbarKey.Simple -> KeyButton(
+                                    label = key.display,
+                                    onClick = key.onSend,
+                                    repeats = key.repeats,
+                                    keyWidth = keyWidth,
+                                    effectiveContentColor = effectiveContentColor
+                                )
+                                is ToolbarKey.ModifierKey -> SpecialKeyButton(
+                                    label = key.label,
+                                    sticky = key.isSticky(),
+                                    locked = key.isLocked(),
+                                    onTap = key.onTap,
+                                    onLongPress = key.onLongPress,
+                                    keyWidth = keyWidth,
+                                    effectiveContentColor = effectiveContentColor
+                                )
+                            }
                         }
                     }
                 }
@@ -1609,14 +1705,63 @@ private fun TerminalKeyboardToolbar(
 private fun KeyButton(
     label: String,
     onClick: () -> Unit,
+    repeats: Boolean,
+    keyWidth: Dp,
     effectiveContentColor: Color
 ) {
+    // repeats 的键长按连发（对齐原版 PRIMARY_REPETITIVE_KEYS 的方向键/退格/翻页）。
+    // 不用 combinedClickable：它的 onLongClick 只触发一次，没有持续回调，无法连发。
+    //
+    // 连发循环与抬手检测放在同一个手势协程里：didRepeat 是普通局部变量而非 Compose 状态，
+    // 抬手时读它不跨快照，永不与连发协程产生竞态。
+    val currentOnClick by rememberUpdatedState(onClick)
+    var pressed by remember { mutableStateOf(false) }
+    val background = if (pressed) {
+        MiuixTheme.colorScheme.primary.copy(alpha = 0.35f)
+    } else {
+        MiuixTheme.colorScheme.surfaceVariant
+    }
+
     Box(
         modifier = Modifier
-            .size(width = 36.dp, height = 32.dp)
+            .size(width = keyWidth, height = 32.dp)
             .clip(RoundedCornerShape(8.dp))
-            .background(MiuixTheme.colorScheme.surfaceVariant)
-            .clickable { onClick() },
+            .background(background)
+            .pointerInput(repeats) {
+                // coroutineScope 让连发循环与抬手检测共享同一个作用域：
+                // 抬手时 cancel 即刻停，指针输入被整体取消时循环随作用域一起结束，
+                // 不会留下一个还在发按键的后台协程。
+                coroutineScope {
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        down.consume()
+                        pressed = true
+                        var didRepeat = false
+                        try {
+                            if (repeats) {
+                                val repeatJob = launch {
+                                    delay(REPEAT_START_DELAY)
+                                    didRepeat = true
+                                    while (true) {
+                                        currentOnClick()
+                                        delay(REPEAT_INTERVAL)
+                                    }
+                                }
+                                // 抬手或手指划出按钮范围都会返回；cancel 保证连发不会残留。
+                                // 放在 finally 里，指针被取消（父手势被打断）时同样收尾。
+                                waitForUpOrCancellation()
+                                repeatJob.cancel()
+                            } else {
+                                waitForUpOrCancellation()
+                            }
+                        } finally {
+                            pressed = false
+                        }
+                        // 连发已经发过就不再补这一次点击，否则长按结束会多出一个字符。
+                        if (!didRepeat) currentOnClick()
+                    }
+                }
+            },
         contentAlignment = Alignment.Center
     ) {
         Text(
@@ -1624,7 +1769,8 @@ private fun KeyButton(
             fontSize = 11.sp,
             fontWeight = FontWeight.Medium,
             color = effectiveContentColor,
-            maxLines = 1
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
         )
     }
 }
@@ -1636,6 +1782,7 @@ private fun SpecialKeyButton(
     locked: Boolean,
     onTap: () -> Unit,
     onLongPress: () -> Unit,
+    keyWidth: Dp,
     effectiveContentColor: Color = Color.White
 ) {
     // 三态：未激活 / 粘滞（半透明，只作用于下一个按键）/ 锁定（实心 + 描边，持续生效到再次长按）。
@@ -1646,7 +1793,7 @@ private fun SpecialKeyButton(
     }
     Box(
         modifier = Modifier
-            .size(width = 36.dp, height = 32.dp)
+            .size(width = keyWidth, height = 32.dp)
             .clip(RoundedCornerShape(8.dp))
             .background(background)
             .then(
