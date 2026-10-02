@@ -121,6 +121,29 @@ private class KeyLoggingContainer(context: Context) : FrameLayout(context) {
                     "repeat=${event.repeatCount} meta=0x${event.metaState.toString(16)}"
             )
         }
-        return super.dispatchKeyEvent(event)
+        val remapped = remapUnsupportedKeyCodes(event)
+        return super.dispatchKeyEvent(remapped)
+    }
+
+    /**
+     * 把部分键盘/输入法发出的 keyCode 归一到 libterminal 认识的编码。
+     *
+     * 引擎 KeySequenceEncoder.getCode 的分支表里有 KEYCODE_MOVE_HOME(122) /
+     * KEYCODE_MOVE_END(123)，但没有 KEYCODE_HOME(3)：Home 键在 Android 上属于系统键，
+     * 通常被系统截走不派发给应用，但部分软键盘与外接键盘仍会发 3，此时
+     * getCode 返回 null、getUnicodeChar 也返回 0，按键被静默丢弃。这里在到达引擎前
+     * 改写成 MOVE_HOME，与经典 KeyHandler 对两者不做区分的行为保持一致。
+     */
+    private fun remapUnsupportedKeyCodes(event: KeyEvent): KeyEvent {
+        val replacement = when (event.keyCode) {
+            KeyEvent.KEYCODE_HOME -> KeyEvent.KEYCODE_MOVE_HOME
+            else -> return event
+        }
+        // 8 参数构造器末位是 flags，传 0：带 FLAG_IS_SYSTEM 的话引擎的
+        // KeyInputProcessor 会直接 PASS_TO_SUPER，按键根本不会被编码。
+        return KeyEvent(
+            event.downTime, event.eventTime, event.action, replacement,
+            event.repeatCount, event.metaState, event.deviceId, 0
+        )
     }
 }
