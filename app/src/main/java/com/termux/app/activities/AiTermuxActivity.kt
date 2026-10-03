@@ -2676,14 +2676,15 @@ private fun AiConversationManagementScreen(
             )
         }
     ) { padding ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .then(glassPage.contentModifier)
-                .padding(pagePaddingWithoutTop(padding))
-                .nestedScroll(scrollBehavior.nestedScrollConnection),
-            contentPadding = standaloneContentPadding(padding, top = 16.dp, bottom = 16.dp, start = 16.dp, end = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+        Box(Modifier.fillMaxSize()) {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .then(glassPage.contentModifier)
+                    .padding(pagePaddingWithoutTop(padding))
+                    .nestedScroll(scrollBehavior.nestedScrollConnection),
+                contentPadding = standaloneContentPadding(padding, top = 16.dp, bottom = 16.dp, start = 16.dp, end = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             item {
                 // 新建对话入口卡
@@ -2775,14 +2776,8 @@ private fun AiConversationManagementScreen(
                                 color = MiuixTheme.colorScheme.onSurfaceVariantSummary
                             )
                         }
-                        // 删除按钮：作为 Column 的兄弟节点放在 Row 里，独立处理点击，
-                        // 与 Column 的 weight(1f) + clickable 互不重叠互不冲突
-                        Box(
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(CircleShape)
-                                .clickable { pendingDeleteId = conv.id },
-                            contentAlignment = Alignment.Center
+                        GlassIconButton(
+                            onClick = { pendingDeleteId = conv.id },
                         ) {
                             Icon(
                                 imageVector = Icons.Rounded.DeleteSweep,
@@ -2795,29 +2790,31 @@ private fun AiConversationManagementScreen(
                 }
             }
         }
-    }
 
-    OverlayDialog(
-        show = pendingDeleteId != null,
-        onDismissRequest = { pendingDeleteId = null },
-        title = "删除对话",
-        summary = "将删除该对话的全部内容，此操作不可撤销。",
-        content = {
-            Row(horizontalArrangement = Arrangement.SpaceBetween) {
-                TextButton(text = "取消", onClick = { pendingDeleteId = null }, modifier = Modifier.weight(1f))
-                Spacer(Modifier.width(16.dp))
-                TextButton(
-                    text = "删除",
-                    onClick = {
-                        pendingDeleteId?.let { vm.deleteConversation(ctx, it) }
-                        pendingDeleteId = null
-                    },
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.textButtonColors(color = Color(0xFFF44336))
-                )
+        // OverlayDialog 必须在 Scaffold 的 content 内部才能正常显示弹窗
+        OverlayDialog(
+            show = pendingDeleteId != null,
+            onDismissRequest = { pendingDeleteId = null },
+            title = "删除对话",
+            summary = "将删除该对话的全部内容，此操作不可撤销。",
+            content = {
+                Row(horizontalArrangement = Arrangement.SpaceBetween) {
+                    TextButton(text = "取消", onClick = { pendingDeleteId = null }, modifier = Modifier.weight(1f))
+                    Spacer(Modifier.width(16.dp))
+                    TextButton(
+                        text = "删除",
+                        onClick = {
+                            pendingDeleteId?.let { vm.deleteConversation(ctx, it) }
+                            pendingDeleteId = null
+                        },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.textButtonColors(color = Color(0xFFF44336))
+                    )
+                }
             }
+        )
         }
-    )
+    }
 }
 
 /** -------------------- 聊天界面 -------------------- */
