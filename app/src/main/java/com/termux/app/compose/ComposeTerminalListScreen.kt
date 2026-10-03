@@ -32,6 +32,8 @@ import com.termux.app.terminal.shell.pidState
 import com.termux.app.terminal.shell.lastCommandState
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import top.yukonga.miuix.kmp.glass.GlassIconButton
+import top.yukonga.miuix.kmp.glass.GlassTopAppBar
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Icon
@@ -42,6 +44,7 @@ import top.yukonga.miuix.kmp.basic.PullToRefresh
 import top.yukonga.miuix.kmp.basic.SearchBar
 import top.yukonga.miuix.kmp.basic.Scaffold
 import androidx.compose.ui.platform.LocalContext
+import com.termux.app.compose.LocalTopBarClearance
 import top.yukonga.miuix.kmp.basic.Switch
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
@@ -88,8 +91,9 @@ fun ComposeTerminalListScreen(
     SideEffect {
         if (active) {
             onTopBarContent {
-                TopAppBar(
+                GlassTopAppBar(
                     title = stringResource(R.string.terminal),
+                    backdrop = LocalGlassTopAppBarBackdrop.current,
                     scrollBehavior = scrollBehavior,
                     actions = {
                         Row(
@@ -106,8 +110,7 @@ fun ComposeTerminalListScreen(
                                 checked = isWakeLockEnabled,
                                 onCheckedChange = { onToggleWakeLock() }
                             )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            IconButton(onClick = {
+                            GlassIconButton(onClick = {
                                 // 直接用 ComposeSessionManager 创建会话，不依赖 Java 版 onNewTerminal。
                                 // 效仿 Java 版策略：只创建未初始化的终端条目（不拉起进程、不跳转），
                                 // 待用户手动点击该终端卡片进入终端控制台时再初始化。
@@ -140,6 +143,8 @@ fun ComposeTerminalListScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                // 搜索栏是页面顶部的固定条，必须停在玻璃顶栏下方；列表本身仍会滚到顶栏之下。
+                .padding(top = LocalTopBarClearance.current)
                 .padding(padding)
         ) {
             val filteredSessions = allSessions.filter { info ->
@@ -294,7 +299,7 @@ fun ComposeTerminalListScreen(
                             .nestedScroll(scrollBehavior.nestedScrollConnection),
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp),
-                        contentPadding = androidx.compose.foundation.layout.PaddingValues(top = 8.dp, bottom = navBarBottomPadding + 16.dp)
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(top = LocalTopBarClearance.current + 8.dp, bottom = navBarBottomPadding + 16.dp)
                     ) {
                         if (allSessions.isEmpty()) {
                             item(span = { GridItemSpan(2) }) {

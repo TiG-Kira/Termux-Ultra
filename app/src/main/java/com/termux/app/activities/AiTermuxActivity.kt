@@ -67,12 +67,15 @@ import androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner
 import com.termux.R
 import com.termux.app.TermuxService
 import com.termux.app.compose.*
+import com.termux.app.compose.pagePaddingWithoutTop
 import com.termux.app.utils.SnackbarHelper
 import com.google.android.material.snackbar.Snackbar
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import top.yukonga.miuix.kmp.glass.GlassIconButton
+import top.yukonga.miuix.kmp.glass.GlassTopAppBar
 import top.yukonga.miuix.kmp.basic.*
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
@@ -1526,6 +1529,8 @@ private fun AiTermuxRoot(vm: AiTermuxViewModel, onBack: () -> Unit) {
 @Composable
 private fun AiSetupScreen(vm: AiTermuxViewModel, onBack: () -> Unit) {
     val ctx = LocalContext.current
+    // 本页在 MainScreen 取景层之外，自建一层供玻璃顶栏折射页面内容
+    val glassPage = rememberGlassPageBackdrop()
     val scrollBehavior = MiuixScrollBehavior()
     val isDark = isSystemInDarkTheme()
 
@@ -1577,19 +1582,15 @@ private fun AiSetupScreen(vm: AiTermuxViewModel, onBack: () -> Unit) {
     LaunchedEffect(localRefresh) { localLlamaReady = AiLocalModel.isLlamaCppInstalled() }
 
     Scaffold(
+        modifier = glassPage.layerModifier,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
-            TopAppBar(
+            GlassTopAppBar(
                 title = "Termux Agent 设置",
+                backdrop = glassPage.backdrop,
                 scrollBehavior = scrollBehavior,
                 navigationIcon = {
-                    Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(CircleShape)
-                            .clickable { onBack() },
-                        contentAlignment = Alignment.Center
-                    ) {
+                    GlassIconButton(onClick = { onBack() }) {
                         Icon(
                             imageVector = MiuixIcons.Back,
                             contentDescription = null,
@@ -1622,7 +1623,7 @@ private fun AiSetupScreen(vm: AiTermuxViewModel, onBack: () -> Unit) {
             LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
+                .padding(pagePaddingWithoutTop(padding))
                 .nestedScroll(scrollBehavior.nestedScrollConnection),
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
@@ -2476,6 +2477,8 @@ private fun ProviderChip(label: String, value: String, selected: String, isDark:
 @Composable
 private fun AiChatScreen(vm: AiTermuxViewModel, onBack: () -> Unit, onOpenSetup: () -> Unit) {
     val ctx = LocalContext.current
+    // 本页在 MainScreen 取景层之外，自建一层供玻璃顶栏折射页面内容
+    val glassPage = rememberGlassPageBackdrop()
     val scrollBehavior = MiuixScrollBehavior()
     val listState = rememberLazyListState()
     val isDark = isSystemInDarkTheme()
@@ -2548,10 +2551,12 @@ private fun AiChatScreen(vm: AiTermuxViewModel, onBack: () -> Unit, onOpenSetup:
 
     Box {
         Scaffold(
+            modifier = glassPage.layerModifier,
             contentWindowInsets = WindowInsets(0, 0, 0, 0),
             topBar = {
-                TopAppBar(
+                GlassTopAppBar(
                     title = "Termux Agent",
+                    backdrop = glassPage.backdrop,
                     subtitle = run {
                         val isLocal = vm.useLocalModel
                         val cfg = vm.config.providerConfig
@@ -2568,13 +2573,7 @@ private fun AiChatScreen(vm: AiTermuxViewModel, onBack: () -> Unit, onOpenSetup:
                     },
                     scrollBehavior = scrollBehavior,
                     navigationIcon = {
-                        Box(
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(CircleShape)
-                                .clickable { onBack() },
-                            contentAlignment = Alignment.Center
-                        ) {
+                        GlassIconButton(onClick = { onBack() }) {
                             Icon(
                                 imageVector = MiuixIcons.Back,
                                 contentDescription = null,
@@ -2776,7 +2775,7 @@ private fun AiChatScreen(vm: AiTermuxViewModel, onBack: () -> Unit, onOpenSetup:
                 state = listState,
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(padding)
+                    .padding(pagePaddingWithoutTop(padding))
                     .nestedScroll(scrollBehavior.nestedScrollConnection),
                 contentPadding = PaddingValues(14.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)

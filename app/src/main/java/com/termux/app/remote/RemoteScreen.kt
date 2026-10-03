@@ -40,11 +40,15 @@ import com.termux.app.vnc.connectToVnc
 import com.termux.app.ssh.SshConnection
 import com.termux.app.ssh.SshConnectionManager
 import com.termux.app.ssh.connectToSsh
+import top.yukonga.miuix.kmp.glass.GlassIconButton
+import top.yukonga.miuix.kmp.glass.GlassTopAppBar
 import top.yukonga.miuix.kmp.basic.CircularProgressIndicator
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.Icon
+import com.termux.app.compose.LocalGlassTopAppBarBackdrop
+import com.termux.app.compose.LocalTopBarClearance
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.ScrollBehavior
 import top.yukonga.miuix.kmp.basic.TabRowWithContour
@@ -207,13 +211,14 @@ fun RemoteScreen(
                         )
                     }
             ) {
-                TopAppBar(
+                GlassTopAppBar(
                     title = topAppBarTitle,
+                    backdrop = LocalGlassTopAppBarBackdrop.current,
                     scrollBehavior = scrollBehavior,
                     actions = {
                         Row {
                             if (showVnc && selectedTabIndex == 0) {
-                                IconButton(
+                                GlassIconButton(
                                     onClick = {
                                         vncAddRequested.value = true
                                     }
@@ -224,7 +229,7 @@ fun RemoteScreen(
                                         tint = topBarIconColor
                                     )
                                 }
-                                IconButton(
+                                GlassIconButton(
                                     onClick = {
                                         if (!isScanning.value) {
                                             vncScanRequested.value = true
@@ -243,7 +248,7 @@ fun RemoteScreen(
                                     }
                                 }
                             } else {
-                                IconButton(
+                                GlassIconButton(
                                     onClick = {
                                         sshAddRequested.value = true
                                     }
@@ -278,7 +283,8 @@ fun RemoteScreen(
                 Column(
                     Modifier
                         .fillMaxSize()
-                        .padding(bottom = navBarBottomPadding)
+                        // 子标签栏与搜索栏是页面顶部的固定条，必须停在玻璃顶栏下方。
+                        .padding(top = LocalTopBarClearance.current, bottom = navBarBottomPadding)
                 ) {
                     TabRowWithContour(
                         tabs = listOf("VNC", "SSH"),
@@ -520,7 +526,8 @@ fun RemoteScreen(
                 Column(
                     Modifier
                         .fillMaxSize()
-                        .padding(bottom = navBarBottomPadding)
+                        // 子标签栏与搜索栏是页面顶部的固定条，必须停在玻璃顶栏下方。
+                        .padding(top = LocalTopBarClearance.current, bottom = navBarBottomPadding)
                 ) {
                     val filtered = sshConnections.filter { conn ->
                         conn.name.contains(searchQuery, ignoreCase = true) ||

@@ -23,6 +23,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import top.yukonga.miuix.kmp.glass.GlassIconButton
+import top.yukonga.miuix.kmp.glass.GlassTopAppBar
 import top.yukonga.miuix.kmp.basic.*
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
@@ -35,6 +37,8 @@ fun LogViewerScreen(
     modifier: Modifier = Modifier
 ) {
     val scope = rememberCoroutineScope()
+    // 本页在 MainScreen 取景层之外，自建一层供玻璃顶栏折射页面内容
+    val glassPage = rememberGlassPageBackdrop()
     val scrollBehavior = MiuixScrollBehavior()
     val snackbarHostState = remember { SnackbarHostState() }
     val logsClearedMessage = stringResource(R.string.logs_cleared)
@@ -111,7 +115,7 @@ fun LogViewerScreen(
     }
 
     Scaffold(
-        modifier = modifier,
+        modifier = modifier.then(glassPage.layerModifier),
         snackbarHost = {
             Box(
                 modifier = Modifier.fillMaxSize(),
@@ -186,16 +190,11 @@ fun LogViewerScreen(
                     }
                 }
             } else {
-                TopAppBar(
+                GlassTopAppBar(
                     title = stringResource(R.string.log_management),
+                    backdrop = glassPage.backdrop,
                     navigationIcon = {
-                        Box(
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(CircleShape)
-                                .clickable { onBack() },
-                            contentAlignment = Alignment.Center
-                        ) {
+                        GlassIconButton(onClick = { onBack() }) {
                             Icon(
                                 imageVector = MiuixIcons.Back,
                                 contentDescription = stringResource(R.string.back),
@@ -206,18 +205,10 @@ fun LogViewerScreen(
                     },
                     actions = {
                         Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
                             // 搜索图标按钮
-                            Box(
-                                modifier = Modifier
-                                    .size(40.dp)
-                                    .clip(CircleShape)
-                                    .background(MiuixTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                                    .clickable { showSearchBar = true },
-                                contentAlignment = Alignment.Center
-                            ) {
+                            GlassIconButton(onClick = { showSearchBar = true }) {
                                 Icon(
                                     painter = painterResource(R.drawable.ic_search),
                                     contentDescription = stringResource(R.string.search),
@@ -226,14 +217,7 @@ fun LogViewerScreen(
                                 )
                             }
                             // 清除日志图标按钮
-                            Box(
-                                modifier = Modifier
-                                    .size(40.dp)
-                                    .clip(CircleShape)
-                                    .background(MiuixTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                                    .clickable { showClearDialog = true },
-                                contentAlignment = Alignment.Center
-                            ) {
+                            GlassIconButton(onClick = { showClearDialog = true }) {
                                 Icon(
                                     painter = painterResource(R.drawable.ic_delete),
                                     contentDescription = stringResource(R.string.clear_logs),

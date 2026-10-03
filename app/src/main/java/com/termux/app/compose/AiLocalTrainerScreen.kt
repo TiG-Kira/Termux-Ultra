@@ -57,6 +57,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import top.yukonga.miuix.kmp.glass.GlassIconButton
+import top.yukonga.miuix.kmp.glass.GlassTopAppBar
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.HorizontalDivider
@@ -75,6 +77,7 @@ import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
+import com.termux.app.compose.pagePaddingWithoutTop
 
 @Composable
 fun AiLocalTrainerScreen(
@@ -85,6 +88,8 @@ fun AiLocalTrainerScreen(
     val scope = rememberCoroutineScope()
     val onlineReady = remember { mutableStateOf(false) }
     val hasLocal = remember { mutableStateOf(AiTermuxPrefs.getConfig(ctx).providerConfig.provider == "local") }
+    // 本页在 MainScreen 取景层之外，自建一层供玻璃顶栏折射页面内容
+    val glassPage = rememberGlassPageBackdrop()
     val scrollBehavior = MiuixScrollBehavior()
 
     LaunchedEffect(Unit) {
@@ -96,14 +101,12 @@ fun AiLocalTrainerScreen(
             modifier = modifier.fillMaxSize(),
             contentWindowInsets = WindowInsets(0, 0, 0, 0),
             topBar = {
-                TopAppBar(
+                GlassTopAppBar(
                     title = stringResource(R.string.train_local_model),
+                    backdrop = glassPage.backdrop,
                     scrollBehavior = scrollBehavior,
                     navigationIcon = {
-                        Box(
-                            modifier = Modifier.size(40.dp).clip(CircleShape).clickable { onBack() },
-                            contentAlignment = Alignment.Center
-                        ) {
+                        GlassIconButton(onClick = { onBack() }) {
                             Icon(
                                 imageVector = MiuixIcons.Back,
                                 contentDescription = stringResource(R.string.back),
@@ -116,11 +119,11 @@ fun AiLocalTrainerScreen(
             }
         ) { padding ->
             if (!hasLocal.value) {
-                NoLocalModelHint(Modifier.padding(padding))
+                NoLocalModelHint(Modifier.padding(pagePaddingWithoutTop(padding)))
             } else {
                 TrainerBody(
                     Modifier
-                        .padding(padding)
+                        .padding(pagePaddingWithoutTop(padding))
                         .fillMaxSize()
                         .nestedScroll(scrollBehavior.nestedScrollConnection),
                     ctx, onlineReady

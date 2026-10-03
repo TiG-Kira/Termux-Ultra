@@ -31,6 +31,8 @@ import com.termux.shared.logger.Logger
 import com.termux.shared.android.AndroidUtils
 import com.termux.shared.termux.TermuxConstants
 import com.termux.shared.termux.TermuxUtils
+import top.yukonga.miuix.kmp.glass.GlassIconButton
+import top.yukonga.miuix.kmp.glass.GlassTopAppBar
 import top.yukonga.miuix.kmp.basic.*
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
@@ -38,6 +40,7 @@ import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.preference.OverlayDropdownPreference
 import top.yukonga.miuix.kmp.preference.SwitchPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
+import com.termux.app.compose.pagePaddingWithoutTop
 
 enum class TermuxSettingsPage {
     MAIN,
@@ -67,6 +70,8 @@ fun TermuxSettingsScreen(
 ) {
     val context = LocalContext.current
     var currentPage by remember { mutableStateOf(TermuxSettingsPage.MAIN) }
+    // 本页在 MainScreen 取景层之外，自建一层供玻璃顶栏折射页面内容
+    val glassPage = rememberGlassPageBackdrop()
     val scrollBehavior = MiuixScrollBehavior()
 
     // 返回逻辑：从子页面返回上一级，主页面退出
@@ -88,19 +93,15 @@ fun TermuxSettingsScreen(
     }
 
     Scaffold(
+        modifier = glassPage.layerModifier,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
-            TopAppBar(
+            GlassTopAppBar(
                 title = getPageTitle(context, currentPage),
+                backdrop = glassPage.backdrop,
                 scrollBehavior = scrollBehavior,
                 navigationIcon = {
-                    Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(CircleShape)
-                            .clickable { handleBack() },
-                        contentAlignment = Alignment.Center
-                    ) {
+                    GlassIconButton(onClick = { handleBack() }) {
                         Icon(
                             imageVector = MiuixIcons.Back,
                             contentDescription = context.getString(R.string.back),
@@ -115,7 +116,7 @@ fun TermuxSettingsScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
+                .padding(pagePaddingWithoutTop(padding))
         ) {
             when (currentPage) {
                 TermuxSettingsPage.MAIN -> {

@@ -30,10 +30,14 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.core.view.WindowCompat
 import com.termux.R
 import com.termux.app.TermuxService
+import com.termux.app.compose.rememberGlassPageBackdrop
+import com.termux.app.compose.pagePaddingWithoutTop
 import com.termux.app.compose.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import top.yukonga.miuix.kmp.glass.GlassIconButton
+import top.yukonga.miuix.kmp.glass.GlassTopAppBar
 import top.yukonga.miuix.kmp.basic.Card as MiuixCard
 import top.yukonga.miuix.kmp.basic.*
 import top.yukonga.miuix.kmp.icon.MiuixIcons
@@ -56,6 +60,8 @@ class UtilityCenterActivity : ComponentActivity() {
             ) {
                 com.termux.app.compose.KiTerminalTheme {
                 val context = this@UtilityCenterActivity
+                // 本页在 MainScreen 取景层之外，自建一层供玻璃顶栏折射页面内容
+                val glassPage = rememberGlassPageBackdrop()
                 val scrollBehavior = MiuixScrollBehavior()
                 val density = LocalDensity.current
                 val systemNavBarsHeight = with(density) {
@@ -201,19 +207,15 @@ class UtilityCenterActivity : ComponentActivity() {
                 }
 
                 Scaffold(
+                    modifier = glassPage.layerModifier,
                     contentWindowInsets = WindowInsets(0, 0, 0, 0),
                     topBar = {
-                        TopAppBar(
+                        GlassTopAppBar(
                             title = getString(R.string.utility_center),
+                            backdrop = glassPage.backdrop,
                             scrollBehavior = scrollBehavior,
                             navigationIcon = {
-                                Box(
-                                    modifier = Modifier
-                                        .size(40.dp)
-                                        .clip(CircleShape)
-                                        .clickable { finish() },
-                                    contentAlignment = Alignment.Center
-                                ) {
+                                GlassIconButton(onClick = { finish() }) {
                                     Icon(
                                         imageVector = MiuixIcons.Back,
                                         contentDescription = null,
@@ -228,7 +230,7 @@ class UtilityCenterActivity : ComponentActivity() {
                     LazyColumn(
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(padding)
+                            .padding(pagePaddingWithoutTop(padding))
                             .nestedScroll(scrollBehavior.nestedScrollConnection),
                         contentPadding = PaddingValues(
                             start = 16.dp,

@@ -28,10 +28,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.fragment.app.FragmentActivity
 import com.termux.R
+import top.yukonga.miuix.kmp.glass.GlassTopAppBar
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.preference.CheckboxPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
@@ -42,7 +42,11 @@ fun AuthorizationMask() {
         modifier = Modifier.fillMaxSize(),
         containerColor = MiuixTheme.colorScheme.surface,
         topBar = {
-            TopAppBar(title = "授权")
+            // 遮罩层是不透明 surface，没有内容可折射，玻璃顶栏退化为实底 pill
+            GlassTopAppBar(
+                title = "授权",
+                backdrop = LocalGlassTopAppBarBackdrop.current,
+            )
         }
     ) { padding ->
         Column(
@@ -80,7 +84,11 @@ fun DisableWarningMask() {
         modifier = Modifier.fillMaxSize(),
         containerColor = MiuixTheme.colorScheme.surface,
         topBar = {
-            TopAppBar(title = "授权")
+            // 遮罩层是不透明 surface，没有内容可折射，玻璃顶栏退化为实底 pill
+            GlassTopAppBar(
+                title = "授权",
+                backdrop = LocalGlassTopAppBarBackdrop.current,
+            )
         }
     ) { padding ->
         Column(

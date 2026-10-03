@@ -27,6 +27,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.res.stringResource
 import com.termux.R
+import top.yukonga.miuix.kmp.glass.GlassIconButton
+import top.yukonga.miuix.kmp.glass.GlassTopAppBar
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
@@ -59,6 +61,8 @@ fun TextEditorScreen(
     onClose: () -> Unit
 ) {
     val isDark = isSystemInDarkTheme()
+    // 本页在 MainScreen 取景层之外，自建一层供玻璃顶栏折射页面内容
+    val glassPage = rememberGlassPageBackdrop()
     val scrollBehavior = MiuixScrollBehavior()
     var currentFilePath by remember { mutableStateOf(filePath) }
     val file = remember(currentFilePath) { if (currentFilePath != null) File(currentFilePath) else null }
@@ -89,22 +93,18 @@ fun TextEditorScreen(
     }
 
     Scaffold(
+        modifier = glassPage.layerModifier,
         contentWindowInsets = WindowInsets(0),
         topBar = {
-            TopAppBar(
+            GlassTopAppBar(
                 title = fileName,
+                backdrop = glassPage.backdrop,
                 scrollBehavior = scrollBehavior,
                 navigationIcon = {
-                    Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(CircleShape)
-                            .clickable {
-                                if (modified && !readOnly) showConfirmExit = true
-                                else onClose()
-                            },
-                        contentAlignment = Alignment.Center
-                    ) {
+                    GlassIconButton(onClick = {
+                        if (modified && !readOnly) showConfirmExit = true
+                        else onClose()
+                    }) {
                         Icon(
                             imageVector = MiuixIcons.Back,
                             contentDescription = null,
@@ -116,7 +116,7 @@ fun TextEditorScreen(
                 actions = {
                     if (!readOnly) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            IconButton(onClick = { doSave() }) {
+                            GlassIconButton(onClick = { doSave() }) {
                                 Icon(
                                     painter = painterResource(R.drawable.ic_save),
                                     contentDescription = stringResource(R.string.save),

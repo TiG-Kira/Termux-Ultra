@@ -38,6 +38,7 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.toBitmap
 import coil.compose.AsyncImage
+import top.yukonga.miuix.kmp.glass.GlassTopAppBar
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
@@ -46,7 +47,6 @@ import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
-import top.yukonga.miuix.kmp.basic.SmallTopAppBar
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
@@ -72,6 +72,8 @@ import kotlinx.coroutines.flow.collect
 @Composable
 fun AboutScreen(onBack: () -> Unit) {
     val context = LocalContext.current
+    // 本页在 MainScreen 取景层之外，自建一层供玻璃顶栏折射页面内容
+    val glassPage = rememberGlassPageBackdrop()
     val scrollBehavior = MiuixScrollBehavior()
     val scope = rememberCoroutineScope()
     val density = LocalDensity.current
@@ -213,17 +215,17 @@ fun AboutScreen(onBack: () -> Unit) {
         }
 
         Scaffold(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier.fillMaxSize().then(glassPage.layerModifier),
             containerColor = Color.Transparent,
             contentWindowInsets = WindowInsets(0, 0, 0, 0),
             topBar = {
-                SmallTopAppBar(
-                    modifier = Modifier.graphicsLayer { alpha = topBarAlphaAnim },
+                GlassTopAppBar(
                     title = context.getString(R.string.about_preference_title),
+                    backdrop = glassPage.backdrop,
                     scrollBehavior = scrollBehavior,
-                    navigationIcon = {
-                        Spacer(modifier = Modifier.size(40.dp))
-                    }
+                    // 原 SmallTopAppBar 用整条 alpha 做渐隐；玻璃顶栏改由 titleAlpha 承担同一交互，
+                    // 否则整条一起淡出会连玻璃底一起消失。
+                    titleAlpha = { topBarAlphaAnim },
                 )
             }
         ) { paddingValues ->

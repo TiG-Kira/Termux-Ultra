@@ -31,7 +31,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.WindowCompat
 import com.google.gson.Gson
+import com.termux.app.compose.rememberGlassPageBackdrop
 import com.termux.app.compose.KiTerminalTheme
+import top.yukonga.miuix.kmp.glass.GlassIconButton
+import top.yukonga.miuix.kmp.glass.GlassTopAppBar
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.icon.MiuixIcons
@@ -145,20 +148,18 @@ class PluginWebViewActivity : ComponentActivity() {
         onWebViewReady: (WebView) -> Unit
     ) {
         val context = LocalContext.current
+        // 本页在 MainScreen 取景层之外，自建一层供玻璃顶栏折射页面内容
+        val glassPage = rememberGlassPageBackdrop()
 
         Scaffold(
+            modifier = glassPage.layerModifier,
             contentWindowInsets = WindowInsets(0, 0, 0, 0),
             topBar = {
-                TopAppBar(
+                GlassTopAppBar(
                     title = title,
+                    backdrop = glassPage.backdrop,
                     navigationIcon = {
-                        Box(
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(CircleShape)
-                                .clickable { onBack() },
-                            contentAlignment = Alignment.Center
-                        ) {
+                        GlassIconButton(onClick = { onBack() }) {
                             Icon(
                                 imageVector = MiuixIcons.Back,
                                 contentDescription = "返回",

@@ -447,10 +447,10 @@ fun MainScreen(
             }
         }
     ) { padding ->
-        val contentPadding = PaddingValues(
-            top = padding.calculateTopPadding(),
-            bottom = 0.dp
-        )
+        // The tab host's bar occludes with its own gradient band, so the pages are not pushed below
+        // it: they run full height and pass under the bar, each holding its first item clear by
+        // [LocalTopBarClearance] worth of scrollable content padding.
+        val topBarClearance = padding.calculateTopPadding()
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -461,7 +461,9 @@ fun MainScreen(
                         else -> Modifier
                     }
                 )
-                .padding(contentPadding)
+                // No bottom inset either: the glass bottom bar floats over the content, and a gap
+                // here is what made it look like a bar of its own. Pages add their own clearance.
+                .padding()
                 .pointerInput(selectedTab, showVnc, isOverviewEditMode, availableTabs) {
                     detectDragGestures(
                         onDragStart = {
@@ -645,6 +647,7 @@ fun MainScreen(
                         onTabChange(4)
                     },
                     navBarBottomPadding = totalNavHeight,
+                    topBarClearance = topBarClearance,
                     onTopBarContent = { topBarContent.value = it },
                     active = swipeTargetTab == selectedTab
                 )
@@ -701,6 +704,7 @@ fun MainScreen(
                         onTabChange(4)
                     },
                     navBarBottomPadding = totalNavHeight,
+                    topBarClearance = topBarClearance,
                     onTopBarContent = { topBarContent.value = it },
                     active = tab == selectedTab
                 )
@@ -758,9 +762,11 @@ private fun PageContentForTab(
     onGoToFiles: () -> Unit,
     onGoToSettings: () -> Unit,
     navBarBottomPadding: Dp,
+    topBarClearance: Dp,
     onTopBarContent: (@Composable () -> Unit) -> Unit,
     active: Boolean = true
 ) {
+    CompositionLocalProvider(LocalTopBarClearance provides topBarClearance) {
     when (tab) {
         0 -> OverviewScreen(
             sessions = sessions,
@@ -833,6 +839,7 @@ private fun PageContentForTab(
         )
     }
 }
+    }
 
 /**
  * 默认（首帧回退）的全局顶栏：仅展示当前页标题，保证切页动画期间顶栏不为空。
