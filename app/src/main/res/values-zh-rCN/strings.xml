@@ -216,6 +216,13 @@
     <string name="appearance_settings_description">视觉外观设置</string>
     <string name="pref_material_you_title">使用 Material You 配色</string>
     <string name="pref_material_you_summary">跟随系统壁纸提取的主色动态调整界面配色，与系统主题色调保持一致（需 Android 12 及以上）</string>
+    <string name="pref_launch_page_title">启动页面</string>
+    <string name="pref_launch_page_summary">打开应用时先进入哪个页面</string>
+    <string name="pref_launch_page_overview">总览页</string>
+    <string name="pref_launch_page_terminal">终端页</string>
+    <string name="pref_launch_page_locked_summary">已开启「自动启动终端控制台」，启动页面固定为总览页</string>
+    <string name="pref_auto_start_console_title">自动启动终端控制台</string>
+    <string name="pref_auto_start_console_summary">启动时自动新建一个终端会话并直接进入其控制台</string>
     <string name="style_title">样式</string>
     <string name="style_settings_description">终端样式</string>
 

@@ -240,6 +240,14 @@ val composeUseCustomKeyboardLayout by com.termux.app.terminal.shell.ComposeTermi
     AppThemePrefs.init(context)
     val materialYouEnabled by AppThemePrefs.materialYouEnabled.collectAsState()
 
+    // 启动行为偏好：落地页 + 启动即开控制台。"自动启动终端控制台"开着时落地页固定总览。
+    LaunchPrefs.init(context)
+    val launchPagePreference by LaunchPrefs.launchPage.collectAsState()
+    val autoStartConsoleEnabled by LaunchPrefs.autoStartConsole.collectAsState()
+    // 下拉显示的下标完全由偏好推导：锁死时显示总览，但磁盘上的用户选择不动。
+    val launchPageSelectedIndex =
+        if (autoStartConsoleEnabled || launchPagePreference == LaunchPrefs.LaunchPage.OVERVIEW) 0 else 1
+
     // Official standalone APK detection. Keys match the add-on app package names; when a standalone
     // APK is installed, the integrated toggle is forced OFF and disabled, with the row shows
     // "Replaced by the official standalone plugin" instead of the normal help summary.
@@ -639,6 +647,35 @@ val composeUseCustomKeyboardLayout by com.termux.app.terminal.shell.ComposeTermi
                     onCheckedChange = { AppThemePrefs.setMaterialYouEnabled(context, it) }
                 )
             }),
+        SearchableSetting(sec_appearance, context.getString(R.string.pref_launch_page_title),
+            context.getString(
+                if (autoStartConsoleEnabled) R.string.pref_launch_page_locked_summary
+                else R.string.pref_launch_page_summary
+            ),
+            keywords = listOf("启动", "启动页", "launch", "startup", "home", "default page"),
+            render = {
+                OverlayDropdownPreference(
+                    title = context.getString(R.string.pref_launch_page_title),
+                    summary = context.getString(
+                        if (autoStartConsoleEnabled) R.string.pref_launch_page_locked_summary
+                        else R.string.pref_launch_page_summary
+                    ),
+                    items = listOf(
+                        context.getString(R.string.pref_launch_page_overview),
+                        context.getString(R.string.pref_launch_page_terminal)
+                    ),
+                    // 开着自动控制台时强制显示总览，磁盘上的用户选择保持不动。
+                    selectedIndex = if (autoStartConsoleEnabled) 0 else launchPageSelectedIndex,
+                    enabled = !autoStartConsoleEnabled,
+                    onSelectedIndexChange = { idx ->
+                        LaunchPrefs.setLaunchPage(
+                            context,
+                            if (idx == 1) LaunchPrefs.LaunchPage.TERMINAL else LaunchPrefs.LaunchPage.OVERVIEW
+                        )
+                    },
+                    startAction = { SettingIcon(Icons.Rounded.Home, contentDescription = context.getString(R.string.pref_launch_page_title)) }
+                )
+            }),
         SearchableSetting(sec_appearance, context.getString(R.string.language), context.getString(R.string.language_description),
             keywords = listOf("语言", "language", "中文", "英文", "locale"),
             render = {
@@ -720,6 +757,18 @@ val composeUseCustomKeyboardLayout by com.termux.app.terminal.shell.ComposeTermi
 
         // ===== Terminal =====
 
+        SearchableSetting(sec_terminal, context.getString(R.string.pref_auto_start_console_title),
+            context.getString(R.string.pref_auto_start_console_summary),
+            keywords = listOf("自动", "启动", "控制台", "console", "auto", "launch", "startup", "session"),
+            render = {
+                SwitchPreference(
+                    title = context.getString(R.string.pref_auto_start_console_title),
+                    summary = context.getString(R.string.pref_auto_start_console_summary),
+                    checked = autoStartConsoleEnabled,
+                    onCheckedChange = { LaunchPrefs.setAutoStartConsole(context, it) },
+                    startAction = { SettingIcon(Icons.Rounded.PlayArrow, contentDescription = context.getString(R.string.pref_auto_start_console_title)) }
+                )
+            }),
         SearchableSetting(sec_terminal, context.getString(R.string.log_level), context.getString(R.string.log_level_desc),
             keywords = listOf("日志", "log", "调试", "debug", "verbose"),
             render = {
@@ -1130,6 +1179,29 @@ val composeUseCustomKeyboardLayout by com.termux.app.terminal.shell.ComposeTermi
                             onCheckedChange = { AppThemePrefs.setMaterialYouEnabled(context, it) }
                         )
                                 OverlayDropdownPreference(
+                            title = context.getString(R.string.pref_launch_page_title),
+                            summary = context.getString(
+                                if (autoStartConsoleEnabled) R.string.pref_launch_page_locked_summary
+                                else R.string.pref_launch_page_summary
+                            ),
+                            items = listOf(
+                                context.getString(R.string.pref_launch_page_overview),
+                                context.getString(R.string.pref_launch_page_terminal)
+                            ),
+                            // 开着自动控制台时强制显示总览，磁盘上的用户选择保持不动。
+                            selectedIndex = if (autoStartConsoleEnabled) 0 else launchPageSelectedIndex,
+                            enabled = !autoStartConsoleEnabled,
+                            onSelectedIndexChange = { idx ->
+                                LaunchPrefs.setLaunchPage(
+                                    context,
+                                    if (idx == 1) LaunchPrefs.LaunchPage.TERMINAL else LaunchPrefs.LaunchPage.OVERVIEW
+                                )
+                            },
+                            startAction = {
+                                SettingIcon(Icons.Rounded.Home, contentDescription = context.getString(R.string.pref_launch_page_title))
+                            }
+                        )
+                                OverlayDropdownPreference(
                             title = context.getString(R.string.language),
                             summary = context.getString(R.string.language_description),
                             items = languageOptions,
@@ -1269,6 +1341,13 @@ val composeUseCustomKeyboardLayout by com.termux.app.terminal.shell.ComposeTermi
                     Column {
 
                         // ===== 终端设置 =====
+                        SwitchPreference(
+                            title = context.getString(R.string.pref_auto_start_console_title),
+                            summary = context.getString(R.string.pref_auto_start_console_summary),
+                            checked = autoStartConsoleEnabled,
+                            onCheckedChange = { LaunchPrefs.setAutoStartConsole(context, it) },
+                            startAction = { SettingIcon(Icons.Rounded.PlayArrow) }
+                        )
                         if (isComposeMode) {
                                 OverlayDropdownPreference(
                                 title = context.getString(R.string.font_size),

@@ -49,6 +49,7 @@ import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Delete
@@ -1397,6 +1398,22 @@ private val REPETITIVE_KEY_NAMES = setOf(
 private val MIN_KEY_WIDTH = 28.dp
 
 /**
+ * 小键盘按键标签的字号策略：优先 11.sp，放不下就自动缩小字号，而不是截断成省略号。
+ *
+ * 按键宽高都是固定值（宽由 [BoxWithConstraints] 等分，高 32.dp），大字号或 CJK 标签
+ * （自定义 extra-keys 布局里很常见）会超出按钮边界。11.sp 是原来的固定字号，作为上限
+ * 保证正常标签的渲染与改动前完全一致；下限 6.sp 防止极小键宽下字号塌到不可读。
+ *
+ * 键高固定 32.dp，正常字号（≤11.sp）行高远小于键高，实际只有水平方向会触顶收缩；
+ * 极端情况下（系统字体缩放很大）才会连带垂直收缩，同样是"保证显示完整"的预期行为。
+ */
+private val KeyboardLabelAutoSize = TextAutoSize.StepBased(
+    minFontSize = 6.sp,
+    maxFontSize = 11.sp,
+    stepSize = 0.5.sp
+)
+
+/**
  * 把 keyCode + 修饰态交给 libterminal 编码并写入当前会话。
  *
  * 走引擎的 TerminalView.onKeyDown 而不是自己拼字节：KeyInputProcessor 会读
@@ -1808,11 +1825,12 @@ private fun KeyButton(
     ) {
         Text(
             text = label,
-            fontSize = 11.sp,
+            autoSize = KeyboardLabelAutoSize,
             fontWeight = FontWeight.Medium,
             color = effectiveContentColor,
             maxLines = 1,
-            overflow = TextOverflow.Ellipsis
+            softWrap = false,
+            overflow = TextOverflow.Clip
         )
     }
 }
@@ -1847,10 +1865,12 @@ private fun SpecialKeyButton(
     ) {
         Text(
             text = label,
-            fontSize = 11.sp,
+            autoSize = KeyboardLabelAutoSize,
             fontWeight = FontWeight.Bold,
             color = if (locked) MiuixTheme.colorScheme.onPrimary else effectiveContentColor,
-            maxLines = 1
+            maxLines = 1,
+            softWrap = false,
+            overflow = TextOverflow.Clip
         )
     }
 }
