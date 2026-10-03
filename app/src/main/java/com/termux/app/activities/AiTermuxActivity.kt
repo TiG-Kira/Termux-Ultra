@@ -2775,8 +2775,14 @@ private fun AiConversationManagementScreen(
                                 color = MiuixTheme.colorScheme.onSurfaceVariantSummary
                             )
                         }
-                        GlassIconButton(
-                            onClick = { pendingDeleteId = conv.id },
+                        // 删除按钮：作为 Column 的兄弟节点放在 Row 里，独立处理点击，
+                        // 与 Column 的 weight(1f) + clickable 互不重叠互不冲突
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .clickable { pendingDeleteId = conv.id },
+                            contentAlignment = Alignment.Center
                         ) {
                             Icon(
                                 imageVector = Icons.Rounded.DeleteSweep,
