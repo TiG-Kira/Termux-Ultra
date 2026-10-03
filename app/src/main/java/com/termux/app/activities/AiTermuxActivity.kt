@@ -1545,9 +1545,24 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
         processAiTurn(ctx, resultText)
     }
 
+    /** 清空所有对话历史：删除除默认对话外的全部对话，再清空默认对话内部内容。 */
     fun clearHistory() {
         val ctx = getApplication<android.app.Application>()
+        val now = System.currentTimeMillis()
+        // 保留默认对话实例（仅清内容），删除所有其他对话
+        conversations.removeAll { it.id != DEFAULT_CONVERSATION_ID }
+        // 清空默认对话的 messages
         synchronized(messages) { messages.clear() }
+        val defaultIdx = conversations.indexOfFirst { it.id == DEFAULT_CONVERSATION_ID }
+        if (defaultIdx >= 0) {
+            conversations[defaultIdx] = conversations[defaultIdx].copy(
+                messages = emptyList(),
+                updatedAt = now
+            )
+        }
+        // 确保当前激活对话是默认对话
+        activeConversationId = DEFAULT_CONVERSATION_ID
+        activeConversationTitle = DEFAULT_CONVERSATION_TITLE
         SkillExecutor.clearTasks()
         persistConversations(ctx)
     }
@@ -2715,11 +2730,14 @@ private fun AiConversationManagementScreen(
                         .clip(RoundedCornerShape(16.dp))
                         .background(if (isDark) Color(0xFF1C1C1E) else Color.White)
                         .then(Modifier.border(0.5.dp, if (isDark) Color(0xFF2C2C2E) else Color(0xFFE8E8E8), RoundedCornerShape(16.dp)))
-                        .clickable { onOpenConversation(conv.id) }
                         .padding(horizontal = 16.dp, vertical = 14.dp)
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Column(modifier = Modifier.weight(1f)) {
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable { onOpenConversation(conv.id) }
+                        ) {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                 Text(
                                     text = conv.title,
