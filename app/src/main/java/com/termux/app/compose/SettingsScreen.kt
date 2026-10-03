@@ -64,6 +64,7 @@ import top.yukonga.miuix.kmp.basic.DropdownItem
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import com.termux.R
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.Launch
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
@@ -184,7 +185,7 @@ fun SettingsScreen(
     var showMemoryEditor by remember { mutableStateOf(false) }
 
     // 高风险命令二次确认
-    var riskConfirmEnabled by remember { mutableStateOf(RiskConfirmManager.isEnabled(context)) }
+    var riskConfirmEnabled by remember { mutableStateOf(RiskConfirmManager.getProtectionLevel(context) != RiskConfirmManager.ProtectionLevel.OFF) }
 
     // 防护等级
     var protectionLevel by remember { mutableStateOf(RiskConfirmManager.getProtectionLevel(context)) }
@@ -529,7 +530,7 @@ val composeUseCustomKeyboardLayout by com.termux.app.terminal.shell.ComposeTermi
                 add(SettingItem(
                     title = context.getString(R.string.termux_boot_help),
                     description = context.getString(R.string.termux_boot_help_summary),
-                    icon = Icons.Rounded.Launch,
+                    icon = Icons.AutoMirrored.Rounded.Launch,
                     action = { showBootHelpDialog = true }
                 ))
             }
@@ -855,7 +856,7 @@ val composeUseCustomKeyboardLayout by com.termux.app.terminal.shell.ComposeTermi
                 IntegratedToolSwitch(
                     title = context.getString(R.string.termux_boot_tool),
                     summary = if (bootStandaloneInstalled) replacedSummary else context.getString(R.string.termux_boot_tool_summary),
-                    icon = Icons.Rounded.Launch,
+                    icon = Icons.AutoMirrored.Rounded.Launch,
                     checked = termuxBootEnabled,
                     onCheckedChange = {
                         termuxBootEnabled = it
@@ -1485,7 +1486,7 @@ val composeUseCustomKeyboardLayout by com.termux.app.terminal.shell.ComposeTermi
                             title = context.getString(R.string.termux_boot_tool),
                             summary = if (bootStandaloneInstalled) replacedSummary
                                       else context.getString(R.string.termux_boot_tool_summary),
-                            icon = Icons.Rounded.Launch,
+                            icon = Icons.AutoMirrored.Rounded.Launch,
                             checked = termuxBootEnabled,
                             onCheckedChange = {
                                 termuxBootEnabled = it
@@ -1850,7 +1851,7 @@ val composeUseCustomKeyboardLayout by com.termux.app.terminal.shell.ComposeTermi
                         val agentJudgeEnabled = protectionLevel != RiskConfirmManager.ProtectionLevel.OFF
                         val hasAgentCfg = remember {
                             val cfg = AiTermuxPrefs.getConfig(context).providerConfig
-                            val hasApi = cfg.apiKey?.isNotBlank() == true || cfg.provider == "local"
+                            val hasApi = cfg.apiKey.isNotBlank() || cfg.provider == "local"
                             val localReady = cfg.provider != "local" || AiLocalModel.isLocalModelReady()
                             hasApi && localReady
                         }
@@ -3009,16 +3010,6 @@ val composeUseCustomKeyboardLayout by com.termux.app.terminal.shell.ComposeTermi
                                 }
                             )
                             Spacer(Modifier.height(4.dp))
-                            // reasoningContent 已移除
-                            if (false) {
-                                Text(
-                                    text = "",
-                                    fontSize = 11.sp,
-                                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                                    lineHeight = 16.sp,
-                                    modifier = Modifier.padding(bottom = 4.dp)
-                                )
-                            }
                             Text(
                                 text = msg.content.ifBlank { context.getString(R.string.empty) },
                                 fontSize = 13.sp,

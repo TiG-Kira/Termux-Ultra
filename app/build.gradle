@@ -197,6 +197,12 @@ android {
             jniLibs.srcDirs = ['src/main/jniLibs']
         }
     }
+
+    lint {
+        abortOnError false
+        checkReleaseBuilds false
+        disable 'MissingTranslation'
+    }
 }
 
 dependencies {

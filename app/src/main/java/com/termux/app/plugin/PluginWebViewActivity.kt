@@ -90,6 +90,16 @@ class PluginWebViewActivity : ComponentActivity() {
         window.statusBarColor = android.graphics.Color.TRANSPARENT
         window.navigationBarColor = android.graphics.Color.TRANSPARENT
 
+        onBackPressedDispatcher.addCallback(this, object : androidx.activity.OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                if (webView?.canGoBack() == true) {
+                    webView?.goBack()
+                } else {
+                    finish()
+                }
+            }
+        })
+
         setContent {
             KiTerminalTheme {
                 PluginWebViewScreen(
@@ -131,14 +141,6 @@ class PluginWebViewActivity : ComponentActivity() {
         webView?.destroy()
         webView = null
         super.onDestroy()
-    }
-
-    override fun onBackPressed() {
-        if (webView?.canGoBack() == true) {
-            webView?.goBack()
-        } else {
-            super.onBackPressed()
-        }
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -184,6 +186,7 @@ class PluginWebViewActivity : ComponentActivity() {
                         WebView(ctx).apply {
                             setBackgroundColor(0)
                             setLayerType(android.view.View.LAYER_TYPE_SOFTWARE, null)
+                            @Suppress("DEPRECATION")
                             settings.apply {
                                 javaScriptEnabled = true
                                 domStorageEnabled = true

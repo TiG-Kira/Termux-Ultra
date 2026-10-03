@@ -192,7 +192,7 @@ class UtilityCenterActivity : ComponentActivity() {
                                 val intent = Intent(context, com.termux.app.TermuxActivity::class.java)
                                 intent.putExtra("sessionHandle", terminalSession.mHandle)
                                 startActivity(intent)
-                                android.os.Handler().postDelayed({
+                                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
                                     if (terminalSession.isRunning) {
                                         terminalSession.write(command + "\n")
                                     }

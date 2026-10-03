@@ -205,6 +205,7 @@ public class ReportActivity extends AppCompatActivity {
 
     @Override
     public void onBackPressed() {
+        super.onBackPressed();
         // Remove activity from recents menu on back button press
         finishAndRemoveTask();
     }

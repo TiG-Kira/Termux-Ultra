@@ -603,25 +603,22 @@ fun RemoteScreen(
                                         verticalArrangement = Arrangement.spacedBy(8.dp)
                                     ) {
                                         filtered.forEach { conn ->
-                                            val (cName, cDetail) = when (conn) {
-                                                is SshConnection -> {
-                                                    val tag = when (conn.connectionType) {
-                                                        "openpilot" -> "[OpenPilot] "
-                                                        "comma" -> "[Comma] "
-                                                        "local" -> "[本地] "
-                                                        else -> ""
-                                                    }
-                                                    val detail = when (conn.connectionType) {
-                                                        "local" -> "${conn.username}@localhost:${conn.port}"
-                                                        "comma" -> {
-                                                            if (conn.deviceType == "external") "${conn.username}@${conn.dongleId} (${context.getString(R.string.ssh_method_dongle_id)})"
-                                                            else "${conn.username}@${conn.host}:${conn.port}"
-                                                        }
-                                                        else -> "${conn.username}@${conn.host}:${conn.port}"
-                                                    }
-                                                    conn.name to "$tag$detail"
-                                                }
+                                            val tag = when (conn.connectionType) {
+                                                "openpilot" -> "[OpenPilot] "
+                                                "comma" -> "[Comma] "
+                                                "local" -> "[本地] "
+                                                else -> ""
                                             }
+                                            val detail = when (conn.connectionType) {
+                                                "local" -> "${conn.username}@localhost:${conn.port}"
+                                                "comma" -> {
+                                                    if (conn.deviceType == "external") "${conn.username}@${conn.dongleId} (${context.getString(R.string.ssh_method_dongle_id)})"
+                                                    else "${conn.username}@${conn.host}:${conn.port}"
+                                                }
+                                                else -> "${conn.username}@${conn.host}:${conn.port}"
+                                            }
+                                            val cName = conn.name
+                                            val cDetail = "$tag$detail"
                                             Row(
                                                 modifier = Modifier
                                                     .fillMaxWidth()

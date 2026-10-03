@@ -65,7 +65,7 @@ fun TextEditorScreen(
     val glassPage = rememberGlassPageBackdrop()
     val scrollBehavior = MiuixScrollBehavior()
     var currentFilePath by remember { mutableStateOf(filePath) }
-    val file = remember(currentFilePath) { if (currentFilePath != null) File(currentFilePath) else null }
+    val file = remember(currentFilePath) { currentFilePath?.let { File(it) } }
     val lang = remember(file) { SyntaxHighlighter.detectLanguage(file) }
     var content by remember { mutableStateOf(initialContent) }
     var modified by remember { mutableStateOf(false) }
@@ -83,8 +83,9 @@ fun TextEditorScreen(
     val perms = SyntaxHighlighter.permissions(file)
 
     fun doSave() {
-        if (currentFilePath != null) {
-            val ok = onSave(currentFilePath!!, content)
+        val path = currentFilePath
+        if (path != null) {
+            val ok = onSave(path, content)
             if (ok) modified = false
         } else {
             // 新建文件 → 先选目录
