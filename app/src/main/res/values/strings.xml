@@ -228,6 +228,13 @@
     <string name="appearance_settings_description">Visual appearance settings</string>
     <string name="pref_material_you_title">Use Material You colors</string>
     <string name="pref_material_you_summary">Tint the interface from your wallpaper so it matches the system theme (requires Android 12 or later)</string>
+    <string name="pref_launch_page_title">Startup page</string>
+    <string name="pref_launch_page_summary">Which page to open when the app starts</string>
+    <string name="pref_launch_page_overview">Overview</string>
+    <string name="pref_launch_page_terminal">Terminal</string>
+    <string name="pref_launch_page_locked_summary">Fixed to Overview while \u201cAuto-open terminal console\u201d is on</string>
+    <string name="pref_auto_start_console_title">Auto-open terminal console</string>
+    <string name="pref_auto_start_console_summary">On launch, create a terminal session and open its console directly</string>
     <string name="style_title">Style</string>
     <string name="style_settings_description">Terminal styling</string>
 

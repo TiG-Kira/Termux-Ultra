@@ -25,6 +25,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import com.termux.app.activities.AboutActivity
 import com.termux.app.compose.KiTerminalTheme
+import com.termux.app.compose.LaunchPrefs
 import com.termux.app.compose.MainScreen
 import com.termux.shared.termux.TermuxConstants
 import com.termux.shared.termux.shell.command.runner.terminal.TermuxSession as SharedTermuxSession
@@ -165,10 +166,26 @@ class MainActivity : FragmentActivity() {
             }
 
             // 外部页面（如终端页"应用设置"）请求直接打开主页设置 tab
+            var hasExplicitTab = false
             if (i != null && i.getBooleanExtra(EXTRA_OPEN_SETTINGS_TAB, false)) {
                 i.removeExtra(EXTRA_OPEN_SETTINGS_TAB)
                 selectedTab = SETTINGS_TAB_INDEX
+                hasExplicitTab = true
             }
+
+            // 启动页偏好（总览/终端）仅在没有显式跳转时生效。
+            // autoStartConsole 打开时 effectiveLaunchPage() 恒为总览，且下面会直接进控制台。
+            LaunchPrefs.init(this)
+            if (!hasExplicitTab && "SHOW_SFTP_INFO" != intent?.action) {
+                selectedTab = when (LaunchPrefs.effectiveLaunchPage()) {
+                    LaunchPrefs.LaunchPage.TERMINAL -> 1
+                    LaunchPrefs.LaunchPage.OVERVIEW -> 0
+                }
+            }
+
+            // 自动启动终端控制台：新建一个会话并直接进入其控制台。
+            // 放到 setContent 之后触发，让主页先完成组合再跳转。
+            val autoStartConsole = LaunchPrefs.autoStartConsole.value
 
             appViewModel = ViewModelProvider(this)[AppViewModel::class.java]
             appViewModel.updateShowVnc(initialShowVnc)
@@ -261,6 +278,34 @@ class MainActivity : FragmentActivity() {
                             onRefreshSessions = { updateSessions() }
                         )
                 }
+                }
+            }
+
+            // 新建会话并进入控制台。仅在真正的冷启动（无 savedInstanceState）时执行：
+            // 旋转屏幕/进程重建也会走 onCreate，若无守卫会每次重建都多建一个会话。
+            if (autoStartConsole && savedInstanceState == null) {
+                handler.post {
+                    try {
+                        val composeSessionManager =
+                            com.termux.app.terminal.shell.ComposeSessionManager.getInstance(this)
+                        val sessionName = if (LocaleHelper.isChinese(this)) {
+                            "会话 ${composeSessionManager.sessions.value.size + 1}"
+                        } else {
+                            "Session ${composeSessionManager.sessions.value.size + 1}"
+                        }
+                        val newSession = composeSessionManager.createDefaultSession(startImmediately = true)
+                        newSession.sessionName.value = sessionName
+                        composeSessionManager.switchTo(newSession.id)
+                        startActivity(Intent(this, TermuxActivity::class.java))
+                    } catch (t: Throwable) {
+                        try {
+                            com.termux.app.utils.LogManager.getInstance().exception(
+                                "MainActivity",
+                                "自动启动终端控制台失败: ${t.message}",
+                                t
+                            )
+                        } catch (ignored: Throwable) {}
+                    }
                 }
             }
         } catch (t: Throwable) {
