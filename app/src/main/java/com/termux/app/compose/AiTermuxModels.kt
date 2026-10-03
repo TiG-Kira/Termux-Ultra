@@ -52,6 +52,19 @@ data class ChatMessage(
     val rawResponse: String? = null  // 原始 API 响应 JSON，用于调试
 )
 
+/** 单条 Agent 对话（多会话管理单元） */
+data class AiConversation(
+    val id: String,
+    val title: String = "Termux Agent",
+    val messages: List<ChatMessage> = emptyList(),
+    val createdAt: Long = System.currentTimeMillis(),
+    val updatedAt: Long = System.currentTimeMillis()
+)
+
+/** 默认对话的固定 ID 与标题（旧版单对话数据迁移目标） */
+const val DEFAULT_CONVERSATION_ID = "termux_agent_default"
+const val DEFAULT_CONVERSATION_TITLE = "Termux Agent"
+
 // ---------- 本地模型训练（System Prompt 蒸馏迭代）相关数据结构 ----------
 /** 单轮训练记录 */
 data class LocalTrainRound(
@@ -492,6 +505,8 @@ object AiTermuxPrefs {
     private const val KEY_CONTEXT_MESSAGES = "context_messages"
     private const val KEY_COMPRESS_THRESHOLD = "compress_threshold"
     private const val KEY_COMPRESS_KEEP_RECENT = "compress_keep_recent"
+    private const val KEY_CONVERSATIONS = "conversations_v1"
+    private const val KEY_ACTIVE_CONVERSATION_ID = "active_conversation_id"
 
     // 对话参数默认值：与 AiTermuxActivity 中原本硬编码的常量保持一致
     const val DEFAULT_MAX_TOKENS = 8192
@@ -693,6 +708,71 @@ object AiTermuxPrefs {
     fun clearChatHistory(context: Context) {
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .edit().remove(KEY_CHAT_HISTORY).apply()
+    }
+
+    // ---------- Conversations (多会话) ----------
+    /**
+     * 读取所有 Agent 对话。
+     *
+     * 迁移（幂等，仅执行一次）：若尚未写入过 [KEY_CONVERSATIONS] 但旧版单对话
+     * [KEY_CHAT_HISTORY] 存在，则将其作为默认对话「Termux Agent」写入，保证旧用户升级后
+     * 历史不丢失。若两者皆无，则创建空的默认对话。
+     */
+    fun getConversations(context: Context): List<AiConversation> {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val raw = prefs.getString(KEY_CONVERSATIONS, null)
+        if (raw != null) {
+            return try {
+                Gson().fromJson(raw, Array<AiConversation>::class.java).toList()
+            } catch (_: Throwable) { emptyList() }
+        }
+        val now = System.currentTimeMillis()
+        val oldRaw = prefs.getString(KEY_CHAT_HISTORY, null)
+        if (oldRaw != null) {
+            val migrated = try {
+                Gson().fromJson(oldRaw, Array<OpenAiMessage>::class.java)
+                    .toList().toChatMessages()
+            } catch (_: Throwable) { emptyList() }
+            val def = AiConversation(
+                id = DEFAULT_CONVERSATION_ID,
+                title = DEFAULT_CONVERSATION_TITLE,
+                messages = migrated,
+                createdAt = now,
+                updatedAt = now
+            )
+            prefs.edit()
+                .putString(KEY_CONVERSATIONS, Gson().toJson(listOf(def)))
+                .putString(KEY_ACTIVE_CONVERSATION_ID, def.id)
+                .remove(KEY_CHAT_HISTORY)
+                .apply()
+            return listOf(def)
+        }
+        val def = AiConversation(
+            id = DEFAULT_CONVERSATION_ID,
+            title = DEFAULT_CONVERSATION_TITLE,
+            createdAt = now,
+            updatedAt = now
+        )
+        prefs.edit()
+            .putString(KEY_CONVERSATIONS, Gson().toJson(listOf(def)))
+            .putString(KEY_ACTIVE_CONVERSATION_ID, def.id)
+            .apply()
+        return listOf(def)
+    }
+
+    fun saveConversations(context: Context, conversations: List<AiConversation>) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().putString(KEY_CONVERSATIONS, Gson().toJson(conversations)).apply()
+    }
+
+    fun getActiveConversationId(context: Context): String? {
+        return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getString(KEY_ACTIVE_CONVERSATION_ID, null)
+    }
+
+    fun setActiveConversationId(context: Context, id: String) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().putString(KEY_ACTIVE_CONVERSATION_ID, id).apply()
     }
 
     // ---------- Custom System Prompt ----------
