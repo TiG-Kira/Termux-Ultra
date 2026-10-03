@@ -1427,7 +1427,7 @@ object AiTermuxPrefs {
             // Profiles
             remove(KEY_LLM_PROFILES)
             remove(KEY_ACTIVE_PROFILE_ID)
-            // 对话历史
+            // 旧版单对话历史（已迁移到多会话，这里兜底清理）
             remove(KEY_CHAT_HISTORY)
             remove(KEY_TEACHER_CHAT_HISTORY)
             // 训练记忆
@@ -1450,5 +1450,7 @@ object AiTermuxPrefs {
             remove(KEY_NEEDS_RECONFIG)
             apply()
         }
+        // 多会话历史：删除除默认对话外的全部对话，再清空默认对话内部内容
+        clearAllConversationsExceptDefault(context)
     }
 }
