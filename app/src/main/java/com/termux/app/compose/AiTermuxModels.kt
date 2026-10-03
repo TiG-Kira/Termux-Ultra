@@ -710,6 +710,61 @@ object AiTermuxPrefs {
             .edit().remove(KEY_CHAT_HISTORY).apply()
     }
 
+    /**
+     * 清空所有对话历史（多会话版本）：
+     * - 删除除 [DEFAULT_CONVERSATION_ID] 外的全部对话
+     * - 清空默认对话内部的 messages
+     * - 设置激活对话为默认对话
+     *
+     * 供没有持有 ViewModel 的入口（如 SettingsScreen）直接调用。
+     */
+    fun clearAllConversationsExceptDefault(context: Context) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val now = System.currentTimeMillis()
+        val raw = prefs.getString(KEY_CONVERSATIONS, null)
+        if (raw == null) {
+            // 还没有多会话存储，可能是旧版单对话存储
+            clearChatHistory(context)
+            return
+        }
+        try {
+            val all = Gson().fromJson(raw, Array<AiConversation>::class.java).toList()
+            val keptDefault = all
+                .filter { it.id == DEFAULT_CONVERSATION_ID }
+                .map { it.copy(messages = emptyList(), updatedAt = now) }
+                .ifEmpty {
+                    listOf(
+                        AiConversation(
+                            id = DEFAULT_CONVERSATION_ID,
+                            title = DEFAULT_CONVERSATION_TITLE,
+                            messages = emptyList(),
+                            createdAt = now,
+                            updatedAt = now
+                        )
+                    )
+                }
+            prefs.edit()
+                .putString(KEY_CONVERSATIONS, Gson().toJson(keptDefault))
+                .putString(KEY_ACTIVE_CONVERSATION_ID, DEFAULT_CONVERSATION_ID)
+                .remove(KEY_CHAT_HISTORY)
+                .apply()
+        } catch (_: Throwable) {
+            // 解析失败，直接重建默认对话
+            val def = AiConversation(
+                id = DEFAULT_CONVERSATION_ID,
+                title = DEFAULT_CONVERSATION_TITLE,
+                messages = emptyList(),
+                createdAt = now,
+                updatedAt = now
+            )
+            prefs.edit()
+                .putString(KEY_CONVERSATIONS, Gson().toJson(listOf(def)))
+                .putString(KEY_ACTIVE_CONVERSATION_ID, def.id)
+                .remove(KEY_CHAT_HISTORY)
+                .apply()
+        }
+    }
+
     // ---------- Conversations (多会话) ----------
     /**
      * 读取所有 Agent 对话。

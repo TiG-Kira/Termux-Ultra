@@ -2350,7 +2350,7 @@ val composeUseCustomKeyboardLayout by com.termux.app.terminal.shell.ComposeTermi
                     text = context.getString(R.string.clear),
                     onClick = {
                         showAiClearConfirm = false
-                        AiTermuxPrefs.clearChatHistory(context)
+                        AiTermuxPrefs.clearAllConversationsExceptDefault(context)
                     },
                     modifier = Modifier.weight(1f)
                 )
