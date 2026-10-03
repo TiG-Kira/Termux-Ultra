@@ -199,9 +199,13 @@ android {
     }
 
     lint {
-        abortOnError false
-        checkReleaseBuilds false
+        // 只关掉两类确认无意义的规则，保留 abortOnError 默认（true）——
+        // lint 仍需作为质量门禁，不能让新引入的问题静默通过。
+        // MissingTranslation：本应用只有 values / values-zh-rCN 两个目录，缺其他语种是预期状态。
+        // MissingSuperCall：onBackPressed() 覆写刻意不调 super（由 finishAndRemoveTask()/
+        //   confirm() 接管收尾），是上游 Termux 既有设计，已在各覆写点用 @SuppressLint 标注。
         disable 'MissingTranslation'
+        disable 'MissingSuperCall'
     }
 }
 
