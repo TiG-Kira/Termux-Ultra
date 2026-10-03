@@ -42,7 +42,6 @@ fun TermuxWidgetScreen(
     var isLauncherDisabled by remember { mutableStateOf(false) }
 
     Scaffold(
-        modifier = glassPage.layerModifier,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             GlassTopAppBar(
@@ -64,6 +63,7 @@ fun TermuxWidgetScreen(
     ) { padding ->
         Box(
             modifier = modifier
+                .then(glassPage.contentModifier)
                 .fillMaxSize()
                 .padding(pagePaddingWithoutTop(padding))
         ) {
@@ -71,7 +71,7 @@ fun TermuxWidgetScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .nestedScroll(scrollBehavior.nestedScrollConnection),
-                contentPadding = PaddingValues(bottom = 16.dp)
+                contentPadding = standaloneContentPadding(padding, bottom = 16.dp)
             ) {
                 item {
                     Column(

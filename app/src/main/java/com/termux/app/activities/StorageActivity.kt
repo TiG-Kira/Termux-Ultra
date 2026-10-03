@@ -1,5 +1,8 @@
 package com.termux.app.activities
 
+import com.termux.app.compose.pagePaddingWithoutTop
+import com.termux.app.compose.topBarClearance
+import com.termux.app.compose.standaloneContentPadding
 import android.app.usage.StorageStatsManager
 import android.content.Context
 import android.os.Bundle
@@ -215,7 +218,7 @@ val glassPage = rememberGlassPageBackdrop()
     }
 
     Scaffold(
-        modifier = Modifier.fillMaxSize().then(glassPage.layerModifier),
+        modifier = Modifier.fillMaxSize(),
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             GlassTopAppBar(
@@ -237,10 +240,11 @@ val glassPage = rememberGlassPageBackdrop()
     ) { padding ->
         LazyColumn(
             modifier = Modifier
+                .then(glassPage.contentModifier)
                 .fillMaxSize()
-                .padding(padding)
+                .padding(pagePaddingWithoutTop(padding))
                 .nestedScroll(scrollBehavior.nestedScrollConnection),
-            contentPadding = PaddingValues(bottom = 92.dp)
+            contentPadding = standaloneContentPadding(padding, bottom = 92.dp)
         ) {
             // 总占用卡片
             item {
@@ -594,7 +598,7 @@ val glassPage = rememberGlassPageBackdrop()
     }
 
     Scaffold(
-        modifier = Modifier.fillMaxSize().then(glassPage.layerModifier),
+Modifier.fillMaxSize(),
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             GlassTopAppBar(
@@ -617,8 +621,12 @@ val glassPage = rememberGlassPageBackdrop()
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
+                .then(glassPage.contentModifier)
+                .padding(pagePaddingWithoutTop(padding))
         ) {
+            // 这页内容固定不滚动，让位只能落在首个 item 上；滚动页才把它折进 contentPadding。
+            Spacer(Modifier.height(topBarClearance(padding)))
+
             itemDetailCard(
                 icon = R.drawable.ic_computer,
                 title = "模型",

@@ -31,6 +31,7 @@ import androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner
 import com.termux.R
 import com.termux.app.compose.*
 import com.termux.app.compose.pagePaddingWithoutTop
+import com.termux.app.compose.standaloneContentPadding
 import com.termux.app.compose.NavigationHelper
 import com.termux.app.github.GitHubApi
 import com.termux.app.github.GitHubLogcat
@@ -130,7 +131,6 @@ class GitHubFeedbackActivity : ComponentActivity() {
                     }
 
                     Scaffold(
-                        modifier = glassPage.layerModifier,
                         contentWindowInsets = WindowInsets(0, 0, 0, 0),
                         topBar = {
                             GlassTopAppBar(
@@ -153,9 +153,11 @@ class GitHubFeedbackActivity : ComponentActivity() {
                         LazyColumn(
                             modifier = Modifier
                                 .fillMaxSize()
+                                .then(glassPage.contentModifier)
                                 .padding(pagePaddingWithoutTop(padding))
                                 .nestedScroll(scrollBehavior.nestedScrollConnection),
-                            contentPadding = PaddingValues(
+                            contentPadding = standaloneContentPadding(
+                                padding,
                                 start = 16.dp, end = 16.dp, bottom = systemNavBarsHeight + 26.dp
                             ),
                             verticalArrangement = Arrangement.spacedBy(12.dp)

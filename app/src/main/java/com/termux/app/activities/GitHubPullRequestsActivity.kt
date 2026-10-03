@@ -1,5 +1,7 @@
 package com.termux.app.activities
 
+import com.termux.app.compose.pagePaddingWithoutTop
+import com.termux.app.compose.standaloneContentPadding
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -90,7 +92,6 @@ class GitHubPullRequestsActivity : ComponentActivity() {
                     }
 
                     Scaffold(
-                        modifier = glassPage.layerModifier,
                         contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0),
                         topBar = {
                             GlassTopAppBar(
@@ -102,7 +103,7 @@ class GitHubPullRequestsActivity : ComponentActivity() {
                         }
                     ) { padding ->
                         if (session == null) {
-                            Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
+                            Box(Modifier.fillMaxSize().padding(pagePaddingWithoutTop(padding)), contentAlignment = Alignment.Center) {
                                 Text(
                                     stringResource(R.string.github_login_required),
                                     style = TextStyle(fontSize = 14.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
@@ -113,14 +114,16 @@ class GitHubPullRequestsActivity : ComponentActivity() {
                         PullRequestFeed(
                             modifier = Modifier
                                 .fillMaxSize()
-                                .padding(padding)
+                                .then(glassPage.contentModifier)
+                                .padding(pagePaddingWithoutTop(padding))
                                 .nestedScroll(scrollBehavior.nestedScrollConnection),
                             prs = prs,
                             loading = loading,
                             error = error,
                             onRetry = { load() },
                             onPrClick = { openDetail(it.number) },
-                            contentPadding = PaddingValues(
+                            contentPadding = standaloneContentPadding(
+                                padding,
                                 start = 16.dp, end = 16.dp, bottom = systemNavBarsHeight + 26.dp
                             )
                         )

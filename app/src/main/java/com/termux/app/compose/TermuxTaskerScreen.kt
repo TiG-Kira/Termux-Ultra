@@ -62,7 +62,6 @@ fun TermuxTaskerScreen(
     }
 
     Scaffold(
-        modifier = glassPage.layerModifier,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             GlassTopAppBar(
@@ -92,6 +91,7 @@ fun TermuxTaskerScreen(
     ) { padding ->
         Box(
             modifier = modifier
+                .then(glassPage.contentModifier)
                 .fillMaxSize()
                 .padding(pagePaddingWithoutTop(padding))
         ) {
@@ -99,7 +99,7 @@ fun TermuxTaskerScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .nestedScroll(scrollBehavior.nestedScrollConnection),
-                contentPadding = PaddingValues(bottom = 16.dp)
+                contentPadding = standaloneContentPadding(padding, bottom = 16.dp)
             ) {
                 termuxAccessibleWarning?.let { warning ->
                     item {

@@ -42,6 +42,7 @@ import com.google.gson.reflect.TypeToken
 import com.termux.R
 import com.termux.app.compose.rememberGlassPageBackdrop
 import com.termux.app.compose.pagePaddingWithoutTop
+import com.termux.app.compose.standaloneContentPadding
 import com.termux.app.compose.*
 import com.termux.app.compose.TerminalSession
 import com.termux.app.compose.getRunningSessions
@@ -212,7 +213,6 @@ class ThirdPartyCenterActivity : ComponentActivity() {
                 }
 
                 Scaffold(
-                    modifier = glassPage.layerModifier,
                     contentWindowInsets = WindowInsets(0, 0, 0, 0),
                     topBar = {
                         GlassTopAppBar(
@@ -255,10 +255,12 @@ class ThirdPartyCenterActivity : ComponentActivity() {
                 ) { padding ->
                     LazyColumn(
                         modifier = Modifier
+                            .then(glassPage.contentModifier)
                             .fillMaxSize()
                             .padding(pagePaddingWithoutTop(padding))
                             .nestedScroll(scrollBehavior.nestedScrollConnection),
-                        contentPadding = PaddingValues(
+                        contentPadding = standaloneContentPadding(
+                            padding,
                             start = 16.dp,
                             end = 16.dp,
                             bottom = systemNavBarsHeight + 26.dp

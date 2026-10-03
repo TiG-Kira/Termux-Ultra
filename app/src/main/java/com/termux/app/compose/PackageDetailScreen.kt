@@ -235,7 +235,6 @@ fun PackageDetailScreen(
     }
 
     Scaffold(
-        modifier = glassPage.layerModifier,
         topBar = {
             GlassTopAppBar(
                 title = pkg.name,
@@ -274,6 +273,7 @@ fun PackageDetailScreen(
     ) { innerPadding ->
         Box(
             modifier = Modifier
+                .then(glassPage.contentModifier)
                 .fillMaxSize()
                 .padding(pagePaddingWithoutTop(innerPadding))
         ) {
@@ -297,10 +297,11 @@ fun PackageDetailScreen(
                 LazyColumn(
                     state = listState,
                     modifier = Modifier.fillMaxSize().nestedScroll(scrollBehavior.nestedScrollConnection),
-                    contentPadding = PaddingValues(
+                    contentPadding = standaloneContentPadding(
+                        innerPadding,
                         start = 12.dp,
                         end = 12.dp,
-                        top = innerPadding.calculateTopPadding() + 6.dp,
+                        top = 6.dp,
                         bottom = navBarBottomPadding + 92.dp
                     ),
                     verticalArrangement = Arrangement.spacedBy(12.dp)

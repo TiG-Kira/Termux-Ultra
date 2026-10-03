@@ -119,12 +119,15 @@ fun AiLocalTrainerScreen(
             }
         ) { padding ->
             if (!hasLocal.value) {
-                NoLocalModelHint(Modifier.padding(pagePaddingWithoutTop(padding)))
+                // 居中提示按整屏居中，让位交给 pagePaddingWithoutTop 之外的那一份顶部空间。
+                NoLocalModelHint(Modifier.padding(top = topBarClearance(padding)))
             } else {
                 TrainerBody(
                     Modifier
-                        .padding(pagePaddingWithoutTop(padding))
                         .fillMaxSize()
+                        // 顶部的 TabBar 是固定条，必须停在玻璃顶栏下方；各 tab 的列表仍会滚到顶栏之下。
+                        .padding(top = topBarClearance(padding))
+                        .padding(pagePaddingWithoutTop(padding))
                         .nestedScroll(scrollBehavior.nestedScrollConnection),
                     ctx, onlineReady
                 )

@@ -68,6 +68,7 @@ import com.termux.R
 import com.termux.app.TermuxService
 import com.termux.app.compose.*
 import com.termux.app.compose.pagePaddingWithoutTop
+import com.termux.app.compose.standaloneContentPadding
 import com.termux.app.utils.SnackbarHelper
 import com.google.android.material.snackbar.Snackbar
 import kotlinx.coroutines.CoroutineExceptionHandler
@@ -1582,7 +1583,6 @@ private fun AiSetupScreen(vm: AiTermuxViewModel, onBack: () -> Unit) {
     LaunchedEffect(localRefresh) { localLlamaReady = AiLocalModel.isLlamaCppInstalled() }
 
     Scaffold(
-        modifier = glassPage.layerModifier,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             GlassTopAppBar(
@@ -1623,9 +1623,10 @@ private fun AiSetupScreen(vm: AiTermuxViewModel, onBack: () -> Unit) {
             LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
+                .then(glassPage.contentModifier)
                 .padding(pagePaddingWithoutTop(padding))
                 .nestedScroll(scrollBehavior.nestedScrollConnection),
-            contentPadding = PaddingValues(16.dp),
+            contentPadding = standaloneContentPadding(padding, top = 16.dp, bottom = 16.dp, start = 16.dp, end = 16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
 
@@ -2551,7 +2552,6 @@ private fun AiChatScreen(vm: AiTermuxViewModel, onBack: () -> Unit, onOpenSetup:
 
     Box {
         Scaffold(
-            modifier = glassPage.layerModifier,
             contentWindowInsets = WindowInsets(0, 0, 0, 0),
             topBar = {
                 GlassTopAppBar(
@@ -2775,9 +2775,10 @@ private fun AiChatScreen(vm: AiTermuxViewModel, onBack: () -> Unit, onOpenSetup:
                 state = listState,
                 modifier = Modifier
                     .fillMaxSize()
+                    .then(glassPage.contentModifier)
                     .padding(pagePaddingWithoutTop(padding))
                     .nestedScroll(scrollBehavior.nestedScrollConnection),
-                contentPadding = PaddingValues(14.dp),
+                contentPadding = standaloneContentPadding(padding, top = 14.dp, bottom = 14.dp, start = 14.dp, end = 14.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
 

@@ -1,5 +1,7 @@
 package com.termux.app.activities
 
+import com.termux.app.compose.pagePaddingWithoutTop
+import com.termux.app.compose.topBarClearance
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -165,7 +167,6 @@ private fun QemuVmScreen(
     }
 
     Scaffold(
-        modifier = glassPage.layerModifier,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             GlassTopAppBar(
@@ -187,13 +188,15 @@ private fun QemuVmScreen(
     ) { padding ->
         Box(
             modifier = Modifier
+                .then(glassPage.contentModifier)
                 .fillMaxSize()
-                .padding(padding)
+                .padding(pagePaddingWithoutTop(padding))
         ) {
             if (vms.isEmpty()) {
                 VmEmptyState(
                     modifier = Modifier
                         .fillMaxSize()
+                        .padding(top = topBarClearance(padding))
                         .verticalScroll(rememberScrollState()),
                     onCreate = {
                         editingVm = null
@@ -204,6 +207,7 @@ private fun QemuVmScreen(
                 VmListScreen(
                     modifier = Modifier
                         .fillMaxSize()
+                        .padding(top = topBarClearance(padding))
                         .nestedScroll(scrollBehavior.nestedScrollConnection),
                     vms = vms,
                     runningVmCount = runningVmCount,
