@@ -19,12 +19,15 @@ import com.termux.R
 import com.termux.shared.logger.Logger
 import com.termux.shared.android.PackageUtils
 import com.termux.shared.termux.TermuxConstants
+import top.yukonga.miuix.kmp.glass.GlassIconButton
+import top.yukonga.miuix.kmp.glass.GlassTopAppBar
 import top.yukonga.miuix.kmp.basic.*
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
+import com.termux.app.compose.pagePaddingWithoutTop
 
 @Composable
 fun TermuxWidgetScreen(
@@ -32,24 +35,22 @@ fun TermuxWidgetScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    // 本页在 MainScreen 取景层之外，自建一层供玻璃顶栏折射页面内容
+    val glassPage = rememberGlassPageBackdrop()
     val scrollBehavior = MiuixScrollBehavior()
     var showDisableDialog by remember { mutableStateOf(false) }
     var isLauncherDisabled by remember { mutableStateOf(false) }
 
     Scaffold(
+        modifier = glassPage.layerModifier,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
-            TopAppBar(
+            GlassTopAppBar(
                 title = stringResource(R.string.title_widget_settings),
+                backdrop = glassPage.backdrop,
                 scrollBehavior = scrollBehavior,
                 navigationIcon = {
-                    Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(CircleShape)
-                            .clickable { onBack() },
-                        contentAlignment = Alignment.Center
-                    ) {
+                    GlassIconButton(onClick = { onBack() }) {
                         Icon(
                             imageVector = MiuixIcons.Back,
                             contentDescription = context.getString(R.string.back),
@@ -64,7 +65,7 @@ fun TermuxWidgetScreen(
         Box(
             modifier = modifier
                 .fillMaxSize()
-                .padding(padding)
+                .padding(pagePaddingWithoutTop(padding))
         ) {
             LazyColumn(
                 modifier = Modifier

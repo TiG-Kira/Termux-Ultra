@@ -30,6 +30,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner
 import com.termux.R
 import com.termux.app.compose.*
+import com.termux.app.compose.pagePaddingWithoutTop
 import com.termux.app.compose.NavigationHelper
 import com.termux.app.github.GitHubApi
 import com.termux.app.github.GitHubLogcat
@@ -37,6 +38,7 @@ import com.termux.app.github.GitHubSessionStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import top.yukonga.miuix.kmp.glass.GlassTopAppBar
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.*
 import top.yukonga.miuix.kmp.icon.MiuixIcons
@@ -57,6 +59,8 @@ class GitHubFeedbackActivity : ComponentActivity() {
             CompositionLocalProvider(LocalNavigationEventDispatcherOwner provides navDispatcherOwner) {
                 KiTerminalTheme {
                     val context = this@GitHubFeedbackActivity
+                    // 本页在 MainScreen 取景层之外，自建一层供玻璃顶栏折射页面内容
+                    val glassPage = rememberGlassPageBackdrop()
                     val scrollBehavior = MiuixScrollBehavior()
                     val density = LocalDensity.current
                     val systemNavBarsHeight = with(density) {
@@ -126,17 +130,19 @@ class GitHubFeedbackActivity : ComponentActivity() {
                     }
 
                     Scaffold(
+                        modifier = glassPage.layerModifier,
                         contentWindowInsets = WindowInsets(0, 0, 0, 0),
                         topBar = {
-                            TopAppBar(
+                            GlassTopAppBar(
                                 title = stringResource(R.string.github_feedback_page_title),
+                                backdrop = glassPage.backdrop,
                                 scrollBehavior = scrollBehavior,
                                 navigationIcon = { BackButton { finish() } }
                             )
                         }
                     ) { padding ->
                         if (session == null) {
-                            Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
+                            Box(Modifier.fillMaxSize().padding(pagePaddingWithoutTop(padding)), contentAlignment = Alignment.Center) {
                                 Text(
                                     stringResource(R.string.github_login_required),
                                     style = TextStyle(fontSize = 14.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
@@ -147,7 +153,7 @@ class GitHubFeedbackActivity : ComponentActivity() {
                         LazyColumn(
                             modifier = Modifier
                                 .fillMaxSize()
-                                .padding(padding)
+                                .padding(pagePaddingWithoutTop(padding))
                                 .nestedScroll(scrollBehavior.nestedScrollConnection),
                             contentPadding = PaddingValues(
                                 start = 16.dp, end = 16.dp, bottom = systemNavBarsHeight + 26.dp

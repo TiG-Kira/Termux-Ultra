@@ -22,12 +22,15 @@ import androidx.compose.foundation.layout.navigationBars
 import com.termux.R
 import com.termux.shared.termux.TermuxUtils
 import kotlinx.coroutines.launch
+import top.yukonga.miuix.kmp.glass.GlassIconButton
+import top.yukonga.miuix.kmp.glass.GlassTopAppBar
 import top.yukonga.miuix.kmp.basic.*
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
+import com.termux.app.compose.pagePaddingWithoutTop
 
 @Composable
 fun TermuxCrashReportScreen(
@@ -35,6 +38,8 @@ fun TermuxCrashReportScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    // 本页在 MainScreen 取景层之外，自建一层供玻璃顶栏折射页面内容
+    val glassPage = rememberGlassPageBackdrop()
     val scrollBehavior = MiuixScrollBehavior()
     val density = LocalDensity.current
     val systemNavBarsHeight = with(density) {
@@ -46,20 +51,16 @@ fun TermuxCrashReportScreen(
     val scope = rememberCoroutineScope()
 
     Scaffold(
+        modifier = glassPage.layerModifier,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         snackbarHost = { SnackbarHost(state = snackbarHostState) },
         topBar = {
-            TopAppBar(
+            GlassTopAppBar(
                 title = stringResource(R.string.title_crash_report),
+                backdrop = glassPage.backdrop,
                 scrollBehavior = scrollBehavior,
                 navigationIcon = {
-                    Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(CircleShape)
-                            .clickable { onBack() },
-                        contentAlignment = Alignment.Center
-                    ) {
+                    GlassIconButton(onClick = { onBack() }) {
                         Icon(
                             imageVector = MiuixIcons.Back,
                             contentDescription = context.getString(R.string.back),
@@ -80,7 +81,7 @@ fun TermuxCrashReportScreen(
         Box(
             modifier = modifier
                 .fillMaxSize()
-                .padding(padding)
+                .padding(pagePaddingWithoutTop(padding))
         ) {
             LazyColumn(
                 modifier = Modifier

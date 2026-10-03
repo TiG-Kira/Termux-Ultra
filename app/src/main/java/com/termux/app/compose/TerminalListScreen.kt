@@ -25,6 +25,8 @@ import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.ExpandLess
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Warning
+import top.yukonga.miuix.kmp.glass.GlassIconButton
+import top.yukonga.miuix.kmp.glass.GlassTopAppBar
 import top.yukonga.miuix.kmp.preference.CheckboxPreference
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -61,6 +63,7 @@ import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import com.termux.R
 import com.termux.app.TermuxService
+import com.termux.app.compose.LocalTopBarClearance
 import com.termux.shared.termux.shell.command.runner.terminal.TermuxSession
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
@@ -209,8 +212,9 @@ fun TerminalListScreen(
     SideEffect {
         if (active) {
             onTopBarContent {
-                TopAppBar(
+                GlassTopAppBar(
                     title = stringResource(R.string.terminal),
+                    backdrop = LocalGlassTopAppBarBackdrop.current,
                     scrollBehavior = scrollBehavior,
                     actions = {
                         Row(
@@ -227,8 +231,7 @@ fun TerminalListScreen(
                                 checked = isWakeLockEnabled,
                                 onCheckedChange = { onToggleWakeLock() }
                             )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            IconButton(onClick = onNewTerminal) {
+                            GlassIconButton(onClick = onNewTerminal) {
                                 Icon(
                                     painter = painterResource(R.drawable.ic_add),
                                     contentDescription = stringResource(R.string.new_terminal),
@@ -250,6 +253,8 @@ fun TerminalListScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                // 搜索栏是页面顶部的固定条，必须停在玻璃顶栏下方；列表本身仍会滚到顶栏之下。
+                .padding(top = LocalTopBarClearance.current)
                 .padding(padding)
         ) {
             val filteredSessions = sessions.filter {

@@ -894,7 +894,7 @@ fun OverviewScreen(
                 .nestedScroll(scrollBehavior.nestedScrollConnection),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
-            contentPadding = PaddingValues(top = 8.dp, bottom = navBarBottomPadding + 16.dp, start = 16.dp, end = 16.dp)
+            contentPadding = PaddingValues(top = LocalTopBarClearance.current + 8.dp, bottom = navBarBottomPadding + 16.dp, start = 16.dp, end = 16.dp)
         ) {
             
             items(

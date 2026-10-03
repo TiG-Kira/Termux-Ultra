@@ -13,6 +13,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowForward
 import androidx.compose.material.icons.rounded.ExpandLess
+import top.yukonga.miuix.kmp.glass.GlassIconButton
+import top.yukonga.miuix.kmp.glass.GlassTopAppBar
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.HorizontalDivider
@@ -45,6 +47,7 @@ import com.termux.R
 import com.termux.app.TermuxService
 import com.termux.app.utils.SnackbarHelper
 import com.google.android.material.snackbar.Snackbar
+import com.termux.app.compose.pagePaddingWithoutTop
 
 data class ResourceItem(
     val title: String,
@@ -71,23 +74,20 @@ fun ResourcesScreen(
     showBackButton: Boolean = false
 ) {
     val context = LocalContext.current
+    // 本页在 MainScreen 取景层之外，自建一层供玻璃顶栏折射页面内容
+    val glassPage = rememberGlassPageBackdrop()
     val scrollBehavior = MiuixScrollBehavior()
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
-            TopAppBar(
+            GlassTopAppBar(
                 title = "功能中心",
+                backdrop = glassPage.backdrop,
                 navigationIcon = {
                     if (showBackButton) {
-                        Box(
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(CircleShape)
-                                .clickable { (context as? ComponentActivity)?.finish() },
-                            contentAlignment = Alignment.Center
-                        ) {
+                        GlassIconButton(onClick = { (context as? ComponentActivity)?.finish() }) {
                             Icon(
                                 imageVector = MiuixIcons.Back,
                                 contentDescription = null,
@@ -104,7 +104,7 @@ fun ResourcesScreen(
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(padding)
+                    .padding(pagePaddingWithoutTop(padding))
                     .nestedScroll(scrollBehavior.nestedScrollConnection),
                 contentPadding = PaddingValues(bottom = navBarBottomPadding + 16.dp)
             ) {

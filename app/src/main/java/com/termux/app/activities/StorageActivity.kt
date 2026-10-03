@@ -29,11 +29,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
 import com.termux.R
+import com.termux.app.compose.rememberGlassPageBackdrop
 import com.termux.app.compose.AiLocalModel
 import com.termux.app.compose.KiTerminalTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import top.yukonga.miuix.kmp.glass.GlassIconButton
+import top.yukonga.miuix.kmp.glass.GlassTopAppBar
 import top.yukonga.miuix.kmp.basic.*
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.icon.MiuixIcons
@@ -124,6 +127,8 @@ private fun cleanItem(item: CleanableItem): Boolean {
 @Composable
 fun StorageScreen(onBack: () -> Unit) {
     val context = LocalContext.current
+        // 本页在 MainScreen 取景层之外，自建一层供玻璃顶栏折射页面内容
+val glassPage = rememberGlassPageBackdrop()
     val scrollBehavior = MiuixScrollBehavior()
     val scope = rememberCoroutineScope()
     var isScanning by remember { mutableStateOf(true) }
@@ -210,20 +215,15 @@ fun StorageScreen(onBack: () -> Unit) {
     }
 
     Scaffold(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier.fillMaxSize().then(glassPage.layerModifier),
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
-            TopAppBar(
+            GlassTopAppBar(
                 title = "存储",
+                backdrop = glassPage.backdrop,
                 scrollBehavior = scrollBehavior,
                 navigationIcon = {
-                    Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(CircleShape)
-                            .clickable { onBack() },
-                        contentAlignment = Alignment.Center
-                    ) {
+                    GlassIconButton(onClick = { onBack() }) {
                         Icon(
                             imageVector = MiuixIcons.Back,
                             contentDescription = "返回",
@@ -572,6 +572,8 @@ fun StorageScreen(onBack: () -> Unit) {
         onDeleted: () -> Unit
     ) {
         val context = LocalContext.current
+                // 本页在 MainScreen 取景层之外，自建一层供玻璃顶栏折射页面内容
+val glassPage = rememberGlassPageBackdrop()
         val scrollBehavior = MiuixScrollBehavior()
         val scope = rememberCoroutineScope()
         var refresh by remember { mutableStateOf(0) }
@@ -592,20 +594,15 @@ fun StorageScreen(onBack: () -> Unit) {
     }
 
     Scaffold(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier.fillMaxSize().then(glassPage.layerModifier),
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
-            TopAppBar(
+            GlassTopAppBar(
                 title = "本地大模型",
+                backdrop = glassPage.backdrop,
                 scrollBehavior = scrollBehavior,
                 navigationIcon = {
-                    Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(CircleShape)
-                            .clickable { onBack() },
-                        contentAlignment = Alignment.Center
-                    ) {
+                    GlassIconButton(onClick = { onBack() }) {
                         Icon(
                             imageVector = MiuixIcons.Back,
                             contentDescription = "返回",

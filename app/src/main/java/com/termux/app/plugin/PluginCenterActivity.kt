@@ -33,11 +33,15 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import top.yukonga.miuix.kmp.glass.GlassIconButton
+import top.yukonga.miuix.kmp.glass.GlassTopAppBar
 import top.yukonga.miuix.kmp.basic.*
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import com.termux.R
+import com.termux.app.compose.rememberGlassPageBackdrop
+import com.termux.app.compose.pagePaddingWithoutTop
 import com.termux.app.compose.KiTerminalTheme
 import com.termux.app.compose.NavigationHelper
 import com.termux.app.utils.SnackbarHelper
@@ -69,6 +73,8 @@ private enum class PluginFilter { ALL, ENABLED, PENDING }
 @Composable
 fun PluginCenterScreen() {
     val context = LocalContext.current
+    // 本页在 MainScreen 取景层之外，自建一层供玻璃顶栏折射页面内容
+    val glassPage = rememberGlassPageBackdrop()
     val scrollBehavior = MiuixScrollBehavior()
     var plugins by remember { mutableStateOf(PluginManager.getInstalledPlugins(context)) }
     var query by remember { mutableStateOf("") }
@@ -230,16 +236,11 @@ fun PluginCenterScreen() {
             modifier = Modifier.fillMaxSize(),
             contentWindowInsets = WindowInsets(0, 0, 0, 0),
             topBar = {
-                TopAppBar(
+                GlassTopAppBar(
                     title = stringResource(R.string.plugin_center),
+                    backdrop = glassPage.backdrop,
                     navigationIcon = {
-                        Box(
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(CircleShape)
-                                .clickable { (context as? ComponentActivity)?.finish() },
-                            contentAlignment = Alignment.Center
-                        ) {
+                        GlassIconButton(onClick = { (context as? ComponentActivity)?.finish() }) {
                             Icon(
                                 imageVector = MiuixIcons.Back,
                                 contentDescription = null,
@@ -255,7 +256,7 @@ fun PluginCenterScreen() {
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(padding)
+                    .padding(pagePaddingWithoutTop(padding))
                     .nestedScroll(scrollBehavior.nestedScrollConnection),
                 contentPadding = PaddingValues(bottom = 92.dp)
             ) {

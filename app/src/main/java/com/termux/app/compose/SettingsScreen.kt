@@ -70,6 +70,7 @@ import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.graphics.painter.Painter
 import com.termux.app.LocaleHelper
 import com.termux.app.compose.AiTermuxPrefs
+import com.termux.app.compose.LocalTopBarClearance
 import com.termux.app.compose.AiLocalModel
 import com.termux.app.compose.SkillType
 import com.termux.app.utils.SnackbarHelper
@@ -1065,7 +1066,10 @@ val composeUseCustomKeyboardLayout by com.termux.app.terminal.shell.ComposeTermi
                 .fillMaxSize()
                 .padding(padding)
                 .nestedScroll(scrollBehavior.nestedScrollConnection),
-            contentPadding = PaddingValues(bottom = navBarBottomPadding + 16.dp)
+            contentPadding = PaddingValues(
+                top = LocalTopBarClearance.current,
+                bottom = navBarBottomPadding + 16.dp
+            )
         ) {
             // ---------- 搜索栏（永远在最顶部）----------
             item(key = "search_bar") {

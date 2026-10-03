@@ -39,6 +39,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import top.yukonga.miuix.kmp.basic.*
+import top.yukonga.miuix.kmp.glass.GlassTopAppBar
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.theme.MiuixTheme
@@ -62,6 +63,8 @@ class GitHubIssuesActivity : ComponentActivity() {
                         WindowInsets.navigationBars.getBottom(density).toDp()
                     }
                     val session = remember { GitHubSessionStore.load(context) }
+                    // 本页在 MainScreen 取景层之外，自建一层供玻璃顶栏折射页面内容
+                    val glassPage = rememberGlassPageBackdrop()
 
                     var issues by remember { mutableStateOf<List<GitHubIssue>>(emptyList()) }
                     var loading by remember { mutableStateOf(true) }
@@ -96,10 +99,12 @@ class GitHubIssuesActivity : ComponentActivity() {
                     }
 
                     Scaffold(
+                        modifier = glassPage.layerModifier,
                         contentWindowInsets = WindowInsets(0, 0, 0, 0),
                         topBar = {
-                            TopAppBar(
+                            GlassTopAppBar(
                                 title = stringResource(R.string.github_topics_title),
+                                backdrop = glassPage.backdrop,
                                 scrollBehavior = scrollBehavior,
                                 navigationIcon = { BackButton { finish() } }
                             )

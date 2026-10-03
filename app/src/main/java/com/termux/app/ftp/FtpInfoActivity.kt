@@ -22,7 +22,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.termux.app.compose.rememberGlassPageBackdrop
 import com.termux.app.compose.KiTerminalTheme
+import top.yukonga.miuix.kmp.glass.GlassIconButton
+import top.yukonga.miuix.kmp.glass.GlassTopAppBar
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
@@ -63,6 +66,8 @@ class FtpInfoActivity : ComponentActivity() {
 @Composable
 fun FtpInfoScreen() {
     val context = LocalContext.current
+    // 本页在 MainScreen 取景层之外，自建一层供玻璃顶栏折射页面内容
+    val glassPage = rememberGlassPageBackdrop()
     val prefs = remember { context.getSharedPreferences("termux_prefs", Context.MODE_PRIVATE) }
     
     var username by remember { mutableStateOf(prefs.getString("sftp_username", "termux") ?: "termux") }
@@ -73,18 +78,13 @@ fun FtpInfoScreen() {
     val ipAddress = getLocalIpAddress(context)
     
     Scaffold(
+        modifier = glassPage.layerModifier,
         topBar = {
-            TopAppBar(
+            GlassTopAppBar(
                 title = "FTP 连接信息",
+                backdrop = glassPage.backdrop,
                 navigationIcon = {
-                    Box(
-                        modifier = Modifier
-                            .padding(horizontal = 12.dp)
-                            .size(40.dp)
-                            .clip(CircleShape)
-                            .clickable { (context as FtpInfoActivity).finish() },
-                        contentAlignment = Alignment.Center
-                    ) {
+                    GlassIconButton(onClick = { (context as FtpInfoActivity).finish() }) {
                         Icon(
                             imageVector = MiuixIcons.Back,
                             contentDescription = "返回",

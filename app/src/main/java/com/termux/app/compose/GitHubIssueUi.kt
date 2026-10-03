@@ -38,6 +38,7 @@ import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
+import top.yukonga.miuix.kmp.glass.GlassIconButton
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.theme.MiuixTheme
@@ -169,13 +170,10 @@ private fun CenterNote(text: String) {
     }
 }
 
-/** 通用返回按钮（圆形点击区 + 返回箭头） */
+/** 通用返回按钮（玻璃 pill + 返回箭头） */
 @Composable
 fun BackButton(onClick: () -> Unit) {
-    Box(
-        Modifier.size(40.dp).clip(CircleShape).clickable { onClick() },
-        contentAlignment = Alignment.Center
-    ) {
+    GlassIconButton(onClick = onClick) {
         Icon(
             imageVector = MiuixIcons.Back,
             contentDescription = null,

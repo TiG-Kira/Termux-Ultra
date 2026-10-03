@@ -9,8 +9,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -32,6 +35,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalDensity
@@ -42,6 +46,7 @@ import top.yukonga.miuix.kmp.basic.ScrollBehavior
 import top.yukonga.miuix.kmp.blur.Backdrop
 import top.yukonga.miuix.kmp.blur.isRuntimeShaderSupported
 import top.yukonga.miuix.kmp.glass.internal.drawGlassMask
+import top.yukonga.miuix.kmp.glass.internal.drawGlassRim
 import top.yukonga.miuix.kmp.glass.internal.drawGlassStroke
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
@@ -110,6 +115,12 @@ object GlassTopAppBarDefaults {
     @Composable
     internal fun actionBarUnderlayMaterial(): GlassMaterial = GlassMaterials.actionBarMask(isDarkTheme())
 
+    /**
+     * Margin on each side of a bar button's pill, which becomes the gap between two adjacent
+     * buttons. Two pills 44dp across with 6dp of margin on both sit 12dp apart.
+     */
+    val ButtonPadding: Dp = 6.dp
+
     /** The small bloom stroke paired with [buttonMaterial]. */
     @Composable
     fun buttonStroke(): GlassStroke = GlassStrokes.forTheme(
@@ -160,6 +171,7 @@ internal data class GlassTopAppBarContext(
     val keepMaterial: Boolean,
     val style: GlassStyle,
     val size: Dp,
+    val buttonPadding: Dp,
     val shape: GlassShape,
     val fill: Color,
     val stroke: GlassStroke?,
@@ -216,6 +228,7 @@ fun GlassTopAppBar(
     alpha: Float = 1f,
     buttonSize: Dp = GlassTopAppBarDefaults.ButtonSize,
     buttonShape: GlassShape = GlassShape(buttonSize / 2),
+    buttonPadding: Dp = GlassTopAppBarDefaults.ButtonPadding,
     fill: Color = GlassTopAppBarDefaults.buttonFill(),
     stroke: GlassStroke? = GlassTopAppBarDefaults.buttonStroke(),
     buttonShadow: GlassShadow? = GlassShadows.Regular,
@@ -243,6 +256,7 @@ fun GlassTopAppBar(
         alpha = alpha,
         buttonSize = buttonSize,
         buttonShape = buttonShape,
+        buttonPadding = buttonPadding,
         fill = fill,
         stroke = stroke,
         buttonShadow = buttonShadow,
@@ -281,6 +295,7 @@ fun GlassTopAppBar(
     alpha: Float = 1f,
     buttonSize: Dp = GlassTopAppBarDefaults.ButtonSize,
     buttonShape: GlassShape = GlassShape(buttonSize / 2),
+    buttonPadding: Dp = GlassTopAppBarDefaults.ButtonPadding,
     fill: Color = GlassTopAppBarDefaults.buttonFill(),
     stroke: GlassStroke? = GlassTopAppBarDefaults.buttonStroke(),
     buttonShadow: GlassShadow? = GlassShadows.Regular,
@@ -290,6 +305,20 @@ fun GlassTopAppBar(
     actions: @Composable RowScope.() -> Unit = {},
     bottomContent: @Composable () -> Unit = {},
 ) {
+    // Buttons carry their own horizontal margin (see [GlassTopAppBarDefaults.ButtonPadding]), so
+    // the trailing row needs no spacing of its own; the wrapper only pins them to the end.
+    val actionsWithPadding: @Composable RowScope.() -> Unit = {
+        Row(
+            horizontalArrangement = Arrangement.End,
+            verticalAlignment = Alignment.CenterVertically,
+            content = actions,
+        )
+    }
+    // The leading slot takes a single control, so it gets the same margin directly. Without it the
+    // pill would sit flush against the bar's own start padding.
+    val navigationIconWithPadding: @Composable () -> Unit = {
+        Box(modifier = Modifier.padding(horizontal = buttonPadding)) { navigationIcon() }
+    }
     val ramp = GlassTopAppBarDefaults.collapseRamp(scrollBehavior)
     val floating = isContentScrolled
     val transition = updateTransition(floating, label = "glassTopBarFloat")
@@ -301,17 +330,20 @@ fun GlassTopAppBar(
         transitionSpec = { GlassMotion.topBarButtonFloat() },
         label = "glassTopBarMaterial",
     ) { if (it) 1f else 0f }
-    val keepMaterial by remember(floating, materialProgress) {
+    val buttonBackdrop = backdrop?.takeIf { isRuntimeShaderSupported() }
+    // Nothing has scrolled under the bar yet, so there is nothing for the glass to show: the pills
+    // stay bare icons until [floating] turns the material, the plate and the shadow on together.
+    val keepButtonMaterial by remember(floating, materialProgress) {
         derivedStateOf { floating || materialProgress.value > 0f }
     }
     val baseMaterial = GlassTopAppBarDefaults.buttonMaterial()
-    val material = if (keepMaterial && backdrop != null) {
+    val material = if (keepButtonMaterial && buttonBackdrop != null) {
         baseMaterial.copy(blurRadius = GlassTopAppBarDefaults.nestedMaterialBlurRadius())
     } else {
         baseMaterial
     }
-    val underlayMaterial = GlassTopAppBarDefaults.actionBarUnderlayMaterial().takeIf { keepMaterial && backdrop != null }
-    val buttonBackdrop = backdrop?.takeIf { isRuntimeShaderSupported() }
+    val underlayMaterial = GlassTopAppBarDefaults.actionBarUnderlayMaterial()
+        .takeIf { keepButtonMaterial && buttonBackdrop != null }
 
     Box(modifier = modifier) {
         val overhangPx = with(LocalDensity.current) { bandOverhang.toPx() }
@@ -334,10 +366,11 @@ fun GlassTopAppBar(
                 alpha = alpha,
                 ramp = ramp,
                 materialProgress = materialProgress,
-                keepMaterial = keepMaterial,
+                keepMaterial = keepButtonMaterial && buttonBackdrop != null,
                 style = style,
                 size = buttonSize,
                 shape = buttonShape,
+                buttonPadding = buttonPadding,
                 fill = fill,
                 stroke = stroke,
                 shadow = buttonShadow,
@@ -355,8 +388,8 @@ fun GlassTopAppBar(
                 defaultWindowInsetsPadding = defaultWindowInsetsPadding,
                 navigationIconPadding = GlassTopAppBarDefaults.HorizontalPadding,
                 actionIconPadding = GlassTopAppBarDefaults.HorizontalPadding,
-                navigationIcon = navigationIcon,
-                actions = actions,
+                navigationIcon = navigationIconWithPadding,
+                actions = actionsWithPadding,
                 bottomContent = bottomContent,
             )
         }
@@ -374,10 +407,13 @@ fun GlassTopAppBar(
  *   the bar's backdrop and effective blur; elsewhere `null` gives the traditional [fill].
  * @param modifier The modifier applied to the button.
  * @param surfaceAlpha Opacity of the pill. Inside [GlassTopAppBar], leave this at its default.
+ * @param enabled Whether the button reacts to taps. A disabled button still shows its pill.
  * @param style Compatibility style forwarded to the renderer.
  * @param size Diameter of the button.
  * @param shape The button's silhouette. Defaults to a circle of [size].
  * @param shadow The shadow under the button. `null` removes it.
+ * @param padding Horizontal margin on each side of the pill, which is the gap between two
+ *   adjacent buttons. Defaults to [GlassTopAppBarDefaults.ButtonPadding].
  * @param stroke Optional bloom stroke along the rim.
  * @param content The icon inside.
  */
@@ -387,6 +423,8 @@ fun GlassIconButton(
     modifier: Modifier = Modifier,
     backdrop: Backdrop? = null,
     surfaceAlpha: Float = 1f,
+    enabled: Boolean = true,
+    padding: Dp = LocalGlassTopAppBarContext.current?.buttonPadding ?: GlassTopAppBarDefaults.ButtonPadding,
     style: GlassStyle = LocalGlassTopAppBarContext.current?.style ?: GlassDefaults.Style,
     size: Dp = LocalGlassTopAppBarContext.current?.size ?: GlassTopAppBarDefaults.ButtonSize,
     shape: GlassShape = LocalGlassTopAppBarContext.current?.shape ?: GlassShape(size / 2),
@@ -413,6 +451,8 @@ fun GlassIconButton(
         fill = fill,
         stroke = stroke,
         shadow = shadow,
+        padding = padding,
+        enabled = enabled,
         sharedProgress = topBarContext?.materialProgress,
         sharedKeepMaterial = topBarContext?.keepMaterial,
         pressed = pressed,
@@ -421,6 +461,7 @@ fun GlassIconButton(
                 interactionSource = interactionSource,
                 indication = null,
                 onClick = onClick,
+                enabled = enabled,
             ),
         content = content,
     )
@@ -444,6 +485,8 @@ private fun GlassButtonSurface(
     stroke: GlassStroke?,
     shadow: GlassShadow?,
     modifier: Modifier = Modifier,
+    padding: Dp = GlassTopAppBarDefaults.ButtonPadding,
+    enabled: Boolean = true,
     pressed: Boolean = false,
     // Retain State for draw-phase reads; the bar owns the shared animation clock.
     sharedProgress: State<Float>? = null,
@@ -465,11 +508,14 @@ private fun GlassButtonSurface(
             if (active) 1f else 0f
         }
     }
+    val opacity = surfaceAlpha.coerceIn(0f, 1f)
+    // How far the button has floated in. Everything it wears — the plate, the material, the shadow
+    // — rides this, so a bar sitting at the top of a page shows bare icons and nothing else.
+    val floatAlpha = progress.value.coerceIn(0f, 1f)
     val ownKeepMaterial by remember(floating, progress) {
         derivedStateOf { floating || progress.value > 0f }
     }
     val keepMaterial = sharedKeepMaterial ?: ownKeepMaterial
-    val opacity = surfaceAlpha.coerceIn(0f, 1f)
     val anchorSurface = remember(backdrop, style, material, underlayMaterial, stroke, fill) {
         GlassAnchorSurface(backdrop, style, material, underlayMaterial, stroke, fill)
     }
@@ -497,6 +543,7 @@ private fun GlassButtonSurface(
 
     Box(
         modifier = modifier
+            .padding(horizontal = padding)
             .size(size)
             .glassShadow(shape, shadow, shadowAlpha),
         contentAlignment = Alignment.Center,
@@ -551,6 +598,31 @@ private fun GlassButtonSurface(
                             }
                     },
                 ),
+        )
+        // The plate the material stands on: [fill], brought up with the float so a bar at the top of
+        // a page keeps its icons bare. It sits over the glass rather than under it — the glass draws
+        // an opaque backdrop of its own — and carries the rim and stroke that make it read as glass
+        // rather than as a flat disc.
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .graphicsLayer { alpha = opacity * floatAlpha }
+                .then(
+                    if (isRuntimeShaderSupported()) {
+                        Modifier.graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+                    } else {
+                        Modifier.clip(shape)
+                    },
+                )
+                .background(fill)
+                .drawWithContent {
+                    drawContent()
+                    if (stroke != null) {
+                        drawGlassStroke(shape, layoutDirection, stroke, floatAlpha)
+                    }
+                    drawGlassRim(shape, layoutDirection, style, fill, floatAlpha)
+                    drawGlassMask(shape, layoutDirection)
+                },
         )
         Box(
             modifier = Modifier

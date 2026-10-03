@@ -21,6 +21,7 @@ import androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner
 import com.termux.R
 import com.termux.app.compose.BackButton
 import com.termux.app.compose.KiTerminalTheme
+import com.termux.app.compose.rememberGlassPageBackdrop
 import com.termux.app.compose.NavigationHelper
 import com.termux.app.compose.PullRequestFeed
 import com.termux.app.github.GitHubApi
@@ -29,6 +30,7 @@ import com.termux.app.github.GitHubSessionStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import top.yukonga.miuix.kmp.glass.GlassTopAppBar
 import top.yukonga.miuix.kmp.basic.*
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
@@ -46,6 +48,8 @@ class GitHubPullRequestsActivity : ComponentActivity() {
             CompositionLocalProvider(LocalNavigationEventDispatcherOwner provides navDispatcherOwner) {
                 KiTerminalTheme {
                     val context = this@GitHubPullRequestsActivity
+                    // 本页在 MainScreen 取景层之外，自建一层供玻璃顶栏折射页面内容
+                    val glassPage = rememberGlassPageBackdrop()
                     val scrollBehavior = MiuixScrollBehavior()
                     val density = LocalDensity.current
                     val systemNavBarsHeight = with(density) {
@@ -86,10 +90,12 @@ class GitHubPullRequestsActivity : ComponentActivity() {
                     }
 
                     Scaffold(
+                        modifier = glassPage.layerModifier,
                         contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0),
                         topBar = {
-                            TopAppBar(
+                            GlassTopAppBar(
                                 title = stringResource(R.string.github_prs_title),
+                                backdrop = glassPage.backdrop,
                                 scrollBehavior = scrollBehavior,
                                 navigationIcon = { BackButton { finish() } }
                             )

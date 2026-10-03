@@ -31,11 +31,14 @@ import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
 import com.termux.R
 import com.termux.app.TermuxService
+import com.termux.app.compose.rememberGlassPageBackdrop
 import com.termux.app.compose.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import top.yukonga.miuix.kmp.glass.GlassIconButton
+import top.yukonga.miuix.kmp.glass.GlassTopAppBar
 import top.yukonga.miuix.kmp.basic.*
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
@@ -132,6 +135,8 @@ private fun QemuVmScreen(
     var editingVm by remember { mutableStateOf<QemuVmConfig?>(null) }
     var showDeleteConfirm by remember { mutableStateOf<QemuVmConfig?>(null) }
     var runningVmCount by remember { mutableStateOf(0) }
+    // 本页在 MainScreen 取景层之外，自建一层供玻璃顶栏折射页面内容
+    val glassPage = rememberGlassPageBackdrop()
     val scrollBehavior = MiuixScrollBehavior()
 
     // 路径迁移状态
@@ -160,19 +165,15 @@ private fun QemuVmScreen(
     }
 
     Scaffold(
+        modifier = glassPage.layerModifier,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
-            TopAppBar(
+            GlassTopAppBar(
                 title = "虚拟机",
+                backdrop = glassPage.backdrop,
                 scrollBehavior = scrollBehavior,
                 navigationIcon = {
-                    Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(CircleShape)
-                            .clickable { onBack() },
-                        contentAlignment = Alignment.Center
-                    ) {
+                    GlassIconButton(onClick = { onBack() }) {
                         Icon(
                             imageVector = MiuixIcons.Back,
                             contentDescription = null,
