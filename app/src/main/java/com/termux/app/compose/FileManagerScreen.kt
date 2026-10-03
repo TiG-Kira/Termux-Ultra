@@ -40,10 +40,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import top.yukonga.miuix.kmp.basic.Scaffold
-import top.yukonga.miuix.kmp.basic.TopAppBar
+import top.yukonga.miuix.kmp.glass.GlassTopAppBar
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
+import top.yukonga.miuix.kmp.glass.GlassIconButton
 import top.yukonga.miuix.kmp.basic.ScrollBehavior
 import top.yukonga.miuix.kmp.basic.Switch
 import top.yukonga.miuix.kmp.basic.Text
@@ -286,7 +287,8 @@ fun FileManagerScreen(
     SideEffect {
         if (active) {
             onTopBarContent {
-            TopAppBar(
+            GlassTopAppBar(
+                backdrop = LocalGlassTopAppBarBackdrop.current,
                 title = if (isInSelectionMode) {
                     "${selectedFiles.size} ${"项"}"
                 } else {
@@ -296,7 +298,7 @@ fun FileManagerScreen(
                 navigationIcon = {
                     if (isInSelectionMode) {
                         Row {
-                            IconButton(onClick = {
+                            GlassIconButton(onClick = {
                                 selectedFiles = emptySet()
                                 isInSelectionMode = false
                             }) {
@@ -310,12 +312,12 @@ fun FileManagerScreen(
                         }
                     } else {
                         Row {
-                            IconButton(onClick = {
+                            GlassIconButton(onClick = {
                                 if (canGoUp) {
                                     forwardHistory = forwardHistory + currentPath
                                     currentPath = currentPath.parentFile!!
                                 }
-                            }, enabled = canGoUp) {
+                            }) {
                                 Icon(
                                     painter = painterResource(R.drawable.ic_arrow_up),
                                     contentDescription = null,
@@ -323,13 +325,13 @@ fun FileManagerScreen(
                                     tint = if (canGoUp) MiuixTheme.colorScheme.onSurface else MiuixTheme.colorScheme.onSurfaceVariantSummary
                                 )
                             }
-                            IconButton(onClick = {
+                            GlassIconButton(onClick = {
                                 if (forwardHistory.isNotEmpty()) {
                                     val nextPath = forwardHistory.last()
                                     forwardHistory = forwardHistory.dropLast(1)
                                     currentPath = nextPath
                                 }
-                            }, enabled = forwardHistory.isNotEmpty()) {
+                            }) {
                                 Icon(
                                     painter = painterResource(R.drawable.ic_arrow_down),
                                     contentDescription = null,
@@ -343,7 +345,7 @@ fun FileManagerScreen(
                 actions = {
                     Row {
                     if (isInSelectionMode && selectedFiles.isNotEmpty()) {
-                        IconButton(onClick = {
+                        GlassIconButton(onClick = {
                             clipboardMode = ClipboardMode.COPY
                             clipboardFiles = selectedFiles.toSet()
                             selectedFiles = emptySet()
@@ -356,7 +358,7 @@ fun FileManagerScreen(
                                 tint = MiuixTheme.colorScheme.onSurface
                             )
                         }
-                        IconButton(onClick = {
+                        GlassIconButton(onClick = {
                             clipboardMode = ClipboardMode.CUT
                             clipboardFiles = selectedFiles.toSet()
                             selectedFiles = emptySet()
@@ -370,7 +372,7 @@ fun FileManagerScreen(
                             )
                         }
                         if (selectedFiles.size == 1) {
-                            IconButton(onClick = {
+                            GlassIconButton(onClick = {
                                 newFileName = File(selectedFiles.first()).name
                                 showRenameDialog = true
                             }) {
@@ -382,7 +384,7 @@ fun FileManagerScreen(
                                 )
                             }
                         }
-                        IconButton(onClick = {
+                        GlassIconButton(onClick = {
                             showDeleteDialog = true
                         }) {
                             Icon(
@@ -395,7 +397,7 @@ fun FileManagerScreen(
                     }
 
                     if (clipboardMode != ClipboardMode.NONE && clipboardFiles.isNotEmpty()) {
-                        IconButton(onClick = {
+                        GlassIconButton(onClick = {
                             showOperationProgress = true
                             operationProgressText = if (clipboardMode == ClipboardMode.CUT) "移动中..." else "复制中..."
                             operationProgress = 0f
@@ -434,7 +436,7 @@ fun FileManagerScreen(
                         Row(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            IconButton(onClick = {
+                            GlassIconButton(onClick = {
                                 com.termux.app.ftp.FtpInfoActivity.start(context)
                             }) {
                                 Icon(
@@ -450,7 +452,7 @@ fun FileManagerScreen(
                                 onCheckedChange = { toggleSftp() }
                             )
                             Spacer(modifier = Modifier.width(8.dp))
-                            IconButton(onClick = {
+                            GlassIconButton(onClick = {
                                 showNewTypeDialog = true
                             }) {
                                 Icon(
