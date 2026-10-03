@@ -721,7 +721,6 @@ fun PackageManagerScreen(
             )
         } else {
             Scaffold(
-                modifier = glassPage.layerModifier,
                 contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0),
                 topBar = {
                     GlassTopAppBar(
@@ -826,7 +825,10 @@ fun PackageManagerScreen(
             ) { innerPadding ->
                 Column(
                     modifier = Modifier
+                        .then(glassPage.contentModifier)
                         .fillMaxSize()
+                        // 顶部的搜索栏与 tab 是固定条，必须停在玻璃顶栏下方；列表本身仍会滚到顶栏之下。
+                        .padding(top = topBarClearance(innerPadding))
                         .padding(pagePaddingWithoutTop(innerPadding))
                 ) {
                     val searchFocusRequester = remember { androidx.compose.ui.focus.FocusRequester() }
@@ -891,7 +893,7 @@ fun PackageManagerScreen(
                                 verticalArrangement = Arrangement.spacedBy(8.dp),
                                 contentPadding = androidx.compose.foundation.layout.PaddingValues(
                                     start = 16.dp, end = 16.dp,
-                                    top = innerPadding.calculateTopPadding() + 4.dp, bottom = 16.dp
+                                    top = 4.dp, bottom = 16.dp
                                 )
                             ) {
                                 // === 分类根级: 显示分类网格 ===

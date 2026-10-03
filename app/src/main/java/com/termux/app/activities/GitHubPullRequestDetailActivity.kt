@@ -28,6 +28,7 @@ import androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner
 import com.termux.R
 import com.termux.app.compose.BackButton
 import com.termux.app.compose.pagePaddingWithoutTop
+import com.termux.app.compose.standaloneContentPadding
 import com.termux.app.compose.CommentCard
 import com.termux.app.compose.KiTerminalTheme
 import com.termux.app.compose.rememberGlassPageBackdrop
@@ -123,7 +124,6 @@ class GitHubPullRequestDetailActivity : ComponentActivity() {
                     LaunchedEffect(Unit) { loadAll() }
 
                     Scaffold(
-                        modifier = glassPage.layerModifier,
                         contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0),
                         topBar = {
                             GlassTopAppBar(
@@ -134,78 +134,84 @@ class GitHubPullRequestDetailActivity : ComponentActivity() {
                             )
                         }
                     ) { padding ->
-                        when {
-                            session == null -> LoginRequired(padding)
-                            loading -> Loading(padding)
-                            error != null -> LoadFailed(padding, error!!) { loadAll() }
-                            detail != null -> {
-                                val d = detail!!
-                                LazyColumn(
-                                    modifier = Modifier.fillMaxSize().padding(pagePaddingWithoutTop(padding)).nestedScroll(scrollBehavior.nestedScrollConnection),
-                                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = systemNavBarsHeight + 26.dp),
-                                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                                ) {
-                                    item {
-                                        Card(Modifier.fillMaxWidth()) {
-                                            Column(Modifier.padding(16.dp)) {
-                                                Text(d.pr.title, style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.Bold, color = MiuixTheme.colorScheme.onSurface))
-                                                Spacer(Modifier.height(10.dp))
-                                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                                    PullRequestStateBadge(d.pr.state, d.pr.merged)
-                                                    if (d.pr.isOpen) {
-                                                        Spacer(Modifier.width(8.dp))
-                                                        when (d.pr.mergeable) {
-                                                            MergeableState.MERGEABLE -> Text(text = stringResource(R.string.github_pr_mergeable), fontSize = 12.sp, color = Color(0xFF1E7E34), fontWeight = FontWeight.Bold)
-                                                            MergeableState.CONFLICTING -> Text(text = stringResource(R.string.github_pr_conflicting), fontSize = 12.sp, color = Color(0xFF9A6700), fontWeight = FontWeight.Bold)
-                                                            else -> Unit
+                        Box(
+                            Modifier
+                                .fillMaxSize()
+                                .then(glassPage.contentModifier)
+                        ) {
+                            when {
+                                session == null -> LoginRequired(padding)
+                                loading -> Loading(padding)
+                                error != null -> LoadFailed(padding, error!!) { loadAll() }
+                                detail != null -> {
+                                    val d = detail!!
+                                    LazyColumn(
+                                        modifier = Modifier.fillMaxSize().padding(pagePaddingWithoutTop(padding)).nestedScroll(scrollBehavior.nestedScrollConnection),
+                                        contentPadding = standaloneContentPadding(padding, start = 16.dp, end = 16.dp, bottom = systemNavBarsHeight + 26.dp),
+                                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                                    ) {
+                                        item {
+                                            Card(Modifier.fillMaxWidth()) {
+                                                Column(Modifier.padding(16.dp)) {
+                                                    Text(d.pr.title, style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.Bold, color = MiuixTheme.colorScheme.onSurface))
+                                                    Spacer(Modifier.height(10.dp))
+                                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                                        PullRequestStateBadge(d.pr.state, d.pr.merged)
+                                                        if (d.pr.isOpen) {
+                                                            Spacer(Modifier.width(8.dp))
+                                                            when (d.pr.mergeable) {
+                                                                MergeableState.MERGEABLE -> Text(text = stringResource(R.string.github_pr_mergeable), fontSize = 12.sp, color = Color(0xFF1E7E34), fontWeight = FontWeight.Bold)
+                                                                MergeableState.CONFLICTING -> Text(text = stringResource(R.string.github_pr_conflicting), fontSize = 12.sp, color = Color(0xFF9A6700), fontWeight = FontWeight.Bold)
+                                                                else -> Unit
+                                                            }
                                                         }
                                                     }
+                                                    Spacer(Modifier.height(8.dp))
+                                                    Text(stringResource(R.string.github_issue_author, d.pr.authorLogin), style = TextStyle(fontSize = 12.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary))
+                                                    Spacer(Modifier.height(2.dp))
+                                                    Text(stringResource(R.string.github_issue_created_at, d.pr.createdAt.take(10)), style = TextStyle(fontSize = 12.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary))
                                                 }
-                                                Spacer(Modifier.height(8.dp))
-                                                Text(stringResource(R.string.github_issue_author, d.pr.authorLogin), style = TextStyle(fontSize = 12.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary))
-                                                Spacer(Modifier.height(2.dp))
-                                                Text(stringResource(R.string.github_issue_created_at, d.pr.createdAt.take(10)), style = TextStyle(fontSize = 12.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary))
                                             }
                                         }
-                                    }
-                                    item {
-                                        Card(Modifier.fillMaxWidth()) {
-                                            Column(Modifier.padding(16.dp)) {
-                                                MarkdownContent(text = d.pr.body ?: stringResource(R.string.github_issue_no_body), bodyFontSizeSp = 13)
-                                            }
-                                        }
-                                    }
-
-                                    item { SmallTitle(text = stringResource(R.string.github_manage_on_github_section)) }
-                                    item {
-                                        Card(Modifier.fillMaxWidth()) {
-                                            ArrowPreference(
-                                                title = stringResource(R.string.github_jump_to_github),
-                                                summary = stringResource(R.string.github_jump_to_github_summary),
-                                                onClick = { openGitHubInPreferredApp(context, gitHubPullUrl(prNumber)) },
-                                                startAction = { LeadIcon(R.drawable.ic_github) }
-                                            )
-                                        }
-                                    }
-
-                                    item { SmallTitle(text = stringResource(R.string.github_issue_comments_section)) }
-                                    if (d.comments.isEmpty()) {
                                         item {
-                                            Box(Modifier.fillMaxWidth().padding(vertical = 16.dp), Alignment.Center) {
-                                                Text(stringResource(R.string.github_issue_no_comments), style = TextStyle(fontSize = 13.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary))
+                                            Card(Modifier.fillMaxWidth()) {
+                                                Column(Modifier.padding(16.dp)) {
+                                                    MarkdownContent(text = d.pr.body ?: stringResource(R.string.github_issue_no_body), bodyFontSizeSp = 13)
+                                                }
                                             }
                                         }
-                                    } else {
-                                        items(d.comments, key = { it.authorLogin + it.createdAt }) { comment -> CommentCard(comment) }
-                                    }
 
-                                    item {
-                                        Card(Modifier.fillMaxWidth()) {
-                                            Column(Modifier.padding(16.dp)) {
-                                                TextField(value = commentDraft, onValueChange = { commentDraft = it }, modifier = Modifier.fillMaxWidth().height(120.dp), singleLine = false, label = stringResource(R.string.github_comment_placeholder))
-                                                Spacer(Modifier.height(8.dp))
-                                                Button(onClick = { sendComment() }, enabled = !submittingComment, modifier = Modifier.fillMaxWidth()) {
-                                                    Text(text = if (submittingComment) stringResource(R.string.github_comment_submitting) else stringResource(R.string.github_comment_submit), color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                                        item { SmallTitle(text = stringResource(R.string.github_manage_on_github_section)) }
+                                        item {
+                                            Card(Modifier.fillMaxWidth()) {
+                                                ArrowPreference(
+                                                    title = stringResource(R.string.github_jump_to_github),
+                                                    summary = stringResource(R.string.github_jump_to_github_summary),
+                                                    onClick = { openGitHubInPreferredApp(context, gitHubPullUrl(prNumber)) },
+                                                    startAction = { LeadIcon(R.drawable.ic_github) }
+                                                )
+                                            }
+                                        }
+
+                                        item { SmallTitle(text = stringResource(R.string.github_issue_comments_section)) }
+                                        if (d.comments.isEmpty()) {
+                                            item {
+                                                Box(Modifier.fillMaxWidth().padding(vertical = 16.dp), Alignment.Center) {
+                                                    Text(stringResource(R.string.github_issue_no_comments), style = TextStyle(fontSize = 13.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary))
+                                                }
+                                            }
+                                        } else {
+                                            items(d.comments, key = { it.authorLogin + it.createdAt }) { comment -> CommentCard(comment) }
+                                        }
+
+                                        item {
+                                            Card(Modifier.fillMaxWidth()) {
+                                                Column(Modifier.padding(16.dp)) {
+                                                    TextField(value = commentDraft, onValueChange = { commentDraft = it }, modifier = Modifier.fillMaxWidth().height(120.dp), singleLine = false, label = stringResource(R.string.github_comment_placeholder))
+                                                    Spacer(Modifier.height(8.dp))
+                                                    Button(onClick = { sendComment() }, enabled = !submittingComment, modifier = Modifier.fillMaxWidth()) {
+                                                        Text(text = if (submittingComment) stringResource(R.string.github_comment_submitting) else stringResource(R.string.github_comment_submit), color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                                                    }
                                                 }
                                             }
                                         }

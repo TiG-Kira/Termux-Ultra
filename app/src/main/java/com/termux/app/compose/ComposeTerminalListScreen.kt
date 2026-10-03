@@ -299,7 +299,8 @@ fun ComposeTerminalListScreen(
                             .nestedScroll(scrollBehavior.nestedScrollConnection),
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp),
-                        contentPadding = androidx.compose.foundation.layout.PaddingValues(top = LocalTopBarClearance.current + 8.dp, bottom = navBarBottomPadding + 16.dp)
+                        // 顶部让位已由承载搜索栏的那行 padding 吃掉，这里不能再加一次顶栏高度。
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(top = 8.dp, bottom = navBarBottomPadding + 16.dp)
                     ) {
                         if (allSessions.isEmpty()) {
                             item(span = { GridItemSpan(2) }) {

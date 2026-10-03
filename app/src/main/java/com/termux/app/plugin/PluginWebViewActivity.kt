@@ -1,5 +1,7 @@
 package com.termux.app.plugin
 
+import com.termux.app.compose.pagePaddingWithoutTop
+import com.termux.app.compose.topBarClearance
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
@@ -152,7 +154,6 @@ class PluginWebViewActivity : ComponentActivity() {
         val glassPage = rememberGlassPageBackdrop()
 
         Scaffold(
-            modifier = glassPage.layerModifier,
             contentWindowInsets = WindowInsets(0, 0, 0, 0),
             topBar = {
                 GlassTopAppBar(
@@ -173,8 +174,10 @@ class PluginWebViewActivity : ComponentActivity() {
         ) { padding ->
             Box(
                 modifier = Modifier
+                    .then(glassPage.contentModifier)
+                    .padding(top = topBarClearance(padding))
                     .fillMaxSize()
-                    .padding(padding)
+                    .padding(pagePaddingWithoutTop(padding))
             ) {
                 AndroidView(
                     factory = { ctx ->

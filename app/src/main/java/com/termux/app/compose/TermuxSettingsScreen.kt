@@ -41,6 +41,8 @@ import top.yukonga.miuix.kmp.preference.OverlayDropdownPreference
 import top.yukonga.miuix.kmp.preference.SwitchPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import com.termux.app.compose.pagePaddingWithoutTop
+import com.termux.app.compose.topBarClearance
+import com.termux.app.compose.LocalTopBarClearance
 
 enum class TermuxSettingsPage {
     MAIN,
@@ -93,7 +95,6 @@ fun TermuxSettingsScreen(
     }
 
     Scaffold(
-        modifier = glassPage.layerModifier,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             GlassTopAppBar(
@@ -113,67 +114,72 @@ fun TermuxSettingsScreen(
             )
         }
     ) { padding ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(pagePaddingWithoutTop(padding))
-        ) {
-            when (currentPage) {
-                TermuxSettingsPage.MAIN -> {
-                    MainTermuxSettingsPage(
-                        onNavigate = { currentPage = it },
-                        onBack = onBack,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .nestedScroll(scrollBehavior.nestedScrollConnection)
-                    )
-                }
-                TermuxSettingsPage.TERMINAL -> {
-                    TerminalSettingsPage(
-                        onNavigate = { currentPage = it },
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .nestedScroll(scrollBehavior.nestedScrollConnection)
-                    )
-                }
-                TermuxSettingsPage.DEBUGGING -> {
-                    DebuggingSettingsPage(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .nestedScroll(scrollBehavior.nestedScrollConnection)
-                    )
-                }
-                TermuxSettingsPage.PLUGIN_API -> {
-                    PluginSettingsPage(
-                        pluginType = "api",
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .nestedScroll(scrollBehavior.nestedScrollConnection)
-                    )
-                }
-                TermuxSettingsPage.PLUGIN_FLOAT -> {
-                    PluginSettingsPage(
-                        pluginType = "float",
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .nestedScroll(scrollBehavior.nestedScrollConnection)
-                    )
-                }
-                TermuxSettingsPage.PLUGIN_TASKER -> {
-                    PluginSettingsPage(
-                        pluginType = "tasker",
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .nestedScroll(scrollBehavior.nestedScrollConnection)
-                    )
-                }
-                TermuxSettingsPage.PLUGIN_WIDGET -> {
-                    PluginSettingsPage(
-                        pluginType = "widget",
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .nestedScroll(scrollBehavior.nestedScrollConnection)
-                    )
+        // The bar's height reaches the paged sections below through [LocalTopBarClearance],
+        // the same hand-off MainScreen's tab pages use.
+        CompositionLocalProvider(LocalTopBarClearance provides topBarClearance(padding)) {
+            Box(
+                modifier = Modifier
+                    .then(glassPage.contentModifier)
+                    .fillMaxSize()
+                    .padding(pagePaddingWithoutTop(padding))
+            ) {
+                when (currentPage) {
+                    TermuxSettingsPage.MAIN -> {
+                        MainTermuxSettingsPage(
+                            onNavigate = { currentPage = it },
+                            onBack = onBack,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .nestedScroll(scrollBehavior.nestedScrollConnection)
+                        )
+                    }
+                    TermuxSettingsPage.TERMINAL -> {
+                        TerminalSettingsPage(
+                            onNavigate = { currentPage = it },
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .nestedScroll(scrollBehavior.nestedScrollConnection)
+                        )
+                    }
+                    TermuxSettingsPage.DEBUGGING -> {
+                        DebuggingSettingsPage(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .nestedScroll(scrollBehavior.nestedScrollConnection)
+                        )
+                    }
+                    TermuxSettingsPage.PLUGIN_API -> {
+                        PluginSettingsPage(
+                            pluginType = "api",
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .nestedScroll(scrollBehavior.nestedScrollConnection)
+                        )
+                    }
+                    TermuxSettingsPage.PLUGIN_FLOAT -> {
+                        PluginSettingsPage(
+                            pluginType = "float",
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .nestedScroll(scrollBehavior.nestedScrollConnection)
+                        )
+                    }
+                    TermuxSettingsPage.PLUGIN_TASKER -> {
+                        PluginSettingsPage(
+                            pluginType = "tasker",
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .nestedScroll(scrollBehavior.nestedScrollConnection)
+                        )
+                    }
+                    TermuxSettingsPage.PLUGIN_WIDGET -> {
+                        PluginSettingsPage(
+                            pluginType = "widget",
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .nestedScroll(scrollBehavior.nestedScrollConnection)
+                        )
+                    }
                 }
             }
         }
@@ -200,7 +206,7 @@ private fun MainTermuxSettingsPage(
 
     LazyColumn(
         modifier = modifier,
-        contentPadding = PaddingValues(bottom = 16.dp)
+        contentPadding = PaddingValues(top = LocalTopBarClearance.current, bottom = 16.dp)
     ) {
         item { SmallTitle(text = stringResource(R.string.terminal)) }
         item {
@@ -340,7 +346,7 @@ private fun TerminalSettingsPage(
 ) {
     LazyColumn(
         modifier = modifier,
-        contentPadding = PaddingValues(bottom = 16.dp)
+        contentPadding = PaddingValues(top = LocalTopBarClearance.current, bottom = 16.dp)
     ) {
         item { SmallTitle(text = stringResource(R.string.terminal)) }
         item {
@@ -381,7 +387,7 @@ private fun DebuggingSettingsPage(
 
     LazyColumn(
         modifier = modifier,
-        contentPadding = PaddingValues(bottom = 16.dp)
+        contentPadding = PaddingValues(top = LocalTopBarClearance.current, bottom = 16.dp)
     ) {
         item { SmallTitle(text = stringResource(R.string.termux_logging_header)) }
         item {
@@ -459,7 +465,7 @@ private fun PluginSettingsPage(
 
     LazyColumn(
         modifier = modifier,
-        contentPadding = PaddingValues(bottom = 16.dp)
+        contentPadding = PaddingValues(top = LocalTopBarClearance.current, bottom = 16.dp)
     ) {
         item { SmallTitle(text = title) }
         item {

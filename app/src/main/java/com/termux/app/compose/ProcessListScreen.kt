@@ -60,6 +60,7 @@ import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import com.termux.app.compose.pagePaddingWithoutTop
+import com.termux.app.compose.standaloneContentPadding
 
 /** 扩展 ProcessInfo，补充 ProcessListScreen 需要的 user / path 信息。 */
 private data class DetailedProcess(
@@ -236,9 +237,7 @@ fun ProcessListScreen(
                     .fillMaxSize()
                     .padding(pagePaddingWithoutTop(padding))
                     .nestedScroll(scrollBehavior.nestedScrollConnection),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                    bottom = navBarBottomPadding + 16.dp
-                )
+                contentPadding = standaloneContentPadding(padding, bottom = navBarBottomPadding + 16.dp)
             ) {
                 item {
                     Row(

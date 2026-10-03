@@ -32,6 +32,7 @@ import com.termux.R
 import com.termux.app.TermuxService
 import com.termux.app.compose.rememberGlassPageBackdrop
 import com.termux.app.compose.pagePaddingWithoutTop
+import com.termux.app.compose.standaloneContentPadding
 import com.termux.app.compose.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -207,7 +208,6 @@ class UtilityCenterActivity : ComponentActivity() {
                 }
 
                 Scaffold(
-                    modifier = glassPage.layerModifier,
                     contentWindowInsets = WindowInsets(0, 0, 0, 0),
                     topBar = {
                         GlassTopAppBar(
@@ -229,10 +229,12 @@ class UtilityCenterActivity : ComponentActivity() {
                 ) { padding ->
                     LazyColumn(
                         modifier = Modifier
+                            .then(glassPage.contentModifier)
                             .fillMaxSize()
                             .padding(pagePaddingWithoutTop(padding))
                             .nestedScroll(scrollBehavior.nestedScrollConnection),
-                        contentPadding = PaddingValues(
+                        contentPadding = standaloneContentPadding(
+                            padding,
                             start = 16.dp,
                             end = 16.dp,
                             bottom = systemNavBarsHeight + 26.dp

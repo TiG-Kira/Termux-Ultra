@@ -42,6 +42,7 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
 import com.termux.R
 import com.termux.app.compose.rememberGlassPageBackdrop
 import com.termux.app.compose.pagePaddingWithoutTop
+import com.termux.app.compose.standaloneContentPadding
 import com.termux.app.compose.KiTerminalTheme
 import com.termux.app.compose.NavigationHelper
 import com.termux.app.utils.SnackbarHelper
@@ -258,7 +259,7 @@ fun PluginCenterScreen() {
                     .fillMaxSize()
                     .padding(pagePaddingWithoutTop(padding))
                     .nestedScroll(scrollBehavior.nestedScrollConnection),
-                contentPadding = PaddingValues(bottom = 92.dp)
+                contentPadding = standaloneContentPadding(padding, bottom = 92.dp)
             ) {
                 if (plugins.isNotEmpty()) {
                     item {

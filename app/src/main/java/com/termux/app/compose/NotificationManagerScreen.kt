@@ -42,6 +42,7 @@ import top.yukonga.miuix.kmp.preference.RadioButtonPreference
 import top.yukonga.miuix.kmp.preference.SwitchPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import com.termux.app.compose.pagePaddingWithoutTop
+import com.termux.app.compose.standaloneContentPadding
 
 /**
  * 通知管理设置页。
@@ -118,9 +119,7 @@ fun NotificationManagerScreen(
                 .fillMaxSize()
                 .padding(pagePaddingWithoutTop(padding))
                 .nestedScroll(scrollBehavior.nestedScrollConnection),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                bottom = navBarBottomPadding + 16.dp
-            )
+            contentPadding = standaloneContentPadding(padding, bottom = navBarBottomPadding + 16.dp)
         ) {
             // ===== 第一组：通知开关 =====
             item(key = "section_notifications") {

@@ -247,7 +247,6 @@ fun TermuxStylingScreen(
     }
 
     Scaffold(
-        modifier = glassPage.layerModifier,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             GlassTopAppBar(
@@ -269,6 +268,7 @@ fun TermuxStylingScreen(
     ) { padding ->
         Box(
             modifier = modifier
+                .then(glassPage.contentModifier)
                 .fillMaxSize()
                 .padding(pagePaddingWithoutTop(padding))
         ) {
@@ -276,7 +276,7 @@ fun TermuxStylingScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .nestedScroll(scrollBehavior.nestedScrollConnection),
-                contentPadding = PaddingValues(bottom = 16.dp)
+                contentPadding = standaloneContentPadding(padding, bottom = 16.dp)
             ) {
                 item { SmallTitle(text = stringResource(R.string.styling_header)) }
 

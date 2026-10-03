@@ -1,5 +1,7 @@
 package com.termux.app.ftp
 
+import com.termux.app.compose.pagePaddingWithoutTop
+import com.termux.app.compose.topBarClearance
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
@@ -78,7 +80,6 @@ fun FtpInfoScreen() {
     val ipAddress = getLocalIpAddress(context)
     
     Scaffold(
-        modifier = glassPage.layerModifier,
         topBar = {
             GlassTopAppBar(
                 title = "FTP 连接信息",
@@ -98,12 +99,16 @@ fun FtpInfoScreen() {
     ) { padding ->
         Column(
             modifier = Modifier
+                .then(glassPage.contentModifier)
                 .fillMaxSize()
-                .padding(padding)
+                .padding(pagePaddingWithoutTop(padding))
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            // 这页内容固定不滚动，让位落在首个 item 上；滚动页才把它折进 contentPadding。
+            Spacer(Modifier.height(topBarClearance(padding)))
+
             Card(
                 modifier = Modifier.fillMaxWidth()
             ) {

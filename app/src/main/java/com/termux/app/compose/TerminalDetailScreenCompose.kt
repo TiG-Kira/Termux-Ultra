@@ -114,6 +114,7 @@ import top.yukonga.miuix.kmp.basic.DropdownEntry
 import top.yukonga.miuix.kmp.basic.DropdownItem
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
+import top.yukonga.miuix.kmp.glass.GlassIconButton
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.SnackbarHost
 import top.yukonga.miuix.kmp.basic.SnackbarHostState
@@ -768,6 +769,31 @@ fun TerminalDetailScreenCompose(
         }
     }
 
+    /**
+     * 顶栏左右两端的键（返回、收缩/展开）。收缩态顶栏只剩这条 56dp 的行压在终端背景上，
+     * 图标得自带玻璃底板 + 阴影，否则会糊进终端内容；展开态顶栏是完整 TopAppBar、自带
+     * 不透明底色，用普通 IconButton 即可。
+     *
+     * 两态必须占同样大的盒子，否则图标会随展开/收缩左右跳：IconButton 默认只给 40dp
+     * 触碰盒，玻璃底板是 48dp。所以展开态显式把 minWidth/minHeight 提到 48dp，玻璃态
+     * 保持 size = 48dp、padding = 0，两者只差画在底板上的那层外观。
+     */
+    @Composable
+    fun TopBarLeafIcon(
+        collapsed: Boolean,
+        onClick: () -> Unit,
+        glyph: @Composable () -> Unit
+    ) {
+        if (collapsed) {
+            GlassIconButton(onClick = onClick, size = 48.dp, padding = 0.dp) {
+                glyph()
+            }
+        } else {
+            // 展开态也要占 48dp，和玻璃态一致；IconButton 默认只有 40dp，图标会跟着态切换左右跳 4dp。
+            IconButton(onClick = onClick, minWidth = 48.dp, minHeight = 48.dp) { glyph() }
+        }
+    }
+
     @Composable
     fun TopBarButtonRow() {
         val showLargeButtons = if (isTopBarTransitioning) useLargeButtons else !isCompact
@@ -790,12 +816,17 @@ fun TerminalDetailScreenCompose(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Row(modifier = Modifier.padding(start = 16.dp)) {
-                IconButton(onClick = { updateInteractionTime(); onBack() }) {
+                TopBarLeafIcon(
+                    collapsed = isCompact,
+                    onClick = { updateInteractionTime(); onBack() }
+                ) {
                     Icon(
                         imageVector = MiuixIcons.Back,
                         contentDescription = null,
                         modifier = Modifier.size(24.dp),
-                        tint = effectiveTopBarContentColor
+                        tint = if (isCompact)
+                            MiuixTheme.colorScheme.onSurface
+                        else effectiveTopBarContentColor
                     )
                 }
             }
@@ -837,7 +868,8 @@ fun TerminalDetailScreenCompose(
             }
 
             Row(modifier = Modifier.padding(start = 8.dp, end = 16.dp)) {
-                IconButton(
+                TopBarLeafIcon(
+                    collapsed = isCompact,
                     onClick = {
                         updateInteractionTime()
                         val newCollapsed = !isTopBarCollapsed
@@ -859,7 +891,9 @@ fun TerminalDetailScreenCompose(
                         imageVector = if (isTopBarCollapsed) Icons.Rounded.KeyboardArrowRight else Icons.Rounded.KeyboardArrowLeft,
                         contentDescription = null,
                         modifier = Modifier.size(22.dp),
-                        tint = effectiveTopBarContentColor
+                        tint = if (isCompact)
+                            MiuixTheme.colorScheme.onSurface
+                        else effectiveTopBarContentColor
                     )
                 }
             }

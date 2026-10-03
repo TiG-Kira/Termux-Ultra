@@ -93,7 +93,6 @@ fun TextEditorScreen(
     }
 
     Scaffold(
-        modifier = glassPage.layerModifier,
         contentWindowInsets = WindowInsets(0),
         topBar = {
             GlassTopAppBar(
@@ -142,11 +141,15 @@ fun TextEditorScreen(
     ) { innerPadding ->
         Column(
             modifier = Modifier
+                .then(glassPage.contentModifier)
                 .fillMaxSize()
-                .padding(innerPadding)
+                .padding(pagePaddingWithoutTop(innerPadding))
                 .verticalScroll(rememberScrollState())
                 .nestedScroll(scrollBehavior.nestedScrollConnection)
         ) {
+            // 这页是 Column + verticalScroll，让位落在首个 item 上；滚动页才把它折进 contentPadding。
+            Spacer(Modifier.height(topBarClearance(innerPadding)))
+
             // 文件信息条
             if (file != null) {
                 Column(

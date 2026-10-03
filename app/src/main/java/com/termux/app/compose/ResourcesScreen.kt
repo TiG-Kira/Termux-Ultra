@@ -48,6 +48,7 @@ import com.termux.app.TermuxService
 import com.termux.app.utils.SnackbarHelper
 import com.google.android.material.snackbar.Snackbar
 import com.termux.app.compose.pagePaddingWithoutTop
+import com.termux.app.compose.standaloneContentPadding
 
 data class ResourceItem(
     val title: String,
@@ -106,7 +107,7 @@ fun ResourcesScreen(
                     .fillMaxSize()
                     .padding(pagePaddingWithoutTop(padding))
                     .nestedScroll(scrollBehavior.nestedScrollConnection),
-                contentPadding = PaddingValues(bottom = navBarBottomPadding + 16.dp)
+                contentPadding = standaloneContentPadding(padding, bottom = navBarBottomPadding + 16.dp)
             ) {
                 item {
                     HeroWelcomeCard(

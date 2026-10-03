@@ -31,6 +31,8 @@ import top.yukonga.miuix.kmp.preference.OverlayDropdownPreference
 import top.yukonga.miuix.kmp.preference.SwitchPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import com.termux.app.compose.pagePaddingWithoutTop
+import com.termux.app.compose.topBarClearance
+import com.termux.app.compose.LocalTopBarClearance
 
 enum class VncSettingsPage {
     MAIN,
@@ -77,7 +79,6 @@ fun VncSettingsScreen(
     }
 
     Scaffold(
-        modifier = glassPage.layerModifier,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             GlassTopAppBar(
@@ -97,49 +98,54 @@ fun VncSettingsScreen(
             )
         }
     ) { padding ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(pagePaddingWithoutTop(padding))
-        ) {
-            when (currentPage) {
-                VncSettingsPage.MAIN -> {
-                    MainVncSettingsPage(
-                        onNavigate = { currentPage = it },
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .nestedScroll(scrollBehavior.nestedScrollConnection)
-                    )
-                }
-                VncSettingsPage.VIEWER -> {
-                    ViewerSettingsPage(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .nestedScroll(scrollBehavior.nestedScrollConnection)
-                    )
-                }
-                VncSettingsPage.INPUT -> {
-                    InputSettingsPage(
-                        onNavigate = { currentPage = it },
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .nestedScroll(scrollBehavior.nestedScrollConnection)
-                    )
-                }
-                VncSettingsPage.SERVER -> {
-                    ServerSettingsPage(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .nestedScroll(scrollBehavior.nestedScrollConnection)
-                    )
-                }
-                VncSettingsPage.CUSTOMIZE_KEYS -> {
-                    CustomKeysEditorScreen(
-                        onBack = { currentPage = VncSettingsPage.INPUT },
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .nestedScroll(scrollBehavior.nestedScrollConnection)
-                    )
+        // The bar's height reaches the paged sections below through [LocalTopBarClearance],
+        // the same hand-off MainScreen's tab pages use.
+        CompositionLocalProvider(LocalTopBarClearance provides topBarClearance(padding)) {
+            Box(
+                modifier = Modifier
+                    .then(glassPage.contentModifier)
+                    .fillMaxSize()
+                    .padding(pagePaddingWithoutTop(padding))
+            ) {
+                when (currentPage) {
+                    VncSettingsPage.MAIN -> {
+                        MainVncSettingsPage(
+                            onNavigate = { currentPage = it },
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .nestedScroll(scrollBehavior.nestedScrollConnection)
+                        )
+                    }
+                    VncSettingsPage.VIEWER -> {
+                        ViewerSettingsPage(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .nestedScroll(scrollBehavior.nestedScrollConnection)
+                        )
+                    }
+                    VncSettingsPage.INPUT -> {
+                        InputSettingsPage(
+                            onNavigate = { currentPage = it },
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .nestedScroll(scrollBehavior.nestedScrollConnection)
+                        )
+                    }
+                    VncSettingsPage.SERVER -> {
+                        ServerSettingsPage(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .nestedScroll(scrollBehavior.nestedScrollConnection)
+                        )
+                    }
+                    VncSettingsPage.CUSTOMIZE_KEYS -> {
+                        CustomKeysEditorScreen(
+                            onBack = { currentPage = VncSettingsPage.INPUT },
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .nestedScroll(scrollBehavior.nestedScrollConnection)
+                        )
+                    }
                 }
             }
         }
@@ -153,7 +159,7 @@ private fun MainVncSettingsPage(
 ) {
     LazyColumn(
         modifier = modifier,
-        contentPadding = PaddingValues(bottom = 16.dp)
+        contentPadding = PaddingValues(top = LocalTopBarClearance.current, bottom = 16.dp)
     ) {
         item { SmallTitle(text = stringResource(R.string.vnc_settings_title)) }
         item {
@@ -242,7 +248,7 @@ private fun ViewerSettingsPage(
 
     LazyColumn(
         modifier = modifier,
-        contentPadding = PaddingValues(bottom = 16.dp)
+        contentPadding = PaddingValues(top = LocalTopBarClearance.current, bottom = 16.dp)
     ) {
         item { SmallTitle(text = stringResource(R.string.pref_viewer)) }
         item {
@@ -618,7 +624,7 @@ private fun InputSettingsPage(
 
     LazyColumn(
         modifier = modifier,
-        contentPadding = PaddingValues(bottom = 16.dp)
+        contentPadding = PaddingValues(top = LocalTopBarClearance.current, bottom = 16.dp)
     ) {
         item { SmallTitle(text = stringResource(R.string.pref_gesture)) }
         item {
@@ -1046,7 +1052,7 @@ private fun ServerSettingsPage(
     Box(modifier = modifier) {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(bottom = 16.dp)
+            contentPadding = PaddingValues(top = LocalTopBarClearance.current, bottom = 16.dp)
         ) {
             item { SmallTitle(text = stringResource(R.string.pref_servers)) }
             item {
