@@ -247,9 +247,17 @@ fun TerminalDetailScreenCompose(
     val terminalBgColor = Color(terminalBgInt)
     val isTerminalDark = terminalBgColor.luminance() < 0.5f
 
-    // 2. 大 TopAppBar 背景 → 用系统亮暗主题的固定 opaque 色
+    // 2. 大 TopAppBar 背景 → 默认沿用系统亮暗主题的固定 opaque 色；
+    //    开了动态取色就换成 Miuix 实际渲染的 surface，否则顶栏永远是纯黑白，动态色根本看不出来。
     val isSystemDarkTheme = isSystemInDarkTheme()
-    val topBarOpaqueBg = if (isSystemDarkTheme) Color(0xFF1C1B1F) else Color(0xFFFFFFFF)
+    AppThemePrefs.init(context)
+    val materialYouEnabled by AppThemePrefs.materialYouEnabled.collectAsState()
+    val useMonetTopBar = materialYouEnabled && ApiCompat.isFeatureUsable(context, ApiCompat.Feature.MIUIX_DYNAMIC_COLOR)
+    val topBarOpaqueBg = when {
+        useMonetTopBar -> MiuixTheme.colorScheme.surface
+        isSystemDarkTheme -> Color(0xFF1C1B1F)
+        else -> Color(0xFFFFFFFF)
+    }
 
     // 3. 大 TopAppBar 图标 → 从 opaque 背景 luminance 算
     val topBarOpaqueContent = if (topBarOpaqueBg.luminance() > 0.5f) Color(0xFF000000) else Color(0xFFFFFFFF)
