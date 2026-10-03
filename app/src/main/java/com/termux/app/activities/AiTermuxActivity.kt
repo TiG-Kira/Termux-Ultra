@@ -2676,148 +2676,143 @@ private fun AiConversationManagementScreen(
             )
         }
     ) { padding ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .then(glassPage.contentModifier)
-                .padding(pagePaddingWithoutTop(padding))
-                .nestedScroll(scrollBehavior.nestedScrollConnection),
-            contentPadding = standaloneContentPadding(padding, top = 16.dp, bottom = 16.dp, start = 16.dp, end = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            item {
-                // 新建对话入口卡
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(if (isDark) Color(0xFF1C1C1E) else Color.White)
-                        .then(Modifier.border(0.5.dp, if (isDark) Color(0xFF2C2C2E) else Color(0xFFE8E8E8), RoundedCornerShape(16.dp)))
-                        .clickable { vm.newConversation(ctx) }
-                        .padding(horizontal = 16.dp, vertical = 14.dp)
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Box(
-                            modifier = Modifier
-                                .size(36.dp)
-                                .clip(CircleShape)
-                                .background(MiuixTheme.colorScheme.primary.copy(alpha = 0.12f)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Rounded.Add,
-                                contentDescription = null,
-                                modifier = Modifier.size(20.dp),
-                                tint = MiuixTheme.colorScheme.primary
+        Box(Modifier.fillMaxSize()) {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .then(glassPage.contentModifier)
+                    .padding(pagePaddingWithoutTop(padding))
+                    .nestedScroll(scrollBehavior.nestedScrollConnection),
+                contentPadding = standaloneContentPadding(padding, top = 16.dp, bottom = 16.dp, start = 16.dp, end = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                item {
+                    // 新建对话入口卡
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(if (isDark) Color(0xFF1C1C1E) else Color.White)
+                            .then(Modifier.border(0.5.dp, if (isDark) Color(0xFF2C2C2E) else Color(0xFFE8E8E8), RoundedCornerShape(16.dp)))
+                            .clickable { vm.newConversation(ctx) }
+                            .padding(horizontal = 16.dp, vertical = 14.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clip(CircleShape)
+                                    .background(MiuixTheme.colorScheme.primary.copy(alpha = 0.12f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Add,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(20.dp),
+                                    tint = MiuixTheme.colorScheme.primary
+                                )
+                            }
+                            Text(
+                                text = "新建对话",
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MiuixTheme.colorScheme.onSurface
                             )
                         }
-                        Text(
-                            text = "新建对话",
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MiuixTheme.colorScheme.onSurface
-                        )
                     }
                 }
-            }
-
-            items(ordered, key = { it.id }) { conv ->
-                val preview = conv.messages.lastOrNull()?.content?.lineSequence()?.firstOrNull().orEmpty().ifBlank { "暂无消息" }
-                val isDefault = conv.id == DEFAULT_CONVERSATION_ID
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(if (isDark) Color(0xFF1C1C1E) else Color.White)
-                        .then(Modifier.border(0.5.dp, if (isDark) Color(0xFF2C2C2E) else Color(0xFFE8E8E8), RoundedCornerShape(16.dp)))
-                        .padding(horizontal = 16.dp, vertical = 14.dp)
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Column(
-                            modifier = Modifier
-                                .weight(1f)
-                                .clickable { onOpenConversation(conv.id) }
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Text(
-                                    text = conv.title,
-                                    fontSize = 15.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MiuixTheme.colorScheme.onSurface
-                                )
-                                if (isDefault) {
-                                    Box(
-                                        modifier = Modifier
-                                            .clip(RoundedCornerShape(6.dp))
-                                            .background(MiuixTheme.colorScheme.primary.copy(alpha = 0.14f))
-                                            .padding(horizontal = 6.dp, vertical = 2.dp)
-                                    ) {
-                                        Text(
-                                            text = "默认",
-                                            fontSize = 11.sp,
-                                            color = MiuixTheme.colorScheme.primary
-                                        )
+    
+                items(ordered, key = { it.id }) { conv ->
+                    val preview = conv.messages.lastOrNull()?.content?.lineSequence()?.firstOrNull().orEmpty().ifBlank { "暂无消息" }
+                    val isDefault = conv.id == DEFAULT_CONVERSATION_ID
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(if (isDark) Color(0xFF1C1C1E) else Color.White)
+                            .then(Modifier.border(0.5.dp, if (isDark) Color(0xFF2C2C2E) else Color(0xFFE8E8E8), RoundedCornerShape(16.dp)))
+                            .padding(horizontal = 16.dp, vertical = 14.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Column(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clickable { onOpenConversation(conv.id) }
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Text(
+                                        text = conv.title,
+                                        fontSize = 15.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MiuixTheme.colorScheme.onSurface
+                                    )
+                                    if (isDefault) {
+                                        Box(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(6.dp))
+                                                .background(MiuixTheme.colorScheme.primary.copy(alpha = 0.14f))
+                                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                                        ) {
+                                            Text(
+                                                text = "默认",
+                                                fontSize = 11.sp,
+                                                color = MiuixTheme.colorScheme.primary
+                                            )
+                                        }
                                     }
                                 }
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    text = preview,
+                                    fontSize = 13.sp,
+                                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    text = "${conv.messages.size} 条消息 · ${formatRelativeTime(conv.updatedAt)}",
+                                    fontSize = 11.sp,
+                                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                                )
                             }
-                            Spacer(Modifier.height(4.dp))
-                            Text(
-                                text = preview,
-                                fontSize = 13.sp,
-                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            Spacer(Modifier.height(4.dp))
-                            Text(
-                                text = "${conv.messages.size} 条消息 · ${formatRelativeTime(conv.updatedAt)}",
-                                fontSize = 11.sp,
-                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                            )
-                        }
-                        // 删除按钮：作为 Column 的兄弟节点放在 Row 里，独立处理点击，
-                        // 与 Column 的 weight(1f) + clickable 互不重叠互不冲突
-                        Box(
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(CircleShape)
-                                .clickable { pendingDeleteId = conv.id },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Rounded.DeleteSweep,
-                                contentDescription = "删除对话",
-                                modifier = Modifier.size(20.dp),
-                                tint = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                            )
+                            GlassIconButton(
+                                onClick = { pendingDeleteId = conv.id },
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.DeleteSweep,
+                                    contentDescription = "删除对话",
+                                    modifier = Modifier.size(20.dp),
+                                    tint = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                                )
+                            }
                         }
                     }
                 }
             }
+        OverlayDialog(
+            show = pendingDeleteId != null,
+            onDismissRequest = { pendingDeleteId = null },
+            title = "删除对话",
+            summary = "将删除该对话的全部内容，此操作不可撤销。",
+            content = {
+                Row(horizontalArrangement = Arrangement.SpaceBetween) {
+                    TextButton(text = "取消", onClick = { pendingDeleteId = null }, modifier = Modifier.weight(1f))
+                    Spacer(Modifier.width(16.dp))
+                    TextButton(
+                        text = "删除",
+                        onClick = {
+                            pendingDeleteId?.let { vm.deleteConversation(ctx, it) }
+                            pendingDeleteId = null
+                        },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.textButtonColors(color = Color(0xFFF44336))
+                    )
+                }
+            }
+        )
         }
     }
-
-    OverlayDialog(
-        show = pendingDeleteId != null,
-        onDismissRequest = { pendingDeleteId = null },
-        title = "删除对话",
-        summary = "将删除该对话的全部内容，此操作不可撤销。",
-        content = {
-            Row(horizontalArrangement = Arrangement.SpaceBetween) {
-                TextButton(text = "取消", onClick = { pendingDeleteId = null }, modifier = Modifier.weight(1f))
-                Spacer(Modifier.width(16.dp))
-                TextButton(
-                    text = "删除",
-                    onClick = {
-                        pendingDeleteId?.let { vm.deleteConversation(ctx, it) }
-                        pendingDeleteId = null
-                    },
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.textButtonColors(color = Color(0xFFF44336))
-                )
-            }
-        }
-    )
 }
 
 /** -------------------- 聊天界面 -------------------- */
