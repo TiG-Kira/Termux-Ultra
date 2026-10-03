@@ -64,7 +64,24 @@ class TerminalSessionAdapter private constructor(
             val envClient = ShellEnvironmentCompat(TermuxShellEnvironment())
             val workingDirectory = executionCommand.workingDirectory ?: "/"
             val shellPath = executionCommand.executable ?: "/system/bin/sh"
-            val args = executionCommand.arguments ?: emptyArray()
+            val rawArgs = executionCommand.arguments ?: emptyArray()
+            // execvp(cmd, argv) 不要求 argv[0] == cmd，内核会把 argv 原样传给新程序，
+            // 因此 argv[0] 是谁直接影响被 exec 的程序如何解析自己的选项。
+            // TermuxService.createTermuxSession(null, arrayOf("-c", command), ...) 传进来的
+            // argv 是 ["-c", <整段脚本>]：argv[0] 是「选项」而非程序名。
+            // /system/bin/sh (mksh) 收到后把 argv[0]="-c" 当作程序名（按惯例剥掉前导 '-'，
+            // 于是 $0 变成 "c"），随后从 argv[1] 起找选项——而 argv[1] 直接是脚本正文，
+            // 不以 '-' 开头，于是被当成「要执行的脚本文件路径」。结果：
+            //   短脚本 → `c: <脚本>: No such file or directory`
+            //   长脚本 → `c: <脚本>: File name too long` (ENAMETOOLONG)，退出码 127
+            // 这正是 QEMU with VNC 生成的大脚本必挂的原因。
+            // 修法：argv[0] 以 '-' 开头（即调用方漏传程序名）时补回程序名，
+            // 使布局变为 ["sh", "-c", <脚本>]，与 createDefaultSession() 的做法一致。
+            val args = if (rawArgs.isNotEmpty() && rawArgs[0].startsWith("-")) {
+                arrayOf(shellPath.substringAfterLast('/')) + rawArgs
+            } else {
+                rawArgs
+            }
             val env = envClient.buildEnvironment(context, executionCommand.isFailsafe, workingDirectory)
 
             val session = ComposeSessionManager.getInstance(context).createSession(

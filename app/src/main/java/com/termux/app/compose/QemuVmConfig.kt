@@ -393,6 +393,37 @@ data class QemuVmConfig(
     }
 
     /**
+     * 把任意来源的路径归一化为「proot 容器内可访问」的形式。
+     *
+     * 背景：容器只 bind 了两处真实目录
+     *   - `$HOME`                    -> `/root/shared`                    （见下方 `-b "$HOME:/root/shared"`）
+     *   - `$HOME/storage/shared`（真身 `/storage/emulated/0`） -> `/root/shared/storage/shared`（见 `EXTRA_BINDS`）
+     * 因此任何落在这两处之外的绝对路径，在容器内都不存在。
+     *
+     * 路径来源有两种形态，必须都覆盖：
+     *   1. 系统文件选择器（SAF）：`$HOME/storage/shared/...`（含字面量 `$HOME` 占位符）
+     *   2. Termux 内部选择器：`/data/data/com.termux/files/home/...`（已展开的绝对路径）
+     * 旧实现只做 `replace("$HOME", "/root/shared")`，形态 2 不含 `$HOME` 于是替换是空操作，
+     * 导致容器内磁盘/ISO 路径校验失败、脚本 `exit 1`。
+     */
+    private fun toContainerPath(path: String): String {
+        if (path.startsWith("\$HOME")) {
+            return "/root/shared" + path.removePrefix("\$HOME")
+        }
+        if (path.startsWith(TERMUX_HOME_ABS)) {
+            return "/root/shared" + path.removePrefix(TERMUX_HOME_ABS)
+        }
+        // 内存储存的裸绝对路径（未经过 $HOME 映射），对应 EXTRA_BINDS 的挂载点
+        if (path.startsWith("/storage/emulated/0/")) {
+            return "/root/shared/storage/shared/" + path.removePrefix("/storage/emulated/0/")
+        }
+        if (path.startsWith("/sdcard/")) {
+            return "/root/shared/storage/shared/" + path.removePrefix("/sdcard/")
+        }
+        return path
+    }
+
+    /**
      * proot 容器环境下的启动脚本（Android 15 / SDK 35+）。
      * 容器使用自己的 glibc / libstdc++，不再触碰 Android 系统库，
      * 从而绕过 linker namespace 对私有符号的限制。
@@ -588,8 +619,8 @@ data class QemuVmConfig(
             sb.append("if [ ! -f \"$diskPath\" ]; then\n")
             sb.append("    echo \"正在创建新硬盘 (${newDiskSizeGB}GB, 格式 $newDiskFormat)...\"\n")
             // 优先使用容器内的 qemu-img（容器版 / 原生版 qcow2 格式完全兼容）
-            // 把 diskPath 里的 \$HOME 前缀映射到容器内的 /root/shared，再由容器内 qemu-img 创建到正确位置
-            val qemuImgDiskPath = diskPath.replace("\$HOME", "/root/shared")
+            // 把 diskPath 归一化到容器内的 /root/shared 前缀，再由容器内 qemu-img 创建到正确位置
+            val qemuImgDiskPath = toContainerPath(diskPath)
             sb.append("    if \"\$RUN_SCRIPT\" -c 'command -v qemu-img' >/dev/null 2>&1; then\n")
             sb.append("        \"\$RUN_SCRIPT\" -c 'qemu-img create -f $newDiskFormat \"$qemuImgDiskPath\" ${newDiskSizeGB}G' 2>/dev/null || true\n")
             sb.append("    fi\n")
@@ -632,10 +663,11 @@ data class QemuVmConfig(
         sb.append("set +e\n")
         sb.append("echo \"  [容器内] 启动参数解析中...\"\n")
 
-        // 容器内路径转换：将 $HOME 替换为 /root/shared（容器内的 bind 路径）
-        val containerDiskPath = diskPath.replace("\$HOME", "/root/shared")
-        val containerIsoPath = isoPath?.replace("\$HOME", "/root/shared")
-        val containerShareDir = shareDir.replace("\$HOME", "/root/shared")
+        // 容器内路径转换：统一归一化到 /root/shared（容器内的 bind 路径）
+        // 兼容 $HOME 占位符（SAF 来源）与 Termux 绝对路径（内部选择器来源）两种形态
+        val containerDiskPath = toContainerPath(diskPath)
+        val containerIsoPath = isoPath?.let { toContainerPath(it) }
+        val containerShareDir = toContainerPath(shareDir)
 
         // 容器内音频策略判定：PA daemon 已在 Termux 原生层启动
         // 容器内 QEMU 通过共享网络栈直连 127.0.0.1:4713（proot 无网络 namespace 隔离）
@@ -1072,6 +1104,9 @@ object QemuVmManager {
         // 为每个需要迁移硬盘的虚拟机生成 mv 命令
         vms.forEach { vm ->
             if (vm.diskPath.contains("/qemu_disks/")) {
+                // 迁移脚本跑在 Termux 原生层，两种 diskPath 形态都能命中文件：
+                //   `$HOME/...`（SAF 来源）→ replace 展开为绝对路径；
+                //   `/data/data/...`（内部选择器来源）→ replace 空操作，本身已是绝对路径。
                 val oldDiskAbs = vm.diskPath.replace("\$HOME", TERMUX_HOME)
                 val fileName = oldDiskAbs.substringAfterLast("/")
                 val newDiskAbs = "$newDiskDirAbs/$fileName"
