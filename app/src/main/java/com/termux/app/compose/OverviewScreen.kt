@@ -995,8 +995,9 @@ private fun TipsAgentCard(
                 showKeepAliveWarning = true
             }
         }
-        showLowCard = ApiCompat.hasAnyRuntimeDisabled() ||
-            (ApiCompat.isLowAndroid && ApiCompat.hasAnyForceEnabled(context))
+        // 低版本设备一律显示提示卡（卡内部再区分"已强制启用"红色态与"老旧设备"橙色态），
+        // 与 hasAnyRuntimeDisabled 同为"需要提醒用户"的入口条件。
+        showLowCard = ApiCompat.hasAnyRuntimeDisabled() || ApiCompat.isLowAndroid
     }
 
     fun toggleCollapse() {

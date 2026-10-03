@@ -232,9 +232,11 @@ public class TextIOActivity extends AppCompatActivity {
         return false;
     }
 
+    // 刻意不调用 super.onBackPressed()：返回键语义等于"确认并回传文本"，
+    // 由 confirm() 负责 setResult + finish，super 的默认 finish() 是多余的。
+    @SuppressLint("MissingSuperCall")
     @Override
     public void onBackPressed() {
-        super.onBackPressed();
         confirm();
     }
 

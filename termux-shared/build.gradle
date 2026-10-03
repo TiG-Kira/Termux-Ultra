@@ -46,9 +46,12 @@ android {
     }
 
     lint {
-        abortOnError false
-        checkReleaseBuilds false
+        // 同 app 模块：只关掉确认无意义的规则，保留 abortOnError 默认（true）作为质量门禁。
+        // MissingTranslation：本库无独立多语种资源，缺翻译是预期状态。
+        // MissingSuperCall：ReportActivity / TextIOActivity 的 onBackPressed() 刻意不调 super，
+        //   已在两处覆写点用 @SuppressLint 标注。
         disable 'MissingTranslation'
+        disable 'MissingSuperCall'
     }
 }
 

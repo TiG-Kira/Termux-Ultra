@@ -7,6 +7,7 @@ import androidx.appcompat.widget.Toolbar;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import android.annotation.SuppressLint;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -203,9 +204,11 @@ public class ReportActivity extends AppCompatActivity {
         return true;
     }
 
+    // 刻意不调用 super.onBackPressed()：这里要在返回时把整个任务从最近任务移除，
+    // 交给 finishAndRemoveTask() 统一处理，super 的默认 finish() 是多余的。
+    @SuppressLint("MissingSuperCall")
     @Override
     public void onBackPressed() {
-        super.onBackPressed();
         // Remove activity from recents menu on back button press
         finishAndRemoveTask();
     }
