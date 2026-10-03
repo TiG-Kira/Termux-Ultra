@@ -36,6 +36,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Send
 import androidx.compose.material.icons.rounded.Checklist
 import androidx.compose.material.icons.rounded.DeleteSweep
+import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.runtime.*
@@ -141,7 +142,7 @@ class AiTermuxActivity : FragmentActivity() {
     override fun onPause() {
         super.onPause()
         val vm: AiTermuxViewModel by viewModels()
-        AiTermuxPrefs.saveChatHistory(this, vm.messages.toOpenAiMessages())
+        vm.persistConversations(this)
     }
 
     override fun onDestroy() {
@@ -192,6 +193,17 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
     }
 
     var messages = mutableStateListOf<ChatMessage>()
+        private set
+
+    /** 当前 Agent 下的全部对话（多会话管理）。 */
+    val conversations = mutableStateListOf<AiConversation>()
+
+    /** 当前正在展示/编辑的对话 ID。 */
+    var activeConversationId by mutableStateOf(DEFAULT_CONVERSATION_ID)
+        private set
+
+    /** 当前对话的标题（含默认「Termux Agent」），供顶栏展示。 */
+    var activeConversationTitle by mutableStateOf(DEFAULT_CONVERSATION_TITLE)
         private set
 
     var isLoading by mutableStateOf(false)
@@ -275,13 +287,21 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
                 ))
             }
         }
-        AiTermuxPrefs.saveChatHistory(ctx, messages.toOpenAiMessages())
+        persistConversations(ctx)
     }
 
     init {
-        val history = AiTermuxPrefs.getChatHistory(app)
-        messages.addAll(history.toChatMessages())
         val ctx = getApplication<android.app.Application>()
+        // 加载全部对话（含旧版本单对话迁移到默认「Termux Agent」），并恢复当前对话
+        val loaded = AiTermuxPrefs.getConversations(ctx)
+        conversations.addAll(loaded)
+        val savedActive = AiTermuxPrefs.getActiveConversationId(ctx)
+        val active = loaded.firstOrNull { it.id == savedActive }
+            ?: loaded.firstOrNull { it.id == DEFAULT_CONVERSATION_ID }
+            ?: loaded.firstOrNull()
+        activeConversationId = active?.id ?: DEFAULT_CONVERSATION_ID
+        activeConversationTitle = active?.title ?: DEFAULT_CONVERSATION_TITLE
+        messages.addAll(active?.messages ?: emptyList())
         // 根据实际配置初始化 useLocalModel：只有 provider 为 local 时才可能使用本地模型
         useLocalModel = config.providerConfig.provider == "local"
         val intent = Intent(ctx, TermuxService::class.java)
@@ -291,6 +311,78 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
             loadMemoryMd(ctx)
         }
     }
+
+    /** 将当前对话的实时消息落盘（写入对应对话快照 + 持久化整个对话列表与激活 ID）。 */
+    fun persistConversations(ctx: Context) {
+        val now = System.currentTimeMillis()
+        val snapshot = synchronized(messages) { messages.toList() }
+        val idx = conversations.indexOfFirst { it.id == activeConversationId }
+        if (idx >= 0) {
+            conversations[idx] = conversations[idx].copy(messages = snapshot, updatedAt = now)
+        } else {
+            val created = AiConversation(activeConversationId, activeConversationTitle, snapshot, now, now)
+            conversations.add(created)
+        }
+        AiTermuxPrefs.saveConversations(ctx, conversations.toList())
+        AiTermuxPrefs.setActiveConversationId(ctx, activeConversationId)
+    }
+
+    /** 新建一个空白对话并切换为当前对话。 */
+    fun newConversation(ctx: Context) {
+        persistConversations(ctx)
+        val now = System.currentTimeMillis()
+        val id = "conv_$now"
+        val title = "$DEFAULT_CONVERSATION_TITLE · ${conversations.size}"
+        activeConversationId = id
+        activeConversationTitle = title
+        conversations.add(AiConversation(id, title, emptyList(), now, now))
+        synchronized(messages) { messages.clear() }
+        AiTermuxPrefs.setActiveConversationId(ctx, id)
+    }
+
+    /** 切换到指定对话（先落盘当前对话）。 */
+    fun selectConversation(ctx: Context, id: String) {
+        persistConversations(ctx)
+        val target = conversations.firstOrNull { it.id == id } ?: return
+        activeConversationId = id
+        activeConversationTitle = target.title
+        synchronized(messages) { messages.clear(); messages.addAll(target.messages) }
+    }
+
+    /** 重命名指定对话（标题同步到当前对话展示）。 */
+    fun renameConversation(id: String, title: String) {
+        val idx = conversations.indexOfFirst { it.id == id }
+        if (idx < 0) return
+        val trimmed = title.ifBlank { DEFAULT_CONVERSATION_TITLE }
+        conversations[idx] = conversations[idx].copy(title = trimmed)
+        if (id == activeConversationId) activeConversationTitle = trimmed
+        val now = getApplication<android.app.Application>()
+        AiTermuxPrefs.saveConversations(now, conversations.toList())
+    }
+
+    /** 删除指定对话；若删除的是当前对话则回退到默认「Termux Agent」，并确保至少保留一个对话。 */
+    fun deleteConversation(ctx: Context, id: String) {
+        val idx = conversations.indexOfFirst { it.id == id }
+        if (idx < 0) return
+        conversations.removeAt(idx)
+        if (activeConversationId == id) {
+            val fallback = conversations.firstOrNull { it.id == DEFAULT_CONVERSATION_ID }
+                ?: conversations.firstOrNull()
+            if (fallback == null) {
+                val now = System.currentTimeMillis()
+                val def = AiConversation(DEFAULT_CONVERSATION_ID, DEFAULT_CONVERSATION_TITLE, emptyList(), now, now)
+                conversations.add(def)
+                activeConversationId = DEFAULT_CONVERSATION_ID
+                activeConversationTitle = DEFAULT_CONVERSATION_TITLE
+                synchronized(messages) { messages.clear() }
+            } else {
+                selectConversation(ctx, fallback.id)
+                return
+            }
+        }
+        persistConversations(ctx)
+    }
+
 
     private suspend fun loadMemoryMd(context: Context) {
         try {
@@ -341,7 +433,7 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
                         errorMessage = "操作失败: ${e.message ?: "未知错误"}"
                     ))
                 }
-                AiTermuxPrefs.saveChatHistory(ctx, messages.toOpenAiMessages())
+                persistConversations(ctx)
             }
         }
     }
@@ -357,7 +449,7 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
 
         val userMsg = ChatMessage(role = "user", content = text)
         synchronized(messages) { messages.add(userMsg) }
-        AiTermuxPrefs.saveChatHistory(ctx, messages.toOpenAiMessages())
+        persistConversations(ctx)
 
         generationJob = runInScope {
             isLoading = true
@@ -367,7 +459,7 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
             } finally {
                 isLoading = false
                 LiveUpdateState.agentStop()
-                AiTermuxPrefs.saveChatHistory(ctx, messages.toOpenAiMessages())
+                persistConversations(ctx)
             }
         }
     }
@@ -383,7 +475,7 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
             if (result != null) {
                 android.util.Log.i("AiTermux", "会话压缩完成: ${result.keptRecent} 条保留，摘要长度 ${result.summary.length}")
                 // 压缩后重新保存
-                AiTermuxPrefs.saveChatHistory(ctx, messages.toOpenAiMessages())
+                persistConversations(ctx)
             }
         } catch (e: Exception) {
             android.util.Log.e("AiTermux", "会话压缩失败（忽略，继续正常流程）", e)
@@ -484,7 +576,7 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
         }
         val userMsg = ChatMessage(role = "user", content = "[用户回答] ${card.askQuestion}\n回答：$answer")
         synchronized(messages) { messages.add(userMsg) }
-        AiTermuxPrefs.saveChatHistory(ctx, messages.toOpenAiMessages())
+        persistConversations(ctx)
 
         generationJob = runInScope {
             isLoading = true
@@ -494,7 +586,7 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
             } finally {
                 isLoading = false
                 LiveUpdateState.agentStop()
-                AiTermuxPrefs.saveChatHistory(ctx, messages.toOpenAiMessages())
+                persistConversations(ctx)
             }
         }
     }
@@ -556,7 +648,7 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
                 skillCard = card.copy(status = SkillStatus.RUNNING, title = "等待二次确认…")
             )
         }
-        AiTermuxPrefs.saveChatHistory(ctx, messages.toOpenAiMessages())
+        persistConversations(ctx)
 
         // 跳转到主页进行二次确认
         val intent = Intent(ctx, com.termux.app.MainActivity::class.java)
@@ -583,7 +675,7 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
                 skillCard = card.copy(status = SkillStatus.RUNNING, title = "正在执行…")
             )
         }
-        AiTermuxPrefs.saveChatHistory(ctx, messages.toOpenAiMessages())
+        persistConversations(ctx)
 
         generationJob = runInScope {
             isLoading = true
@@ -610,14 +702,14 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
                         )
                     }
                 }
-                AiTermuxPrefs.saveChatHistory(ctx, messages.toOpenAiMessages())
+                persistConversations(ctx)
                 continueAfterSkill(ctx, resultCard, result.message)
             } finally {
                 // 恢复风险确认标志
                 RiskConfirmManager.setSkipRiskCheck(false)
                 isLoading = false
                 LiveUpdateState.agentStop()
-                AiTermuxPrefs.saveChatHistory(ctx, messages.toOpenAiMessages())
+                persistConversations(ctx)
             }
         }
     }
@@ -641,7 +733,7 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
                 )
             )
         }
-        AiTermuxPrefs.saveChatHistory(ctx, messages.toOpenAiMessages())
+        persistConversations(ctx)
 
         generationJob = runInScope {
             isLoading = true
@@ -651,7 +743,7 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
             } finally {
                 isLoading = false
                 LiveUpdateState.agentStop()
-                AiTermuxPrefs.saveChatHistory(ctx, messages.toOpenAiMessages())
+                persistConversations(ctx)
             }
         }
     }
@@ -674,7 +766,7 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
                 )
             )
         }
-        AiTermuxPrefs.saveChatHistory(ctx, messages.toOpenAiMessages())
+        persistConversations(ctx)
 
         generationJob = runInScope {
             isLoading = true
@@ -684,7 +776,7 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
             } finally {
                 isLoading = false
                 LiveUpdateState.agentStop()
-                AiTermuxPrefs.saveChatHistory(ctx, messages.toOpenAiMessages())
+                persistConversations(ctx)
             }
         }
     }
@@ -896,7 +988,7 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
 
 // 流结束后，处理消息
             if (wasCancelled) {
-                AiTermuxPrefs.saveChatHistory(ctx, messages.toOpenAiMessages())
+                persistConversations(ctx)
                 return
             }
 
@@ -910,7 +1002,7 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
                         )
                     }
                 }
-                AiTermuxPrefs.saveChatHistory(ctx, messages.toOpenAiMessages())
+                persistConversations(ctx)
                 return
             }
 
@@ -927,7 +1019,7 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
                         )
                     }
                 }
-                AiTermuxPrefs.saveChatHistory(ctx, messages.toOpenAiMessages())
+                persistConversations(ctx)
                 // 自动续生：告诉 AI 跳过思考直接输出
                 currentUserText = "[你的深度思考因 token 限制被截断了。请跳过思考过程，直接输出最终回复（包括需要的技能卡片）。]"
                 streamFinishReason = null
@@ -948,7 +1040,7 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
                         )
                     }
                 }
-                AiTermuxPrefs.saveChatHistory(ctx, messages.toOpenAiMessages())
+                persistConversations(ctx)
                 return
             }
 
@@ -969,7 +1061,7 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
                         )
                     }
                 }
-                AiTermuxPrefs.saveChatHistory(ctx, messages.toOpenAiMessages())
+                persistConversations(ctx)
                 currentUserText = "[你的回复因 token 限制被截断了。请从截断处继续完成剩余内容。]"
                 streamFinishReason = null
                 continue
@@ -987,7 +1079,7 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
                         )
                     }
                 }
-                AiTermuxPrefs.saveChatHistory(ctx, messages.toOpenAiMessages())
+                persistConversations(ctx)
                 return
             }
 
@@ -1028,7 +1120,7 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
                             )
                         }
                     }
-                    AiTermuxPrefs.saveChatHistory(ctx, messages.toOpenAiMessages())
+                    persistConversations(ctx)
                     // 继续执行下面的技能解析和执行逻辑，跳过幻觉检测
                     // 不设置 continue，让代码走到下面的正常流程
                 } else {
@@ -1049,7 +1141,7 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
                             )
                         }
                     }
-                    AiTermuxPrefs.saveChatHistory(ctx, messages.toOpenAiMessages())
+                    persistConversations(ctx)
 
                     val shortReason = finalViolations.firstOrNull() ?: "违反输出规范"
                     val originalReplyPreview = replyText.take(300) + if (replyText.length > 300) "..." else ""
@@ -1156,7 +1248,7 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
                         )
                     }
                 }
-                AiTermuxPrefs.saveChatHistory(ctx, messages.toOpenAiMessages())
+                persistConversations(ctx)
                 // 用简短消息告诉 AI 不要再重复
                 currentUserText = "[系统] 你连续多次输出了相同的技能，请直接回答用户的问题，不要重复执行已完成的操作。"
                 // 重置连续计数，防止立即再次触发
@@ -1204,7 +1296,7 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
                         )
                     }
                 }
-                AiTermuxPrefs.saveChatHistory(ctx, messages.toOpenAiMessages())
+                persistConversations(ctx)
             }
 
             // 更新消息文本
@@ -1218,7 +1310,7 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
                     }
                 }
             }
-            AiTermuxPrefs.saveChatHistory(ctx, messages.toOpenAiMessages())
+            persistConversations(ctx)
 
             // 清理被拦截的技能集合
             hallucinatedSkillKeys = emptySet()
@@ -1254,7 +1346,7 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
                             )
                         }
                     }
-                    AiTermuxPrefs.saveChatHistory(ctx, messages.toOpenAiMessages())
+                    persistConversations(ctx)
                     return
                 }
             }
@@ -1307,7 +1399,7 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
                             )
                         )
                     }
-                    AiTermuxPrefs.saveChatHistory(ctx, messages.toOpenAiMessages())
+                    persistConversations(ctx)
                     needsUserInput = true
                     break
                 }
@@ -1364,14 +1456,14 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
 
                         if (resultCard.skillType == SkillType.ASK_USER) {
                             needsUserInput = true
-                            AiTermuxPrefs.saveChatHistory(ctx, messages.toOpenAiMessages())
+                            persistConversations(ctx)
                             break
                         }
 
                         allResultTexts.add(buildSkillResultText(resultCard, result.message))
                     }
                 }
-                AiTermuxPrefs.saveChatHistory(ctx, messages.toOpenAiMessages())
+                persistConversations(ctx)
                 withContext(Dispatchers.IO) { kotlinx.coroutines.delay(150) }
             }
 
@@ -1457,7 +1549,7 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
         val ctx = getApplication<android.app.Application>()
         synchronized(messages) { messages.clear() }
         SkillExecutor.clearTasks()
-        AiTermuxPrefs.clearChatHistory(ctx)
+        persistConversations(ctx)
     }
 
     /** 重新生成最后一条回复：回退到最后一条用户消息并重发 */
@@ -1470,14 +1562,14 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
             if (idx < 0) null else messages.removeAt(idx).content
         } ?: return
         val ctx = getApplication<android.app.Application>()
-        AiTermuxPrefs.saveChatHistory(ctx, messages.toOpenAiMessages())
+        persistConversations(ctx)
         sendUserMessage(lastUserText)
     }
 
     fun deleteMessage(messageId: String) {
         val ctx = getApplication<android.app.Application>()
         synchronized(messages) { messages.removeAll { it.id == messageId } }
-        AiTermuxPrefs.saveChatHistory(ctx, messages.toOpenAiMessages())
+        persistConversations(ctx)
     }
 
     /** 导出整段对话为纯文本并调用系统分享 */
@@ -1516,12 +1608,27 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
 @Composable
 private fun AiTermuxRoot(vm: AiTermuxViewModel, onBack: () -> Unit) {
     var showSetup by remember { mutableStateOf(false) }
+    // null = 对话管理页；非 null = 指定对话 ID 的对话页
+    var openConversationId by remember { mutableStateOf<String?>(null) }
     if (!vm.config.isConfigured || showSetup) {
         AiSetupScreen(vm = vm, onBack = {
             if (showSetup) showSetup = false else onBack()
         })
+    } else if (openConversationId == null) {
+        // 已配置 Agent：从入口进入默认展示对话管理页
+        AiConversationManagementScreen(
+            vm = vm,
+            onBack = onBack,
+            onOpenConversation = { id -> openConversationId = id },
+            onOpenSetup = { showSetup = true }
+        )
     } else {
-        AiChatScreen(vm = vm, onBack = onBack, onOpenSetup = { showSetup = true })
+        AiChatScreen(
+            vm = vm,
+            conversationId = openConversationId!!,
+            onBack = { openConversationId = null },
+            onOpenSetup = { showSetup = true }
+        )
     }
 }
 
@@ -2469,20 +2576,245 @@ private fun ProviderChip(label: String, value: String, selected: String, isDark:
     }
 }
 
+/** -------------------- 多会话管理页 -------------------- */
+
+/**
+ * 顶栏副标题：与对话页一致的「在线/离线模型 · 模型名」文案。
+ */
+private fun modelStatusSubtitle(ctx: Context, vm: AiTermuxViewModel): String {
+    val isLocal = vm.useLocalModel
+    val cfg = vm.config.providerConfig
+    val modelName = if (isLocal) {
+        cfg.localModelId.ifBlank { "本地模型" }
+    } else if (cfg.provider == "local") {
+        AiTermuxPrefs.getFallbackOnlineConfig(ctx).model.ifBlank { "在线模型" }
+    } else {
+        cfg.model.ifBlank { "在线模型" }
+    }
+    val providerLabel = if (isLocal) "本地模型" else "在线模型"
+    return "$providerLabel · $modelName"
+}
+
+/** 相对时间（刚刚 / N 分钟前 / N 小时前 / N 天前 / 日期）。 */
+private fun formatRelativeTime(ts: Long): String {
+    val now = System.currentTimeMillis()
+    val diff = now - ts
+    val min = 60_000L
+    val hour = 60 * min
+    val day = 24 * hour
+    return when {
+        diff < min -> "刚刚"
+        diff < hour -> "${diff / min} 分钟前"
+        diff < day -> "${diff / hour} 小时前"
+        diff < 30 * day -> "${diff / day} 天前"
+        else -> java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date(ts))
+    }
+}
+
+@Composable
+private fun AiConversationManagementScreen(
+    vm: AiTermuxViewModel,
+    onBack: () -> Unit,
+    onOpenConversation: (String) -> Unit,
+    onOpenSetup: () -> Unit
+) {
+    val ctx = LocalContext.current
+    // 与设置页等独立页一致：自建取景层供玻璃顶栏折射页面内容
+    val glassPage = rememberGlassPageBackdrop()
+    val scrollBehavior = MiuixScrollBehavior()
+    val isDark = isSystemInDarkTheme()
+
+    var pendingDeleteId by remember { mutableStateOf<String?>(null) }
+
+    // 默认「Termux Agent」置顶，其余按更新时间倒序
+    val ordered = vm.conversations.sortedWith(compareByDescending<AiConversation> { it.id == DEFAULT_CONVERSATION_ID }
+        .thenByDescending { it.updatedAt })
+
+    Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        topBar = {
+            GlassTopAppBar(
+                title = DEFAULT_CONVERSATION_TITLE,
+                backdrop = glassPage.backdrop,
+                subtitle = modelStatusSubtitle(ctx, vm),
+                scrollBehavior = scrollBehavior,
+                navigationIcon = {
+                    GlassIconButton(onClick = { onBack() }) {
+                        Icon(
+                            imageVector = MiuixIcons.Back,
+                            contentDescription = null,
+                            modifier = Modifier.size(24.dp),
+                            tint = MiuixTheme.colorScheme.onSurface
+                        )
+                    }
+                },
+                actions = {
+                    GlassIconButton(onClick = { vm.newConversation(ctx) }) {
+                        Icon(
+                            imageVector = Icons.Rounded.Add,
+                            contentDescription = "新建对话",
+                            modifier = Modifier.size(24.dp),
+                            tint = MiuixTheme.colorScheme.onSurface
+                        )
+                    }
+                }
+            )
+        }
+    ) { padding ->
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .then(glassPage.contentModifier)
+                .padding(pagePaddingWithoutTop(padding))
+                .nestedScroll(scrollBehavior.nestedScrollConnection),
+            contentPadding = standaloneContentPadding(padding, top = 16.dp, bottom = 16.dp, start = 16.dp, end = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            item {
+                // 新建对话入口卡
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(if (isDark) Color(0xFF1C1C1E) else Color.White)
+                        .then(Modifier.border(0.5.dp, if (isDark) Color(0xFF2C2C2E) else Color(0xFFE8E8E8), RoundedCornerShape(16.dp)))
+                        .clickable { vm.newConversation(ctx) }
+                        .padding(horizontal = 16.dp, vertical = 14.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(CircleShape)
+                                .background(MiuixTheme.colorScheme.primary.copy(alpha = 0.12f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Add,
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp),
+                                tint = MiuixTheme.colorScheme.primary
+                            )
+                        }
+                        Text(
+                            text = "新建对话",
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MiuixTheme.colorScheme.onSurface
+                        )
+                    }
+                }
+            }
+
+            items(ordered, key = { it.id }) { conv ->
+                val preview = conv.messages.lastOrNull()?.content?.lineSequence()?.firstOrNull().orEmpty().ifBlank { "暂无消息" }
+                val isDefault = conv.id == DEFAULT_CONVERSATION_ID
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(if (isDark) Color(0xFF1C1C1E) else Color.White)
+                        .then(Modifier.border(0.5.dp, if (isDark) Color(0xFF2C2C2E) else Color(0xFFE8E8E8), RoundedCornerShape(16.dp)))
+                        .clickable { onOpenConversation(conv.id) }
+                        .padding(horizontal = 16.dp, vertical = 14.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Text(
+                                    text = conv.title,
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MiuixTheme.colorScheme.onSurface
+                                )
+                                if (isDefault) {
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .background(MiuixTheme.colorScheme.primary.copy(alpha = 0.14f))
+                                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                                    ) {
+                                        Text(
+                                            text = "默认",
+                                            fontSize = 11.sp,
+                                            color = MiuixTheme.colorScheme.primary
+                                        )
+                                    }
+                                }
+                            }
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                text = preview,
+                                fontSize = 13.sp,
+                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                text = "${conv.messages.size} 条消息 · ${formatRelativeTime(conv.updatedAt)}",
+                                fontSize = 11.sp,
+                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                            )
+                        }
+                        GlassIconButton(
+                            onClick = { pendingDeleteId = conv.id },
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.DeleteSweep,
+                                contentDescription = "删除对话",
+                                modifier = Modifier.size(20.dp),
+                                tint = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    OverlayDialog(
+        show = pendingDeleteId != null,
+        onDismissRequest = { pendingDeleteId = null },
+        title = "删除对话",
+        summary = "将删除该对话的全部内容，此操作不可撤销。",
+        content = {
+            Row(horizontalArrangement = Arrangement.SpaceBetween) {
+                TextButton(text = "取消", onClick = { pendingDeleteId = null }, modifier = Modifier.weight(1f))
+                Spacer(Modifier.width(16.dp))
+                TextButton(
+                    text = "删除",
+                    onClick = {
+                        pendingDeleteId?.let { vm.deleteConversation(ctx, it) }
+                        pendingDeleteId = null
+                    },
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.textButtonColors(color = Color(0xFFF44336))
+                )
+            }
+        }
+    )
+}
+
 /** -------------------- 聊天界面 -------------------- */
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun AiChatScreen(vm: AiTermuxViewModel, onBack: () -> Unit, onOpenSetup: () -> Unit) {
+private fun AiChatScreen(vm: AiTermuxViewModel, conversationId: String, onBack: () -> Unit, onOpenSetup: () -> Unit) {
     val ctx = LocalContext.current
-    // 本页在 MainScreen 取景层之外，自建一层供玻璃顶栏折射页面内容
-    val glassPage = rememberGlassPageBackdrop()
     val scrollBehavior = MiuixScrollBehavior()
     val listState = rememberLazyListState()
     val isDark = isSystemInDarkTheme()
     val focusRequester = remember { FocusRequester() }
     var inputText by remember { mutableStateOf("") }
     var pendingAttachment by remember { mutableStateOf<Triple<String, String, Long>?>(null) }
+
+    // 进入对话页时，若当前激活对话不是目标对话，则切换（从管理页点进来 / 新建后进入）
+    LaunchedEffect(conversationId) {
+        if (vm.activeConversationId != conversationId) {
+            vm.selectConversation(ctx, conversationId)
+        }
+    }
 
 
     // 文件/图片选择器
@@ -2551,37 +2883,11 @@ private fun AiChatScreen(vm: AiTermuxViewModel, onBack: () -> Unit, onOpenSetup:
         Scaffold(
             contentWindowInsets = WindowInsets(0, 0, 0, 0),
             topBar = {
-                GlassTopAppBar(
-                    title = "Termux Agent",
-                    backdrop = glassPage.backdrop,
-                    subtitle = run {
-                        val isLocal = vm.useLocalModel
-                        val cfg = vm.config.providerConfig
-                        val modelName = if (isLocal) {
-                            cfg.localModelId.ifBlank { "本地模型" }
-                        } else if (cfg.provider == "local") {
-                            // provider 为 local 时切到在线 = 使用备用在线模型，显示其真实名称
-                            AiTermuxPrefs.getFallbackOnlineConfig(ctx).model.ifBlank { "在线模型" }
-                        } else {
-                            cfg.model.ifBlank { "在线模型" }
-                        }
-                        val providerLabel = if (isLocal) "本地模型" else "在线模型"
-                        "$providerLabel · $modelName"
-                    },
-                    scrollBehavior = scrollBehavior,
-                    navigationIcon = {
-                        GlassIconButton(onClick = { onBack() }) {
-                            Icon(
-                                imageVector = MiuixIcons.Back,
-                                contentDescription = null,
-                                modifier = Modifier.size(24.dp),
-                                tint = MiuixTheme.colorScheme.onSurface
-                            )
-                        }
-                    },
-                    actions = {
-                        AiChatTopActions(vm, onOpenSetup = onOpenSetup)
-                    },
+                AiChatImessageTopBar(
+                    vm = vm,
+                    onBack = onBack,
+                    onOpenSetup = onOpenSetup,
+                    onNewConversation = { vm.newConversation(ctx) }
                 )
             },
             bottomBar = {
@@ -2772,7 +3078,6 @@ private fun AiChatScreen(vm: AiTermuxViewModel, onBack: () -> Unit, onOpenSetup:
                 state = listState,
                 modifier = Modifier
                     .fillMaxSize()
-                    .then(glassPage.contentModifier)
                     .padding(pagePaddingWithoutTop(padding))
                     .nestedScroll(scrollBehavior.nestedScrollConnection),
                 contentPadding = standaloneContentPadding(padding, top = 14.dp, bottom = 14.dp, start = 14.dp, end = 14.dp),
@@ -2816,6 +3121,83 @@ private fun AiChatScreen(vm: AiTermuxViewModel, onBack: () -> Unit, onOpenSetup:
 
     // 风险命令确认弹窗
     com.termux.app.compose.RiskConfirmDialogHost()
+}
+
+/**
+ * 对话页自建顶栏：iMessage 对话风格（居中大标题 + 副标题在线/离线模型 + 返回 chevron），
+ * 不使用 GlassTopAppBar。按钮与主题元素沿用 miuix / miuix-glass（GlassIconButton）。
+ */
+@Composable
+private fun AiChatImessageTopBar(
+    vm: AiTermuxViewModel,
+    onBack: () -> Unit,
+    onOpenSetup: () -> Unit,
+    onNewConversation: () -> Unit
+) {
+    val ctx = LocalContext.current
+    val isDark = isSystemInDarkTheme()
+    val subtitle = modelStatusSubtitle(ctx, vm)
+    val surface = MiuixTheme.colorScheme.surface
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(surface.copy(alpha = 0.96f))
+            .statusBarsPadding()
+    ) {
+        Column(Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(52.dp)
+                    .padding(horizontal = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // 左侧：返回 chevron（miuix-glass 玻璃按钮）
+                GlassIconButton(onClick = onBack) {
+                    Icon(
+                        imageVector = MiuixIcons.Back,
+                        contentDescription = "返回",
+                        modifier = Modifier.size(24.dp),
+                        tint = MiuixTheme.colorScheme.onSurface
+                    )
+                }
+                // 居中：标题 + 副标题（iMessage 风格）
+                Column(
+                    modifier = Modifier.weight(1f),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = vm.activeConversationTitle,
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MiuixTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    if (subtitle.isNotBlank()) {
+                        Text(
+                            text = subtitle,
+                            fontSize = 12.sp,
+                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+                // 右侧：新建对话 + 任务/更多（沿用 AiChatTopActions）
+                GlassIconButton(onClick = onNewConversation) {
+                    Icon(
+                        imageVector = Icons.Rounded.Add,
+                        contentDescription = "新建对话",
+                        modifier = Modifier.size(24.dp),
+                        tint = MiuixTheme.colorScheme.onSurface
+                    )
+                }
+                AiChatTopActions(vm, onOpenSetup = onOpenSetup)
+            }
+            HorizontalDivider(color = if (isDark) Color(0xFF2A2A2A) else Color(0xFFE8E8E8))
+        }
+    }
 }
 
 /** 对话页顶栏右侧操作：任务全量列表 + 更多操作菜单 */
