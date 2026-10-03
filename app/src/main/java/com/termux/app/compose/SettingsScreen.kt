@@ -35,7 +35,7 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
 import top.yukonga.miuix.kmp.basic.LinearProgressIndicator
 import top.yukonga.miuix.kmp.basic.Scaffold
-import top.yukonga.miuix.kmp.basic.TopAppBar
+import top.yukonga.miuix.kmp.glass.GlassTopAppBar
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Icon
@@ -579,7 +579,11 @@ val composeUseCustomKeyboardLayout by com.termux.app.terminal.shell.ComposeTermi
     SideEffect {
         if (active) {
             onTopBarContent {
-                TopAppBar(title = context.getString(R.string.settings_title), scrollBehavior = scrollBehavior)
+                GlassTopAppBar(
+                    title = context.getString(R.string.settings_title),
+                    backdrop = LocalGlassTopAppBarBackdrop.current,
+                    scrollBehavior = scrollBehavior,
+                )
             }
         }
     }

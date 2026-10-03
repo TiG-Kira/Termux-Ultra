@@ -25,6 +25,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -36,6 +37,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.BlurredEdgeTreatment
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
@@ -93,9 +95,9 @@ object GlassNavigationBarDefaults {
     val Height: Dp = 54.dp
 
     /** Size of an icon. */
-    val IconSize: Dp = 30.dp
+    val IconSize: Dp = 28.dp
 
-    /** Caption size in dp, matching the source's footnote3 dimension resource. */
+    /** Caption size in dp. */
     val LabelSize: Dp = 11.dp
 
     /** Caption size used when the system font scale reaches 1.6. */
@@ -131,13 +133,7 @@ object GlassNavigationBarDefaults {
         isDark = MiuixTheme.colorScheme.background.luminance() < 0.5f,
     )
 
-    /**
-     * Resting fill of the capsule.
-     *
-     * The source builds all three of the capsule's states out of one colour at three alphas, not
-     * out of three colours: white over a dark page, black over a light one. This is the first of
-     * them.
-     */
+    /** Resting fill of the capsule: the first of three alphas of one colour. */
     @Composable
     fun indicatorColor(): Color = if (MiuixTheme.colorScheme.background.luminance() < 0.5f) {
         Color.White.copy(alpha = 0.12f)
@@ -145,13 +141,7 @@ object GlassNavigationBarDefaults {
         Color.Black.copy(alpha = 0.06f)
     }
 
-    /**
-     * Fill of the capsule under a finger.
-     *
-     * The same colour, roughly twice as strong. The capsule does not change hue when it is held —
-     * over a dark page that reads as the capsule lighting up, and what darkens is the destination
-     * inside it, by [PressedAlpha].
-     */
+    /** Fill of the capsule under a finger: the same colour at roughly twice the alpha. */
     @Composable
     fun indicatorPressedColor(): Color = if (MiuixTheme.colorScheme.background.luminance() < 0.5f) {
         Color.White.copy(alpha = 0.26f)
@@ -163,11 +153,8 @@ object GlassNavigationBarDefaults {
 /**
  * A floating bottom bar on glass.
  *
- * While dragging within a destination, the indicator follows a spring with damping 1 and
- * response 0.15s. Its trailing edge stretches by four times each pointer delta, capped at 60px.
- * Crossing destinations uses the directional edge springs; release retargets the same animated
- * edges without snapping them to the pointer. Rendered edges stay within the outermost items,
- * including during spring overshoot. Selection callbacks still run on press and drag.
+ * The indicator follows the pointer while dragging and settles from its current position and
+ * velocity on release, without ever overshooting past the outermost destinations.
  *
  * @param items The destinations, in order.
  * @param selectedIndex The index of the current destination.
@@ -183,13 +170,12 @@ object GlassNavigationBarDefaults {
  * @param shadow The shadow the floating capsule casts. `null` removes it.
  * @param height Minimum bar height. Content can grow for two-line or large-font captions.
  * @param material The bar's own body — the blur radius and the colour layers over it. `null`
- *   leaves the bar transparent, which over a dark page reads as a hole rather than as a panel.
+ *   leaves the bar transparent.
  * @param indicatorPressedColor Fill of the capsule while a finger is on it.
- * @param indicatorColor Fill of the capsule behind the selected destination. Neutral rather than
- *   accented — the source bar tints the icon, not the indicator.
+ * @param indicatorColor Fill of the capsule behind the selected destination.
  * @param selectedColor Tint of the selected icon and label.
- * @param unselectedColor Tint of the others. The source bar does not dim them: every destination
- *   is drawn at full strength and the indicator alone says which one is current.
+ * @param unselectedColor Tint of the others. They are not dimmed; the indicator alone says which
+ *   one is current.
  */
 @Composable
 fun GlassNavigationBar(
@@ -278,7 +264,7 @@ fun GlassNavigationBar(
         animationSpec = if (chipPressed) GlassMotion.pressDown() else GlassMotion.pressUp(),
         label = "glassNavigationIndicatorPress",
     )
-    val chipFill by animateColorAsState(
+    val chipFill = animateColorAsState(
         targetValue = if (chipPressed) indicatorPressedColor else indicatorColor,
         animationSpec = if (chipPressed) GlassMotion.navPressEnter() else GlassMotion.navPressExit(),
         label = "glassNavigationIndicatorFill",
@@ -387,8 +373,8 @@ fun GlassNavigationBar(
                 .matchParentSize()
                 .padding(vertical = GlassNavigationBarDefaults.IndicatorPaddingVertical)
                 .layout { measurable, constraints ->
-                    // OverlayView clamps in LEFT_PROPERTY/RIGHT_PROPERTY on every frame, not
-                    // just at the target. Keep the spring alive so the other edge still rebounds.
+                    // Both edges are clamped on every frame, not just at the target. Keep the
+                    // spring alive so the other edge still rebounds.
                     val bounds = navigationIndicatorBounds(
                         left.value,
                         right.value,
@@ -409,7 +395,7 @@ fun GlassNavigationBar(
                     scaleY = chipScale
                 }
                 .clip(RoundedCornerShape(percent = 50))
-                .background(chipFill),
+                .drawBehind { drawRect(chipFill.value) },
         )
 
         Row(
@@ -420,80 +406,82 @@ fun GlassNavigationBar(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             items.forEachIndexed { position, item ->
-                val selected = position == index
-                val tint by animateColorAsState(
-                    targetValue = if (selected) selectedColor else unselectedColor,
-                    animationSpec = GlassMotion.navContent(),
-                    label = "glassNavigationTint",
-                )
-                val pressAlpha by animateFloatAsState(
-                    targetValue = if (position == pressedIndex) {
-                        GlassNavigationBarDefaults.PressedAlpha
-                    } else {
-                        1f
-                    },
-                    animationSpec = GlassMotion.navContentFloat(),
-                    label = "glassNavigationPress",
-                )
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .padding(
-                            horizontal = GlassNavigationBarDefaults.IndicatorOverhang,
-                            vertical = GlassNavigationBarDefaults.ContentPaddingVertical,
-                        )
-                        .then(
-                            if (interactionEnabled) {
-                                Modifier
-                                    .semantics(mergeDescendants = true) {
-                                        this.role = Role.Tab
-                                        this.selected = selected
-                                        (item.contentDescription ?: item.label)?.let {
-                                            this.contentDescription = it
-                                        }
-                                        onClick {
-                                            onSelectState(position)
-                                            true
-                                        }
-                                    }
-                                    .onKeyEvent { event ->
-                                        val activationKey = event.key == Key.Enter ||
-                                            event.key == Key.NumPadEnter ||
-                                            event.key == Key.Spacebar
-                                        if (activationKey) {
-                                            if (event.type == KeyEventType.KeyUp) onSelectState(position)
-                                            true
-                                        } else {
-                                            false
-                                        }
-                                    }
-                                    .focusable()
-                            } else {
-                                Modifier.clearAndSetSemantics { }
-                            },
-                        )
-                        .graphicsLayer { this.alpha = pressAlpha },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    androidx.compose.foundation.layout.Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(GlassNavigationBarDefaults.LabelSpacing),
-                    ) {
-                        Icon(
-                            imageVector = item.icon,
-                            contentDescription = null,
-                            modifier = Modifier.size(GlassNavigationBarDefaults.IconSize),
-                            tint = tint,
-                        )
-                        if (item.label != null) {
-                            Text(
-                                text = item.label,
-                                style = MiuixTheme.textStyles.footnote2.copy(fontSize = labelSize),
-                                color = tint,
-                                textAlign = TextAlign.Center,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis,
+                key(item) {
+                    val selected = position == index
+                    val tint by animateColorAsState(
+                        targetValue = if (selected) selectedColor else unselectedColor,
+                        animationSpec = GlassMotion.navContent(),
+                        label = "glassNavigationTint",
+                    )
+                    val pressAlpha = animateFloatAsState(
+                        targetValue = if (position == pressedIndex) {
+                            GlassNavigationBarDefaults.PressedAlpha
+                        } else {
+                            1f
+                        },
+                        animationSpec = GlassMotion.navContentFloat(),
+                        label = "glassNavigationPress",
+                    )
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(
+                                horizontal = GlassNavigationBarDefaults.IndicatorOverhang,
+                                vertical = GlassNavigationBarDefaults.ContentPaddingVertical,
                             )
+                            .then(
+                                if (interactionEnabled) {
+                                    Modifier
+                                        .semantics(mergeDescendants = true) {
+                                            this.role = Role.Tab
+                                            this.selected = selected
+                                            (item.contentDescription ?: item.label)?.let {
+                                                this.contentDescription = it
+                                            }
+                                            onClick {
+                                                onSelectState(position)
+                                                true
+                                            }
+                                        }
+                                        .onKeyEvent { event ->
+                                            val activationKey = event.key == Key.Enter ||
+                                                event.key == Key.NumPadEnter ||
+                                                event.key == Key.Spacebar
+                                            if (activationKey) {
+                                                if (event.type == KeyEventType.KeyUp) onSelectState(position)
+                                                true
+                                            } else {
+                                                false
+                                            }
+                                        }
+                                        .focusable()
+                                } else {
+                                    Modifier.clearAndSetSemantics { }
+                                },
+                            )
+                            .graphicsLayer { this.alpha = pressAlpha.value },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        androidx.compose.foundation.layout.Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(GlassNavigationBarDefaults.LabelSpacing),
+                        ) {
+                            Icon(
+                                imageVector = item.icon,
+                                contentDescription = null,
+                                modifier = Modifier.size(GlassNavigationBarDefaults.IconSize),
+                                tint = tint,
+                            )
+                            if (item.label != null) {
+                                Text(
+                                    text = item.label,
+                                    style = MiuixTheme.textStyles.footnote2.copy(fontSize = labelSize),
+                                    color = tint,
+                                    textAlign = TextAlign.Center,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
                         }
                     }
                 }

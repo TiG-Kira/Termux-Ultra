@@ -103,12 +103,13 @@ import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.HorizontalDivider
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
+import top.yukonga.miuix.kmp.glass.GlassIconButton
 import top.yukonga.miuix.kmp.basic.ScrollBehavior
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.Switch
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
-import top.yukonga.miuix.kmp.basic.TopAppBar
+import top.yukonga.miuix.kmp.glass.GlassTopAppBar
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.theme.MiuixTheme
@@ -831,7 +832,8 @@ fun OverviewScreen(
     SideEffect {
         if (active) {
             onTopBarContent {
-                TopAppBar(
+                GlassTopAppBar(
+                    backdrop = LocalGlassTopAppBarBackdrop.current,
                     title = stringResource(R.string.overview_title),
                     scrollBehavior = scrollBehavior,
                     navigationIcon = {
@@ -848,7 +850,7 @@ fun OverviewScreen(
                         Row(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            IconButton(onClick = {
+                            GlassIconButton(onClick = {
                                 showAddCardDialog = true
                             }) {
                                 Icon(
@@ -858,7 +860,7 @@ fun OverviewScreen(
                                     tint = MiuixTheme.colorScheme.onSurface
                                 )
                             }
-                            IconButton(onClick = {
+                            GlassIconButton(onClick = {
                                 isEditMode = !isEditMode
                             }) {
                                 Icon(
