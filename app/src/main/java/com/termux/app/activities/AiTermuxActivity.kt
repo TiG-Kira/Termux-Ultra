@@ -2802,7 +2802,6 @@ private fun AiConversationManagementScreen(
 @Composable
 private fun AiChatScreen(vm: AiTermuxViewModel, conversationId: String, onBack: () -> Unit, onOpenSetup: () -> Unit) {
     val ctx = LocalContext.current
-    val scrollBehavior = MiuixScrollBehavior()
     val listState = rememberLazyListState()
     val isDark = isSystemInDarkTheme()
     val focusRequester = remember { FocusRequester() }
@@ -3078,8 +3077,7 @@ private fun AiChatScreen(vm: AiTermuxViewModel, conversationId: String, onBack: 
                 state = listState,
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(pagePaddingWithoutTop(padding))
-                    .nestedScroll(scrollBehavior.nestedScrollConnection),
+                    .padding(pagePaddingWithoutTop(padding)),
                 contentPadding = standaloneContentPadding(padding, top = 14.dp, bottom = 14.dp, start = 14.dp, end = 14.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
