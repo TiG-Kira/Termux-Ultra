@@ -41,6 +41,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.List
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Check
@@ -995,7 +996,7 @@ private fun TipsAgentCard(
             }
         }
         showLowCard = ApiCompat.hasAnyRuntimeDisabled() ||
-            (ApiCompat.isLowAndroid && (ApiCompat.hasAnyForceEnabled(context) || true))
+            (ApiCompat.isLowAndroid && ApiCompat.hasAnyForceEnabled(context))
     }
 
     fun toggleCollapse() {
@@ -2483,7 +2484,7 @@ fun ProcessListCard(
                     )
                 }
                 CardIconBox(
-                    icon = Icons.Rounded.List,
+                    icon = Icons.AutoMirrored.Rounded.List,
                     tint = processColor,
                     modifier = Modifier.size(40.dp),
                     iconSize = 22.dp
@@ -3005,7 +3006,7 @@ fun getCardIcon(type: OverviewCardType): ImageVector {
         OverviewCardType.CPU_MONITOR -> Icons.Rounded.Monitor
         OverviewCardType.GPU_MONITOR -> Icons.Rounded.Speed
         OverviewCardType.MEMORY_MONITOR -> Icons.Rounded.Memory
-        OverviewCardType.PROCESS_LIST -> Icons.Rounded.List
+        OverviewCardType.PROCESS_LIST -> Icons.AutoMirrored.Rounded.List
         OverviewCardType.STOP_ALL -> Icons.Rounded.Stop
         OverviewCardType.RESOURCE_ACTION -> Icons.Rounded.PlayArrow
     }
@@ -3986,7 +3987,7 @@ fun launchResourceAction(
         }
         
         action.script?.startsWith("http") == true -> {
-            val command = resolveUrlScript(action.script ?: "")
+            val command = resolveUrlScript(action.script)
             onExecuteScript(action.name, command)
         }
         

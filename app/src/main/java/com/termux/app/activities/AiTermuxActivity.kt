@@ -839,7 +839,7 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
                             if (idx >= 0) {
                                 val cur = messages[idx]
                                 val newDetails = if (!chunk.detailLine.isNullOrBlank()) {
-                                    cur.preparingDetails + chunk.detailLine!!.split("\\n").filter { it.isNotBlank() }
+                                    cur.preparingDetails + chunk.detailLine.split("\\n").filter { it.isNotBlank() }
                                 } else cur.preparingDetails
                                 messages[idx] = cur.copy(
                                     preparingStatus = chunk.status,
@@ -2013,10 +2013,8 @@ private fun AiSetupScreen(vm: AiTermuxViewModel, onBack: () -> Unit) {
                         }
                     }
                     
-                    if (ollamaInstalled.value || true) {  // Always show models list
-                        // 使用顶层定义的 ollama 状态变量
-                        
-                        OLLAMA_MODELS.forEach { ollamaEntry ->
+                    // Always show models list so users can browse available models
+                    OLLAMA_MODELS.forEach { ollamaEntry ->
                             item {
                                 Card(
                                     modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)
@@ -2130,7 +2128,6 @@ private fun AiSetupScreen(vm: AiTermuxViewModel, onBack: () -> Unit) {
                             }
                         }
                     }
-                }
 
                 item { Spacer(Modifier.height(8.dp)) }
             }
@@ -3421,8 +3418,9 @@ private fun ChatBubble(msg: ChatMessage, vm: AiTermuxViewModel) {
         horizontalAlignment = if (isUser) Alignment.End else Alignment.Start
     ) {
         // 本地模型准备中卡片（样式类似深度思考；一旦有思考或回复就自动隐藏）
-        if (!isUser && msg.preparingStatus != null) {
-            PreparingBlock(status = msg.preparingStatus!!, details = msg.preparingDetails, isDark = isDark)
+        val preparingStatus = msg.preparingStatus
+        if (!isUser && preparingStatus != null) {
+            PreparingBlock(status = preparingStatus, details = msg.preparingDetails, isDark = isDark)
             Spacer(Modifier.height(6.dp))
         }
         // 深度思考内容（可折叠）
@@ -3541,6 +3539,7 @@ private fun ChatBubble(msg: ChatMessage, vm: AiTermuxViewModel) {
             onDismissRequest = { showRawResponse = false },
             title = "原始 API 响应",
             content = {
+                val rawResponse = msg.rawResponse
                 Column(modifier = Modifier.fillMaxWidth()) {
                     Text(
                         text = "这是从 API 收到的原始 SSE 数据，用于排查问题。",
@@ -3556,7 +3555,7 @@ private fun ChatBubble(msg: ChatMessage, vm: AiTermuxViewModel) {
                             .padding(8.dp)
                     ) {
                         Text(
-                            text = msg.rawResponse!!,
+                            text = rawResponse,
                             style = TextStyle(
                                 fontSize = 11.sp,
                                 fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
@@ -3578,7 +3577,7 @@ private fun ChatBubble(msg: ChatMessage, vm: AiTermuxViewModel) {
                             text = "复制",
                             onClick = {
                                 val clipboard = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                                val clip = android.content.ClipData.newPlainText("原始 API 响应", msg.rawResponse!!)
+                                val clip = android.content.ClipData.newPlainText("原始 API 响应", rawResponse)
                                 clipboard.setPrimaryClip(clip)
                                 SnackbarHelper.show(ctx, "已复制到剪贴板", Snackbar.LENGTH_SHORT, null)
                             }
@@ -4221,8 +4220,6 @@ private fun SkillCard(msgId: String, card: SkillCardData, errorMsg: String?, isD
                                 }
                             }
                         }
-
-                        else -> {}
                     }
                 }
             }
@@ -4518,7 +4515,7 @@ private fun resolveAttachment(ctx: Context, uri: Uri): Triple<String, String, Lo
     }
 
     if (realPath != null) {
-        val f = java.io.File(realPath!!)
+        val f = java.io.File(realPath)
         if (f.exists() && f.canRead()) {
             return Triple(finalName, f.absolutePath, if (sizeBytes > 0) sizeBytes else f.length())
         }

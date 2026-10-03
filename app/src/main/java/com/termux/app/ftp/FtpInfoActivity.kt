@@ -251,8 +251,9 @@ fun getLocalIpAddress(context: Context): String {
             val addresses = networkInterface.inetAddresses
             while (addresses.hasMoreElements()) {
                 val address = addresses.nextElement()
-                if (!address.isLoopbackAddress && address is java.net.Inet4Address) {
-                    return address.hostAddress
+                val host = address.hostAddress
+                if (!address.isLoopbackAddress && address is java.net.Inet4Address && !host.isNullOrEmpty()) {
+                    return host
                 }
             }
         }
