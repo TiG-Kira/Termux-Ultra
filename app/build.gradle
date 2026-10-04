@@ -9,6 +9,14 @@ plugins {
 configurations.all {
     resolutionStrategy {
         force "top.yukonga.miuix.kmp:miuix-ui-android:0.9.4"
+        // guava-24.1-jre 自带 ListenableFuture，与 com.google.guava:listenablefuture:1.0 重复
+        // （libterminal 4.0.3 → androidx.core:1.19.1 → concurrent-futures 引入）。
+        // 替换为 guava 官方空占位包，消除 duplicate class。
+        eachDependency { details ->
+            if (details.requested.group == "com.google.guava" && details.requested.name == "listenablefuture") {
+                details.useTarget "com.google.guava:listenablefuture:9999.0-empty-to-avoid-conflict-with-guava"
+            }
+        }
     }
 }
 
@@ -69,7 +77,7 @@ android {
         buildConfigField "String", "TERMUX_CORE_VERSION", "\"0.119.0\""
 
         // libterminal 核心版本号（来自 Maven Central）
-        buildConfigField "String", "LIBTERMINAL_VERSION", "\"4.0.0\""
+        buildConfigField "String", "LIBTERMINAL_VERSION", "\"4.0.3\""
 
         // Workflow CLI build flag (set by GitHub Actions)
         buildConfigField "boolean", "WORKFLOW_CLI", "${workflowCliBuild}"
@@ -252,7 +260,7 @@ implementation "io.coil-kt:coil:2.7.0"
     }
 
     // LibTerminal 引擎改从 Maven Central 引入（io.github.awkox:libterminal，与上游 ~/at 同步）
-    implementation "io.github.awkox:libterminal:4.0.0"
+    implementation "io.github.awkox:libterminal:4.0.3"
 
     implementation project(':termux-shared')
     // Integrated Termux add-on tools
@@ -261,9 +269,7 @@ implementation "io.coil-kt:coil:2.7.0"
     implementation project(':termux-tasker')
     implementation project(':termux-widget')
 
-    implementation("com.google.guava:guava:24.1-jre") {
-        exclude group: 'com.google.guava', module: 'listenablefuture'
-    }
+    implementation "com.google.guava:guava:24.1-jre"
     implementation "com.google.code.gson:gson:2.10.1"
 
     // AVNC dependencies
