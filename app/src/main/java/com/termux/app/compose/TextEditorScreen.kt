@@ -3,10 +3,9 @@ package com.termux.app.compose
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -140,142 +139,148 @@ fun TextEditorScreen(
         },
 
     ) { innerPadding ->
-        Column(
+        Box(
             modifier = Modifier
                 .then(glassPage.contentModifier)
                 .fillMaxSize()
                 .padding(pagePaddingWithoutTop(innerPadding))
-                .verticalScroll(rememberScrollState())
-                .nestedScroll(scrollBehavior.nestedScrollConnection)
         ) {
-            // 这页是 Column + verticalScroll，让位落在首个 item 上；滚动页才把它折进 contentPadding。
-            Spacer(Modifier.height(topBarClearance(innerPadding)))
-
-            // 文件信息条
-            if (file != null) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(
-                            if (isDark) Color(0xFF1C1C1E) else Color(0xFFF2F2F7)
-                        )
-                        .padding(horizontal = 16.dp, vertical = 10.dp),
-                    verticalArrangement = Arrangement.spacedBy(2.dp)
-                ) {
-                    val infoParts = fileInfo.split(" · ")
-                    // 第一行：语言 · 扩展名 · 大小 · 权限 + 保存状态
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = lang.uppercase(),
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = MiuixTheme.colorScheme.primary,
-                            fontFamily = FontFamily.Monospace
-                        )
-                        infoParts.getOrNull(0)?.let { ext ->
-                            Text(
-                                text = "· $ext",
-                                fontSize = 12.sp,
-                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                                fontFamily = FontFamily.Monospace
-                            )
-                        }
-                        infoParts.getOrNull(1)?.let { size ->
-                            Text(
-                                text = "· $size",
-                                fontSize = 12.sp,
-                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                                fontFamily = FontFamily.Monospace
-                            )
-                        }
-                        if (perms.isNotBlank()) {
-                            Text(
-                                text = "· [$perms]",
-                                fontSize = 12.sp,
-                                color = if (perms.contains('w')) Color(0xFFFF9F0A) else MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                                fontFamily = FontFamily.Monospace
-                            )
-                        }
-                        Spacer(modifier = Modifier.weight(1f))
-                        Text(
-                            text = if (modified) "● 未保存" else "✓ 已保存",
-                            fontSize = 11.sp,
-                            color = if (modified) Color(0xFFFF9F0A) else MiuixTheme.colorScheme.onSurfaceVariantSummary
-                        )
-                    }
-                    // 第二行：修改时间
-                    infoParts.getOrNull(2)?.let { date ->
-                        Text(
-                            text = "修改时间 $date",
-                            fontSize = 11.sp,
-                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.7f)
-                        )
-                    }
-                }
-            }
-
-            // 编辑器主体
-            Box(
+            LazyColumn(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .wrapContentHeight()
-                    .background(
-                        if (isDark) Color(0xFF0A0A0C) else Color(0xFFFFFFFF)
-                    )
-                    .padding(8.dp)
+                    .fillMaxSize()
+                    .nestedScroll(scrollBehavior.nestedScrollConnection),
+                contentPadding = standaloneContentPadding(innerPadding)
             ) {
-                val textFieldState = rememberTextFieldState(content)
-                LaunchedEffect(textFieldState) {
-                    snapshotFlow { textFieldState.text.toString() }.collectLatest { newText ->
-                        if (newText != content) {
-                            content = newText
-                            modified = true
+                // 文件信息条
+                if (file != null) {
+                    item {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(
+                                    if (isDark) Color(0xFF1C1C1E) else Color(0xFFF2F2F7)
+                                )
+                                .padding(horizontal = 16.dp, vertical = 10.dp),
+                            verticalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
+                            val infoParts = fileInfo.split(" · ")
+                            // 第一行：语言 · 扩展名 · 大小 · 权限 + 保存状态
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = lang.uppercase(),
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = MiuixTheme.colorScheme.primary,
+                                    fontFamily = FontFamily.Monospace
+                                )
+                                infoParts.getOrNull(0)?.let { ext ->
+                                    Text(
+                                        text = "· $ext",
+                                        fontSize = 12.sp,
+                                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                        fontFamily = FontFamily.Monospace
+                                    )
+                                }
+                                infoParts.getOrNull(1)?.let { size ->
+                                    Text(
+                                        text = "· $size",
+                                        fontSize = 12.sp,
+                                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                        fontFamily = FontFamily.Monospace
+                                    )
+                                }
+                                if (perms.isNotBlank()) {
+                                    Text(
+                                        text = "· [$perms]",
+                                        fontSize = 12.sp,
+                                        color = if (perms.contains('w')) Color(0xFFFF9F0A) else MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                        fontFamily = FontFamily.Monospace
+                                    )
+                                }
+                                Spacer(modifier = Modifier.weight(1f))
+                                Text(
+                                    text = if (modified) "● 未保存" else "✓ 已保存",
+                                    fontSize = 11.sp,
+                                    color = if (modified) Color(0xFFFF9F0A) else MiuixTheme.colorScheme.onSurfaceVariantSummary
+                                )
+                            }
+                            // 第二行：修改时间
+                            infoParts.getOrNull(2)?.let { date ->
+                                Text(
+                                    text = "修改时间 $date",
+                                    fontSize = 11.sp,
+                                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.7f)
+                                )
+                            }
                         }
                     }
                 }
-                val lineCount = if (content.isEmpty()) 1 else content.count { it == '\n' } + 1
-                Text(
-                    text = (1..lineCount).joinToString("\n"),
-                    fontSize = 14.sp,
-                    lineHeight = 20.sp,
-                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.4f),
-                    fontFamily = FontFamily.Monospace,
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .padding(end = 8.dp)
-                )
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .wrapContentHeight()
-                        .padding(start = 40.dp)
-                ) {
-                    if (textFieldState.text.isEmpty()) {
-                        Text(
-                            text = "在此输入...",
-                            fontSize = 14.sp,
-                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.5f),
-                            fontFamily = FontFamily.Monospace,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                    BasicTextField(
-                        state = textFieldState,
-                        readOnly = readOnly,
-                        textStyle = TextStyle(
-                            fontFamily = FontFamily.Monospace,
-                            fontSize = 14.sp,
-                            color = if (isDark) Color(0xFFE5E5EA) else Color(0xFF1C1C1E),
-                            lineHeight = 20.sp
-                        ),
+
+                // 编辑器主体
+                item {
+                    Box(
                         modifier = Modifier
                             .fillMaxWidth()
                             .wrapContentHeight()
-                    )
+                            .background(
+                                if (isDark) Color(0xFF0A0A0C) else Color(0xFFFFFFFF)
+                            )
+                            .padding(8.dp)
+                    ) {
+                        val textFieldState = rememberTextFieldState(content)
+                        LaunchedEffect(textFieldState) {
+                            snapshotFlow { textFieldState.text.toString() }.collectLatest { newText ->
+                                if (newText != content) {
+                                    content = newText
+                                    modified = true
+                                }
+                            }
+                        }
+                        val lineCount = if (content.isEmpty()) 1 else content.count { it == '\n' } + 1
+                        Text(
+                            text = (1..lineCount).joinToString("\n"),
+                            fontSize = 14.sp,
+                            lineHeight = 20.sp,
+                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.4f),
+                            fontFamily = FontFamily.Monospace,
+                            modifier = Modifier
+                                .align(Alignment.TopStart)
+                                .padding(end = 8.dp)
+                        )
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .wrapContentHeight()
+                                .padding(start = 40.dp)
+                        ) {
+                            if (textFieldState.text.isEmpty()) {
+                                Text(
+                                    text = "在此输入...",
+                                    fontSize = 14.sp,
+                                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.5f),
+                                    fontFamily = FontFamily.Monospace,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                            BasicTextField(
+                                state = textFieldState,
+                                readOnly = readOnly,
+                                textStyle = TextStyle(
+                                    fontFamily = FontFamily.Monospace,
+                                    fontSize = 14.sp,
+                                    color = if (isDark) Color(0xFFE5E5EA) else Color(0xFF1C1C1E),
+                                    lineHeight = 20.sp
+                                ),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .wrapContentHeight()
+                            )
+                        }
+                    }
                 }
             }
         }
