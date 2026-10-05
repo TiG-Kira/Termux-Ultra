@@ -263,10 +263,10 @@ Termux Ultra 与原版 Termux 及其所有插件共享 `sharedUserId`（`com.ter
 - Release 版本输出各架构独立 APK，使用架构包约 `~120MB`。
 - GitHub 来源的 APK 均为 `debuggable`，彼此兼容，但与其他来源不兼容。
 
-### 关于 Google Play 商店（已弃用）
+### 关于 Google Play 商店
 
-原版 Termux 及其插件因 [Android 10 问题](https://github.com/termux/termux-packages/wiki/Termux-and-Android-10) 已在 Play Store 停止更新，最后版本为 `v0.101`。
->**强烈建议不再从 Play Store 安装 Termux 系应用**，请迁移至 GitHub 或 F-Droid 来源。
+Termux 原版的 Google Play 仓库请参考 [Termux-Play-store](https://github.com/termux-play-store)，由于与原基线不同，Termux Ultra **无法对 Google Play 系 Termux 来源保持兼容。**
+>**如果您使用 Termux Ultra，强烈建议不再从 Play Store 安装 Termux 系应用**，请迁移至 GitHub 或 F-Droid 来源。
 
 ## 卸载
 
