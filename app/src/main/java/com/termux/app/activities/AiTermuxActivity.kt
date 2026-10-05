@@ -80,7 +80,8 @@ import top.yukonga.miuix.kmp.glass.GlassIconButton
 import top.yukonga.miuix.kmp.glass.GlassTopAppBar
 import top.yukonga.miuix.kmp.basic.*
 import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.Back
+import top.yukonga.miuix.kmp.icon.glass.Back
+import top.yukonga.miuix.kmp.icon.glass.MiuixGlassIcons
 import top.yukonga.miuix.kmp.window.WindowDialog
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
@@ -1836,7 +1837,7 @@ private fun AiSetupScreen(vm: AiTermuxViewModel, onBack: () -> Unit) {
                 navigationIcon = {
                     GlassIconButton(onClick = { onBack() }) {
                         Icon(
-                            imageVector = MiuixIcons.Back,
+                            imageVector = MiuixGlassIcons.Back,
                             contentDescription = null,
                             modifier = Modifier.size(24.dp),
                             tint = MiuixTheme.colorScheme.onSurface
@@ -2778,7 +2779,7 @@ private fun AiConversationManagementScreen(
                 navigationIcon = {
                     GlassIconButton(onClick = { onBack() }) {
                         Icon(
-                            imageVector = MiuixIcons.Back,
+                            imageVector = MiuixGlassIcons.Back,
                             contentDescription = null,
                             modifier = Modifier.size(24.dp),
                             tint = MiuixTheme.colorScheme.onSurface
@@ -3299,7 +3300,7 @@ private fun AiChatImessageTopBar(
                 // 左侧：返回 chevron（miuix-glass 玻璃按钮）
                 GlassIconButton(onClick = onBack) {
                     Icon(
-                        imageVector = MiuixIcons.Back,
+                        imageVector = MiuixGlassIcons.Back,
                         contentDescription = "返回",
                         modifier = Modifier.size(24.dp),
                         tint = MiuixTheme.colorScheme.onSurface

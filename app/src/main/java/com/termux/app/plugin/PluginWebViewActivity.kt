@@ -40,7 +40,8 @@ import top.yukonga.miuix.kmp.glass.GlassTopAppBar
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.Back
+import top.yukonga.miuix.kmp.icon.glass.Back
+import top.yukonga.miuix.kmp.icon.glass.MiuixGlassIcons
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 class PluginWebViewActivity : ComponentActivity() {
@@ -164,7 +165,7 @@ class PluginWebViewActivity : ComponentActivity() {
                     navigationIcon = {
                         GlassIconButton(onClick = { onBack() }) {
                             Icon(
-                                imageVector = MiuixIcons.Back,
+                                imageVector = MiuixGlassIcons.Back,
                                 contentDescription = "返回",
                                 tint = MiuixTheme.colorScheme.onSurface,
                                 modifier = Modifier.size(24.dp)

@@ -20,7 +20,8 @@ import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.HorizontalDivider
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.Back
+import top.yukonga.miuix.kmp.icon.glass.Back
+import top.yukonga.miuix.kmp.icon.glass.MiuixGlassIcons
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -90,7 +91,7 @@ fun ResourcesScreen(
                     if (showBackButton) {
                         GlassIconButton(onClick = { (context as? ComponentActivity)?.finish() }) {
                             Icon(
-                                imageVector = MiuixIcons.Back,
+                                imageVector = MiuixGlassIcons.Back,
                                 contentDescription = null,
                                 modifier = Modifier.size(24.dp),
                                 tint = MiuixTheme.colorScheme.onSurface

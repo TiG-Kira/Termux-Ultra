@@ -19,7 +19,8 @@ import top.yukonga.miuix.kmp.glass.GlassIconButton
 import top.yukonga.miuix.kmp.glass.GlassTopAppBar
 import top.yukonga.miuix.kmp.basic.*
 import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.Back
+import top.yukonga.miuix.kmp.icon.glass.Back
+import top.yukonga.miuix.kmp.icon.glass.MiuixGlassIcons
 import top.yukonga.miuix.kmp.preference.SwitchPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import com.termux.app.compose.pagePaddingWithoutTop
@@ -71,7 +72,7 @@ fun TermuxTaskerScreen(
                 navigationIcon = {
                     GlassIconButton(onClick = { onBack() }) {
                         Icon(
-                            imageVector = MiuixIcons.Back,
+                            imageVector = MiuixGlassIcons.Back,
                             contentDescription = context.getString(R.string.back),
                             tint = MiuixTheme.colorScheme.onSurface,
                             modifier = Modifier.size(24.dp)

@@ -124,7 +124,8 @@ import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.Back
+import top.yukonga.miuix.kmp.icon.glass.Back
+import top.yukonga.miuix.kmp.icon.glass.MiuixGlassIcons
 import top.yukonga.miuix.kmp.menu.OverlayIconDropdownMenu
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.theme.MiuixTheme
@@ -822,7 +823,7 @@ fun TerminalDetailScreenCompose(
                     onClick = { updateInteractionTime(); onBack() }
                 ) {
                     Icon(
-                        imageVector = MiuixIcons.Back,
+                        imageVector = MiuixGlassIcons.Back,
                         contentDescription = null,
                         modifier = Modifier.size(24.dp),
                         tint = if (isCompact)

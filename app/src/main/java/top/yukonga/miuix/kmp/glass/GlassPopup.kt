@@ -44,9 +44,9 @@ import androidx.compose.ui.unit.dp
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.blur.Backdrop
-import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.basic.ArrowRight
-import top.yukonga.miuix.kmp.icon.basic.Check
+import top.yukonga.miuix.kmp.icon.glass.ChevronForward
+import top.yukonga.miuix.kmp.icon.glass.MiuixGlassIcons
+import top.yukonga.miuix.kmp.icon.glass.Ok
 import top.yukonga.miuix.kmp.layout.CascadingPopupDefaults
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
@@ -413,7 +413,7 @@ fun GlassPopupItem(
         }
         if (selected) {
             Icon(
-                imageVector = MiuixIcons.Basic.Check,
+                imageVector = MiuixGlassIcons.Ok,
                 contentDescription = null,
                 modifier = Modifier
                     .padding(start = GlassPopupDefaults.ItemIconGap)
@@ -423,7 +423,7 @@ fun GlassPopupItem(
         }
         if (showArrow) {
             Icon(
-                imageVector = MiuixIcons.Basic.ArrowRight,
+                imageVector = MiuixGlassIcons.ChevronForward,
                 contentDescription = null,
                 modifier = Modifier
                     .padding(start = GlassPopupDefaults.ItemIconGap)

@@ -61,7 +61,8 @@ import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.Back
+import top.yukonga.miuix.kmp.icon.glass.Back
+import top.yukonga.miuix.kmp.icon.glass.MiuixGlassIcons
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import androidx.compose.foundation.layout.offset
@@ -249,7 +250,7 @@ fun PackageDetailScreen(
                 navigationIcon = {
                     GlassIconButton(onClick = { if (!showProgressDialog && !showLockDialog) onBack() }) {
                         Icon(
-                            imageVector = MiuixIcons.Back,
+                            imageVector = MiuixGlassIcons.Back,
                             contentDescription = stringResource(R.string.back),
                             tint = colorScheme.onSurface,
                             modifier = Modifier.size(24.dp)
