@@ -34,6 +34,10 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import top.yukonga.miuix.kmp.glass.GlassIconButton
 import top.yukonga.miuix.kmp.glass.GlassTopAppBar
+import top.yukonga.miuix.kmp.glass.GlassTopAppBarDefaults
+import top.yukonga.miuix.kmp.icon.glass.Add
+import top.yukonga.miuix.kmp.icon.glass.Lock
+import top.yukonga.miuix.kmp.icon.glass.MiuixGlassIcons
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Icon
@@ -95,14 +99,19 @@ fun ComposeTerminalListScreen(
                     title = stringResource(R.string.terminal),
                     backdrop = LocalGlassTopAppBarBackdrop.current,
                     scrollBehavior = scrollBehavior,
-                    actions = {
+                    navigationIcon = {
+                        // 左右边距要和右侧玻璃按钮一致：GlassTopAppBar 会替 navigationIcon 额外垫
+                        // 一层 Box(buttonPadding)，而右侧那份同样数值的边距是 GlassIconButton
+                        // 自带的。这里放的是「锁图标 + 开关」而不是玻璃按钮，所以要把框架多给
+                        // 的这一份抵掉，否则左边会比右边多让出 buttonPadding。
                         Row(
+                            modifier = Modifier.offset(x = -GlassTopAppBarDefaults.ButtonPadding),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(
-                                painter = painterResource(R.drawable.ic_lock),
+                                imageVector = MiuixGlassIcons.Lock,
                                 contentDescription = null,
-                                modifier = Modifier.size(20.dp),
+                                modifier = Modifier.size(24.dp),
                                 tint = MiuixTheme.colorScheme.onSurface
                             )
                             Spacer(modifier = Modifier.width(4.dp))
@@ -110,25 +119,27 @@ fun ComposeTerminalListScreen(
                                 checked = isWakeLockEnabled,
                                 onCheckedChange = { onToggleWakeLock() }
                             )
-                            GlassIconButton(onClick = {
-                                // 直接用 ComposeSessionManager 创建会话，不依赖 Java 版 onNewTerminal。
-                                // 效仿 Java 版策略：只创建未初始化的终端条目（不拉起进程、不跳转），
-                                // 待用户手动点击该终端卡片进入终端控制台时再初始化。
-                                val createdSession = sessionManager.createDefaultSession(startImmediately = false)
-                                val count = sessionManager.sessions.value.indexOfFirst { it.session.id == createdSession.id }
-                                createdSession.sessionName.value = if (com.termux.app.LocaleHelper.isChinese(context)) {
-                                    context.getString(R.string.session_count_plus, count + 1)
-                                } else {
-                                    context.getString(R.string.session_count_plus, count + 1)
-                                }
-                            }) {
-                                Icon(
-                                    painter = painterResource(R.drawable.ic_add),
-                                    contentDescription = stringResource(R.string.new_terminal),
-                                    modifier = Modifier.size(24.dp),
-                                    tint = MiuixTheme.colorScheme.onSurface
-                                )
+                        }
+                    },
+                    actions = {
+                        GlassIconButton(onClick = {
+                            // 直接用 ComposeSessionManager 创建会话，不依赖 Java 版 onNewTerminal。
+                            // 效仿 Java 版策略：只创建未初始化的终端条目（不拉起进程、不跳转），
+                            // 待用户手动点击该终端卡片进入终端控制台时再初始化。
+                            val createdSession = sessionManager.createDefaultSession(startImmediately = false)
+                            val count = sessionManager.sessions.value.indexOfFirst { it.session.id == createdSession.id }
+                            createdSession.sessionName.value = if (com.termux.app.LocaleHelper.isChinese(context)) {
+                                context.getString(R.string.session_count_plus, count + 1)
+                            } else {
+                                context.getString(R.string.session_count_plus, count + 1)
                             }
+                        }) {
+                            Icon(
+                                imageVector = MiuixGlassIcons.Add,
+                                contentDescription = stringResource(R.string.new_terminal),
+                                modifier = Modifier.size(24.dp),
+                                tint = MiuixTheme.colorScheme.onSurface
+                            )
                         }
                     }
                 )

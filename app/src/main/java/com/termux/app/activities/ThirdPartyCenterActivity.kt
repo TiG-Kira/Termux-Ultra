@@ -52,8 +52,9 @@ import top.yukonga.miuix.kmp.glass.GlassTopAppBar
 import top.yukonga.miuix.kmp.basic.Card as MiuixCard
 import top.yukonga.miuix.kmp.basic.*
 import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.glass.Back
+import top.yukonga.miuix.kmp.icon.glass.ChevronBackward
 import top.yukonga.miuix.kmp.icon.glass.MiuixGlassIcons
+import top.yukonga.miuix.kmp.icon.glass.Add
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
@@ -223,7 +224,7 @@ class ThirdPartyCenterActivity : ComponentActivity() {
                             navigationIcon = {
                                 GlassIconButton(onClick = { finish() }) {
                                     Icon(
-                                        imageVector = MiuixGlassIcons.Back,
+                                        imageVector = MiuixGlassIcons.ChevronBackward,
                                         contentDescription = null,
                                         modifier = Modifier.size(24.dp),
                                         tint = MiuixTheme.colorScheme.onSurface
@@ -244,7 +245,7 @@ class ThirdPartyCenterActivity : ComponentActivity() {
                                     Log.d("ThirdPartyCenter", "showAddDialog set to true: $showAddDialog")
                                 }) {
                                     Icon(
-                                        painter = painterResource(R.drawable.ic_add),
+                                        imageVector = MiuixGlassIcons.Add,
                                         contentDescription = null,
                                         modifier = Modifier.size(24.dp),
                                         tint = MiuixTheme.colorScheme.onSurface

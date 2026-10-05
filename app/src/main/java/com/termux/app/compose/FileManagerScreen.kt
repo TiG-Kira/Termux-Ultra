@@ -45,6 +45,14 @@ import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.glass.GlassIconButton
+import top.yukonga.miuix.kmp.icon.glass.AddFolder
+import top.yukonga.miuix.kmp.icon.glass.Close
+import top.yukonga.miuix.kmp.icon.glass.Copy
+import top.yukonga.miuix.kmp.icon.glass.Cut
+import top.yukonga.miuix.kmp.icon.glass.Delete
+import top.yukonga.miuix.kmp.icon.glass.MiuixGlassIcons
+import top.yukonga.miuix.kmp.icon.glass.Paste
+import top.yukonga.miuix.kmp.icon.glass.Rename
 import top.yukonga.miuix.kmp.basic.ScrollBehavior
 import top.yukonga.miuix.kmp.basic.Switch
 import top.yukonga.miuix.kmp.basic.Text
@@ -304,7 +312,7 @@ fun FileManagerScreen(
                                 isInSelectionMode = false
                             }) {
                                 Icon(
-                                    painter = painterResource(R.drawable.ic_close),
+                                    imageVector = MiuixGlassIcons.Close,
                                     contentDescription = null,
                                     modifier = Modifier.size(24.dp),
                                     tint = MiuixTheme.colorScheme.onSurface
@@ -322,7 +330,7 @@ fun FileManagerScreen(
                                 Icon(
                                     painter = painterResource(R.drawable.ic_arrow_up),
                                     contentDescription = null,
-                                    modifier = Modifier.size(24.dp),
+                                    modifier = Modifier.size(40.dp),
                                     tint = if (canGoUp) MiuixTheme.colorScheme.onSurface else MiuixTheme.colorScheme.onSurfaceVariantSummary
                                 )
                             }
@@ -336,7 +344,7 @@ fun FileManagerScreen(
                                 Icon(
                                     painter = painterResource(R.drawable.ic_arrow_down),
                                     contentDescription = null,
-                                    modifier = Modifier.size(24.dp),
+                                    modifier = Modifier.size(40.dp),
                                     tint = if (forwardHistory.isNotEmpty()) MiuixTheme.colorScheme.onSurface else MiuixTheme.colorScheme.onSurfaceVariantSummary
                                 )
                             }
@@ -353,7 +361,7 @@ fun FileManagerScreen(
                             isInSelectionMode = false
                         }) {
                             Icon(
-                                painter = painterResource(R.drawable.ic_copy),
+                                imageVector = MiuixGlassIcons.Copy,
                                 contentDescription = "复制",
                                 modifier = Modifier.size(24.dp),
                                 tint = MiuixTheme.colorScheme.onSurface
@@ -366,7 +374,7 @@ fun FileManagerScreen(
                             isInSelectionMode = false
                         }) {
                             Icon(
-                                painter = painterResource(R.drawable.ic_cut),
+                                imageVector = MiuixGlassIcons.Cut,
                                 contentDescription = "剪切",
                                 modifier = Modifier.size(24.dp),
                                 tint = MiuixTheme.colorScheme.onSurface
@@ -378,7 +386,7 @@ fun FileManagerScreen(
                                 showRenameDialog = true
                             }) {
                                 Icon(
-                                    painter = painterResource(R.drawable.ic_edit),
+                                    imageVector = MiuixGlassIcons.Rename,
                                     contentDescription = "重命名",
                                     modifier = Modifier.size(24.dp),
                                     tint = MiuixTheme.colorScheme.onSurface
@@ -389,7 +397,7 @@ fun FileManagerScreen(
                             showDeleteDialog = true
                         }) {
                             Icon(
-                                painter = painterResource(R.drawable.ic_delete),
+                                imageVector = MiuixGlassIcons.Delete,
                                 contentDescription = "删除",
                                 modifier = Modifier.size(24.dp),
                                 tint = MiuixTheme.colorScheme.onSurface
@@ -425,7 +433,7 @@ fun FileManagerScreen(
                             }
                         }) {
                             Icon(
-                                painter = painterResource(R.drawable.ic_paste),
+                                imageVector = MiuixGlassIcons.Paste,
                                 contentDescription = "粘贴",
                                 modifier = Modifier.size(24.dp),
                                 tint = MiuixTheme.colorScheme.onSurface
@@ -443,7 +451,7 @@ fun FileManagerScreen(
                                 Icon(
                                     painter = painterResource(R.drawable.ic_web),
                                     contentDescription = "FTP 信息",
-                                    modifier = Modifier.size(20.dp),
+                                    modifier = Modifier.size(24.dp),
                                     tint = MiuixTheme.colorScheme.onSurface
                                 )
                             }
@@ -457,7 +465,7 @@ fun FileManagerScreen(
                                 showNewTypeDialog = true
                             }) {
                                 Icon(
-                                    painter = painterResource(R.drawable.ic_add),
+                                    imageVector = MiuixGlassIcons.AddFolder,
                                     contentDescription = "文件夹",
                                     modifier = Modifier.size(24.dp),
                                     tint = MiuixTheme.colorScheme.onSurface

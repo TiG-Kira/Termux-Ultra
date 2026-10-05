@@ -26,7 +26,7 @@ import top.yukonga.miuix.kmp.glass.GlassIconButton
 import top.yukonga.miuix.kmp.glass.GlassTopAppBar
 import top.yukonga.miuix.kmp.basic.*
 import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.glass.Back
+import top.yukonga.miuix.kmp.icon.glass.ChevronBackward
 import top.yukonga.miuix.kmp.icon.glass.MiuixGlassIcons
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.preference.ArrowPreference
@@ -62,7 +62,7 @@ fun TermuxCrashReportScreen(
                 navigationIcon = {
                     GlassIconButton(onClick = { onBack() }) {
                         Icon(
-                            imageVector = MiuixGlassIcons.Back,
+                            imageVector = MiuixGlassIcons.ChevronBackward,
                             contentDescription = context.getString(R.string.back),
                             tint = MiuixTheme.colorScheme.onSurface,
                             modifier = Modifier.size(24.dp)

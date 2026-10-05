@@ -37,7 +37,7 @@ import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.glass.Back
+import top.yukonga.miuix.kmp.icon.glass.ChevronBackward
 import top.yukonga.miuix.kmp.icon.glass.MiuixGlassIcons
 import top.yukonga.miuix.kmp.preference.RadioButtonPreference
 import top.yukonga.miuix.kmp.preference.SwitchPreference
@@ -105,7 +105,7 @@ fun NotificationManagerScreen(
                 navigationIcon = {
                     GlassIconButton(onClick = { onBack() }) {
                         Icon(
-                            imageVector = MiuixGlassIcons.Back,
+                            imageVector = MiuixGlassIcons.ChevronBackward,
                             contentDescription = stringResource(R.string.back),
                             tint = MiuixTheme.colorScheme.onSurface,
                             modifier = Modifier.width(24.dp).height(24.dp)

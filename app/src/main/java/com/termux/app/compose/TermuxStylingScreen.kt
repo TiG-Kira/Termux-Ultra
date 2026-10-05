@@ -36,7 +36,7 @@ import top.yukonga.miuix.kmp.glass.GlassIconButton
 import top.yukonga.miuix.kmp.glass.GlassTopAppBar
 import top.yukonga.miuix.kmp.basic.*
 import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.glass.Back
+import top.yukonga.miuix.kmp.icon.glass.ChevronBackward
 import top.yukonga.miuix.kmp.icon.glass.MiuixGlassIcons
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.preference.ArrowPreference
@@ -257,7 +257,7 @@ fun TermuxStylingScreen(
                 navigationIcon = {
                     GlassIconButton(onClick = { onBack() }) {
                         Icon(
-                            imageVector = MiuixGlassIcons.Back,
+                            imageVector = MiuixGlassIcons.ChevronBackward,
                             contentDescription = context.getString(R.string.back),
                             tint = MiuixTheme.colorScheme.onSurface,
                             modifier = Modifier.size(24.dp)
@@ -685,7 +685,7 @@ private fun StyleListContent(
                 }
                 if (isSelected) {
                     Icon(
-                        imageVector = MiuixGlassIcons.Back,
+                        imageVector = MiuixGlassIcons.ChevronBackward,
                         contentDescription = null,
                         tint = MiuixTheme.colorScheme.primary,
                         modifier = Modifier.size(20.dp)

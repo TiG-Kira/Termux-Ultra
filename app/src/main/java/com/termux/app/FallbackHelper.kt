@@ -271,9 +271,6 @@ object FallbackHelper {
             // 设置页
             matches(stackTraceString, "SettingsScreenKt", "SettingsScreen") ->
                 ApiCompat.Page.SETTINGS
-            // 终端页会话列表
-            matches(stackTraceString, "TerminalListScreenKt", "TerminalListScreen") ->
-                ApiCompat.Page.TERMINAL
             // 更上层的 MainScreen 动画/过渡崩溃：不屏蔽页面，避免不必要的降级
             else -> null
         }

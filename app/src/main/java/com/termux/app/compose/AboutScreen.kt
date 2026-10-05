@@ -50,7 +50,7 @@ import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.glass.Back
+import top.yukonga.miuix.kmp.icon.glass.ChevronBackward
 import top.yukonga.miuix.kmp.icon.glass.MiuixGlassIcons
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.preference.ArrowPreference
@@ -223,7 +223,7 @@ fun AboutScreen(onBack: () -> Unit) {
                     navigationIcon = {
                         GlassIconButton(onClick = onBack) {
                             Icon(
-                                imageVector = MiuixGlassIcons.Back,
+                                imageVector = MiuixGlassIcons.ChevronBackward,
                                 contentDescription = stringResource(R.string.back),
                                 tint = MiuixTheme.colorScheme.onSurface,
                                 modifier = Modifier.size(24.dp)

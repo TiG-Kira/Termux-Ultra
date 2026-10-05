@@ -105,6 +105,10 @@ import top.yukonga.miuix.kmp.basic.HorizontalDivider
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.glass.GlassIconButton
+import top.yukonga.miuix.kmp.icon.glass.Add
+import top.yukonga.miuix.kmp.icon.glass.Edit
+import top.yukonga.miuix.kmp.icon.glass.MiuixGlassIcons
+import top.yukonga.miuix.kmp.icon.glass.Ok
 import top.yukonga.miuix.kmp.basic.ScrollBehavior
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.Switch
@@ -855,7 +859,7 @@ fun OverviewScreen(
                                 showAddCardDialog = true
                             }) {
                                 Icon(
-                                    imageVector = Icons.Rounded.Add,
+                                    imageVector = MiuixGlassIcons.Add,
                                     contentDescription = null,
                                     modifier = Modifier.size(24.dp),
                                     tint = MiuixTheme.colorScheme.onSurface
@@ -865,7 +869,7 @@ fun OverviewScreen(
                                 isEditMode = !isEditMode
                             }) {
                                 Icon(
-                                    imageVector = if (isEditMode) Icons.Rounded.Check else Icons.Rounded.Edit,
+                                    imageVector = if (isEditMode) MiuixGlassIcons.Ok else MiuixGlassIcons.Edit,
                                     contentDescription = null,
                                     modifier = Modifier.size(24.dp),
                                     tint = MiuixTheme.colorScheme.onSurface
