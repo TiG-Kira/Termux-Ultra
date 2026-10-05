@@ -4,30 +4,30 @@
     android:viewportWidth="512"
     android:viewportHeight="512">
     <!-- AgentPaw 设置图标（取自 agentpaw-core:0.1.2 内置 agentpaw-settings.svg 几何，单色可由主题 tint 上色） -->
-    <group android:fillColor="#FF000000">
+    <group>
         <!-- 五个齿（每 72° 旋转，绕中心 256,256） -->
-        <path android:pathData="M223 25 L289 25 A22 22 0 0 1 311 47 L311 73 A22 22 0 0 1 289 95 L223 95 A22 22 0 0 1 201 73 L201 47 A22 22 0 0 1 223 25 Z" />
+        <path android:fillColor="#FF000000" android:pathData="M223 25 L289 25 A22 22 0 0 1 311 47 L311 73 A22 22 0 0 1 289 95 L223 95 A22 22 0 0 1 201 73 L201 47 A22 22 0 0 1 223 25 Z" />
         <group android:rotation="72" android:pivotX="256" android:pivotY="256">
-            <path android:pathData="M223 25 L289 25 A22 22 0 0 1 311 47 L311 73 A22 22 0 0 1 289 95 L223 95 A22 22 0 0 1 201 73 L201 47 A22 22 0 0 1 223 25 Z" />
+            <path android:fillColor="#FF000000" android:pathData="M223 25 L289 25 A22 22 0 0 1 311 47 L311 73 A22 22 0 0 1 289 95 L223 95 A22 22 0 0 1 201 73 L201 47 A22 22 0 0 1 223 25 Z" />
         </group>
         <group android:rotation="144" android:pivotX="256" android:pivotY="256">
-            <path android:pathData="M223 25 L289 25 A22 22 0 0 1 311 47 L311 73 A22 22 0 0 1 289 95 L223 95 A22 22 0 0 1 201 73 L201 47 A22 22 0 0 1 223 25 Z" />
+            <path android:fillColor="#FF000000" android:pathData="M223 25 L289 25 A22 22 0 0 1 311 47 L311 73 A22 22 0 0 1 289 95 L223 95 A22 22 0 0 1 201 73 L201 47 A22 22 0 0 1 223 25 Z" />
         </group>
         <group android:rotation="216" android:pivotX="256" android:pivotY="256">
-            <path android:pathData="M223 25 L289 25 A22 22 0 0 1 311 47 L311 73 A22 22 0 0 1 289 95 L223 95 A22 22 0 0 1 201 73 L201 47 A22 22 0 0 1 223 25 Z" />
+            <path android:fillColor="#FF000000" android:pathData="M223 25 L289 25 A22 22 0 0 1 311 47 L311 73 A22 22 0 0 1 289 95 L223 95 A22 22 0 0 1 201 73 L201 47 A22 22 0 0 1 223 25 Z" />
         </group>
         <group android:rotation="288" android:pivotX="256" android:pivotY="256">
-            <path android:pathData="M223 25 L289 25 A22 22 0 0 1 311 47 L311 73 A22 22 0 0 1 289 95 L223 95 A22 22 0 0 1 201 73 L201 47 A22 22 0 0 1 223 25 Z" />
+            <path android:fillColor="#FF000000" android:pathData="M223 25 L289 25 A22 22 0 0 1 311 47 L311 73 A22 22 0 0 1 289 95 L223 95 A22 22 0 0 1 201 73 L201 47 A22 22 0 0 1 223 25 Z" />
         </group>
         <!-- 齿轮盘（外圈 r=194 减去内窗 r=126，evenOdd 抠空） -->
-        <path android:fillType="evenOdd"
+        <path android:fillColor="#FF000000" android:fillType="evenOdd"
             android:pathData="M256 62 A194 194 0 1 0 256 450 A194 194 0 1 0 256 62 Z M256 130 A126 126 0 1 0 256 382 A126 126 0 1 0 256 130 Z" />
         <!-- 中央爪印 -->
-        <path android:pathData="M161.76 223.14 A21.08 29.76 0 1 0 203.92 223.14 A21.08 29.76 0 1 0 161.76 223.14 Z" />
-        <path android:pathData="M205.16 203.3 A23.56 29.76 0 1 0 252.28 203.3 A23.56 29.76 0 1 0 205.16 203.3 Z" />
-        <path android:pathData="M259.72 203.3 A23.56 29.76 0 1 0 306.84 203.3 A23.56 29.76 0 1 0 259.72 203.3 Z" />
-        <path android:pathData="M308.08 223.14 A21.08 29.76 0 1 0 350.24 223.14 A21.08 29.76 0 1 0 308.08 223.14 Z" />
-        <path android:fillType="evenOdd"
+        <path android:fillColor="#FF000000" android:pathData="M161.76 223.14 A21.08 29.76 0 1 0 203.92 223.14 A21.08 29.76 0 1 0 161.76 223.14 Z" />
+        <path android:fillColor="#FF000000" android:pathData="M205.16 203.3 A23.56 29.76 0 1 0 252.28 203.3 A23.56 29.76 0 1 0 205.16 203.3 Z" />
+        <path android:fillColor="#FF000000" android:pathData="M259.72 203.3 A23.56 29.76 0 1 0 306.84 203.3 A23.56 29.76 0 1 0 259.72 203.3 Z" />
+        <path android:fillColor="#FF000000" android:pathData="M308.08 223.14 A21.08 29.76 0 1 0 350.24 223.14 A21.08 29.76 0 1 0 308.08 223.14 Z" />
+        <path android:fillColor="#FF000000" android:fillType="evenOdd"
             android:pathData="M 193.38 275.22 C 193.38 250.42, 318.62 250.42, 318.62 275.22 C 325.44 290.1, 325.44 308.7, 306.84 322.34 A 16.12 16.12 0 0 1 274.6 322.34 C 273.98 318, 272.74 318, 272.12 322.34 A 16.12 16.12 0 0 1 239.88 322.34 C 239.26 318, 238.02 318, 237.4 322.34 A 16.12 16.12 0 0 1 205.16 322.34 C 186.56 308.7, 186.56 290.1, 193.38 275.22 Z" />
     </group>
 </vector>
