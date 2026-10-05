@@ -1045,7 +1045,7 @@ val composeUseCustomKeyboardLayout by com.termux.app.terminal.shell.ComposeTermi
                     title = "AgentPaw 设置",
                     summary = "手机操控 Agent，LLM 沿用 Termux Agent 配置",
                     onClick = { showAgentPawSettings = true },
-                    startAction = { SettingIcon(Icons.Rounded.Pets, contentDescription = "AgentPaw 设置") }
+                    startAction = { SettingIcon(painterResource(R.drawable.ic_agentpaw_settings), contentDescription = "AgentPaw 设置") }
                 )
             }),
         SearchableSetting(sec_ai, context.getString(R.string.agent_chat_params), context.getString(R.string.agent_chat_params_desc),
@@ -1713,7 +1713,7 @@ val composeUseCustomKeyboardLayout by com.termux.app.terminal.shell.ComposeTermi
                                 summary = "手机操控 Agent，LLM 沿用 Termux Agent 配置",
                                 onClick = { showAgentPawSettings = true },
                                 startAction = {
-                                SettingIcon(Icons.Rounded.Pets, contentDescription = "AgentPaw 设置")
+                                SettingIcon(painterResource(R.drawable.ic_agentpaw_settings), contentDescription = "AgentPaw 设置")
                                 }
                             )
 
