@@ -1,5 +1,8 @@
 package com.termux.app.compose
 
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,6 +16,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -23,7 +27,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.paw.agent.device.DevicePermissionManager
-import com.paw.agent.device.shizuku.ShizukuController
+import com.paw.agent.device.shizuku.ShizukuStatus
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Switch
 import top.yukonga.miuix.kmp.basic.Text
@@ -52,11 +56,13 @@ fun AgentPawSettingsDialog(show: Boolean, onDismiss: () -> Unit) {
     var visionMode by remember(show) { mutableStateOf(AgentPawPrefs.getVisionMode(context)) }
     var systemPrompt by remember(show) { mutableStateOf(AgentPawPrefs.getSystemPrompt(context)) }
 
-    // 无障碍 / Shizuku 状态每次打开弹窗时实时检测（用户可能刚从系统设置回来）
+    // 无障碍状态每次打开弹窗时实时检测（用户可能刚从系统设置回来）
     val accessibilityEnabled = remember(show) {
         DevicePermissionManager.isAccessibilityServiceEnabled(context)
     }
-    val shizukuAvailable = remember(show) { ShizukuController().isAvailable }
+    // Shizuku 状态走 0.1.1 的 StateFlow：binder 到达/授权结果实时刷新（如授权弹窗返回后立即更新）
+    val shizukuStatus by remember { DevicePermissionManager.observeShizukuState() }.collectAsState()
+    val overlayGranted = remember(show) { Settings.canDrawOverlays(context) }
 
     OverlayDialog(
         title = "AgentPaw 设置",
@@ -86,12 +92,40 @@ fun AgentPawSettingsDialog(show: Boolean, onDismiss: () -> Unit) {
                         actionText = if (accessibilityEnabled) null else "去开启",
                         onAction = { DevicePermissionManager.openAccessibilitySettings(context) }
                     )
+                    ShizukuStatusRow(
+                        status = shizukuStatus,
+                        onAuthorize = {
+                            if (!DevicePermissionManager.requestShizukuPermission()) {
+                                android.widget.Toast.makeText(
+                                    context, "Shizuku 未就绪，请先启动 Shizuku 服务", android.widget.Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        },
+                        onOpenShizuku = {
+                            if (!DevicePermissionManager.openShizukuApp(context)) {
+                                android.widget.Toast.makeText(
+                                    context, "未检测到 Shizuku 应用", android.widget.Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        }
+                    )
                     DialogStatusRow(
-                        title = "Shizuku 提权（可选）",
-                        summary = "未开启时自动使用无障碍通道",
-                        ok = shizukuAvailable,
-                        okText = "可用",
-                        badText = "未运行"
+                        title = "悬浮窗停止按钮",
+                        summary = "AgentPaw 操控手机时显示可拖拽的停止按钮，点击随时中止",
+                        ok = overlayGranted,
+                        okText = "已授权",
+                        badText = "未授权",
+                        actionText = if (overlayGranted) null else "去授权",
+                        onAction = {
+                            runCatching {
+                                context.startActivity(
+                                    Intent(
+                                        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                        Uri.parse("package:${context.packageName}")
+                                    ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                )
+                            }
+                        }
                     )
 
                     DialogSectionTitle("采样参数")
@@ -231,6 +265,45 @@ private fun DialogSwitchRow(
             Text(summary, fontSize = 12.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
         }
         Switch(checked = checked, onCheckedChange = onCheckedChange)
+    }
+}
+
+/**
+ * Shizuku 状态行（0.1.1 ShizukuStatus 三态）：
+ * GRANTED → 已授权；RUNNING_NO_PERMISSION → 显示「授权」按钮拉起授权对话框；
+ * NOT_RUNNING → 服务未运行或未安装，显示「打开 Shizuku」引导。
+ */
+@Composable
+private fun ShizukuStatusRow(
+    status: ShizukuStatus,
+    onAuthorize: () -> Unit,
+    onOpenShizuku: () -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text("Shizuku 提权（可选）", fontSize = 14.sp, color = MiuixTheme.colorScheme.onSurface)
+            Text(
+                "已授权时优先通过 Shizuku 执行按键操作，未开启时自动使用无障碍通道",
+                fontSize = 12.sp,
+                color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+            )
+        }
+        when (status) {
+            ShizukuStatus.GRANTED -> Text(
+                "已授权", fontSize = 12.sp, color = MiuixTheme.colorScheme.primary
+            )
+            ShizukuStatus.RUNNING_NO_PERMISSION -> {
+                Spacer(Modifier.width(8.dp))
+                TextButton(text = "授权", onClick = onAuthorize)
+            }
+            ShizukuStatus.NOT_RUNNING -> {
+                Spacer(Modifier.width(8.dp))
+                TextButton(text = "打开 Shizuku", onClick = onOpenShizuku)
+            }
+        }
     }
 }
 

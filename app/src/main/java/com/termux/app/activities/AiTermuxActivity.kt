@@ -88,6 +88,8 @@ import com.paw.agent.core.agent.AgentEvent
 import com.paw.agent.core.llm.OpenAiCompatibleClient
 import com.paw.agent.core.model.Message as PawMessage
 import com.paw.agent.core.model.MessageRole as PawMessageRole
+import com.paw.agent.device.accessibility.AgentAccessibilityService
+import com.paw.agent.device.floating.AgentStopFloatingButton
 import java.io.File
 
 class AiTermuxActivity : FragmentActivity() {
@@ -876,6 +878,11 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
         }
 
         try {
+            // 新一轮开始：清掉上一轮的用户停止标志，并显示可拖拽的停止悬浮按钮；
+            // 无悬浮窗权限时库内静默返回 false（返回值仅主线程调用时可信，此处运行于主线程协程）
+            AgentAccessibilityService.instance?.clearUserStop()
+            AgentStopFloatingButton.show(getApplication()) { cancelGeneration() }
+
             val agent = AgentPawEngine.buildAgent(pawEngineParts.llmClient, pawEngineParts.toolRegistry)
             agent.run(llmConfig, history, isCancelled = { cancelled }).collect { event ->
                 when (event) {
@@ -901,6 +908,7 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
                 }
             }
         } finally {
+            AgentStopFloatingButton.hide()
             isStreaming = false
         }
     }
