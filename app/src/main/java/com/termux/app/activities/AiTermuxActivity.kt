@@ -95,6 +95,7 @@ import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.yield
 import top.yukonga.miuix.kmp.glass.GlassIconButton
 import top.yukonga.miuix.kmp.glass.GlassTopAppBar
 import top.yukonga.miuix.kmp.glass.GlassTopAppBarDefaults
@@ -2992,9 +2993,10 @@ private fun AiChatScreen(vm: AiTermuxViewModel, conversationId: String, onBack: 
 
     // 进入后强制把顶栏打到完全收缩态（heightOffsetLimit 在 layout 阶段才被赋值，因此延迟几帧）。
     LaunchedEffect(conversationId) {
-        repeat(10) {
-            if (topAppBarState.heightOffsetLimit != 0f) break
+        var attempts = 0
+        while (attempts < 10 && topAppBarState.heightOffsetLimit == 0f) {
             yield()
+            attempts++
         }
         if (topAppBarState.heightOffsetLimit != 0f) {
             topAppBarState.heightOffset = topAppBarState.heightOffsetLimit
