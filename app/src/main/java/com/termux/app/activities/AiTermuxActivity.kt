@@ -2984,7 +2984,22 @@ private fun AiChatScreen(vm: AiTermuxViewModel, conversationId: String, onBack: 
     var showMoreMenu by remember { mutableStateOf(false) }
     var showClearConfirm by remember { mutableStateOf(false) }
     val pawManual by AgentPawPrefs.manualMode.collectAsState()
-    val scrollBehavior = MiuixScrollBehavior()
+    // 对话页默认滚到底（最新消息在底），内容 offset=0 但有历史可向上滚；
+    // 把 TopAppBarState 的 heightOffset 直接预置到极限负值，首帧即收缩态（小标题 + 玻璃按钮）。
+    // 切换对话时重建 state，避免上一个对话的收缩状态"粘"过来。
+    val topAppBarState = remember(conversationId) { TopAppBarState(0f, 0f, 0f) }
+    val scrollBehavior = MiuixScrollBehavior(state = topAppBarState)
+
+    // 进入后强制把顶栏打到完全收缩态（heightOffsetLimit 在 layout 阶段才被赋值，因此延迟几帧）。
+    LaunchedEffect(conversationId) {
+        repeat(10) {
+            if (topAppBarState.heightOffsetLimit != 0f) break
+            yield()
+        }
+        if (topAppBarState.heightOffsetLimit != 0f) {
+            topAppBarState.heightOffset = topAppBarState.heightOffsetLimit
+        }
+    }
 
     // 进入对话页时，若当前激活对话不是目标对话，则切换（从管理页点进来 / 新建后进入）
     LaunchedEffect(conversationId) {
@@ -3066,6 +3081,7 @@ private fun AiChatScreen(vm: AiTermuxViewModel, conversationId: String, onBack: 
                 AiChatGlassTopBar(
                     vm = vm,
                     scrollBehavior = scrollBehavior,
+                    isContentScrolled = listState.canScrollBackward,
                     backdrop = glassPage.backdrop,
                     onBack = onBack,
                     onOpenSetup = onOpenSetup,
@@ -3410,6 +3426,7 @@ private fun AiChatScreen(vm: AiTermuxViewModel, conversationId: String, onBack: 
 private fun AiChatGlassTopBar(
     vm: AiTermuxViewModel,
     scrollBehavior: ScrollBehavior? = null,
+    isContentScrolled: Boolean = true,
     backdrop: top.yukonga.miuix.kmp.blur.Backdrop?,
     onBack: () -> Unit,
     onOpenSetup: () -> Unit,
@@ -3430,6 +3447,7 @@ private fun AiChatGlassTopBar(
 
     GlassTopAppBar(
         title = vm.activeConversationTitle,
+        isContentScrolled = isContentScrolled,
         subtitle = subtitle,
         scrollBehavior = scrollBehavior,
         backdrop = backdrop,
