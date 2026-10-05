@@ -23,6 +23,9 @@ jobs:
     name: "Debug APK (${{ matrix.abi }})"
     runs-on: ubuntu-26.04
     timeout-minutes: 60
+    env:
+      # AgentPaw 依赖走 GitHub Packages（公开包也要 token），gradle 仓库源读取该变量
+      GITHUB_PACKAGES_TOKEN: ${{ github.token }}
     strategy:
       # 单架构失败时其余架构继续跑完，便于区分「某架构特有问题」与「全架构共性问题」
       fail-fast: false

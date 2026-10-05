@@ -183,6 +183,7 @@ fun SettingsScreen(
     var showProfileManager by remember { mutableStateOf(false) }
     var showChatParamsEditor by remember { mutableStateOf(false) }
     var showMemoryEditor by remember { mutableStateOf(false) }
+    var showAgentPawSettings by remember { mutableStateOf(false) }
 
     // 高风险命令二次确认
     var riskConfirmEnabled by remember { mutableStateOf(RiskConfirmManager.getProtectionLevel(context) != RiskConfirmManager.ProtectionLevel.OFF) }
@@ -1037,6 +1038,16 @@ val composeUseCustomKeyboardLayout by com.termux.app.terminal.shell.ComposeTermi
                     startAction = { SettingIcon(Icons.Rounded.Dashboard, contentDescription = context.getString(R.string.agent_profiles)) }
                 )
             }),
+        SearchableSetting(sec_ai, "AgentPaw 设置", "手机操控 Agent，LLM 沿用 Termux Agent 配置",
+            keywords = listOf("agentpaw", "paw", "手机操控", "自动化", "无障碍"),
+            render = {
+                ArrowPreference(
+                    title = "AgentPaw 设置",
+                    summary = "手机操控 Agent，LLM 沿用 Termux Agent 配置",
+                    onClick = { showAgentPawSettings = true },
+                    startAction = { SettingIcon(Icons.Rounded.Pets, contentDescription = "AgentPaw 设置") }
+                )
+            }),
         SearchableSetting(sec_ai, context.getString(R.string.agent_chat_params), context.getString(R.string.agent_chat_params_desc),
             keywords = listOf("上下文", "context", "压缩", "compress", "token", "参数"),
             render = {
@@ -1694,6 +1705,15 @@ val composeUseCustomKeyboardLayout by com.termux.app.terminal.shell.ComposeTermi
                                 onClick = { showProfileManager = true },
                                 startAction = {
                                 SettingIcon(Icons.Rounded.Dashboard, contentDescription = context.getString(R.string.agent_profiles))
+                                }
+                            )
+
+                            ArrowPreference(
+                                title = "AgentPaw 设置",
+                                summary = "手机操控 Agent，LLM 沿用 Termux Agent 配置",
+                                onClick = { showAgentPawSettings = true },
+                                startAction = {
+                                SettingIcon(Icons.Rounded.Pets, contentDescription = "AgentPaw 设置")
                                 }
                             )
 
@@ -2642,6 +2662,7 @@ val composeUseCustomKeyboardLayout by com.termux.app.terminal.shell.ComposeTermi
     AgentProfileDialog(show = showProfileManager, onDismiss = { showProfileManager = false })
     AgentChatParamsDialog(show = showChatParamsEditor, onDismiss = { showChatParamsEditor = false })
     AgentMemoryDialog(show = showMemoryEditor, onDismiss = { showMemoryEditor = false })
+    AgentPawSettingsDialog(show = showAgentPawSettings, onDismiss = { showAgentPawSettings = false })
 
     // ---------- AI Termux：选择 System Prompt 文件 ----------
     var showInternalPromptPicker by remember { mutableStateOf(false) }
