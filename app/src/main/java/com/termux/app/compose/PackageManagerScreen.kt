@@ -77,8 +77,11 @@ import top.yukonga.miuix.kmp.basic.TabRowWithContour
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.glass.Back
+import top.yukonga.miuix.kmp.icon.glass.ChevronBackward
 import top.yukonga.miuix.kmp.icon.glass.MiuixGlassIcons
+import top.yukonga.miuix.kmp.icon.glass.Download
+import top.yukonga.miuix.kmp.icon.glass.Play
+import top.yukonga.miuix.kmp.icon.glass.Refresh
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import java.io.File
@@ -811,7 +814,7 @@ fun PackageManagerScreen(
                                 else onBackPressed()
                             }) {
                                 Icon(
-                                    imageVector = MiuixGlassIcons.Back,
+                                    imageVector = MiuixGlassIcons.ChevronBackward,
                                     contentDescription = stringResource(R.string.back),
                                     tint = MiuixTheme.colorScheme.onSurface,
                                     modifier = Modifier.size(24.dp)
@@ -835,10 +838,10 @@ fun PackageManagerScreen(
                                     }
                                 ) {
                                     Icon(
-                                        painter = painterResource(R.drawable.ic_play),
+                                        imageVector = MiuixGlassIcons.Play,
                                         contentDescription = stringResource(R.string.resume_background),
                                         tint = MiuixTheme.colorScheme.primary,
-                                        modifier = Modifier.size(22.dp)
+                                        modifier = Modifier.size(24.dp)
                                     )
                                 }
                             }
@@ -864,10 +867,10 @@ fun PackageManagerScreen(
                                 }
                             ) {
                                 Icon(
-                                    painter = painterResource(R.drawable.ic_refresh),
+                                    imageVector = MiuixGlassIcons.Refresh,
                                     contentDescription = stringResource(R.string.refresh_sources),
                                     tint = MiuixTheme.colorScheme.onSurface,
-                                    modifier = Modifier.size(22.dp)
+                                    modifier = Modifier.size(24.dp)
                                 )
                             }
                             GlassIconButton(
@@ -889,10 +892,10 @@ fun PackageManagerScreen(
                                 }
                             ) {
                                 Icon(
-                                    painter = painterResource(R.drawable.ic_download),
+                                    imageVector = MiuixGlassIcons.Download,
                                     contentDescription = stringResource(R.string.upgrade_all_packages),
                                     tint = MiuixTheme.colorScheme.onSurface,
-                                    modifier = Modifier.size(22.dp)
+                                    modifier = Modifier.size(24.dp)
                                 )
                             }
                         }

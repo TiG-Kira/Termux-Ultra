@@ -25,7 +25,7 @@ import top.yukonga.miuix.kmp.glass.GlassTopAppBar
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.glass.Back
+import top.yukonga.miuix.kmp.icon.glass.ChevronBackward
 import top.yukonga.miuix.kmp.icon.glass.MiuixGlassIcons
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
@@ -83,7 +83,7 @@ class PluginComposeActivity : ComponentActivity() {
                         navigationIcon = {
                             GlassIconButton(onClick = { finish() }) {
                                 Icon(
-                                    imageVector = MiuixGlassIcons.Back,
+                                    imageVector = MiuixGlassIcons.ChevronBackward,
                                     contentDescription = "返回",
                                     tint = MiuixTheme.colorScheme.onSurface,
                                     modifier = Modifier.size(24.dp)

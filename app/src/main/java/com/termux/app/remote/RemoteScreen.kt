@@ -42,6 +42,9 @@ import com.termux.app.ssh.SshConnectionManager
 import com.termux.app.ssh.connectToSsh
 import top.yukonga.miuix.kmp.glass.GlassIconButton
 import top.yukonga.miuix.kmp.glass.GlassTopAppBar
+import top.yukonga.miuix.kmp.icon.glass.Add
+import top.yukonga.miuix.kmp.icon.glass.MiuixGlassIcons
+import top.yukonga.miuix.kmp.icon.glass.Refresh
 import top.yukonga.miuix.kmp.basic.CircularProgressIndicator
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.TopAppBar
@@ -224,7 +227,7 @@ fun RemoteScreen(
                                     }
                                 ) {
                                     Icon(
-                                        painter = painterResource(R.drawable.ic_add),
+                                        imageVector = MiuixGlassIcons.Add,
                                         contentDescription = "添加",
                                         tint = topBarIconColor
                                     )
@@ -241,7 +244,7 @@ fun RemoteScreen(
                                         CircularProgressIndicator(modifier = Modifier.size(24.dp))
                                     } else {
                                         Icon(
-                                            painter = painterResource(R.drawable.ic_refresh),
+                                            imageVector = MiuixGlassIcons.Refresh,
                                             contentDescription = "扫描",
                                             tint = topBarIconColor
                                         )
@@ -254,7 +257,7 @@ fun RemoteScreen(
                                     }
                                 ) {
                                     Icon(
-                                        painter = painterResource(R.drawable.ic_add),
+                                        imageVector = MiuixGlassIcons.Add,
                                         contentDescription = "添加",
                                         tint = topBarIconColor
                                     )

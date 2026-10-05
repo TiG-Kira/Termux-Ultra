@@ -52,8 +52,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowLeft
-import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.filled.ArrowLeft
+import androidx.compose.material.icons.automirrored.filled.ArrowRight
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.ExpandLess
 import androidx.compose.material.icons.rounded.Info
@@ -124,7 +124,7 @@ import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.glass.Back
+import top.yukonga.miuix.kmp.icon.glass.ChevronBackward
 import top.yukonga.miuix.kmp.icon.glass.MiuixGlassIcons
 import top.yukonga.miuix.kmp.menu.OverlayIconDropdownMenu
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
@@ -602,7 +602,7 @@ fun TerminalDetailScreenCompose(
         val terminalInteractionSource = remember { MutableInteractionSource() }
         Box(
             modifier = Modifier
-                .size(40.dp)
+                .size(48.dp)
                 .clip(CircleShape)
                 .combinedClickable(
                     interactionSource = terminalInteractionSource,
@@ -619,13 +619,13 @@ fun TerminalDetailScreenCompose(
             Icon(
                 painter = painterResource(R.drawable.ic_terminal),
                 contentDescription = null,
-                modifier = Modifier.size(22.dp),
+                modifier = Modifier.size(26.dp),
                 tint = effectiveTopBarContentColor
             )
         }
         Box(
             modifier = Modifier
-                .size(40.dp)
+                .size(48.dp)
                 .clip(CircleShape)
                 .combinedClickable(
                     interactionSource = remember { MutableInteractionSource() },
@@ -641,20 +641,20 @@ fun TerminalDetailScreenCompose(
             Icon(
                 painter = painterResource(R.drawable.ic_keyboard),
                 contentDescription = null,
-                modifier = Modifier.size(22.dp),
+                modifier = Modifier.size(26.dp),
                 tint = effectiveTopBarContentColor
             )
         }
         OverlayIconDropdownMenu(
             entry = addSessionEntry,
             backgroundColor = Color.Transparent,
-            minWidth = 40.dp,
-            minHeight = 40.dp
+            minWidth = 48.dp,
+            minHeight = 48.dp
         ) {
             Icon(
                 painter = painterResource(R.drawable.ic_add),
                 contentDescription = null,
-                modifier = Modifier.size(22.dp),
+                modifier = Modifier.size(26.dp),
                 tint = effectiveTopBarContentColor
             )
         }
@@ -663,22 +663,24 @@ fun TerminalDetailScreenCompose(
                 updateInteractionTime()
                 closeCurrentSession()
             },
-            enabled = !currentSessionIsDead
+            enabled = !currentSessionIsDead,
+            minWidth = 48.dp,
+            minHeight = 48.dp
         ) {
             Icon(
                 painter = painterResource(R.drawable.ic_close),
                 contentDescription = null,
-                modifier = Modifier.size(22.dp),
+                modifier = Modifier.size(26.dp),
                 tint = if (currentSessionIsDead)
                     effectiveTopBarContentColor.copy(alpha = 0.3f)
                 else effectiveTopBarContentColor
             )
         }
-        IconButton(onClick = { updateInteractionTime(); showContextMenu = true }) {
+        IconButton(onClick = { updateInteractionTime(); showContextMenu = true }, minWidth = 48.dp, minHeight = 48.dp) {
             Icon(
                 imageVector = Icons.Rounded.MoreVert,
                 contentDescription = null,
-                modifier = Modifier.size(22.dp),
+                modifier = Modifier.size(26.dp),
                 tint = effectiveTopBarContentColor
             )
         }
@@ -689,7 +691,7 @@ fun TerminalDetailScreenCompose(
         val terminalInteractionSource = remember { MutableInteractionSource() }
         Box(
             modifier = Modifier
-                .size(40.dp)
+                .size(48.dp)
                 .clip(CircleShape)
                 .combinedClickable(
                     interactionSource = terminalInteractionSource,
@@ -706,13 +708,13 @@ fun TerminalDetailScreenCompose(
             Icon(
                 painter = painterResource(R.drawable.ic_terminal),
                 contentDescription = null,
-                modifier = Modifier.size(22.dp),
+                modifier = Modifier.size(26.dp),
                 tint = effectiveTopBarContentColor
             )
         }
         Box(
             modifier = Modifier
-                .size(40.dp)
+                .size(48.dp)
                 .clip(CircleShape)
                 .combinedClickable(
                     interactionSource = remember { MutableInteractionSource() },
@@ -728,20 +730,20 @@ fun TerminalDetailScreenCompose(
             Icon(
                 painter = painterResource(R.drawable.ic_keyboard),
                 contentDescription = null,
-                modifier = Modifier.size(22.dp),
+                modifier = Modifier.size(26.dp),
                 tint = effectiveTopBarContentColor
             )
         }
         OverlayIconDropdownMenu(
             entry = addSessionEntry,
             backgroundColor = Color.Transparent,
-            minWidth = 40.dp,
-            minHeight = 40.dp
+            minWidth = 48.dp,
+            minHeight = 48.dp
         ) {
             Icon(
                 painter = painterResource(R.drawable.ic_add),
                 contentDescription = null,
-                modifier = Modifier.size(22.dp),
+                modifier = Modifier.size(26.dp),
                 tint = effectiveTopBarContentColor
             )
         }
@@ -750,22 +752,24 @@ fun TerminalDetailScreenCompose(
                 updateInteractionTime()
                 closeCurrentSession()
             },
-            enabled = !currentSessionIsDead
+            enabled = !currentSessionIsDead,
+            minWidth = 48.dp,
+            minHeight = 48.dp
         ) {
             Icon(
                 painter = painterResource(R.drawable.ic_close),
                 contentDescription = null,
-                modifier = Modifier.size(22.dp),
+                modifier = Modifier.size(26.dp),
                 tint = if (currentSessionIsDead)
                     effectiveTopBarContentColor.copy(alpha = 0.3f)
                 else effectiveTopBarContentColor
             )
         }
-        IconButton(onClick = { updateInteractionTime(); showContextMenu = true }) {
+        IconButton(onClick = { updateInteractionTime(); showContextMenu = true }, minWidth = 48.dp, minHeight = 48.dp) {
             Icon(
                 imageVector = Icons.Rounded.MoreVert,
                 contentDescription = null,
-                modifier = Modifier.size(22.dp),
+                modifier = Modifier.size(26.dp),
                 tint = effectiveTopBarContentColor
             )
         }
@@ -823,7 +827,7 @@ fun TerminalDetailScreenCompose(
                     onClick = { updateInteractionTime(); onBack() }
                 ) {
                     Icon(
-                        imageVector = MiuixGlassIcons.Back,
+                        imageVector = MiuixGlassIcons.ChevronBackward,
                         contentDescription = null,
                         modifier = Modifier.size(24.dp),
                         tint = if (isCompact)
@@ -890,9 +894,13 @@ fun TerminalDetailScreenCompose(
                     }
                 ) {
                     Icon(
-                        imageVector = if (isTopBarCollapsed) Icons.AutoMirrored.Rounded.KeyboardArrowRight else Icons.AutoMirrored.Rounded.KeyboardArrowLeft,
+                        // 左侧返回键是 chevron（描边 V 形），折叠把手必须换成实心三角才不撞形。
+                        // 注意 KeyboardArrow 家族连 Filled 变体也是 chevron，真正的实心楔形是
+                        // ArrowLeft/ArrowRight（M10 17l5-5-5-5v10z）。楔形 @24dp 墨迹仅 25dp²，
+                        // 取 32dp 后约 44dp²，与返回 chevron 的 ~46dp² 视觉重量相当。
+                        imageVector = if (isTopBarCollapsed) Icons.AutoMirrored.Filled.ArrowRight else Icons.AutoMirrored.Filled.ArrowLeft,
                         contentDescription = null,
-                        modifier = Modifier.size(22.dp),
+                        modifier = Modifier.size(32.dp),
                         tint = if (isCompact)
                             MiuixTheme.colorScheme.onSurface
                         else effectiveTopBarContentColor

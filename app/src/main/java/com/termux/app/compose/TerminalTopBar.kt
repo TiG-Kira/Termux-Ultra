@@ -32,7 +32,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.termux.R
 import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.glass.Back
+import top.yukonga.miuix.kmp.icon.glass.ChevronBackward
 import top.yukonga.miuix.kmp.icon.glass.MiuixGlassIcons
 
 object TerminalTopBarState {
@@ -61,11 +61,11 @@ fun TerminalTopBar(
             .padding(horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        IconButton(onClick = onBack) {
+        IconButton(onClick = onBack, minWidth = 48.dp, minHeight = 48.dp) {
             Icon(
-                imageVector = MiuixGlassIcons.Back,
+                imageVector = MiuixGlassIcons.ChevronBackward,
                 contentDescription = null,
-                modifier = Modifier.size(24.dp),
+                modifier = Modifier.size(26.dp),
                 tint = TerminalTopBarState.iconColor
             )
         }
@@ -97,7 +97,7 @@ fun TerminalTopBar(
                 Icon(
                     painter = painterResource(R.drawable.ic_keyboard),
                     contentDescription = null,
-                    modifier = Modifier.size(24.dp),
+                    modifier = Modifier.size(26.dp),
                     tint = TerminalTopBarState.iconColor
                 )
             }
@@ -117,15 +117,15 @@ fun TerminalTopBar(
             Icon(
                 painter = painterResource(R.drawable.ic_add),
                 contentDescription = null,
-                modifier = Modifier.size(24.dp),
+                modifier = Modifier.size(26.dp),
                 tint = TerminalTopBarState.iconColor
             )
         }
-        IconButton(onClick = onCloseSession) {
+        IconButton(onClick = onCloseSession, minWidth = 48.dp, minHeight = 48.dp) {
             Icon(
                 painter = painterResource(R.drawable.ic_delete),
                 contentDescription = null,
-                modifier = Modifier.size(24.dp),
+                modifier = Modifier.size(26.dp),
                 tint = TerminalTopBarState.iconColor
             )
         }

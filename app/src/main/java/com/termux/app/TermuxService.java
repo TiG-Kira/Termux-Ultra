@@ -154,36 +154,11 @@ public final class TermuxService extends Service implements TermuxTaskCompat.Ter
     private boolean mAreSessionsFrozen = false;
     private String mKilledSessionName = null;
 
-    /**
-     * 已结束（被杀死/自然退出）的会话信息队列。
-     *
-     * 当 [onTermuxSessionExited] 触发时，会话会立即从 [mTermuxSessions] 移除，
-     * UI 层来不及捕获退出代码。这里在移除前把会话名 + 退出代码 + 时间戳记录下来，
-     * 供 TerminalListScreen 拉取并以"死亡卡片"形式展示（红色标题 + 退出代码小字），
-     * 直到用户手动消除。
-     *
-     * 死亡会话不计入 [mTermuxSessions]，因此 LiveUpdate 通知中的会话数量自动排除。
-     */
-    private final List<DeadSessionInfo> mDeadSessionInfos = new ArrayList<>();
-
     /** LiveUpdateState 变化监听器：Kotlin 层状态变化时触发 updateNotification()。 */
     private final LiveUpdateState.OnChangeListener mLiveUpdateListener = () -> {
         try { updateNotification(); }
         catch (Throwable t) { Logger.logDebug(LOG_TAG, "LiveUpdateState listener failed: " + t.getMessage()); }
     };
-
-    /** 已结束会话的信息载体（name + exitCode + exitedAt）。 */
-    public static class DeadSessionInfo {
-        public final String sessionName;
-        public final int exitCode;
-        public final long exitedAt;
-
-        public DeadSessionInfo(String sessionName, int exitCode, long exitedAt) {
-            this.sessionName = sessionName;
-            this.exitCode = exitCode;
-            this.exitedAt = exitedAt;
-        }
-    }
 
     private Handler mMemoryCheckHandler;
     private Runnable mMemoryCheckRunnable;
@@ -1038,10 +1013,6 @@ public synchronized int removeTermuxSession(TerminalSession sessionToRemove) {
                 sessionName = getString(R.string.terminal);
             }
 
-            // 记录到死亡会话队列，供 TerminalListScreen 以"死亡卡片"形式展示
-            // （红色标题 + 退出代码小字 + 手动消除按钮）
-            mDeadSessionInfos.add(new DeadSessionInfo(sessionName, exitCode, System.currentTimeMillis()));
-
             if (exitCode == 137 && !mIsMemoryKillActive && !MemoryBroadcastReceiver.isMemoryKillReceived()) {
                 mKilledSessionName = sessionName;
                 Logger.logDebug(LOG_TAG, "Session killed by system: " + sessionName);
@@ -1057,21 +1028,6 @@ public synchronized int removeTermuxSession(TerminalSession sessionToRemove) {
         updateNotification();
     }
 
-    /** 获取已结束会话信息列表（供 TerminalListScreen 渲染死亡卡片）。 */
-    public synchronized List<DeadSessionInfo> getDeadSessionInfos() {
-        return new ArrayList<>(mDeadSessionInfos);
-    }
-
-    /** 用户手动消除某个死亡会话卡片时调用。 */
-    public synchronized void clearDeadSessionInfo(String sessionName, long exitedAt) {
-        mDeadSessionInfos.removeIf(info ->
-            info.sessionName.equals(sessionName) && info.exitedAt == exitedAt);
-    }
-
-    /** 清除所有死亡会话信息（例如用户点击"全部清除"）。 */
-    public synchronized void clearAllDeadSessionInfos() {
-        mDeadSessionInfos.clear();
-    }
 
     /** Get the terminal transcript rows to be used for new {@link TermuxSession}. */
     public Integer getTerminalTranscriptRows() {

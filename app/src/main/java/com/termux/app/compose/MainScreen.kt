@@ -787,34 +787,17 @@ private fun PageContentForTab(
             onTopBarContent = onTopBarContent,
             active = active
         )
-        1 -> {
-            val runtimeCore = TerminalRuntimeCore.getCurrent(context)
-            if (runtimeCore == TerminalRuntimeCore.Core.KOTLIN_COMPOSE) {
-                ComposeTerminalListScreen(
-                    context = context,
-                    onNewTerminal = onNewTerminal,
-                    isWakeLockEnabled = isWakeLockEnabled,
-                    onToggleWakeLock = onToggleWakeLock,
-                    navBarBottomPadding = navBarBottomPadding,
-                    onTopBarContent = onTopBarContent,
-                    active = active
-                )
-            } else {
-                TerminalListScreen(
-                    sessions = sessions,
-                    onSessionClick = onSessionClick,
-                    onNewTerminal = onNewTerminal,
-                    onStopTerminal = onStopTerminal,
-                    onRenameTerminal = onRenameTerminal,
-                    isWakeLockEnabled = isWakeLockEnabled,
-                    onToggleWakeLock = onToggleWakeLock,
-                    onRefresh = onRefreshSessions,
-                    navBarBottomPadding = navBarBottomPadding,
-                    onTopBarContent = onTopBarContent,
-                    active = active
-                )
-            }
-        }
+        // 终端会话列表页只保留 Compose 版：经典引擎及其 Java 版列表页（TerminalListScreen）已
+        // 移除，TerminalRuntimeCore.getCurrent() 恒为 KOTLIN_COMPOSE，此处不再做核心分支。
+        1 -> ComposeTerminalListScreen(
+            context = context,
+            onNewTerminal = onNewTerminal,
+            isWakeLockEnabled = isWakeLockEnabled,
+            onToggleWakeLock = onToggleWakeLock,
+            navBarBottomPadding = navBarBottomPadding,
+            onTopBarContent = onTopBarContent,
+            active = active
+        )
         2 -> FileManagerScreen(
             onOpenFile = onExecuteScript,
             navBarBottomPadding = navBarBottomPadding,

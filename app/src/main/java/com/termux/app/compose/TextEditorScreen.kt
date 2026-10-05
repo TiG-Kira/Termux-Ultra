@@ -29,7 +29,6 @@ import com.termux.R
 import top.yukonga.miuix.kmp.glass.GlassIconButton
 import top.yukonga.miuix.kmp.glass.GlassTopAppBar
 import top.yukonga.miuix.kmp.basic.Icon
-import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.Switch
@@ -37,8 +36,9 @@ import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.glass.Back
+import top.yukonga.miuix.kmp.icon.glass.ChevronBackward
 import top.yukonga.miuix.kmp.icon.glass.MiuixGlassIcons
+import top.yukonga.miuix.kmp.icon.glass.Save
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import java.io.File
@@ -106,7 +106,7 @@ fun TextEditorScreen(
                         else onClose()
                     }) {
                         Icon(
-                            imageVector = MiuixGlassIcons.Back,
+                            imageVector = MiuixGlassIcons.ChevronBackward,
                             contentDescription = null,
                             tint = MiuixTheme.colorScheme.onSurface,
                             modifier = Modifier.size(24.dp)
@@ -118,18 +118,18 @@ fun TextEditorScreen(
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             GlassIconButton(onClick = { doSave() }) {
                                 Icon(
-                                    painter = painterResource(R.drawable.ic_save),
+                                    imageVector = MiuixGlassIcons.Save,
                                     contentDescription = stringResource(R.string.save),
-                                    modifier = Modifier.size(22.dp),
+                                    modifier = Modifier.size(24.dp),
                                     tint = MiuixTheme.colorScheme.onSurface
                                 )
                             }
                             Spacer(modifier = Modifier.width(2.dp))
-                            IconButton(onClick = { showPermissionDialog = true }) {
+                            GlassIconButton(onClick = { showPermissionDialog = true }) {
                                 Icon(
                                     painter = painterResource(R.drawable.ic_terminal),
                                     contentDescription = stringResource(R.string.file_info_permissions),
-                                    modifier = Modifier.size(22.dp),
+                                    modifier = Modifier.size(30.dp),
                                     tint = MiuixTheme.colorScheme.onSurface
                                 )
                             }

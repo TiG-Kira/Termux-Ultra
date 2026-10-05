@@ -40,7 +40,7 @@ import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.glass.GlassIconButton
 import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.glass.Back
+import top.yukonga.miuix.kmp.icon.glass.ChevronBackward
 import top.yukonga.miuix.kmp.icon.glass.MiuixGlassIcons
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
@@ -176,7 +176,7 @@ private fun CenterNote(text: String) {
 fun BackButton(onClick: () -> Unit) {
     GlassIconButton(onClick = onClick) {
         Icon(
-            imageVector = MiuixGlassIcons.Back,
+            imageVector = MiuixGlassIcons.ChevronBackward,
             contentDescription = null,
             modifier = Modifier.size(24.dp),
             tint = MiuixTheme.colorScheme.onSurface
