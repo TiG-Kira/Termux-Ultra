@@ -3349,29 +3349,25 @@ private fun TopActionButton(
     badge: Boolean = false,
     onClick: () -> Unit
 ) {
-    Box(contentAlignment = Alignment.Center) {
-        Box(
-            modifier = Modifier
-                .size(40.dp)
-                .clip(CircleShape)
-                .clickable(onClick = onClick),
-            contentAlignment = Alignment.Center
-        ) {
+    GlassIconButton(onClick = onClick) {
+        Box(Modifier.fillMaxSize()) {
             Icon(
                 imageVector = icon,
                 contentDescription = description,
-                modifier = Modifier.size(22.dp),
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .size(22.dp),
                 tint = MiuixTheme.colorScheme.onSurface
             )
-        }
-        if (badge) {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .size(8.dp)
-                    .clip(CircleShape)
-                    .background(MiuixTheme.colorScheme.primary)
-            )
+            if (badge) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .size(8.dp)
+                        .clip(CircleShape)
+                        .background(MiuixTheme.colorScheme.primary)
+                )
+            }
         }
     }
 }

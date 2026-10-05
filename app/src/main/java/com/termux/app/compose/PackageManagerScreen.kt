@@ -67,7 +67,6 @@ import top.yukonga.miuix.kmp.glass.GlassIconButton
 import top.yukonga.miuix.kmp.glass.GlassTopAppBar
 import top.yukonga.miuix.kmp.basic.Card as MiuixCard
 import top.yukonga.miuix.kmp.basic.Icon
-import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.InputField
@@ -766,7 +765,7 @@ fun PackageManagerScreen(
                                     )
                                 }
                             }
-                            IconButton(
+                            GlassIconButton(
                                 onClick = {
                                     progressTitle = "正在刷新软件源"
                                     progressLog = ""
@@ -794,7 +793,7 @@ fun PackageManagerScreen(
                                     modifier = Modifier.size(22.dp)
                                 )
                             }
-                            IconButton(
+                            GlassIconButton(
                                 onClick = {
                                     progressTitle = "正在升级所有包"
                                     progressLog = ""

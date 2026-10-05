@@ -7,6 +7,7 @@ import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.core.view.WindowCompat
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -43,6 +44,8 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
 class FtpInfoActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // 与其他独立玻璃页一致：状态栏交给 Compose 画布，玻璃顶栏才能盖到状态栏后面，否则异色。
+        WindowCompat.setDecorFitsSystemWindows(window, false)
         setContent {
             val navDispatcher = com.termux.app.compose.NavigationHelper.createDispatcher()
             val navDispatcherOwner = com.termux.app.compose.NavigationHelper.createOwner(navDispatcher)
@@ -80,6 +83,7 @@ fun FtpInfoScreen() {
     val ipAddress = getLocalIpAddress(context)
     
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             GlassTopAppBar(
                 title = "FTP 连接信息",
@@ -102,6 +106,8 @@ fun FtpInfoScreen() {
                 .then(glassPage.contentModifier)
                 .fillMaxSize()
                 .padding(pagePaddingWithoutTop(padding))
+                // insets 已归零，底部导航栏让位由页面自己负责。
+                .navigationBarsPadding()
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
