@@ -453,11 +453,18 @@ private fun TopAppBarLayout(
                 y = verticalCenter - titlePlaceable.height / 2,
             )
 
-            // Small subtitle (centered below small title, same alpha as small title)
-            smallSubtitlePlaceable?.placeRelative(
-                x = (constraints.maxWidth - smallSubtitlePlaceable.width) / 2,
-                y = verticalCenter + titlePlaceable.height / 2,
-            )
+            // Small subtitle (centered below small title, same alpha as small title).
+            // Subtitle 复用 title 的避让策略：跟随 title 的左边界（baseX），再 clamp 到
+            // navigationIcon 左边界 / actionIcons 右边界之间的安全区，避免被右侧按钮挡。
+            smallSubtitlePlaceable?.let { sub ->
+                val subRightMax = (constraints.maxWidth - actionIconsPlaceable.width - sub.width)
+                    .coerceAtLeast(navigationIconPlaceable.width)
+                val subX = baseX.coerceIn(navigationIconPlaceable.width, subRightMax)
+                sub.placeRelative(
+                    x = subX,
+                    y = verticalCenter + titlePlaceable.height / 2,
+                )
+            }
 
             // Action icons
             actionIconsPlaceable.placeRelative(
