@@ -92,7 +92,8 @@ import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.Back
+import top.yukonga.miuix.kmp.icon.glass.Back
+import top.yukonga.miuix.kmp.icon.glass.MiuixGlassIcons
 import top.yukonga.miuix.kmp.preference.CheckboxPreference
 
 import androidx.compose.material.icons.Icons
@@ -719,7 +720,7 @@ private fun OobeEulaPage(
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    imageVector = MiuixIcons.Back,
+                    imageVector = MiuixGlassIcons.Back,
                     contentDescription = stringResource(R.string.provision_back),
                     tint = MiuixTheme.colorScheme.onSurface
                 )
@@ -1022,7 +1023,7 @@ private fun OobePermissionPage(
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    imageVector = MiuixIcons.Back,
+                    imageVector = MiuixGlassIcons.Back,
                     contentDescription = stringResource(R.string.provision_back),
                     tint = MiuixTheme.colorScheme.onSurface
                 )
@@ -1254,7 +1255,7 @@ private fun OobeInstallPage(
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    imageVector = MiuixIcons.Back,
+                    imageVector = MiuixGlassIcons.Back,
                     contentDescription = stringResource(R.string.provision_back),
                     tint = MiuixTheme.colorScheme.onSurface
                 )
@@ -1485,7 +1486,7 @@ private fun OobeReleaseNotesPage(
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    imageVector = MiuixIcons.Back,
+                    imageVector = MiuixGlassIcons.Back,
                     contentDescription = stringResource(R.string.provision_back),
                     tint = MiuixTheme.colorScheme.onSurface
                 )

@@ -74,7 +74,8 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.ui.res.stringResource
 import top.yukonga.miuix.kmp.window.WindowDialog
 import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.Back
+import top.yukonga.miuix.kmp.icon.glass.Back
+import top.yukonga.miuix.kmp.icon.glass.MiuixGlassIcons
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 import com.termux.app.compose.pagePaddingWithoutTop
@@ -108,7 +109,7 @@ fun AiLocalTrainerScreen(
                     navigationIcon = {
                         GlassIconButton(onClick = { onBack() }) {
                             Icon(
-                                imageVector = MiuixIcons.Back,
+                                imageVector = MiuixGlassIcons.Back,
                                 contentDescription = stringResource(R.string.back),
                                 modifier = Modifier.size(24.dp),
                                 tint = MiuixTheme.colorScheme.onSurface

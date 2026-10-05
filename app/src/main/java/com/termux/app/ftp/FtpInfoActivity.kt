@@ -38,7 +38,8 @@ import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.Back
+import top.yukonga.miuix.kmp.icon.glass.Back
+import top.yukonga.miuix.kmp.icon.glass.MiuixGlassIcons
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 class FtpInfoActivity : ComponentActivity() {
@@ -91,7 +92,7 @@ fun FtpInfoScreen() {
                 navigationIcon = {
                     GlassIconButton(onClick = { (context as FtpInfoActivity).finish() }) {
                         Icon(
-                            imageVector = MiuixIcons.Back,
+                            imageVector = MiuixGlassIcons.Back,
                             contentDescription = "返回",
                             tint = MiuixTheme.colorScheme.onSurface,
                             modifier = Modifier.size(24.dp)
