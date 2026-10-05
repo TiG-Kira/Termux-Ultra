@@ -450,10 +450,24 @@ object PkgRepo {
     }
 }
 
-/** 分类视图导航栈层级 */
+/**
+ * 分类视图导航栈层级。
+ *
+ * 分类以**显示名**为标识：sectionDisplayName 会把所有未收录的 key 统一映射成"实用工具"，
+ * 因此同一个显示名可能对应多个 section key，按 key 记录无法定位到归并后的分类。
+ */
 data class PkgNavLevel(
-    val sectionKey: String?,
     val label: String?
+)
+
+/**
+ * 归并后的分类：一个显示名 = 一个分类。
+ *
+ * [packages] 已按包名去重并排序，详情页按 [label] 取包，保证与列表里的计数一致。
+ */
+data class PkgCategory(
+    val label: String,
+    val packages: List<PackageInfo>
 )
 
 /** 启发式 section 分类器 */
@@ -613,9 +627,71 @@ fun PackageManagerScreen(
     }
     val pkgViewMode by remember { mutableStateOf(pkgPrefs.getInt("KEY_PKG_VIEW_MODE", 0)) }
     var navStack by remember {
-        mutableStateOf(listOf(PkgNavLevel(sectionKey = null, label = null)))
+        mutableStateOf(listOf(PkgNavLevel(label = null)))
     }
-    val currentSection: String? = navStack.lastOrNull()?.sectionKey
+    val currentLabel: String? = navStack.lastOrNull()?.label
+
+    // ---- 派生列表：分类归并 / 去重 / 排序 ----
+    // 这些计算原先写在 LazyColumn 的 content lambda 里。顶栏收展是逐帧动画，每帧重组
+    // 都要对全量包跑一遍 section 分类（section 为空时走正则启发式，未安装 tab 数千条），
+    // 主线程被占满就掉帧。提到 remember 后只在输入变化时算一次。
+    val rawList: List<PackageInfo> = remember(
+        searchQuery, selectedTab, installedList, availableList
+    ) {
+        if (searchQuery.isNotBlank()) {
+            val q = searchQuery.lowercase()
+            val installedMatch = installedList.filter { it.name.lowercase().contains(q) }
+            val availableMatch = availableList.filter { it.name.lowercase().contains(q) }
+            (installedMatch + availableMatch).distinctBy { it.name }
+        } else if (selectedTab == 0) installedList.distinctBy { it.name } else availableList
+    }
+
+    val showCategory = pkgViewMode == 0 && searchQuery.isBlank()
+    val isCategoryRoot = showCategory && navStack.size == 1
+    val isCategoryDetail = showCategory && navStack.size > 1
+
+    // 按**显示名**分组而非 section key：不同 key 可能显示成同一个名字（未收录 key 全部
+    // 落到"实用工具"），按 key 分组会在列表里出现多个同名分类。同名分类在此合并为一个，
+    // 条目按包名去重后排序。
+    val categories: List<PkgCategory> = remember(rawList, showCategory, context) {
+        if (!showCategory) emptyList() else {
+            rawList
+                // 先按规范化后的 key 分桶：启发式 classify 每条只跑一次
+                .groupBy { pkg -> PkgRepo.normalizeSectionKey(pkg.resolveSection()) }
+                .entries
+                // 再按显示名归并：getString 只对十几个 key 调用，而不是每包一次
+                .groupBy { (key, _) -> PkgRepo.sectionDisplayName(context, key) }
+                .map { (label, groups) ->
+                    PkgCategory(
+                        label = label,
+                        packages = groups
+                            .flatMap { it.value }
+                            .distinctBy { it.name }
+                            .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name })
+                    )
+                }
+                .sortedWith(
+                    compareByDescending<PkgCategory> { it.packages.size }
+                        .thenBy(String.CASE_INSENSITIVE_ORDER) { it.label }
+                )
+        }
+    }
+
+    // 分类详情：按归并后的分类取包（而不是拿 section key 去跟原始 section 硬比，
+    // 那样 python3 这类 key 会被规范化前后不一致漏掉）。
+    val displayList: List<PackageInfo> = remember(rawList, categories, isCategoryDetail, currentLabel) {
+        if (!isCategoryDetail) rawList
+        else categories.firstOrNull { it.label == currentLabel }?.packages ?: emptyList()
+    }
+
+    // 切分类 / 换 tab / 进出搜索时回到顶部并让顶栏复位到展开态：
+    // 否则上一级的滚动位置会残留，新列表明明在顶部、顶栏却停在收缩态。
+    // 搜索逐字输入不参与复位（用 isBlank 而不是 searchQuery 本身），
+    // 否则每敲一个字符都会把翻着结果的人强行拉回顶部。
+    LaunchedEffect(navStack, selectedTab, searchQuery.isBlank()) {
+        listState.scrollToItem(0)
+        scrollBehavior.state.heightOffset = 0f
+    }
 
     // 观察 LiveUpdateState — 实时 log + 后台任务按钮 + 恢复请求
     val livePkgLog by LiveUpdateState.pkgLog.collectAsState()
@@ -723,8 +799,7 @@ fun PackageManagerScreen(
                 contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0),
                 topBar = {
                     GlassTopAppBar(
-                        title = if (navStack.size > 1) PkgRepo.sectionDisplayName(context, navStack.last().sectionKey ?: "")
-                                 else "软件包管理",
+                        title = currentLabel ?: "软件包管理",
                         isContentScrolled = listState.canScrollBackward,
                         backdrop = glassPage.backdrop,
                         scrollBehavior = scrollBehavior,
@@ -865,28 +940,6 @@ fun PackageManagerScreen(
                                 color = Color(0xFF2563EB)
                             )
                         } else {
-                            // 先拿到当前 tab 的包列表（搜索优先）
-                            val rawList = if (searchQuery.isNotBlank()) {
-                                val q = searchQuery.lowercase()
-                                val installedMatch = installedList.filter { it.name.lowercase().contains(q) }
-                                val availableMatch = availableList.filter { it.name.lowercase().contains(q) }
-                                (installedMatch + availableMatch).distinctBy { it.name }
-                            } else if (selectedTab == 0) installedList else availableList
-
-                            // 分类模式: viewMode=0
-                            val showCategory = pkgViewMode == 0 && searchQuery.isBlank()
-
-                            val isCategoryRoot = showCategory && navStack.size == 1
-                            val isCategoryDetail = showCategory && navStack.size > 1
-
-                            // 在分类详情里 → 过滤当前 section 的包
-                            val displayList = if (isCategoryDetail) {
-                                val cur = currentSection
-                                rawList.filter { pkg -> pkg.resolveSection() == cur }
-                            } else {
-                                rawList
-                            }
-
                             LazyColumn(
                                 state = listState,
                                 modifier = Modifier.fillMaxSize().nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -898,12 +951,7 @@ fun PackageManagerScreen(
                             ) {
                                 // === 分类根级: 显示分类网格 ===
                                 if (isCategoryRoot) {
-                                    val sectionGroups = rawList
-                                        .groupBy { pkg -> PkgRepo.normalizeSectionKey(pkg.resolveSection()) }
-                                        .map { (k, v) -> k to v.size }
-                                        .sortedByDescending { it.second }
-
-                                    if (sectionGroups.isEmpty()) {
+                                    if (categories.isEmpty()) {
                                         item {
                                             EmptyStateView(
                                                 message = if (selectedTab == 0)
@@ -913,15 +961,12 @@ fun PackageManagerScreen(
                                             )
                                         }
                                     } else {
-                                        items(sectionGroups) { (sectionKey, count) ->
+                                        items(categories, key = { it.label }) { category ->
                                             CategoryEntry(
-                                                label = PkgRepo.sectionDisplayName(context, sectionKey),
-                                                count = count,
+                                                label = category.label,
+                                                count = category.packages.size,
                                                 onClick = {
-                                                    navStack = navStack + PkgNavLevel(
-                                                        sectionKey = sectionKey,
-                                                        label = PkgRepo.sectionDisplayName(context, sectionKey)
-                                                    )
+                                                    navStack = navStack + PkgNavLevel(label = category.label)
                                                 }
                                             )
                                         }
@@ -943,7 +988,8 @@ fun PackageManagerScreen(
                                         )
                                     }
                                 } else {
-                                    items(displayList) { pkg ->
+                                    // key 让切分类/搜索时同名的条目复用组合，避免整列表重建造成的抖动
+                                    items(displayList, key = { it.name }) { pkg ->
                                         PackageCard(
                                             pkg = pkg,
                                             onClick = { showDetail = pkg }
