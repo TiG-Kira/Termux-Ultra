@@ -725,6 +725,7 @@ fun PackageManagerScreen(
                     GlassTopAppBar(
                         title = if (navStack.size > 1) PkgRepo.sectionDisplayName(context, navStack.last().sectionKey ?: "")
                                  else "软件包管理",
+                        isContentScrolled = listState.canScrollBackward,
                         backdrop = glassPage.backdrop,
                         scrollBehavior = scrollBehavior,
                         navigationIcon = {
