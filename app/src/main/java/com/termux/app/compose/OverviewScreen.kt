@@ -956,8 +956,6 @@ private fun TipsAgentCard(
     onNewTerminalAndOpenConsole: () -> Unit = {}
 ) {
     val context = LocalContext.current
-    val isDark = isSystemInDarkTheme()
-    val surfaceColor = if (isDark) Color(0xFF1C1C1E) else Color(0xFFFAFAFA)
     val aiTermuxEnabled = context.getSharedPreferences("app_settings", Context.MODE_PRIVATE)
         .getBoolean("ai_termux_enabled", true)
     val cardLayoutMode = context.getSharedPreferences("app_settings", Context.MODE_PRIVATE)
@@ -1013,7 +1011,7 @@ private fun TipsAgentCard(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(surfaceColor)
+                .background(MiuixTheme.colorScheme.surfaceContainer)
         ) {
             // ===== Top row: pill + uptime =====
             Row(
@@ -1813,7 +1811,7 @@ private fun OverviewCardContainer(
     content: @Composable ColumnScope.() -> Unit
 ) {
     val isWide = card.size == CardSize.WIDE
-    val surfaceColor = backgroundColor ?: MiuixTheme.colorScheme.surface
+    val surfaceColor = backgroundColor ?: MiuixTheme.colorScheme.surfaceContainer
 
     Card(
         modifier = Modifier
