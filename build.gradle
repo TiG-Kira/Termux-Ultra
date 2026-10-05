@@ -16,6 +16,22 @@ allprojects {
         maven { url "https://jitpack.io" }
         maven { url "https://maven.fanmiu.com/nexus/repository/maven-public/" }
         maven { url "https://maven.pkg.github.com/compose-miuix-ui/miuix" }
+        // AgentPaw 合作项目包源（GitHub Packages 即便公开包也强制 token 认证）。
+        // token 解析顺序：环境变量 GITHUB_PACKAGES_TOKEN / GITHUB_TOKEN →
+        // gradle 属性 agentpaw.gpr.token（本地建议写入 ~/.gradle/gradle.properties）。
+        // 无 token 时不注册该仓库，依赖解析会给出明确的 404 而不是认证混乱。
+        def agentpawToken = (System.getenv("GITHUB_PACKAGES_TOKEN")
+            ?: System.getenv("GITHUB_TOKEN")
+            ?: rootProject.findProperty("agentpaw.gpr.token") ?: "").toString()
+        if (agentpawToken) {
+            maven {
+                url "https://maven.pkg.github.com/YHLFurry/AgentPaw"
+                credentials {
+                    username = System.getenv("GITHUB_ACTOR") ?: "token"
+                    password = agentpawToken
+                }
+            }
+        }
         mavenLocal()
     }
 

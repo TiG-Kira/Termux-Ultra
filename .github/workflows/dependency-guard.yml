@@ -64,6 +64,8 @@ jobs:
       CONFIGURATION: ${{ inputs.configuration || 'debugRuntimeClasspath' }}
       DUMP_SCRIPT: .github/scripts/dump-app-deps.gradle
       GUARD_SCRIPT: .github/scripts/dependency-guard.py
+      # AgentPaw 依赖走 GitHub Packages（公开包也要 token），gradle 仓库源读取该变量
+      GITHUB_PACKAGES_TOKEN: ${{ github.token }}
       # 注意：runner 上下文在 job 级 env 不可用，必须改用 github 上下文（runner.temp 只能出现在 step 级）。
       # 所有临时产物统一落到 WORK_DIR 下，保证 dump 步骤的输出与 analyze 步骤的读取路径一致。
       WORK_DIR: ${{ github.workspace }}/depguard-tmp

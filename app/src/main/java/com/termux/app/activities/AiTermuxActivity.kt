@@ -84,6 +84,10 @@ import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.window.WindowDialog
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
+import com.paw.agent.core.agent.AgentEvent
+import com.paw.agent.core.llm.OpenAiCompatibleClient
+import com.paw.agent.core.model.Message as PawMessage
+import com.paw.agent.core.model.MessageRole as PawMessageRole
 import java.io.File
 
 class AiTermuxActivity : FragmentActivity() {
@@ -232,6 +236,8 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
             && AiTermuxPrefs.isFallbackOnlineConfigReady(ctx)
     }
 
+    // @Volatile：该标志既被主线程写、也被 AgentPaw 引擎的工作协程读，需要可见性保证
+    @Volatile
     private var cancelled = false
 
     /** 白名单每次实时读取：设置页改完回到对话页立即生效，不必重建 Activity */
@@ -292,6 +298,7 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
 
     init {
         val ctx = getApplication<android.app.Application>()
+        AgentPawPrefs.init(ctx)
         // 加载全部对话（含旧版本单对话迁移到默认「Termux Agent」），并恢复当前对话
         val loaded = AiTermuxPrefs.getConversations(ctx)
         conversations.addAll(loaded)
@@ -788,7 +795,114 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
     fun getPendingDanger(messageId: String): Pair<String, JsonObject>? = pendingDanger[messageId]
 
     private suspend fun processUserMessage(ctx: Context, userText: String) {
-        processAiTurn(ctx, userText)
+        val manualPaw = AgentPawPrefs.manualMode.value
+        val autoDelegate = !manualPaw &&
+            AgentPawPrefs.isAutoSwitchEnabled(ctx) &&
+            AgentPawEngine.canUseAgentPaw(ctx) &&
+            AgentPawEngine.shouldAutoDelegate(ctx, userText)
+        if (manualPaw || autoDelegate) {
+            processAgentPawTurn(ctx, userText, autoDelegated = autoDelegate)
+        } else {
+            processAiTurn(ctx, userText)
+        }
+    }
+
+    /** AgentPaw 引擎装配较重（PhoneController/技能表），VM 级缓存复用 */
+    private val pawEngineParts by lazy {
+        val appCtx = getApplication<android.app.Application>()
+        AgentPawEngine.Parts(
+            llmClient = com.paw.agent.core.llm.OpenAiCompatibleClient(),
+            toolRegistry = AgentPawEngine.buildToolRegistry(appCtx),
+        )
+    }
+
+    /**
+     * AgentPaw 回合：由 agentpaw-core 的 Agent 循环接管（手机操控/沙盒脚本/Web 搜索），
+     * LLM 连接沿用 Termux Agent 配置。自动切换场景在任务完成后下一条消息即回到
+     * Termux Agent 模式（本函数无状态，模式由调用方逐条判定）。
+     */
+    private suspend fun processAgentPawTurn(ctx: Context, userText: String, autoDelegated: Boolean) {
+        val llmConfig = AgentPawEngine.buildLlmConfig(ctx)
+        if (llmConfig?.isUsable != true) {
+            // 本地模型 / 连接信息缺失时无法桥接 AgentPaw（只支持 OpenAI 兼容端点）
+            android.widget.Toast.makeText(
+                ctx, "AgentPaw 需要在线模型（当前为本地模型或配置不完整），已回退 Termux Agent",
+                android.widget.Toast.LENGTH_SHORT
+            ).show()
+            processAiTurn(ctx, userText)
+            return
+        }
+
+        cancelled = false
+        val history: List<PawMessage> = synchronized(messages) {
+            messages.dropLast(1)
+                .filter { (it.role == "user" || it.role == "assistant") && it.errorMessage == null && it.content.isNotBlank() }
+                .map { msg ->
+                    PawMessage(
+                        id = msg.id,
+                        role = if (msg.role == "user") PawMessageRole.USER else PawMessageRole.ASSISTANT,
+                        content = msg.content,
+                    )
+                } + PawMessage(
+                id = "paw_user_${System.currentTimeMillis()}",
+                role = PawMessageRole.USER,
+                content = userText,
+            )
+        }
+
+        val streamMsgId = "paw_stream_${System.currentTimeMillis()}"
+        synchronized(messages) {
+            messages.add(ChatMessage(id = streamMsgId, role = "assistant", content = ""))
+        }
+        isStreaming = true
+
+        // 工具执行轨迹逐行追加进消息正文，让用户看到 AgentPaw 的操作过程
+        val toolLog = mutableListOf<String>()
+        if (autoDelegated) toolLog.add("🐾 检测到手机操控任务，已切换到 AgentPaw 模式")
+
+        // AssistantDelta 是当轮累计内容，工具轮之间会被清零；工具事件时保留最后正文避免闪断
+        var lastBody = ""
+
+        fun renderBody(body: String): String =
+            ((if (toolLog.isEmpty()) "" else toolLog.joinToString("\n") + "\n\n") + body).trim()
+
+        fun updateStream(body: String, error: String? = null) {
+            synchronized(messages) {
+                val idx = messages.indexOfFirst { it.id == streamMsgId }
+                if (idx >= 0) {
+                    messages[idx] = messages[idx].copy(content = renderBody(body), errorMessage = error)
+                }
+            }
+        }
+
+        try {
+            val agent = AgentPawEngine.buildAgent(pawEngineParts.llmClient, pawEngineParts.toolRegistry)
+            agent.run(llmConfig, history, isCancelled = { cancelled }).collect { event ->
+                when (event) {
+                    is AgentEvent.AssistantDelta -> {
+                        lastBody = event.message.content
+                        updateStream(lastBody)
+                    }
+                    is AgentEvent.ToolStarted -> {
+                        toolLog.add("⚙ ${event.call.name} ${event.call.arguments.take(80)}")
+                        updateStream(lastBody)
+                    }
+                    is AgentEvent.ToolFinished -> {
+                        val brief = event.result.content.take(120)
+                        toolLog.add(if (event.result.isError) "✗ ${event.result.name} 失败：$brief" else "✓ ${event.result.name}")
+                        updateStream(lastBody)
+                    }
+                    is AgentEvent.Completed -> updateStream(event.message.content)
+                    is AgentEvent.Failed -> updateStream(
+                        event.message.content.ifBlank { "AgentPaw 执行出错" },
+                        error = event.message.error ?: "AgentPaw 执行出错"
+                    )
+                    is AgentEvent.Cancelled -> updateStream(event.message.content)
+                }
+            }
+        } finally {
+            isStreaming = false
+        }
     }
 
     /**
@@ -3153,7 +3267,12 @@ private fun AiChatImessageTopBar(
 ) {
     val ctx = LocalContext.current
     val isDark = isSystemInDarkTheme()
-    val subtitle = modelStatusSubtitle(ctx, vm)
+    val pawManual by AgentPawPrefs.manualMode.collectAsState()
+    val subtitle = if (pawManual) {
+        "AgentPaw 模式 · ${modelStatusSubtitle(ctx, vm)}"
+    } else {
+        modelStatusSubtitle(ctx, vm)
+    }
     val surface = MiuixTheme.colorScheme.surface
     Box(
         modifier = Modifier
@@ -3280,6 +3399,11 @@ private fun AiChatTopActions(vm: AiTermuxViewModel, onOpenSetup: () -> Unit) {
                 TopActionRow("Agent 设置") {
                     showMoreMenu = false
                     onOpenSetup()
+                }
+                val pawManual by AgentPawPrefs.manualMode.collectAsState()
+                TopActionRow(if (pawManual) "退出 AgentPaw 模式" else "进入 AgentPaw 模式") {
+                    showMoreMenu = false
+                    AgentPawPrefs.setManualMode(context, !pawManual)
                 }
                 TopActionRow("导出对话（分享）") {
                     showMoreMenu = false
