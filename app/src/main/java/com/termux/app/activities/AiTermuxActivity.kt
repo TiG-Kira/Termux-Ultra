@@ -2984,6 +2984,7 @@ private fun AiChatScreen(vm: AiTermuxViewModel, conversationId: String, onBack: 
     var showMoreMenu by remember { mutableStateOf(false) }
     var showClearConfirm by remember { mutableStateOf(false) }
     val pawManual by AgentPawPrefs.manualMode.collectAsState()
+    val scrollBehavior = MiuixScrollBehavior()
 
     // 进入对话页时，若当前激活对话不是目标对话，则切换（从管理页点进来 / 新建后进入）
     LaunchedEffect(conversationId) {
@@ -3064,7 +3065,7 @@ private fun AiChatScreen(vm: AiTermuxViewModel, conversationId: String, onBack: 
             topBar = {
                 AiChatGlassTopBar(
                     vm = vm,
-                    listState = listState,
+                    scrollBehavior = scrollBehavior,
                     backdrop = glassPage.backdrop,
                     onBack = onBack,
                     onOpenSetup = onOpenSetup,
@@ -3296,6 +3297,7 @@ private fun AiChatScreen(vm: AiTermuxViewModel, conversationId: String, onBack: 
                         .align(Alignment.TopCenter)
                         .widthIn(max = 640.dp)
                         .fillMaxSize()
+                        .nestedScroll(scrollBehavior.nestedScrollConnection)
                         .padding(pagePaddingWithoutTop(padding)),
                     contentPadding = standaloneContentPadding(padding, top = 12.dp, bottom = 12.dp, start = 16.dp, end = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
@@ -3407,7 +3409,7 @@ private fun AiChatScreen(vm: AiTermuxViewModel, conversationId: String, onBack: 
 @Composable
 private fun AiChatGlassTopBar(
     vm: AiTermuxViewModel,
-    listState: androidx.compose.foundation.lazy.LazyListState,
+    scrollBehavior: ScrollBehavior? = null,
     backdrop: top.yukonga.miuix.kmp.blur.Backdrop?,
     onBack: () -> Unit,
     onOpenSetup: () -> Unit,
@@ -3429,7 +3431,7 @@ private fun AiChatGlassTopBar(
     GlassTopAppBar(
         title = vm.activeConversationTitle,
         subtitle = subtitle,
-        isContentScrolled = listState.canScrollBackward,
+        scrollBehavior = scrollBehavior,
         backdrop = backdrop,
         navigationIcon = {
             GlassIconButton(onClick = onBack) {
