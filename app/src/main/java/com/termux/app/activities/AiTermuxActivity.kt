@@ -97,6 +97,12 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import top.yukonga.miuix.kmp.glass.GlassIconButton
 import top.yukonga.miuix.kmp.glass.GlassTopAppBar
+import top.yukonga.miuix.kmp.glass.GlassTopAppBarDefaults
+import top.yukonga.miuix.kmp.glass.GlassPopupAnchor
+import top.yukonga.miuix.kmp.glass.GlassPopupItem
+import top.yukonga.miuix.kmp.glass.GlassTransformPopup
+import top.yukonga.miuix.kmp.glass.glassPopupAnchor
+import top.yukonga.miuix.kmp.glass.rememberGlassPopupAnchor
 import top.yukonga.miuix.kmp.basic.*
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.glass.Add
@@ -106,7 +112,6 @@ import top.yukonga.miuix.kmp.icon.glass.ExpandMore
 import top.yukonga.miuix.kmp.icon.glass.More
 import top.yukonga.miuix.kmp.icon.glass.MiuixGlassIcons
 import top.yukonga.miuix.kmp.icon.glass.Tasks
-import top.yukonga.miuix.kmp.menu.OverlayIconDropdownMenu
 import top.yukonga.miuix.kmp.window.WindowDialog
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
@@ -1856,13 +1861,13 @@ private fun AiSetupScreen(vm: AiTermuxViewModel, onBack: () -> Unit) {
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             GlassTopAppBar(
-                title = "Termux Agent 设置",
-                backdrop = glassPage.backdrop,
-                scrollBehavior = scrollBehavior,
-                navigationIcon = {
-                    GlassIconButton(onClick = { onBack() }) {
-                        Icon(
-                            imageVector = MiuixGlassIcons.Back,
+            title = "Termux Agent 设置",
+            backdrop = glassPage.backdrop,
+            scrollBehavior = scrollBehavior,
+            navigationIcon = {
+                GlassIconButton(onClick = { onBack() }) {
+                    Icon(
+                        imageVector = MiuixGlassIcons.ChevronBackward,
                             contentDescription = null,
                             modifier = Modifier.size(24.dp),
                             tint = MiuixTheme.colorScheme.onSurface
@@ -2797,14 +2802,14 @@ private fun AiConversationManagementScreen(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             GlassTopAppBar(
-                title = DEFAULT_CONVERSATION_TITLE,
-                backdrop = glassPage.backdrop,
-                subtitle = modelStatusSubtitle(ctx, vm),
-                scrollBehavior = scrollBehavior,
-                navigationIcon = {
-                    GlassIconButton(onClick = { onBack() }) {
-                        Icon(
-                            imageVector = MiuixGlassIcons.Back,
+            title = DEFAULT_CONVERSATION_TITLE,
+            backdrop = glassPage.backdrop,
+            subtitle = modelStatusSubtitle(ctx, vm),
+            scrollBehavior = scrollBehavior,
+            navigationIcon = {
+                GlassIconButton(onClick = { onBack() }) {
+                    Icon(
+                        imageVector = MiuixGlassIcons.ChevronBackward,
                             contentDescription = null,
                             modifier = Modifier.size(24.dp),
                             tint = MiuixTheme.colorScheme.onSurface
@@ -2974,6 +2979,12 @@ private fun AiChatScreen(vm: AiTermuxViewModel, conversationId: String, onBack: 
     var inputText by remember { mutableStateOf("") }
     var pendingAttachment by remember { mutableStateOf<Triple<String, String, Long>?>(null) }
 
+    // 「更多」玻璃下拉菜单：锚点与开关上提到本屏，弹层挂在根 Box（避免被顶栏裁剪 / 坐标错位）
+    val moreAnchor = top.yukonga.miuix.kmp.glass.rememberGlassPopupAnchor()
+    var showMoreMenu by remember { mutableStateOf(false) }
+    var showClearConfirm by remember { mutableStateOf(false) }
+    val pawManual by AgentPawPrefs.manualMode.collectAsState()
+
     // 进入对话页时，若当前激活对话不是目标对话，则切换（从管理页点进来 / 新建后进入）
     LaunchedEffect(conversationId) {
         if (vm.activeConversationId != conversationId) {
@@ -3057,7 +3068,10 @@ private fun AiChatScreen(vm: AiTermuxViewModel, conversationId: String, onBack: 
                     backdrop = glassPage.backdrop,
                     onBack = onBack,
                     onOpenSetup = onOpenSetup,
-                    onNewConversation = { vm.newConversation(ctx) }
+                    onNewConversation = { vm.newConversation(ctx) },
+                    pawManual = pawManual,
+                    moreAnchor = moreAnchor,
+                    onMoreOpen = { showMoreMenu = true }
                 )
             },
             bottomBar = {
@@ -3337,6 +3351,48 @@ private fun AiChatScreen(vm: AiTermuxViewModel, conversationId: String, onBack: 
                 }
             }
         }
+
+        // 玻璃「更多」菜单 + 清空确认弹窗：挂在根 Box，避免被顶栏裁剪 / 坐标错位
+        GlassTransformPopup(
+            show = showMoreMenu,
+            onDismissRequest = { showMoreMenu = false },
+            anchor = moreAnchor,
+            backdrop = glassPage.backdrop,
+            anchorContent = {
+                Icon(MiuixGlassIcons.More, null, Modifier.size(22.dp), tint = MiuixTheme.colorScheme.onSurface)
+            },
+            simplified = true,
+        ) {
+            GlassPopupItem(text = "Agent 设置", onClick = { showMoreMenu = false; onOpenSetup() })
+            GlassPopupItem(
+                text = if (pawManual) "退出 AgentPaw 模式" else "进入 AgentPaw 模式",
+                onClick = { showMoreMenu = false; AgentPawPrefs.setManualMode(ctx, !pawManual) }
+            )
+            GlassPopupItem(text = "导出对话（分享）", onClick = { showMoreMenu = false; vm.exportConversation(ctx) })
+            GlassPopupItem(text = "清空对话历史", onClick = { showMoreMenu = false; showClearConfirm = true })
+        }
+        OverlayDialog(
+            show = showClearConfirm,
+            onDismissRequest = { showClearConfirm = false },
+            title = "清空对话历史",
+            summary = "将删除当前所有对话内容，此操作不可撤销。",
+            content = {
+                Row(horizontalArrangement = Arrangement.SpaceBetween) {
+                    TextButton(text = "取消", onClick = { showClearConfirm = false }, modifier = Modifier.weight(1f))
+                    Spacer(Modifier.width(16.dp))
+                    TextButton(
+                        text = "清空",
+                        onClick = {
+                            vm.clearHistory()
+                            showClearConfirm = false
+                            SnackbarHelper.show(ctx, "对话历史已清空", Snackbar.LENGTH_SHORT)
+                        },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.textButtonColors(color = StatusError)
+                    )
+                }
+            }
+        )
     }
 
     // 风险命令确认弹窗
@@ -3345,7 +3401,8 @@ private fun AiChatScreen(vm: AiTermuxViewModel, conversationId: String, onBack: 
 
 /**
  * 对话页玻璃顶栏：GlassTopAppBar + miuix-glass 玻璃按钮。
- * 右上角「更多选项」走 OverlayIconDropdownMenu（必须处于 Scaffold 组合内，弹层挂根 Scaffold）。
+ * 右上角「更多」为 GlassIconButton 触发器；下拉面板由根 Box 中的 GlassTransformPopup 承载，
+ * 通过 glassPopupAnchor 与按钮共享玻璃质感（避免被顶栏裁剪 / 坐标错位）。
  */
 @Composable
 private fun AiChatGlassTopBar(
@@ -3354,14 +3411,15 @@ private fun AiChatGlassTopBar(
     backdrop: top.yukonga.miuix.kmp.blur.Backdrop?,
     onBack: () -> Unit,
     onOpenSetup: () -> Unit,
-    onNewConversation: () -> Unit
+    onNewConversation: () -> Unit,
+    pawManual: Boolean,
+    moreAnchor: GlassPopupAnchor,
+    onMoreOpen: () -> Unit
 ) {
     val context = LocalContext.current
     val tasks by SkillExecutor.tasksFlow.collectAsState()
     var showTaskList by remember { mutableStateOf(false) }
-    var showClearConfirm by remember { mutableStateOf(false) }
     val pendingCount = tasks.count { it.status != "done" && it.status != "cancelled" }
-    val pawManual by AgentPawPrefs.manualMode.collectAsState()
     val subtitle = if (pawManual) {
         "AgentPaw 模式 · ${modelStatusSubtitle(context, vm)}"
     } else {
@@ -3413,32 +3471,11 @@ private fun AiChatGlassTopBar(
                     }
                 }
             }
-            // 更多选项：玻璃图标按钮 + 下拉弹层
-            val moreEntry = DropdownEntry(
-                items = listOf(
-                    DropdownItem(
-                        text = "Agent 设置",
-                        onClick = onOpenSetup
-                    ),
-                    DropdownItem(
-                        text = if (pawManual) "退出 AgentPaw 模式" else "进入 AgentPaw 模式",
-                        onClick = { AgentPawPrefs.setManualMode(context, !pawManual) }
-                    ),
-                    DropdownItem(
-                        text = "导出对话（分享）",
-                        onClick = { vm.exportConversation(context) }
-                    ),
-                    DropdownItem(
-                        text = "清空对话历史",
-                        onClick = { showClearConfirm = true }
-                    )
-                )
-            )
-            OverlayIconDropdownMenu(
-                entry = moreEntry,
-                backgroundColor = Color.Transparent,
-                minWidth = 40.dp,
-                minHeight = 40.dp
+            // 更多选项：玻璃图标按钮（与 Add / Tasks 同填充、同尺寸、同间隔），
+            // 下拉面板由根 Box 中的 GlassTransformPopup 承载（避免被顶栏裁剪 / 坐标错位）。
+            GlassIconButton(
+                onClick = onMoreOpen,
+                modifier = Modifier.glassPopupAnchor(moreAnchor, cornerRadius = GlassTopAppBarDefaults.ButtonSize / 2),
             ) {
                 Icon(
                     imageVector = MiuixGlassIcons.More,
@@ -3487,28 +3524,6 @@ private fun AiChatGlassTopBar(
         }
     )
 
-    OverlayDialog(
-        show = showClearConfirm,
-        onDismissRequest = { showClearConfirm = false },
-        title = "清空对话历史",
-        summary = "将删除当前所有对话内容，此操作不可撤销。",
-        content = {
-            Row(horizontalArrangement = Arrangement.SpaceBetween) {
-                TextButton(text = "取消", onClick = { showClearConfirm = false }, modifier = Modifier.weight(1f))
-                Spacer(Modifier.width(16.dp))
-                TextButton(
-                    text = "清空",
-                    onClick = {
-                        vm.clearHistory()
-                        showClearConfirm = false
-                        SnackbarHelper.show(context, "对话历史已清空", Snackbar.LENGTH_SHORT)
-                    },
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.textButtonColors(color = StatusError)
-                )
-            }
-        }
-    )
 }
 
 /** 消息长按操作：复制 / 重新生成 / 删除 */
