@@ -602,7 +602,7 @@ fun TerminalDetailScreenCompose(
         val terminalInteractionSource = remember { MutableInteractionSource() }
         Box(
             modifier = Modifier
-                .size(48.dp)
+                .size(40.dp)
                 .clip(CircleShape)
                 .combinedClickable(
                     interactionSource = terminalInteractionSource,
@@ -619,13 +619,13 @@ fun TerminalDetailScreenCompose(
             Icon(
                 painter = painterResource(R.drawable.ic_terminal),
                 contentDescription = null,
-                modifier = Modifier.size(26.dp),
+                modifier = Modifier.size(24.dp),
                 tint = effectiveTopBarContentColor
             )
         }
         Box(
             modifier = Modifier
-                .size(48.dp)
+                .size(40.dp)
                 .clip(CircleShape)
                 .combinedClickable(
                     interactionSource = remember { MutableInteractionSource() },
@@ -641,20 +641,20 @@ fun TerminalDetailScreenCompose(
             Icon(
                 painter = painterResource(R.drawable.ic_keyboard),
                 contentDescription = null,
-                modifier = Modifier.size(26.dp),
+                modifier = Modifier.size(24.dp),
                 tint = effectiveTopBarContentColor
             )
         }
         OverlayIconDropdownMenu(
             entry = addSessionEntry,
             backgroundColor = Color.Transparent,
-            minWidth = 48.dp,
-            minHeight = 48.dp
+            minWidth = 40.dp,
+            minHeight = 40.dp
         ) {
             Icon(
                 painter = painterResource(R.drawable.ic_add),
                 contentDescription = null,
-                modifier = Modifier.size(26.dp),
+                modifier = Modifier.size(24.dp),
                 tint = effectiveTopBarContentColor
             )
         }
@@ -664,23 +664,23 @@ fun TerminalDetailScreenCompose(
                 closeCurrentSession()
             },
             enabled = !currentSessionIsDead,
-            minWidth = 48.dp,
-            minHeight = 48.dp
+            minWidth = 40.dp,
+            minHeight = 40.dp
         ) {
             Icon(
                 painter = painterResource(R.drawable.ic_close),
                 contentDescription = null,
-                modifier = Modifier.size(26.dp),
+                modifier = Modifier.size(24.dp),
                 tint = if (currentSessionIsDead)
                     effectiveTopBarContentColor.copy(alpha = 0.3f)
                 else effectiveTopBarContentColor
             )
         }
-        IconButton(onClick = { updateInteractionTime(); showContextMenu = true }, minWidth = 48.dp, minHeight = 48.dp) {
+        IconButton(onClick = { updateInteractionTime(); showContextMenu = true }, minWidth = 40.dp, minHeight = 40.dp) {
             Icon(
                 imageVector = Icons.Rounded.MoreVert,
                 contentDescription = null,
-                modifier = Modifier.size(26.dp),
+                modifier = Modifier.size(24.dp),
                 tint = effectiveTopBarContentColor
             )
         }
@@ -691,7 +691,7 @@ fun TerminalDetailScreenCompose(
         val terminalInteractionSource = remember { MutableInteractionSource() }
         Box(
             modifier = Modifier
-                .size(48.dp)
+                .size(40.dp)
                 .clip(CircleShape)
                 .combinedClickable(
                     interactionSource = terminalInteractionSource,
@@ -708,13 +708,13 @@ fun TerminalDetailScreenCompose(
             Icon(
                 painter = painterResource(R.drawable.ic_terminal),
                 contentDescription = null,
-                modifier = Modifier.size(26.dp),
+                modifier = Modifier.size(24.dp),
                 tint = effectiveTopBarContentColor
             )
         }
         Box(
             modifier = Modifier
-                .size(48.dp)
+                .size(40.dp)
                 .clip(CircleShape)
                 .combinedClickable(
                     interactionSource = remember { MutableInteractionSource() },
@@ -730,20 +730,20 @@ fun TerminalDetailScreenCompose(
             Icon(
                 painter = painterResource(R.drawable.ic_keyboard),
                 contentDescription = null,
-                modifier = Modifier.size(26.dp),
+                modifier = Modifier.size(24.dp),
                 tint = effectiveTopBarContentColor
             )
         }
         OverlayIconDropdownMenu(
             entry = addSessionEntry,
             backgroundColor = Color.Transparent,
-            minWidth = 48.dp,
-            minHeight = 48.dp
+            minWidth = 40.dp,
+            minHeight = 40.dp
         ) {
             Icon(
                 painter = painterResource(R.drawable.ic_add),
                 contentDescription = null,
-                modifier = Modifier.size(26.dp),
+                modifier = Modifier.size(24.dp),
                 tint = effectiveTopBarContentColor
             )
         }
@@ -753,23 +753,23 @@ fun TerminalDetailScreenCompose(
                 closeCurrentSession()
             },
             enabled = !currentSessionIsDead,
-            minWidth = 48.dp,
-            minHeight = 48.dp
+            minWidth = 40.dp,
+            minHeight = 40.dp
         ) {
             Icon(
                 painter = painterResource(R.drawable.ic_close),
                 contentDescription = null,
-                modifier = Modifier.size(26.dp),
+                modifier = Modifier.size(24.dp),
                 tint = if (currentSessionIsDead)
                     effectiveTopBarContentColor.copy(alpha = 0.3f)
                 else effectiveTopBarContentColor
             )
         }
-        IconButton(onClick = { updateInteractionTime(); showContextMenu = true }, minWidth = 48.dp, minHeight = 48.dp) {
+        IconButton(onClick = { updateInteractionTime(); showContextMenu = true }, minWidth = 40.dp, minHeight = 40.dp) {
             Icon(
                 imageVector = Icons.Rounded.MoreVert,
                 contentDescription = null,
-                modifier = Modifier.size(26.dp),
+                modifier = Modifier.size(24.dp),
                 tint = effectiveTopBarContentColor
             )
         }
