@@ -371,12 +371,11 @@ private fun TopAppBarLayout(
                 (constraints.maxWidth - navigationIconPlaceable.width - actionIconsPlaceable.width)
                     .coerceAtLeast(0)
             }
-        val titleMaxWidth =
-            if (maxTitleWidth == Constraints.Infinity) {
-                maxTitleWidth
-            } else {
-                (maxTitleWidth * TITLE_WIDTH_FRACTION).fastRoundToInt()
-            }
+        // 直接给 title 完整安全区宽度：两侧的 navIcon / actionIcons 已经各自占位，
+        // 标题文字在安全区内部自然居中 + ellipsis。之前额外再乘 TITLE_WIDTH_FRACTION=0.9
+        // 会让 title 宽度被额外砍 10%，在 actionIcons 很宽时（对话页 3 个玻璃按钮 ≈200dp）
+        // 导致 title 永远挤在安全区左侧一小段。
+        val titleMaxWidth = maxTitleWidth
 
         val titlePlaceable =
             measurables
@@ -442,24 +441,25 @@ private fun TopAppBarLayout(
             )
 
             // Title
+            // baseX 先按屏幕几何中心算，再双向 clamp 到 navIcon / actionIcons 的安全区。
+            // 之前是 if/else if 互斥——当 actionIcons 很宽时（对话页 3 个按钮 ≈200dp），
+            // title 同时被左右两侧挤，if/else if 只会触发一侧修正，另一侧溢出被"遗忘"。
             var baseX = (constraints.maxWidth - titlePlaceable.width) / 2
-            if (baseX < navigationIconPlaceable.width) {
-                baseX += (navigationIconPlaceable.width - baseX)
-            } else if (baseX + titlePlaceable.width > constraints.maxWidth - actionIconsPlaceable.width) {
-                baseX += ((constraints.maxWidth - actionIconsPlaceable.width) - (baseX + titlePlaceable.width))
-            }
+            val leftSafe = navigationIconPlaceable.width
+            val rightSafe = constraints.maxWidth - actionIconsPlaceable.width - titlePlaceable.width
+            baseX = baseX.coerceIn(leftSafe, rightSafe)
             titlePlaceable.placeRelative(
                 x = baseX,
                 y = verticalCenter - titlePlaceable.height / 2,
             )
 
-            // Small subtitle (centered below small title, same alpha as small title).
-            // Subtitle 复用 title 的避让策略：跟随 title 的左边界（baseX），再 clamp 到
-            // navigationIcon 左边界 / actionIcons 右边界之间的安全区，避免被右侧按钮挡。
+            // Small subtitle：居中在与 title 相同的安全区内部。
+            // 既不居中屏幕（会被右侧 actionIcons 挡），也不左对齐 baseX（视觉上不居中）。
             smallSubtitlePlaceable?.let { sub ->
-                val subRightMax = (constraints.maxWidth - actionIconsPlaceable.width - sub.width)
-                    .coerceAtLeast(navigationIconPlaceable.width)
-                val subX = baseX.coerceIn(navigationIconPlaceable.width, subRightMax)
+                val subLeftSafe = navigationIconPlaceable.width
+                val subRightSafe = constraints.maxWidth - actionIconsPlaceable.width - sub.width
+                val subCenter = subLeftSafe + ((subRightSafe - subLeftSafe) / 2)
+                val subX = subCenter.coerceIn(subLeftSafe, subRightSafe)
                 sub.placeRelative(
                     x = subX,
                     y = verticalCenter + titlePlaceable.height / 2,
