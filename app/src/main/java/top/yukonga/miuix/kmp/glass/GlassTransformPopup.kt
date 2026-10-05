@@ -321,11 +321,15 @@ fun BoxScope.GlassTransformPopup(
     fun stackedProgress() = popupFractionWithBack(pushedBack.value, anchor.secondaryBackProgress)
     fun panelAlpha() = transformPanelAlpha(
         visualAlpha = visuals.alpha,
-        floating = if (anchorSurface != null) anchor.surfaceFloating || anchor.surfaceAlpha > 0f else anchor.floating,
-        // transformPanelAlpha multiplies by visualAlpha; the published surface alpha already
-        // includes the button's opacity, so remove that outer factor at the anchor endpoint.
+        // A menu is a menu, whatever the control it grew from happens to be showing. A panel
+        // anchored to a glass button hangs below the bar, over the page, and carries its own full
+        // body while it grows into its rectangle: that button may be a bare icon or a lit pill, and
+        // either way the rows need a body under them. An anchor with no button surface keeps the
+        // caller's own rule — a plain control, whose background stood down for the menu, fades with
+        // the icon instead.
+        floating = if (anchorSurface != null) true else anchor.floating,
         anchorAlpha = if (anchorSurface != null) {
-            if (visuals.alpha > 0f) anchor.surfaceAlpha / visuals.alpha else 0f
+            1f
         } else {
             anchorAlpha
         },
@@ -336,12 +340,21 @@ fun BoxScope.GlassTransformPopup(
 
     GlassPopupSurface(
         onDismissRequest = onDismissRequest,
-        backdrop = if (anchorSurface != null) anchorSurface.backdrop else backdrop,
+        // The panel is a card that hangs below the bar, not a sheet of the bar's own glass: it
+        // should sit in the page's own card colour (white on light themes, the dark surface on
+        // dark ones) with its shadow, not sample and blur the backdrop behind it. An anchored menu
+        // therefore drops the button's backdrop and falls back to its solid fill; an anchor with no
+        // surface keeps the caller's own backdrop rule.
+        backdrop = if (anchorSurface != null) null else backdrop,
         modifier = modifier,
         sizing = sizing,
         visuals = resolvedVisuals.copy(alpha = 1f),
         interactive = isTransformPopupInteractive(show, stacked),
-        underlayMaterial = anchorSurface?.underlayMaterial,
+        // The anchor's underlay is the bar's own scrim, which a button wears so it blends into the
+        // band it sits in. The panel is not in that band — it hangs below it over the page — so
+        // inheriting the scrim would wash the panel's body away and leave the rows floating on the
+        // scrim's transparency. Take the button's style, material and stroke; leave the band behind.
+        underlayMaterial = null,
         contentPadding = contentPadding,
         onMeasured = onMeasured,
         panelLayer = {
