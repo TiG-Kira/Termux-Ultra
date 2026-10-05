@@ -100,14 +100,12 @@ fun ComposeTerminalListScreen(
                     backdrop = LocalGlassTopAppBarBackdrop.current,
                     scrollBehavior = scrollBehavior,
                     navigationIcon = {
-                        // 对齐目标是「右侧的 + 图标」，不是「+ 的玻璃底板」：
-                        // 右侧 GlassIconButton 的图标中心距右缘 =
-                        //   actionIconPadding(12) + ButtonPadding(6) + ButtonSize/2(22) = 40dp，
-                        // 因为收缩态下 + 嵌在 44dp 底板里、图标只居中而不贴边。
-                        // 左侧 navigationIcon 槽只有 Box(buttonPadding 6) 且没底板，offset=0 时锁图标
-                        // 中心仅距左缘 12+6+12=30dp，故向内(+x)推 10dp 让两者中心对称。右侧不要动。
+                        // 左右边距要和右侧玻璃按钮一致：GlassTopAppBar 会替 navigationIcon 额外垫
+                        // 一层 Box(buttonPadding)，而右侧那份同样数值的边距是 GlassIconButton
+                        // 自带的。这里放的是「锁图标 + 开关」而不是玻璃按钮，所以要把框架多给
+                        // 的这一份抵掉，否则左边会比右边多让出 buttonPadding。
                         Row(
-                            modifier = Modifier.offset(x = 10.dp),
+                            modifier = Modifier.offset(x = -GlassTopAppBarDefaults.ButtonPadding),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(
