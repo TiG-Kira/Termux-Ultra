@@ -1620,6 +1620,8 @@
     <string name="agentpaw_vision_category">Phone control and vision strategy</string>
     <string name="agentpaw_max_tool_rounds_label">Max execution steps (tool call rounds)</string>
     <string name="agentpaw_max_tool_rounds_desc">How many rounds of UI actions / tool calls one task may run. Range 1–50, default 15: the agent wraps up and reports once the limit is reached, which prevents endless loops.</string>
+    <string name="agentpaw_unlimited_tool_rounds_title">Unlimited execution steps</string>
+    <string name="agentpaw_unlimited_tool_rounds_desc">When on, the 0.1.3 step-unlimited mechanism is enabled: the agent runs without a step cap and keeps working until it finishes on its own. When off, the max execution steps limit above applies.</string>
     <string name="agentpaw_vision_mode_title">Screenshot resolution mode</string>
     <string name="agentpaw_vision_mode_desc">Clarity of the screenshots taken while driving the phone: higher clarity means more accurate recognition, but slower capture and more tokens per step.</string>
     <string name="agentpaw_vision_mode_auto">AUTO</string>

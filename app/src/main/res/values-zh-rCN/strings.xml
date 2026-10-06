@@ -1564,6 +1564,8 @@
     <string name="agentpaw_vision_category">手机控制与视觉策略</string>
     <string name="agentpaw_max_tool_rounds_label">最大执行步数（工具调用轮数）</string>
     <string name="agentpaw_max_tool_rounds_desc">一次任务最多执行多少轮界面操作与工具调用。取值 1–50，默认 15：达到上限后 Agent 会收尾并汇报结果，可避免陷入无效循环。</string>
+    <string name="agentpaw_unlimited_tool_rounds_title">无限执行步数</string>
+    <string name="agentpaw_unlimited_tool_rounds_desc">开启后启用 0.1.3 的步数无上限机制：Agent 不再受步数限制，持续执行直到自行收尾。关闭时沿用上方的最大执行步数限制。</string>
     <string name="agentpaw_vision_mode_title">截屏分辨率模式</string>
     <string name="agentpaw_vision_mode_desc">决定操控手机时截屏的清晰度：越清晰识别越准，但截屏与上传更慢、每步消耗更多 Token。</string>
     <string name="agentpaw_vision_mode_auto">AUTO</string>

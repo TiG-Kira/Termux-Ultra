@@ -82,6 +82,7 @@ fun AgentPawSettingsScreen(onBack: () -> Unit) {
     var autoSwitch by remember { mutableStateOf(AgentPawPrefs.isAutoSwitchEnabled(context)) }
     var stream by remember { mutableStateOf(AgentPawPrefs.isStreamEnabled(context)) }
     var visionMode by remember { mutableStateOf(AgentPawPrefs.getVisionMode(context)) }
+    var unlimitedToolRounds by remember { mutableStateOf(AgentPawPrefs.isUnlimitedToolRounds(context)) }
 
     // 数值/文本草稿：rememberSaveable 保证旋转重建后仍是用户刚输入的值，而不是磁盘旧值
     var temperature by rememberSaveable { mutableStateOf(AgentPawPrefs.getTemperature(context).toString()) }
@@ -342,17 +343,31 @@ fun AgentPawSettingsScreen(onBack: () -> Unit) {
                 item(key = "card_tool_rounds") {
                     SettingCard {
                         Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
-                            TextField(
-                                value = maxToolRounds,
-                                onValueChange = { maxToolRounds = it },
-                                modifier = Modifier.fillMaxWidth(),
-                                label = stringResource(R.string.agentpaw_max_tool_rounds_label),
-                                useLabelAsPlaceholder = true
+                            SwitchPreference(
+                                title = stringResource(R.string.agentpaw_unlimited_tool_rounds_title),
+                                summary = stringResource(R.string.agentpaw_unlimited_tool_rounds_desc),
+                                checked = unlimitedToolRounds,
+                                onCheckedChange = {
+                                    unlimitedToolRounds = it
+                                    AgentPawPrefs.setUnlimitedToolRounds(context, it)
+                                }
                             )
-                            FieldHint(
-                                text = stringResource(R.string.agentpaw_max_tool_rounds_desc),
-                                isError = parseMaxToolRounds(maxToolRounds) == null
-                            )
+                            // 开关开启时启用 0.1.3 步数无上限机制，隐藏执行步数输入框；
+                            // 关闭时恢复输入框并沿用原有的步数上限。
+                            if (!unlimitedToolRounds) {
+                                Spacer(Modifier.height(10.dp))
+                                TextField(
+                                    value = maxToolRounds,
+                                    onValueChange = { maxToolRounds = it },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    label = stringResource(R.string.agentpaw_max_tool_rounds_label),
+                                    useLabelAsPlaceholder = true
+                                )
+                                FieldHint(
+                                    text = stringResource(R.string.agentpaw_max_tool_rounds_desc),
+                                    isError = parseMaxToolRounds(maxToolRounds) == null
+                                )
+                            }
                         }
                     }
                 }

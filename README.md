@@ -445,7 +445,7 @@ Termux-Ultra/
 | 生物识别 | AndroidX Biometric 1.2.0-alpha05 |
 | 序列化 | Gson 2.10.1、kotlinx-serialization 1.9.0 |
 | AI 助手 | OpenAI 兼容 API、自定义端点、技能系统 |
-| 手机操控 | AgentPaw `agentpaw-core` 0.1.2（GitHub Packages）、Shizuku |
+| 手机操控 | AgentPaw `agentpaw-core` 0.1.3（GitHub Packages）、Shizuku |
 | 插件系统 | ZIP 打包、JSON 配置、WebView Bridge、Broadcast 桥接 |
 | 构建 | Gradle（AGP 9.1.0）、CMake 3.22.1、NDK 28.2.13676358、JDK 21 |
 | 集成插件 | termux-api、termux-boot、termux-styling、termux-tasker、termux-widget |
