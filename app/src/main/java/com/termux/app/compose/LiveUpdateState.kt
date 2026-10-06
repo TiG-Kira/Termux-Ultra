@@ -140,6 +140,8 @@ object LiveUpdateState {
     @JvmStatic
     fun agentStart(backgrounded: Boolean = false) {
         _agentState.value = AgentState(active = true, thinking = true, backgrounded = backgrounded)
+        // 对话执行真正开始 —— 通知会话宿主，页面离开时才知道要不要留悬浮窗入口
+        AgentChatSession.onExecutionStart()
         notifyChanged()
     }
 
@@ -157,6 +159,8 @@ object LiveUpdateState {
     fun agentStop() {
         if (!_agentState.value.active) return
         _agentState.value = AgentState()
+        // 结束点驱动悬浮气泡的"回答完成"提示；用户主动停止时由 userStopped 抑制
+        AgentChatSession.onExecutionEnd()
         notifyChanged()
     }
 
