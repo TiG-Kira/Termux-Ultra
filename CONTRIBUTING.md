@@ -89,8 +89,9 @@
 
 ### 3. 合并方式
 
-- 合并到 `main` 采用 **squash merge**：合并后的主线条目即 PR 标题（沿用 `type(scope): 描述` 风格），保持 `--first-parent` 历史干净。
-- 作者本人不能 approve 自己的 PR；如需评审意见用 `gh pr comment` 沟通。
+- 合并到 `main` 采用 **rebase merge**：合并后的主线条目即 commmit 标题。
+- 作者本人不能 approve 自己的 PR；如需评审意见用 `gh pr comment` 沟通。否则管理人员可能不进行留言性质评审，并直接给 merge 或 close 判定。
+- 仓库管理者在本地运行环境测试过的 PR，将直接执行 rebase merge。
 
 ### 4. 版本号与打 tag 发版
 
