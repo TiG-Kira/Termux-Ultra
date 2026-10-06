@@ -2,8 +2,10 @@ name: 发布 Release Tag
 
 # 专职「打 Release 标签 + 生成 Release 详情页」，与 release_apk.yml（负责上传 APK）完全独立：
 #   - 本工作流仅手动（workflow_dispatch）触发，提交版本号改动并发布「无产物」Release；
-#   - release_apk.yml 监听 release: published 事件，在本工作流发布后自动接管、构建并上传 APK。
-# 两条流程互不改写对方、互不阻塞。
+#   - 发布完成后，本工作流显式（用 PAT）dispatch release_apk.yml，由其构建并上传 APK 到本 Release。
+# 注：release_apk.yml 虽同时监听 release: published 事件，但本工作流用 GITHUB_TOKEN 创建的
+#     Release 不会触发该事件（GitHub 禁止 GITHUB_TOKEN 引发的事件链式拉起新 workflow run），
+#     因此必须显式 dispatch。两条流程互不改写对方、互不阻塞。
 on:
   workflow_dispatch:
     inputs:
@@ -169,9 +171,42 @@ jobs:
           fi
           printf '%s\n' "$NOTES" > "$RUNNER_TEMP/notes.md"
 
-          # 发布：不附带任何产物；release: published 会唤醒 release_apk.yml 接管后续 APK 上传
+          # 发布：不附带任何产物；随后由本工作流显式 dispatch release_apk.yml 接管 APK 上传
           gh release create "$TAG" \
             --target "$SHA" \
             --title "$TAG" \
             --notes-file "$RUNNER_TEMP/notes.md"
-          echo "✅ 已发布 Release: $TAG（无产物，等待 release_apk.yml 接管）"
+          echo "✅ 已发布 Release: $TAG（无产物，随后将显式拉起 release_apk.yml）"
+
+      # ── 4. 链式触发 release_apk.yml：构建并上传 APK 到本 Release ──────
+      # 关键：本工作流用 GITHUB_TOKEN 创建的 Release 不会触发 release_apk.yml 监听的
+      # release: published 事件（GitHub 禁止 GITHUB_TOKEN 引发的事件链式拉起新 workflow run），
+      # 因此必须显式用 PAT 主动 dispatch。PAT 需含 repo + workflow 权限，存为仓库 secret：PAT。
+      # 该步骤与前面「版本比对是否 skip」无关——无论是否修改 build.gradle，Release 都已发布，
+      # 故始终拉起 APK 构建；传 build_universal=true 以复刻 release 事件的完整产物集（4 架构 + universal）。
+      - name: 触发 APK 构建与发布 (release_apk.yml)
+        env:
+          PAT: ${{ secrets.PAT }}
+        run: |
+          set -euo pipefail
+          TAG="${{ inputs.tag }}"
+          echo "触发 release_apk.yml (workflow_dispatch, tag=$TAG, build_universal=true)..."
+
+          # 等待刚创建的 Release 在 API 侧可见，避免 release_apk.yml 预检竞态
+          sleep 5
+
+          resp=$(curl -s -w "\nHTTP:%{http_code}" -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer $PAT" \
+            -H "Content-Type: application/json" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/release_apk.yml/dispatches" \
+            -d "{\"ref\":\"main\",\"inputs\":{\"tag\":\"$TAG\",\"build_universal\":true}}")
+
+          code=$(echo "$resp" | tail -1 | sed 's/HTTP://')
+          if [ "$code" = "204" ]; then
+            echo "✅ 已拉起 release_apk.yml，APK 构建与上传由其自动接管"
+          else
+            echo "::error::触发 release_apk.yml 失败 HTTP $code"
+            echo "$resp" | sed '$d'
+            exit 1
+          fi
