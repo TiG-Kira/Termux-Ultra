@@ -9,6 +9,7 @@
     <string name="oobe_description">To use Termux Ultra, you need to grant the necessary permissions.\nThis will allow the app to access files and function properly.</string>
     <string name="oobe_permission_progress">Permission progress:</string>
     <string name="oobe_permission_all_granted">All permissions granted!</string>
+    <string name="oobe_permission_status_unavailable">Permission status unavailable</string>
     <string name="oobe_grant_permissions">Grant Permissions</string>
     <string name="oobe_manage_storage">Manage External Storage</string>
     <string name="oobe_next">Next</string>

@@ -22,6 +22,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
 import com.termux.app.compose.KiTerminalTheme
+import com.termux.app.compose.OobePermissionIds
 import com.termux.app.compose.OobeScreen
 
 class OobeActivity : ComponentActivity() {
@@ -31,6 +32,8 @@ class OobeActivity : ComponentActivity() {
         
         // 许可条款最终修改日期 (YYYYMMDD)
         const val EULA_LAST_MODIFIED = "20260916"
+
+        private const val TAG_PERM = "OobePermissions"
     }
 
     private var isUpgrade by mutableStateOf(false)
@@ -39,6 +42,13 @@ class OobeActivity : ComponentActivity() {
     
     private var permissionStatus by mutableStateOf("")
     private var isPermissionGranted by mutableStateOf(false)
+
+    // 逐项权限状态：key 见 OobePermissionIds，value=是否真实持有。
+    // 之前只把结果聚合成 permissionStatus/isPermissionGranted 两个值下发，
+    // 逐项信息在 Activity 边界就被压扁了，导致 UI 只能硬编码 granted=true。
+    private var permissionStates by mutableStateOf<Map<String, Boolean>>(emptyMap())
+    private var isPermissionLoading by mutableStateOf(true)
+    private var permissionLoadFailed by mutableStateOf(false)
     private var isBootstrapping by mutableStateOf(false)
     private var isDownloading by mutableStateOf(false)
     private var isInstalling by mutableStateOf(false)
@@ -80,6 +90,12 @@ class OobeActivity : ComponentActivity() {
                 ActivityResultContracts.RequestMultiplePermissions()
             ) { _ ->
                 updatePermissionStatus()
+                // 运行时权限批结束后接着把「文件存储」补齐，否则串行申请会断在这一步。
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !Environment.isExternalStorageManager()) {
+                    val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
+                    intent.data = Uri.parse("package:$packageName")
+                    manageStorageLauncher.launch(intent)
+                }
             }
 
             manageStorageLauncher = registerForActivityResult(
@@ -108,6 +124,9 @@ class OobeActivity : ComponentActivity() {
                             eulaLastStored = SplashActivity.getEulaDate(this),
                             permissionStatus = permissionStatus,
                             isPermissionGranted = isPermissionGranted,
+                            permissionStates = permissionStates,
+                            isPermissionLoading = isPermissionLoading,
+                            permissionLoadFailed = permissionLoadFailed,
                             isBootstrapping = isBootstrapping,
                             isDownloading = isDownloading,
                             isInstalling = isInstalling,
@@ -186,6 +205,9 @@ class OobeActivity : ComponentActivity() {
         isDownloading = true
         isInstalling = false
         bootstrapError = null
+        // 必须复位：安装页的 when 里 bootstrapComplete 分支排在 bootstrapError 之前，
+        // 不清零的话「成功过一次之后再失败」会继续显示成功页而盖掉失败原因。
+        bootstrapComplete = false
 
         // OOBE 自带 Compose 进度与两阶段文案，用回调接住阶段与失败，避免叠系统弹窗。
         val callback = object : TermuxInstaller.BootstrapCallback {
@@ -229,17 +251,18 @@ class OobeActivity : ComponentActivity() {
     }
 
     private fun grantAllPermissions() {
-        val deniedPermissions = mutableListOf<String>()
-        
-        for (permission in normalPermissions) {
-            if (ContextCompat.checkSelfPermission(this, permission) != PackageManager.PERMISSION_GRANTED) {
-                deniedPermissions.add(permission)
-            }
+        val deniedPermissions = normalPermissions.filter {
+            ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
         }
 
+        // 两类权限要串行申请，不能用 else if 互斥：只要有运行时权限被拒，
+        // 文件存储的特殊权限设置页就永远打不开，用户无法补齐。
         if (deniedPermissions.isNotEmpty()) {
             requestPermissionsLauncher.launch(deniedPermissions.toTypedArray())
-        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !Environment.isExternalStorageManager()) {
+            return
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !Environment.isExternalStorageManager()) {
             val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
             intent.data = Uri.parse("package:$packageName")
             manageStorageLauncher.launch(intent)
@@ -248,37 +271,51 @@ class OobeActivity : ComponentActivity() {
         }
     }
 
-    private fun allPermissionsGranted(): Boolean {
-        for (permission in normalPermissions) {
-            if (ContextCompat.checkSelfPermission(this, permission) != PackageManager.PERMISSION_GRANTED) {
-                return false
-            }
-        }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            if (!Environment.isExternalStorageManager()) return false
-        }
-        return true
-    }
+    /** 「文件存储」是否真实持有：Android 11+ 是全文件访问特殊权限，之前是普通权限。 */
+    private fun isFileStorageGranted(): Boolean =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) Environment.isExternalStorageManager()
+        else isGranted(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+
+    private fun isGranted(permission: String): Boolean =
+        ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED
+
+    /** 网络能力要 INTERNET 与 ACCESS_NETWORK_STATE 同时具备才算完整。 */
+    private fun isNetworkAccessGranted(): Boolean =
+        isGranted(Manifest.permission.INTERNET) && isGranted(Manifest.permission.ACCESS_NETWORK_STATE)
 
     private fun updatePermissionStatus() {
-        var grantedCount = normalPermissions.count {
-            ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED
-        }
-        var totalPermissions = normalPermissions.size
-        
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            totalPermissions += 1
-            if (Environment.isExternalStorageManager()) grantedCount += 1
+        // 逐项查询。任一项查询抛异常都不能让整页崩掉，也不能谎报全部已授权：
+        // 标记为加载失败并清空状态，UI 会显示「无法读取」且所有项保持未勾选。
+        val states: Map<String, Boolean> = try {
+            linkedMapOf<String, Boolean>(
+                OobePermissionIds.NETWORK to isNetworkAccessGranted(),
+                OobePermissionIds.FILE_STORAGE to isFileStorageGranted(),
+                OobePermissionIds.WAKE_LOCK to isGranted(Manifest.permission.WAKE_LOCK),
+                OobePermissionIds.VIBRATE to isGranted(Manifest.permission.VIBRATE)
+            )
+        } catch (t: Throwable) {
+            Log.w(TAG_PERM, "Failed to query permission states", t)
+            permissionStates = emptyMap()
+            isPermissionLoading = false
+            permissionLoadFailed = true
+            isPermissionGranted = false
+            permissionStatus = getString(R.string.oobe_permission_status_unavailable)
+            return
         }
 
-        permissionStatus = String.format("%s %d/%d",
-            getString(R.string.oobe_permission_progress),
-            grantedCount,
-            totalPermissions)
+        permissionStates = states
+        isPermissionLoading = false
+        permissionLoadFailed = false
 
-        isPermissionGranted = allPermissionsGranted()
-        if (isPermissionGranted) {
-            permissionStatus = getString(R.string.oobe_permission_all_granted)
+        // 空结果不能算「全部已授权」，否则会放行一个什么都没查到的页面。
+        isPermissionGranted = states.isNotEmpty() && states.values.all { it }
+        permissionStatus = if (isPermissionGranted) {
+            getString(R.string.oobe_permission_all_granted)
+        } else {
+            String.format(
+                "%s %d/%d", getString(R.string.oobe_permission_progress),
+                states.values.count { it }, states.size
+            )
         }
     }
 

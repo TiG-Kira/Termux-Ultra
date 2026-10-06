@@ -69,20 +69,32 @@ final class TermuxInstaller {
             bootstrapErrorMessage = activity.getString(R.string.bootstrap_error_not_primary_user_message, MarkdownUtils.getMarkdownCodeForString(TERMUX_PREFIX_DIR_PATH, false));
             Logger.logError(LOG_TAG, "isFilesDirectoryAccessible: " + isFilesDirectoryAccessible);
             Logger.logError(LOG_TAG, bootstrapErrorMessage);
-            sendBootstrapCrashReportNotification(activity, bootstrapErrorMessage);
-            MessageDialogUtils.exitAppWithErrorMessage(activity,
-                activity.getString(R.string.bootstrap_error_title),
-                bootstrapErrorMessage);
+            // 有回调时必须交给调用方展示：这条分支原本直接 System.exit，
+            // OOBE 会连同安装失败页一起被杀掉，状态机停在「正在下载」且无法重试。
+            if (callback != null) {
+                reportBootstrapError(activity, whenDone, callback, bootstrapErrorMessage);
+            } else {
+                sendBootstrapCrashReportNotification(activity, bootstrapErrorMessage);
+                MessageDialogUtils.exitAppWithErrorMessage(activity,
+                    activity.getString(R.string.bootstrap_error_title),
+                    bootstrapErrorMessage);
+            }
             return;
         }
 
         if (!isFilesDirectoryAccessible) {
             bootstrapErrorMessage = Error.getMinimalErrorString(filesDirectoryAccessibleError) + "\nTERMUX_FILES_DIR: " + MarkdownUtils.getMarkdownCodeForString(TermuxConstants.TERMUX_FILES_DIR_PATH, false);
             Logger.logError(LOG_TAG, bootstrapErrorMessage);
-            sendBootstrapCrashReportNotification(activity, bootstrapErrorMessage);
-            MessageDialogUtils.showMessage(activity,
-                activity.getString(R.string.bootstrap_error_title),
-                bootstrapErrorMessage, null);
+            // 同上：原本无条件弹系统对话框就 return，回调永不触发，
+            // OOBE 永远停在转圈状态且没有重试入口。
+            if (callback != null) {
+                reportBootstrapError(activity, whenDone, callback, bootstrapErrorMessage);
+            } else {
+                sendBootstrapCrashReportNotification(activity, bootstrapErrorMessage);
+                MessageDialogUtils.showMessage(activity,
+                    activity.getString(R.string.bootstrap_error_title),
+                    bootstrapErrorMessage, null);
+            }
             return;
         }
 
@@ -242,10 +254,33 @@ final class TermuxInstaller {
     /** 失败统一入口：有回调就交给调用方展示（OOBE 的 Compose 错误页），否则弹系统对话框。 */
     private static void reportBootstrapError(Activity activity, Runnable whenDone,
                                              BootstrapCallback callback, String message) {
-        Logger.logErrorExtended(LOG_TAG, "Bootstrap Error:\n" + message);
-        sendBootstrapCrashReportNotification(activity, message);
+        try {
+            Logger.logErrorExtended(LOG_TAG, "Bootstrap Error:\n" + message);
+        } catch (Throwable ignored) {
+        }
+
+        // 崩溃通知是尽力而为的旁路：它要写外部文件、建通知通道，失败概率不低
+        // （bootstrap 失败的原因之一恰恰就是存储不可访问）。它一旦抛异常，
+        // 下面的失败回调就永远不会执行，OOBE 会永远停在转圈且不给重试入口。
+        try {
+            sendBootstrapCrashReportNotification(activity, message);
+        } catch (Throwable t) {
+            try {
+                Logger.logError(LOG_TAG, "Failed to send bootstrap crash report: " + t);
+            } catch (Throwable ignored) {
+            }
+        }
 
         if (callback != null) {
+            // Activity 已销毁时 post 的 runnable 不会再跑，回调丢失等于静默失败；
+            // 此时无处展示，只能记日志。Activity 存活时一律走 UI 线程回调。
+            if (activity.isFinishing() || activity.isDestroyed()) {
+                try {
+                    Logger.logError(LOG_TAG, "Activity gone, bootstrap error not surfaced to UI: " + message);
+                } catch (Throwable ignored) {
+                }
+                return;
+            }
             activity.runOnUiThread(() -> callback.onError(message));
         } else {
             showBootstrapErrorDialog(activity, whenDone, message);
