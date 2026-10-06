@@ -1,0 +1,314 @@
+name: Gradle 编译（增量优先 + 全量降级重试一次）
+description: >
+  统一的 Android 编译步骤：优先走缓存命中的增量编译；增量失败时自动清空
+  全部本地缓存与构建产物，并自动触发一次全量编译重试；仅当全量重试也失败
+  时才判定失败，同时输出结构化的失败原因与排查日志。
+  ci.yml（Debug）与 release_apk.yml（Release）共用本 action，保证两条流程
+  的错误处理语义完全一致。
+
+inputs:
+  gradle-task:
+    description: 要执行的 Gradle 任务，例如 assembleRelease / assembleDebug
+    required: true
+  variant:
+    description: 构建变体标识（release / debug），参与缓存键
+    required: true
+  abi:
+    description: 目标 ABI（arm64-v8a / universal 等），参与缓存键
+    required: true
+  termux-workflow-cli:
+    description: 传给构建的 TERMUX_WORKFLOW_CLI 环境值（true=Debug/CLI，false=Release）
+    required: true
+  artifact-glob:
+    description: 编译成功后用于校验产物是否真的生成的 glob（留空则跳过校验）
+    required: false
+    default: ""
+  extra-args:
+    description: 追加到 gradlew 命令行后的额外参数
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    # ══════════════════════════════════════════════════════════════
+    # 1. 计算缓存键
+    #    键的维度：锁文件哈希 / 操作系统 / 工具链(JDK+Gradle+AGP+NDK+CMake) /
+    #    构建变体 / ABI。故意不含 commit 或分支 SHA —— 否则每次推送都必然
+    #    是一次全新键、必然全量重编，「复用缓存」就退化成了「每次多传一份
+    #    空缓存」。跨 commit 的复用交给 Gradle/CMake 自身的 up-to-date 校验。
+    # ══════════════════════════════════════════════════════════════
+    - name: 计算缓存键
+      id: keys
+      shell: bash
+      run: |
+        set -uo pipefail
+        LOCK_HASH="${{ hashFiles('**/gradle-wrapper.properties', '**/*.gradle', '**/*.gradle.kts', '**/gradle.properties', '**/libs.versions.toml') }}"
+        RUNNER_OS="ubuntu-26.04"
+        TOOLCHAIN="jdk21-temurin-gradle9.7.1-agp9.1.0"
+        NATIVE_TOOLCHAIN="ndk28.2.13676358-cmake3.22.1"
+        VARIANT="${{ inputs.variant }}"
+        ABI="${{ inputs.abi }}"
+
+        # 依赖缓存：锁文件哈希 + OS + 工具链
+        DEP_KEY="gha-deps-${RUNNER_OS}-${TOOLCHAIN}-${LOCK_HASH}"
+        # 构建中间产物缓存：在依赖键基础上再加变体 + ABI
+        BUILD_KEY="gha-build-${RUNNER_OS}-${TOOLCHAIN}-${LOCK_HASH}-${VARIANT}-${ABI}"
+        # 原生（CMake/NDK）缓存：不含依赖锁文件哈希 —— 升级 Java 依赖不该让
+        # .o/.a 全部作废，这一项是本项目耗时占比最高的收益来源。
+        NATIVE_KEY="gha-native-${RUNNER_OS}-${NATIVE_TOOLCHAIN}-${VARIANT}-${ABI}"
+
+        {
+          echo "runners_os=${RUNNER_OS}"
+          echo "deps_key=${DEP_KEY}"
+          echo "build_key=${BUILD_KEY}"
+          echo "native_key=${NATIVE_KEY}"
+          echo "lock_hash=${LOCK_HASH}"
+        } >> "$GITHUB_OUTPUT"
+
+        {
+          echo "### 构建上下文"
+          echo ""
+          echo "| 键维度 | 取值 |"
+          echo "|---|---|"
+          echo "| 构建变体 | \`${VARIANT}\` |"
+          echo "| ABI | \`${ABI}\` |"
+          echo "| 操作系统 | \`${RUNNER_OS}\` |"
+          echo "| 工具链 | \`${TOOLCHAIN}\` + \`${NATIVE_TOOLCHAIN}\` |"
+          echo "| 锁文件哈希 | \`${LOCK_HASH:0:16}\` |"
+          echo "| Gradle 任务 | \`${{ inputs.gradle-task }}\` |"
+          echo ""
+          echo "缓存键刻意**不含** commit / 分支：跨提交复用由 Gradle 与 CMake 的"
+          echo "up-to-date 校验保证，加上 SHA 会让每次推送都退化为全量重编。"
+          echo ""
+        } >> "$GITHUB_STEP_SUMMARY"
+
+    # ══════════════════════════════════════════════════════════════
+    # 2. 缓存恢复
+    #    缓存：Gradle 依赖 + 构建缓存 + 全部 build/ 中间产物 + .cxx 原生产物
+    #    不缓存：outputs/（APK 每次重新打包签名，缓存它等于复用旧签名产物，
+    #            反而有「拿到过期 APK」的风险）、源码目录、密钥文件（JKS
+    #            每次由 base64 现场解码）、.git/、reports/ 与 tmp/（纯输出）。
+    # ══════════════════════════════════════════════════════════════
+    - name: 恢复依赖与构建缓存
+      id: restore
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.gradle/caches
+          ~/.gradle/wrapper
+          ~/.gradle/daemon
+          **/build
+          ./*/.cxx
+        key: ${{ steps.keys.outputs.build_key }}
+        restore-keys: |
+          gha-build-${{ steps.keys.outputs.runners_os }}-jdk21-temurin-gradle9.7.1-agp9.1.0-*-release-${{ inputs.abi }}
+          gha-build-${{ steps.keys.outputs.runners_os }}-jdk21-temurin-gradle9.7.1-agp9.1.0-*-debug-${{ inputs.abi }}
+          gha-build-${{ steps.keys.outputs.runners_os }}-jdk21-temurin-gradle9.7.1-agp9.1.0-${{ steps.keys.outputs.lock_hash }}-
+
+    # ══════════════════════════════════════════════════════════════
+    # 3. 缓存命中情况盘点：集中记录，失败报告直接引用
+    # ══════════════════════════════════════════════════════════════
+    - name: 汇总缓存命中情况
+      id: hits
+      if: always()
+      shell: bash
+      run: |
+        set -uo pipefail
+        hit="${{ steps.restore.outputs.cache-hit }}"
+        case "$hit" in
+          true)  verdict="✅ 精确命中（完全复用）" ;;
+          false) verdict="⚠️ 部分命中（restore-keys 命中，增量基线来自更早的提交）" ;;
+          *)     verdict="❌ 未命中（冷构建）" ;;
+        esac
+        {
+          echo "### 缓存命中情况"
+          echo ""
+          echo "| 项 | 结果 |"
+          echo "|---|---|"
+          echo "| 依赖 + 构建 + 原生缓存 | ${verdict} |"
+          echo "| 命中键 | \`${{ steps.restore.outputs.cache-primary-key }}\` |"
+          echo "| 恢复键 | \`${{ steps.restore.outputs.cache-matched-key }}\` |"
+          echo ""
+        } >> "$GITHUB_STEP_SUMMARY"
+        echo "cache_hit=${hit}" >> "$GITHUB_OUTPUT"
+
+    # ══════════════════════════════════════════════════════════════
+    # 4. 增量编译（首选路径）
+    #    continue-on-error：失败不终止作业，交由第 6 步做全量重试。
+    # ══════════════════════════════════════════════════════════════
+    - name: 增量编译（缓存优先）
+      id: incremental
+      continue-on-error: true
+      shell: bash
+      env:
+        TERMUX_WORKFLOW_CLI: ${{ inputs.termux-workflow-cli }}
+      run: |
+        set -uo pipefail
+        LOG_DIR="${RUNNER_TEMP}/gradle-logs"
+        mkdir -p "$LOG_DIR"
+        LOG="${LOG_DIR}/incremental.log"
+
+        echo "▶ 增量编译：${{ inputs.gradle-task }} -Ptermux.abi=${{ inputs.abi }} ${{ inputs.extra-args }}"
+        set -o pipefail
+        ./gradlew ${{ inputs.gradle-task }} \
+          -Ptermux.abi=${{ inputs.abi }} \
+          --build-cache --parallel --console=plain \
+          ${{ inputs.extra-args }} 2>&1 | tee "$LOG"
+        rc=${PIPESTATUS[0]}
+        echo "exit_code=${rc}" >> "$GITHUB_OUTPUT"
+
+        if [ "$rc" -ne 0 ]; then
+          echo "::warning::增量编译失败（exit=${rc}），将转入全量冷构建重试"
+          exit "$rc"
+        fi
+
+        # 产物校验：拦住「Gradle 退出码 0 但没出包」的情况，
+        # 否则要等到上传产物那一步才炸，白白浪费一次全量重试的机会。
+        if [ -n "${{ inputs.artifact-glob }}" ]; then
+          shopt -s nullglob
+          found=(${{ inputs.artifact-glob }})
+          if [ ${#found[@]} -eq 0 ]; then
+            echo "::warning::增量编译退出码为 0 但未产出 ${{ inputs.artifact-glob }}，按失败处理并降级"
+            exit 1
+          fi
+          echo "✅ 增量编译产物：${found[*]}"
+        fi
+
+    # ══════════════════════════════════════════════════════════════
+    # 5. 失败降级：清空全部缓存与构建产物
+    #    目的只有一个 —— 让重试是一次真正的冷构建。否则脏中间产物被继续
+    #    复用，重试必然复现同一个失败，降级就白做了。
+    #    注：GitHub 缓存条目在运行中无法删除（无运行时 token），因此这里
+    #    清的是本地已恢复的缓存；失效键同时写入 summary，便于事后清理。
+    # ══════════════════════════════════════════════════════════════
+    - name: 清理全部缓存与构建产物
+      id: purge
+      if: steps.incremental.outcome == 'failure'
+      shell: bash
+      run: |
+        set -uo pipefail
+        echo "▶ 增量路径失败，执行缓存与产物清理"
+        before_kb=$(du -sm ~/.gradle/caches 2>/dev/null | cut -f1 || echo 0)
+        before_bb=$(du -sm ./*/build 2>/dev/null | awk '{s+=$1} END {print s+0}')
+        echo "清理前：Gradle 缓存 ${before_kb}MB / 构建目录合计 ${before_bb}MB"
+
+        # Gradle 本地构建缓存 + 配置缓存 + 变换产物
+        # （配置缓存必须一起清：它命中时 Gradle 会跳过配置阶段，
+        #  「已清理」会变成假象）
+        rm -rf ~/.gradle/caches/build-cache-* ~/.gradle/caches/configuration-cache-* ~/.gradle/caches/transforms-* 2>/dev/null || true
+        # 所有模块的构建输出（排除 .git）
+        find . -maxdepth 3 -type d -name build -not -path './.git/*' -prune -exec rm -rf {} + 2>/dev/null || true
+        # AGP 的 CMake 原生构建目录
+        rm -rf ./*/.cxx 2>/dev/null || true
+        # 停掉 daemon，防止它把内存里的旧状态回写到磁盘
+        ./gradlew --stop >/dev/null 2>&1 || true
+
+        after_kb=$(du -sm ~/.gradle/caches 2>/dev/null | cut -f1 || echo 0)
+        echo "清理后：Gradle 缓存 ${after_kb}MB"
+        {
+          echo ""
+          echo "> **降级处理：** 增量编译失败，已清空本地 Gradle 构建缓存、配置缓存、"
+          echo "> 变换产物、全部 \`build/\` 与 \`.cxx/\` 目录，随后的全量重试为冷构建。"
+          echo "> 失效缓存键（可在 Actions 页面手动删除）：\`${{ steps.keys.outputs.build_key }}\`"
+          echo ""
+        } >> "$GITHUB_STEP_SUMMARY"
+
+    # ══════════════════════════════════════════════════════════════
+    # 6. 全量编译重试 —— 严格只跑这一次，无循环、无无限重试。
+    # ══════════════════════════════════════════════════════════════
+    - name: 全量编译重试（冷构建，仅一次）
+      id: fullretry
+      if: steps.incremental.outcome == 'failure'
+      shell: bash
+      env:
+        TERMUX_WORKFLOW_CLI: ${{ inputs.termux-workflow-cli }}
+      run: |
+        set -uo pipefail
+        LOG_DIR="${RUNNER_TEMP}/gradle-logs"
+        mkdir -p "$LOG_DIR"
+        LOG="${LOG_DIR}/full-retry.log"
+
+        echo "▶ 全量重试（缓存与产物已清空，等价于首次构建）"
+        set -o pipefail
+        ./gradlew ${{ inputs.gradle-task }} \
+          -Ptermux.abi=${{ inputs.abi }} \
+          --build-cache --parallel --console=plain \
+          ${{ inputs.extra-args }} 2>&1 | tee "$LOG"
+        rc=${PIPESTATUS[0]}
+        echo "exit_code=${rc}" >> "$GITHUB_OUTPUT"
+
+        if [ "$rc" -eq 0 ] && [ -n "${{ inputs.artifact-glob }}" ]; then
+          shopt -s nullglob
+          found=(${{ inputs.artifact-glob }})
+          if [ ${#found[@]} -eq 0 ]; then
+            echo "::error::全量重试退出码为 0 但未产出 ${{ inputs.artifact-glob }}"
+            exit 1
+          fi
+          echo "✅ 全量重试产物：${found[*]}"
+        fi
+        exit "$rc"
+
+    # ══════════════════════════════════════════════════════════════
+    # 7. 结构化失败报告
+    #    `if: failure()` 意味着能走到这里的前提是「全量重试也失败了」，
+    #    报告里如实写清这条判定链路。
+    # ══════════════════════════════════════════════════════════════
+    - name: 输出失败原因与排查日志
+      id: report
+      if: failure()
+      shell: bash
+      run: |
+        set -uo pipefail
+        LOG_DIR="${RUNNER_TEMP}/gradle-logs"
+        FULL_RC="${{ steps.fullretry.outputs.exit_code }}"
+        PURGED="${{ steps.purge.outcome }}"
+
+        {
+          echo "## ❌ 编译失败"
+          echo ""
+          echo "**变体 / ABI：** \`${{ inputs.variant }}\` / \`${{ inputs.abi }}\`"
+          echo ""
+          echo "### 重试记录"
+          echo ""
+          echo "| # | 阶段 | 结果 |"
+          echo "|---|---|---|"
+          echo "| 1 | 增量编译（缓存优先） | ❌ 失败，exit=\`${{ steps.incremental.outputs.exit_code }}\` |"
+          echo "| 2 | 清理缓存与构建产物 | ${PURGED} |"
+          echo "| 3 | 全量冷构建重试 | ❌ 失败，exit=\`${FULL_RC:-未执行}\` |"
+          echo ""
+          echo "**失败判定：** 增量失败已自动触发一次全量重试（仅重试一次，无循环）；"
+          echo "全量重试仍失败，故判定本次 Workflow 失败。"
+          echo ""
+          echo "### 关键错误信息"
+          echo ""
+          echo '```text'
+          if [ -f "${LOG_DIR}/full-retry.log" ]; then
+            grep -nE "FAILURE:|What went wrong|Execution failed for task|Caused by:|> Task .* FAILED|CMake Error|ninja: build stopped|OutOfMemoryError|Gradle build daemon disappeared|No space left" "${LOG_DIR}/full-retry.log" | head -40 \
+              || echo "(未匹配到标准错误模式，请看下方完整日志)"
+          else
+            echo "(全量重试日志不存在：失败发生在清理阶段之前)"
+          fi
+          echo '```'
+          echo ""
+          echo "### 排查线索"
+          echo ""
+          echo "- 缓存命中情况：见本 summary 上方「缓存命中情况」小节"
+          echo "- 完整日志已归档为 artifact \`build-logs-${{ inputs.variant }}-${{ inputs.abi }}\`（含 \`incremental.log\` 与 \`full-retry.log\`）"
+          echo "- 失效缓存键：\`${{ steps.keys.outputs.build_key }}\`"
+          echo ""
+        } >> "$GITHUB_STEP_SUMMARY"
+
+        echo "::error title=编译失败（增量+全量重试均失败）::变体=${{ inputs.variant }} ABI=${{ inputs.abi }} 增量 exit=${{ steps.incremental.outputs.exit_code }}，全量重试 exit=${FULL_RC:-未执行}。详见 job summary 与 build-logs artifact。"
+
+        mkdir -p build-logs
+        cp -f "${LOG_DIR}"/*.log build-logs/ 2>/dev/null || true
+
+    - name: 上传排查日志
+      if: failure()
+      uses: actions/upload-artifact@v7
+      with:
+        name: build-logs-${{ inputs.variant }}-${{ inputs.abi }}
+        archive: false
+        if-no-files-found: ignore
+        path: build-logs/*.log

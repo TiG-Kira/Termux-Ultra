@@ -67,6 +67,9 @@ jobs:
   # 每个 ABI 一个独立作业：CMake 只为该 ABI 配置与编译，四项原生构建互不干扰，
   # 单作业的内存峰值约 1/4、墙钟时间也降到 1/4 左右；4 个 APK 同时产出。
   # -Ptermux.abi=<abi> 只影响本作业，产物保持 AGP 默认命名 app-<abi>-release.apk。
+  #
+  # 编译逻辑（缓存 + 增量优先 + 全量降级重试 + 失败判定）收敛到
+  # ./.github/actions/gradle-build，与 ci.yml 共用同一份实现。
   build:
     needs: preflight
     if: needs.preflight.outputs.skip == 'false'
@@ -102,12 +105,17 @@ jobs:
           test -s app/ki-terminal-release.jks
           echo "JKS 写入完成：$(stat -c%s app/ki-terminal-release.jks) 字节"
 
-      - name: 编译 ${{ matrix.abi }} Release APK
-        env:
-          # 关键：TERMUX_WORKFLOW_CLI=false，否则会打 CLI 版本！
-          TERMUX_WORKFLOW_CLI: "false"
-        run: |
-          ./gradlew :app:assembleRelease -Ptermux.abi=${{ matrix.abi }} --console=plain
+      # 签名配置（signingConfigs.release / buildTypes.release.signingConfig）
+      # 仍由 app/build.gradle 读取上面解码出的 JKS，此处逻辑未做任何改动。
+      # 关键：TERMUX_WORKFLOW_CLI=false，否则会打 CLI 版本！
+      - name: 编译 ${{ matrix.abi }} Release APK（增量优先，失败自动全量重试一次）
+        uses: ./.github/actions/gradle-build
+        with:
+          gradle-task: ':app:assembleRelease'
+          variant: release
+          abi: ${{ matrix.abi }}
+          termux-workflow-cli: 'false'
+          artifact-glob: 'app/build/outputs/apk/release/*.apk'
 
       # 体积优化流程已取消（收益有限且拖慢构建）：直接采用 Gradle 已签名产物上传。
 
@@ -149,12 +157,16 @@ jobs:
           test -s app/ki-terminal-release.jks
           echo "JKS 写入完成：$(stat -c%s app/ki-terminal-release.jks) 字节"
 
-      - name: 编译 universal Release APK
-        env:
-          TERMUX_WORKFLOW_CLI: "false"
-        run: |
-          # -Ptermux.abi=universal → 关闭 ABI 拆分，四个架构一起打进一个包
-          ./gradlew :app:assembleRelease -Ptermux.abi=universal --console=plain
+      - name: 编译 universal Release APK（增量优先，失败自动全量重试一次）
+        uses: ./.github/actions/gradle-build
+        with:
+          gradle-task: ':app:assembleRelease'
+          variant: release
+          # -Ptermux.abi=universal → 关闭 ABI 拆分，四个架构一起打进一个包。
+          # 独立缓存段：与四个单架构作业互不覆盖，各自复用各自的历史产物。
+          abi: universal
+          termux-workflow-cli: 'false'
+          artifact-glob: 'app/build/outputs/apk/release/*.apk'
 
       # 体积优化流程已取消（收益有限且拖慢构建）：直接采用 Gradle 已签名产物上传。
 
