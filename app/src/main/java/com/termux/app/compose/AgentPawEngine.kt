@@ -46,6 +46,10 @@ object AgentPawEngine {
         if (providerConfig.apiBaseUrl.isBlank() || providerConfig.model.isBlank()) return null
 
         val provider = if (providerConfig.provider == "openai") LlmProvider.OPENAI else LlmProvider.CUSTOM
+        // 步数无上限开关开启时，给库传 0 触发 0.1.3 的步数无上限机制（run 循环对 maxToolRounds <= 0 视为不限轮数）；
+        // 关闭时沿用用户在设置里配置的上限。
+        val maxToolRounds = if (AgentPawPrefs.isUnlimitedToolRounds(context)) 0
+        else AgentPawPrefs.getMaxToolRounds(context)
         return LlmConfig(
             provider = provider,
             baseUrl = providerConfig.apiBaseUrl,
@@ -54,7 +58,7 @@ object AgentPawEngine {
             temperature = AgentPawPrefs.getTemperature(context),
             topP = AgentPawPrefs.getTopP(context),
             maxTokens = AgentPawPrefs.getMaxTokens(context),
-            maxToolRounds = AgentPawPrefs.getMaxToolRounds(context),
+            maxToolRounds = maxToolRounds,
             visionResolutionMode = AgentPawPrefs.getVisionMode(context),
             stream = AgentPawPrefs.isStreamEnabled(context),
             systemPrompt = AgentPawPrefs.getSystemPrompt(context)

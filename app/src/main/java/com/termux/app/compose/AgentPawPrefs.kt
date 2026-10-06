@@ -21,6 +21,7 @@ object AgentPawPrefs {
     private const val KEY_TOP_P = "top_p"
     private const val KEY_MAX_TOKENS = "max_tokens"
     private const val KEY_MAX_TOOL_ROUNDS = "max_tool_rounds"
+    private const val KEY_UNLIMITED_TOOL_ROUNDS = "unlimited_tool_rounds"
     private const val KEY_STREAM = "stream"
     private const val KEY_VISION_MODE = "vision_mode"
     private const val KEY_SYSTEM_PROMPT = "system_prompt"
@@ -75,6 +76,17 @@ object AgentPawPrefs {
 
     fun getMaxToolRounds(context: Context): Int =
         prefs(context).getInt(KEY_MAX_TOOL_ROUNDS, DEFAULT_MAX_TOOL_ROUNDS)
+
+    /**
+     * 无限执行步数：开启后步数不再受限（交给 0.1.3 的步数无上限机制，见 [AgentPawEngine.buildLlmConfig]），
+     * 关闭时沿用 [getMaxToolRounds] 的原有上限。默认关闭。
+     */
+    fun isUnlimitedToolRounds(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_UNLIMITED_TOOL_ROUNDS, false)
+
+    fun setUnlimitedToolRounds(context: Context, enabled: Boolean) {
+        prefs(context).edit().putBoolean(KEY_UNLIMITED_TOOL_ROUNDS, enabled).apply()
+    }
 
     fun isStreamEnabled(context: Context): Boolean =
         prefs(context).getBoolean(KEY_STREAM, true)
