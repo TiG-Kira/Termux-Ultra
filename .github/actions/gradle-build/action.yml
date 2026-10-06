@@ -27,6 +27,13 @@ inputs:
     description: 追加到 gradlew 命令行后的额外参数
     required: false
     default: ""
+  cache-write:
+    description: >
+      是否允许在本次运行结束后写回缓存。auto（默认）= pull_request 事件只读、
+      其余（push / release / workflow_dispatch）可写。显式传 true/false 可覆盖。
+      PR 传false 是为了不让 PR 的缓存挤占仓库 10GB 配额、把主线的缓存条目挤出 LRU。
+    required: false
+    default: "auto"
 
 runs:
   using: composite
@@ -58,13 +65,37 @@ runs:
         # .o/.a 全部作废，这一项是本项目耗时占比最高的收益来源。
         NATIVE_KEY="gha-native-${RUNNER_OS}-${NATIVE_TOOLCHAIN}-${VARIANT}-${ABI}"
 
+        # ── 缓存写权限判定（缓存隔离）──────────────────────────────
+        # GitHub 缓存的驱逐是**仓库级全局 LRU**，不按作用域隔离：PR 写入的缓存
+        # 与主线缓存共用同一个 10GB 配额池。PR 每提交一次就写4 份（4 个 ABI）
+        # 全量构建缓存，足以把主线的条目挤出 LRU —— 这才是「污染主线缓存」的
+        # 真实机制（并非PR 能改到主线的键，而是把主线的键挤没了）。
+        # 因此：PR 只读（actions/cache/restore），主线才写（save）。
+        if [ "${{ inputs.cache-write }}" = "auto" ]; then
+          case "${{ github.event_name }}" in
+            pull_request|pull_request_target)
+              CACHE_WRITE="false" ;;
+            *)
+              CACHE_WRITE="true" ;;
+          esac
+        else
+          CACHE_WRITE="${{ inputs.cache-write }}"
+        fi
+
         {
           echo "runners_os=${RUNNER_OS}"
           echo "deps_key=${DEP_KEY}"
           echo "build_key=${BUILD_KEY}"
           echo "native_key=${NATIVE_KEY}"
           echo "lock_hash=${LOCK_HASH}"
+          echo "cache_write=${CACHE_WRITE}"
         } >> "$GITHUB_OUTPUT"
+
+        if [ "$CACHE_WRITE" = "true" ]; then
+          WRITE_NOTE="✅ 可写（${{ github.event_name }}）"
+        else
+          WRITE_NOTE="🔒 只读（${{ github.event_name }}）"
+        fi
 
         {
           echo "### 构建上下文"
@@ -77,6 +108,7 @@ runs:
           echo "| 工具链 | \`${TOOLCHAIN}\` + \`${NATIVE_TOOLCHAIN}\` |"
           echo "| 锁文件哈希 | \`${LOCK_HASH:0:16}\` |"
           echo "| Gradle 任务 | \`${{ inputs.gradle-task }}\` |"
+          echo "| 缓存写权限 | ${WRITE_NOTE} |"
           echo ""
           echo "缓存键刻意**不含** commit / 分支：跨提交复用由 Gradle 与 CMake 的"
           echo "up-to-date 校验保证，加上 SHA 会让每次推送都退化为全量重编。"
@@ -84,15 +116,15 @@ runs:
         } >> "$GITHUB_STEP_SUMMARY"
 
     # ══════════════════════════════════════════════════════════════
-    # 2. 缓存恢复
-    #    缓存：Gradle 依赖 + 构建缓存 + 全部 build/ 中间产物 + .cxx 原生产物
-    #    不缓存：outputs/（APK 每次重新打包签名，缓存它等于复用旧签名产物，
-    #            反而有「拿到过期 APK」的风险）、源码目录、密钥文件（JKS
-    #            每次由 base64 现场解码）、.git/、reports/ 与 tmp/（纯输出）。
+    # 2. 缓存恢复（只读）
+    #    刻意使用 cache/restore 而非 cache —— 后者在 job 结束时无条件回写，
+    #    PR 会因此写入 4 份全量构建缓存，挤占仓库 10GB 配额把主线条目顶出 LRU。
+    #    restore-only 让 PR 安全复用主线已有的缓存（这才是缓存的加速价值），
+    #    但绝不产生新条目。
     # ══════════════════════════════════════════════════════════════
-    - name: 恢复依赖与构建缓存
+    - name: 恢复依赖与构建缓存（只读）
       id: restore
-      uses: actions/cache@v4
+      uses: actions/cache/restore@v4
       with:
         path: |
           ~/.gradle/caches
@@ -116,17 +148,24 @@ runs:
       run: |
         set -uo pipefail
         hit="${{ steps.restore.outputs.cache-hit }}"
+        write="${{ steps.keys.outputs.cache_write }}"
         case "$hit" in
           true)  verdict="✅ 精确命中（完全复用）" ;;
           false) verdict="⚠️ 部分命中（restore-keys 命中，增量基线来自更早的提交）" ;;
           *)     verdict="❌ 未命中（冷构建）" ;;
         esac
+        if [ "$write" = "true" ]; then
+          policy="✅ 可写回（本次构建结束后存为新条目）"
+        else
+          policy="🔒 **只读**（PR 运行不写缓存，避免挤占主线缓存配额）"
+        fi
         {
           echo "### 缓存命中情况"
           echo ""
           echo "| 项 | 结果 |"
           echo "|---|---|"
           echo "| 依赖 + 构建 + 原生缓存 | ${verdict} |"
+          echo "| 写回策略 | ${policy} |"
           echo "| 命中键 | \`${{ steps.restore.outputs.cache-primary-key }}\` |"
           echo "| 恢复键 | \`${{ steps.restore.outputs.cache-matched-key }}\` |"
           echo ""
@@ -248,6 +287,31 @@ runs:
           echo "✅ 全量重试产物：${found[*]}"
         fi
         exit "$rc"
+
+    # ══════════════════════════════════════════════════════════════
+    # 6.5 缓存回写（仅主线）
+    #     · PR（pull_request）跳过：绝不让 PR 写入缓存。
+    #       GitHub 缓存驱逐是仓库级全局 LRU，PR 每跑一次就写 4 份全量构建
+    #       缓存（4 个 ABI），足以把主线条目挤出 10GB 配额 —— 这是「污染
+    #       主线缓存」的真实机制。
+    #     · 必须放在编译成功之后：失败/被中断时 build/ 与 .cxx/ 可能处于
+    #       半成品状态，写回去等于把损坏的缓存喂给下一次构建。
+    #     · 降级重试成功的场景也回写：此时缓存已被 purge，重新构建出的产物
+    #       是干净完整的，比什么都不写更好。
+    #     · 复用 restore 的 key（而非 cache-matched-key）：保持键稳定，
+    #       否则同一份产物会因键漂移产生多个条目，加速 LRU 淘汰。
+    # ══════════════════════════════════════════════════════════════
+    - name: 回写缓存（仅主线）
+      if: steps.keys.outputs.cache_write == 'true' && (steps.incremental.outcome == 'success' || steps.fullretry.outcome == 'success')
+      uses: actions/cache/save@v4
+      with:
+        path: |
+          ~/.gradle/caches
+          ~/.gradle/wrapper
+          ~/.gradle/daemon
+          **/build
+          ./*/.cxx
+        key: ${{ steps.keys.outputs.build_key }}
 
     # ══════════════════════════════════════════════════════════════
     # 7. 结构化失败报告
