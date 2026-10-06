@@ -65,7 +65,10 @@ jobs:
       #   x 段变化            → VersionCode += 100，结束
       #   否则 y 段变化       → VersionCode += 10，结束
       #   否则 z 段变化       → VersionCode += 1，结束
-      #   否则（x/y/z 均未变）→ VersionCode 不变（仅 Rn 变化）
+      #   否则（x/y/z 完全一致）→ 进一步比对 Rx：
+      #        Rx 更高       → VersionCode += 1，并按原逻辑替换 VersionName，提交
+      #        Rx 相同       → 跳过 build.gradle 全部修改与提交，直接进入发布
+      #        Rx 更低       → 报错退出（禁止降级）
       - name: 比对版本号并改写 app/build.gradle
         id: bump
         run: |
@@ -81,19 +84,43 @@ jobs:
           NEW_BASE="${TAG%.R*}"
           OLD_X="${OLD_BASE%%.*}"; OLD_YZ="${OLD_BASE#*.}"; OLD_Y="${OLD_YZ%%.*}"; OLD_Z="${OLD_YZ#*.}"
           NEW_X="${NEW_BASE%%.*}"; NEW_YZ="${NEW_BASE#*.}"; NEW_Y="${NEW_YZ%%.*}"; NEW_Z="${NEW_YZ#*.}"
-          echo "分段：当前 ${OLD_X}.${OLD_Y}.${OLD_Z}  vs  新 ${NEW_X}.${NEW_Y}.${NEW_Z}"
+          # 取 Rn 中的数字 n（无 R 后缀时默认为 0）
+          OLD_R=$(printf '%s' "$OLD_VERSION_NAME" | sed -nE 's/.*\.R([0-9]+).*/\1/p'); if [ -z "$OLD_R" ]; then OLD_R=0; fi
+          NEW_R=$(printf '%s' "$TAG"             | sed -nE 's/.*\.R([0-9]+).*/\1/p'); if [ -z "$NEW_R" ]; then NEW_R=0; fi
+          echo "分段：当前 ${OLD_X}.${OLD_Y}.${OLD_Z}.R${OLD_R}  vs  新 ${NEW_X}.${NEW_Y}.${NEW_Z}.R${NEW_R}"
 
-          # 优先级短路：x 成立即跳过 y/z；否则 y 成立即跳过 z
+          # 优先级短路：x 成立即跳过 y/z；否则 y 成立即跳过 z；否则在 x/y/z 一致时比对 Rx
           DELTA=0
           CHANGED="none"
+          SKIP=false
           if [ "$NEW_X" -ne "$OLD_X" ]; then
             DELTA=100; CHANGED="x"
           elif [ "$NEW_Y" -ne "$OLD_Y" ]; then
             DELTA=10;  CHANGED="y"
           elif [ "$NEW_Z" -ne "$OLD_Z" ]; then
             DELTA=1;   CHANGED="z"
+          else
+            # —— x/y/z 完全一致：进一步比对 Rx ——
+            if [ "$NEW_R" -gt "$OLD_R" ]; then
+              DELTA=1; CHANGED="Rx"
+            elif [ "$NEW_R" -eq "$OLD_R" ]; then
+              SKIP=true; CHANGED="skip"
+            else
+              echo "::error::提交的 Rx($NEW_R) 低于当前 Rx($OLD_R)，禁止降级发布"
+              exit 1
+            fi
           fi
-          echo "变更段=${CHANGED}  VersionCode delta=+${DELTA}"
+          echo "变更段=${CHANGED}  VersionCode delta=+${DELTA}  skip=${SKIP}"
+
+          # Rx 相同分支：跳过对 build.gradle 的全部修改与提交，直接发布当前 main
+          if [ "$SKIP" = "true" ]; then
+            echo "ℹ️ x/y/z/Rx 均与当前完全一致 → 跳过 build.gradle 全部修改与提交，直接进入 Release 发布"
+            CURRENT_SHA=$(git rev-parse HEAD)
+            echo "sha=$CURRENT_SHA" >> "$GITHUB_OUTPUT"
+            echo "skipped=true"     >> "$GITHUB_OUTPUT"
+            echo "✅ 无改动，将以当前 main HEAD($CURRENT_SHA) 作为 Release target"
+            exit 0
+          fi
 
           NEW_VERSION_CODE=$((OLD_VERSION_CODE + DELTA))
 
@@ -113,6 +140,7 @@ jobs:
           SHA=$(git rev-parse HEAD)
           git push origin main
           echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "skipped=false" >> "$GITHUB_OUTPUT"
           echo "✅ 已提交并推送 ${SHA}（VersionCode ${OLD_VERSION_CODE} → ${NEW_VERSION_CODE}, VersionName → ${TAG}）"
 
       # ── 3. 发布 Release（无产物，详情取自上一版 What's Changed）──────
