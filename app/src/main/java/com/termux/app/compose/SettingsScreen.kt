@@ -183,7 +183,6 @@ fun SettingsScreen(
     var showProfileManager by remember { mutableStateOf(false) }
     var showChatParamsEditor by remember { mutableStateOf(false) }
     var showMemoryEditor by remember { mutableStateOf(false) }
-    var showAgentPawSettings by remember { mutableStateOf(false) }
 
     // 高风险命令二次确认
     var riskConfirmEnabled by remember { mutableStateOf(RiskConfirmManager.getProtectionLevel(context) != RiskConfirmManager.ProtectionLevel.OFF) }
@@ -1044,7 +1043,7 @@ val composeUseCustomKeyboardLayout by com.termux.app.terminal.shell.ComposeTermi
                 ArrowPreference(
                     title = "AgentPaw 设置",
                     summary = "手机操控 Agent，LLM 沿用 Termux Agent 配置",
-                    onClick = { showAgentPawSettings = true },
+                    onClick = { openAgentPawSettings(context) },
                     startAction = { SettingIcon(painterResource(R.drawable.ic_agentpaw_settings), contentDescription = "AgentPaw 设置") }
                 )
             }),
@@ -1711,7 +1710,7 @@ val composeUseCustomKeyboardLayout by com.termux.app.terminal.shell.ComposeTermi
                             ArrowPreference(
                                 title = "AgentPaw 设置",
                                 summary = "手机操控 Agent，LLM 沿用 Termux Agent 配置",
-                                onClick = { showAgentPawSettings = true },
+                                onClick = { openAgentPawSettings(context) },
                                 startAction = {
                                 SettingIcon(painterResource(R.drawable.ic_agentpaw_settings), contentDescription = "AgentPaw 设置")
                                 }
@@ -2662,7 +2661,6 @@ val composeUseCustomKeyboardLayout by com.termux.app.terminal.shell.ComposeTermi
     AgentProfileDialog(show = showProfileManager, onDismiss = { showProfileManager = false })
     AgentChatParamsDialog(show = showChatParamsEditor, onDismiss = { showChatParamsEditor = false })
     AgentMemoryDialog(show = showMemoryEditor, onDismiss = { showMemoryEditor = false })
-    AgentPawSettingsDialog(show = showAgentPawSettings, onDismiss = { showAgentPawSettings = false })
 
     // ---------- AI Termux：选择 System Prompt 文件 ----------
     var showInternalPromptPicker by remember { mutableStateOf(false) }

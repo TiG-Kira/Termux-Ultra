@@ -32,6 +32,9 @@ object AgentPawPrefs {
     const val DEFAULT_MAX_TOOL_ROUNDS = 15
     const val DEFAULT_VISION_MODE = "AUTO"
 
+    /** 截屏分辨率模式的可选值，与 AgentPaw 截屏工具的取图策略一一对应。 */
+    val VISION_MODES = listOf(DEFAULT_VISION_MODE, "FAST", "HIGH")
+
     /** 手动模式：进入后持续由 AgentPaw 处理对话，直到用户手动退出。 */
     private val _manualMode = MutableStateFlow(false)
     val manualMode: StateFlow<Boolean> = _manualMode.asStateFlow()
@@ -77,8 +80,19 @@ object AgentPawPrefs {
         prefs(context).getBoolean(KEY_STREAM, true)
 
     /** 视觉分辨率模式：AUTO / FAST / HIGH（AgentPaw 截屏工具的取图策略） */
-    fun getVisionMode(context: Context): String =
-        prefs(context).getString(KEY_VISION_MODE, DEFAULT_VISION_MODE) ?: DEFAULT_VISION_MODE
+    fun getVisionMode(context: Context): String {
+        val stored = prefs(context).getString(KEY_VISION_MODE, DEFAULT_VISION_MODE) ?: DEFAULT_VISION_MODE
+        // 磁盘上可能是旧版本或被外部写坏的取值，落到默认模式而不是让选中态无匹配项
+        return if (VISION_MODES.contains(stored)) stored else DEFAULT_VISION_MODE
+    }
+
+    fun setVisionMode(context: Context, mode: String) {
+        prefs(context).edit().putString(KEY_VISION_MODE, mode).apply()
+    }
+
+    fun setStreamEnabled(context: Context, enabled: Boolean) {
+        prefs(context).edit().putBoolean(KEY_STREAM, enabled).apply()
+    }
 
     /** 自定义系统提示词；为空时使用 AgentPaw 内置默认提示词 */
     fun getSystemPrompt(context: Context): String =

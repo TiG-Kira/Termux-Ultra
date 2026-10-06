@@ -1582,4 +1582,47 @@
     <string name="plugin_prompt_modify">Modify</string>
     <string name="plugin_prompt_overwrite">Overwrite</string>
 
+    <!-- AgentPaw 设置页 -->
+    <string name="agentpaw_settings_title">AgentPaw Settings</string>
+    <string name="agentpaw_settings_intro">Phone control agent; LLM connection reuses the Termux Agent configuration</string>
+    <string name="agentpaw_auto_switch_title">Auto-switch to AgentPaw</string>
+    <string name="agentpaw_auto_switch_desc">Hand over to AgentPaw when a task needs phone control, then switch back automatically</string>
+    <string name="agentpaw_perm_category">Phone control and system permissions</string>
+    <string name="agentpaw_accessibility_title">Accessibility service</string>
+    <string name="agentpaw_accessibility_desc">Base channel for taps, swipes and screenshots</string>
+    <string name="agentpaw_accessibility_on">Enabled</string>
+    <string name="agentpaw_accessibility_off">Not enabled</string>
+    <string name="agentpaw_shizuku_title">Shizuku elevation (optional)</string>
+    <string name="agentpaw_shizuku_desc">Uses Shizuku for key events when granted, otherwise falls back to accessibility</string>
+    <string name="agentpaw_shizuku_granted">Granted</string>
+    <string name="agentpaw_shizuku_authorize">Authorize</string>
+    <string name="agentpaw_shizuku_open">Open Shizuku</string>
+    <string name="agentpaw_shizuku_not_ready">Shizuku not ready, start the Shizuku service first</string>
+    <string name="agentpaw_shizuku_not_installed">Shizuku app not found</string>
+    <string name="agentpaw_overlay_title">Floating stop button</string>
+    <string name="agentpaw_overlay_desc">Shows a draggable stop button while AgentPaw controls the phone</string>
+    <string name="agentpaw_overlay_granted">Granted</string>
+    <string name="agentpaw_overlay_denied">Not granted</string>
+    <string name="agentpaw_go_enable">Enable</string>
+    <string name="agentpaw_go_grant">Grant</string>
+    <string name="agentpaw_sampling_category">Sampling parameters</string>
+    <string name="agentpaw_temperature_label">Temperature</string>
+    <string name="agentpaw_top_p_label">Top-P</string>
+    <string name="agentpaw_max_tokens_label">Max tokens per reply</string>
+    <string name="agentpaw_system_prompt_category">System prompt</string>
+    <string name="agentpaw_system_prompt_label">Leave empty to use the built-in AgentPaw prompt</string>
+    <string name="agentpaw_vision_category">Phone control and vision strategy</string>
+    <string name="agentpaw_max_tool_rounds_label">Max execution steps (tool call rounds)</string>
+    <string name="agentpaw_vision_mode_title">Screenshot resolution mode</string>
+    <string name="agentpaw_vision_mode_auto">AUTO</string>
+    <string name="agentpaw_vision_mode_auto_desc">Chosen automatically by the agent</string>
+    <string name="agentpaw_vision_mode_fast">FAST</string>
+    <string name="agentpaw_vision_mode_fast_desc">Faster, but lower clarity</string>
+    <string name="agentpaw_vision_mode_high">HIGH</string>
+    <string name="agentpaw_vision_mode_high_desc">Higher clarity, but slower</string>
+    <string name="agentpaw_stream_title">Stream output</string>
+    <string name="agentpaw_stream_desc">When off, wait for the full reply before showing it</string>
+    <string name="agentpaw_invalid_number">Sampling parameters / token limit / steps must be valid numbers (range checked)</string>
+    <string name="agentpaw_saved">AgentPaw settings saved</string>
+
 </resources>
