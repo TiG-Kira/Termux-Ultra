@@ -1,0 +1,149 @@
+name: 发布 Release Tag
+
+# 专职「打 Release 标签 + 生成 Release 详情页」，与 release_apk.yml（负责上传 APK）完全独立：
+#   - 本工作流仅手动（workflow_dispatch）触发，提交版本号改动并发布「无产物」Release；
+#   - release_apk.yml 监听 release: published 事件，在本工作流发布后自动接管、构建并上传 APK。
+# 两条流程互不改写对方、互不阻塞。
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "新版本 tag，须严格符合 x.y.z.Rn 格式（如 3.1.0.R7）。Rn 为构建序号，比对角忽略。"
+        required: true
+        type: string
+
+# 串行化：同一时间只允许一个手动发布在跑，避免并发提交互相覆盖 main。
+concurrency:
+  group: release-tag
+  cancel-in-progress: false
+
+# 仅 contents: write 即可完成「提交版本改动」与「创建 Release」两件事。
+permissions:
+  contents: write
+
+env:
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+jobs:
+  release:
+    runs-on: ubuntu-26.04
+    steps:
+      # ── 0. 格式校验（最优先、最快失败）──────────────────────────────
+      # 约束：tag 必须严格符合 x.y.z.Rn；格式不合规 → 立即报错并终止。
+      - name: 校验 tag 格式
+        run: |
+          set -euo pipefail
+          TAG="${{ inputs.tag }}"
+          if ! printf '%s' "$TAG" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+\.R[0-9]+$'; then
+            echo "::error::tag 格式不合规：$TAG —— 必须严格符合 x.y.z.Rn（如 3.1.0.R7）"
+            exit 1
+          fi
+          echo "✅ tag 格式合规: $TAG"
+
+      # ── 1. 权限校验：仅 admin / maintain / write 可触发 ──────────────
+      - name: 校验触发者权限
+        run: |
+          set -euo pipefail
+          ACTOR="${{ github.actor }}"
+          PERM=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/collaborators/$ACTOR/permission" \
+            | jq -r '.permission // empty')
+          echo "触发者 $ACTOR 仓库权限: $PERM"
+          case "$PERM" in
+            admin|write|maintain) echo "✅ 权限校验通过" ;;
+            *) echo "::error::权限不足：仅 admin / maintain / write 可触发本工作流（当前为 ${PERM:-无}）"; exit 1 ;;
+          esac
+
+      - name: 检出 main 主线
+        uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+
+      # ── 2. 分段比对（忽略 Rn）+ 优先级短路 + 改写 + 提交 ─────────────
+      # 优先级短路规则（按顺序，前条件成立即跳过后续）：
+      #   x 段变化            → VersionCode += 100，结束
+      #   否则 y 段变化       → VersionCode += 10，结束
+      #   否则 z 段变化       → VersionCode += 1，结束
+      #   否则（x/y/z 均未变）→ VersionCode 不变（仅 Rn 变化）
+      - name: 比对版本号并改写 app/build.gradle
+        id: bump
+        run: |
+          set -euo pipefail
+          TAG="${{ inputs.tag }}"
+
+          OLD_VERSION_CODE=$(grep -oE 'versionCode [0-9]+' app/build.gradle | head -1 | sed -E 's/versionCode ([0-9]+)/\1/')
+          OLD_VERSION_NAME=$(grep -oE 'versionName "[^"]*"' app/build.gradle | head -1 | sed -E 's/versionName "([^"]*)"/\1/')
+          echo "当前 VersionCode=$OLD_VERSION_CODE  VersionName=$OLD_VERSION_NAME"
+
+          # 去掉 Rn 后缀，仅取 x.y.z
+          OLD_BASE="${OLD_VERSION_NAME%.R*}"
+          NEW_BASE="${TAG%.R*}"
+          OLD_X="${OLD_BASE%%.*}"; OLD_YZ="${OLD_BASE#*.}"; OLD_Y="${OLD_YZ%%.*}"; OLD_Z="${OLD_YZ#*.}"
+          NEW_X="${NEW_BASE%%.*}"; NEW_YZ="${NEW_BASE#*.}"; NEW_Y="${NEW_YZ%%.*}"; NEW_Z="${NEW_YZ#*.}"
+          echo "分段：当前 ${OLD_X}.${OLD_Y}.${OLD_Z}  vs  新 ${NEW_X}.${NEW_Y}.${NEW_Z}"
+
+          # 优先级短路：x 成立即跳过 y/z；否则 y 成立即跳过 z
+          DELTA=0
+          CHANGED="none"
+          if [ "$NEW_X" -ne "$OLD_X" ]; then
+            DELTA=100; CHANGED="x"
+          elif [ "$NEW_Y" -ne "$OLD_Y" ]; then
+            DELTA=10;  CHANGED="y"
+          elif [ "$NEW_Z" -ne "$OLD_Z" ]; then
+            DELTA=1;   CHANGED="z"
+          fi
+          echo "变更段=${CHANGED}  VersionCode delta=+${DELTA}"
+
+          NEW_VERSION_CODE=$((OLD_VERSION_CODE + DELTA))
+
+          # 2a. VersionCode：仅替换数字
+          sed -i -E "s/(versionCode )[0-9]+/\1${NEW_VERSION_CODE}/" app/build.gradle
+          # 2b. VersionName：仅替换双引号内的内容（保留引号）
+          sed -i -E "s/(versionName \")[^\"]*(\")/\1${TAG}\2/" app/build.gradle
+
+          echo "修改后："
+          grep -E '^\s*versionCode |^\s*versionName "' app/build.gradle | head -2
+
+          # 3. 在 main 直接 commit
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/build.gradle
+          git commit -m "chore(release): bump to ${TAG} (VersionCode ${OLD_VERSION_CODE} → ${NEW_VERSION_CODE})"
+          SHA=$(git rev-parse HEAD)
+          git push origin main
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "✅ 已提交并推送 ${SHA}（VersionCode ${OLD_VERSION_CODE} → ${NEW_VERSION_CODE}, VersionName → ${TAG}）"
+
+      # ── 3. 发布 Release（无产物，详情取自上一版 What's Changed）──────
+      - name: 发布 Release（无产物）
+        run: |
+          set -euo pipefail
+          TAG="${{ inputs.tag }}"
+          SHA="${{ steps.bump.outputs.sha }}"
+
+          # 防重：tag 已存在则中止
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "::error::Release/Tag $TAG 已存在，中止发布"
+            exit 1
+          fi
+
+          # 提取「上一个 Release」的 What's Changed 作为本版说明
+          PREV_BODY=$(gh release view --json body -q .body 2>/dev/null || true)
+          NOTES=$(printf '%s\n' "$PREV_BODY" | awk '
+            /^##+[[:space:]]*What.s Changed/ { cap=1; print; next }
+            /^##+[[:space:]]/ { if (cap) cap=0; next }
+            cap { print }
+          ')
+          if [ -z "$NOTES" ]; then
+            # 上一版没有 What.s Changed 段落时，回退为整段正文
+            NOTES="$PREV_BODY"
+          fi
+          printf '%s\n' "$NOTES" > "$RUNNER_TEMP/notes.md"
+
+          # 发布：不附带任何产物；release: published 会唤醒 release_apk.yml 接管后续 APK 上传
+          gh release create "$TAG" \
+            --target "$SHA" \
+            --title "$TAG" \
+            --notes-file "$RUNNER_TEMP/notes.md"
+          echo "✅ 已发布 Release: $TAG（无产物，等待 release_apk.yml 接管）"
