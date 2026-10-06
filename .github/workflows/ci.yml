@@ -2,6 +2,10 @@ name: 编译
 
 # 每个 ABI 一个独立作业并行编译：单作业只编一份原生代码（CMake 只为该 ABI 配置），
 # 内存峰值与耗时约为原来的 1/4；某一架构失败也不会连累其它架构出包。
+#
+# 编译逻辑（缓存策略 + 增量优先 + 全量降级重试 + 失败判定）已收敛到
+# ./.github/actions/gradle-build，与 release_apk.yml 共用同一份实现，
+# 两条流程的错误处理语义因此天然一致。
 on:
   push:
     paths-ignore:
@@ -41,6 +45,8 @@ jobs:
 
       # 与 run_tests.yml 保持一致直接用 v6：v4 已被 GitHub 标记弃用，
       # runner 上会被强制跑在 Node 24。
+      # cache: gradle 只覆盖 ~/.gradle（依赖 + wrapper），构建中间产物由
+      # 下面的 gradle-build action 统一负责，避免两处缓存互相覆盖。
       - name: 设置 JDK 21
         uses: actions/setup-java@v6
         with:
@@ -49,10 +55,15 @@ jobs:
           cache: gradle
 
       # -Ptermux.abi=<abi> 让 NDK/CMake 只编译该架构，产出 app-<abi>-debug.apk
-      - name: 编译 ${{ matrix.abi }} Debug APK
-        run: |
-          export TERMUX_WORKFLOW_CLI=true
-          ./gradlew :app:assembleDebug -Ptermux.abi=${{ matrix.abi }} --console=plain
+      # TERMUX_WORKFLOW_CLI=true 保持不变：Debug 走 CLI 版本配置。
+      - name: 编译 ${{ matrix.abi }} Debug APK（增量优先，失败自动全量重试一次）
+        uses: ./.github/actions/gradle-build
+        with:
+          gradle-task: ':app:assembleDebug'
+          variant: debug
+          abi: ${{ matrix.abi }}
+          termux-workflow-cli: 'true'
+          artifact-glob: 'app/build/outputs/apk/debug/*.apk'
 
       - name: 上传 ${{ matrix.abi }} Debug APK
         uses: actions/upload-artifact@v7
