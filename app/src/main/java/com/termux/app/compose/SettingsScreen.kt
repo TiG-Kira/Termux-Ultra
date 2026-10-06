@@ -1,6 +1,5 @@
 package com.termux.app.compose
 
-import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.os.Handler
@@ -260,10 +259,6 @@ val composeUseCustomKeyboardLayout by com.termux.app.terminal.shell.ComposeTermi
 
     val replacedSummary = context.getString(R.string.standalone_plugin_installed_summary)
 
-    // Tool configuration / help dialog visibility
-    var showApiHelpDialog by remember { mutableStateOf(false) }
-    var showBootHelpDialog by remember { mutableStateOf(false) }
-
     val languageOptions = listOf(
         context.getString(R.string.chinese),
         context.getString(R.string.english)
@@ -519,70 +514,11 @@ val composeUseCustomKeyboardLayout by com.termux.app.terminal.shell.ComposeTermi
         }
     }
 
-    // Tool configuration entries — only shown for tools that are enabled. Tools with a dedicated
-    // settings UI open their Activity; tools without one (API/Boot) show a usage guide dialog.
-    val toolConfigItems = remember(
-        termuxApiEnabled, termuxBootEnabled, termuxStylingEnabled,
-        termuxTaskerEnabled, termuxWidgetEnabled
-    ) {
-        buildList {
-            if (termuxApiEnabled) {
-                add(SettingItem(
-                    title = context.getString(R.string.termux_api_help),
-                    description = context.getString(R.string.termux_api_help_summary),
-                    icon = Icons.Rounded.Terminal,
-                    action = { showApiHelpDialog = true }
-                ))
-            }
-            if (termuxBootEnabled) {
-                add(SettingItem(
-                    title = context.getString(R.string.termux_boot_help),
-                    description = context.getString(R.string.termux_boot_help_summary),
-                    icon = Icons.AutoMirrored.Rounded.Launch,
-                    action = { showBootHelpDialog = true }
-                ))
-            }
-            if (termuxStylingEnabled) {
-                add(SettingItem(
-                    title = context.getString(R.string.termux_styling_config),
-                    description = context.getString(R.string.termux_styling_config_summary),
-                    icon = Icons.Rounded.Palette,
-                    action = {
-                        val intent = Intent().apply {
-                            component = ComponentName(context.packageName, "com.termux.app.activities.TermuxStylingActivity")
-                        }
-                        runCatching { context.startActivity(intent) }
-                    }
-                ))
-            }
-            if (termuxTaskerEnabled) {
-                add(SettingItem(
-                    title = context.getString(R.string.termux_tasker_config),
-                    description = context.getString(R.string.termux_tasker_config_summary),
-                    icon = Icons.Rounded.Tune,
-                    action = {
-                        val intent = Intent().apply {
-                            component = ComponentName(context.packageName, "com.termux.app.activities.TermuxTaskerActivity")
-                        }
-                        runCatching { context.startActivity(intent) }
-                    }
-                ))
-            }
-            if (termuxWidgetEnabled) {
-                add(SettingItem(
-                    title = context.getString(R.string.termux_widget_config),
-                    description = context.getString(R.string.termux_widget_config_summary),
-                    icon = Icons.Rounded.Star,
-                    action = {
-                        val intent = Intent().apply {
-                            component = ComponentName(context.packageName, "com.termux.app.activities.TermuxWidgetActivity")
-                        }
-                        runCatching { context.startActivity(intent) }
-                    }
-                ))
-            }
-        }
-    }
+    // 「配置集成工具」入口可见性：五个开关任一为开即显示，全关即隐藏。
+    // 判断放在渲染处而不是缓存成 val，开关 onCheckedChange 改的是 termuxXxxEnabled，
+    // 重组时重新求值才能做到即时显隐。
+    val anyIntegratedToolEnabled = termuxApiEnabled || termuxBootEnabled || termuxStylingEnabled ||
+        termuxTaskerEnabled || termuxWidgetEnabled
     // 与「统一顶栏之前」一致：本页自持吸顶状态
     val scrollBehavior = MiuixScrollBehavior()
     // 统一全局顶栏：仅当前激活页把本页的 TopAppBar 内容写入 onTopBarContent 槽
@@ -604,7 +540,6 @@ val composeUseCustomKeyboardLayout by com.termux.app.terminal.shell.ComposeTermi
     val sec_terminal = context.getString(R.string.terminal)
     val sec_tools = context.getString(R.string.integrated_tools_category)
     val sec_ai = "Termux Agent"
-    val sec_tool_config = context.getString(R.string.tool_config_category)
     val sec_security = context.getString(R.string.security_settings)
     val sec_system = context.getString(R.string.system_category)
     val sec_backup = context.getString(R.string.backup_category)
@@ -1110,8 +1045,28 @@ val composeUseCustomKeyboardLayout by com.termux.app.terminal.shell.ComposeTermi
         // SettingsGroupCard 里的条目（动态展开）
     ) + buildList {
         addAll(dataSettings.map { it.toSearchable(sec_backup) })
-        addAll(toolConfigItems.map { it.toSearchable(sec_tool_config) })
         addAll(systemSettings.map { it.toSearchable(sec_system) })
+        // 「配置集成工具」入口随开关显隐，搜索结果里同步跟随，避免搜到点进去是空页
+        if (anyIntegratedToolEnabled) {
+            add(
+                SearchableSetting(
+                    sec_tools,
+                    context.getString(R.string.integrated_tools_config_entry),
+                    context.getString(R.string.integrated_tools_config_entry_summary),
+                    keywords = listOf("工具配置", "tool config", "集成工具", "integrated tools", "配置"),
+                    render = {
+                        ArrowPreference(
+                            title = context.getString(R.string.integrated_tools_config_entry),
+                            summary = context.getString(R.string.integrated_tools_config_entry_summary),
+                            onClick = { openIntegratedToolsConfig(context) },
+                            startAction = {
+                                SettingIcon(Icons.Rounded.Extension, contentDescription = context.getString(R.string.integrated_tools_config_entry))
+                            }
+                        )
+                    }
+                )
+            )
+        }
     }
 
 
@@ -1637,6 +1592,18 @@ val composeUseCustomKeyboardLayout by com.termux.app.terminal.shell.ComposeTermi
                                 IntegratedTools.showStandaloneConflictPrompt(context, IntegratedTools.Tool.TERMUX_STYLING)
                             }
                         )
+
+                        // 五个开关任一为开才出现；全关时整行消失，配置页进不去
+                        if (anyIntegratedToolEnabled) {
+                            ArrowPreference(
+                                title = context.getString(R.string.integrated_tools_config_entry),
+                                summary = context.getString(R.string.integrated_tools_config_entry_summary),
+                                onClick = { openIntegratedToolsConfig(context) },
+                                startAction = {
+                                    SettingIcon(Icons.Rounded.Extension, contentDescription = context.getString(R.string.integrated_tools_config_entry))
+                                }
+                            )
+                        }
                     }
                 }
             }
@@ -1901,12 +1868,6 @@ val composeUseCustomKeyboardLayout by com.termux.app.terminal.shell.ComposeTermi
                 }
             }
 
-            // ---------- Tool Configuration (conditional, only for enabled tools) ----------
-            if (toolConfigItems.isNotEmpty()) {
-                item(key = "section_tool_config") { SmallTitle(text = context.getString(R.string.tool_config_category)) }
-                item(key = "card_tool_config") { SettingsGroupCard(items = toolConfigItems) }
-            }
-
             // ---------- Security Settings ----------
             item(key = "section_security") { SmallTitle(text = context.getString(R.string.security_settings)) }
             item(key = "card_security") {
@@ -2140,50 +2101,6 @@ val composeUseCustomKeyboardLayout by com.termux.app.terminal.shell.ComposeTermi
             }
         )
     }
-
-    // ---------- Termux:API usage guide ----------
-                        OverlayDialog(
-        title = context.getString(R.string.termux_api_help),
-        show = showApiHelpDialog,
-        onDismissRequest = { showApiHelpDialog = false },
-        content = {
-                                Box(modifier = Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
-                                HelpContentWithCopyableCommands(
-                    content = context.getString(R.string.termux_api_help_content),
-                    context = context,
-                    snackbarHostState = snackbarHostState
-                )
-            }
-                            Spacer(Modifier.height(12.dp))
-                            TextButton(
-                text = context.getString(R.string.ok),
-                onClick = { showApiHelpDialog = false },
-                modifier = Modifier.fillMaxWidth()
-            )
-        }
-    )
-
-    // ---------- Termux:Boot startup guide ----------
-                        OverlayDialog(
-        title = context.getString(R.string.termux_boot_help),
-        show = showBootHelpDialog,
-        onDismissRequest = { showBootHelpDialog = false },
-        content = {
-                                Box(modifier = Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
-                                HelpContentWithCopyableCommands(
-                    content = context.getString(R.string.termux_boot_help_content),
-                    context = context,
-                    snackbarHostState = snackbarHostState
-                )
-            }
-                            Spacer(Modifier.height(12.dp))
-                            TextButton(
-                text = context.getString(R.string.ok),
-                onClick = { showBootHelpDialog = false },
-                modifier = Modifier.fillMaxWidth()
-            )
-        }
-    )
 
     // ---------- Restore: choose backup file ----------
                         OverlayDialog(
@@ -3476,105 +3393,6 @@ private fun IntegratedToolSwitch(
     }
 }
 
-/**
- * 解析帮助文本，将命令行渲染为可一键复制的行，其余渲染为普通文本。
- *
- * 判定规则（行首去空格后）：
- *  - 以 `•` 开头 → 命令描述行，其中 ` — ` 后为说明，前面是命令 → 提取命令部分可复制
- *  - 以 `pkg ` / `mkdir ` / `termux-` / `#!/` / `#` / `sshd` / `termux-wake-lock` 开头 → 整行可复制
- *  - 以数字+`.` 开头（如 `1. `）→ 步骤说明行，不可复制
- *  - 其余 → 普通文本
- */
-@Composable
-private fun HelpContentWithCopyableCommands(
-    content: String,
-    context: Context,
-    snackbarHostState: SnackbarHostState
-) {
-    val scope = rememberCoroutineScope()
-    fun showSnackbar(message: String) {
-        scope.launch {
-            snackbarHostState.showSnackbar(message = message, duration = SnackbarDuration.Short)
-        }
-    }
-    val lines = content.split("\n")
-    val clipboard = remember {
-        context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-    }
-                            Column(modifier = Modifier.fillMaxWidth()) {
-        lines.forEachIndexed { index, rawLine ->
-            val trimmed = rawLine.trim()
-            if (trimmed.isEmpty()) {
-                                Spacer(Modifier.height(8.dp))
-                return@forEachIndexed
-            }
-
-            val commandText: String? = when {
-                trimmed.startsWith("• ") -> {
-                    val afterBullet = trimmed.substring(2).trim()
-                    val dashIdx = afterBullet.indexOf(" — ")
-                    if (dashIdx > 0) afterBullet.substring(0, dashIdx).trim()
-                    else if (afterBullet.startsWith("termux-") || afterBullet.startsWith("pkg ")) afterBullet
-                    else null
-                }
-                trimmed.startsWith("pkg ") ||
-                trimmed.startsWith("mkdir ") ||
-                trimmed.startsWith("termux-") ||
-                trimmed.startsWith("#!/") ||
-                trimmed.startsWith("sshd") ||
-                trimmed.startsWith("termux-wake-lock") -> trimmed
-                rawLine.trimStart().startsWith("#!/") -> rawLine.trimStart()
-                rawLine.trimStart().startsWith("termux-wake-lock") -> rawLine.trimStart()
-                rawLine.trimStart().startsWith("sshd") -> rawLine.trimStart()
-                else -> null
-            }
-
-            if (commandText != null) {
-                                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 2.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                                Text(
-                        text = rawLine,
-                        fontSize = 13.sp,
-                        color = MiuixTheme.colorScheme.onSurface,
-                        lineHeight = 20.sp,
-                        modifier = Modifier.weight(1f)
-                    )
-                            Spacer(Modifier.width(4.dp))
-                            Box(
-                        modifier = Modifier
-                            .size(28.dp)
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(MiuixTheme.colorScheme.primary.copy(alpha = 0.12f))
-                            .clickable {
-                                val clip = android.content.ClipData.newPlainText(context.getString(R.string.command), commandText)
-                                clipboard.setPrimaryClip(clip)
-                                showSnackbar(context.getString(R.string.copied_command, commandText))
-                            },
-                        contentAlignment = Alignment.Center
-                    ) {
-                                Icon(
-                            painter = painterResource(R.drawable.ic_copy),
-                            contentDescription = context.getString(R.string.copy),
-                            modifier = Modifier.size(16.dp),
-                            tint = MiuixTheme.colorScheme.primary
-                        )
-                    }
-                }
-            } else {
-                                Text(
-                    text = rawLine,
-                    fontSize = 14.sp,
-                    color = MiuixTheme.colorScheme.onSurface,
-                    lineHeight = 22.sp
-                )
-            }
-        }
-    }
-}
 
 /** Agent 在线模型配置弹窗：直接编辑当前生效的主配置 */
 @Composable
