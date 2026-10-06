@@ -148,6 +148,7 @@ enum class SkillType {
     GET_CURRENT_SESSION,  // 获取当前活跃会话
     ASK_USER,             // 向用户询问问题（填空/单选/多选）
     CONFIRM_DANGEROUS,    // 危险操作二次确认
+    CONFIRM_DUPLICATE,    // 重复操作确认（执行前询问用户是否继续）
     CUSTOM_COMMAND,        // AI 自定义命令（兜底类型）
     SCHEDULE_TASK,        // 定时任务/提醒
     GET_DEVICE_STATUS,    // 查询设备状态（Termux:API）
@@ -502,6 +503,7 @@ object AiTermuxPrefs {
     private const val KEY_LLM_PROFILES = "llm_profiles_v1"
     private const val KEY_ACTIVE_PROFILE_ID = "active_llm_profile_id"
     private const val KEY_MAX_TOKENS = "max_tokens"
+    private const val KEY_MAX_ROUNDS = "max_rounds"
     private const val KEY_CONTEXT_MESSAGES = "context_messages"
     private const val KEY_COMPRESS_THRESHOLD = "compress_threshold"
     private const val KEY_COMPRESS_KEEP_RECENT = "compress_keep_recent"
@@ -510,6 +512,7 @@ object AiTermuxPrefs {
 
     // 对话参数默认值：与 AiTermuxActivity 中原本硬编码的常量保持一致
     const val DEFAULT_MAX_TOKENS = 8192
+    const val DEFAULT_MAX_ROUNDS = 50
     const val DEFAULT_CONTEXT_MESSAGES = 20
     const val DEFAULT_COMPRESS_THRESHOLD = 40
     const val DEFAULT_COMPRESS_KEEP_RECENT = 12
@@ -1199,6 +1202,20 @@ object AiTermuxPrefs {
     fun setMaxTokens(context: Context, value: Int) {
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .edit().putInt(KEY_MAX_TOKENS, value.coerceIn(1024, 65536)).apply()
+    }
+
+    /**
+     * 一轮对话的最大工具回合数（技能/工具执行→结果回灌→再思考循环的上限）。
+     * 复杂任务往往需要十几到几十个回合，过低会导致任务跑到一半就被截断。
+     */
+    fun getMaxRounds(context: Context): Int {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        return prefs.getInt(KEY_MAX_ROUNDS, DEFAULT_MAX_ROUNDS).coerceIn(5, 200)
+    }
+
+    fun setMaxRounds(context: Context, value: Int) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().putInt(KEY_MAX_ROUNDS, value.coerceIn(5, 200)).apply()
     }
 
     fun getContextMessages(context: Context): Int {
