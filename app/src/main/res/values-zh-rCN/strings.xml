@@ -1526,4 +1526,47 @@
     <string name="plugin_prompt_modify">修改</string>
     <string name="plugin_prompt_overwrite">覆盖</string>
 
+    <!-- AgentPaw 设置页 -->
+    <string name="agentpaw_settings_title">AgentPaw 设置</string>
+    <string name="agentpaw_settings_intro">手机操控 Agent；LLM 连接沿用 Termux Agent 配置</string>
+    <string name="agentpaw_auto_switch_title">自动切换到 AgentPaw</string>
+    <string name="agentpaw_auto_switch_desc">对话中识别到需要操控手机的任务时临时交给 AgentPaw，完成后自动切回</string>
+    <string name="agentpaw_perm_category">手机控制与系统权限</string>
+    <string name="agentpaw_accessibility_title">无障碍服务</string>
+    <string name="agentpaw_accessibility_desc">执行界面点击、滑动、截屏的基础通道</string>
+    <string name="agentpaw_accessibility_on">已开启</string>
+    <string name="agentpaw_accessibility_off">未开启</string>
+    <string name="agentpaw_shizuku_title">Shizuku 提权（可选）</string>
+    <string name="agentpaw_shizuku_desc">已授权时优先通过 Shizuku 执行按键操作，未开启时自动使用无障碍通道</string>
+    <string name="agentpaw_shizuku_granted">已授权</string>
+    <string name="agentpaw_shizuku_authorize">授权</string>
+    <string name="agentpaw_shizuku_open">打开 Shizuku</string>
+    <string name="agentpaw_shizuku_not_ready">Shizuku 未就绪，请先启动 Shizuku 服务</string>
+    <string name="agentpaw_shizuku_not_installed">未检测到 Shizuku 应用</string>
+    <string name="agentpaw_overlay_title">悬浮窗停止按钮</string>
+    <string name="agentpaw_overlay_desc">AgentPaw 操控手机时显示可拖拽的停止按钮，点击随时中止</string>
+    <string name="agentpaw_overlay_granted">已授权</string>
+    <string name="agentpaw_overlay_denied">未授权</string>
+    <string name="agentpaw_go_enable">去开启</string>
+    <string name="agentpaw_go_grant">去授权</string>
+    <string name="agentpaw_sampling_category">采样参数</string>
+    <string name="agentpaw_temperature_label">Temperature</string>
+    <string name="agentpaw_top_p_label">Top-P</string>
+    <string name="agentpaw_max_tokens_label">单轮回复最大 Token</string>
+    <string name="agentpaw_system_prompt_category">系统提示词</string>
+    <string name="agentpaw_system_prompt_label">留空使用 AgentPaw 内置提示词</string>
+    <string name="agentpaw_vision_category">手机控制与视觉策略</string>
+    <string name="agentpaw_max_tool_rounds_label">最大执行步数（工具调用轮数）</string>
+    <string name="agentpaw_vision_mode_title">截屏分辨率模式</string>
+    <string name="agentpaw_vision_mode_auto">AUTO</string>
+    <string name="agentpaw_vision_mode_auto_desc">由 Agent 自动选择</string>
+    <string name="agentpaw_vision_mode_fast">FAST</string>
+    <string name="agentpaw_vision_mode_fast_desc">速度快，但清晰度较低</string>
+    <string name="agentpaw_vision_mode_high">HIGH</string>
+    <string name="agentpaw_vision_mode_high_desc">清晰度更高，但速度较慢</string>
+    <string name="agentpaw_stream_title">流式输出</string>
+    <string name="agentpaw_stream_desc">关闭后等待完整回复再显示</string>
+    <string name="agentpaw_invalid_number">采样参数 / Token 上限 / 执行步数须为有效数字（已按范围校验）</string>
+    <string name="agentpaw_saved">AgentPaw 设置已保存</string>
+
 </resources>

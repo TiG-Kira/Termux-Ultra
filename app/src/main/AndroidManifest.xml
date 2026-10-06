@@ -463,6 +463,12 @@
             android:label="训练本地模型"
             android:windowSoftInputMode="adjustResize" />
 
+        <activity
+            android:name=".app.activities.AgentPawSettingsActivity"
+            android:exported="false"
+            android:label="@string/agentpaw_settings_title"
+            android:windowSoftInputMode="adjustResize" />
+
         <service
             android:name="com.termux.app.NewTerminalTileService"
             android:exported="true"
