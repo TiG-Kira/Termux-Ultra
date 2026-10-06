@@ -589,7 +589,9 @@
     <string name="termux_widget_tool_summary">Add shortcut widgets to run scripts from the home screen</string>
 
     <!-- Tool configuration entries (shown when the corresponding tool is enabled) -->
-    <string name="tool_config_category">Tool Configuration</string>
+    <string name="integrated_tools_config_entry">Configure Integrated Tools</string>
+    <string name="integrated_tools_config_entry_summary">Manage settings of enabled integrated tools</string>
+    <string name="integrated_tools_config_empty">No integrated tools enabled</string>
     <string name="termux_styling_config">Colors &amp; Fonts</string>
     <string name="termux_styling_config_summary">Choose terminal color scheme and font</string>
     <string name="termux_tasker_config">Tasker Plugin</string>

@@ -469,6 +469,11 @@
             android:label="@string/agentpaw_settings_title"
             android:windowSoftInputMode="adjustResize" />
 
+        <activity
+            android:name=".app.activities.IntegratedToolsConfigActivity"
+            android:exported="false"
+            android:label="@string/integrated_tools_config_entry" />
+
         <service
             android:name="com.termux.app.NewTerminalTileService"
             android:exported="true"

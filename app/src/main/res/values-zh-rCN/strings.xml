@@ -518,7 +518,9 @@
     <string name="termux_widget_tool_summary">添加快捷方式小部件，从主屏幕运行脚本</string>
 
     <!-- 工具配置入口（对应工具启用后显示） -->
-    <string name="tool_config_category">工具配置</string>
+    <string name="integrated_tools_config_entry">配置集成工具</string>
+    <string name="integrated_tools_config_entry_summary">管理已开启集成工具的详细配置</string>
+    <string name="integrated_tools_config_empty">暂无开启的集成工具</string>
     <string name="termux_styling_config">颜色与字体</string>
     <string name="termux_styling_config_summary">选择终端配色方案和字体</string>
     <string name="termux_tasker_config">Tasker 插件</string>
