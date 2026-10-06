@@ -96,7 +96,9 @@ jobs:
         with:
           java-version: '21'
           distribution: 'temurin'
-          cache: gradle
+          # 刻意不启用 cache: gradle —— 它内部走 actions/cache，PR 上会无条件
+          # 回写并挤占主线缓存配额；且 ~/.gradle 已由 gradle-build action 完整
+          # 覆盖，留着属重复覆盖。详见 .github/actions/gradle-build/action.yml
 
       - name: 解码 JKS 到 app 目录
         run: |
@@ -149,7 +151,9 @@ jobs:
         with:
           java-version: '21'
           distribution: 'temurin'
-          cache: gradle
+          # 刻意不启用 cache: gradle —— 它内部走 actions/cache，PR 上会无条件
+          # 回写并挤占主线缓存配额；且 ~/.gradle 已由 gradle-build action 完整
+          # 覆盖，留着属重复覆盖。详见 .github/actions/gradle-build/action.yml
 
       - name: 解码 JKS 到 app 目录
         run: |
