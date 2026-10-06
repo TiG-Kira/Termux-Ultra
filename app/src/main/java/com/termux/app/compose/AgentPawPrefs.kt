@@ -98,26 +98,29 @@ object AgentPawPrefs {
     fun getSystemPrompt(context: Context): String =
         prefs(context).getString(KEY_SYSTEM_PROMPT, "").orEmpty()
 
-    fun save(
+    /**
+     * 写入数值/文本字段（自动保存用）。null 表示该项当前输入非法，跳过写入以保留上次的值，
+     * 这样一处输错不会连带丢掉其它已改好的项。
+     *
+     * [sync] = true 时用 commit() 同步等待写盘完成，仅在离开页面前使用——apply() 的异步
+     * 写入有可能来不及在页面被回收前落盘。开关与单选项由各自的 setter 即时落盘，不在这里写。
+     */
+    fun saveFields(
         context: Context,
-        temperature: Float,
-        topP: Float,
-        maxTokens: Int,
-        maxToolRounds: Int,
-        stream: Boolean,
-        visionMode: String,
+        temperature: Float?,
+        topP: Float?,
+        maxTokens: Int?,
+        maxToolRounds: Int?,
         systemPrompt: String,
+        sync: Boolean = false,
     ) {
-        prefs(context).edit().apply {
-            putFloat(KEY_TEMPERATURE, temperature)
-            putFloat(KEY_TOP_P, topP)
-            putInt(KEY_MAX_TOKENS, maxTokens)
-            putInt(KEY_MAX_TOOL_ROUNDS, maxToolRounds)
-            putBoolean(KEY_STREAM, stream)
-            putString(KEY_VISION_MODE, visionMode)
-            putString(KEY_SYSTEM_PROMPT, systemPrompt)
-            apply()
-        }
+        val editor = prefs(context).edit()
+        temperature?.let { editor.putFloat(KEY_TEMPERATURE, it) }
+        topP?.let { editor.putFloat(KEY_TOP_P, it) }
+        maxTokens?.let { editor.putInt(KEY_MAX_TOKENS, it) }
+        maxToolRounds?.let { editor.putInt(KEY_MAX_TOOL_ROUNDS, it) }
+        editor.putString(KEY_SYSTEM_PROMPT, systemPrompt)
+        if (sync) editor.commit() else editor.apply()
     }
 
     private fun prefs(context: Context) =

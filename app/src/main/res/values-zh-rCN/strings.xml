@@ -1531,7 +1531,6 @@
 
     <!-- AgentPaw 设置页 -->
     <string name="agentpaw_settings_title">AgentPaw 设置</string>
-    <string name="agentpaw_settings_intro">手机操控 Agent；LLM 连接沿用 Termux Agent 配置</string>
     <string name="agentpaw_auto_switch_title">自动切换到 AgentPaw</string>
     <string name="agentpaw_auto_switch_desc">对话中识别到需要操控手机的任务时临时交给 AgentPaw，完成后自动切回</string>
     <string name="agentpaw_perm_category">手机控制与系统权限</string>
@@ -1554,13 +1553,19 @@
     <string name="agentpaw_go_grant">去授权</string>
     <string name="agentpaw_sampling_category">采样参数</string>
     <string name="agentpaw_temperature_label">Temperature</string>
+    <string name="agentpaw_temperature_desc">控制回复的随机性。取值 0–2，默认 0.7：数值越大越有创意但可能跑偏，越小越严谨、越稳定。</string>
     <string name="agentpaw_top_p_label">Top-P</string>
+    <string name="agentpaw_top_p_desc">核采样阈值，决定每步保留多少候选词。取值 0–1，默认 1.0：越小只从高概率词中采样、回复越聚焦，1.0 表示不裁剪候选。</string>
     <string name="agentpaw_max_tokens_label">单轮回复最大 Token</string>
+    <string name="agentpaw_max_tokens_desc">单次回复允许生成的最大长度。取值 256–32768，默认 2048：超出会被截断，数值越大耗时与消耗越高。</string>
     <string name="agentpaw_system_prompt_category">系统提示词</string>
     <string name="agentpaw_system_prompt_label">留空使用 AgentPaw 内置提示词</string>
+    <string name="agentpaw_system_prompt_desc">每次请求都会作为系统级指令发给模型，可用于约束操作风格、语言或禁止某些动作；留空则使用内置提示词，修改后从下一次会话开始生效。</string>
     <string name="agentpaw_vision_category">手机控制与视觉策略</string>
     <string name="agentpaw_max_tool_rounds_label">最大执行步数（工具调用轮数）</string>
+    <string name="agentpaw_max_tool_rounds_desc">一次任务最多执行多少轮界面操作与工具调用。取值 1–50，默认 15：达到上限后 Agent 会收尾并汇报结果，可避免陷入无效循环。</string>
     <string name="agentpaw_vision_mode_title">截屏分辨率模式</string>
+    <string name="agentpaw_vision_mode_desc">决定操控手机时截屏的清晰度：越清晰识别越准，但截屏与上传更慢、每步消耗更多 Token。</string>
     <string name="agentpaw_vision_mode_auto">AUTO</string>
     <string name="agentpaw_vision_mode_auto_desc">由 Agent 自动选择</string>
     <string name="agentpaw_vision_mode_fast">FAST</string>
@@ -1568,8 +1573,8 @@
     <string name="agentpaw_vision_mode_high">HIGH</string>
     <string name="agentpaw_vision_mode_high_desc">清晰度更高，但速度较慢</string>
     <string name="agentpaw_stream_title">流式输出</string>
-    <string name="agentpaw_stream_desc">关闭后等待完整回复再显示</string>
-    <string name="agentpaw_invalid_number">采样参数 / Token 上限 / 执行步数须为有效数字（已按范围校验）</string>
-    <string name="agentpaw_saved">AgentPaw 设置已保存</string>
+    <string name="agentpaw_stream_desc">开启时逐字实时显示模型输出；关闭后等待完整回复再一次性显示</string>
+    <string name="agentpaw_field_not_saved">当前取值无效，未保存，仍沿用上次保存的值</string>
+    <string name="agentpaw_save_failed">AgentPaw 设置保存失败</string>
 
 </resources>
