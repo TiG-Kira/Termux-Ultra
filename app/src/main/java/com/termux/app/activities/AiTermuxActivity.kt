@@ -129,8 +129,14 @@ class AiTermuxActivity : FragmentActivity() {
     /** 停止 Agent 的广播接收器（onCreate 注册，onDestroy 反注册，避免泄漏）。 */
     private var stopReceiver: android.content.BroadcastReceiver? = null
 
+    /** 用户是否主动离开对话页（区别于被系统/其他页面遮挡）——离开后才决定要不要弹悬浮窗 */
+    private var leavingChatPage = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // 进程级前台状态追踪（决定悬浮窗显示与否），进程内只注册一次
+        AgentChatBubblePolicy.register(this)
 
         val vm: AiTermuxViewModel by viewModels()
 
@@ -159,7 +165,15 @@ class AiTermuxActivity : FragmentActivity() {
                 LocalNavigationEventDispatcherOwner provides navDispatcherOwner
             ) {
                 com.termux.app.compose.KiTerminalTheme {
-                    AiTermuxRoot(vm) { finish() }
+                    AiTermuxRoot(vm) {
+                        // 唯一的"用户主动离开对话页"入口：先决定要不要悬浮窗，再真正 finish
+                        leavingChatPage = true
+                        val ctx = applicationContext
+                        AgentChatBubblePolicy.onLeftChatPage(ctx) {
+                            AgentChatBubblePolicy.launchChatPage(ctx)
+                        }
+                        finish()
+                    }
                 }
             }
         }
@@ -169,6 +183,11 @@ class AiTermuxActivity : FragmentActivity() {
         super.onResume()
         val vm: AiTermuxViewModel by viewModels()
         handlePendingAgentResult(vm)
+        // 回到对话页：悬浮气泡（含"回答完成"提示）让位给真实页面
+        if (leavingChatPage) {
+            leavingChatPage = false
+            AgentChatBubblePolicy.onReturnedToChatPage()
+        }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -270,9 +289,13 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
             && AiTermuxPrefs.isFallbackOnlineConfigReady(ctx)
     }
 
-    // @Volatile：该标志既被主线程写、也被 AgentPaw 引擎的工作协程读，需要可见性保证
-    @Volatile
-    private var cancelled = false
+    // 该标志既被主线程写、也被 AgentPaw 引擎的工作协程读，需要可见性保证 ——
+    // @Volatile 施加在 AgentChatSession.cancelled 字段本身（属性改为委托后不能再标注）
+    // 实际存放于进程级 AgentChatSession —— 页面销毁后新页面读到的是同一个标志，
+    // 否则重建的 Activity 会以为「没在跑」而漏掉 isCancelled 判定。
+    private var cancelled: Boolean
+        get() = AgentChatSession.cancelled
+        set(value) { AgentChatSession.cancelled = value }
 
     /** 白名单每次实时读取：设置页改完回到对话页立即生效，不必重建 Activity */
     private fun autoExecSkills(): Set<String> = AiTermuxPrefs.getAutoExecSkills(getApplication())
@@ -283,7 +306,8 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
         isLoading = false
         LiveUpdateState.agentStop()
         // 取消协程本身：否则正在执行的技能跑完后本轮循环会继续调用模型
-        generationJob?.cancel()
+        // 同时清掉会话宿主上的执行标记，避免悬浮窗误以为还在跑
+        AgentChatSession.cancel()
         generationJob = null
         // 停止时丢弃待确认的危险操作，避免回到页面后又被自动执行
         pendingDanger.clear()
@@ -438,6 +462,8 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
 
     override fun onCleared() {
         super.onCleared()
+        // 注意：这里**不能**取消 AgentChatSession —— 离开对话页时 ViewModel 必然被清，
+        // 而对话要在后台继续跑到完成。对话协程由进程级 AgentChatSession.scope 持有。
         if (bound) {
             runCatching { getApplication<android.app.Application>().unbindService(serviceConn) }
         }
@@ -454,10 +480,20 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
     }
 
     /** 当前进行中的生成任务。「停止」时真正取消协程，而不只是置标志位 */
-    private var generationJob: kotlinx.coroutines.Job? = null
+    private var generationJob: kotlinx.coroutines.Job?
+        get() = AgentChatSession.generationJob
+        set(value) { AgentChatSession.generationJob = value }
 
+    /**
+     * 在**进程级** scope 中执行一个对话回合。
+     *
+     * 这里刻意不用 `viewModelScope`：它绑定 Activity 的 ViewModelStore，
+     * 用户离开对话页（finish）时 ViewModel 被 onCleared，viewModelScope 随即取消，
+     * 正在跑的对话会被强杀。改用 [AgentChatSession.scope] 后，页面销毁不再中断执行；
+     * 同一进程内重新进入对话页会拿到同一份状态，继续观察流式输出。
+     */
     private fun runInScope(block: suspend () -> Unit): kotlinx.coroutines.Job {
-        return viewModelScope.launch(exceptionHandler) {
+        return AgentChatSession.scope.launch(exceptionHandler) {
             try {
                 block()
             } catch (e: kotlinx.coroutines.CancellationException) {
