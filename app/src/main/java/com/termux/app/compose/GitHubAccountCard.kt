@@ -12,10 +12,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.LaunchedEffect
@@ -30,13 +29,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.ManageAccounts
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -209,21 +209,24 @@ private fun openDevicePage(context: Context, uri: String) {
 }
 
 /**
- * [ArrowPreference] 的 startAction：圆形头像 + 头像正下方的管理员 Badge。
+ * [ArrowPreference] 的 startAction：圆形头像 + 右下角管理员角标。
  *
- * 管理员 tag 放在头像底部（而不是标题右侧），避免挤压标题空间；
- * 非管理员时只渲染头像，宽度与头像一致，不与其它入口的图标错位。
+ * 角标叠加在头像右下角（参考 SettingIcon 的 badge 方案）：
+ * - 角标挂在外层未裁剪的 Box 上，避免被头像的 CircleShape clip 裁掉右下角；
+ * - 非管理员 / 未登录时不渲染角标，整体宽度与头像一致，不与其它入口的图标错位。
  */
 @Composable
 fun AvatarWithAdminBadge(avatarUrl: String?, session: GitHubSession?) {
-    Column(
-        modifier = Modifier.widthIn(min = 40.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
+    Box(modifier = Modifier.size(40.dp)) {
         LoginAvatar(avatarUrl)
         if (session != null) {
-            Spacer(modifier = Modifier.height(3.dp))
-            RepoAdminBadge(session)
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .offset(x = 2.dp, y = 2.dp)
+            ) {
+                RepoAdminBadge(session)
+            }
         }
     }
 }
@@ -444,8 +447,8 @@ object RepoRoleCache {
 }
 
 /**
- * 异步检测当前登录用户在目标仓库的角色，若为管理员则显示 Badge。
- * 未登录或查询失败时不显示 Badge，也不抛异常。
+ * 异步检测当前登录用户在目标仓库的角色，若为管理员则在头像右下角叠加圆形角标。
+ * 未登录或查询失败时不显示角标，也不抛异常。
  *
  * 检测结果由 [RepoRoleCache] 持久化：同一 Activity 内反复重组 / 滑动不会重复请求。
  */
@@ -468,18 +471,24 @@ fun RepoAdminBadge(session: GitHubSession?) {
     val r = role
     if (r == null || !r.isAdminLike()) return
 
-    // 尺寸刻意做小：这个 Badge 要塞在 40dp 头像的正下方，宽度过大会把标题挤掉
+    // 圆形角标：蓝色底 + 白色人像齿轮图标，颜色写死、不随亮/暗主题切换（与 SettingIcon 的
+    // 主题化衬底不同，管理员标识需要跨主题保持一致的品牌识别度）。尺寸约为 40dp 头像的 2/5，
+    // 悬挂在右下角边缘，不遮挡头像主体。
     Box(
         modifier = Modifier
-            .clip(RoundedCornerShape(6.dp))
-            .background(Color(0xFF1A56DB))
-            .padding(horizontal = 6.dp, vertical = 2.dp)
+            .size(16.dp)
+            .clip(CircleShape)
+            .background(AdminBadgeBlue),
+        contentAlignment = Alignment.Center
     ) {
-        Text(
-            text = stringResource(R.string.github_admin_badge),
-            fontSize = 10.sp,
-            fontWeight = FontWeight.Bold,
-            color = Color.White
+        Icon(
+            painter = rememberVectorPainter(Icons.Rounded.ManageAccounts),
+            contentDescription = stringResource(R.string.github_admin_badge),
+            modifier = Modifier.size(12.dp),
+            tint = Color.White
         )
     }
 }
+
+/** 管理员角标的品牌蓝，亮色 / 暗色主题下保持一致 */
+private val AdminBadgeBlue = Color(0xFF1A56DB)
