@@ -1,9 +1,9 @@
 <img width="5643" height="2790" alt="AATUltra" src="https://github.com/user-attachments/assets/d9205d38-6acf-4e9e-8b95-28969322bad1" />
 
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](./LICENSE)
-[![Platform: Android](https://img.shields.io/badge/Platform-Android%2010.0%2B-green.svg)]()
+[![Platform: Android](https://img.shields.io/badge/Platform-Android%209.0%2B-green.svg)]()
 [![Based on Termux v0.119.0](https://img.shields.io/badge/Base-Termux%20v0.119.0-orange.svg)](https://github.com/termux/termux-app/releases/tag/v0.119.0-beta.3)
-[![v2.1.0.R5](https://img.shields.io/badge/v2.1.0.R5-stable-brightgreen.svg)](https://github.com/TiG-Kira/Termux-Ultra/releases)
+[![v3.3.3.R7](https://img.shields.io/badge/v3.3.3.R7-stable-brightgreen.svg)](https://github.com/TiG-Kira/Termux-Ultra/releases)
 
 [![Build status](https://github.com/TiG-Kira/Termux-Ultra/actions/workflows/ci.yml/badge.svg)](https://github.com/TiG-Kira/Termux-Ultra/actions)
 [![Docs](https://img.shields.io/badge/Docs-GitHub%20Pages-blue.svg)](https://tig-kira.github.io/Termux-Ultra/)
@@ -20,7 +20,7 @@
 | `release/r1-r4` | 上游 Termux `v0.118.3` | 1.8.0.R4 | 📦 v1.8.x 历史快照，**停止功能更新**，仅做紧急阻断 Bug 修复 |
 | `archived/corebump/2.x` | 上游 Termux `v0.119.0-beta.3` | 2.0.0.R5 | 📂 归档快照，保留 2.x 内部开发步骤 |
 
-> ✅ **2.1.0.R5 正式版已于 2026-09-19 发布**，基于上游 Termux v0.119.0，包含 libterminal 引擎、玻璃导航栏、插件系统、AI 助手等核心功能。
+> ✅ **当前主线为 `3.3.3.R7`**，基于上游 Termux v0.119.0，包含 libterminal 引擎、玻璃顶栏、插件系统、Termux Agent、AgentPaw 手机操控引擎等核心功能。
 > 由于上游长期未更新 Release，内部测试上游 Beta 稳定，将直接作为 0.119.0 基底。
 
 
@@ -32,6 +32,61 @@
 ***
 
 ## 最近更新
+
+### Termux Ultra 3.3.x — 🤖 Agent 深度整合（当前主线）
+
+> 📅 **2026-10-05 ~ 2026-10-06**
+
+- **AgentPaw 手机操控引擎**：Termux Agent 接入 `com.paw.agent:agentpaw-core`，可在自动 / 手动两种模式下调度 Shell、联网搜索与手机操控工具链；LLM 配置沿用 Termux 侧在线模型，本地模型模式安全回退
+- **Shizuku 授权与停止悬浮按钮**：AgentPaw 0.1.1 起支持 Shizuku 授权（三态实时显示）与全局停止悬浮按钮，长任务可随时中断；0.1.2 替换设置图标
+- **Agent 对话后台执行**：对话回合脱离页面生命周期（进程级 `AgentChatSession` 持有执行域），离开对话页后继续跑完；配套 `AgentChatBubble` 悬浮气泡显示「思考中 / 回答完成」并拉起页面
+- **Agent 聊天页 Eta 设计语言重构**：全新玻璃顶栏、Eta 语义色（成功 / 警告 / 错误）、用户气泡 20/20/6/20 不对称圆角、助手消息平铺 + 30dp 操作行、推理折叠块与呼吸式打字指示器
+- **miuix-glass OS4 符号图标**：vendor 176 个 OS4 symbol 图标（5 字重）并本地桥接，顶栏图标全量替换、返回箭头统一，视觉尺寸按墨迹面积对齐
+- **玻璃顶栏收尾**：对话页「更多」菜单玻璃化、对话详情页默认折叠大顶栏（滚到顶部弹簧展开）、收缩态 title/subtitle 真正落入图标安全区
+- **CI 构建提速**：编译缓存 + 增量优先 + 全量降级重试，Debug 与 Release 两条流程共用同一份 composite action
+
+### Termux Ultra 3.2.x — 🪟 玻璃顶栏铺开与引擎升级
+
+> 📅 **2026-10-03 ~ 2026-10-05**
+
+- **miuix 玻璃顶栏全面铺开**：从首批页面扩展到控制台、文件、远程、资源、设置等全部页面；顶栏随列表滚动浮出玻璃底板、回顶收敛；独立 Activity 正确处理系统栏 inset
+- **Termux Agent 拆分为「对话管理页 + 对话页」**：支持多会话并存，会话列表可重命名 / 删除 / 清空
+- **可配置启动页与自动控制台**：冷启动按偏好落到总览页或终端页；开启自动控制台后启动即新建会话直进控制台；终端小键盘标签改为自适应字号，不再被截断
+- **LibTerminal 升级 4.0.3**：引擎改从 Maven Central（`io.github.awkox:libterminal`）引入，消除 `ListenableFuture` 与 guava 的重复类冲突
+- **软件包管理分类同名归并**：按显示名归并重复分类（如两个「实用工具」），分类详情顶栏收展不再逐帧重算，jank 率与首屏耗时大幅下降
+- **VNC 自定义按键页还原真实键盘布局**：按 `prefs.input.vkRowCount` 与真实 keymap 列优先排布，摘要显示真实键值
+- **全仓缺陷修复与代码质量治理**：空安全、生命周期与死逻辑清理，收紧 lint 配置
+
+### Termux Ultra 3.1.x — 🎨 Agent 应用重做与 Material You
+
+> 📅 **2026-09-29 ~ 2026-10-03**
+
+- **Agent 应用重做**：设置整合、插件中心翻新、随心插件（Compose DSL 主页）、快捷入口统一配色
+- **Material You 动态取色开关**：设置页新增开关，总览页功能卡片与控制台顶栏展开态跟随系统取色
+- **设置页顶部搜索栏**：按关键字搜索设置项，结果以独立 Card 展示
+- **bootstrap 首次启动在线下载**：不再把 `native .so` 烘焙进 APK，首启动按架构从 Release 资产源下载（多镜像回退 + SHA-256 校验），失败可回落到 OOBE 重试
+- **键盘布局修复**：extra-keys 列截断、HOME/END 失效、方向键无法连发
+
+### Termux Ultra 3.0.x — 🧹 体积与工程治理
+
+> 📅 **2026-09-25 ~ 2026-09-29**
+
+- **关闭 R8 代码收缩**（默认）：Gson `TypeToken` 泛型签名、`Class.forName`、JNI 回调等动态引用点难以穷举 -keep 且仍偶发崩溃，维护成本高于体积收益；需要时可用 `-Ptermux.enableR8=true` 显式开启
+- **APK 体积路线调整**：ReDex / strip_so 重打包方案实测收益有限（整体仍 ~103MB）且可靠性风险更高，已从发布流程移除；减重改由 bootstrap 在线下载承担
+- **集成工具默认关闭**：新安装用户不再默认启用 5 款 Termux 插件，需在设置中手动开启
+- **恢复经典引擎终端设置项**并接入 libterminal；重写存储管理占用统计，分类之和精确等于系统值
+- **导航栏五个 tab 改用 Material 风格图标**并统一光学尺寸
+
+### Termux Ultra 2.2.x / 2.3.x — 🐙 GitHub 集成与文档站
+
+> 📅 **2026-09-21 ~ 2026-09-24**
+
+- **GitHub 登录与反馈中心**：OAuth 2.0 PKCE + Device Flow，改为设备码弹窗登录并修复登录态丢失
+- **GitHub 页面强化**：PR / Issue 管理 + 仓库权限检测，管理员操作改为跳转 GitHub 处理
+- **GitHub Pages 文档站**：使用手册 / 功能讲解 / 插件构建文档（中英双语），并接入团队 OKR 雷达图可视化页面
+- **浮动玻璃底栏**：切页后吸顶小标题不再消失
+- **软件包管理增强**：分类视图、详情动画与空态优化
+- **依赖污染检查 CI**：固定 `androidx.core` / `ListenableFuture` 等传递依赖外溢
 
 ### Termux Ultra 2.1.0.R5 — 🎉 正式版发布
 
@@ -200,26 +255,38 @@
 - 网络信息卡片：实时刷新公网 IP 与所属国家
 - 设备信息：机型、Android 版本、内核版本
 - 备份 / 恢复 Termux 数据
-- 集成工具开关面板（含独立 APK 冲突检测）
+- 集成工具开关面板（含独立 APK 冲突检测，新安装默认全部关闭）
 - 生物识别认证（指纹解锁）
 - 多语言支持（中文 / 英文，100% 中文覆盖）
-- 深色 / 浅色模式自适应
-- Miuix 风格设置页（ArrowPreference 套件）
+- 深色 / 浅色模式自适应，Material You 动态取色开关
+- Miuix 风格设置页（ArrowPreference 套件）+ 顶部关键字搜索
+- 可配置启动页（总览页 / 终端页）与「自动启动终端控制台」开关
 
 ### AI 助手
 - 自然语言交互：通过对话方式与终端、文件系统、远程连接等交互
+- **多会话**：对话管理页 + 对话页拆分，支持多个会话并存、重命名与删除
+- **后台执行**：离开对话页后回合继续跑完，悬浮气泡显示思考 / 完成状态并拉起页面
 - 技能系统：支持新建/关闭会话、执行命令、文件读写、VNC/SSH 连接、QEMU 虚拟机管理等
 - 多模型支持：兼容 OpenAI API 及自定义端点，可配置 temperature 等参数
+- **AgentPaw 手机操控**：自动 / 手动两种模式调度 Shell、联网搜索与设备操控工具链；支持 Shizuku 授权与全局停止悬浮按钮
 - 安全机制：危险操作检测（rm -rf、dd、fork bomb 等）与二次确认
 - 上下文感知：可获取会话信息、文件列表、执行结果等实时数据
 - 插件扩展：支持插件添加自定义 Skill、修改 System Prompt
 
+### GitHub 集成
+- 账号登录：OAuth 2.0 PKCE + Device Flow 设备码弹窗
+- PR / Issue 列表与详情，仓库权限检测（管理员标记）
+- 一键跳转 GitHub 处理问题与 PR
+- 问题反馈中心
+
 ### 交互与动画
 - 首页横滑手势切换页面（终端 → 文件 → 远程 → 资源）
 - 页面切换叠加动画与左右切换动画，支持预测式返回
-- 卡片圆角与点击反馈裁剪统一
+- 卡片圆角与点击反馈裁剪统一；卡片底色统一走 Miuix `surfaceContainer`，在 Monet 动态取色下自动联动
 - 底部导航避让与边距修正，防止误触
-- 玻璃/柔光/浮动导航栏效果
+- 玻璃 / 浮动导航栏效果
+- **Miuix 玻璃顶栏**：覆盖控制台、文件、远程、资源、设置等全部页面，随内容滚动浮出玻璃底板、回顶收敛为裸图标
+- **OS4 符号图标**：顶栏与关键操作按钮使用 vendor 进来的 176 个 miuix-glass OS4 图标（5 字重）
 
 ## 应用与插件
 
@@ -237,7 +304,7 @@ Termux Ultra v2.0.0 起支持用户安装第三方插件（ZIP/TUP 格式），�
 
 ## 系统要求
 
-- Android `>= 8.0`（API 26）
+- Android `>= 9.0`（API 28）
 - targetSdk `28`，compileSdk `37`
 - 支持架构：`arm64-v8a`、`armeabi-v7a`、`x86`、`x86_64`
 
@@ -259,8 +326,8 @@ Termux Ultra 与原版 Termux 及其所有插件共享 `sharedUserId`（`com.ter
 | <img src="https://avatars.githubusercontent.com/in/15368?s=64&v=4" width = "30" height = "30" alt="LOGO"/> | [GitHub Releases](https://github.com/TiG-Kira/Termux-Ultra/releases) | 正式版 (稳定版) ，发布页 `Assets` 下提供各架构 APK。|
 |------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------|-----------|
 
-- Debug 版本仅输出 universal APK（`termux-ultra_debug_universal.apk`），安装包 + bootstrap 约 `~180MB`。
-- Release 版本输出各架构独立 APK，使用架构包约 `~120MB`。
+- Debug 构建按 ABI 分别出包（CI 中为 `arm64-v8a` / `armeabi-v7a` / `x86` / `x86_64` 四份，各约 `~108MB`）。
+- Release 版本输出各架构独立 APK，单架构约 `~80MB`，universal 约 `~87MB`。
 - GitHub 来源的 APK 均为 `debuggable`，彼此兼容，但与其他来源不兼容。
 
 ### 关于 Google Play 商店
@@ -327,9 +394,9 @@ Termux-Ultra/
 
 ### 环境要求
 
-- JDK 8
+- JDK 21
 - Android SDK，compileSdk 37
-- NDK `22.1.7171670`
+- NDK `28.2.13676358`
 - CMake `3.22.1`
 
 ### 构建命令
@@ -337,16 +404,21 @@ Termux-Ultra/
 为避免路径中的空格导致 NDK 编译问题，请通过无空格的硬链接路径访问项目（如 `D:\KiTerminal-UX`）。
 
 ```bash
-# Debug 版本（仅输出 universal APK）
+# Debug 版本（整包 APK）
 ./gradlew assembleDebug
 
-# Release 版本（输出各架构 APK）
+# Release 版本（输出各架构 APK + universal）
 ./gradlew assembleRelease
+
+# 单架构构建（不产出 universal）
+./gradlew assembleRelease -Ptermux.abi=arm64-v8a
 ```
 
 构建产物：
-- Debug：`app/build/outputs/apk/debug/termux-ultra_debug_universal.apk`
-- Release：`app/build/outputs/apk/release/` 下各架构 APK（`arm64-v8a`、`armeabi-v7a`、`x86`、`x86_64`）
+- Debug：`app/build/outputs/apk/debug/app-<abi>-debug.apk`
+- Release：`app/build/outputs/apk/release/` 下 `app-<abi>-release.apk` 与 `app-release.apk`（universal）
+
+> Release 包体量参考（3.3.x 实测）：单架构约 80MB，universal 约 87MB；bootstrap 运行环境不再烘焙进 APK，首启动时由 `BootstrapDownloader` 按设备架构在线下载（多镜像回退 + SHA-256 校验），下载失败会回落到 OOBE 重试。
 
 原生构建目标（CMake）：`native-vnc`、`vncclient`、`turbojpeg-static`、`wolfssl`、`termux`
 
@@ -362,20 +434,23 @@ Termux-Ultra/
 
 | 类别 | 技术 |
 | --- | --- |
-| 语言 | Kotlin、Java、C/C++ |
-| UI | Jetpack Compose 1.8.3、Material 3 1.3.0、Miuix KMP 0.9.3（ui / icons / preference） |
-| 架构组件 | AndroidX、Lifecycle 2.8.5、ViewModel、Navigation、Room 2.7.2、DataBinding |
-| 终端 | libterminal（Maven Central）、内联 TermuxTerminalSession |
+| 语言 | Kotlin 2.4.20、Java、C/C++ |
+| UI | Jetpack Compose 1.8.3、Material 3 1.3.0、Miuix KMP 0.9.4（ui / icons / preference / blur）、vendor miuix-glass（玻璃顶栏与弹层） |
+| 架构组件 | AndroidX、Lifecycle 2.8.5、ViewModel、Navigation、Room 2.8.5、DataBinding |
+| 终端 | libterminal 4.0.3（Maven Central）、内联 TermuxTerminalSession |
 | VNC | AVNC、libvncserver、libjpeg-turbo、wolfssl |
 | SSH | connectbot sshlib 2.2.36 |
+| 网络 | OkHttp 5.5.0 |
 | 图片加载 | Coil Compose 2.7.0 |
 | 生物识别 | AndroidX Biometric 1.2.0-alpha05 |
 | 序列化 | Gson 2.10.1、kotlinx-serialization 1.9.0 |
 | AI 助手 | OpenAI 兼容 API、自定义端点、技能系统 |
+| 手机操控 | AgentPaw `agentpaw-core` 0.1.2（GitHub Packages）、Shizuku |
 | 插件系统 | ZIP 打包、JSON 配置、WebView Bridge、Broadcast 桥接 |
-| 构建 | Gradle、CMake 3.22.1、NDK 22.1.7171670 |
+| 构建 | Gradle（AGP 9.1.0）、CMake 3.22.1、NDK 28.2.13676358、JDK 21 |
 | 集成插件 | termux-api、termux-boot、termux-styling、termux-tasker、termux-widget |
 | 包名 | `com.termux`（sharedUserId） |
+| 混淆 | R8 默认关闭（`-Ptermux.enableR8=true` 可显式开启） |
 
 ## 插件开发指南
 
