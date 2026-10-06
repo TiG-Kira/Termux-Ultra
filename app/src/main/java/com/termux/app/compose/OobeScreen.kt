@@ -106,6 +106,24 @@ import androidx.compose.material3.Icon as MaterialIcon
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import kotlinx.coroutines.delay
 
+/** OOBE 权限项的稳定标识：Activity 按这些 key 上报真实状态，UI 按同样的 key 取值渲染。 */
+object OobePermissionIds {
+    const val NETWORK = "network"
+    const val FILE_STORAGE = "file_storage"
+    const val WAKE_LOCK = "wake_lock"
+    const val VIBRATE = "vibrate"
+}
+
+/** 权限项的展示定义：文案属于 UI，granted 由 [permissionStates] 决定，不在此写死。 */
+private data class PermissionEntry(val id: String, val title: String, val desc: String)
+
+private val permissionEntries = listOf(
+    PermissionEntry(OobePermissionIds.NETWORK, "网络访问", "运行命令、下载包、远程连接"),
+    PermissionEntry(OobePermissionIds.FILE_STORAGE, "文件存储", "访问设备存储空间"),
+    PermissionEntry(OobePermissionIds.WAKE_LOCK, "唤醒锁定", "后台运行时保持活跃"),
+    PermissionEntry(OobePermissionIds.VIBRATE, "震动反馈", "触觉反馈")
+)
+
 @Composable
 fun OobeScreen(
     isUpgrade: Boolean,
@@ -117,6 +135,9 @@ fun OobeScreen(
     eulaLastStored: String,
     permissionStatus: String,
     isPermissionGranted: Boolean,
+    permissionStates: Map<String, Boolean>,
+    isPermissionLoading: Boolean,
+    permissionLoadFailed: Boolean,
     isBootstrapping: Boolean,
     isDownloading: Boolean,
     isInstalling: Boolean,
@@ -397,6 +418,9 @@ fun OobeScreen(
                             2 -> OobePermissionPage(
                                 permissionStatus = permissionStatus,
                                 isPermissionGranted = isPermissionGranted,
+                                permissionStates = permissionStates,
+                                isPermissionLoading = isPermissionLoading,
+                                permissionLoadFailed = permissionLoadFailed,
                                 onGrantAllPermissions = onGrantAllPermissions,
                                 onBack = { goBack() },
                                 onNext = { goNext() }
@@ -995,6 +1019,9 @@ private fun Gpl3Summary() {
 private fun OobePermissionPage(
     permissionStatus: String,
     isPermissionGranted: Boolean,
+    permissionStates: Map<String, Boolean>,
+    isPermissionLoading: Boolean,
+    permissionLoadFailed: Boolean,
     onGrantAllPermissions: () -> Unit,
     onBack: () -> Unit,
     onNext: () -> Unit,
@@ -1064,51 +1091,100 @@ private fun OobePermissionPage(
         )
         Spacer(modifier = Modifier.height(24.dp))
 
-        Column(
+        // 权限项列表只在状态加载成功后渲染；加载中/失败/空结果都不显示任何勾选，
+        // 避免把「还没查到」画成「已授权」。
+        val items: List<PermissionEntry> =
+            if (!isPermissionLoading && !permissionLoadFailed && permissionStates.isNotEmpty()) permissionEntries
+            else emptyList()
+
+        Box(
             modifier = Modifier
                 .weight(1f)
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
+                .fillMaxWidth(),
+            contentAlignment = Alignment.Center
         ) {
-            PermissionItemCard(
-                title = "网络访问",
-                desc = "运行命令、下载包、远程连接",
-                granted = true,
-                icon = { MaterialIcon(imageVector = Icons.Default.Wifi, contentDescription = null, tint = MiuixTheme.colorScheme.onSurface, modifier = Modifier.size(22.dp)) }
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-            PermissionItemCard(
-                title = "文件存储",
-                desc = "访问设备存储空间",
-                granted = true,
-                icon = { MaterialIcon(imageVector = Icons.Default.CheckCircle, contentDescription = null, tint = MiuixTheme.colorScheme.onSurface, modifier = Modifier.size(22.dp)) }
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-            PermissionItemCard(
-                title = "唤醒锁定",
-                desc = "后台运行时保持活跃",
-                granted = true,
-                icon = { MaterialIcon(imageVector = Icons.Default.CheckCircle, contentDescription = null, tint = MiuixTheme.colorScheme.onSurface, modifier = Modifier.size(22.dp)) }
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-            PermissionItemCard(
-                title = "震动反馈",
-                desc = "触觉反馈",
-                granted = true,
-                icon = { MaterialIcon(imageVector = Icons.Default.CheckCircle, contentDescription = null, tint = MiuixTheme.colorScheme.onSurface, modifier = Modifier.size(22.dp)) }
-            )
+            when {
+                isPermissionLoading -> {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        CircularProgressIndicator(modifier = Modifier.size(40.dp))
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            text = "正在读取权限状态...",
+                            style = TextStyle(fontSize = 14.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+                        )
+                    }
+                }
+                permissionLoadFailed -> {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.padding(horizontal = 8.dp)
+                    ) {
+                        MaterialIcon(
+                            imageVector = Icons.Default.Error,
+                            contentDescription = null,
+                            tint = MiuixTheme.colorScheme.error,
+                            modifier = Modifier.size(36.dp)
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = "无法读取权限状态",
+                            style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Medium, color = MiuixTheme.colorScheme.error)
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = "请重新授予权限后再试",
+                            style = TextStyle(fontSize = 13.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+                        )
+                    }
+                }
+                items.isEmpty() -> {
+                    Text(
+                        text = "暂无可校验的权限项",
+                        style = TextStyle(fontSize = 14.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+                    )
+                }
+                else -> {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .verticalScroll(rememberScrollState())
+                    ) {
+                        items.forEachIndexed { index, entry ->
+                            if (index > 0) Spacer(modifier = Modifier.height(12.dp))
+                            PermissionItemCard(
+                                title = entry.title,
+                                desc = entry.desc,
+                                // 缺失 key 一律按未授权渲染，不默认打勾。
+                                granted = permissionStates[entry.id] == true,
+                                icon = {
+                                    MaterialIcon(
+                                        imageVector = if (entry.id == OobePermissionIds.NETWORK) Icons.Default.Wifi
+                                        else Icons.Default.CheckCircle,
+                                        contentDescription = null,
+                                        tint = MiuixTheme.colorScheme.onSurface,
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                }
+                            )
+                        }
+                    }
+                }
+            }
         }
 
-        Text(
-            text = permissionStatus,
-            style = TextStyle(
-                fontSize = 13.sp,
-                color = if (isPermissionGranted) MiuixTheme.colorScheme.primary 
-                       else MiuixTheme.colorScheme.onSurfaceVariantSummary
-            ),
-            modifier = Modifier.fillMaxWidth(),
-            textAlign = TextAlign.Center
-        )
+        // 加载中/失败时不展示「x/y」进度，避免与「暂无勾选」的卡片区自相矛盾。
+        if (!isPermissionLoading && !permissionLoadFailed) {
+            Text(
+                text = permissionStatus,
+                style = TextStyle(
+                    fontSize = 13.sp,
+                    color = if (isPermissionGranted) MiuixTheme.colorScheme.primary
+                    else MiuixTheme.colorScheme.onSurfaceVariantSummary
+                ),
+                modifier = Modifier.fillMaxWidth(),
+                textAlign = TextAlign.Center
+            )
+        }
         
         Spacer(modifier = Modifier.height(16.dp))
 
@@ -1130,7 +1206,7 @@ private fun OobePermissionPage(
             }
             Button(
                 onClick = { onNext() },
-                enabled = isPermissionGranted,
+                enabled = isPermissionGranted && !isPermissionLoading && !permissionLoadFailed,
                 modifier = Modifier.weight(1f),
                 colors = ButtonDefaults.buttonColors(color = MiuixTheme.colorScheme.primary)
             ) {
@@ -1302,6 +1378,32 @@ private fun OobeInstallPage(
             contentAlignment = Alignment.Center
         ) {
             when {
+                // 失败态排在最前：bootstrapError 是唯一可信的终态信号，
+                // 任何残留的进行中/完成标记都不该盖掉失败原因与重试入口。
+                bootstrapError != null -> {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        Box(
+                            modifier = Modifier.size(72.dp).clip(androidx.compose.foundation.shape.CircleShape).background(MiuixTheme.colorScheme.error),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            MaterialIcon(imageVector = Icons.Default.Error, contentDescription = null, tint = Color.White, modifier = Modifier.size(40.dp))
+                        }
+                        Spacer(modifier = Modifier.height(24.dp))
+                        Text(text = stringResource(R.string.install_failed), style = TextStyle(fontSize = 22.sp, fontWeight = FontWeight.Bold, color = MiuixTheme.colorScheme.error))
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Card(modifier = Modifier.fillMaxWidth()) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                // bootstrapError 是完整堆栈 markdown，截断以免撑爆页面；关键信息在前几行。
+                                Text(text = bootstrapError, style = TextStyle(fontSize = 13.sp, color = MiuixTheme.colorScheme.onSurface),
+                                    maxLines = 6, overflow = TextOverflow.Ellipsis)
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(text = "可能原因：网络连接不稳定 / 存储空间不足 / 设备不支持", style = TextStyle(fontSize = 12.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary))
+                            }
+                        }
+                    }
+                }
                 isDownloading -> {
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
@@ -1369,30 +1471,6 @@ private fun OobeInstallPage(
                         Text(text = "终端环境已成功初始化", style = TextStyle(fontSize = 14.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary))
                     }
                 }
-                bootstrapError != null -> {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                    ) {
-                        Box(
-                            modifier = Modifier.size(72.dp).clip(androidx.compose.foundation.shape.CircleShape).background(MiuixTheme.colorScheme.error),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            MaterialIcon(imageVector = Icons.Default.Error, contentDescription = null, tint = Color.White, modifier = Modifier.size(40.dp))
-                        }
-                        Spacer(modifier = Modifier.height(24.dp))
-                        Text(text = stringResource(R.string.install_failed), style = TextStyle(fontSize = 22.sp, fontWeight = FontWeight.Bold, color = MiuixTheme.colorScheme.error))
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Card(modifier = Modifier.fillMaxWidth()) {
-                            Column(modifier = Modifier.padding(16.dp)) {
-                                // bootstrapError 是完整堆栈 markdown，截断以免撑爆页面；关键信息在前几行。
-                                Text(text = bootstrapError, style = TextStyle(fontSize = 13.sp, color = MiuixTheme.colorScheme.onSurface),
-                                    maxLines = 6, overflow = TextOverflow.Ellipsis)
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Text(text = "可能原因：网络连接不稳定 / 存储空间不足 / 设备不支持", style = TextStyle(fontSize = 12.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary))
-                            }
-                        }
-                    }
-                }
                 else -> {
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
@@ -1413,14 +1491,7 @@ private fun OobeInstallPage(
         }
 
         when {
-            bootstrapComplete -> {
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Button(onClick = { onNext() }, modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(color = MiuixTheme.colorScheme.primary)) {
-                        Text(text = stringResource(R.string.critical_force_enable_action_continue), fontWeight = FontWeight.Bold, color = Color.White)
-                    }
-                }
-            }
+            // 失败态优先，保证任何情况下都提供「重试 / 退出」出口。
             bootstrapError != null -> {
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Button(onClick = { onExitApp() }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(color = MiuixTheme.colorScheme.error)) {
@@ -1428,6 +1499,14 @@ private fun OobeInstallPage(
                     }
                     Button(onClick = { onRetryBootstrap() }, modifier = Modifier.weight(1f)) {
                         Text(text = stringResource(R.string.bootstrap_error_try_again), fontWeight = FontWeight.Bold, color = Color.White)
+                    }
+                }
+            }
+            bootstrapComplete -> {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Button(onClick = { onNext() }, modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(color = MiuixTheme.colorScheme.primary)) {
+                        Text(text = stringResource(R.string.critical_force_enable_action_continue), fontWeight = FontWeight.Bold, color = Color.White)
                     }
                 }
             }

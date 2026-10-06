@@ -9,6 +9,7 @@
     <string name="oobe_description">要使用 Termux Ultra，您需要授予必要的权限。\n这将允许应用访问文件并正常运行。</string>
     <string name="oobe_permission_progress">权限进度：</string>
     <string name="oobe_permission_all_granted">所有权限已授予！</string>
+    <string name="oobe_permission_status_unavailable">无法读取权限状态</string>
     <string name="oobe_grant_permissions">授予权限</string>
     <string name="oobe_manage_storage">管理外部存储</string>
     <string name="oobe_next">下一步</string>
