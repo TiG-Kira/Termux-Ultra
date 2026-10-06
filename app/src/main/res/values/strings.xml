@@ -1586,7 +1586,6 @@
 
     <!-- AgentPaw 设置页 -->
     <string name="agentpaw_settings_title">AgentPaw Settings</string>
-    <string name="agentpaw_settings_intro">Phone control agent; LLM connection reuses the Termux Agent configuration</string>
     <string name="agentpaw_auto_switch_title">Auto-switch to AgentPaw</string>
     <string name="agentpaw_auto_switch_desc">Hand over to AgentPaw when a task needs phone control, then switch back automatically</string>
     <string name="agentpaw_perm_category">Phone control and system permissions</string>
@@ -1609,13 +1608,19 @@
     <string name="agentpaw_go_grant">Grant</string>
     <string name="agentpaw_sampling_category">Sampling parameters</string>
     <string name="agentpaw_temperature_label">Temperature</string>
+    <string name="agentpaw_temperature_desc">Randomness of each reply. Range 0–2, default 0.7: higher values are more creative but may drift, lower values are stricter and more repeatable.</string>
     <string name="agentpaw_top_p_label">Top-P</string>
+    <string name="agentpaw_top_p_desc">Nucleus sampling threshold, i.e. how many candidate tokens are kept per step. Range 0–1, default 1.0: lower values sample only from high-probability tokens (more focused), 1.0 keeps all candidates.</string>
     <string name="agentpaw_max_tokens_label">Max tokens per reply</string>
+    <string name="agentpaw_max_tokens_desc">Upper bound for one reply. Range 256–32768, default 2048: longer replies get truncated, and larger values cost more time and tokens.</string>
     <string name="agentpaw_system_prompt_category">System prompt</string>
     <string name="agentpaw_system_prompt_label">Leave empty to use the built-in AgentPaw prompt</string>
+    <string name="agentpaw_system_prompt_desc">Sent to the model as a system instruction on every request: use it to constrain operating style, language or forbidden actions. Empty means the built-in prompt is used. Takes effect from the next session.</string>
     <string name="agentpaw_vision_category">Phone control and vision strategy</string>
     <string name="agentpaw_max_tool_rounds_label">Max execution steps (tool call rounds)</string>
+    <string name="agentpaw_max_tool_rounds_desc">How many rounds of UI actions / tool calls one task may run. Range 1–50, default 15: the agent wraps up and reports once the limit is reached, which prevents endless loops.</string>
     <string name="agentpaw_vision_mode_title">Screenshot resolution mode</string>
+    <string name="agentpaw_vision_mode_desc">Clarity of the screenshots taken while driving the phone: higher clarity means more accurate recognition, but slower capture and more tokens per step.</string>
     <string name="agentpaw_vision_mode_auto">AUTO</string>
     <string name="agentpaw_vision_mode_auto_desc">Chosen automatically by the agent</string>
     <string name="agentpaw_vision_mode_fast">FAST</string>
@@ -1623,8 +1628,8 @@
     <string name="agentpaw_vision_mode_high">HIGH</string>
     <string name="agentpaw_vision_mode_high_desc">Higher clarity, but slower</string>
     <string name="agentpaw_stream_title">Stream output</string>
-    <string name="agentpaw_stream_desc">When off, wait for the full reply before showing it</string>
-    <string name="agentpaw_invalid_number">Sampling parameters / token limit / steps must be valid numbers (range checked)</string>
-    <string name="agentpaw_saved">AgentPaw settings saved</string>
+    <string name="agentpaw_stream_desc">When on, the reply is rendered token by token; when off, the full reply is shown at once</string>
+    <string name="agentpaw_field_not_saved">Value out of range, not saved; the last saved value is still in use</string>
+    <string name="agentpaw_save_failed">Failed to save AgentPaw settings</string>
 
 </resources>
