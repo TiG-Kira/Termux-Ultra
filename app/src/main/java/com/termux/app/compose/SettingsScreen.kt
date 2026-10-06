@@ -3622,6 +3622,7 @@ private fun AgentChatParamsDialog(show: Boolean, onDismiss: () -> Unit) {
     var threshold by remember(show) { mutableStateOf(AiTermuxPrefs.getCompressThreshold(context)) }
     var keepRecent by remember(show) { mutableStateOf(AiTermuxPrefs.getCompressKeepRecent(context)) }
     var maxTokens by remember(show) { mutableStateOf(AiTermuxPrefs.getMaxTokens(context)) }
+    var maxRounds by remember(show) { mutableStateOf(AiTermuxPrefs.getMaxRounds(context)) }
 
     OverlayDialog(
         title = stringResource(R.string.agent_chat_params),
@@ -3655,6 +3656,12 @@ private fun AgentChatParamsDialog(show: Boolean, onDismiss: () -> Unit) {
                         onValueChange = { maxTokens = it },
                         range = 1024..65536
                     )
+                    NumberField(
+                        label = stringResource(R.string.label_max_rounds),
+                        value = maxRounds,
+                        onValueChange = { maxRounds = it },
+                        range = 5..200
+                    )
                 }
             }
             Spacer(Modifier.height(12.dp))
@@ -3672,6 +3679,7 @@ private fun AgentChatParamsDialog(show: Boolean, onDismiss: () -> Unit) {
                         AiTermuxPrefs.setCompressThreshold(context, threshold)
                         AiTermuxPrefs.setCompressKeepRecent(context, keepRecent)
                         AiTermuxPrefs.setMaxTokens(context, maxTokens)
+                        AiTermuxPrefs.setMaxRounds(context, maxRounds)
                         onDismiss()
                     },
                     modifier = Modifier.weight(1f),

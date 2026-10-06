@@ -93,6 +93,7 @@ import com.termux.app.utils.SnackbarHelper
 import com.google.android.material.snackbar.Snackbar
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.yield
@@ -296,9 +297,6 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
     private var cancelled: Boolean
         get() = AgentChatSession.cancelled
         set(value) { AgentChatSession.cancelled = value }
-
-    /** 白名单每次实时读取：设置页改完回到对话页立即生效，不必重建 Activity */
-    private fun autoExecSkills(): Set<String> = AiTermuxPrefs.getAutoExecSkills(getApplication())
 
     fun cancelGeneration() {
         cancelled = true
@@ -861,8 +859,23 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
     // 待执行的危险操作：messageId -> (skillType, params)
     private val pendingDanger = mutableMapOf<String, Pair<String, JsonObject>>()
 
+    // 重复操作确认：messageId -> 用户选择（true=继续 / false=取消）。执行循环在遇到已执行过的
+    // 重复技能时挂起等待用户决定，按钮回调通过 complete() 唤醒。
+    private val pendingDupConfirm = mutableMapOf<String, CompletableDeferred<Boolean>>()
+
     /** 获取待执行的危险操作（用于从主页返回后恢复执行） */
     fun getPendingDanger(messageId: String): Pair<String, JsonObject>? = pendingDanger[messageId]
+
+    /** 用户在重复操作确认卡片中选择「继续」：唤醒挂起的执行循环，照常执行该技能 */
+    fun confirmDuplicate(messageId: String) {
+        pendingDupConfirm[messageId]?.complete(true)
+    }
+
+    /** 用户在重复操作确认卡片中选择「取消」：唤醒挂起的执行循环，跳过该技能（走原跳过逻辑） */
+    fun cancelDuplicate(messageId: String) {
+        pendingDupConfirm[messageId]?.complete(false)
+    }
+
 
     private suspend fun processUserMessage(ctx: Context, userText: String) {
         val manualPaw = AgentPawPrefs.manualMode.value
@@ -1005,8 +1018,8 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
         var consecutiveSimilarReplies = 0
         val maxConsecutiveSimilarReplies = 3
 
-        // 每轮对话最多迭代次数：防止技能→结果→技能无限循环
-        val maxRounds = 20
+        // 每轮对话最多迭代次数：防止技能→结果→技能无限循环，上限由「对话参数」设置页控制
+        val maxRounds = AiTermuxPrefs.getMaxRounds(ctx)
         // 上下文条数与 maxTokens 由设置页控制
         val contextMessages = AiTermuxPrefs.getContextMessages(ctx)
         val maxTokens = AiTermuxPrefs.getMaxTokens(ctx)
@@ -1404,16 +1417,17 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
             }
 
             // === 去重检查 2：与已执行的历史比较，检测 AI 重复执行同一操作 ===
+            // 不再自动跳过：改为在执行前询问用户是否继续（见下方执行循环）。
             val trulyNewSkills = mutableListOf<Pair<String, JsonObject>>()
+            val pendingDupKeys = mutableSetOf<String>()
             for (skill in newSkills) {
                 val key = "${skill.first}:${skill.second}"
                 if (key in executedHistory) {
-                    // AI 试图重复执行已执行过的相同技能
-                    skippedSkills.add(skill)
-                    android.util.Log.w("AiTermux", "AI 试图重复执行已执行的技能: $key")
-                } else {
-                    trulyNewSkills.add(skill)
+                    // 已执行过的相同操作：保留到执行列表，但先询问用户是否继续
+                    pendingDupKeys.add(key)
+                    android.util.Log.w("AiTermux", "AI 试图重复执行已执行的技能: $key（将询问用户）")
                 }
+                trulyNewSkills.add(skill)
             }
 
             // 检查连续相同技能，检测 AI 陷入循环
@@ -1507,54 +1521,49 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
             hallucinatedTotalCount = 0
 
             // === 文本重复检测：检测 AI 是否在反复输出相同/相似的回答 ===
-            val normalizedReply = plainText.trim().lowercase().replace(Regex("\\s+"), " ")
-            if (normalizedReply.length > 20) {
-                // 与历史回复比较相似度
-                val isSimilarToRecent = recentAiReplies.any { prev ->
-                    calcTextSimilarity(normalizedReply, prev) > 0.85
-                }
-                if (isSimilarToRecent) {
-                    consecutiveSimilarReplies++
-                    android.util.Log.w("AiTermux", "AI 文本重复: 连续相似回复 $consecutiveSimilarReplies 次")
-                } else {
-                    consecutiveSimilarReplies = 1
-                }
-                recentAiReplies.add(normalizedReply)
-                if (recentAiReplies.size > maxReplyHistory) {
-                    recentAiReplies.removeAt(0)
-                }
-
-                if (consecutiveSimilarReplies >= maxConsecutiveSimilarReplies) {
-                    android.util.Log.e("AiTermux", "AI 陷入文本循环：连续 $consecutiveSimilarReplies 次相似回复")
-                    synchronized(messages) {
-                        val idx = messages.indexOfFirst { it.id == streamMsgId }
-                        if (idx >= 0) {
-                            messages[idx] = messages[idx].copy(
-                                content = plainText.ifBlank { "（AI 重复回答已停止）" } +
-                                    "\n\n⚠️ 检测到 AI 陷入重复回答循环（$consecutiveSimilarReplies 次相似回复），已自动停止。",
-                                isWarning = true
-                            )
-                        }
+            // 本轮执行过技能说明任务仍在推进，只有纯文本回复才计入重复检测：多步任务里
+            // 每轮的过渡语（"好的，接下来…"）彼此相近，若一并计入会被误判成循环而提前终止
+            if (skillsToExecute.isEmpty()) {
+                val normalizedReply = plainText.trim().lowercase().replace(Regex("\\s+"), " ")
+                if (normalizedReply.length > 20) {
+                    // 与历史回复比较相似度
+                    val isSimilarToRecent = recentAiReplies.any { prev ->
+                        calcTextSimilarity(normalizedReply, prev) > 0.85
                     }
-                    persistConversations(ctx)
-                    return
+                    if (isSimilarToRecent) {
+                        consecutiveSimilarReplies++
+                        android.util.Log.w("AiTermux", "AI 文本重复: 连续相似回复 $consecutiveSimilarReplies 次")
+                    } else {
+                        consecutiveSimilarReplies = 1
+                    }
+                    recentAiReplies.add(normalizedReply)
+                    if (recentAiReplies.size > maxReplyHistory) {
+                        recentAiReplies.removeAt(0)
+                    }
+
+                    if (consecutiveSimilarReplies >= maxConsecutiveSimilarReplies) {
+                        android.util.Log.e("AiTermux", "AI 陷入文本循环：连续 $consecutiveSimilarReplies 次相似回复")
+                        synchronized(messages) {
+                            val idx = messages.indexOfFirst { it.id == streamMsgId }
+                            if (idx >= 0) {
+                                messages[idx] = messages[idx].copy(
+                                    content = plainText.ifBlank { "（AI 重复回答已停止）" } +
+                                        "\n\n⚠️ 检测到 AI 陷入重复回答循环（$consecutiveSimilarReplies 次相似回复），已自动停止。",
+                                    isWarning = true
+                                )
+                            }
+                        }
+                        persistConversations(ctx)
+                        return
+                    }
                 }
             }
-
-            // 检测是否有重复执行的技能（触犯禁令第四条）
-            val hasDuplicateViolation = skippedSkills.isNotEmpty() && hallucinatedSkillKeys.isEmpty()
-            // 构建警告消息，用于告知 AI 触犯了禁令
-            val duplicateWarning = if (hasDuplicateViolation) {
-                "[系统警告] 你违反了输出规范禁令第四条：禁止重复执行已执行过的技能。以下 ${skippedSkills.size} 个技能已跳过执行。请直接回答用户的问题，不要再重复执行已完成的操作。"
-            } else null
 
             // === 智能终止逻辑 ===
             if (skillsToExecute.isEmpty()) {
                 // 无新技能要执行 → 视为回复完成
-                if (hasDuplicateViolation) {
-                    currentUserText = duplicateWarning!!
-                    continue
-                }
+                // 注：已执行过的重复操作不再自动跳过，改为执行前询问用户（见上面执行循环），
+                // 因此这里不再对重复执行做自动告警/终止。
                 android.util.Log.d("AiTermux", "AI 回复完成（无技能），终止循环")
                 return
             }
@@ -1565,6 +1574,69 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
             for ((skillTypeStr, params) in skillsToExecute) {
                 // 停止信号在技能之间也要生效：技能执行可能耗时几十秒，不能等它跑完才判定
                 if (cancelled) break
+
+                val key = "$skillTypeStr:$params"
+                // === 重复操作确认：已执行过的相同操作，执行前先询问用户 ===
+                var confirmId: String? = null
+                var reuseCard = false
+                if (key in pendingDupKeys) {
+                    val deferred = CompletableDeferred<Boolean>()
+                    val cId = "dup_${System.currentTimeMillis()}_${Math.random()}"
+                    pendingDupConfirm[cId] = deferred
+                    synchronized(messages) {
+                        messages.add(
+                            ChatMessage(
+                                id = cId,
+                                role = "assistant",
+                                content = "",
+                                skillCard = SkillCardData(
+                                    skillType = SkillType.CONFIRM_DUPLICATE,
+                                    title = "重复操作确认",
+                                    description = "该操作与之前执行过的相同，是否继续执行？",
+                                    status = SkillStatus.RUNNING
+                                )
+                            )
+                        )
+                    }
+                    persistConversations(ctx)
+                    val approved = try {
+                        deferred.await()
+                    } finally {
+                        pendingDupConfirm.remove(cId)
+                    }
+                    if (!approved) {
+                        // 用户选择取消：走原跳过逻辑，不执行该操作
+                        synchronized(messages) {
+                            val idx = messages.indexOfFirst { it.id == cId }
+                            if (idx >= 0) {
+                                messages[idx] = messages[idx].copy(
+                                    skillCard = messages[idx].skillCard?.copy(
+                                        status = SkillStatus.FAILED,
+                                        title = "已跳过（重复执行）",
+                                        description = "用户选择不执行该重复操作"
+                                    )
+                                )
+                            }
+                        }
+                        persistConversations(ctx)
+                        continue
+                    }
+                    // 用户选择继续：复用该卡片作为执行卡片
+                    confirmId = cId
+                    reuseCard = true
+                    synchronized(messages) {
+                        val idx = messages.indexOfFirst { it.id == cId }
+                        if (idx >= 0) {
+                            messages[idx] = messages[idx].copy(
+                                skillCard = messages[idx].skillCard?.copy(
+                                    status = SkillStatus.RUNNING,
+                                    title = "执行技能中…",
+                                    description = skillTypeStr
+                                )
+                            )
+                        }
+                    }
+                }
 
                 val st = runCatching { SkillType.valueOf(skillTypeStr) }.getOrNull()
                 val dangerReason = if (st != null) SkillExecutor.checkDangerous(ctx, st, params) else null
@@ -1600,16 +1672,18 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
                     description = skillTypeStr,
                     status = SkillStatus.RUNNING
                 )
-                val tempId = "skill_${System.currentTimeMillis()}_${Math.random()}"
-                synchronized(messages) {
-                    messages.add(
-                        ChatMessage(
-                            id = tempId,
-                            role = "assistant",
-                            content = "",
-                            skillCard = runningCard
+                val tempId = if (reuseCard) confirmId!! else "skill_${System.currentTimeMillis()}_${Math.random()}"
+                if (!reuseCard) {
+                    synchronized(messages) {
+                        messages.add(
+                            ChatMessage(
+                                id = tempId,
+                                role = "assistant",
+                                content = "",
+                                skillCard = runningCard
+                            )
                         )
-                    )
+                    }
                 }
 
                 val svc = termuxService
@@ -1661,18 +1735,13 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
                 return
             }
 
-            // 如果所有执行的技能都是"需点击执行"类型，终止循环
-            // AI 已经生成了卡片并告知用户点击，不应再继续生成更多卡片
-            val unlimitedModeActive = AiTermuxPrefs.isUnlimitedModeActive(ctx)
-            if (executedSkillTypes.isNotEmpty() &&
-                executedSkillTypes.all { it.requiresClick(autoExecSkills(), unlimitedModeActive) }) {
-                return
-            }
+            // 原「所有技能都需点击执行则终止」的判断已移除：技能在 SkillExecutor.executeSkill
+            // 里是真实执行的（不存在等用户点击才跑的卡片），而真正需要用户介入的分支
+            // （危险操作确认 / ASK_USER）已由上面的 needsUserInput 提前结束一轮。
+            // 保留该判断会让默认（非无限制）模式下的多步任务执行完第一条命令就被截断。
 
             val allResultsText = allResultTexts.joinToString("\n")
-            currentUserText = if (hasDuplicateViolation) {
-                "[技能执行完成，请根据以下执行结果继续回复用户：]\n$allResultsText\n\n[系统警告] 你违反了输出规范禁令第四条：禁止重复执行已执行过的技能。请直接回答用户的问题，不要再重复执行已完成的操作。"
-            } else if (allResultsText.isNotBlank()) {
+            currentUserText = if (allResultsText.isNotBlank()) {
                 "[技能执行完成，请根据以下执行结果继续回复用户：]\n$allResultsText"
             } else {
                 ""
@@ -4515,13 +4584,16 @@ private fun SkillCard(msgId: String, card: SkillCardData, errorMsg: String?, vm:
 
     val ctx = LocalContext.current
     // ASK_USER / CONFIRM_DANGEROUS 需要可交互，状态为 RUNNING 时显示交互组件
-    val isInteractive = (card.skillType == SkillType.ASK_USER || card.skillType == SkillType.CONFIRM_DANGEROUS)
+    val isInteractive = (card.skillType == SkillType.ASK_USER || card.skillType == SkillType.CONFIRM_DANGEROUS
+            || card.skillType == SkillType.CONFIRM_DUPLICATE)
             && card.status == SkillStatus.RUNNING
 
     // Eta 语义状态色：进行中=primary、完成=StatusSuccess、失败/待确认=error、询问=warning
     val (statusColor, statusText) = when {
         card.skillType == SkillType.CONFIRM_DANGEROUS && card.status == SkillStatus.RUNNING ->
             Pair(StatusError, "待确认")
+        card.skillType == SkillType.CONFIRM_DUPLICATE && card.status == SkillStatus.RUNNING ->
+            Pair(StatusWarning, "待确认")
         card.skillType == SkillType.ASK_USER && card.status == SkillStatus.RUNNING ->
             Pair(StatusWarning, "待回答")
         card.status == SkillStatus.RUNNING -> Pair(MiuixTheme.colorScheme.primary, "执行中")
@@ -4548,6 +4620,7 @@ private fun SkillCard(msgId: String, card: SkillCardData, errorMsg: String?, vm:
         SkillType.APP_UNINSTALL -> R.drawable.ic_delete
         SkillType.ASK_USER -> R.drawable.ic_help
         SkillType.CONFIRM_DANGEROUS -> R.drawable.ic_warning
+        SkillType.CONFIRM_DUPLICATE -> R.drawable.ic_warning
         SkillType.SCHEDULE_TASK -> R.drawable.ic_service_notification
         SkillType.GET_DEVICE_STATUS -> R.drawable.ic_info
         SkillType.CLIPBOARD_READ, SkillType.CLIPBOARD_WRITE -> R.drawable.ic_copy
@@ -4915,6 +4988,45 @@ private fun SkillCard(msgId: String, card: SkillCardData, errorMsg: String?, vm:
                                         colors = ButtonDefaults.buttonColors(color = StatusError)
                                     ) {
                                         Text("确认执行", color = MiuixTheme.colorScheme.onPrimary, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
+                        }
+
+                        SkillType.CONFIRM_DUPLICATE -> {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                card.description?.let { desc ->
+                                    Text(
+                                        text = desc,
+                                        style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Medium, color = MiuixTheme.colorScheme.onSurface),
+                                        modifier = Modifier.padding(bottom = 10.dp)
+                                    )
+                                }
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    Button(
+                                        onClick = { vm.cancelDuplicate(msgId) },
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .height(44.dp)
+                                            .clip(RoundedCornerShape(10.dp)),
+                                        colors = ButtonDefaults.buttonColors(
+                                            color = MiuixTheme.colorScheme.surfaceContainerHigh
+                                        )
+                                    ) {
+                                        Text("取消", color = MiuixTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
+                                    }
+                                    Button(
+                                        onClick = { vm.confirmDuplicate(msgId) },
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .height(44.dp)
+                                            .clip(RoundedCornerShape(10.dp)),
+                                        colors = ButtonDefaults.buttonColors(color = MiuixTheme.colorScheme.primary)
+                                    ) {
+                                        Text("继续", color = Color.White, fontWeight = FontWeight.Bold)
                                     }
                                 }
                             }

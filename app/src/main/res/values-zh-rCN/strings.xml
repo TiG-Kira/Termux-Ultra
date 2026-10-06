@@ -1479,6 +1479,7 @@
     <string name="label_compress_threshold">消息数超过此值自动压缩</string>
     <string name="label_compress_keep_recent">压缩后保留的最近消息数</string>
     <string name="label_max_tokens">单轮回复最大 token</string>
+    <string name="label_max_rounds">单轮最大执行回合数（工具调用轮次）</string>
     <string name="profile_name">配置档名称</string>
     <string name="profile_set_active">启用</string>
     <string name="profile_new">新建配置档</string>

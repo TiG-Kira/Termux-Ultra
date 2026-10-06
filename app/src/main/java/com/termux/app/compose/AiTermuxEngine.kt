@@ -614,6 +614,7 @@ object SkillExecutor {
             SkillType.SEARCH_AGENT -> execSearchAgent(context, termuxService, params)
             SkillType.WEB_SEARCH -> execWebSearch(context, termuxService, params)
             SkillType.CONFIRM_DANGEROUS -> SkillExecutionResult(false, "危险操作需在 UI 中确认后执行")
+            SkillType.CONFIRM_DUPLICATE -> SkillExecutionResult(false, "重复操作确认需在 UI 中处理")
             SkillType.SCHEDULE_TASK -> execScheduleTask(context, params)
             SkillType.GET_DEVICE_STATUS -> execGetDeviceStatus(context, termuxService, params)
             SkillType.GET_CURRENT_SESSION -> execGetCurrentSession(context, termuxService)

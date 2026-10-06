@@ -1535,6 +1535,7 @@
     <string name="label_compress_threshold">Auto-compress when messages exceed</string>
     <string name="label_compress_keep_recent">Messages kept after compression</string>
     <string name="label_max_tokens">Max tokens per reply</string>
+    <string name="label_max_rounds">Max tool rounds per turn</string>
     <string name="profile_name">Profile name</string>
     <string name="profile_set_active">Use</string>
     <string name="profile_new">New profile</string>
