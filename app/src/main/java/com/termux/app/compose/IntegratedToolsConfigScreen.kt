@@ -207,51 +207,51 @@ fun IntegratedToolsConfigScreen(onBack: () -> Unit) {
                 }
             }
         }
+
+        // ---------- Termux:API usage guide ----------
+        OverlayDialog(
+            title = stringResource(R.string.termux_api_help),
+            show = showApiHelpDialog,
+            onDismissRequest = { showApiHelpDialog = false },
+            content = {
+                Box(modifier = Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
+                    HelpContentWithCopyableCommands(
+                        content = stringResource(R.string.termux_api_help_content),
+                        context = context,
+                        snackbarHostState = snackbarHostState
+                    )
+                }
+                Spacer(Modifier.height(12.dp))
+                TextButton(
+                    text = stringResource(R.string.ok),
+                    onClick = { showApiHelpDialog = false },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        )
+
+        // ---------- Termux:Boot startup guide ----------
+        OverlayDialog(
+            title = stringResource(R.string.termux_boot_help),
+            show = showBootHelpDialog,
+            onDismissRequest = { showBootHelpDialog = false },
+            content = {
+                Box(modifier = Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
+                    HelpContentWithCopyableCommands(
+                        content = stringResource(R.string.termux_boot_help_content),
+                        context = context,
+                        snackbarHostState = snackbarHostState
+                    )
+                }
+                Spacer(Modifier.height(12.dp))
+                TextButton(
+                    text = stringResource(R.string.ok),
+                    onClick = { showBootHelpDialog = false },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        )
     }
-
-    // ---------- Termux:API usage guide ----------
-    OverlayDialog(
-        title = stringResource(R.string.termux_api_help),
-        show = showApiHelpDialog,
-        onDismissRequest = { showApiHelpDialog = false },
-        content = {
-            Box(modifier = Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
-                HelpContentWithCopyableCommands(
-                    content = stringResource(R.string.termux_api_help_content),
-                    context = context,
-                    snackbarHostState = snackbarHostState
-                )
-            }
-            Spacer(Modifier.height(12.dp))
-            TextButton(
-                text = stringResource(R.string.ok),
-                onClick = { showApiHelpDialog = false },
-                modifier = Modifier.fillMaxWidth()
-            )
-        }
-    )
-
-    // ---------- Termux:Boot startup guide ----------
-    OverlayDialog(
-        title = stringResource(R.string.termux_boot_help),
-        show = showBootHelpDialog,
-        onDismissRequest = { showBootHelpDialog = false },
-        content = {
-            Box(modifier = Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
-                HelpContentWithCopyableCommands(
-                    content = stringResource(R.string.termux_boot_help_content),
-                    context = context,
-                    snackbarHostState = snackbarHostState
-                )
-            }
-            Spacer(Modifier.height(12.dp))
-            TextButton(
-                text = stringResource(R.string.ok),
-                onClick = { showBootHelpDialog = false },
-                modifier = Modifier.fillMaxWidth()
-            )
-        }
-    )
 }
 
 /**
