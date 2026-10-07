@@ -474,6 +474,30 @@
             android:exported="false"
             android:label="@string/integrated_tools_config_entry" />
 
+        <activity
+            android:name=".app.activities.ConsoleSettingsActivity"
+            android:exported="false"
+            android:label="@string/console_settings"
+            android:windowSoftInputMode="adjustResize" />
+
+        <activity
+            android:name=".app.activities.KeySettingsActivity"
+            android:exported="false"
+            android:label="@string/key_settings"
+            android:windowSoftInputMode="adjustResize" />
+
+        <activity
+            android:name=".app.activities.ConsoleLogActivity"
+            android:exported="false"
+            android:label="@string/console_log"
+            android:windowSoftInputMode="adjustResize" />
+
+        <activity
+            android:name=".app.activities.ConsolePersonalizationActivity"
+            android:exported="false"
+            android:label="@string/console_personalization"
+            android:windowSoftInputMode="adjustResize" />
+
         <service
             android:name="com.termux.app.NewTerminalTileService"
             android:exported="true"
