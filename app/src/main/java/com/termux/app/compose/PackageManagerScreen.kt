@@ -259,7 +259,7 @@ fun parsePkgDep(raw: String): PkgDep {
  * 返回 <0 / 0 / >0 分别表示 a<b / a==b / a>b。
  * 这是 apt 的通用近似实现（termux 上版本格式比较规整，足够用）。
  */
-private fun compareVersions(a: String, b: String): Int {
+fun compareVersions(a: String, b: String): Int {
     val la = a.trim().split('.', '-', '_')
     val lb = b.trim().split('.', '-', '_')
     val maxLen = maxOf(la.size, lb.size)
