@@ -818,7 +818,7 @@ fun PackageDetailScreen(
             )
 
             // 冲突卸载警告 —— 安装目标包会连带卸载已装冲突包（含完整连带列表 + 稳定性警告）
-            {
+            if (true) {
                 val allRemovePkgs = remember(detail, aptSim) {
                     computeAllWillRemove(detail ?: pkg)
                 }
