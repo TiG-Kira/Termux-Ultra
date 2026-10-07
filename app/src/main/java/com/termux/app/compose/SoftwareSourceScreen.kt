@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -39,6 +40,7 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -51,14 +53,16 @@ import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Icon
-import top.yukonga.miuix.kmp.basic.InputField
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
+import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.glass.GlassIconButton
 import top.yukonga.miuix.kmp.glass.GlassTopAppBar
+import top.yukonga.miuix.kmp.icon.glass.Add
+import top.yukonga.miuix.kmp.icon.glass.ChevronBackward
 import top.yukonga.miuix.kmp.icon.glass.MiuixGlassIcons
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.theme.MiuixTheme
@@ -229,7 +233,7 @@ private suspend fun pingSource(context: Context, url: String): Pair<Boolean, Lon
         val startTime = System.currentTimeMillis()
         val (code, _) = AppShell.exec(
             context,
-            "curl -s -o /dev/null -w '%{http_code}' --connect-timeout 5 ${AppShell.shq(url)} 2>/dev/null",
+            "curl -s -o /dev/null -w '%{http_code}' --connect-timeout 5 ${shellQuote(url)} 2>/dev/null",
             timeout = 10
         )
         val elapsed = System.currentTimeMillis() - startTime
@@ -238,6 +242,9 @@ private suspend fun pingSource(context: Context, url: String): Pair<Boolean, Lon
         Pair(false, 0)
     }
 }
+
+/** Shell 安全引用：用单引号包裹并转义内部单引号。 */
+private fun shellQuote(s: String): String = "'" + s.replace("'", "'\\''") + "'"
 
 /**
  * 构造函数，暴露给 SettingsScreen 跳转到本页。
@@ -629,29 +636,33 @@ private fun SourceEditDialog(
                     .padding(top = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                InputField(
-                    title = stringResource(R.string.pkg_source_url),
+                TextField(
+                    label = stringResource(R.string.pkg_source_url),
                     value = url,
                     onValueChange = { url = it },
-                    placeholder = stringResource(R.string.pkg_source_url_hint)
+                    modifier = Modifier.fillMaxWidth(),
+                    textStyle = TextStyle(fontSize = 14.sp, color = MiuixTheme.colorScheme.onSurface)
                 )
-                InputField(
-                    title = stringResource(R.string.pkg_source_suite),
+                TextField(
+                    label = stringResource(R.string.pkg_source_suite),
                     value = suite,
                     onValueChange = { suite = it },
-                    placeholder = stringResource(R.string.pkg_source_suite_hint)
+                    modifier = Modifier.fillMaxWidth(),
+                    textStyle = TextStyle(fontSize = 14.sp, color = MiuixTheme.colorScheme.onSurface)
                 )
-                InputField(
-                    title = stringResource(R.string.pkg_source_components),
+                TextField(
+                    label = stringResource(R.string.pkg_source_components),
                     value = components,
                     onValueChange = { components = it },
-                    placeholder = stringResource(R.string.pkg_source_components_hint)
+                    modifier = Modifier.fillMaxWidth(),
+                    textStyle = TextStyle(fontSize = 14.sp, color = MiuixTheme.colorScheme.onSurface)
                 )
-                InputField(
-                    title = stringResource(R.string.pkg_source_options),
+                TextField(
+                    label = stringResource(R.string.pkg_source_options),
                     value = options,
                     onValueChange = { options = it },
-                    placeholder = stringResource(R.string.pkg_source_options_hint)
+                    modifier = Modifier.fillMaxWidth(),
+                    textStyle = TextStyle(fontSize = 14.sp, color = MiuixTheme.colorScheme.onSurface)
                 )
 
                 Row(
