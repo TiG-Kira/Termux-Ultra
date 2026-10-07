@@ -32,7 +32,6 @@ import com.termux.app.terminal.shell.ComposeTerminalSettings
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.Scaffold
-import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.preference.SwitchPreference
 import top.yukonga.miuix.kmp.glass.GlassIconButton
 import top.yukonga.miuix.kmp.glass.GlassTopAppBar
@@ -89,9 +88,6 @@ fun KeySettingsScreen(onBack: () -> Unit) {
                     .nestedScroll(scrollBehavior.nestedScrollConnection),
                 contentPadding = standaloneContentPadding(padding, bottom = 16.dp)
             ) {
-                item(key = "section_key") {
-                    SmallTitle(text = stringResource(R.string.key_settings))
-                }
                 item(key = "card_key") {
                     SettingCard {
                         Column {

@@ -36,7 +36,6 @@ import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.Scaffold
-import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.preference.SwitchPreference
 import top.yukonga.miuix.kmp.glass.GlassIconButton
 import top.yukonga.miuix.kmp.glass.GlassTopAppBar
@@ -96,9 +95,6 @@ fun ConsoleLogScreen(onBack: () -> Unit) {
                     .nestedScroll(scrollBehavior.nestedScrollConnection),
                 contentPadding = standaloneContentPadding(padding, bottom = 16.dp)
             ) {
-                item(key = "section_log") {
-                    SmallTitle(text = stringResource(R.string.console_log))
-                }
                 item(key = "card_log") {
                     SettingCard {
                         Column {
