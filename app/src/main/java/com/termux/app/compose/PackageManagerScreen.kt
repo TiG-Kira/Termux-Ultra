@@ -504,6 +504,38 @@ object PkgRepo {
         return AptSimResult(feasible = feasible, willRemovePackages = willRemove)
     }
 
+    /**
+     * 运行 `apt-get -s remove <name>` 模拟卸载，解析 apt 计划连带移除的所有包。
+     * 用于普通卸载前提示"卸载这个包会把哪些反向依赖也卸了"。
+     */
+    suspend fun aptSimulateRemove(context: Context, name: String): AptSimResult? {
+        val cmd = "apt-get -s remove ${shq(name)} 2>&1"
+        val (code, output) = AppShell.exec(context, cmd, timeout = 30)
+        if (code != 0) { /* 卸载几乎不会返回不可解，忽略错误码 */ }
+        val trimmed = output.trim()
+        if (trimmed.isBlank()) return null
+
+        val willRemove = mutableSetOf<String>()
+        var feasible = true
+
+        for (line in trimmed.lines()) {
+            val l = line.trim()
+            when {
+                l.startsWith("Remv ") -> {
+                    val parts = l.removePrefix("Remv ").split(' ', '\t')
+                    if (parts.isNotEmpty()) willRemove.add(parts[0])
+                }
+                l.startsWith("Inst ") -> { /* 意外安装行（降级解等） */ }
+                "Unable to correct problems" in l ||
+                "has unmet dependencies" in l ||
+                l.startsWith("E: ") -> feasible = false
+            }
+        }
+        // 模拟目标包本身一定会被移除，保险起见
+        willRemove.add(name)
+        return AptSimResult(feasible = feasible, willRemovePackages = willRemove)
+    }
+
     suspend fun uninstall(context: Context, name: String, onOutput: ((String) -> Unit)? = null): Pair<Boolean, String> {
         val cmd = "export DEBIAN_FRONTEND=noninteractive && pkg uninstall -y ${shq(name)} 2>&1"
         val (code, output) = if (onOutput != null) AppShell.execStreaming(context, cmd, timeout = 60, onOutput = onOutput)
