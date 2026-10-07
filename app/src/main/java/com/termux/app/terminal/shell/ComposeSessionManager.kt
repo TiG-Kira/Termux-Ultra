@@ -181,6 +181,7 @@ class ComposeSessionManager private constructor(private val context: Context) {
             _sessions.value.getOrNull(removedIndex)
         } ?: return
         info.session.finishIfRunning()
+        TerminalSessionCompat.unregister(sessionId)
 
         synchronized(sessionsLock) {
             val remaining = _sessions.value.filter { it.session.id != sessionId }
@@ -198,7 +199,10 @@ class ComposeSessionManager private constructor(private val context: Context) {
     /** 结束所有会话。 */
     fun killAllSessions() {
         synchronized(sessionsLock) {
-            _sessions.value.forEach { it.session.finishIfRunning() }
+            _sessions.value.forEach {
+                it.session.finishIfRunning()
+                TerminalSessionCompat.unregister(it.session.id)
+            }
             _sessions.value = emptyList()
             _currentSessionId.value = -1
         }

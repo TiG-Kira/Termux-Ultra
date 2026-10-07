@@ -986,6 +986,9 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
                         error = event.message.error ?: "AgentPaw 执行出错"
                     )
                     is AgentEvent.Cancelled -> updateStream(event.message.content)
+                    is AgentEvent.AdaptivePaced -> {
+                        // 自适应节奏控制事件，无需更新消息文本
+                    }
                 }
             }
         } finally {
@@ -3088,6 +3091,7 @@ private fun AiChatScreen(vm: AiTermuxViewModel, conversationId: String, onBack: 
     // 「更多」玻璃下拉菜单：锚点与开关上提到本屏，弹层挂在根 Box（避免被顶栏裁剪 / 坐标错位）
     val moreAnchor = top.yukonga.miuix.kmp.glass.rememberGlassPopupAnchor()
     var showMoreMenu by remember { mutableStateOf(false) }
+    var showFullHistoryDialog by remember { mutableStateOf(false) }
     var showClearConfirm by remember { mutableStateOf(false) }
     val pawManual by AgentPawPrefs.manualMode.collectAsState()
     // 对话页默认滚到底（最新消息在底），内容 offset=0 但有历史可向上滚；
@@ -3493,6 +3497,7 @@ private fun AiChatScreen(vm: AiTermuxViewModel, conversationId: String, onBack: 
                 text = if (pawManual) "退出 AgentPaw 模式" else "进入 AgentPaw 模式",
                 onClick = { showMoreMenu = false; AgentPawPrefs.setManualMode(ctx, !pawManual) }
             )
+            GlassPopupItem(text = "完整对话记录", onClick = { showMoreMenu = false; showFullHistoryDialog = true })
             GlassPopupItem(text = "导出对话（分享）", onClick = { showMoreMenu = false; vm.exportConversation(ctx) })
             GlassPopupItem(text = "清空对话历史", onClick = { showMoreMenu = false; showClearConfirm = true })
         }
@@ -3517,6 +3522,12 @@ private fun AiChatScreen(vm: AiTermuxViewModel, conversationId: String, onBack: 
                     )
                 }
             }
+        )
+        AgentFullHistoryDialog(
+            show = showFullHistoryDialog,
+            onDismiss = { showFullHistoryDialog = false },
+            context = ctx,
+            initialConversationId = conversationId
         )
     }
 
@@ -4995,9 +5006,9 @@ private fun SkillCard(msgId: String, card: SkillCardData, errorMsg: String?, vm:
 
                         SkillType.CONFIRM_DUPLICATE -> {
                             Column(modifier = Modifier.padding(12.dp)) {
-                                card.description?.let { desc ->
+                                if (card.description.isNotBlank()) {
                                     Text(
-                                        text = desc,
+                                        text = card.description,
                                         style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Medium, color = MiuixTheme.colorScheme.onSurface),
                                         modifier = Modifier.padding(bottom = 10.dp)
                                     )

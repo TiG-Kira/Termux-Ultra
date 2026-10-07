@@ -101,26 +101,24 @@ fun AiTermuxModelGenScreen(onBack: () -> Unit) {
                 item(key = "card_model_params") {
                     SettingCard {
                         Column {
-                            if (isLocalMode) {
-                                val onlineCfg = AiTermuxPrefs.getConfig(context).providerConfig
-                                ArrowPreference(
-                                    title = stringResource(R.string.agent_online_config),
-                                    summary = if (onlineCfg.apiKey.isBlank()) {
-                                        stringResource(R.string.api_key_empty)
-                                    } else {
-                                        stringResource(
-                                            R.string.model_url_key,
-                                            onlineCfg.model.ifBlank { stringResource(R.string.not_set) },
-                                            onlineCfg.apiBaseUrl.ifBlank { stringResource(R.string.not_set) },
-                                            "********"
-                                        )
-                                    },
-                                    onClick = { showOnlineConfigEditor = true },
-                                    startAction = {
-                                        SettingIcon(Icons.Rounded.Cloud, stringResource(R.string.agent_online_config))
-                                    }
-                                )
-                            }
+                            val onlineCfg = AiTermuxPrefs.getConfig(context).providerConfig
+                            ArrowPreference(
+                                title = stringResource(R.string.agent_online_config),
+                                summary = if (onlineCfg.apiKey.isBlank()) {
+                                    stringResource(R.string.api_key_empty)
+                                } else {
+                                    stringResource(
+                                        R.string.model_url_key,
+                                        onlineCfg.model.ifBlank { stringResource(R.string.not_set) },
+                                        onlineCfg.apiBaseUrl.ifBlank { stringResource(R.string.not_set) },
+                                        "********"
+                                    )
+                                },
+                                onClick = { showOnlineConfigEditor = true },
+                                startAction = {
+                                    SettingIcon(Icons.Rounded.Cloud, stringResource(R.string.agent_online_config))
+                                }
+                            )
 
                             ArrowPreference(
                                 title = stringResource(R.string.agent_profiles),
