@@ -139,8 +139,10 @@ fun PackageDetailScreen(
     // 预加载依赖/冲突包详情 + 已安装包名 + 已安装版本
     var installedNames by remember { mutableStateOf<Set<String>>(emptySet()) }
     var installedVersions by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
-    // apt 模拟安装结果（判断冲突能否被自动卸载等）
+    // apt 模拟安装结果（判断冲突能否被自动移除等）
     var aptSim by remember { mutableStateOf<PkgRepo.AptSimResult?>(null) }
+    // apt 模拟卸载结果（判断卸载这个包会连带卸哪些反向依赖）
+    var aptSimRemove by remember { mutableStateOf<PkgRepo.AptSimResult?>(null) }
     // 解析后的依赖条目：key=原始字符串, value=解析结果(纯包名+版本限制)
     var depParsed by remember { mutableStateOf<Map<String, PkgDep>>(emptyMap()) }
     var confParsed by remember { mutableStateOf<Map<String, PkgDep>>(emptyMap()) }
@@ -195,6 +197,10 @@ fun PackageDetailScreen(
 
         // apt 模拟安装 —— 用于准确判断冲突能否被自动移除
         aptSim = PkgRepo.aptSimulateInstall(context, pkg.name)
+        // apt 模拟卸载 —— 用于判断卸载当前包的连带影响（仅在已安装时运行）
+        if (d.isInstalled) {
+            aptSimRemove = PkgRepo.aptSimulateRemove(context, pkg.name)
+        }
 
         isLoading = false
     }
@@ -733,7 +739,24 @@ fun PackageDetailScreen(
             OverlayDialog(
                 show = showUninstallConfirm,
                 title = "确认卸载",
-                summary = "确定要卸载 ${pkg.name} 吗？此操作不可撤销。",
+                summary = run {
+                    val self = pkg.name
+                    val allRemove = aptSimRemove?.willRemovePackages.orEmpty()
+                        .filter { it in installedNames }
+                    val cascade = allRemove.filter { it != self }
+                    buildString {
+                        append("确定要卸载 ").append(self).append(" 吗？")
+                        if (cascade.isNotEmpty()) {
+                            append("\n\n卸载 ").append(self)
+                            append(" 将连带卸载以下依赖它的反向依赖包（共 ").append(cascade.size).append(" 个）：\n")
+                            cascade.forEach { append("  • ").append(it).append('\n') }
+                            append('\n')
+                            append("这极可能影响 Termux 环境的稳定性，请慎重决断！")
+                        } else {
+                            append("\n\n此操作不可撤销。")
+                        }
+                    }
+                },
                 onDismissRequest = { showUninstallConfirm = false },
                 content = {
                     Row(
@@ -753,7 +776,7 @@ fun PackageDetailScreen(
                             modifier = Modifier.weight(1f),
                             colors = ButtonDefaults.buttonColors(color = DangerRed)
                         ) {
-                            Text("确认卸载", color = Color.White, fontWeight = FontWeight.Medium)
+                            Text("卸载", color = Color.White, fontWeight = FontWeight.Medium)
                         }
                     }
                 }
