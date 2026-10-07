@@ -145,7 +145,7 @@ jobs:
           echo "skipped=false" >> "$GITHUB_OUTPUT"
           echo "✅ 已提交并推送 ${SHA}（VersionCode ${OLD_VERSION_CODE} → ${NEW_VERSION_CODE}, VersionName → ${TAG}）"
 
-      # ── 3. 发布 Release（无产物，详情取自上一版 What's Changed）──────
+      # ── 3. 发布 Release（无产物，详情基于 OLD_TAG..NEW_SHA 区间）──────
       - name: 发布 Release（无产物）
         run: |
           set -euo pipefail
@@ -153,23 +153,50 @@ jobs:
           SHA="${{ steps.bump.outputs.sha }}"
 
           # 防重：tag 已存在则中止
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "::error::Release/Tag $TAG 已存在，中止发布"
+          if git rev-parse --verify "refs/tags/$TAG" >/dev/null 2>&1; then
+            echo "::error::Tag $TAG 已存在，中止发布"
             exit 1
           fi
 
-          # 提取「上一个 Release」的 What's Changed 作为本版说明
-          PREV_BODY=$(gh release view --json body -q .body 2>/dev/null || true)
-          NOTES=$(printf '%s\n' "$PREV_BODY" | awk '
-            /^##+[[:space:]]*What.s Changed/ { cap=1; print; next }
-            /^##+[[:space:]]/ { if (cap) cap=0; next }
-            cap { print }
-          ')
-          if [ -z "$NOTES" ]; then
-            # 上一版没有 What.s Changed 段落时，回退为整段正文
-            NOTES="$PREV_BODY"
+          # ── 找到上一个已发布 Release 的 tag 作为 diff 起点 ──
+          # gh release list 按时间倒序，取第 1 个；若仓库尚无 release 则 OLD_TAG 为空，
+          # 回退为 git log --all 截取，保证首次发布也有可用的 changelog。
+          OLD_TAG=$(gh release list --limit 1 --json tagName -r .[].tagName 2>/dev/null || true)
+          if [ -n "$OLD_TAG" ]; then
+            echo "✅ 上一个 Release tag: $OLD_TAG  →  新 tag: $TAG"
+            RANGE="$OLD_TAG"
+          else
+            echo "⚠️  仓库尚无任何 Release，使用 git log --all 作为 changelog 来源"
+            RANGE=""
           fi
-          printf '%s\n' "$NOTES" > "$RUNNER_TEMP/notes.md"
+
+          # ── 生成 What's Changed 段落 ──
+          # 格式：每行 "- <subject> (@<author_login>) <short_sha>"
+          #   * --no-merges 排除合并提交（噪声）
+          #   * --reverse 按时间正序（新的在下，和 GitHub 原生 release 一致）
+          #   * date 作为副标题
+          {
+            echo "## What's Changed"
+            echo ""
+            if [ -n "$RANGE" ]; then
+              COUNT=$(git log "$RANGE".."$SHA" --no-merges --pretty=format:%H | wc -l | tr -d ' ')
+              echo "*从 $OLD_TAG 到 $TAG 共 $COUNT 个提交*"
+              echo ""
+              git log "$RANGE".."$SHA" --no-merges --reverse \
+                --pretty=format:'- %s (@%an) %h' || true
+            else
+              COUNT=$(git log --all --no-merges --pretty=format:%H | wc -l | tr -d ' ')
+              echo "*首次发布，从仓库初始状态到 $TAG 共 $COUNT 个提交*"
+              echo ""
+              git log --all --no-merges --reverse \
+                --pretty=format:'- %s (@%an) %h' | head -200 || true
+            fi
+            echo ""
+            echo ""
+            echo "_由 release_tag.yml 自动生成于 $(date -u '+%Y-%m-%dT%H:%M:%SZ')_"
+          } > "$RUNNER_TEMP/notes.md"
+
+          echo "📝 changelog 已写入 $(wc -l < "$RUNNER_TEMP/notes.md") 行"
 
           # 发布：不附带任何产物；随后由本工作流显式 dispatch release_apk.yml 接管 APK 上传
           gh release create "$TAG" \
