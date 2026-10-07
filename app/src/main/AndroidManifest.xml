@@ -505,6 +505,12 @@
             android:windowSoftInputMode="adjustResize" />
 
         <activity
+            android:name=".app.activities.SoftwareSourceActivity"
+            android:exported="false"
+            android:label="@string/pkg_sources_title"
+            android:windowSoftInputMode="adjustResize" />
+
+        <activity
             android:name=".app.activities.ConsoleLogActivity"
             android:exported="false"
             android:label="@string/console_log"
