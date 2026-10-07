@@ -70,6 +70,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CheckCircleOutline
 import androidx.compose.material.icons.rounded.ErrorOutline
+import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.ui.draw.alpha
 import com.termux.R
 import top.yukonga.miuix.kmp.theme.MiuixTheme
@@ -319,7 +320,7 @@ fun PackageDetailScreen(
         return false
     }
 
-    /** 能被 apt 自动移除的冲突包列表（供 UI 提示"将卸载"用） */
+    /** 能被 apt 自动移除的直接冲突包列表（供 UI 提示"将卸载"用） */
     fun computeWillUninstallConflicts(target: PackageInfo): List<String> {
         return target.conflicts.mapNotNull { confRaw ->
             val parsed = confParsed[confRaw] ?: return@mapNotNull null
@@ -327,6 +328,17 @@ fun PackageDetailScreen(
             if (pure !in installedNames) return@mapNotNull null
             if (canConflictBeAutoRemoved(pure)) pure else null
         }
+    }
+
+    /**
+     * apt 计划移除的**完整**包列表——包含直接冲突包及其所有被连带卸载的依赖/反向依赖包。
+     * 用于确认对话框展示全部风险。
+     */
+    fun computeAllWillRemove(target: PackageInfo): List<String> {
+        val sim = aptSim ?: return emptyList()
+        if (!sim.feasible) return emptyList()
+        // 只保留当前已安装的（理论上 willRemovePackages 里的本来就是已装的，保险起见过滤）
+        return sim.willRemovePackages.filter { it in installedNames }.toList()
     }
 
     fun computeCanInstall(target: PackageInfo): Boolean {
@@ -428,11 +440,13 @@ fun PackageDetailScreen(
                     if (!d.isInstalled) {
                         item {
                             val hardBlock = computeHardBlock(d)
-                            val willRemove = computeWillUninstallConflicts(d)
+                            val willRemoveAll = computeAllWillRemove(d)
+                            val directConflicts = computeWillUninstallConflicts(d)
                             PackageInstallStatusCard(
                                 pkgName = d.name,
                                 hardBlock = hardBlock,
-                                willRemoveConflicts = willRemove
+                                willRemoveConflicts = willRemoveAll,
+                                directConflictCount = directConflicts.size
                             )
                         }
                     }
@@ -673,8 +687,8 @@ fun PackageDetailScreen(
                 val d = detail ?: pkg
                 val canInstall = computeCanInstall(d)
                 val hardBlock = computeHardBlock(d)
-                val willRemove = computeWillUninstallConflicts(d)
-                val needsConflictConfirm = willRemove.isNotEmpty()
+                val willRemoveAll = computeAllWillRemove(d)
+                val needsConflictConfirm = willRemoveAll.isNotEmpty()
                 Box(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
@@ -745,47 +759,93 @@ fun PackageDetailScreen(
                 }
             )
 
-            // 冲突卸载警告 —— 安装目标包会连带卸载已装冲突包
+            // 冲突卸载警告 —— 安装目标包会连带卸载已装冲突包（含完整连带列表 + 稳定性警告）
             {
-                val conflictPkgs = remember(detail) {
+                val allRemovePkgs = remember(detail, aptSim) {
+                    computeAllWillRemove(detail ?: pkg)
+                }
+                val directConflictPkgs = remember(detail) {
                     computeWillUninstallConflicts(detail ?: pkg)
                 }
-                OverlayDialog(
-                    show = showConflictConfirm && conflictPkgs.isNotEmpty(),
-                    title = "将卸载冲突项",
-                    summary = buildString {
-                        append("安装 ${pkg.name} 将连带卸载以下已安装的冲突包：
-")
-                        append(conflictPkgs.joinToString("
-") { "• $it" })
-                        append("
+                val cascadePkgs = allRemovePkgs.filter { it !in directConflictPkgs }
 
-此操作不可撤销，请确认是否继续。")
-                    },
-                    onDismissRequest = { showConflictConfirm = false },
-                    content = {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            TextButton(
-                                text = stringResource(R.string.cancel),
-                                onClick = { showConflictConfirm = false },
-                                modifier = Modifier.weight(1f)
-                            )
-                            Button(
-                                onClick = {
-                                    showConflictConfirm = false
-                                    startOperation(isInstall = true)
-                                },
-                                modifier = Modifier.weight(1f),
-                                colors = ButtonDefaults.buttonColors(color = DangerRed)
-                            ) {
-                                Text("确认安装", color = Color.White, fontWeight = FontWeight.Medium)
+                if (allRemovePkgs.isNotEmpty()) {
+                    OverlayDialog(
+                        show = showConflictConfirm,
+                        title = "⚠ 严重警告：将卸载多个软件包",
+                        summary = buildString {
+                            append("安装 ").append(pkg.name)
+                            append(" 将强制卸载以下已安装的软件包，")
+                            append("此操作不可撤销且极可能破坏 Termux 环境的稳定性！\n\n")
+
+                            if (directConflictPkgs.isNotEmpty()) {
+                                append("【直接冲突包】")
+                                append("（${pkg.name} 明确声明与之冲突，apt 将自动移除）：\n")
+                                directConflictPkgs.forEach { append("  • ").append(it).append('\n') }
+                                append('\n')
+                            }
+
+                            if (cascadePkgs.isNotEmpty()) {
+                                append("【连带卸载包】")
+                                append("（因依赖上述冲突包而被一并移除，共 ").append(cascadePkgs.size).append(" 个）：\n")
+                                cascadePkgs.forEach { append("  • ").append(it).append('\n') }
+                                append('\n')
+                            }
+
+                            append("━━━━━━━━━━━━━━━━━━━━━━\n")
+                            append("总计将卸载 ").append(allRemovePkgs.size).append(" 个包。\n\n")
+                            append("⚠ 卸载这些包可能导致：\n")
+                            append("  • 命令、工具链、服务无法使用\n")
+                            append("  • 已安装应用功能缺失或崩溃\n")
+                            append("  • Termux 环境无法正常启动\n")
+                            append("  • 需要重新安装大量依赖包才能恢复\n\n")
+                            append("请务必仔细核对上述列表，慎重决断后再考虑继续！")
+                        },
+                        onDismissRequest = { showConflictConfirm = false },
+                        content = {
+                            Column {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(
+                                            color = if (isDark) Color(0xFF3B1414) else Color(0xFFFFEBEE),
+                                            shape = RoundedCornerShape(8.dp)
+                                        )
+                                        .padding(12.dp)
+                                ) {
+                                    Text(
+                                        text = "建议先取消安装，在终端中执行 pkg install ${pkg.name} 仔细审阅 apt 的输出，确认无误后再操作。",
+                                        fontSize = 13.sp,
+                                        color = DangerRed,
+                                        fontWeight = FontWeight.Medium,
+                                        lineHeight = 18.sp
+                                    )
+                                }
+                                Spacer(Modifier.height(12.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    TextButton(
+                                        text = stringResource(R.string.cancel),
+                                        onClick = { showConflictConfirm = false },
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    Button(
+                                        onClick = {
+                                            showConflictConfirm = false
+                                            startOperation(isInstall = true)
+                                        },
+                                        modifier = Modifier.weight(1f),
+                                        colors = ButtonDefaults.buttonColors(color = DangerRed)
+                                    ) {
+                                        Text("确认安装（风险自负）", color = Color.White, fontWeight = FontWeight.Medium)
+                                    }
+                                }
                             }
                         }
-                    }
-                )
+                    )
+                }
             }
 
             OverlayDialog(
@@ -927,11 +987,14 @@ fun PackageDetailScreen(
 private fun PackageInstallStatusCard(
     pkgName: String,
     hardBlock: Boolean,
-    willRemoveConflicts: List<String>
+    willRemoveConflicts: List<String>,
+    directConflictCount: Int
 ) {
     val isDark = isSystemInDarkTheme()
     val textColor = if (isDark) Color.White else Color.Black
     val needsConflictWarn = willRemoveConflicts.isNotEmpty() && !hardBlock
+    val totalRemove = willRemoveConflicts.size
+    val cascadeCount = (totalRemove - directConflictCount).coerceAtLeast(0)
     val (cardColor, iconColor, icon) = when {
         hardBlock -> Triple(
             if (isDark) Color(0xFF3B1414) else Color(0xFFFFEBEE),
@@ -951,16 +1014,28 @@ private fun PackageInstallStatusCard(
     }
     val title = when {
         hardBlock -> "暂时无法安装"
-        needsConflictWarn -> "将卸载冲突项后安装"
+        needsConflictWarn -> "将卸载 $totalRemove 个包后安装"
         else -> "已准备好安装"
     }
     val desc = when {
         hardBlock -> "$pkgName 有依赖或冲突项无法满足，请检查"
         needsConflictWarn -> buildString {
             append(pkgName)
-            append(" 可以进行安装，但相关冲突项将会被卸载：")
-            append(willRemoveConflicts.joinToString("、"))
-            append("，请慎重考虑")
+            append(" 可安装，但 apt 将移除 ")
+            append(totalRemove)
+            append(" 个包")
+            if (directConflictCount > 0) {
+                append("（直接冲突 ")
+                append(directConflictCount)
+                append(" 个")
+                if (cascadeCount > 0) {
+                    append(" + 连带卸载 ")
+                    append(cascadeCount)
+                    append(" 个")
+                }
+                append("）")
+            }
+            append("，极可能影响 Termux 稳定性，点击安装按钮前请仔细审阅")
         }
         else -> "点击安装按钮开始安装$pkgName，如有需要的依赖也将一并安装"
     }
