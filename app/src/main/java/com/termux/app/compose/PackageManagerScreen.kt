@@ -216,6 +216,44 @@ data class PackageInfo(
     fun resolveSection(): String = section.ifBlank { SectionClassifier.classify(name) }
 }
 
+/**
+ * 解析 apt 依赖/冲突条目字符串，分离纯包名和版本限制。
+ *
+ * apt 版本限制格式: 包名 (操作符 版本号)
+ * 操作符: << (早于), < (早于或等于), = (等于), >= (晚于或等于), >> (晚于)
+ *
+ * 示例:
+ *   "ruby-2 (= 2.7.6-1)" -> PkgDep(name="ruby-2", versionConstraint="= 2.7.6-1")
+ *   "python (>= 10.1.0)" -> PkgDep(name="python", versionConstraint=">= 10.1.0")
+ *   "zlib1g"             -> PkgDep(name="zlib1g", versionConstraint=null)
+ */
+data class PkgDep(
+    val name: String,
+    val versionConstraint: String?
+)
+
+private val depVersionRegex = Regex("^([a-zA-Z0-9][a-zA-Z0-9+._-]*)\\s*(?:\\((<<|<=|=|>=|>>)\\s+([^)]+)\\))?\\s*$")
+
+fun parsePkgDep(raw: String): PkgDep {
+    val trimmed = raw.trim()
+    val match = depVersionRegex.find(trimmed)
+    return if (match != null) {
+        val name = match.groupValues[1]
+        val op = match.groupValues[2]
+        val ver = match.groupValues[3]
+        val constraint = if (op.isNotEmpty() && ver.isNotEmpty()) "$op $ver" else null
+        PkgDep(name = name, versionConstraint = constraint)
+    } else {
+        // 无法解析时退化为去掉括号内容
+        val parenIdx = trimmed.indexOf('(')
+        if (parenIdx > 0) {
+            PkgDep(name = trimmed.substring(0, parenIdx).trim(), versionConstraint = null)
+        } else {
+            PkgDep(name = trimmed, versionConstraint = null)
+        }
+    }
+}
+
 object PkgRepo {
 
     /**
