@@ -151,6 +151,14 @@
 
 
     <string name="terminal">Terminal</string>
+    <string name="console_settings">Console Settings</string>
+    <string name="console_settings_desc">Font size, cursor, text blink, scrollback</string>
+    <string name="key_settings">Key Settings</string>
+    <string name="key_settings_desc">Soft keyboard, hardware keyboard, custom layout</string>
+    <string name="console_log">Console Log</string>
+    <string name="console_log_desc">Key logging, log level</string>
+    <string name="console_personalization">Console Personalization</string>
+    <string name="console_personalization_desc">Auto-start, editor tools, welcome text</string>
     <string name="vnc">VNC</string>
     <string name="remote">Remote</string>
     <string name="vnc_description">Enable VNC remote desktop</string>

@@ -145,6 +145,14 @@
 
 
     <string name="terminal">终端</string>
+    <string name="console_settings">控制台设置</string>
+    <string name="console_settings_desc">字体大小、光标、文本闪烁、滚动缓冲区</string>
+    <string name="key_settings">按键设置</string>
+    <string name="key_settings_desc">软键盘、物理键盘、自定义按键布局</string>
+    <string name="console_log">控制台日志</string>
+    <string name="console_log_desc">终端按键日志、日志级别</string>
+    <string name="console_personalization">控制台个性化</string>
+    <string name="console_personalization_desc">自动启动控制台、编辑器工具、欢迎文本</string>
     <string name="vnc">VNC</string>
     <string name="remote">远程</string>
 

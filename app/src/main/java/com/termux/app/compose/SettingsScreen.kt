@@ -74,8 +74,6 @@ import com.termux.app.compose.LocalTopBarClearance
 import com.termux.app.compose.AiLocalModel
 import com.termux.app.compose.SkillType
 import com.termux.app.utils.SnackbarHelper
-import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences
-import com.termux.shared.logger.Logger
 import com.google.android.material.snackbar.Snackbar
 import java.io.File
 
@@ -219,22 +217,8 @@ fun SettingsScreen(
 
 
 
-    // Terminal settings（通用项：日志级别等还被 Logger 消费）
-    val terminalPrefs = remember { TermuxAppSharedPreferences.build(context) }
-    var logLevel by remember { mutableStateOf(terminalPrefs?.logLevel ?: Logger.DEFAULT_LOG_LEVEL) }
-
-    // Terminal settings - Kotlin+Compose mode（订阅 ComposeTerminalSettings StateFlow，
-    // 单一事实来源：写入经 setter 持久化到 SP，显示实时同步，重进设置页不回退）
-    com.termux.app.terminal.shell.ComposeTerminalSettings.init(context)
-    val composeFontSize by com.termux.app.terminal.shell.ComposeTerminalSettings.fontSize.collectAsState()
-    val composeCursorBlink by com.termux.app.terminal.shell.ComposeTerminalSettings.cursorBlink.collectAsState()
-    val composeScrollbackLines by com.termux.app.terminal.shell.ComposeTerminalSettings.scrollbackLines.collectAsState()
-val composeCursorStyleName by com.termux.app.terminal.shell.ComposeTerminalSettings.cursorStyleName.collectAsState()
-val composeTextBlinking by com.termux.app.terminal.shell.ComposeTerminalSettings.textBlinking.collectAsState()
-val composeSoftKeyboard by com.termux.app.terminal.shell.ComposeTerminalSettings.softKeyboard.collectAsState()
-val composeSoftKeyboardOnlyIfNoHardware by com.termux.app.terminal.shell.ComposeTerminalSettings.softKeyboardOnlyIfNoHardware.collectAsState()
-val composeKeyLogging by com.termux.app.terminal.shell.ComposeTerminalSettings.keyLogging.collectAsState()
-val composeUseCustomKeyboardLayout by com.termux.app.terminal.shell.ComposeTerminalSettings.useCustomKeyboardLayout.collectAsState()
+    // 终端相关设置已拆分到独立子页面（控制台设置 / 按键设置 / 控制台日志 / 控制台个性化），
+    // 各自在对应 Activity 中完成 ComposeTerminalSettings 等初始化，设置主页不再内联这些项。
 
     // Material You 动态取色：与上面终端设置同一套路（偏好即 StateFlow）
     AppThemePrefs.init(context)
@@ -692,127 +676,44 @@ val composeUseCustomKeyboardLayout by com.termux.app.terminal.shell.ComposeTermi
             }),
 
         // ===== Terminal =====
-
-        SearchableSetting(sec_terminal, context.getString(R.string.pref_auto_start_console_title),
-            context.getString(R.string.pref_auto_start_console_summary),
-            keywords = listOf("自动", "启动", "控制台", "console", "auto", "launch", "startup", "session"),
+        SearchableSetting(sec_terminal, context.getString(R.string.console_settings), context.getString(R.string.console_settings_desc),
+            keywords = listOf("控制台", "字体", "光标", "闪烁", "滚动", "缓冲区", "console", "font", "cursor", "blink", "scrollback"),
             render = {
-                SwitchPreference(
-                    title = context.getString(R.string.pref_auto_start_console_title),
-                    summary = context.getString(R.string.pref_auto_start_console_summary),
-                    checked = autoStartConsoleEnabled,
-                    onCheckedChange = { LaunchPrefs.setAutoStartConsole(context, it) },
-                    startAction = { SettingIcon(Icons.Rounded.PlayArrow, contentDescription = context.getString(R.string.pref_auto_start_console_title)) }
+                ArrowPreference(
+                    title = context.getString(R.string.console_settings),
+                    summary = context.getString(R.string.console_settings_desc),
+                    onClick = { openConsoleSettings(context) },
+                    startAction = { SettingIcon(Icons.Rounded.Tune) }
                 )
             }),
-        SearchableSetting(sec_terminal, context.getString(R.string.log_level), context.getString(R.string.log_level_desc),
-            keywords = listOf("日志", "log", "调试", "debug", "verbose"),
+        SearchableSetting(sec_terminal, context.getString(R.string.key_settings), context.getString(R.string.key_settings_desc),
+            keywords = listOf("按键", "键盘", "软键盘", "物理键盘", "自定义布局", "key", "keyboard", "layout"),
             render = {
-                OverlayDropdownPreference(
-                    title = context.getString(R.string.log_level),
-                    summary = context.getString(R.string.log_level_desc),
-                    items = listOf(context.getString(R.string.off), context.getString(R.string.normal), context.getString(R.string.debug), context.getString(R.string.verbose)),
-                    selectedIndex = logLevel.coerceIn(0, 3),
-                    onSelectedIndexChange = { idx -> logLevel = idx; terminalPrefs?.setLogLevel(context, idx) },
+                ArrowPreference(
+                    title = context.getString(R.string.key_settings),
+                    summary = context.getString(R.string.key_settings_desc),
+                    onClick = { openKeySettings(context) },
+                    startAction = { SettingIcon(Icons.Rounded.Keyboard) }
+                )
+            }),
+        SearchableSetting(sec_terminal, context.getString(R.string.console_log), context.getString(R.string.console_log_desc),
+            keywords = listOf("日志", "按键日志", "日志级别", "log", "debug", "verbose", "key logging"),
+            render = {
+                ArrowPreference(
+                    title = context.getString(R.string.console_log),
+                    summary = context.getString(R.string.console_log_desc),
+                    onClick = { openConsoleLog(context) },
                     startAction = { SettingIcon(Icons.Rounded.BugReport) }
                 )
             }),
-        SearchableSetting(sec_terminal, context.getString(R.string.font_size), context.getString(R.string.font_size_desc),
-            keywords = listOf("字体", "font", "字号", "大小"),
+        SearchableSetting(sec_terminal, context.getString(R.string.console_personalization), context.getString(R.string.console_personalization_desc),
+            keywords = listOf("个性化", "自动启动", "编辑器", "欢迎文本", "motd", "personalization", "auto-start", "editor", "welcome"),
             render = {
-                OverlayDropdownPreference(
-                    title = context.getString(R.string.font_size),
-                    summary = context.getString(R.string.font_size_desc),
-                    items = listOf("10sp", "12sp", "14sp", "16sp", "18sp", "20sp", "24sp"),
-                    selectedIndex = listOf(10, 12, 14, 16, 18, 20, 24).indexOf(composeFontSize).coerceAtLeast(0),
-                    onSelectedIndexChange = { idx ->
-                        com.termux.app.terminal.shell.ComposeTerminalSettings.setFontSize(listOf(10, 12, 14, 16, 18, 20, 24)[idx])
-                    },
-                    startAction = { SettingIcon(Icons.Rounded.FormatSize) }
-                )
-            }),
-        SearchableSetting(sec_terminal, context.getString(R.string.cursor_style), context.getString(R.string.cursor_style_desc),
-            keywords = listOf("光标", "cursor", "闪烁", "blink"),
-            render = {
-                OverlayDropdownPreference(
-                    title = context.getString(R.string.cursor_style),
-                    summary = context.getString(R.string.cursor_style_desc),
-                    items = listOf("Bar I", "Underline ▁", "Block ■"),
-                    selectedIndex = listOf("BAR", "UNDERLINE", "BLOCK").indexOf(composeCursorStyleName).coerceAtLeast(0),
-                    onSelectedIndexChange = { idx ->
-                        com.termux.app.terminal.shell.ComposeTerminalSettings.setCursorStyle(
-                            com.awkoo.libterminal.engine.TerminalCursorStyle.valueOf(listOf("BAR", "UNDERLINE", "BLOCK")[idx])
-                        )
-                    },
-                    startAction = { SettingIcon(Icons.Rounded.Terminal) }
-                )
-            }),
-        SearchableSetting(sec_terminal, stringResource(R.string.editor_tools), "",
-            keywords = listOf("编辑器", "editor", "vim", "文本编辑"),
-            render = {
-                var editorToolIndex by remember { mutableStateOf(prefs.getString("editor_tool", "internal")?.let { if (it == "vim") 1 else 0 } ?: 0) }
-                OverlayDropdownPreference(
-                    title = stringResource(R.string.editor_tools),
-                    summary = if (editorToolIndex == 0) "内置文本编辑器" else "Vim (终端中)",
-                    items = listOf("内置", "Vim"),
-                    selectedIndex = editorToolIndex,
-                    onSelectedIndexChange = { idx ->
-                        editorToolIndex = idx
-                        prefs.edit().putString("editor_tool", if (idx == 0) "internal" else "vim").apply()
-                    },
-                    startAction = { SettingIcon(Icons.Rounded.Edit) }
-                )
-            }),
-        SearchableSetting(sec_terminal, context.getString(R.string.enable_softkeyboard), "",
-            keywords = listOf("软键盘", "键盘", "keyboard", "输入法"),
-            render = {
-                SwitchPreference(
-                    title = context.getString(R.string.enable_softkeyboard),
-                    summary = if (composeSoftKeyboard) context.getString(R.string.enabled) else context.getString(R.string.disabled),
-                    checked = composeSoftKeyboard,
-                    onCheckedChange = {
-                        com.termux.app.terminal.shell.ComposeTerminalSettings.setSoftKeyboard(it)
-                    },
-                    startAction = { SettingIcon(Icons.Rounded.Keyboard) }
-                )
-            }),
-        SearchableSetting(sec_terminal, context.getString(R.string.enable_soft_keyboard_no_hw), context.getString(R.string.soft_keyboard_only_if_no_hardware_desc),
-            keywords = listOf("物理键盘", "硬件键盘", "hardware keyboard"),
-            render = {
-                SwitchPreference(
-                    title = context.getString(R.string.enable_soft_keyboard_no_hw),
-                    summary = context.getString(R.string.soft_keyboard_only_if_no_hardware_desc),
-                    checked = composeSoftKeyboardOnlyIfNoHardware,
-                    onCheckedChange = {
-                        com.termux.app.terminal.shell.ComposeTerminalSettings.setSoftKeyboardOnlyIfNoHardware(it)
-                    },
-                    startAction = { SettingIcon(painterResource(R.drawable.ic_keyboard_disabled)) }
-                )
-            }),
-        SearchableSetting(sec_terminal, context.getString(R.string.terminal_key_logging), context.getString(R.string.terminal_key_logging_desc),
-            keywords = listOf("按键", "日志", "key logging", "debug"),
-            render = {
-                SwitchPreference(
-                    title = context.getString(R.string.terminal_key_logging),
-                    summary = context.getString(R.string.terminal_key_logging_desc),
-                    checked = composeKeyLogging,
-                    onCheckedChange = {
-                        com.termux.app.terminal.shell.ComposeTerminalSettings.setKeyLogging(it)
-                    },
-                    startAction = { SettingIcon(Icons.Rounded.DeveloperMode) }
-                )
-            }),
-        SearchableSetting(sec_terminal, context.getString(R.string.use_custom_keyboard_layout), context.getString(R.string.use_custom_keyboard_layout_desc),
-            keywords = listOf("键盘", "布局", "自定义", "keyboard layout", "custom"),
-            render = {
-                SwitchPreference(
-                    title = context.getString(R.string.use_custom_keyboard_layout),
-                    summary = context.getString(R.string.use_custom_keyboard_layout_desc),
-                    checked = composeUseCustomKeyboardLayout,
-                    onCheckedChange = {
-                        com.termux.app.terminal.shell.ComposeTerminalSettings.setUseCustomKeyboardLayout(it)
-                    },
-                    startAction = { SettingIcon(Icons.Rounded.Keyboard) }
+                ArrowPreference(
+                    title = context.getString(R.string.console_personalization),
+                    summary = context.getString(R.string.console_personalization_desc),
+                    onClick = { openConsolePersonalization(context) },
+                    startAction = { SettingIcon(Icons.Rounded.Palette) }
                 )
             }),
 
@@ -1287,214 +1188,40 @@ val composeUseCustomKeyboardLayout by com.termux.app.terminal.shell.ComposeTermi
 
             // ---------- 终端 ----------
             item(key = "section_terminal") { SmallTitle(text = context.getString(R.string.terminal)) }
-            item(key = "card_terminal_runtime") {
-                val prefs = context.getSharedPreferences("termux_preferences", android.content.Context.MODE_PRIVATE)
-                var showStartupCmdDialog by remember { mutableStateOf(false) }
-                var startupCmdText by remember { mutableStateOf(prefs.getString("auto_start_command", "") ?: "") }
-                val defaultWelcome = remember {
-                    try {
-                        java.io.File("/data/data/com.termux/files/usr/etc/motd").takeIf { it.exists() }?.readText()
-                            ?: "Welcome to Termux!"
-                    } catch (_: Exception) { "Welcome to Termux!" }
-                }
-                val isComposeMode = true
-                            Card(
+            item(key = "card_terminal_modules") {
+                Card(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp, vertical = 8.dp)
                         .clip(RoundedCornerShape(16.dp))
                 ) {
                     Column {
-
-                        // ===== 终端设置 =====
-                        SwitchPreference(
-                            title = context.getString(R.string.pref_auto_start_console_title),
-                            summary = context.getString(R.string.pref_auto_start_console_summary),
-                            checked = autoStartConsoleEnabled,
-                            onCheckedChange = { LaunchPrefs.setAutoStartConsole(context, it) },
-                            startAction = { SettingIcon(Icons.Rounded.PlayArrow) }
+                        ArrowPreference(
+                            title = context.getString(R.string.console_settings),
+                            summary = context.getString(R.string.console_settings_desc),
+                            onClick = { openConsoleSettings(context) },
+                            startAction = { SettingIcon(Icons.Rounded.Tune) }
                         )
-                        if (isComposeMode) {
-                                OverlayDropdownPreference(
-                                title = context.getString(R.string.font_size),
-                                summary = context.getString(R.string.font_size_desc),
-                                items = listOf("10sp", "12sp", "14sp", "16sp", "18sp", "20sp", "24sp"),
-                                selectedIndex = listOf(10, 12, 14, 16, 18, 20, 24).indexOf(composeFontSize).coerceAtLeast(0),
-                                onSelectedIndexChange = { idx ->
-                                    com.termux.app.terminal.shell.ComposeTerminalSettings.setFontSize(
-                                        listOf(10, 12, 14, 16, 18, 20, 24)[idx]
-                                    )
-                                },
-                                startAction = { SettingIcon(Icons.Rounded.FormatSize) }
-                            )
-                            SwitchPreference(
-                                title = context.getString(R.string.cursor_blink),
-                                summary = if (composeCursorBlink) context.getString(R.string.enabled) else context.getString(R.string.disabled),
-                                checked = composeCursorBlink,
-                                onCheckedChange = {
-                                    com.termux.app.terminal.shell.ComposeTerminalSettings.setCursorBlink(it)
-                                },
-                                startAction = { SettingIcon(Icons.Rounded.Terminal) }
-                            )
-                            OverlayDropdownPreference(
-                                title = context.getString(R.string.cursor_style),
-                                summary = context.getString(R.string.cursor_style_desc),
-                                items = listOf("Bar I", "Underline ▁", "Block ■"),
-                                selectedIndex = listOf("BAR", "UNDERLINE", "BLOCK").indexOf(composeCursorStyleName).coerceAtLeast(0),
-                                onSelectedIndexChange = { idx ->
-                                    com.termux.app.terminal.shell.ComposeTerminalSettings.setCursorStyle(
-                                        com.awkoo.libterminal.engine.TerminalCursorStyle.valueOf(
-                                            listOf("BAR", "UNDERLINE", "BLOCK")[idx]
-                                        )
-                                    )
-                                },
-                                startAction = { SettingIcon(Icons.Rounded.Terminal) }
-                            )
-                            SwitchPreference(
-                                title = context.getString(R.string.text_blinking),
-                                summary = context.getString(R.string.text_blinking_desc),
-                                checked = composeTextBlinking,
-                                onCheckedChange = {
-                                    com.termux.app.terminal.shell.ComposeTerminalSettings.setTextBlinking(it)
-                                },
-                                startAction = { SettingIcon(Icons.Rounded.Terminal) }
-                            )
-                            OverlayDropdownPreference(
-                                title = context.getString(R.string.scrollback_buffer),
-                                summary = context.getString(R.string.scrollback_desc),
-                                items = listOf(context.getString(R.string.lines_1000), context.getString(R.string.lines_5000), context.getString(R.string.lines_10000), context.getString(R.string.lines_50000)),
-                                selectedIndex = listOf(1000, 5000, 10000, 50000).indexOf(composeScrollbackLines).coerceAtLeast(0),
-                                onSelectedIndexChange = { idx ->
-                                    com.termux.app.terminal.shell.ComposeTerminalSettings.setScrollbackLines(
-                                        listOf(1000, 5000, 10000, 50000)[idx]
-                                    )
-                                },
-                                startAction = { SettingIcon(Icons.Rounded.ScreenRotation) }
-                            )
-                            // 经典引擎终端设置项（PR168 迁移 libterminal 时移除，现接入 Nova 引擎）
-                            SwitchPreference(
-                                title = context.getString(R.string.enable_softkeyboard),
-                                summary = if (composeSoftKeyboard) context.getString(R.string.enabled) else context.getString(R.string.disabled),
-                                checked = composeSoftKeyboard,
-                                onCheckedChange = {
-                                    com.termux.app.terminal.shell.ComposeTerminalSettings.setSoftKeyboard(it)
-                                },
-                                startAction = { SettingIcon(Icons.Rounded.Keyboard) }
-                            )
-                            SwitchPreference(
-                                title = context.getString(R.string.enable_soft_keyboard_no_hw),
-                                summary = context.getString(R.string.soft_keyboard_only_if_no_hardware_desc),
-                                checked = composeSoftKeyboardOnlyIfNoHardware,
-                                onCheckedChange = {
-                                    com.termux.app.terminal.shell.ComposeTerminalSettings.setSoftKeyboardOnlyIfNoHardware(it)
-                                },
-                                startAction = { SettingIcon(painterResource(R.drawable.ic_keyboard_disabled)) }
-                            )
-                            SwitchPreference(
-                                title = context.getString(R.string.terminal_key_logging),
-                                summary = context.getString(R.string.terminal_key_logging_desc),
-                                checked = composeKeyLogging,
-                                onCheckedChange = {
-                                    com.termux.app.terminal.shell.ComposeTerminalSettings.setKeyLogging(it)
-                                },
-                                startAction = { SettingIcon(Icons.Rounded.DeveloperMode) }
-                            )
-                            SwitchPreference(
-                                title = context.getString(R.string.use_custom_keyboard_layout),
-                                summary = context.getString(R.string.use_custom_keyboard_layout_desc),
-                                checked = composeUseCustomKeyboardLayout,
-                                onCheckedChange = {
-                                    com.termux.app.terminal.shell.ComposeTerminalSettings.setUseCustomKeyboardLayout(it)
-                                },
-                                startAction = { SettingIcon(Icons.Rounded.Keyboard) }
-                            )
-                            OverlayDropdownPreference(
-                                title = context.getString(R.string.log_level),
-                                summary = context.getString(R.string.log_level_desc),
-                                items = listOf(context.getString(R.string.off), context.getString(R.string.normal), context.getString(R.string.debug), context.getString(R.string.verbose)),
-                                selectedIndex = logLevel.coerceIn(0, 3),
-                                onSelectedIndexChange = { idx -> logLevel = idx; terminalPrefs?.setLogLevel(context, idx) },
-                                startAction = { SettingIcon(Icons.Rounded.BugReport) }
-                            )
-                        }
-
-                            // ===== 通用设置 =====
-                            var editorToolIndex by remember { mutableStateOf(prefs.getString("editor_tool", "internal")?.let { if (it == "vim") 1 else 0 } ?: 0) }
-                            OverlayDropdownPreference(
-                                title = stringResource(R.string.editor_tools),
-                                summary = if (editorToolIndex == 0) "内置文本编辑器" else "Vim (终端中)",
-                                items = listOf("内置", "Vim"),
-                                selectedIndex = editorToolIndex,
-                                onSelectedIndexChange = { idx ->
-                                    editorToolIndex = idx
-                                    prefs.edit().putString("editor_tool", if (idx == 0) "internal" else "vim").apply()
-                                },
-                                startAction = { SettingIcon(Icons.Rounded.Edit) }
-                            )
-                            ArrowPreference(
-                                title = stringResource(R.string.auto_execute_new_session),
-                                summary = if (startupCmdText.isBlank()) "设置每次启动新会话自动运行的指令" else "已设置：${startupCmdText.take(40)}${if (startupCmdText.length > 40) "..." else ""}",
-                                onClick = { showStartupCmdDialog = true },
-                                startAction = { SettingIcon(Icons.Rounded.Terminal) }
-                            )
-                            ArrowPreference(
-                                title = stringResource(R.string.edit_welcome_motd),
-                                summary = "直接编辑 /data/data/com.termux/files/usr/etc/motd",
-                                onClick = {
-                                    val tool = prefs.getString("editor_tool", "internal") ?: "internal"
-                                    if (tool == "vim") {
-                                        // 在终端中用 vim 打开
-                                        val intent = Intent(Intent.ACTION_SEND)
-                                        intent.setPackage(context.packageName)
-                                        intent.putExtra("command_path", "/data/data/com.termux/files/usr/etc/motd")
-                                        intent.putExtra("command", "vim /data/data/com.termux/files/usr/etc/motd")
-                                        intent.putExtra("session_name", "motd")
-                                        context.startActivity(intent)
-                                    } else {
-                                        val intent = android.content.Intent(context, com.termux.app.activities.TextEditorActivity::class.java)
-                                        intent.putExtra("file_path", "/data/data/com.termux/files/usr/etc/motd")
-                                        context.startActivity(intent)
-                                    }
-                                },
-                                startAction = { SettingIcon(Icons.Rounded.FormatSize) }
-                            )
-                        }
-                    }
-                // ===== 弹窗（和 Card 平级，都在 item 块内）=====
-                        OverlayDialog(
-                    show = showStartupCmdDialog,
-                    onDismissRequest = { showStartupCmdDialog = false },
-                    title = stringResource(R.string.auto_execute_new_session),
-                    summary = "设置每次启动新会话自动运行的指令",
-                    content = {
-                                TextField(
-                            value = startupCmdText,
-                            onValueChange = { startupCmdText = it },
-                            label = stringResource(R.string.common_auto_execute),
-                            modifier = Modifier.fillMaxWidth()
+                        ArrowPreference(
+                            title = context.getString(R.string.key_settings),
+                            summary = context.getString(R.string.key_settings_desc),
+                            onClick = { openKeySettings(context) },
+                            startAction = { SettingIcon(Icons.Rounded.Keyboard) }
                         )
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            top.yukonga.miuix.kmp.basic.TextButton(
-                                text = stringResource(R.string.cancel),
-                                onClick = { showStartupCmdDialog = false },
-                                modifier = Modifier.weight(1f)
-                            )
-                            top.yukonga.miuix.kmp.basic.TextButton(
-                                text = stringResource(R.string.save),
-                                onClick = {
-                                    prefs.edit().putString("auto_start_command", startupCmdText).apply()
-                                    showStartupCmdDialog = false
-                                },
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
+                        ArrowPreference(
+                            title = context.getString(R.string.console_log),
+                            summary = context.getString(R.string.console_log_desc),
+                            onClick = { openConsoleLog(context) },
+                            startAction = { SettingIcon(Icons.Rounded.BugReport) }
+                        )
+                        ArrowPreference(
+                            title = context.getString(R.string.console_personalization),
+                            summary = context.getString(R.string.console_personalization_desc),
+                            onClick = { openConsolePersonalization(context) },
+                            startAction = { SettingIcon(Icons.Rounded.Palette) }
+                        )
                     }
-                )
-
+                }
             }
 
 
