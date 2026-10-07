@@ -696,11 +696,20 @@ object AiTermuxPrefs {
         // ---------- Chat History ----------
     fun getChatHistory(context: Context): List<OpenAiMessage> {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val raw = prefs.getString(KEY_CHAT_HISTORY, null) ?: return emptyList()
-        return try {
-            val arr = Gson().fromJson(raw, Array<OpenAiMessage>::class.java)
-            arr.toList()
-        } catch (_: Throwable) { emptyList() }
+        val raw = prefs.getString(KEY_CHAT_HISTORY, null)
+        if (raw != null) {
+            val list = try {
+                val arr = Gson().fromJson(raw, Array<OpenAiMessage>::class.java)
+                arr.toList()
+            } catch (_: Throwable) { emptyList() }
+            if (list.isNotEmpty()) return list
+        }
+        val convs = getConversations(context)
+        val activeId = getActiveConversationId(context)
+        val active = convs.firstOrNull { it.id == activeId }
+            ?: convs.firstOrNull { it.id == DEFAULT_CONVERSATION_ID }
+            ?: convs.firstOrNull()
+        return active?.messages?.toOpenAiMessages() ?: emptyList()
     }
 
     fun saveChatHistory(context: Context, history: List<OpenAiMessage>) {

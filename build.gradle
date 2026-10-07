@@ -14,7 +14,6 @@ allprojects {
         google()
         mavenCentral()
         maven { url "https://jitpack.io" }
-        maven { url "https://maven.fanmiu.com/nexus/repository/maven-public/" }
         maven { url "https://maven.pkg.github.com/compose-miuix-ui/miuix" }
         // AgentPaw 合作项目包源（GitHub Packages 即便公开包也强制 token 认证）。
         // token 解析顺序：环境变量 GITHUB_PACKAGES_TOKEN / GITHUB_TOKEN →

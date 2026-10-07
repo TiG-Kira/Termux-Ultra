@@ -3,29 +3,28 @@ package com.termux.app.terminal.shell
 import com.awkoo.libterminal.engine.TerminalSession
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import java.util.Collections
-import java.util.WeakHashMap
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * 新版 TerminalSession 兼容层：为上游 v3.1.1 移除的 pid / pidState / sessionExited / shellPid
  * 提供扩展属性桥接，维持 app 层 Java 版 pid 语义（0=未初始化, >0=运行中, -1=已结束）。
  *
  * 注册表由 ComposeSessionManager 在 createSession 时初始化并在会话生命周期内维护。
- * 使用 WeakHashMap 避免会话被移除后遗留内存。
+ * 使用 ConcurrentHashMap 确保线程安全与会话状态持久，并在会话销毁时通过 unregister 显式注销。
  */
 object TerminalSessionCompat {
 
     /** sessionId -> 真实 pid 映射。未启动进程时无 key，进程结束后若会话从列表移除则自动回收。 */
-    private val pidRegistry = Collections.synchronizedMap(WeakHashMap<Int, Int>())
+    private val pidRegistry = ConcurrentHashMap<Int, Int>()
 
     /** sessionId -> pidState (MutableStateFlow<Int>)。Java 版 pid 语义：0=未初始化, >0=运行中, -1=已结束。 */
-    private val pidStateRegistry = Collections.synchronizedMap(WeakHashMap<Int, MutableStateFlow<Int>>())
+    private val pidStateRegistry = ConcurrentHashMap<Int, MutableStateFlow<Int>>()
 
     /** sessionId -> sessionExited (MutableStateFlow<Boolean>)。进程结束瞬间置 true。 */
-    private val exitedRegistry = Collections.synchronizedMap(WeakHashMap<Int, MutableStateFlow<Boolean>>())
+    private val exitedRegistry = ConcurrentHashMap<Int, MutableStateFlow<Boolean>>()
 
     /** sessionId -> 最近执行的命令（MutableStateFlow<String>），由 PTY 写入侧记录器回填。 */
-    private val lastCommandRegistry = Collections.synchronizedMap(WeakHashMap<Int, MutableStateFlow<String>>())
+    private val lastCommandRegistry = ConcurrentHashMap<Int, MutableStateFlow<String>>()
 
     fun registerSession(sessionId: Int) {
         pidStateRegistry[sessionId] = MutableStateFlow(0)

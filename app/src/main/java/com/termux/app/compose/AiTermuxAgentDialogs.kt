@@ -24,12 +24,19 @@ import com.google.android.material.snackbar.Snackbar
 import com.termux.app.activities.AiTermuxActivity
 import com.termux.app.utils.SnackbarHelper
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
+import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.preference.CheckboxPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.ui.res.stringResource
+import android.content.ClipboardManager
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 /**
  * 信任白名单选择对话框（自包含）。
@@ -330,6 +337,401 @@ internal fun AgentFallbackLlmDialog(show: Boolean, onDismiss: () -> Unit, contex
                     modifier = Modifier.weight(1f),
                     colors = ButtonDefaults.textButtonColorsPrimary()
                 )
+            }
+        }
+    )
+}
+
+/**
+ * 完整对话记录对话框（自包含）。
+ *
+ * 支持多会话切换、查看 System Prompt、每条消息的详情（角色、内容、技能调用卡片、深度思考、报错）、
+ * 单条消息复制、全局格式化导出复制与系统分享。
+ */
+@Composable
+internal fun AgentFullHistoryDialog(
+    show: Boolean,
+    onDismiss: () -> Unit,
+    context: Context,
+    initialConversationId: String? = null
+) {
+    val clipboard = remember {
+        context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+    }
+    val conversations = remember(show) { AiTermuxPrefs.getConversations(context) }
+    val activeId = remember(show, initialConversationId) {
+        initialConversationId ?: AiTermuxPrefs.getActiveConversationId(context)
+    }
+    var selectedConvId by remember(show, activeId) {
+        mutableStateOf(
+            if (conversations.any { it.id == activeId }) activeId!!
+            else conversations.firstOrNull()?.id ?: DEFAULT_CONVERSATION_ID
+        )
+    }
+
+    val selectedConv = conversations.firstOrNull { it.id == selectedConvId } ?: conversations.firstOrNull()
+    val messages = selectedConv?.messages ?: emptyList()
+    val fullSystemPrompt = remember(show) { AiTermuxPrefs.buildFullSystemPrompt(context) }
+
+    OverlayDialog(
+        title = stringResource(R.string.full_chat_history),
+        summary = stringResource(R.string.chat_history_full_desc),
+        show = show,
+        onDismissRequest = onDismiss,
+        content = {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                // 多会话切换标签栏
+                if (conversations.size > 1) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState())
+                            .padding(bottom = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        conversations.forEach { conv ->
+                            val isSelected = conv.id == selectedConvId
+                            val count = conv.messages.size
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .background(
+                                        if (isSelected) MiuixTheme.colorScheme.primary
+                                        else MiuixTheme.colorScheme.surfaceContainer
+                                    )
+                                    .clickable { selectedConvId = conv.id }
+                                    .padding(horizontal = 12.dp, vertical = 6.dp)
+                            ) {
+                                Text(
+                                    text = "${conv.title} ($count)",
+                                    fontSize = 12.sp,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                    color = if (isSelected) MiuixTheme.colorScheme.onPrimary
+                                            else MiuixTheme.colorScheme.onSurface
+                                )
+                            }
+                        }
+                    }
+                }
+
+                if (messages.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(130.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = stringResource(R.string.no_chat_history),
+                                fontSize = 14.sp,
+                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                            )
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                text = "当前会话暂无聊天记录",
+                                fontSize = 12.sp,
+                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.7f)
+                            )
+                        }
+                    }
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .heightIn(max = 420.dp)
+                            .verticalScroll(rememberScrollState())
+                    ) {
+                        Column {
+                            // 会话信息卡片
+                            val dateFormat = remember { SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()) }
+                            val timeStr = selectedConv?.let { dateFormat.format(Date(it.updatedAt)) } ?: ""
+                            Text(
+                                text = "会话：${selectedConv?.title ?: "默认"} · ${messages.size} 条消息 · $timeStr",
+                                fontSize = 12.sp,
+                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                modifier = Modifier.padding(bottom = 6.dp)
+                            )
+
+                            // System Prompt 卡片
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp)
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp)) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = "System Prompt",
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MiuixTheme.colorScheme.primary
+                                        )
+                                        Text(
+                                            text = stringResource(R.string.copy),
+                                            fontSize = 11.sp,
+                                            color = MiuixTheme.colorScheme.primary,
+                                            modifier = Modifier
+                                                .clickable {
+                                                    clipboard.setPrimaryClip(
+                                                        android.content.ClipData.newPlainText("System Prompt", fullSystemPrompt)
+                                                    )
+                                                    SnackbarHelper.show(context, "System Prompt 已复制", Snackbar.LENGTH_SHORT)
+                                                }
+                                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                                        )
+                                    }
+                                    Spacer(Modifier.height(4.dp))
+                                    Text(
+                                        text = fullSystemPrompt,
+                                        fontSize = 11.sp,
+                                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                        lineHeight = 16.sp,
+                                        maxLines = 25
+                                    )
+                                }
+                            }
+
+                            // 消息列表
+                            val msgTimeFormat = remember { SimpleDateFormat("HH:mm:ss", Locale.getDefault()) }
+                            messages.forEachIndexed { index, msg ->
+                                Card(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 4.dp)
+                                ) {
+                                    Column(modifier = Modifier.padding(12.dp)) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = when (msg.role) {
+                                                    "user" -> stringResource(R.string.tab_user)
+                                                    "assistant" -> "🤖 AI"
+                                                    "system" -> stringResource(R.string.tab_system)
+                                                    else -> msg.role
+                                                },
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = when (msg.role) {
+                                                    "user" -> MiuixTheme.colorScheme.primary
+                                                    "assistant" -> MiuixTheme.colorScheme.onSurface
+                                                    else -> MiuixTheme.colorScheme.onSurfaceVariantSummary
+                                                }
+                                            )
+                                            Text(
+                                                text = "#${index + 1}  ${msgTimeFormat.format(Date(msg.timestamp))}",
+                                                fontSize = 10.sp,
+                                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.6f)
+                                            )
+                                        }
+
+                                        // 深度思考折叠/展开内容展示
+                                        if (!msg.reasoningContent.isNullOrBlank()) {
+                                            Spacer(Modifier.height(4.dp))
+                                            Box(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .clip(RoundedCornerShape(8.dp))
+                                                    .background(MiuixTheme.colorScheme.surfaceContainerHigh)
+                                                    .padding(8.dp)
+                                            ) {
+                                                Column {
+                                                    Text(
+                                                        text = "💡 思考过程：",
+                                                        fontSize = 11.sp,
+                                                        fontWeight = FontWeight.SemiBold,
+                                                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                                                    )
+                                                    Text(
+                                                        text = msg.reasoningContent,
+                                                        fontSize = 11.sp,
+                                                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                                        lineHeight = 15.sp,
+                                                        maxLines = 15
+                                                    )
+                                                }
+                                            }
+                                        }
+
+                                        Spacer(Modifier.height(4.dp))
+                                        val mainContent = when {
+                                            msg.content.isNotBlank() -> msg.content
+                                            msg.skillCard != null -> "⚙ [${msg.skillCard.skillType.name}] ${msg.skillCard.title}"
+                                            else -> stringResource(R.string.empty)
+                                        }
+                                        Text(
+                                            text = mainContent,
+                                            fontSize = 13.sp,
+                                            color = MiuixTheme.colorScheme.onSurface,
+                                            lineHeight = 18.sp,
+                                            maxLines = 50
+                                        )
+
+                                        // 技能调用详细卡片
+                                        if (msg.skillCard != null) {
+                                            Spacer(Modifier.height(4.dp))
+                                            Box(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .clip(RoundedCornerShape(6.dp))
+                                                    .background(MiuixTheme.colorScheme.surfaceContainer)
+                                                    .padding(6.dp)
+                                            ) {
+                                                Column {
+                                                    Text(
+                                                        text = "技能: ${msg.skillCard.title.ifBlank { msg.skillCard.skillType.name }} (${msg.skillCard.status})",
+                                                        fontSize = 11.sp,
+                                                        fontWeight = FontWeight.Medium,
+                                                        color = MiuixTheme.colorScheme.primary
+                                                    )
+                                                    if (!msg.skillCard.command.isNullOrBlank()) {
+                                                        Text(
+                                                            text = "$ ${msg.skillCard.command}",
+                                                            fontSize = 10.sp,
+                                                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                                            maxLines = 4
+                                                        )
+                                                    }
+                                                    if (!msg.skillCard.output.isNullOrBlank()) {
+                                                        Text(
+                                                            text = msg.skillCard.output,
+                                                            fontSize = 10.sp,
+                                                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.8f),
+                                                            maxLines = 6
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        // 错误信息
+                                        if (!msg.errorMessage.isNullOrBlank()) {
+                                            Spacer(Modifier.height(4.dp))
+                                            Text(
+                                                text = "⚠️ ${msg.errorMessage}",
+                                                fontSize = 11.sp,
+                                                color = Color(0xFFE53935)
+                                            )
+                                        }
+
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(top = 4.dp),
+                                            horizontalArrangement = Arrangement.End
+                                        ) {
+                                            Text(
+                                                text = stringResource(R.string.copy),
+                                                fontSize = 11.sp,
+                                                color = MiuixTheme.colorScheme.primary,
+                                                modifier = Modifier
+                                                    .clickable {
+                                                        val clipText = buildString {
+                                                            if (!msg.reasoningContent.isNullOrBlank()) {
+                                                                appendLine("【思考过程】")
+                                                                appendLine(msg.reasoningContent)
+                                                                appendLine()
+                                                            }
+                                                            append(mainContent)
+                                                            if (msg.skillCard != null && !msg.skillCard.command.isNullOrBlank()) {
+                                                                appendLine("\n命令: ${msg.skillCard.command}")
+                                                            }
+                                                        }
+                                                        clipboard.setPrimaryClip(
+                                                            android.content.ClipData.newPlainText(
+                                                                context.getString(R.string.messages), clipText
+                                                            )
+                                                        )
+                                                        SnackbarHelper.show(context, "已复制该条消息", Snackbar.LENGTH_SHORT)
+                                                    }
+                                                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(12.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    val buildExportText = {
+                        buildString {
+                            appendLine("# Termux Agent 对话记录")
+                            appendLine("会话：${selectedConv?.title ?: "默认"}")
+                            appendLine("时间：${SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())}")
+                            appendLine()
+                            appendLine("=== System Prompt ===")
+                            appendLine(fullSystemPrompt)
+                            appendLine()
+                            appendLine("=== 对话记录 (${messages.size} 条) ===")
+                            messages.forEachIndexed { i, msg ->
+                                val roleLabel = when (msg.role) {
+                                    "user" -> "用户"
+                                    "assistant" -> "AI"
+                                    "system" -> "系统"
+                                    else -> msg.role
+                                }
+                                appendLine("[$roleLabel] (#${i + 1})")
+                                if (!msg.reasoningContent.isNullOrBlank()) {
+                                    appendLine("> 思考: ${msg.reasoningContent.replace("\n", "\n> ")}")
+                                }
+                                val body = msg.content.ifBlank { msg.skillCard?.title.orEmpty() }
+                                appendLine(body)
+                                if (msg.skillCard != null && !msg.skillCard.command.isNullOrBlank()) {
+                                    appendLine("`$ ${msg.skillCard.command}`")
+                                }
+                                if (!msg.errorMessage.isNullOrBlank()) {
+                                    appendLine("⚠️ 错误: ${msg.errorMessage}")
+                                }
+                                appendLine()
+                            }
+                        }
+                    }
+
+                    TextButton(
+                        text = stringResource(R.string.copy_all),
+                        onClick = {
+                            val allContent = buildExportText()
+                            clipboard.setPrimaryClip(
+                                android.content.ClipData.newPlainText(
+                                    context.getString(R.string.full_chat_history), allContent
+                                )
+                            )
+                            SnackbarHelper.show(context, "完整对话记录已复制到剪贴板", Snackbar.LENGTH_SHORT)
+                        },
+                        modifier = Modifier.weight(1f)
+                    )
+                    TextButton(
+                        text = "分享",
+                        onClick = {
+                            val allContent = buildExportText()
+                            val intent = Intent(Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(Intent.EXTRA_TEXT, allContent)
+                                putExtra(Intent.EXTRA_TITLE, "Termux Agent 完整对话记录")
+                            }
+                            context.startActivity(Intent.createChooser(intent, "分享完整对话记录"))
+                        },
+                        modifier = Modifier.weight(1f)
+                    )
+                    TextButton(
+                        text = stringResource(R.string.off),
+                        onClick = onDismiss,
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.textButtonColorsPrimary()
+                    )
+                }
             }
         }
     )
