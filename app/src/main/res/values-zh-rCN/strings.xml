@@ -1534,7 +1534,7 @@
     <string name="agentpaw_settings_title">AgentPaw 设置</string>
     <string name="agentpaw_auto_switch_title">自动切换到 AgentPaw</string>
     <string name="agentpaw_auto_switch_desc">对话中识别到需要操控手机的任务时临时交给 AgentPaw，完成后自动切回</string>
-    <string name="agentpaw_perm_category">手机控制与系统权限</string>
+    <string name="agentpaw_perm_category">系统权限</string>
     <string name="agentpaw_accessibility_title">无障碍服务</string>
     <string name="agentpaw_accessibility_desc">执行界面点击、滑动、截屏的基础通道</string>
     <string name="agentpaw_accessibility_on">已开启</string>
@@ -1562,7 +1562,12 @@
     <string name="agentpaw_system_prompt_category">系统提示词</string>
     <string name="agentpaw_system_prompt_label">留空使用 AgentPaw 内置提示词</string>
     <string name="agentpaw_system_prompt_desc">每次请求都会作为系统级指令发给模型，可用于约束操作风格、语言或禁止某些动作；留空则使用内置提示词，修改后从下一次会话开始生效。</string>
-    <string name="agentpaw_vision_category">手机控制与视觉策略</string>
+    <string name="agentpaw_vision_category">视觉策略</string>
+    <string name="agentpaw_generation_page_title">生成参数</string>
+    <string name="agentpaw_control_page_title">手机控制与权限</string>
+    <string name="agentpaw_generation_nav_summary">采样参数与系统提示词</string>
+    <string name="agentpaw_control_nav_summary">执行策略、视觉与系统权限</string>
+    <string name="agentpaw_exec_category">执行策略</string>
     <string name="agentpaw_max_tool_rounds_label">最大执行步数（工具调用轮数）</string>
     <string name="agentpaw_max_tool_rounds_desc">一次任务最多执行多少轮界面操作与工具调用。取值 1–50，默认 15：达到上限后 Agent 会收尾并汇报结果，可避免陷入无效循环。</string>
     <string name="agentpaw_unlimited_tool_rounds_title">无限执行步数</string>
