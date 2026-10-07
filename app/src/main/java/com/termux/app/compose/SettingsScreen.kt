@@ -60,6 +60,7 @@ import top.yukonga.miuix.kmp.preference.OverlayDropdownPreference
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.preference.WindowSpinnerPreference
 import top.yukonga.miuix.kmp.basic.DropdownItem
+import top.yukonga.miuix.kmp.basic.HorizontalDivider
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import com.termux.R
 import androidx.compose.material.icons.Icons
@@ -520,6 +521,7 @@ fun SettingsScreen(
 
     // ===== 搜索索引：所有可搜索设置项（独立 Card 展示 + 保留交互）=====
     val sec_appearance = context.getString(R.string.appearance)
+    val sec_pkg_mgmt = context.getString(R.string.pkg_mgmt_category)
     val sec_remote = context.getString(R.string.remote)
     val sec_terminal = context.getString(R.string.terminal)
     val sec_tools = context.getString(R.string.integrated_tools_category)
@@ -643,7 +645,7 @@ fun SettingsScreen(
                     startAction = { SettingIcon(Icons.Rounded.SwapHoriz, contentDescription = context.getString(R.string.horizontal_tip_layout)) }
                 )
             }),
-        SearchableSetting(sec_appearance, context.getString(R.string.pkg_view_mode), context.getString(R.string.pkg_view_mode_desc),
+        SearchableSetting(sec_pkg_mgmt, context.getString(R.string.pkg_view_mode), context.getString(R.string.pkg_view_mode_desc),
             keywords = listOf("软件包", "包管理", "package", "分类", "列表", "view mode"),
             render = {
                 OverlayDropdownPreference(
@@ -653,6 +655,16 @@ fun SettingsScreen(
                     selectedIndex = pkgViewModeIndex,
                     onSelectedIndexChange = { idx -> pkgViewModeIndex = idx; prefs.edit().putInt("KEY_PKG_VIEW_MODE", idx).apply() },
                     startAction = { SettingIcon(Icons.Rounded.Folder, contentDescription = context.getString(R.string.pkg_view_mode)) }
+                )
+            }),
+        SearchableSetting(sec_pkg_mgmt, context.getString(R.string.pkg_edit_sources), context.getString(R.string.pkg_edit_sources_desc),
+            keywords = listOf("软件源", "源", "source", "mirror", "apt", "repository"),
+            render = {
+                ArrowPreference(
+                    title = context.getString(R.string.pkg_edit_sources),
+                    summary = context.getString(R.string.pkg_edit_sources_desc),
+                    onClick = { openSoftwareSourceSettings(context) },
+                    startAction = { SettingIcon(Icons.Rounded.Dns, contentDescription = context.getString(R.string.pkg_edit_sources)) }
                 )
             }),
 
@@ -1120,7 +1132,21 @@ fun SettingsScreen(
                                 SettingIcon(Icons.Rounded.SwapHoriz, contentDescription = context.getString(R.string.horizontal_tip_layout))
                             }
                         )
-                            OverlayDropdownPreference(
+                    }
+                }
+            }
+
+            // ---------- Package Manager ----------
+            item(key = "section_pkg_mgmt") { SmallTitle(text = context.getString(R.string.pkg_mgmt_category)) }
+            item(key = "card_pkg_mgmt") {
+                                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                ) {
+                    Column {
+                        OverlayDropdownPreference(
                             title = context.getString(R.string.pkg_view_mode),
                             summary = context.getString(R.string.pkg_view_mode_desc),
                             items = listOf(
@@ -1134,6 +1160,18 @@ fun SettingsScreen(
                             },
                             startAction = {
                                 SettingIcon(Icons.Rounded.Folder, contentDescription = context.getString(R.string.pkg_view_mode))
+                            }
+                        )
+                        HorizontalDivider(
+                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f),
+                            modifier = Modifier.padding(start = 72.dp, end = 16.dp)
+                        )
+                        ArrowPreference(
+                            title = context.getString(R.string.pkg_edit_sources),
+                            summary = context.getString(R.string.pkg_edit_sources_desc),
+                            onClick = { openSoftwareSourceSettings(context) },
+                            startAction = {
+                                SettingIcon(Icons.Rounded.Dns, contentDescription = context.getString(R.string.pkg_edit_sources))
                             }
                         )
                     }
