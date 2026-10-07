@@ -280,6 +280,25 @@ fun PackageDetailScreen(
         return conflictPkg in sim.willRemovePackages
     }
 
+    /** 从 PkgDep 中取出版本操作符（>= / <= / = / >> / <<）。没约束或格式异常返回 null */
+    fun constraintBeforeOp(parsed: PkgDep): String? {
+        val c = parsed.versionConstraint ?: return null
+        val trimmed = c.trim()
+        return when {
+            trimmed.startsWith(">= ") -> ">="
+            trimmed.startsWith("<= ") -> "<="
+            trimmed.startsWith(">> ") -> ">>"
+            trimmed.startsWith("<< ") -> "<<"
+            trimmed.startsWith("= ") -> "="
+            trimmed.startsWith(">=") -> ">="
+            trimmed.startsWith("<=") -> "<="
+            trimmed.startsWith(">>") -> ">>"
+            trimmed.startsWith("<<") -> "<<"
+            trimmed.startsWith("=") -> "="
+            else -> null
+        }
+    }
+
     /**
      * 硬阻塞判定（任一为 true 则无法安装）：
      * 1) 源内找不到的依赖包（不可能装）
@@ -350,25 +369,6 @@ fun PackageDetailScreen(
 
     fun computeCanInstall(target: PackageInfo): Boolean {
         return !computeHardBlock(target)
-    }
-
-    /** 从 PkgDep 中取出版本操作符（>= / <= / = / >> / <<）。没约束或格式异常返回 null */
-    fun constraintBeforeOp(parsed: PkgDep): String? {
-        val c = parsed.versionConstraint ?: return null
-        val trimmed = c.trim()
-        return when {
-            trimmed.startsWith(">= ") -> ">="
-            trimmed.startsWith("<= ") -> "<="
-            trimmed.startsWith(">> ") -> ">>"
-            trimmed.startsWith("<< ") -> "<<"
-            trimmed.startsWith("= ") -> "="
-            trimmed.startsWith(">=") -> ">="
-            trimmed.startsWith("<=") -> "<="
-            trimmed.startsWith(">>") -> ">>"
-            trimmed.startsWith("<<") -> "<<"
-            trimmed.startsWith("=") -> "="
-            else -> null
-        }
     }
 
     Scaffold(
