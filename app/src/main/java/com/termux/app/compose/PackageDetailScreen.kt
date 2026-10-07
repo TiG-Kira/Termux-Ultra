@@ -82,11 +82,13 @@ private val SuccessGreen = Color(0xFF16A34A)
 private enum class DepStatus(val text: String, val color: Color) {
     INSTALLED("已安装", SuccessGreen),
     WILL_INSTALL("将安装", AccentBlue),
+    WILL_UPGRADE("将升级", AccentBlue),
     NOT_SATISFIED("不满足", DangerRed)
 }
 
 private enum class ConfStatus(val text: String, val color: Color) {
     SATISFIED("已满足", SuccessGreen),
+    WILL_UNINSTALL("将卸载", Color(0xFFFF9800)),
     NOT_SATISFIED("不满足", DangerRed)
 }
 
@@ -126,14 +128,16 @@ fun PackageDetailScreen(
     var isLoading by remember { mutableStateOf(true) }
     var showLockDialog by remember { mutableStateOf(false) }
     var showUninstallConfirm by remember { mutableStateOf(false) }
+    var showConflictConfirm by remember { mutableStateOf(false) }
     var showProgressDialog by remember { mutableStateOf(false) }
     var progressTitle by remember { mutableStateOf("") }
     var progressLog by remember { mutableStateOf("") }
     var progressSuccess by remember { mutableStateOf<Boolean?>(null) }
     var pendingAction by remember { mutableStateOf<(() -> Unit)?>(null) }
 
-    // 预加载依赖/冲突包详情 + 已安装包名
+    // 预加载依赖/冲突包详情 + 已安装包名 + 已安装版本
     var installedNames by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var installedVersions by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     // 解析后的依赖条目：key=原始字符串, value=解析结果(纯包名+版本限制)
     var depParsed by remember { mutableStateOf<Map<String, PkgDep>>(emptyMap()) }
     var confParsed by remember { mutableStateOf<Map<String, PkgDep>>(emptyMap()) }
@@ -170,8 +174,9 @@ fun PackageDetailScreen(
         detail = d
 
         // 并行加载已安装包名和依赖/冲突详情
-        val installed = PkgRepo.getInstalled(context).map { it.name }.toSet()
-        installedNames = installed
+        val installed = PkgRepo.getInstalled(context)
+        installedNames = installed.map { it.name }.toSet()
+        installedVersions = installed.associate { it.name to it.version }
 
         // 先解析所有依赖/冲突条目
         depParsed = d.depends.associate { raw -> raw to parsePkgDep(raw) }
@@ -252,15 +257,23 @@ fun PackageDetailScreen(
         }
     }
 
-    fun computeCanInstall(target: PackageInfo): Boolean {
-        // 依赖项：源内不存在（depDetails 为 null）才视为无法满足；源内存在将随安装一并装好
-        // depDetails 的 key 是原始依赖字符串，value 用解析后的纯包名搜索获得
-        val hasUnsatisfiedDep = target.depends.any { depName -> depDetails[depName] == null }
-        // 冲突项：当前已安装才算冲突未满足 —— 需要先解析出纯包名
-        val hasInstalledConflict = target.conflicts.any { confName ->
-            confParsed[confName]?.name in installedNames
+    /** 硬阻塞：存在源里找不到的依赖（不可能自动解决） */
+    fun computeHardBlock(target: PackageInfo): Boolean {
+        return target.depends.any { depRaw -> depDetails[depRaw] == null }
+    }
+
+    /** 存在 apt 可以自动移除的冲突（已安装且有冲突） */
+    fun computeWillUninstallConflicts(target: PackageInfo): List<String> {
+        return target.conflicts.mapNotNull { confRaw ->
+            val parsed = confParsed[confRaw] ?: return@mapNotNull null
+            if (parsed.name in installedNames) parsed.name else null
         }
-        return !hasUnsatisfiedDep && !hasInstalledConflict
+    }
+
+    fun computeCanInstall(target: PackageInfo): Boolean {
+        // 只有硬阻塞（有源内找不到的依赖）才禁用安装按钮
+        // 版本不够的依赖 → apt 自动升级；已安装的冲突 → apt 自动移除（需确认）
+        return !computeHardBlock(target)
     }
 
     Scaffold(
@@ -338,9 +351,12 @@ fun PackageDetailScreen(
                     // 安装状态卡 — 仅未安装的软件包显示，置于 TopAppBar 下方、描述上方
                     if (!d.isInstalled) {
                         item {
+                            val hardBlock = computeHardBlock(d)
+                            val willRemove = computeWillUninstallConflicts(d)
                             PackageInstallStatusCard(
                                 pkgName = d.name,
-                                canInstall = computeCanInstall(d)
+                                hardBlock = hardBlock,
+                                willRemoveConflicts = willRemove
                             )
                         }
                     }
@@ -448,8 +464,13 @@ fun PackageDetailScreen(
                             val depInfo = depDetails[depRaw]
                             val pureName = parsed.name
                             val isInstalled = pureName in installedNames
+                            val installedVer = installedVersions[pureName]
+                            val versionOk = if (isInstalled && installedVer != null) {
+                                checkVersionConstraint(installedVer, parsed.versionConstraint)
+                            } else null
                             val status = when {
                                 depInfo == null -> DepStatus.NOT_SATISFIED
+                                isInstalled && versionOk == false -> DepStatus.WILL_UPGRADE
                                 isInstalled -> DepStatus.INSTALLED
                                 else -> DepStatus.WILL_INSTALL
                             }
@@ -506,7 +527,8 @@ fun PackageDetailScreen(
                             val pureName = parsed.name
                             val isInstalled = pureName in installedNames
                             val status = if (isInstalled) {
-                                ConfStatus.NOT_SATISFIED
+                                // apt 安装时会自动移除冲突包
+                                ConfStatus.WILL_UNINSTALL
                             } else {
                                 ConfStatus.SATISFIED
                             }
@@ -555,6 +577,9 @@ fun PackageDetailScreen(
             if (!isLoading) {
                 val d = detail ?: pkg
                 val canInstall = computeCanInstall(d)
+                val hardBlock = computeHardBlock(d)
+                val willRemove = computeWillUninstallConflicts(d)
+                val needsConflictConfirm = willRemove.isNotEmpty()
                 Box(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
@@ -578,12 +603,16 @@ fun PackageDetailScreen(
                             Text("卸载", fontSize = 15.sp, fontWeight = FontWeight.Medium, color = Color.White)
                         }
                     } else {
+                        val installColor = if (needsConflictConfirm) DangerRed else AccentBlue
                         Button(
-                            onClick = { startOperation(isInstall = true) },
+                            onClick = {
+                                if (needsConflictConfirm) showConflictConfirm = true
+                                else startOperation(isInstall = true)
+                            },
                             modifier = Modifier.fillMaxWidth(),
                             enabled = canInstall,
                             colors = ButtonDefaults.buttonColors(
-                                color = AccentBlue
+                                color = installColor
                             )
                         ) {
                             Text(stringResource(R.string.action_styling_install), fontSize = 15.sp, fontWeight = FontWeight.Medium, color = Color.White)

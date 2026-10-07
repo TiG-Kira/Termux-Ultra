@@ -254,6 +254,66 @@ fun parsePkgDep(raw: String): PkgDep {
     }
 }
 
+/**
+ * 语义化版本号比较：按 . 拆分各段，按整数优先、字符串次之逐段比较。
+ * 返回 <0 / 0 / >0 分别表示 a<b / a==b / a>b。
+ * 这是 apt 的通用近似实现（termux 上版本格式比较规整，足够用）。
+ */
+private fun compareVersions(a: String, b: String): Int {
+    val la = a.trim().split('.', '-', '_')
+    val lb = b.trim().split('.', '-', '_')
+    val maxLen = maxOf(la.size, lb.size)
+    for (i in 0 until maxLen) {
+        val sa = la.getOrNull(i) ?: ""
+        val sb = lb.getOrNull(i) ?: ""
+        if (sa == sb) continue
+        val ia = sa.toLongOrNull()
+        val ib = sb.toLongOrNull()
+        val cmp = when {
+            ia != null && ib != null -> ia.compareTo(ib)
+            ia != null -> -1           // 数字 < 字符串
+            ib != null -> 1
+            else -> sa.compareTo(sb)
+        }
+        if (cmp != 0) return cmp
+    }
+    return 0
+}
+
+/**
+ * 判断已安装版本是否满足 apt 版本约束。
+ *
+ * @param installedVer 已安装版本号，如 "1.2.3"
+ * @param constraint 约束字符串，如 ">= 1.0.0"、"= 2.0"、"<< 3"
+ * @return true 满足或没有约束；false 不满足；null 无法判断（约束格式异常）
+ */
+fun checkVersionConstraint(installedVer: String, constraint: String?): Boolean? {
+    if (constraint.isNullOrBlank()) return true
+    val trimmed = constraint.trim()
+    val (op, ver) = when {
+        trimmed.startsWith(">= ") -> ">=" to trimmed.removePrefix(">= ").trim()
+        trimmed.startsWith("<= ") -> "<=" to trimmed.removePrefix("<= ").trim()
+        trimmed.startsWith(">> ") -> ">>" to trimmed.removePrefix(">> ").trim()
+        trimmed.startsWith("<< ") -> "<<" to trimmed.removePrefix("<< ").trim()
+        trimmed.startsWith("= ") -> "=" to trimmed.removePrefix("= ").trim()
+        trimmed.startsWith(">=") -> ">=" to trimmed.removePrefix(">=").trim()
+        trimmed.startsWith("<=") -> "<=" to trimmed.removePrefix("<=").trim()
+        trimmed.startsWith(">>") -> ">>" to trimmed.removePrefix(">>").trim()
+        trimmed.startsWith("<<") -> "<<" to trimmed.removePrefix("<<").trim()
+        trimmed.startsWith("=") -> "=" to trimmed.removePrefix("=").trim()
+        else -> return null
+    }
+    val cmp = compareVersions(installedVer, ver)
+    return when (op) {
+        ">=" -> cmp >= 0
+        "<=" -> cmp <= 0
+        "=" -> cmp == 0
+        ">>" -> cmp > 0
+        "<<" -> cmp < 0
+        else -> null
+    }
+}
+
 object PkgRepo {
 
     /**
