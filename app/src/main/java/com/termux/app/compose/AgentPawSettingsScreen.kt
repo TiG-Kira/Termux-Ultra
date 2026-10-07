@@ -6,7 +6,6 @@ import android.net.Uri
 import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,7 +18,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.runtime.Composable
@@ -58,8 +56,8 @@ import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.glass.GlassIconButton
 import top.yukonga.miuix.kmp.glass.GlassTopAppBar
 import top.yukonga.miuix.kmp.icon.glass.ChevronBackward
-import top.yukonga.miuix.kmp.icon.glass.ChevronForward
 import top.yukonga.miuix.kmp.icon.glass.MiuixGlassIcons
+import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.preference.RadioButtonPreference
 import top.yukonga.miuix.kmp.preference.SwitchPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
@@ -304,21 +302,25 @@ private fun LazyListScope.homeContent(
     }
 
     item(key = "nav_generation") {
-        SettingsNavRow(
-            iconRes = R.drawable.ic_settings,
-            title = stringResource(R.string.agentpaw_generation_page_title),
-            summary = stringResource(R.string.agentpaw_generation_nav_summary),
-            onClick = { onOpenPage(AgentPawPage.GENERATION) }
-        )
+        SettingCard {
+            ArrowPreference(
+                title = stringResource(R.string.agentpaw_generation_page_title),
+                summary = stringResource(R.string.agentpaw_generation_nav_summary),
+                onClick = { onOpenPage(AgentPawPage.GENERATION) },
+                startAction = { SettingIcon(R.drawable.ic_settings) }
+            )
+        }
     }
 
     item(key = "nav_control") {
-        SettingsNavRow(
-            iconRes = R.drawable.ic_ai_agent,
-            title = stringResource(R.string.agentpaw_control_page_title),
-            summary = stringResource(R.string.agentpaw_control_nav_summary),
-            onClick = { onOpenPage(AgentPawPage.CONTROL) }
-        )
+        SettingCard {
+            ArrowPreference(
+                title = stringResource(R.string.agentpaw_control_page_title),
+                summary = stringResource(R.string.agentpaw_control_nav_summary),
+                onClick = { onOpenPage(AgentPawPage.CONTROL) },
+                startAction = { SettingIcon(R.drawable.ic_ai_agent) }
+            )
+        }
     }
 
     item(key = "home_spacer") { Spacer(Modifier.height(16.dp)) }
@@ -553,47 +555,6 @@ private fun LazyListScope.controlContent(
 /** 三个页面的导航状态。 */
 private enum class AgentPawPage {
     HOME, GENERATION, CONTROL
-}
-
-/** 子页入口行：图标 + 标题 + 摘要 + 右箭头。 */
-@Composable
-private fun SettingsNavRow(
-    iconRes: Int,
-    title: String,
-    summary: String,
-    onClick: () -> Unit
-) {
-    SettingCard {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable(onClick = onClick)
-                .padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            SettingIcon(iconRes)
-            Spacer(Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = title,
-                    fontSize = 15.sp,
-                    color = MiuixTheme.colorScheme.onSurface
-                )
-                Text(
-                    text = summary,
-                    fontSize = 12.sp,
-                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                    modifier = Modifier.padding(top = 2.dp)
-                )
-            }
-            Icon(
-                imageVector = MiuixGlassIcons.ChevronForward,
-                contentDescription = null,
-                tint = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                modifier = Modifier.size(20.dp)
-            )
-        }
-    }
 }
 
 /**
