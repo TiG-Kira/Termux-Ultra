@@ -181,26 +181,33 @@ jobs:
       # ── 4. 链式触发 release_apk.yml：构建并上传 APK 到本 Release ──────
       # 关键：本工作流用 GITHUB_TOKEN 创建的 Release 不会触发 release_apk.yml 监听的
       # release: published 事件（GitHub 禁止 GITHUB_TOKEN 引发的事件链式拉起新 workflow run），
-      # 因此必须显式用 PAT 主动 dispatch。PAT 需含 repo + workflow 权限，存为仓库 secret：PAT。
+      # 因此必须显式 dispatch。
+      # 原实现使用 PAT + workflow_dispatch API，但仓库未配置 secrets.PAT 会导致 401。
+      # 改用 repository_dispatch API 触发——它支持 GITHUB_TOKEN 且只需要 contents: write 权限，
+      # release_apk.yml 已同步添加 repository_dispatch: [trigger-release-apk] 触发源。
       # 该步骤与前面「版本比对是否 skip」无关——无论是否修改 build.gradle，Release 都已发布，
       # 故始终拉起 APK 构建；传 build_universal=true 以复刻 release 事件的完整产物集（4 架构 + universal）。
       - name: 触发 APK 构建与发布 (release_apk.yml)
-        env:
-          PAT: ${{ secrets.PAT }}
         run: |
           set -euo pipefail
           TAG="${{ inputs.tag }}"
-          echo "触发 release_apk.yml (workflow_dispatch, tag=$TAG, build_universal=true)..."
+          echo "通过 repository_dispatch 触发 release_apk.yml (tag=$TAG, build_universal=true)..."
 
           # 等待刚创建的 Release 在 API 侧可见，避免 release_apk.yml 预检竞态
           sleep 5
 
           resp=$(curl -s -w "\nHTTP:%{http_code}" -X POST \
             -H "Accept: application/vnd.github+json" \
-            -H "Authorization: Bearer $PAT" \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
             -H "Content-Type: application/json" \
-            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/release_apk.yml/dispatches" \
-            -d "{\"ref\":\"main\",\"inputs\":{\"tag\":\"$TAG\",\"build_universal\":true}}")
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/dispatches" \
+            -d "{
+              \"event_type\": \"trigger-release-apk\",
+              \"client_payload\": {
+                \"tag\": \"$TAG\",
+                \"build_universal\": true
+              }
+            }")
 
           code=$(echo "$resp" | tail -1 | sed 's/HTTP://')
           if [ "$code" = "204" ]; then
