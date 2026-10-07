@@ -274,7 +274,7 @@ fun PackageDetailScreen(
      * 判断某个已安装的包名是否能被 apt 自动移除（因为目标包声明它为冲突）。
      * 优先使用 aptSim 的精确结果；若模拟失败，则保守处理。
      */
-    private fun canConflictBeAutoRemoved(conflictPkg: String): Boolean {
+    fun canConflictBeAutoRemoved(conflictPkg: String): Boolean {
         val sim = aptSim ?: return false  // 无结果 → 保守：无法确认就不认为可移除
         if (!sim.feasible) return false
         return conflictPkg in sim.willRemovePackages
@@ -353,7 +353,7 @@ fun PackageDetailScreen(
     }
 
     /** 从 PkgDep 中取出版本操作符（>= / <= / = / >> / <<）。没约束或格式异常返回 null */
-    private fun constraintBeforeOp(parsed: PkgDep): String? {
+    fun constraintBeforeOp(parsed: PkgDep): String? {
         val c = parsed.versionConstraint ?: return null
         val trimmed = c.trim()
         return when {
