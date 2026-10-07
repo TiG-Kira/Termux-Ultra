@@ -1252,7 +1252,7 @@
     <string name="skill_description">Skill description</string>
     <string name="implementation">Implementation</string>
     <string name="tab_user">👤 User</string>
-    <string name="copy_all">Copy all</string>
+    <string name="copy_all">Copy</string>
     <string name="confirm_enable">Confirm enable</string>
     <string name="share_session">Share session</string>
     <string name="new_session">New session</string>
