@@ -1116,6 +1116,13 @@
     <string name="training_manual_mode">Manual mode · User grades manually with heuristic reference scores and suggestions (no online model)</string>
     <string name="kill_process_pid">Kill process (PID %1$s)</string>
     <string name="agent_entry_card_desc">When enabled, shows the Termux Agent entry card and related settings on the terminal page</string>
+    <string name="model_gen_title">Models &amp; Generation</string>
+    <string name="model_gen_nav_desc">Online config, model profiles, chat params, trust whitelist, reset config</string>
+    <string name="memory_history_title">Memory &amp; History</string>
+    <string name="memory_history_nav_desc">Long-term memory, full chat history, clear chat history</string>
+    <string name="developer_settings_title">Developer Mode</string>
+    <string name="developer_settings_nav_desc">Custom system prompt, custom skills, unrestricted mode</string>
+    <string name="enable_developer_mode">Enable Developer Mode</string>
     <!-- Required by the accessibility_service_config.xml shipped inside agentpaw-core (the library itself does not provide this string) -->
     <string name="accessibility_service_description">AgentPaw phone AI assistant accessibility service, used to perform screen taps, swipes, key events and on-screen content analysis.</string>
     <string name="load_prompt_from_file">Load System Prompt from file (.md supported)</string>
