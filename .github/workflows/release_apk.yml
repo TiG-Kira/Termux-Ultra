@@ -14,6 +14,11 @@ on:
         required: false
         type: boolean
         default: false
+  # repository_dispatch：由 release_tag.yml 在创建 Release 后显式触发（替代 workflow_dispatch + PAT）。
+  # 使用 event_type=trigger-release-apk，tag/build_universal 通过 client_payload 传入。
+  # 该 API 支持 GITHUB_TOKEN，不再依赖 secrets.PAT。
+  repository_dispatch:
+    types: [trigger-release-apk]
 
 # 同一 tag 的发布构建串行化：不取消进行中的运行，避免构建到一半被打断、
 # 结果 Release 上只挂了一半架构的包。
@@ -37,20 +42,33 @@ jobs:
     outputs:
       tag: ${{ steps.check.outputs.tag }}
       skip: ${{ steps.check.outputs.skip }}
+      build_universal: ${{ steps.check.outputs.build_universal }}
     steps:
       - name: 检查 Release 是否已附带 APK
         id: check
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # release 事件 → 触发 tag；workflow_dispatch → 手动输入的 tag
-          tag="${{ github.event.release.tag_name || inputs.tag }}"
+          # 三种触发源的 tag 取值优先级：
+          #   1. repository_dispatch → client_payload.tag
+          #   2. release             → github.event.release.tag_name
+          #   3. workflow_dispatch   → inputs.tag
+          tag="${{ github.event.client_payload.tag || github.event.release.tag_name || inputs.tag }}"
+          # build_universal：release 事件始终构建；dispatch 事件由传入决定；手动默认 false
+          if [ "${{ github.event_name }}" = "release" ]; then
+            build_universal=true
+          elif [ "${{ github.event_name }}" = "repository_dispatch" ]; then
+            build_universal="${{ github.event.client_payload.build_universal || true }}"
+          else
+            build_universal="${{ inputs.build_universal || false }}"
+          fi
           if [ -z "$tag" ]; then
-            echo "::error::无法确定 tag：release 事件的 tag_name 和 workflow_dispatch 的 inputs.tag 都为空"
+            echo "::error::无法确定 tag：release 事件的 tag_name、workflow_dispatch 的 inputs.tag、repository_dispatch 的 client_payload.tag 都为空"
             exit 1
           fi
-          echo "目标 tag: $tag"
+          echo "目标 tag: $tag  build_universal: $build_universal  触发源: ${{ github.event_name }}"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "build_universal=$build_universal" >> "$GITHUB_OUTPUT"
           api_url="https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/tags/${tag}"
           assets=$(curl -s -H "Authorization: token $GITHUB_TOKEN" "$api_url" \
             | jq -r '.assets[]?.name' 2>/dev/null | grep -i '\.apk$' || true)
@@ -137,7 +155,8 @@ jobs:
   # 手动触发时由 inputs.build_universal 决定（默认 false，只想要分架构包时可省掉这趟）。
   build_universal:
     needs: preflight
-    if: needs.preflight.outputs.skip == 'false' && (github.event_name == 'release' || inputs.build_universal == true)
+    # 优先以 preflight 计算出的 build_universal 标志为准，兼容三种触发源。
+    if: needs.preflight.outputs.skip == 'false' && needs.preflight.outputs.build_universal == 'true'
     runs-on: ubuntu-26.04
     timeout-minutes: 120
     steps:
