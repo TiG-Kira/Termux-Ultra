@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -739,44 +740,78 @@ fun PackageDetailScreen(
             OverlayDialog(
                 show = showUninstallConfirm,
                 title = "确认卸载",
-                summary = run {
+                summary = "",
+                onDismissRequest = { showUninstallConfirm = false },
+                content = {
                     val self = pkg.name
                     val allRemove = aptSimRemove?.willRemovePackages.orEmpty()
                         .filter { it in installedNames }
                     val cascade = allRemove.filter { it != self }
-                    buildString {
-                        append("确定要卸载 ").append(self).append(" 吗？")
-                        if (cascade.isNotEmpty()) {
-                            append("\n\n卸载 ").append(self)
-                            append(" 将连带卸载以下依赖它的反向依赖包（共 ").append(cascade.size).append(" 个）：\n")
-                            cascade.forEach { append("  • ").append(it).append('\n') }
-                            append('\n')
-                            append("这极可能影响 Termux 环境的稳定性，请慎重决断！")
-                        } else {
-                            append("\n\n此操作不可撤销。")
-                        }
-                    }
-                },
-                onDismissRequest = { showUninstallConfirm = false },
-                content = {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        TextButton(
-                            text = stringResource(R.string.cancel),
-                            onClick = { showUninstallConfirm = false },
-                            modifier = Modifier.weight(1f)
-                        )
-                        Button(
-                            onClick = {
-                                showUninstallConfirm = false
-                                startOperation(isInstall = false)
+                    Column {
+                        // 主说明 —— 不带连带时一行搞定；有连带则展示可滚动列表
+                        Text(
+                            text = if (cascade.isEmpty()) {
+                                "确定要卸载 $self 吗？此操作不可撤销。"
+                            } else {
+                                "确定要卸载 $self 吗？此操作将连带卸载 ${cascade.size} 个反向依赖包，极可能影响 Termux 环境的稳定性，请慎重决断！"
                             },
-                            modifier = Modifier.weight(1f),
-                            colors = ButtonDefaults.buttonColors(color = DangerRed)
+                            fontSize = 14.sp,
+                            color = colorScheme.onSurface,
+                            lineHeight = 20.sp
+                        )
+                        if (cascade.isNotEmpty()) {
+                            Spacer(Modifier.height(8.dp))
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(max = 280.dp)
+                                    .background(
+                                        color = if (isDark) Color(0xFF1A1A1A) else Color(0xFFF5F5F5),
+                                        shape = RoundedCornerShape(8.dp)
+                                    )
+                                    .padding(12.dp)
+                            ) {
+                                Column(
+                                    modifier = Modifier.verticalScroll(rememberScrollState())
+                                ) {
+                                    Text(
+                                        text = "连带卸载的反向依赖包（共 ${cascade.size} 个）：",
+                                        fontSize = 12.sp,
+                                        color = colorScheme.onSurfaceVariantSummary,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                    Spacer(Modifier.height(6.dp))
+                                    cascade.forEach {
+                                        Text(
+                                            text = "  • $it",
+                                            fontSize = 13.sp,
+                                            color = colorScheme.onSurface,
+                                            lineHeight = 18.sp
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        Spacer(Modifier.height(16.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Text("卸载", color = Color.White, fontWeight = FontWeight.Medium)
+                            TextButton(
+                                text = stringResource(R.string.cancel),
+                                onClick = { showUninstallConfirm = false },
+                                modifier = Modifier.weight(1f)
+                            )
+                            Button(
+                                onClick = {
+                                    showUninstallConfirm = false
+                                    startOperation(isInstall = false)
+                                },
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.buttonColors(color = DangerRed)
+                            ) {
+                                Text("卸载", color = Color.White, fontWeight = FontWeight.Medium)
+                            }
                         }
                     }
                 }
@@ -796,37 +831,122 @@ fun PackageDetailScreen(
                     OverlayDialog(
                         show = showConflictConfirm,
                         title = "⚠ 严重警告：将卸载多个软件包",
-                        summary = buildString {
-                            append("安装 ").append(pkg.name)
-                            append(" 将强制卸载以下已安装的软件包，")
-                            append("此操作不可撤销且极可能破坏 Termux 环境的稳定性！\n\n")
-
-                            if (directConflictPkgs.isNotEmpty()) {
-                                append("【直接冲突包】")
-                                append("（${pkg.name} 明确声明与之冲突，apt 将自动移除）：\n")
-                                directConflictPkgs.forEach { append("  • ").append(it).append('\n') }
-                                append('\n')
-                            }
-
-                            if (cascadePkgs.isNotEmpty()) {
-                                append("【连带卸载包】")
-                                append("（因依赖上述冲突包而被一并移除，共 ").append(cascadePkgs.size).append(" 个）：\n")
-                                cascadePkgs.forEach { append("  • ").append(it).append('\n') }
-                                append('\n')
-                            }
-
-                            append("━━━━━━━━━━━━━━━━━━━━━━\n")
-                            append("总计将卸载 ").append(allRemovePkgs.size).append(" 个包。\n\n")
-                            append("⚠ 卸载这些包可能导致：\n")
-                            append("  • 命令、工具链、服务无法使用\n")
-                            append("  • 已安装应用功能缺失或崩溃\n")
-                            append("  • Termux 环境无法正常启动\n")
-                            append("  • 需要重新安装大量依赖包才能恢复\n\n")
-                            append("请务必仔细核对上述列表，慎重决断后再考虑继续！")
-                        },
+                        summary = "",
                         onDismissRequest = { showConflictConfirm = false },
                         content = {
                             Column {
+                                // 顶部简短警示语
+                                Text(
+                                    text = "安装 ${pkg.name} 将强制卸载以下已安装的软件包，此操作不可撤销且极可能破坏 Termux 环境的稳定性！",
+                                    fontSize = 14.sp,
+                                    color = colorScheme.onSurface,
+                                    lineHeight = 20.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                                Spacer(Modifier.height(10.dp))
+
+                                // 可滚动区域 —— 直接冲突 + 连带卸载 + 风险清单
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .heightIn(max = 320.dp)
+                                        .background(
+                                            color = if (isDark) Color(0xFF1A1A1A) else Color(0xFFF5F5F5),
+                                            shape = RoundedCornerShape(8.dp)
+                                        )
+                                        .padding(12.dp)
+                                ) {
+                                    Column(
+                                        modifier = Modifier.verticalScroll(rememberScrollState())
+                                    ) {
+                                        if (directConflictPkgs.isNotEmpty()) {
+                                            Text(
+                                                text = "【直接冲突包】",
+                                                fontSize = 13.sp,
+                                                color = AccentBlue,
+                                                fontWeight = FontWeight.SemiBold
+                                            )
+                                            Text(
+                                                text = "（${pkg.name} 明确声明与之冲突，apt 将自动移除）",
+                                                fontSize = 12.sp,
+                                                color = colorScheme.onSurfaceVariantSummary
+                                            )
+                                            directConflictPkgs.forEach {
+                                                Text(
+                                                    text = "  • $it",
+                                                    fontSize = 13.sp,
+                                                    color = colorScheme.onSurface,
+                                                    lineHeight = 18.sp
+                                                )
+                                            }
+                                            Spacer(Modifier.height(8.dp))
+                                        }
+
+                                        if (cascadePkgs.isNotEmpty()) {
+                                            Text(
+                                                text = "【连带卸载包】（${cascadePkgs.size} 个）",
+                                                fontSize = 13.sp,
+                                                color = Color(0xFFFF9800),
+                                                fontWeight = FontWeight.SemiBold
+                                            )
+                                            Text(
+                                                text = "（因依赖上述冲突包而被一并移除）",
+                                                fontSize = 12.sp,
+                                                color = colorScheme.onSurfaceVariantSummary
+                                            )
+                                            cascadePkgs.forEach {
+                                                Text(
+                                                    text = "  • $it",
+                                                    fontSize = 13.sp,
+                                                    color = colorScheme.onSurface,
+                                                    lineHeight = 18.sp
+                                                )
+                                            }
+                                            Spacer(Modifier.height(8.dp))
+                                        }
+
+                                        // 分隔线 + 总计
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(0.5.dp)
+                                                .background(colorScheme.onSurface.copy(alpha = 0.2f))
+                                        )
+                                        Spacer(Modifier.height(8.dp))
+                                        Text(
+                                            text = "总计将卸载 ${allRemovePkgs.size} 个包",
+                                            fontSize = 13.sp,
+                                            color = DangerRed,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                        Spacer(Modifier.height(8.dp))
+
+                                        // 风险清单
+                                        Text(
+                                            text = "⚠ 卸载这些包可能导致：",
+                                            fontSize = 13.sp,
+                                            color = DangerRed,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                        listOf(
+                                            "命令、工具链、服务无法使用",
+                                            "已安装应用功能缺失或崩溃",
+                                            "Termux 环境无法正常启动",
+                                            "需要重新安装大量依赖包才能恢复"
+                                        ).forEach {
+                                            Text(
+                                                text = "  • $it",
+                                                fontSize = 12.sp,
+                                                color = colorScheme.onSurface.copy(alpha = 0.85f),
+                                                lineHeight = 18.sp
+                                            )
+                                        }
+                                    }
+                                }
+
+                                Spacer(Modifier.height(12.dp))
+
+                                // 底部红色建议卡
                                 Box(
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -844,7 +964,7 @@ fun PackageDetailScreen(
                                         lineHeight = 18.sp
                                     )
                                 }
-                                Spacer(Modifier.height(12.dp))
+                                Spacer(Modifier.height(16.dp))
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.spacedBy(8.dp)
