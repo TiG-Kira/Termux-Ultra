@@ -90,6 +90,21 @@ private enum class ConfStatus(val text: String, val color: Color) {
     NOT_SATISFIED("不满足", DangerRed)
 }
 
+/**
+ * 把 apt 版本约束字符串（如 ">= 10.1.0"）转成友好显示格式（如 "≥10.1.0"）。
+ */
+private fun translateConstraint(constraint: String): String {
+    val trimmed = constraint.trim()
+    return when {
+        trimmed.startsWith(">= ") -> "≥${trimmed.removePrefix(">= ").trim()}"
+        trimmed.startsWith("<= ") -> "≤${trimmed.removePrefix("<= ").trim()}"
+        trimmed.startsWith(">> ") -> "晚于 ${trimmed.removePrefix(">> ").trim()}"
+        trimmed.startsWith("<< ") -> "早于 ${trimmed.removePrefix("<< ").trim()}"
+        trimmed.startsWith("= ") -> "=${trimmed.removePrefix("= ").trim()}"
+        else -> trimmed
+    }
+}
+
 @Composable
 fun PackageDetailScreen(
     pkg: PackageInfo,
@@ -119,6 +134,10 @@ fun PackageDetailScreen(
 
     // 预加载依赖/冲突包详情 + 已安装包名
     var installedNames by remember { mutableStateOf<Set<String>>(emptySet()) }
+    // 解析后的依赖条目：key=原始字符串, value=解析结果(纯包名+版本限制)
+    var depParsed by remember { mutableStateOf<Map<String, PkgDep>>(emptyMap()) }
+    var confParsed by remember { mutableStateOf<Map<String, PkgDep>>(emptyMap()) }
+    // 依赖/冲突包详情，使用解析后的纯包名搜索
     var depDetails by remember { mutableStateOf<Map<String, PackageInfo?>>(emptyMap()) }
     var confDetails by remember { mutableStateOf<Map<String, PackageInfo?>>(emptyMap()) }
 
@@ -154,11 +173,16 @@ fun PackageDetailScreen(
         val installed = PkgRepo.getInstalled(context).map { it.name }.toSet()
         installedNames = installed
 
-        depDetails = d.depends.associate { depName ->
-            depName to PkgRepo.getDetail(context, depName)
+        // 先解析所有依赖/冲突条目
+        depParsed = d.depends.associate { raw -> raw to parsePkgDep(raw) }
+        confParsed = d.conflicts.associate { raw -> raw to parsePkgDep(raw) }
+
+        // 用解析后的纯包名搜索详情（原始字符串作为 key 保留）
+        depDetails = depParsed.mapValues { (_, parsed) ->
+            PkgRepo.getDetail(context, parsed.name)
         }
-        confDetails = d.conflicts.associate { confName ->
-            confName to PkgRepo.getDetail(context, confName)
+        confDetails = confParsed.mapValues { (_, parsed) ->
+            PkgRepo.getDetail(context, parsed.name)
         }
 
         isLoading = false
@@ -230,9 +254,12 @@ fun PackageDetailScreen(
 
     fun computeCanInstall(target: PackageInfo): Boolean {
         // 依赖项：源内不存在（depDetails 为 null）才视为无法满足；源内存在将随安装一并装好
+        // depDetails 的 key 是原始依赖字符串，value 用解析后的纯包名搜索获得
         val hasUnsatisfiedDep = target.depends.any { depName -> depDetails[depName] == null }
-        // 冲突项：当前已安装才算冲突未满足
-        val hasInstalledConflict = target.conflicts.any { confName -> confName in installedNames }
+        // 冲突项：当前已安装才算冲突未满足 —— 需要先解析出纯包名
+        val hasInstalledConflict = target.conflicts.any { confName ->
+            confParsed[confName]?.name in installedNames
+        }
         return !hasUnsatisfiedDep && !hasInstalledConflict
     }
 
@@ -416,32 +443,37 @@ fun PackageDetailScreen(
                                 modifier = Modifier.padding(top = 6.dp)
                             )
                         }
-                        items(d.depends) { depName ->
-                            val depInfo = depDetails[depName]
+                        items(d.depends) { depRaw ->
+                            val parsed = depParsed[depRaw] ?: PkgDep(depRaw, null)
+                            val depInfo = depDetails[depRaw]
+                            val pureName = parsed.name
+                            val isInstalled = pureName in installedNames
                             val status = when {
                                 depInfo == null -> DepStatus.NOT_SATISFIED
-                                depName in installedNames -> DepStatus.INSTALLED
+                                isInstalled -> DepStatus.INSTALLED
                                 else -> DepStatus.WILL_INSTALL
                             }
-                            val summaryLine = if (depInfo != null) {
+                            // 副标题：版本限制 | 详情
+                            val constraintPart = parsed.versionConstraint?.let { translateConstraint(it) }
+                            val infoPart = if (depInfo != null) {
                                 val versionPart = depInfo.version.takeIf { it.isNotBlank() }?.let { "v$it" } ?: ""
                                 val sectionPart = depInfo.section.takeIf { it.isNotBlank() }
-                                val parts = listOfNotNull(versionPart, sectionPart)
-                                parts.joinToString(" · ").ifBlank { "暂无相关信息" }
+                                listOfNotNull(versionPart, sectionPart).joinToString(" · ").ifBlank { "暂无相关信息" }
                             } else {
                                 "暂无相关信息"
                             }
+                            val summaryLine = if (constraintPart != null) "$constraintPart | $infoPart" else infoPart
 
                             Card(
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 ArrowPreference(
-                                    title = depName,
+                                    title = pureName,
                                     summary = summaryLine,
                                     onClick = {
                                         if (depInfo != null) {
                                             onOpenPackageDetail?.invoke(
-                                                depInfo.copy(isInstalled = depName in installedNames)
+                                                depInfo.copy(isInstalled = isInstalled)
                                             )
                                         } else {
                                             Toast.makeText(context, "源内没有此软件包", Toast.LENGTH_SHORT).show()
@@ -468,32 +500,37 @@ fun PackageDetailScreen(
                                 modifier = Modifier.padding(top = 6.dp)
                             )
                         }
-                        items(d.conflicts) { confName ->
-                            val confInfo = confDetails[confName]
-                            val status = if (confName in installedNames) {
+                        items(d.conflicts) { confRaw ->
+                            val parsed = confParsed[confRaw] ?: PkgDep(confRaw, null)
+                            val confInfo = confDetails[confRaw]
+                            val pureName = parsed.name
+                            val isInstalled = pureName in installedNames
+                            val status = if (isInstalled) {
                                 ConfStatus.NOT_SATISFIED
                             } else {
                                 ConfStatus.SATISFIED
                             }
-                            val summaryLine = if (confInfo != null) {
+                            // 副标题：版本限制 | 详情
+                            val constraintPart = parsed.versionConstraint?.let { translateConstraint(it) }
+                            val infoPart = if (confInfo != null) {
                                 val versionPart = confInfo.version.takeIf { it.isNotBlank() }?.let { "v$it" } ?: ""
                                 val sectionPart = confInfo.section.takeIf { it.isNotBlank() }
-                                val parts = listOfNotNull(versionPart, sectionPart)
-                                parts.joinToString(" · ").ifBlank { "暂无相关信息" }
+                                listOfNotNull(versionPart, sectionPart).joinToString(" · ").ifBlank { "暂无相关信息" }
                             } else {
                                 "暂无相关信息"
                             }
+                            val summaryLine = if (constraintPart != null) "$constraintPart | $infoPart" else infoPart
 
                             Card(
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 ArrowPreference(
-                                    title = confName,
+                                    title = pureName,
                                     summary = summaryLine,
                                     onClick = {
                                         if (confInfo != null) {
                                             onOpenPackageDetail?.invoke(
-                                                confInfo.copy(isInstalled = confName in installedNames)
+                                                confInfo.copy(isInstalled = isInstalled)
                                             )
                                         } else {
                                             Toast.makeText(context, "源内没有此软件包", Toast.LENGTH_SHORT).show()
