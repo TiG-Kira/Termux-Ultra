@@ -44,7 +44,6 @@ import top.yukonga.miuix.kmp.glass.GlassTopAppBar
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.Scaffold
-import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
@@ -104,9 +103,6 @@ fun AiTermuxMemoryHistoryScreen(onBack: () -> Unit) {
                     .nestedScroll(scrollBehavior.nestedScrollConnection),
                 contentPadding = standaloneContentPadding(padding, bottom = 16.dp)
             ) {
-                item(key = "section_memory_history") {
-                    SmallTitle(text = stringResource(R.string.memory_history_title))
-                }
                 item(key = "card_memory_history") {
                     SettingCard {
                         Column {

@@ -95,10 +95,10 @@ fun AiTermuxModelGenScreen(onBack: () -> Unit) {
                     .nestedScroll(scrollBehavior.nestedScrollConnection),
                 contentPadding = standaloneContentPadding(padding, bottom = 16.dp)
             ) {
-                item(key = "section_model_gen") {
-                    SmallTitle(text = stringResource(R.string.model_gen_title))
+                item(key = "section_model_params") {
+                    SmallTitle(text = stringResource(R.string.model_params_settings))
                 }
-                item(key = "card_model_gen") {
+                item(key = "card_model_params") {
                     SettingCard {
                         Column {
                             if (isLocalMode) {
@@ -140,24 +140,6 @@ fun AiTermuxModelGenScreen(onBack: () -> Unit) {
                                 }
                             )
 
-                            val autoExecConfig = AiTermuxPrefs.getAutoExecConfig(context)
-                            val unlimitedMode = AiTermuxPrefs.isUnlimitedMode(context)
-                            val whitelistCount = autoExecConfig.autoExecSkills.size
-                            val whitelistSummary = when {
-                                unlimitedMode -> stringResource(R.string.unrestricted_opened)
-                                whitelistCount == 0 -> stringResource(R.string.whitelist_off)
-                                else -> stringResource(R.string.whitelist_count_selected, whitelistCount)
-                            }
-                            ArrowPreference(
-                                title = stringResource(R.string.trust_whitelist),
-                                summary = whitelistSummary,
-                                enabled = !unlimitedMode,
-                                onClick = { showWhitelistDialog = true },
-                                startAction = {
-                                    SettingIcon(Icons.Rounded.Shield, stringResource(R.string.trust_whitelist))
-                                }
-                            )
-
                             if (aiProvider == "local") {
                                 ArrowPreference(
                                     title = stringResource(R.string.train_local_model),
@@ -174,15 +156,6 @@ fun AiTermuxModelGenScreen(onBack: () -> Unit) {
                                     }
                                 )
                             }
-
-                            ArrowPreference(
-                                title = stringResource(R.string.reconfigure_ai),
-                                summary = stringResource(R.string.reset_config_desc),
-                                onClick = { showResetConfigWarning = true },
-                                startAction = {
-                                    SettingIcon(Icons.Rounded.Autorenew, stringResource(R.string.reconfigure_ai))
-                                }
-                            )
 
                             // 本地模式专属：备用在线大模型（fallback）
                             if (isLocalMode) {
@@ -219,6 +192,42 @@ fun AiTermuxModelGenScreen(onBack: () -> Unit) {
                                     )
                                 }
                             }
+                        }
+                    }
+                }
+
+                item(key = "section_security") {
+                    SmallTitle(text = stringResource(R.string.security_settings))
+                }
+                item(key = "card_security") {
+                    SettingCard {
+                        Column {
+                            val autoExecConfig = AiTermuxPrefs.getAutoExecConfig(context)
+                            val unlimitedMode = AiTermuxPrefs.isUnlimitedMode(context)
+                            val whitelistCount = autoExecConfig.autoExecSkills.size
+                            val whitelistSummary = when {
+                                unlimitedMode -> stringResource(R.string.unrestricted_opened)
+                                whitelistCount == 0 -> stringResource(R.string.whitelist_off)
+                                else -> stringResource(R.string.whitelist_count_selected, whitelistCount)
+                            }
+                            ArrowPreference(
+                                title = stringResource(R.string.trust_whitelist),
+                                summary = whitelistSummary,
+                                enabled = !unlimitedMode,
+                                onClick = { showWhitelistDialog = true },
+                                startAction = {
+                                    SettingIcon(Icons.Rounded.Shield, stringResource(R.string.trust_whitelist))
+                                }
+                            )
+
+                            ArrowPreference(
+                                title = stringResource(R.string.reconfigure_ai),
+                                summary = stringResource(R.string.reset_config_desc),
+                                onClick = { showResetConfigWarning = true },
+                                startAction = {
+                                    SettingIcon(Icons.Rounded.Autorenew, stringResource(R.string.reconfigure_ai))
+                                }
+                            )
                         }
                     }
                 }

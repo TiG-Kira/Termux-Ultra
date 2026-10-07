@@ -153,6 +153,9 @@
     <string name="terminal">Terminal</string>
     <string name="console_settings">Console Settings</string>
     <string name="console_settings_desc">Font size, cursor, text blink, scrollback</string>
+    <string name="cursor_settings">Cursor Settings</string>
+    <string name="text_settings">Text Settings</string>
+    <string name="model_params_settings">Model Parameters</string>
     <string name="key_settings">Key Settings</string>
     <string name="key_settings_desc">Soft keyboard, hardware keyboard, custom layout</string>
     <string name="console_log">Console Log</string>
@@ -1111,7 +1114,7 @@
     <string name="fallback_enabled_desc">Enabled: all limits removed, arbitrary commands and SSH allowed, ROOT devices auto-escalate</string>
     <string name="skill_impl_detail_hint">Describe how the skill works in detail; it is injected into the System Prompt to guide the AI</string>
     <string name="root_auto_su_desc">When ROOT is detected, the Agent automatically runs commands with su, no manual confirmation</string>
-    <string name="developer_mode_desc">Allows editing the System Prompt, managing custom skills and viewing the full chat history</string>
+    <string name="developer_mode_desc">Allows editing the System Prompt, managing custom skills and enabling unrestricted mode</string>
     <string name="custom_skill_create_desc">Create a custom skill callable by the AI. The skill is injected as part of the system instructions.</string>
     <string name="training_manual_mode">Manual mode · User grades manually with heuristic reference scores and suggestions (no online model)</string>
     <string name="kill_process_pid">Kill process (PID %1$s)</string>

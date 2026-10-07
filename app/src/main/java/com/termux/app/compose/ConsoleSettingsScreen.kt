@@ -96,22 +96,12 @@ fun ConsoleSettingsScreen(onBack: () -> Unit) {
                     .nestedScroll(scrollBehavior.nestedScrollConnection),
                 contentPadding = standaloneContentPadding(padding, bottom = 16.dp)
             ) {
-                item(key = "section_console") {
-                    SmallTitle(text = stringResource(R.string.console_settings))
+                item(key = "section_cursor") {
+                    SmallTitle(text = stringResource(R.string.cursor_settings))
                 }
-                item(key = "card_console") {
+                item(key = "card_cursor") {
                     SettingCard {
                         Column {
-                            OverlayDropdownPreference(
-                                title = stringResource(R.string.font_size),
-                                summary = stringResource(R.string.font_size_desc),
-                                items = listOf("10sp", "12sp", "14sp", "16sp", "18sp", "20sp", "24sp"),
-                                selectedIndex = listOf(10, 12, 14, 16, 18, 20, 24).indexOf(fontSize).coerceAtLeast(0),
-                                onSelectedIndexChange = { idx ->
-                                    ComposeTerminalSettings.setFontSize(listOf(10, 12, 14, 16, 18, 20, 24)[idx])
-                                },
-                                startAction = { SettingIcon(Icons.Rounded.FormatSize) }
-                            )
                             SwitchPreference(
                                 title = stringResource(R.string.cursor_blink),
                                 summary = if (cursorBlink) stringResource(R.string.enabled) else stringResource(R.string.disabled),
@@ -130,6 +120,26 @@ fun ConsoleSettingsScreen(onBack: () -> Unit) {
                                     )
                                 },
                                 startAction = { SettingIcon(Icons.Rounded.Terminal) }
+                            )
+                        }
+                    }
+                }
+
+                item(key = "section_text") {
+                    SmallTitle(text = stringResource(R.string.text_settings))
+                }
+                item(key = "card_text") {
+                    SettingCard {
+                        Column {
+                            OverlayDropdownPreference(
+                                title = stringResource(R.string.font_size),
+                                summary = stringResource(R.string.font_size_desc),
+                                items = listOf("10sp", "12sp", "14sp", "16sp", "18sp", "20sp", "24sp"),
+                                selectedIndex = listOf(10, 12, 14, 16, 18, 20, 24).indexOf(fontSize).coerceAtLeast(0),
+                                onSelectedIndexChange = { idx ->
+                                    ComposeTerminalSettings.setFontSize(listOf(10, 12, 14, 16, 18, 20, 24)[idx])
+                                },
+                                startAction = { SettingIcon(Icons.Rounded.FormatSize) }
                             )
                             SwitchPreference(
                                 title = stringResource(R.string.text_blinking),

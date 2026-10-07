@@ -41,7 +41,6 @@ import com.termux.app.activities.TextEditorActivity
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.Scaffold
-import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.glass.GlassIconButton
@@ -110,9 +109,6 @@ fun ConsolePersonalizationScreen(onBack: () -> Unit) {
                     .nestedScroll(scrollBehavior.nestedScrollConnection),
                 contentPadding = standaloneContentPadding(padding, bottom = 16.dp)
             ) {
-                item(key = "section_personalization") {
-                    SmallTitle(text = stringResource(R.string.console_personalization))
-                }
                 item(key = "card_personalization") {
                     SettingCard {
                         Column {

@@ -147,6 +147,9 @@
     <string name="terminal">终端</string>
     <string name="console_settings">控制台设置</string>
     <string name="console_settings_desc">字体大小、光标、文本闪烁、滚动缓冲区</string>
+    <string name="cursor_settings">光标设置</string>
+    <string name="text_settings">文本设置</string>
+    <string name="model_params_settings">模型参数</string>
     <string name="key_settings">按键设置</string>
     <string name="key_settings_desc">软键盘、物理键盘、自定义按键布局</string>
     <string name="console_log">控制台日志</string>
@@ -959,7 +962,7 @@
     <string name="fallback_enabled_desc">已开启：放开全部限制，允许任意命令和 SSH 连接，ROOT 设备自动提权</string>
     <string name="skill_impl_detail_hint">详细说明该技能如何实现，会注入到 System Prompt 中指导 AI</string>
     <string name="root_auto_su_desc">检测到 ROOT 时，Agent 自动使用 su 执行命令，无需手动确认</string>
-    <string name="developer_mode_desc">允许编辑 System Prompt、管理自定义技能、查看完整对话记录</string>
+    <string name="developer_mode_desc">允许编辑 System Prompt、管理自定义技能、启用无限制模式</string>
     <string name="custom_skill_create_desc">创建一个供 AI 调用的自定义技能。技能将作为系统指令的一部分注入。</string>
     <string name="training_manual_mode">手动模式 · 用户手动评分，给出启发式参考评分+建议（无在线模型）</string>
     <string name="kill_process_pid">结束进程 (PID %1$s)</string>

@@ -57,7 +57,6 @@ import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.SnackbarDuration
 import top.yukonga.miuix.kmp.basic.SnackbarHost
 import top.yukonga.miuix.kmp.basic.SnackbarHostState
-import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.glass.GlassIconButton
@@ -156,9 +155,6 @@ fun IntegratedToolsConfigScreen(onBack: () -> Unit) {
                     .nestedScroll(scrollBehavior.nestedScrollConnection),
                 contentPadding = standaloneContentPadding(padding, bottom = 16.dp)
             ) {
-                item(key = "section_config") {
-                    SmallTitle(text = stringResource(R.string.integrated_tools_category))
-                }
                 item(key = "card_config") {
                     SettingCard {
                         Column {
