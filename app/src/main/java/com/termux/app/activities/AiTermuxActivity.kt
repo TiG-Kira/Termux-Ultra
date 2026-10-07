@@ -986,9 +986,6 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
                         error = event.message.error ?: "AgentPaw 执行出错"
                     )
                     is AgentEvent.Cancelled -> updateStream(event.message.content)
-                    is AgentEvent.AdaptivePaced -> {
-                        // 自适应节奏控制事件，无需更新消息文本
-                    }
                 }
             }
         } finally {
