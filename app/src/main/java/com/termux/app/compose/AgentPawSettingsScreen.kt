@@ -5,6 +5,8 @@ import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,7 +19,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -54,6 +58,7 @@ import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.glass.GlassIconButton
 import top.yukonga.miuix.kmp.glass.GlassTopAppBar
 import top.yukonga.miuix.kmp.icon.glass.ChevronBackward
+import top.yukonga.miuix.kmp.icon.glass.ChevronForward
 import top.yukonga.miuix.kmp.icon.glass.MiuixGlassIcons
 import top.yukonga.miuix.kmp.preference.RadioButtonPreference
 import top.yukonga.miuix.kmp.preference.SwitchPreference
@@ -65,8 +70,11 @@ private const val AUTOSAVE_DELAY_MS = 400L
 /**
  * AgentPaw 设置页（独立 Activity）。
  *
- * 展示 AgentPaw 全部设置项；LLM 连接类选项（Provider / Base URL / API Key / 模型 /
- * 测试连接）不在此展示——按集成约定直接沿用 Termux Agent 已配置的 LLM。
+ * 结构改为「首页 + 两个子页」，分类对齐 AgentPaw 本体 APP：
+ *  - 首页保留「自动切换到 AgentPaw」与「流式输出」两个总开关，并给出「生成参数」「手机控制与权限」两个入口；
+ *  - 生成参数子页：采样参数（Temperature / Top-P / MaxTokens）+ 系统提示词；
+ *  - 手机控制与权限子页：执行策略（步数上限 / 无上限开关）+ 视觉策略（截屏分辨率模式）+ 系统权限（无障碍 / Shizuku / 悬浮窗）。
+ * LLM 连接类选项（Provider / Base URL / API Key / 模型 / 测试连接）不在此展示——按集成约定直接沿用 Termux Agent 已配置的 LLM。
  *
  * 全部设置项即时生效：开关与单选项点击即落盘，数值/文本字段走「草稿 + 防抖自动保存」，
  * 页面不再提供取消/保存按钮。草稿用 [rememberSaveable] 承载，旋转等配置变更后不丢用户输入；
@@ -78,6 +86,8 @@ fun AgentPawSettingsScreen(onBack: () -> Unit) {
     // 本页在 MainScreen 取景层之外，自建一层供玻璃顶栏折射页面内容
     val glassPage = rememberGlassPageBackdrop()
     val scrollBehavior = MiuixScrollBehavior()
+
+    var page by remember { mutableStateOf(AgentPawPage.HOME) }
 
     var autoSwitch by remember { mutableStateOf(AgentPawPrefs.isAutoSwitchEnabled(context)) }
     var stream by remember { mutableStateOf(AgentPawPrefs.isStreamEnabled(context)) }
@@ -156,16 +166,36 @@ fun AgentPawSettingsScreen(onBack: () -> Unit) {
         "HIGH" to (R.string.agentpaw_vision_mode_high to R.string.agentpaw_vision_mode_high_desc),
     )
 
+    val titleRes = when (page) {
+        AgentPawPage.HOME -> R.string.agentpaw_settings_title
+        AgentPawPage.GENERATION -> R.string.agentpaw_generation_page_title
+        AgentPawPage.CONTROL -> R.string.agentpaw_control_page_title
+    }
+
+    // 系统返回键：在子页时先回首页，只有首页才交回 Activity 栈（否则会直接退出设置页）
+    BackHandler(enabled = page != AgentPawPage.HOME) {
+        flushPendingSave()
+        page = AgentPawPage.HOME
+    }
+
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             GlassTopAppBar(
-                title = stringResource(R.string.agentpaw_settings_title),
+                title = stringResource(titleRes),
                 backdrop = glassPage.backdrop,
                 scrollBehavior = scrollBehavior,
                 navigationIcon = {
-                    GlassIconButton(onClick = { onBack() }) {
+                    GlassIconButton(onClick = {
+                        // 子页优先返回首页；首页才结束 Activity
+                        if (page == AgentPawPage.HOME) {
+                            flushPendingSave()
+                            onBack()
+                        } else {
+                            page = AgentPawPage.HOME
+                        }
+                    }) {
                         Icon(
                             imageVector = MiuixGlassIcons.ChevronBackward,
                             contentDescription = stringResource(R.string.back),
@@ -189,228 +219,379 @@ fun AgentPawSettingsScreen(onBack: () -> Unit) {
                     .nestedScroll(scrollBehavior.nestedScrollConnection),
                 contentPadding = standaloneContentPadding(padding, bottom = 16.dp)
             ) {
-                item(key = "card_auto_switch") {
-                    SettingCard {
-                        SwitchPreference(
-                            title = stringResource(R.string.agentpaw_auto_switch_title),
-                            summary = stringResource(R.string.agentpaw_auto_switch_desc),
-                            checked = autoSwitch,
-                            onCheckedChange = {
-                                autoSwitch = it
-                                AgentPawPrefs.setAutoSwitch(context, it)
-                            }
-                        )
-                    }
-                }
-
-                item(key = "section_perm") {
-                    SmallTitle(text = stringResource(R.string.agentpaw_perm_category))
-                }
-                item(key = "card_perm") {
-                    SettingCard {
-                        Column {
-                            StatusPreference(
-                                title = stringResource(R.string.agentpaw_accessibility_title),
-                                summary = stringResource(R.string.agentpaw_accessibility_desc),
-                                statusText = stringResource(
-                                    if (accessibilityEnabled) R.string.agentpaw_accessibility_on
-                                    else R.string.agentpaw_accessibility_off
-                                ),
-                                ok = accessibilityEnabled,
-                                actionText = if (accessibilityEnabled) null
-                                else stringResource(R.string.agentpaw_go_enable),
-                                onAction = { DevicePermissionManager.openAccessibilitySettings(context) }
-                            )
-                            ShizukuPreference(
-                                status = shizukuStatus,
-                                onAuthorize = {
-                                    if (!DevicePermissionManager.requestShizukuPermission()) {
-                                        Toast.makeText(
-                                            context,
-                                            context.getString(R.string.agentpaw_shizuku_not_ready),
-                                            Toast.LENGTH_SHORT
-                                        ).show()
-                                    }
-                                },
-                                onOpenShizuku = {
-                                    if (!DevicePermissionManager.openShizukuApp(context)) {
-                                        Toast.makeText(
-                                            context,
-                                            context.getString(R.string.agentpaw_shizuku_not_installed),
-                                            Toast.LENGTH_SHORT
-                                        ).show()
-                                    }
-                                }
-                            )
-                            StatusPreference(
-                                title = stringResource(R.string.agentpaw_overlay_title),
-                                summary = stringResource(R.string.agentpaw_overlay_desc),
-                                statusText = stringResource(
-                                    if (overlayGranted) R.string.agentpaw_overlay_granted
-                                    else R.string.agentpaw_overlay_denied
-                                ),
-                                ok = overlayGranted,
-                                actionText = if (overlayGranted) null
-                                else stringResource(R.string.agentpaw_go_grant),
-                                onAction = {
-                                    runCatching {
-                                        context.startActivity(
-                                            Intent(
-                                                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                                                Uri.parse("package:${context.packageName}")
-                                            ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                        )
-                                    }
-                                }
-                            )
+                when (page) {
+                    AgentPawPage.HOME -> homeContent(
+                        autoSwitch = autoSwitch,
+                        onAutoSwitchChange = {
+                            autoSwitch = it
+                            AgentPawPrefs.setAutoSwitch(context, it)
+                        },
+                        stream = stream,
+                        onStreamChange = {
+                            stream = it
+                            AgentPawPrefs.setStreamEnabled(context, it)
+                        },
+                        onOpenPage = { target ->
+                            flushPendingSave()
+                            page = target
                         }
-                    }
-                }
+                    )
 
-                item(key = "section_sampling") {
-                    SmallTitle(text = stringResource(R.string.agentpaw_sampling_category))
-                }
-                item(key = "card_sampling") {
-                    SettingCard {
-                        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
-                            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    TextField(
-                                        value = temperature,
-                                        onValueChange = { temperature = it },
-                                        modifier = Modifier.fillMaxWidth(),
-                                        label = stringResource(R.string.agentpaw_temperature_label),
-                                        useLabelAsPlaceholder = true
-                                    )
-                                    FieldHint(
-                                        text = stringResource(R.string.agentpaw_temperature_desc),
-                                        isError = parseTemperature(temperature) == null
-                                    )
-                                }
-                                Column(modifier = Modifier.weight(1f)) {
-                                    TextField(
-                                        value = topP,
-                                        onValueChange = { topP = it },
-                                        modifier = Modifier.fillMaxWidth(),
-                                        label = stringResource(R.string.agentpaw_top_p_label),
-                                        useLabelAsPlaceholder = true
-                                    )
-                                    FieldHint(
-                                        text = stringResource(R.string.agentpaw_top_p_desc),
-                                        isError = parseTopP(topP) == null
-                                    )
-                                }
-                            }
-                            Spacer(Modifier.height(10.dp))
-                            TextField(
-                                value = maxTokens,
-                                onValueChange = { maxTokens = it },
-                                modifier = Modifier.fillMaxWidth(),
-                                label = stringResource(R.string.agentpaw_max_tokens_label),
-                                useLabelAsPlaceholder = true
-                            )
-                            FieldHint(
-                                text = stringResource(R.string.agentpaw_max_tokens_desc),
-                                isError = parseMaxTokens(maxTokens) == null
-                            )
-                        }
-                    }
-                }
+                    AgentPawPage.GENERATION -> generationContent(
+                        temperature = temperature,
+                        onTemperatureChange = { temperature = it },
+                        topP = topP,
+                        onTopPChange = { topP = it },
+                        maxTokens = maxTokens,
+                        onMaxTokensChange = { maxTokens = it },
+                        systemPrompt = systemPrompt,
+                        onSystemPromptChange = { systemPrompt = it }
+                    )
 
-                item(key = "section_prompt") {
-                    SmallTitle(text = stringResource(R.string.agentpaw_system_prompt_category))
-                }
-                item(key = "card_prompt") {
-                    SettingCard {
-                        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
-                            TextField(
-                                value = systemPrompt,
-                                onValueChange = { systemPrompt = it },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .heightIn(min = 96.dp),
-                                label = stringResource(R.string.agentpaw_system_prompt_label),
-                                useLabelAsPlaceholder = true
-                            )
-                            FieldHint(text = stringResource(R.string.agentpaw_system_prompt_desc))
-                        }
-                    }
-                }
-
-                item(key = "section_vision") {
-                    SmallTitle(text = stringResource(R.string.agentpaw_vision_category))
-                }
-                item(key = "card_tool_rounds") {
-                    SettingCard {
-                        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
-                            SwitchPreference(
-                                title = stringResource(R.string.agentpaw_unlimited_tool_rounds_title),
-                                summary = stringResource(R.string.agentpaw_unlimited_tool_rounds_desc),
-                                checked = unlimitedToolRounds,
-                                onCheckedChange = {
-                                    unlimitedToolRounds = it
-                                    AgentPawPrefs.setUnlimitedToolRounds(context, it)
-                                }
-                            )
-                            // 开关开启时启用 0.1.3 步数无上限机制，隐藏执行步数输入框；
-                            // 关闭时恢复输入框并沿用原有的步数上限。
-                            if (!unlimitedToolRounds) {
-                                Spacer(Modifier.height(10.dp))
-                                TextField(
-                                    value = maxToolRounds,
-                                    onValueChange = { maxToolRounds = it },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    label = stringResource(R.string.agentpaw_max_tool_rounds_label),
-                                    useLabelAsPlaceholder = true
-                                )
-                                FieldHint(
-                                    text = stringResource(R.string.agentpaw_max_tool_rounds_desc),
-                                    isError = parseMaxToolRounds(maxToolRounds) == null
-                                )
-                            }
-                        }
-                    }
-                }
-                item(key = "card_vision_mode") {
-                    SettingCard {
-                        Column {
-                            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
-                                Text(
-                                    text = stringResource(R.string.agentpaw_vision_mode_title),
-                                    fontSize = 14.sp,
-                                    color = MiuixTheme.colorScheme.onSurface
-                                )
-                                FieldHint(text = stringResource(R.string.agentpaw_vision_mode_desc))
-                            }
-                            visionOptions.forEach { (mode, labels) ->
-                                RadioButtonPreference(
-                                    title = stringResource(labels.first),
-                                    summary = stringResource(labels.second),
-                                    selected = visionMode == mode,
-                                    onClick = {
-                                        visionMode = mode
-                                        AgentPawPrefs.setVisionMode(context, mode)
-                                    }
-                                )
-                            }
-                        }
-                    }
-                }
-
-                item(key = "card_stream") {
-                    SettingCard {
-                        SwitchPreference(
-                            title = stringResource(R.string.agentpaw_stream_title),
-                            summary = stringResource(R.string.agentpaw_stream_desc),
-                            checked = stream,
-                            onCheckedChange = {
-                                stream = it
-                                AgentPawPrefs.setStreamEnabled(context, it)
-                            }
-                        )
-                    }
+                    AgentPawPage.CONTROL -> controlContent(
+                        context = context,
+                        unlimitedToolRounds = unlimitedToolRounds,
+                        onUnlimitedToolRoundsChange = {
+                            unlimitedToolRounds = it
+                            AgentPawPrefs.setUnlimitedToolRounds(context, it)
+                        },
+                        maxToolRounds = maxToolRounds,
+                        onMaxToolRoundsChange = { maxToolRounds = it },
+                        visionMode = visionMode,
+                        onVisionModeChange = { mode ->
+                            visionMode = mode
+                            AgentPawPrefs.setVisionMode(context, mode)
+                        },
+                        visionOptions = visionOptions,
+                        accessibilityEnabled = accessibilityEnabled,
+                        overlayGranted = overlayGranted,
+                        shizukuStatus = shizukuStatus
+                    )
                 }
             }
+        }
+    }
+}
+
+/** 首页：两个总开关 + 两个子页入口。 */
+private fun LazyListScope.homeContent(
+    autoSwitch: Boolean,
+    onAutoSwitchChange: (Boolean) -> Unit,
+    stream: Boolean,
+    onStreamChange: (Boolean) -> Unit,
+    onOpenPage: (AgentPawPage) -> Unit
+) {
+    item(key = "card_auto_switch") {
+        SettingCard {
+            SwitchPreference(
+                title = stringResource(R.string.agentpaw_auto_switch_title),
+                summary = stringResource(R.string.agentpaw_auto_switch_desc),
+                checked = autoSwitch,
+                onCheckedChange = onAutoSwitchChange
+            )
+        }
+    }
+
+    item(key = "card_stream") {
+        SettingCard {
+            SwitchPreference(
+                title = stringResource(R.string.agentpaw_stream_title),
+                summary = stringResource(R.string.agentpaw_stream_desc),
+                checked = stream,
+                onCheckedChange = onStreamChange
+            )
+        }
+    }
+
+    item(key = "nav_generation") {
+        SettingsNavRow(
+            iconRes = R.drawable.ic_settings,
+            title = stringResource(R.string.agentpaw_generation_page_title),
+            summary = stringResource(R.string.agentpaw_generation_nav_summary),
+            onClick = { onOpenPage(AgentPawPage.GENERATION) }
+        )
+    }
+
+    item(key = "nav_control") {
+        SettingsNavRow(
+            iconRes = R.drawable.ic_ai_agent,
+            title = stringResource(R.string.agentpaw_control_page_title),
+            summary = stringResource(R.string.agentpaw_control_nav_summary),
+            onClick = { onOpenPage(AgentPawPage.CONTROL) }
+        )
+    }
+
+    item(key = "home_spacer") { Spacer(Modifier.height(16.dp)) }
+}
+/** 生成参数子页：采样参数 + 系统提示词。 */
+private fun LazyListScope.generationContent(
+    temperature: String,
+    onTemperatureChange: (String) -> Unit,
+    topP: String,
+    onTopPChange: (String) -> Unit,
+    maxTokens: String,
+    onMaxTokensChange: (String) -> Unit,
+    systemPrompt: String,
+    onSystemPromptChange: (String) -> Unit
+) {
+    item(key = "section_sampling") {
+        SmallTitle(text = stringResource(R.string.agentpaw_sampling_category))
+    }
+    item(key = "card_sampling") {
+        SettingCard {
+            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        TextField(
+                            value = temperature,
+                            onValueChange = onTemperatureChange,
+                            modifier = Modifier.fillMaxWidth(),
+                            label = stringResource(R.string.agentpaw_temperature_label),
+                            useLabelAsPlaceholder = true
+                        )
+                        FieldHint(
+                            text = stringResource(R.string.agentpaw_temperature_desc),
+                            isError = parseTemperature(temperature) == null
+                        )
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        TextField(
+                            value = topP,
+                            onValueChange = onTopPChange,
+                            modifier = Modifier.fillMaxWidth(),
+                            label = stringResource(R.string.agentpaw_top_p_label),
+                            useLabelAsPlaceholder = true
+                        )
+                        FieldHint(
+                            text = stringResource(R.string.agentpaw_top_p_desc),
+                            isError = parseTopP(topP) == null
+                        )
+                    }
+                }
+                Spacer(Modifier.height(10.dp))
+                TextField(
+                    value = maxTokens,
+                    onValueChange = onMaxTokensChange,
+                    modifier = Modifier.fillMaxWidth(),
+                    label = stringResource(R.string.agentpaw_max_tokens_label),
+                    useLabelAsPlaceholder = true
+                )
+                FieldHint(
+                    text = stringResource(R.string.agentpaw_max_tokens_desc),
+                    isError = parseMaxTokens(maxTokens) == null
+                )
+            }
+        }
+    }
+
+    item(key = "section_prompt") {
+        SmallTitle(text = stringResource(R.string.agentpaw_system_prompt_category))
+    }
+    item(key = "card_prompt") {
+        SettingCard {
+            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                TextField(
+                    value = systemPrompt,
+                    onValueChange = onSystemPromptChange,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 96.dp),
+                    label = stringResource(R.string.agentpaw_system_prompt_label),
+                    useLabelAsPlaceholder = true
+                )
+                FieldHint(text = stringResource(R.string.agentpaw_system_prompt_desc))
+            }
+        }
+    }
+
+    item(key = "generation_spacer") { Spacer(Modifier.height(16.dp)) }
+}
+
+/**
+ * 手机控制与权限子页：执行策略 + 视觉策略 + 系统权限。
+ *
+ * 权限类状态由调用方在 ON_RESUME 时重查后传入；跳系统设置授权的 Toast 行为沿用原实现。
+ */
+private fun LazyListScope.controlContent(
+    context: Context,
+    unlimitedToolRounds: Boolean,
+    onUnlimitedToolRoundsChange: (Boolean) -> Unit,
+    maxToolRounds: String,
+    onMaxToolRoundsChange: (String) -> Unit,
+    visionMode: String,
+    onVisionModeChange: (String) -> Unit,
+    visionOptions: List<Pair<String, Pair<Int, Int>>>,
+    accessibilityEnabled: Boolean,
+    overlayGranted: Boolean,
+    shizukuStatus: ShizukuStatus
+) {
+    item(key = "section_exec") {
+        SmallTitle(text = stringResource(R.string.agentpaw_exec_category))
+    }
+    item(key = "card_tool_rounds") {
+        SettingCard {
+            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                SwitchPreference(
+                    title = stringResource(R.string.agentpaw_unlimited_tool_rounds_title),
+                    summary = stringResource(R.string.agentpaw_unlimited_tool_rounds_desc),
+                    checked = unlimitedToolRounds,
+                    onCheckedChange = onUnlimitedToolRoundsChange
+                )
+                // 开关开启时启用 0.1.3 步数无上限机制，隐藏执行步数输入框；
+                // 关闭时恢复输入框并沿用原有的步数上限。
+                if (!unlimitedToolRounds) {
+                    Spacer(Modifier.height(10.dp))
+                    TextField(
+                        value = maxToolRounds,
+                        onValueChange = onMaxToolRoundsChange,
+                        modifier = Modifier.fillMaxWidth(),
+                        label = stringResource(R.string.agentpaw_max_tool_rounds_label),
+                        useLabelAsPlaceholder = true
+                    )
+                    FieldHint(
+                        text = stringResource(R.string.agentpaw_max_tool_rounds_desc),
+                        isError = parseMaxToolRounds(maxToolRounds) == null
+                    )
+                }
+            }
+        }
+    }
+
+    item(key = "section_vision") {
+        SmallTitle(text = stringResource(R.string.agentpaw_vision_category))
+    }
+    item(key = "card_vision_mode") {
+        SettingCard {
+            Column {
+                Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                    Text(
+                        text = stringResource(R.string.agentpaw_vision_mode_title),
+                        fontSize = 14.sp,
+                        color = MiuixTheme.colorScheme.onSurface
+                    )
+                    FieldHint(text = stringResource(R.string.agentpaw_vision_mode_desc))
+                }
+                visionOptions.forEach { (mode, labels) ->
+                    RadioButtonPreference(
+                        title = stringResource(labels.first),
+                        summary = stringResource(labels.second),
+                        selected = visionMode == mode,
+                        onClick = { onVisionModeChange(mode) }
+                    )
+                }
+            }
+        }
+    }
+
+    item(key = "section_perm") {
+        SmallTitle(text = stringResource(R.string.agentpaw_perm_category))
+    }
+    item(key = "card_perm") {
+        SettingCard {
+            Column {
+                StatusPreference(
+                    title = stringResource(R.string.agentpaw_accessibility_title),
+                    summary = stringResource(R.string.agentpaw_accessibility_desc),
+                    statusText = stringResource(
+                        if (accessibilityEnabled) R.string.agentpaw_accessibility_on
+                        else R.string.agentpaw_accessibility_off
+                    ),
+                    ok = accessibilityEnabled,
+                    actionText = if (accessibilityEnabled) null
+                    else stringResource(R.string.agentpaw_go_enable),
+                    onAction = { DevicePermissionManager.openAccessibilitySettings(context) }
+                )
+                ShizukuPreference(
+                    status = shizukuStatus,
+                    onAuthorize = {
+                        if (!DevicePermissionManager.requestShizukuPermission()) {
+                            Toast.makeText(
+                                context,
+                                context.getString(R.string.agentpaw_shizuku_not_ready),
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }
+                    },
+                    onOpenShizuku = {
+                        if (!DevicePermissionManager.openShizukuApp(context)) {
+                            Toast.makeText(
+                                context,
+                                context.getString(R.string.agentpaw_shizuku_not_installed),
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }
+                    }
+                )
+                StatusPreference(
+                    title = stringResource(R.string.agentpaw_overlay_title),
+                    summary = stringResource(R.string.agentpaw_overlay_desc),
+                    statusText = stringResource(
+                        if (overlayGranted) R.string.agentpaw_overlay_granted
+                        else R.string.agentpaw_overlay_denied
+                    ),
+                    ok = overlayGranted,
+                    actionText = if (overlayGranted) null
+                    else stringResource(R.string.agentpaw_go_grant),
+                    onAction = {
+                        runCatching {
+                            context.startActivity(
+                                Intent(
+                                    Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                    Uri.parse("package:${context.packageName}")
+                                ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            )
+                        }
+                    }
+                )
+            }
+        }
+    }
+
+    item(key = "control_spacer") { Spacer(Modifier.height(16.dp)) }
+}
+
+/** 三个页面的导航状态。 */
+private enum class AgentPawPage {
+    HOME, GENERATION, CONTROL
+}
+
+/** 子页入口行：图标 + 标题 + 摘要 + 右箭头。 */
+@Composable
+private fun SettingsNavRow(
+    iconRes: Int,
+    title: String,
+    summary: String,
+    onClick: () -> Unit
+) {
+    SettingCard {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onClick)
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            SettingIcon(iconRes)
+            Spacer(Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    fontSize = 15.sp,
+                    color = MiuixTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = summary,
+                    fontSize = 12.sp,
+                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                    modifier = Modifier.padding(top = 2.dp)
+                )
+            }
+            Icon(
+                imageVector = MiuixGlassIcons.ChevronForward,
+                contentDescription = null,
+                tint = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                modifier = Modifier.size(20.dp)
+            )
         }
     }
 }

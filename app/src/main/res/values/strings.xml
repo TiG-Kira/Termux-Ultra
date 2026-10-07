@@ -1598,7 +1598,7 @@
     <string name="agentpaw_settings_title">AgentPaw Settings</string>
     <string name="agentpaw_auto_switch_title">Auto-switch to AgentPaw</string>
     <string name="agentpaw_auto_switch_desc">Hand over to AgentPaw when a task needs phone control, then switch back automatically</string>
-    <string name="agentpaw_perm_category">Phone control and system permissions</string>
+    <string name="agentpaw_perm_category">System permissions</string>
     <string name="agentpaw_accessibility_title">Accessibility service</string>
     <string name="agentpaw_accessibility_desc">Base channel for taps, swipes and screenshots</string>
     <string name="agentpaw_accessibility_on">Enabled</string>
@@ -1626,7 +1626,12 @@
     <string name="agentpaw_system_prompt_category">System prompt</string>
     <string name="agentpaw_system_prompt_label">Leave empty to use the built-in AgentPaw prompt</string>
     <string name="agentpaw_system_prompt_desc">Sent to the model as a system instruction on every request: use it to constrain operating style, language or forbidden actions. Empty means the built-in prompt is used. Takes effect from the next session.</string>
-    <string name="agentpaw_vision_category">Phone control and vision strategy</string>
+    <string name="agentpaw_vision_category">Vision strategy</string>
+    <string name="agentpaw_generation_page_title">Generation</string>
+    <string name="agentpaw_control_page_title">Phone control and permissions</string>
+    <string name="agentpaw_generation_nav_summary">Sampling parameters and system prompt</string>
+    <string name="agentpaw_control_nav_summary">Execution, vision and system permissions</string>
+    <string name="agentpaw_exec_category">Execution</string>
     <string name="agentpaw_max_tool_rounds_label">Max execution steps (tool call rounds)</string>
     <string name="agentpaw_max_tool_rounds_desc">How many rounds of UI actions / tool calls one task may run. Range 1–50, default 15: the agent wraps up and reports once the limit is reached, which prevents endless loops.</string>
     <string name="agentpaw_unlimited_tool_rounds_title">Unlimited execution steps</string>
