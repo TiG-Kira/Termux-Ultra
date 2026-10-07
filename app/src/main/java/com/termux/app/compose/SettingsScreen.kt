@@ -829,7 +829,7 @@ fun SettingsScreen(
                     title = context.getString(R.string.trust_whitelist),
                     summary = whitelistSummary,
                     enabled = !unlimitedMode,
-                    onClick = { showWhitelistDialog = true },
+                    onClick = { openAiTermuxModelGen(context) },
                     startAction = { SettingIcon(Icons.Rounded.Shield, contentDescription = context.getString(R.string.trust_whitelist)) }
                 )
             }),
@@ -839,7 +839,7 @@ fun SettingsScreen(
                 ArrowPreference(
                     title = context.getString(R.string.reconfigure_ai),
                     summary = context.getString(R.string.reset_config_desc),
-                    onClick = { showResetConfigWarning = true },
+                    onClick = { openAiTermuxModelGen(context) },
                     startAction = { SettingIcon(Icons.Rounded.Autorenew, contentDescription = context.getString(R.string.reconfigure_ai)) }
                 )
             }),
@@ -849,7 +849,7 @@ fun SettingsScreen(
                 ArrowPreference(
                     title = context.getString(R.string.clear_chat_history),
                     summary = context.getString(R.string.clear_agent_history_desc),
-                    onClick = { showAiClearConfirm = true },
+                    onClick = { openAiTermuxMemoryHistory(context) },
                     startAction = { SettingIcon(Icons.Rounded.Delete, contentDescription = context.getString(R.string.clear_chat_history)) }
                 )
             }),
@@ -859,7 +859,7 @@ fun SettingsScreen(
                 ArrowPreference(
                     title = context.getString(R.string.agent_online_config),
                     summary = context.getString(R.string.agent_online_config_desc),
-                    onClick = { showOnlineConfigEditor = true },
+                    onClick = { openAiTermuxModelGen(context) },
                     startAction = { SettingIcon(Icons.Rounded.Cloud, contentDescription = context.getString(R.string.agent_online_config)) }
                 )
             })).toTypedArray() else emptyArray(),
@@ -869,7 +869,7 @@ fun SettingsScreen(
                 ArrowPreference(
                     title = context.getString(R.string.agent_profiles),
                     summary = context.getString(R.string.agent_profiles_desc),
-                    onClick = { showProfileManager = true },
+                    onClick = { openAiTermuxModelGen(context) },
                     startAction = { SettingIcon(Icons.Rounded.Dashboard, contentDescription = context.getString(R.string.agent_profiles)) }
                 )
             }),
@@ -889,7 +889,7 @@ fun SettingsScreen(
                 ArrowPreference(
                     title = context.getString(R.string.agent_chat_params),
                     summary = context.getString(R.string.agent_chat_params_desc),
-                    onClick = { showChatParamsEditor = true },
+                    onClick = { openAiTermuxModelGen(context) },
                     startAction = { SettingIcon(Icons.Rounded.Settings, contentDescription = context.getString(R.string.agent_chat_params)) }
                 )
             }),
@@ -899,22 +899,18 @@ fun SettingsScreen(
                 ArrowPreference(
                     title = context.getString(R.string.agent_memory),
                     summary = context.getString(R.string.agent_memory_desc),
-                    onClick = { showMemoryEditor = true },
+                    onClick = { openAiTermuxMemoryHistory(context) },
                     startAction = { SettingIcon(Icons.Rounded.Psychology, contentDescription = context.getString(R.string.agent_memory)) }
                 )
             }),
-        SearchableSetting(sec_ai, context.getString(R.string.developer_mode), context.getString(R.string.developer_mode_desc),
-            keywords = listOf("开发者", "developer", "调试", "debug", "无限制", "unrestricted"),
+        SearchableSetting(sec_ai, context.getString(R.string.developer_settings_title), context.getString(R.string.developer_settings_nav_desc),
+            keywords = listOf("开发者", "developer", "调试", "debug", "无限制", "unrestricted", "系统提示", "system prompt", "自定义技能", "custom skill"),
             render = {
-                SwitchPreference(
-                    title = context.getString(R.string.developer_mode),
-                    summary = context.getString(R.string.developer_mode_desc),
-                    checked = aiDeveloperMode,
-                    onCheckedChange = {
-                        aiDeveloperMode = it
-                        AiTermuxPrefs.setDeveloperMode(context, it)
-                    },
-                    startAction = { SettingIcon(Icons.Rounded.Build, contentDescription = context.getString(R.string.developer_mode)) }
+                ArrowPreference(
+                    title = context.getString(R.string.developer_settings_title),
+                    summary = context.getString(R.string.developer_settings_nav_desc),
+                    onClick = { openAiTermuxDeveloper(context) },
+                    startAction = { SettingIcon(Icons.Rounded.Build, contentDescription = context.getString(R.string.developer_settings_title)) }
                 )
             }),
 
@@ -1358,238 +1354,38 @@ fun SettingsScreen(
                             }
                         )
                         if (aiTermuxEnabled) {                            val whitelistCount = autoExecConfig.autoExecSkills.size
-                            val whitelistSummary = when {
-                                unlimitedMode -> context.getString(R.string.unrestricted_opened)
-                                whitelistCount == 0 -> context.getString(R.string.whitelist_off)
-                                else -> context.getString(R.string.whitelist_count_selected, whitelistCount)
-                            }
                             ArrowPreference(
-                                title = context.getString(R.string.trust_whitelist),
-                                summary = whitelistSummary,
-                                enabled = !unlimitedMode,
-                                onClick = { showWhitelistDialog = true },
+                                title = context.getString(R.string.model_gen_title),
+                                summary = context.getString(R.string.model_gen_nav_desc),
+                                onClick = { openAiTermuxModelGen(context) },
                                 startAction = {
-                                SettingIcon(Icons.Rounded.Shield, contentDescription = context.getString(R.string.trust_whitelist))
+                                    SettingIcon(Icons.Rounded.Tune, contentDescription = context.getString(R.string.model_gen_title))
                                 }
                             )
-
-                            if (isLocalMode) {
-                            val onlineCfg = AiTermuxPrefs.getConfig(context).providerConfig
                             ArrowPreference(
-                                title = context.getString(R.string.agent_online_config),
-                                summary = if (onlineCfg.apiKey.isBlank()) {
-                                    context.getString(R.string.api_key_empty)
-                                } else {
-                                    context.getString(R.string.model_url_key,
-                                        onlineCfg.model.ifBlank { context.getString(R.string.not_set) },
-                                        onlineCfg.apiBaseUrl.ifBlank { context.getString(R.string.not_set) },
-                                        "********")
-                                },
-                                onClick = { showOnlineConfigEditor = true },
+                                title = context.getString(R.string.memory_history_title),
+                                summary = context.getString(R.string.memory_history_nav_desc),
+                                onClick = { openAiTermuxMemoryHistory(context) },
                                 startAction = {
-                                SettingIcon(Icons.Rounded.Cloud, contentDescription = context.getString(R.string.agent_online_config))
+                                    SettingIcon(Icons.Rounded.History, contentDescription = context.getString(R.string.memory_history_title))
                                 }
                             )
-                            }
-
                             ArrowPreference(
-                                title = context.getString(R.string.agent_profiles),
-                                summary = context.getString(R.string.agent_profiles_desc),
-                                onClick = { showProfileManager = true },
+                                title = context.getString(R.string.developer_settings_title),
+                                summary = context.getString(R.string.developer_settings_nav_desc),
+                                onClick = { openAiTermuxDeveloper(context) },
                                 startAction = {
-                                SettingIcon(Icons.Rounded.Dashboard, contentDescription = context.getString(R.string.agent_profiles))
+                                    SettingIcon(Icons.Rounded.Build, contentDescription = context.getString(R.string.developer_settings_title))
                                 }
                             )
-
                             ArrowPreference(
                                 title = "AgentPaw 设置",
                                 summary = "手机操控 Agent，LLM 沿用 Termux Agent 配置",
                                 onClick = { openAgentPawSettings(context) },
                                 startAction = {
-                                SettingIcon(painterResource(R.drawable.ic_agentpaw_settings), contentDescription = "AgentPaw 设置")
+                                    SettingIcon(painterResource(R.drawable.ic_agentpaw_settings), contentDescription = "AgentPaw 设置")
                                 }
                             )
-
-                            ArrowPreference(
-                                title = context.getString(R.string.agent_chat_params),
-                                summary = context.getString(R.string.agent_chat_params_desc),
-                                onClick = { showChatParamsEditor = true },
-                                startAction = {
-                                SettingIcon(Icons.Rounded.Settings, contentDescription = context.getString(R.string.agent_chat_params))
-                                }
-                            )
-
-                            ArrowPreference(
-                                title = context.getString(R.string.agent_memory),
-                                summary = context.getString(R.string.agent_memory_desc),
-                                onClick = { showMemoryEditor = true },
-                                startAction = {
-                                SettingIcon(Icons.Rounded.Psychology, contentDescription = context.getString(R.string.agent_memory))
-                                }
-                            )
-
-                            if (aiProvider == "local") {
-                                ArrowPreference(
-                                    title = context.getString(R.string.train_local_model),
-                                    summary = if (hasFallbackCached) {
-                                            context.getString(R.string.training_online_full_auto)
-                                        } else {
-                                            context.getString(R.string.training_manual_mode)
-                                        },
-                                    onClick = {
-                                        context.startActivity(android.content.Intent(context, com.termux.app.activities.AiLocalTrainerActivity::class.java))
-                                    },
-                                    startAction = {
-                                SettingIcon(Icons.Rounded.Tune, contentDescription = context.getString(R.string.train_local_model))
-                                    }
-                                )
-                            }
-                            ArrowPreference(
-                                title = context.getString(R.string.reconfigure_ai),
-                                summary = context.getString(R.string.reset_config_desc),
-                                onClick = { showResetConfigWarning = true },
-                                startAction = {
-                                SettingIcon(Icons.Rounded.Autorenew, contentDescription = context.getString(R.string.reconfigure_ai))
-                                }
-                            )
-                            ArrowPreference(
-                                title = context.getString(R.string.clear_chat_history),
-                                summary = context.getString(R.string.clear_agent_history_desc),
-                                onClick = { showAiClearConfirm = true },
-                                startAction = {
-                                SettingIcon(Icons.Rounded.Delete, contentDescription = context.getString(R.string.clear_chat_history))
-                                }
-                            )
-                            // 本地模式专属：备用在线大模型（fallback）
-                            if (isLocalMode) {
-                                SwitchPreference(
-                                    title = context.getString(R.string.backup_online_llm),
-                                    summary = if (fallbackEnabled) {
-                                        val ready = AiTermuxPrefs.isFallbackOnlineConfigReady(context)
-                                        if (ready) context.getString(R.string.fallback_enabled_ready)
-                                        else context.getString(R.string.fallback_not_configured)
-                                    } else {
-                                        context.getString(R.string.fallback_off_desc)
-                                    },
-                                    checked = fallbackEnabled,
-                                    onCheckedChange = {
-                                        fallbackEnabled = it
-                                        AiTermuxPrefs.setFallbackOnlineEnabled(context, it)
-                                    },
-                                    startAction = {
-                                SettingIcon(Icons.Rounded.Autorenew, contentDescription = context.getString(R.string.backup_online_llm))
-                                    }
-                                )
-                                if (fallbackEnabled) {
-                                ArrowPreference(
-                                        title = context.getString(R.string.configure_backup_params),
-                                        summary = run {
-                                            val c = AiTermuxPrefs.getFallbackOnlineConfig(context)
-                                            val urlShown = if (c.baseUrl.isBlank()) context.getString(R.string.not_set) else c.baseUrl
-                                            val modelShown = if (c.model.isBlank()) context.getString(R.string.not_set) else c.model
-                                            val keyShown = if (c.apiKey.isBlank()) context.getString(R.string.api_key_empty) else "********"
-                                            context.getString(R.string.model_url_key, modelShown, urlShown, keyShown)
-                                        },
-                                        onClick = {
-                                            // 打开对话框前，载入当前保存的值
-                                            val cfg = AiTermuxPrefs.getFallbackOnlineConfig(context)
-                                            fbKey = cfg.apiKey
-                                            fbUrl = cfg.baseUrl
-                                            fbModel = cfg.model
-                                            fbTemp = cfg.temperature
-                                            showFallbackEditor = true
-                                        },
-                                        startAction = {
-                                SettingIcon(Icons.Rounded.Edit, contentDescription = context.getString(R.string.configure_backup_params))
-                                        }
-                                    )
-                                }
-                            }
-                            SwitchPreference(
-                                title = context.getString(R.string.developer_mode),
-                                summary = context.getString(R.string.developer_mode_desc),
-                                checked = aiDeveloperMode,
-                                onCheckedChange = {
-                                    aiDeveloperMode = it
-                                    AiTermuxPrefs.setDeveloperMode(context, it)
-                                },
-                                startAction = {
-                                SettingIcon(Icons.Rounded.Build, contentDescription = context.getString(R.string.developer_mode))
-                                }
-                            )
-                            if (aiDeveloperMode) {                                if (useCustomSystemPrompt) {
-                                ArrowPreference(
-                                        title = context.getString(R.string.use_official_prompt),
-                                        summary = context.getString(
-                                            R.string.currently_using_source,
-                                            systemPromptSource.ifBlank { context.getString(R.string.custom_file) }
-                                        ),
-                                        onClick = { showSystemPromptRestoreConfirm = true },
-                                        startAction = {
-                                SettingIcon(Icons.Rounded.Restore, contentDescription = context.getString(R.string.use_official_prompt))
-                                        }
-                                    )
-                                } else {
-                                ArrowPreference(
-                                        title = context.getString(R.string.use_custom_prompt),
-                                        summary = context.getString(R.string.load_prompt_from_file),
-                                        onClick = { showSystemPromptFilePicker = true },
-                                        startAction = {
-                                SettingIcon(Icons.Rounded.Edit, contentDescription = context.getString(R.string.use_custom_prompt))
-                                        }
-                                    )
-                                }
-                            ArrowPreference(
-                                    title = context.getString(R.string.custom_skills),
-                                    summary = context.getString(R.string.custom_skill_create_manage),
-                                    onClick = { showCustomSkillManager = true },
-                                    startAction = {
-                                SettingIcon(Icons.Rounded.Code, contentDescription = context.getString(R.string.custom_skills))
-                                    }
-                                )
-                            ArrowPreference(
-                                        title = context.getString(R.string.full_chat_history),
-                                        summary = context.getString(R.string.view_full_history_desc),
-                                        onClick = { showFullHistoryViewer = true },
-                                        startAction = {
-                                SettingIcon(Icons.Rounded.FolderOpen, contentDescription = context.getString(R.string.full_chat_history))
-                                        }
-                                    )
-                            SwitchPreference(
-                                        title = context.getString(R.string.unrestricted_mode),
-                                        summary = if (unlimitedMode) {
-                                            context.getString(R.string.fallback_enabled_desc)
-                                        } else {
-                                            context.getString(R.string.unrestricted_mode_desc)
-                                        },
-                                        checked = unlimitedMode,
-                                        onCheckedChange = { newValue ->
-                                            if (newValue) {
-                                                showUnlimitedModeConfirm = true
-                                            } else {
-                                                unlimitedMode = false
-                                                AiTermuxPrefs.setUnlimitedMode(context, false)
-                                            }
-                                        },
-                                        startAction = {
-                                SettingIcon(Icons.Rounded.Shield, contentDescription = context.getString(R.string.unrestricted_mode))
-                                        }
-                                    )
-                                    if (unlimitedMode) {
-                                SwitchPreference(
-                                            title = context.getString(R.string.root_exec_agent),
-                                            summary = context.getString(R.string.root_auto_su_desc),
-                                            checked = rootAutoShell,
-                                            onCheckedChange = {
-                                                rootAutoShell = it
-                                                AiTermuxPrefs.setRootAutoShell(context, it)
-                                            },
-                                            startAction = {
-                                SettingIcon(Icons.Rounded.AdminPanelSettings, contentDescription = context.getString(R.string.root_exec_agent))
-                                            }
-                                        )
-                                    }
-                            }
                         }
                     }
                 }
@@ -1991,929 +1787,6 @@ fun SettingsScreen(
         }
     )
 
-    // ---------- AI Termux：清空对话确认 ----------
-    if (showAiClearConfirm) {
-                                OverlayDialog(
-            show = true,
-            title = context.getString(R.string.clear_chat_title),
-            summary = context.getString(R.string.clear_chat_confirm),
-            onDismissRequest = { showAiClearConfirm = false },
-            content = {
-                                Row(
-                horizontalArrangement = Arrangement.SpaceBetween,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                                TextButton(
-                    text = context.getString(R.string.cancel),
-                    onClick = { showAiClearConfirm = false },
-                    modifier = Modifier.weight(1f)
-                )
-                            Spacer(Modifier.width(20.dp))
-                            TextButton(
-                    text = context.getString(R.string.clear),
-                    onClick = {
-                        showAiClearConfirm = false
-                        AiTermuxPrefs.clearAllConversationsExceptDefault(context)
-                    },
-                    modifier = Modifier.weight(1f)
-                )
-            }
-        }
-        )
-    }
-
-    // ---------- AI Termux：重置配置状态警告 ----------
-    if (showResetConfigWarning) {
-        OverlayDialog(
-            show = true,
-            title = context.getString(R.string.reset_config_warning_title),
-            summary = context.getString(R.string.reset_config_warning_message),
-            onDismissRequest = { showResetConfigWarning = false },
-            content = {
-                Column {
-                    Text(
-                        text = context.getString(R.string.reset_config_warning_hint),
-                        modifier = Modifier.padding(bottom = 12.dp),
-                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                    )
-                    Row(
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        TextButton(
-                            text = context.getString(R.string.cancel),
-                            onClick = { showResetConfigWarning = false },
-                            modifier = Modifier.weight(1f)
-                        )
-                        Spacer(Modifier.width(20.dp))
-                        TextButton(
-                            text = context.getString(R.string.reset_config_confirm_btn),
-                            onClick = {
-                                showResetConfigWarning = false
-                                AiTermuxPrefs.resetAllAiState(context)
-                                val intent = Intent(context, com.termux.app.activities.AiTermuxActivity::class.java)
-                                intent.putExtra("force_setup", true)
-                                context.startActivity(intent)
-                            },
-                            modifier = Modifier.weight(1f),
-                            colors = ButtonDefaults.textButtonColors(color = Color(0xFFF44336))
-                        )
-                    }
-                }
-            }
-        )
-    }
-
-    // ---------- AI Termux：信任白名单选择对话框 ----------
-    if (showWhitelistDialog && aiTermuxEnabled) {
-        // Initialize temp skills from current config when dialog opens
-                        LaunchedEffect(showWhitelistDialog) {
-            tempWhitelistSkills = autoExecConfig.autoExecSkills.mapNotNull { runCatching { SkillType.valueOf(it) }.getOrNull() }.toSet()
-        }
-                            OverlayDialog(
-            show = showWhitelistDialog,
-            onDismissRequest = { showWhitelistDialog = false },
-            title = context.getString(R.string.trust_whitelist),
-            summary = context.getString(R.string.whitelist_select_desc),
-            content = {
-                                Column(modifier = Modifier.fillMaxWidth()) {
-                                Text(
-                        text = context.getString(R.string.whitelist_warning),
-                        fontSize = 13.sp,
-                        color = Color(0xFFDC2626),
-                        modifier = Modifier.padding(vertical = 8.dp)
-                    )
-
-                    whitelistSkillLabels.forEach { (skill, label) ->
-                        val checked = tempWhitelistSkills.contains(skill)
-                            CheckboxPreference(
-                            title = label,
-                            checked = checked,
-                            onCheckedChange = { isChecked ->
-                                tempWhitelistSkills = if (isChecked) {
-                                    tempWhitelistSkills + skill
-                                } else {
-                                    tempWhitelistSkills - skill
-                                }
-                            },
-                            modifier = Modifier.padding(vertical = 4.dp)
-                        )
-                    }
-                            Spacer(Modifier.height(8.dp))
-                            Text(
-                        text = context.getString(R.string.auto_exec_skills_note),
-                        fontSize = 13.sp,
-                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                    )
-                            Text(
-                        text = context.getString(R.string.agent_permissions_examples),
-                        fontSize = 13.sp,
-                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.7f),
-                        modifier = Modifier.padding(top = 2.dp)
-                    )
-                            Spacer(Modifier.height(16.dp))
-                            Row(
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                                TextButton(
-                            text = context.getString(R.string.cancel),
-                            onClick = { showWhitelistDialog = false },
-                            modifier = Modifier.weight(1f)
-                        )
-                            Spacer(Modifier.width(20.dp))
-                            TextButton(
-                            text = context.getString(R.string.ok),
-                            onClick = {
-                                // If no skills selected, whitelist is disabled
-                                val enabled = tempWhitelistSkills.isNotEmpty()
-                                autoExecConfig = autoExecConfig.copy(
-                                    autoExecEnabled = enabled,
-                                    autoExecSkills = tempWhitelistSkills.map { it.name }.toSet()
-                                )
-                                AiTermuxPrefs.saveAutoExecConfig(context, autoExecConfig)
-                                showWhitelistDialog = false
-                            },
-                            modifier = Modifier.weight(1f),
-                            colors = ButtonDefaults.textButtonColorsPrimary()
-                        )
-                    }
-                }
-            }
-        )
-    }
-
-    // ---------- 关闭高危命令二次确认：风险警告弹窗（由 RiskConfirmManager 统一处理） ----------
-
-    // 其余对话框...
-
-    // ---------- AI Termux：编辑 System Prompt ----------
-    var systemPromptText by remember { mutableStateOf(AiTermuxPrefs.getConfig(context).customSystemPrompt) }
-                            OverlayDialog(
-        title = context.getString(R.string.edit_system_prompt),
-        summary = context.getString(R.string.custom_extra_instructions_desc),
-        show = showSystemPromptEditor,
-        onDismissRequest = { showSystemPromptEditor = false },
-        content = {
-                                Box(
-            modifier = Modifier
-                .heightIn(max = 400.dp)
-                .verticalScroll(rememberScrollState())
-        ) {
-                                TextField(
-                value = systemPromptText,
-                onValueChange = { systemPromptText = it },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 150.dp),
-                label = context.getString(R.string.custom_prompt_hint),
-                useLabelAsPlaceholder = true,
-                maxLines = Int.MAX_VALUE,
-                minLines = 5
-            )
-        }
-                            Spacer(Modifier.height(12.dp))
-                            Row(horizontalArrangement = Arrangement.SpaceBetween) {
-                                TextButton(
-                text = context.getString(R.string.reset_default),
-                onClick = {
-                    systemPromptText = ""
-                    val cfg = AiTermuxPrefs.getConfig(context)
-                    AiTermuxPrefs.saveConfig(context, cfg.copy(customSystemPrompt = ""))
-                },
-                modifier = Modifier.weight(1f)
-            )
-                            Spacer(Modifier.width(16.dp))
-                            TextButton(
-                text = context.getString(R.string.save),
-                onClick = {
-                    val cfg = AiTermuxPrefs.getConfig(context)
-                    AiTermuxPrefs.saveConfig(context, cfg.copy(customSystemPrompt = systemPromptText))
-                    showSystemPromptEditor = false
-                },
-                modifier = Modifier.weight(1f),
-                colors = ButtonDefaults.textButtonColorsPrimary()
-            )
-        }
-        }
-    )
-
-    // ---------- AI Termux：备用在线模型参数编辑 ----------
-                        OverlayDialog(
-        title = context.getString(R.string.configure_backup_llm),
-        summary = context.getString(R.string.fallback_desc),
-        show = showFallbackEditor,
-        onDismissRequest = { showFallbackEditor = false },
-        content = {
-                                Box(
-            modifier = Modifier
-                .heightIn(max = 480.dp)
-                .verticalScroll(rememberScrollState())
-        ) {
-                                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                // 从 LLM Profile 一键载入
-                                val profiles = com.termux.app.compose.AiTermuxPrefs.getLlmProfiles(context)
-                                if (profiles.isNotEmpty()) {
-                                    Box(modifier = Modifier.fillMaxWidth().height(40.dp)
-                                        .clickable {
-                                            val p = profiles.first()
-                                            fbUrl = p.apiBaseUrl; fbKey = p.apiKey; fbModel = p.model; fbTemp = p.temperature
-                                            com.termux.app.compose.AiTermuxPrefs.saveFallbackOnlineConfig(context,
-                                                com.termux.app.compose.AiTermuxPrefs.FallbackOnlineConfig(
-                                                    enabled = true, apiKey = p.apiKey, baseUrl = p.apiBaseUrl,
-                                                    model = p.model, temperature = p.temperature))
-                                            SnackbarHelper.show(context, "已从 Profile「" + p.name + "」载入备用大模型", Snackbar.LENGTH_SHORT, null)
-                                            showFallbackEditor = false
-                                        }
-                                        .clip(RoundedCornerShape(12.dp))
-                                        .background(MiuixTheme.colorScheme.primary.copy(alpha = 0.1f))
-                                        .padding(horizontal = 14.dp),
-                                        contentAlignment = Alignment.CenterStart) {
-                                        Text("📋 从 LLM Profile 一键载入 (" + profiles.first().name + ")",
-                                            style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Medium),
-                                            color = MiuixTheme.colorScheme.primary)
-                                    }
-                                }
-
-                                TextField(
-                    value = fbUrl,
-                    onValueChange = { v -> fbUrl = v },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = context.getString(R.string.api_base_url_hint),
-                    useLabelAsPlaceholder = true
-                )
-                            TextField(
-                    value = fbKey,
-                    onValueChange = { v -> fbKey = v },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = context.getString(R.string.api_key_hint),
-                    useLabelAsPlaceholder = true
-                )
-                            TextField(
-                    value = fbModel,
-                    onValueChange = { v -> fbModel = v },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = context.getString(R.string.model_name_hint),
-                    useLabelAsPlaceholder = true
-                )
-                            Text(
-                    text = context.getString(R.string.temperature_current, fbTemp),
-                    fontSize = 12.sp,
-                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                )
-                androidx.compose.material3.Slider(
-                    value = fbTemp,
-                    onValueChange = { fbTemp = it },
-                    valueRange = 0f..2f,
-                    steps = 39,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-        }
-                            Spacer(Modifier.height(12.dp))
-                            Row(horizontalArrangement = Arrangement.SpaceBetween) {
-                                TextButton(
-                text = context.getString(R.string.cancel),
-                onClick = { showFallbackEditor = false },
-                modifier = Modifier.weight(1f)
-            )
-                            Spacer(Modifier.width(16.dp))
-                            TextButton(
-                text = context.getString(R.string.save),
-                onClick = {
-                    AiTermuxPrefs.saveFallbackOnlineConfig(
-                        context,
-                        AiTermuxPrefs.FallbackOnlineConfig(
-                            enabled = true,
-                            apiKey = fbKey,
-                            baseUrl = fbUrl,
-                            model = fbModel,
-                            temperature = fbTemp
-                        )
-                    )
-                    showFallbackEditor = false
-                },
-                modifier = Modifier.weight(1f),
-                colors = ButtonDefaults.textButtonColorsPrimary()
-            )
-        }
-        }
-    )
-
-    // ---------- AI Termux：在线主配置 / 模型配置档 / 对话参数 / 长期记忆 ----------
-    AgentOnlineConfigDialog(show = showOnlineConfigEditor, onDismiss = { showOnlineConfigEditor = false })
-    AgentProfileDialog(show = showProfileManager, onDismiss = { showProfileManager = false })
-    AgentChatParamsDialog(show = showChatParamsEditor, onDismiss = { showChatParamsEditor = false })
-    AgentMemoryDialog(show = showMemoryEditor, onDismiss = { showMemoryEditor = false })
-
-    // ---------- AI Termux：选择 System Prompt 文件 ----------
-    var showInternalPromptPicker by remember { mutableStateOf(false) }
-                            OverlayDialog(
-        title = context.getString(R.string.select_prompt_file),
-        summary = context.getString(R.string.custom_prompt_pick_md),
-        show = showSystemPromptFilePicker,
-        onDismissRequest = { showSystemPromptFilePicker = false },
-        content = {
-        Column {
-                                Text(
-                text = context.getString(R.string.file_picker_choice),
-                style = TextStyle(fontSize = 14.sp)
-            )
-                            Spacer(Modifier.height(16.dp))
-                            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                                TextButton(
-                    text = context.getString(R.string.termux_builtin),
-                    onClick = {
-                        showSystemPromptFilePicker = false
-                        showInternalPromptPicker = true
-                    },
-                    modifier = Modifier.weight(1f)
-                )
-                            TextButton(
-                    text = context.getString(R.string.system_picker),
-                    onClick = {
-                        showSystemPromptFilePicker = false
-                        // 使用系统文件选择器
-                        systemPromptFileLauncher.launch(arrayOf("text/markdown", "text/plain", "*/*"))
-                    },
-                    modifier = Modifier.weight(1f)
-                )
-            }
-        }
-        }
-    )
-
-    // Termux 内部文件选择器
-                        TermuxInternalFilePicker(
-        show = showInternalPromptPicker,
-        title = context.getString(R.string.select_prompt_file),
-        fileExtensions = listOf("md", "txt"),
-        onDismiss = { showInternalPromptPicker = false },
-        onFileSelected = { path ->
-            showInternalPromptPicker = false
-            try {
-                val file = java.io.File(path.replace("\$HOME", TERMUX_HOME_ABS))
-                if (file.exists() && file.isFile) {
-                    val content = file.readText()
-                    if (content.isNotBlank()) {
-                        AiTermuxPrefs.setCustomSystemPrompt(context, content)
-                        AiTermuxPrefs.setUseCustomSystemPrompt(context, true)
-                        useCustomSystemPrompt = true
-                        systemPromptSource = file.name
-                        showSnackbar(context.getString(R.string.custom_prompt_loaded))
-                    } else {
-                        showSnackbar(context.getString(R.string.file_empty))
-                    }
-                }
-            } catch (e: Exception) {
-                showSnackbar(context.getString(R.string.read_file_failed, e.message))
-            }
-        }
-    )
-
-    // ---------- AI Termux：确认还原官方 System Prompt ----------
-                        OverlayDialog(
-        title = context.getString(R.string.restore_official_prompt),
-        summary = context.getString(R.string.restore_official_prompt_confirm),
-        show = showSystemPromptRestoreConfirm,
-        onDismissRequest = { showSystemPromptRestoreConfirm = false },
-        content = {
-                                Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.End
-        ) {
-                                TextButton(
-                text = context.getString(R.string.cancel),
-                onClick = { showSystemPromptRestoreConfirm = false }
-            )
-                            Spacer(Modifier.width(12.dp))
-                            TextButton(
-                text = context.getString(R.string.confirm_restore),
-                onClick = {
-                    AiTermuxPrefs.setUseCustomSystemPrompt(context, false)
-                    useCustomSystemPrompt = false
-                    systemPromptSource = ""
-                    showSystemPromptRestoreConfirm = false
-                    showSnackbar(context.getString(R.string.switched_official_prompt))
-                },
-                colors = ButtonDefaults.textButtonColorsPrimary()
-            )
-        }
-        }
-    )
-
-    // ---------- AI Termux：自定义技能管理 ----------
-    var skillsRefreshKey by remember { mutableStateOf(0) }
-                            OverlayDialog(
-        title = context.getString(R.string.custom_skills),
-        summary = context.getString(R.string.custom_skill_manage_desc),
-        show = showCustomSkillManager,
-        onDismissRequest = { showCustomSkillManager = false },
-        content = {
-        val customSkills = remember(skillsRefreshKey) { AiTermuxPrefs.getCustomSkills(context) }
-        if (customSkills.isEmpty()) {
-                                Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(120.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                                Text(
-                    text = context.getString(R.string.no_custom_skills),
-                    fontSize = 14.sp,
-                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                )
-            }
-        } else {
-                                Box(
-                modifier = Modifier
-                    .heightIn(max = 350.dp)
-                    .verticalScroll(rememberScrollState())
-            ) {
-                Column {
-                    customSkills.forEach { skill ->
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 4.dp)
-                    ) {
-                                Column(
-                            modifier = Modifier.padding(12.dp)
-                        ) {
-                                Text(
-                                text = skill.name,
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MiuixTheme.colorScheme.onSurface
-                            )
-                            if (skill.description.isNotBlank()) {
-                                Text(
-                                    text = skill.description,
-                                    fontSize = 13.sp,
-                                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                                    modifier = Modifier.padding(top = 4.dp)
-                                )
-                            }
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(top = 8.dp),
-                                horizontalArrangement = Arrangement.End
-                            ) {
-                                TextButton(
-                                    text = context.getString(R.string.edit),
-                                    onClick = {
-                                        editingSkill = skill
-                                        showAddEditSkillDialog = true
-                                    }
-                                )
-                            Spacer(Modifier.width(8.dp))
-                            TextButton(
-                                    text = context.getString(R.string.delete),
-                                    onClick = {
-                                        AiTermuxPrefs.deleteCustomSkill(context, skill.id)
-                                        skillsRefreshKey++
-                                    }
-                                )
-                            }
-                        }
-                    }
-                }
-
-}
-            }
-        }
-                            Spacer(Modifier.height(12.dp))
-                            Row(horizontalArrangement = Arrangement.SpaceBetween) {
-                                TextButton(
-                text = context.getString(R.string.off),
-                onClick = { showCustomSkillManager = false },
-                modifier = Modifier.weight(1f)
-            )
-                            Spacer(Modifier.width(16.dp))
-                            TextButton(
-                text = context.getString(R.string.add_skill),
-                onClick = {
-                    editingSkill = null
-                    showAddEditSkillDialog = true
-                },
-                modifier = Modifier.weight(1f),
-                colors = ButtonDefaults.textButtonColorsPrimary()
-            )
-        }
-        }
-    )
-
-    // ---------- AI Termux：添加/编辑自定义技能 ----------
-    var skillName by remember { mutableStateOf("") }
-    var skillDescription by remember { mutableStateOf("") }
-    var skillSystemPrompt by remember { mutableStateOf("") }
-    var skillJson by remember { mutableStateOf("") }
-    var skillImplementationType by remember { mutableStateOf("shell_command") }
-
-    val implOptions = listOf(
-        "shell_command" to context.getString(R.string.shell_command),
-        "open_activity" to context.getString(R.string.open_page),
-        "send_broadcast" to context.getString(R.string.send_broadcast),
-        "custom" to context.getString(R.string.custom)
-    )
-
-    val implJsonTemplates = mapOf(
-        "shell_command" to """{"skillType":"CUSTOM_COMMAND","params":{"command":"ls -la ~"}}""",
-        "open_activity" to """{"skillType":"CUSTOM_COMMAND","params":{"activityClass":"com.example.MyActivity","extras":{"key":"value"}}}""",
-        "send_broadcast" to """{"skillType":"CUSTOM_COMMAND","params":{"action":"com.example.MY_ACTION","extras":{"key":"value"}}}""",
-        "custom" to """{"skillType":"CUSTOM_COMMAND","params":{"key":"value"}}"""
-    )
-                            LaunchedEffect(editingSkill) {
-        editingSkill?.let { skill ->
-            skillName = skill.name
-            skillDescription = skill.description
-            skillSystemPrompt = skill.systemPrompt
-            skillJson = skill.skillJson
-            skillImplementationType = skill.implementationType
-        } ?: run {
-            skillName = ""
-            skillDescription = ""
-            skillSystemPrompt = ""
-            skillJson = ""
-            skillImplementationType = "shell_command"
-        }
-    }
-                            OverlayDialog(
-        title = if (editingSkill != null) context.getString(R.string.edit_skill) else context.getString(R.string.add_custom_skill),
-        summary = context.getString(R.string.custom_skill_create_desc),
-        show = showAddEditSkillDialog,
-        onDismissRequest = { showAddEditSkillDialog = false },
-        content = {
-                                Box(
-            modifier = Modifier
-                .heightIn(max = 520.dp)
-                .verticalScroll(rememberScrollState())
-        ) {
-            Column {
-                                TextField(
-                value = skillName,
-                onValueChange = { skillName = it },
-                modifier = Modifier.fillMaxWidth(),
-                label = context.getString(R.string.skill_name_hint),
-                useLabelAsPlaceholder = true,
-                singleLine = true
-            )
-                            Spacer(Modifier.height(8.dp))
-                            TextField(
-                value = skillDescription,
-                onValueChange = { skillDescription = it },
-                modifier = Modifier.fillMaxWidth(),
-                label = context.getString(R.string.skill_description),
-                useLabelAsPlaceholder = true,
-                singleLine = false,
-                maxLines = 2
-            )
-                            Spacer(Modifier.height(8.dp))
-                            Text(
-                text = context.getString(R.string.implementation),
-                fontSize = 12.sp,
-                color = MiuixTheme.colorScheme.onSurfaceVariantSummary
-            )
-                            Spacer(Modifier.height(4.dp))
-                            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                implOptions.forEach { (value, label) ->
-                    val selected = skillImplementationType == value
-                    TextButton(
-                        text = label,
-                        onClick = {
-                            skillImplementationType = value
-                            if (skillJson.isBlank() || skillJson == implJsonTemplates.values.first()) {
-                                skillJson = implJsonTemplates[value] ?: ""
-                            }
-                        },
-                        modifier = Modifier.weight(1f),
-                        colors = if (selected) ButtonDefaults.textButtonColorsPrimary() else ButtonDefaults.textButtonColors()
-                    )
-                }
-            }
-                            Spacer(Modifier.height(8.dp))
-                            Text(
-                text = context.getString(R.string.skill_invocation_desc),
-                fontSize = 12.sp,
-                color = MiuixTheme.colorScheme.onSurfaceVariantSummary
-            )
-                            TextField(
-                value = skillJson,
-                onValueChange = { skillJson = it },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 60.dp),
-                label = context.getString(R.string.impl_example_prefix, implJsonTemplates[skillImplementationType]),
-                useLabelAsPlaceholder = true,
-                maxLines = Int.MAX_VALUE,
-                minLines = 3
-            )
-                            Spacer(Modifier.height(8.dp))
-                            Text(
-                text = context.getString(R.string.impl_notes_hint),
-                fontSize = 12.sp,
-                color = MiuixTheme.colorScheme.onSurfaceVariantSummary
-            )
-                            TextField(
-                value = skillSystemPrompt,
-                onValueChange = { skillSystemPrompt = it },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 60.dp),
-                label = context.getString(R.string.skill_impl_detail_hint),
-                useLabelAsPlaceholder = true,
-                maxLines = Int.MAX_VALUE,
-                minLines = 3
-            )
-            }
-        }
-                            Spacer(Modifier.height(12.dp))
-                            Row(horizontalArrangement = Arrangement.SpaceBetween) {
-                                TextButton(
-                text = context.getString(R.string.cancel),
-                onClick = { showAddEditSkillDialog = false },
-                modifier = Modifier.weight(1f)
-            )
-                            Spacer(Modifier.width(16.dp))
-                            TextButton(
-                text = context.getString(R.string.save),
-                onClick = {
-                    if (skillName.isBlank()) return@TextButton
-                    val existing = editingSkill
-                    if (existing != null) {
-                        AiTermuxPrefs.updateCustomSkill(context, existing.copy(
-                            name = skillName,
-                            description = skillDescription,
-                            systemPrompt = skillSystemPrompt,
-                            skillJson = skillJson,
-                            implementationType = skillImplementationType
-                        ))
-                    } else {
-                        AiTermuxPrefs.addCustomSkill(context, CustomSkill(
-                            name = skillName,
-                            description = skillDescription,
-                            systemPrompt = skillSystemPrompt,
-                            skillJson = skillJson,
-                            implementationType = skillImplementationType
-                        ))
-                    }
-                    skillsRefreshKey++
-                    showAddEditSkillDialog = false
-                },
-                modifier = Modifier.weight(1f),
-                colors = ButtonDefaults.textButtonColorsPrimary()
-            )
-        }
-        }
-    )
-
-    // ---------- AI Termux：完整对话记录 ----------
-                        OverlayDialog(
-        title = context.getString(R.string.full_chat_history),
-        summary = context.getString(R.string.chat_history_full_desc),
-        show = showFullHistoryViewer,
-        onDismissRequest = { showFullHistoryViewer = false },
-        content = {
-        val messages = remember { AiTermuxPrefs.getChatHistory(context) }
-        val clipboard = remember {
-            context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-        }
-        if (messages.isEmpty()) {
-                                Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(120.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                                Text(
-                    text = context.getString(R.string.no_chat_history),
-                    fontSize = 14.sp,
-                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                )
-            }
-        } else {
-                                Box(
-                modifier = Modifier
-                    .heightIn(max = 400.dp)
-                    .verticalScroll(rememberScrollState())
-            ) {
-                Column {
-                // System Prompt
-                        Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 4.dp)
-                ) {
-                                Column(modifier = Modifier.padding(12.dp)) {
-                                Text(
-                            text = "System Prompt",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MiuixTheme.colorScheme.primary
-                        )
-                            Spacer(Modifier.height(4.dp))
-                            Text(
-                            text = AiTermuxPrefs.buildFullSystemPrompt(context),
-                            fontSize = 11.sp,
-                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                            lineHeight = 16.sp,
-                            maxLines = 30
-                        )
-                    }
-                }
-                // Messages
-                messages.forEach { msg ->
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 4.dp)
-                    ) {
-                                Column(modifier = Modifier.padding(12.dp)) {
-                                Text(
-                                text = when (msg.role) {
-                                    "user" -> context.getString(R.string.tab_user)
-                                    "assistant" -> "🤖 AI"
-                                    "system" -> context.getString(R.string.tab_system)
-                                    else -> msg.role
-                                },
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = when (msg.role) {
-                                    "user" -> MiuixTheme.colorScheme.primary
-                                    "assistant" -> MiuixTheme.colorScheme.onSurface
-                                    else -> MiuixTheme.colorScheme.onSurfaceVariantSummary
-                                }
-                            )
-                            Spacer(Modifier.height(4.dp))
-                            Text(
-                                text = msg.content.ifBlank { context.getString(R.string.empty) },
-                                fontSize = 13.sp,
-                                color = MiuixTheme.colorScheme.onSurface,
-                                lineHeight = 18.sp,
-                                maxLines = 50
-                            )
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(top = 4.dp),
-                                horizontalArrangement = Arrangement.End
-                            ) {
-                                Text(
-                                    text = context.getString(R.string.copy),
-                                    fontSize = 11.sp,
-                                    color = MiuixTheme.colorScheme.primary,
-                                    modifier = Modifier
-                                        .clickable {
-                                            val clip = android.content.ClipData.newPlainText(context.getString(R.string.messages), msg.content)
-                                            clipboard.setPrimaryClip(clip)
-                                        }
-                                        .padding(horizontal = 8.dp, vertical = 4.dp)
-                                )
-                            }
-                        }
-                    }
-                }
-                }
-            }
-        }
-                            Spacer(Modifier.height(12.dp))
-                            Row(horizontalArrangement = Arrangement.SpaceBetween) {
-                                TextButton(
-                text = context.getString(R.string.copy_all),
-                onClick = {
-                    val allContent = buildString {
-                        appendLine("=== System Prompt ===")
-                        appendLine(AiTermuxPrefs.buildFullSystemPrompt(context))
-                        appendLine()
-                        appendLine(context.getString(R.string.chat_history_header))
-                        messages.forEach { msg ->
-                            appendLine("[${msg.role}] ${msg.content}")
-                        }
-                    }
-                    val clip = android.content.ClipData.newPlainText(context.getString(R.string.full_chat_history), allContent)
-                    clipboard.setPrimaryClip(clip)
-                },
-                modifier = Modifier.weight(1f)
-            )
-                            Spacer(Modifier.width(16.dp))
-                            TextButton(
-                text = context.getString(R.string.off),
-                onClick = { showFullHistoryViewer = false },
-                modifier = Modifier.weight(1f),
-                colors = ButtonDefaults.textButtonColorsPrimary()
-            )
-        }
-        }
-    )
-
-    // ---------- 无限制模式二次确认弹窗 ----------
-    var unlimitedCheckboxChecked by remember { mutableStateOf(false) }
-    var isUnlimitedAuthenticating by remember { mutableStateOf(false) }
-                            LaunchedEffect(showUnlimitedModeConfirm) {
-        if (!showUnlimitedModeConfirm) {
-            unlimitedCheckboxChecked = false
-            isUnlimitedAuthenticating = false
-        }
-    }
-    val unlimitedScope = rememberCoroutineScope()
-    val unlimitedShowBlocked: () -> Unit = {
-        val msg = context.getString(R.string.accessibility_guard_blocked_toast)
-        SnackbarHelper.show(context, msg, Snackbar.LENGTH_LONG)
-    }
-                            OverlayDialog(
-        show = showUnlimitedModeConfirm,
-        onDismissRequest = {
-            showUnlimitedModeConfirm = false
-        },
-        title = context.getString(R.string.enable_unrestricted),
-        summary = context.getString(R.string.unrestricted_mode_banner),
-        content = {
-                                Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 4.dp)
-            ) {
-                                Text(
-                    text = context.getString(R.string.unrestricted_mode_warning),
-                    fontSize = 13.sp,
-                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                    lineHeight = 20.sp,
-                    modifier = Modifier.padding(bottom = 12.dp)
-                )
-                            CheckboxPreference(
-                    title = context.getString(R.string.confirm_unrestricted),
-                    checked = unlimitedCheckboxChecked,
-                    onCheckedChange = { unlimitedCheckboxChecked = it },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                            Spacer(Modifier.height(16.dp))
-                            Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(20.dp)
-                ) {
-                                Button(
-                        onClick = {
-                            showUnlimitedModeConfirm = false
-                        },
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.buttonColors(
-                            color = Color.Transparent
-                        )
-                    ) {
-                                Text(
-                            text = context.getString(R.string.cancel),
-                            color = MiuixTheme.colorScheme.onSurface,
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
-                            Button(
-                        onClick = {
-                            isUnlimitedAuthenticating = true
-                            val activity = context as? FragmentActivity
-                            if (activity != null) {
-                                launchBiometricAuth(activity) { success ->
-                                    isUnlimitedAuthenticating = false
-                                    if (success) {
-                                        unlimitedMode = true
-                                        AiTermuxPrefs.setUnlimitedMode(context, true)
-                                        showUnlimitedModeConfirm = false
-                                    } else {
-                                        val msg = context.getString(R.string.risk_command_biometric_prompt)
-                                        SnackbarHelper.show(context, msg, Snackbar.LENGTH_SHORT)
-                                    }
-                                }
-                            } else {
-                                unlimitedMode = true
-                                AiTermuxPrefs.setUnlimitedMode(context, true)
-                                showUnlimitedModeConfirm = false
-                            }
-                        },
-                        enabled = unlimitedCheckboxChecked && !isUnlimitedAuthenticating,
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.buttonColors(
-                            color = if (unlimitedCheckboxChecked && !isUnlimitedAuthenticating)
-                            Color(0xFFD32F2F) else Color(0xFFBDBDBD)
-                        )
-                    ) {
-                                Text(
-                            text = context.getString(R.string.confirm_enable),
-                            color = Color.White,
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
-                }
-            }
-        }
-    )
     }
 }
 
@@ -2973,7 +1846,7 @@ private fun AgentHistoryItem(entry: com.termux.app.compose.AgentScriptJudge.Judg
 }
 
 @Composable
-private fun SettingIcon(icon: ImageVector, contentDescription: String? = null, badge: ImageVector? = null) {
+internal fun SettingIcon(icon: ImageVector, contentDescription: String? = null, badge: ImageVector? = null) {
                                 Box(
         modifier = Modifier.size(40.dp)
     ) {
@@ -3015,7 +1888,7 @@ private fun SettingIcon(icon: ImageVector, contentDescription: String? = null, b
 }
 
 @Composable
-private fun SettingIcon(painter: Painter, contentDescription: String? = null) {
+internal fun SettingIcon(painter: Painter, contentDescription: String? = null) {
     Box(
         modifier = Modifier
             .size(40.dp)
@@ -3123,7 +1996,7 @@ private fun IntegratedToolSwitch(
 
 /** Agent 在线模型配置弹窗：直接编辑当前生效的主配置 */
 @Composable
-private fun AgentOnlineConfigDialog(show: Boolean, onDismiss: () -> Unit) {
+internal fun AgentOnlineConfigDialog(show: Boolean, onDismiss: () -> Unit) {
     val context = LocalContext.current
     val cfg = AiTermuxPrefs.getConfig(context).providerConfig
     var baseUrl by remember(show) { mutableStateOf(cfg.apiBaseUrl) }
@@ -3198,7 +2071,7 @@ private fun AgentOnlineConfigDialog(show: Boolean, onDismiss: () -> Unit) {
 
 /** 模型配置档：列出已保存的 profile，可启用 / 删除 / 新建 */
 @Composable
-private fun AgentProfileDialog(show: Boolean, onDismiss: () -> Unit) {
+internal fun AgentProfileDialog(show: Boolean, onDismiss: () -> Unit) {
     val context = LocalContext.current
     var profiles by remember(show) { mutableStateOf(AiTermuxPrefs.getLlmProfiles(context)) }
     var activeId by remember(show) { mutableStateOf(AiTermuxPrefs.getActiveLlmProfileId(context)) }
@@ -3343,7 +2216,7 @@ private fun AgentProfileDialog(show: Boolean, onDismiss: () -> Unit) {
 
 /** 对话参数：上下文条数、压缩阈值、保留条数、单轮 maxTokens */
 @Composable
-private fun AgentChatParamsDialog(show: Boolean, onDismiss: () -> Unit) {
+internal fun AgentChatParamsDialog(show: Boolean, onDismiss: () -> Unit) {
     val context = LocalContext.current
     var ctx by remember(show) { mutableStateOf(AiTermuxPrefs.getContextMessages(context)) }
     var threshold by remember(show) { mutableStateOf(AiTermuxPrefs.getCompressThreshold(context)) }
@@ -3440,7 +2313,7 @@ private fun NumberField(
 
 /** 长期记忆：查看 / 编辑 / 清空 Agent 的 MEMORY.md */
 @Composable
-private fun AgentMemoryDialog(show: Boolean, onDismiss: () -> Unit) {
+internal fun AgentMemoryDialog(show: Boolean, onDismiss: () -> Unit) {
     val context = LocalContext.current
     var text by remember(show) { mutableStateOf(AiTermuxPrefs.getMemory(context)) }
 

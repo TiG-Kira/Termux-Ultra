@@ -470,6 +470,24 @@
             android:windowSoftInputMode="adjustResize" />
 
         <activity
+            android:name=".app.activities.AiTermuxModelGenActivity"
+            android:exported="false"
+            android:label="@string/model_gen_title"
+            android:windowSoftInputMode="adjustResize" />
+
+        <activity
+            android:name=".app.activities.AiTermuxMemoryHistoryActivity"
+            android:exported="false"
+            android:label="@string/memory_history_title"
+            android:windowSoftInputMode="adjustResize" />
+
+        <activity
+            android:name=".app.activities.AiTermuxDeveloperActivity"
+            android:exported="false"
+            android:label="@string/developer_settings_title"
+            android:windowSoftInputMode="adjustResize" />
+
+        <activity
             android:name=".app.activities.IntegratedToolsConfigActivity"
             android:exported="false"
             android:label="@string/integrated_tools_config_entry" />

@@ -964,6 +964,13 @@
     <string name="training_manual_mode">手动模式 · 用户手动评分，给出启发式参考评分+建议（无在线模型）</string>
     <string name="kill_process_pid">结束进程 (PID %1$s)</string>
     <string name="agent_entry_card_desc">开启后显示终端页 Termux Agent 入口卡片及相关设置</string>
+    <string name="model_gen_title">模型和生成</string>
+    <string name="model_gen_nav_desc">在线主配置、模型配置档、对话参数、信任白名单、重置配置</string>
+    <string name="memory_history_title">记忆与历史</string>
+    <string name="memory_history_nav_desc">长期记忆、完整对话记录、清空对话记录</string>
+    <string name="developer_settings_title">开发者模式</string>
+    <string name="developer_settings_nav_desc">自定义 System Prompt、自定义技能、无限制模式</string>
+    <string name="enable_developer_mode">启用开发者模式</string>
     <string name="accessibility_service_description">AgentPaw 手机 AI 助手无障碍服务，用于执行界面点击、滑动、按键模拟与屏幕内容分析。</string>
     <string name="load_prompt_from_file">从文件加载 System Prompt（支持 .md 文件）</string>
     <string name="whitelist_select_desc">选择允许自动执行的技能。未选择任何技能时，信任白名单将关闭。</string>
