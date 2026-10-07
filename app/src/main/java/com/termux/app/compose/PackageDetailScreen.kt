@@ -839,7 +839,7 @@ fun PackageDetailScreen(
                                         modifier = Modifier.weight(1f),
                                         colors = ButtonDefaults.buttonColors(color = DangerRed)
                                     ) {
-                                        Text("确认安装（风险自负）", color = Color.White, fontWeight = FontWeight.Medium)
+                                        Text("确认安装", color = Color.White, fontWeight = FontWeight.Medium)
                                     }
                                 }
                             }
