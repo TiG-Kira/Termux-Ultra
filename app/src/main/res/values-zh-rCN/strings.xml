@@ -1099,7 +1099,7 @@
     <string name="skill_description">技能描述</string>
     <string name="implementation">实现方式</string>
     <string name="tab_user">👤 用户</string>
-    <string name="copy_all">复制全部</string>
+    <string name="copy_all">复制</string>
     <string name="confirm_enable">确认开启</string>
     <string name="share_session">分享会话</string>
     <string name="new_session">新建会话</string>
