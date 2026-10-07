@@ -460,6 +460,50 @@ object PkgRepo {
         return (code == 0) to output
     }
 
+    /**
+     * 运行 `apt-get -s install <name>` 模拟安装，解析 apt 给出的解决方案计划。
+     * 用于判断：apt 能否成功安装；会自动移除哪些冲突包；整体是否可解。
+     *
+     * 返回 null 表示模拟命令本身失败（网络、锁、apt 异常等），无法判断。
+     */
+    data class AptSimResult(
+        val feasible: Boolean,              // apt 认为安装可解
+        val willRemovePackages: Set<String> // apt 计划移除的包名（冲突方）
+    )
+
+    suspend fun aptSimulateInstall(context: Context, name: String): AptSimResult? {
+        val cmd = "apt-get -s install ${shq(name)} 2>&1"
+        val (code, output) = AppShell.exec(context, cmd, timeout = 30)
+        if (code != 0 && !output.contains("Unable to locate package")) {
+            // 0 = 成功；apt 不可解时也可能返回非零但关键看输出内容
+        }
+        val trimmed = output.trim()
+        if (trimmed.isBlank()) return null
+
+        val willRemove = mutableSetOf<String>()
+        var feasible = true
+
+        for (line in trimmed.lines()) {
+            val l = line.trim()
+            when {
+                // Remv <pkg> [version] [reason]  ← apt 计划移除的包
+                l.startsWith("Remv ") -> {
+                    val parts = l.removePrefix("Remv ").split(' ', '\t')
+                    if (parts.isNotEmpty()) willRemove.add(parts[0])
+                }
+                l.startsWith("Conf ") -> { /* 正常安装计划行 */ }
+                l.startsWith("Inst ") -> { /* 正常安装计划行 */ }
+                l.startsWith("Break ") -> { /* apt 自动降级解 */ }
+                // 不可解的标志
+                "Unable to correct problems" in l ||
+                "has unmet dependencies" in l ||
+                "held broken" in l ||
+                l.startsWith("E: ") -> feasible = false
+            }
+        }
+        return AptSimResult(feasible = feasible, willRemovePackages = willRemove)
+    }
+
     suspend fun uninstall(context: Context, name: String, onOutput: ((String) -> Unit)? = null): Pair<Boolean, String> {
         val cmd = "export DEBIAN_FRONTEND=noninteractive && pkg uninstall -y ${shq(name)} 2>&1"
         val (code, output) = if (onOutput != null) AppShell.execStreaming(context, cmd, timeout = 60, onOutput = onOutput)

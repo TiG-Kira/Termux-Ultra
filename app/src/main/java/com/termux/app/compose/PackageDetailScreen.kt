@@ -138,6 +138,8 @@ fun PackageDetailScreen(
     // 预加载依赖/冲突包详情 + 已安装包名 + 已安装版本
     var installedNames by remember { mutableStateOf<Set<String>>(emptySet()) }
     var installedVersions by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+    // apt 模拟安装结果（判断冲突能否被自动卸载等）
+    var aptSim by remember { mutableStateOf<PkgRepo.AptSimResult?>(null) }
     // 解析后的依赖条目：key=原始字符串, value=解析结果(纯包名+版本限制)
     var depParsed by remember { mutableStateOf<Map<String, PkgDep>>(emptyMap()) }
     var confParsed by remember { mutableStateOf<Map<String, PkgDep>>(emptyMap()) }
@@ -189,6 +191,9 @@ fun PackageDetailScreen(
         confDetails = confParsed.mapValues { (_, parsed) ->
             PkgRepo.getDetail(context, parsed.name)
         }
+
+        // apt 模拟安装 —— 用于准确判断冲突能否被自动移除
+        aptSim = PkgRepo.aptSimulateInstall(context, pkg.name)
 
         isLoading = false
     }
@@ -257,23 +262,94 @@ fun PackageDetailScreen(
         }
     }
 
-    /** 硬阻塞：存在源里找不到的依赖（不可能自动解决） */
-    fun computeHardBlock(target: PackageInfo): Boolean {
-        return target.depends.any { depRaw -> depDetails[depRaw] == null }
+    /**
+     * 判断某个已安装的包名是否能被 apt 自动移除（因为目标包声明它为冲突）。
+     * 优先使用 aptSim 的精确结果；若模拟失败，则保守处理。
+     */
+    private fun canConflictBeAutoRemoved(conflictPkg: String): Boolean {
+        val sim = aptSim ?: return false  // 无结果 → 保守：无法确认就不认为可移除
+        if (!sim.feasible) return false
+        return conflictPkg in sim.willRemovePackages
     }
 
-    /** 存在 apt 可以自动移除的冲突（已安装且有冲突） */
+    /**
+     * 硬阻塞判定（任一为 true 则无法安装）：
+     * 1) 源内找不到的依赖包（不可能装）
+     * 2) 已安装依赖包的版本约束方向不兼容（apt 不会自动降级/换版本）
+     * 3) 已安装的冲突包，apt 模拟显示不会被自动移除
+     */
+    fun computeHardBlock(target: PackageInfo): Boolean {
+        // 1) 源内缺失的依赖
+        if (target.depends.any { depRaw -> depDetails[depRaw] == null }) return true
+
+        // 2) 方向敏感的版本约束：仅当已装版本与约束方向不兼容时才算硬阻塞
+        for (depRaw in target.depends) {
+            val parsed = depParsed[depRaw] ?: continue
+            val pure = parsed.name
+            val installedVer = installedVersions[pure] ?: continue
+            val constraint = parsed.versionConstraint
+            if (constraint.isNullOrBlank()) continue
+            val cmp = compareVersions(installedVer, constraint)
+            val op = constraintBeforeOp(parsed)
+            // 若 cmp 为 null 表示版本解析失败，跳过（不判定为阻塞）
+            if (cmp == null || op == null) continue
+            val blocking = when (op) {
+                // 已装版本过新 → apt 不会降级
+                "<=" -> cmp > 0
+                "<<" -> cmp >= 0
+                // 已装版本过旧且约束是 "必须远晚于"（apt 会升级 ≥ 的场景都覆盖不到 >>）
+                ">>" -> cmp >= 0
+                // 精确匹配：apt 通常不会强制换版本
+                "=" -> cmp != 0
+                // >= 已装版本过旧 → apt 会升级 → 不阻塞
+                ">=" -> false
+                else -> false
+            }
+            if (blocking) return true
+        }
+
+        // 3) 已安装的冲突包中，存在至少一个 apt 无法自动移除
+        for (confRaw in target.conflicts) {
+            val parsed = confParsed[confRaw] ?: continue
+            val pure = parsed.name
+            if (pure !in installedNames) continue
+            if (!canConflictBeAutoRemoved(pure)) return true
+        }
+
+        return false
+    }
+
+    /** 能被 apt 自动移除的冲突包列表（供 UI 提示"将卸载"用） */
     fun computeWillUninstallConflicts(target: PackageInfo): List<String> {
         return target.conflicts.mapNotNull { confRaw ->
             val parsed = confParsed[confRaw] ?: return@mapNotNull null
-            if (parsed.name in installedNames) parsed.name else null
+            val pure = parsed.name
+            if (pure !in installedNames) return@mapNotNull null
+            if (canConflictBeAutoRemoved(pure)) pure else null
         }
     }
 
     fun computeCanInstall(target: PackageInfo): Boolean {
-        // 只有硬阻塞（有源内找不到的依赖）才禁用安装按钮
-        // 版本不够的依赖 → apt 自动升级；已安装的冲突 → apt 自动移除（需确认）
         return !computeHardBlock(target)
+    }
+
+    /** 从 PkgDep 中取出版本操作符（>= / <= / = / >> / <<）。没约束或格式异常返回 null */
+    private fun constraintBeforeOp(parsed: PkgDep): String? {
+        val c = parsed.versionConstraint ?: return null
+        val trimmed = c.trim()
+        return when {
+            trimmed.startsWith(">= ") -> ">="
+            trimmed.startsWith("<= ") -> "<="
+            trimmed.startsWith(">> ") -> ">>"
+            trimmed.startsWith("<< ") -> "<<"
+            trimmed.startsWith("= ") -> "="
+            trimmed.startsWith(">=") -> ">="
+            trimmed.startsWith("<=") -> "<="
+            trimmed.startsWith(">>") -> ">>"
+            trimmed.startsWith("<<") -> "<<"
+            trimmed.startsWith("=") -> "="
+            else -> null
+        }
     }
 
     Scaffold(
@@ -465,14 +541,34 @@ fun PackageDetailScreen(
                             val pureName = parsed.name
                             val isInstalled = pureName in installedNames
                             val installedVer = installedVersions[pureName]
-                            val versionOk = if (isInstalled && installedVer != null) {
-                                checkVersionConstraint(installedVer, parsed.versionConstraint)
-                            } else null
                             val status = when {
+                                // 源内找不到的依赖 — 不可能装
                                 depInfo == null -> DepStatus.NOT_SATISFIED
-                                isInstalled && versionOk == false -> DepStatus.WILL_UPGRADE
-                                isInstalled -> DepStatus.INSTALLED
-                                else -> DepStatus.WILL_INSTALL
+                                // 未安装 — apt 会装
+                                !isInstalled -> DepStatus.WILL_INSTALL
+                                // 已安装但无法判断版本（无版本信息）→ 保守视为已满足
+                                installedVer == null -> DepStatus.INSTALLED
+                                // 已安装 — 方向敏感版本判定
+                                else -> {
+                                    val cv = compareVersions(installedVer, parsed.versionConstraint ?: "")
+                                    val op = constraintBeforeOp(parsed)
+                                    when {
+                                        // 无约束 → 已满足
+                                        op == null || cv == null -> DepStatus.INSTALLED
+                                        // 版本满足约束 → 已满足
+                                        (op == ">=" && cv >= 0) ||
+                                        (op == "<=" && cv <= 0) ||
+                                        (op == "=" && cv == 0) ||
+                                        (op == ">>" && cv > 0) ||
+                                        (op == "<<" && cv < 0) -> DepStatus.INSTALLED
+                                        // >= 但 installedVer 更小 → apt 会升级
+                                        op == ">=" && cv < 0 -> DepStatus.WILL_UPGRADE
+                                        // >> 但 installedVer 更小 → apt 会升级
+                                        op == ">>" && cv < 0 -> DepStatus.WILL_UPGRADE
+                                        // 其他方向不兼容（apt 不会降级/换版本）
+                                        else -> DepStatus.NOT_SATISFIED
+                                    }
+                                }
                             }
                             // 副标题：版本限制 | 详情
                             val constraintPart = parsed.versionConstraint?.let { translateConstraint(it) }
@@ -526,11 +622,10 @@ fun PackageDetailScreen(
                             val confInfo = confDetails[confRaw]
                             val pureName = parsed.name
                             val isInstalled = pureName in installedNames
-                            val status = if (isInstalled) {
-                                // apt 安装时会自动移除冲突包
-                                ConfStatus.WILL_UNINSTALL
-                            } else {
-                                ConfStatus.SATISFIED
+                            val status = when {
+                                !isInstalled -> ConfStatus.SATISFIED
+                                canConflictBeAutoRemoved(pureName) -> ConfStatus.WILL_UNINSTALL
+                                else -> ConfStatus.NOT_SATISFIED
                             }
                             // 副标题：版本限制 | 详情
                             val constraintPart = parsed.versionConstraint?.let { translateConstraint(it) }
@@ -649,6 +744,49 @@ fun PackageDetailScreen(
                     }
                 }
             )
+
+            // 冲突卸载警告 —— 安装目标包会连带卸载已装冲突包
+            {
+                val conflictPkgs = remember(detail) {
+                    computeWillUninstallConflicts(detail ?: pkg)
+                }
+                OverlayDialog(
+                    show = showConflictConfirm && conflictPkgs.isNotEmpty(),
+                    title = "将卸载冲突项",
+                    summary = buildString {
+                        append("安装 ${pkg.name} 将连带卸载以下已安装的冲突包：
+")
+                        append(conflictPkgs.joinToString("
+") { "• $it" })
+                        append("
+
+此操作不可撤销，请确认是否继续。")
+                    },
+                    onDismissRequest = { showConflictConfirm = false },
+                    content = {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            TextButton(
+                                text = stringResource(R.string.cancel),
+                                onClick = { showConflictConfirm = false },
+                                modifier = Modifier.weight(1f)
+                            )
+                            Button(
+                                onClick = {
+                                    showConflictConfirm = false
+                                    startOperation(isInstall = true)
+                                },
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.buttonColors(color = DangerRed)
+                            ) {
+                                Text("确认安装", color = Color.White, fontWeight = FontWeight.Medium)
+                            }
+                        }
+                    }
+                )
+            }
 
             OverlayDialog(
                 show = showLockDialog,
@@ -788,28 +926,43 @@ fun PackageDetailScreen(
 @Composable
 private fun PackageInstallStatusCard(
     pkgName: String,
-    canInstall: Boolean
+    hardBlock: Boolean,
+    willRemoveConflicts: List<String>
 ) {
     val isDark = isSystemInDarkTheme()
     val textColor = if (isDark) Color.White else Color.Black
-    val (cardColor, iconColor, icon) = if (canInstall) {
-        Triple(
-            if (isDark) Color(0xFF1A3825) else Color(0xFFDFFAE4),
-            Color(0xFF36D167),
-            Icons.Rounded.CheckCircleOutline
-        )
-    } else {
-        Triple(
+    val needsConflictWarn = willRemoveConflicts.isNotEmpty() && !hardBlock
+    val (cardColor, iconColor, icon) = when {
+        hardBlock -> Triple(
             if (isDark) Color(0xFF3B1414) else Color(0xFFFFEBEE),
             Color(0xFFFF5252),
             Icons.Rounded.ErrorOutline
         )
+        needsConflictWarn -> Triple(
+            if (isDark) Color(0xFF3B1414) else Color(0xFFFFEBEE),
+            Color(0xFFFF9800),
+            Icons.Rounded.Warning
+        )
+        else -> Triple(
+            if (isDark) Color(0xFF1A3825) else Color(0xFFDFFAE4),
+            Color(0xFF36D167),
+            Icons.Rounded.CheckCircleOutline
+        )
     }
-    val title = if (canInstall) "已准备好安装" else "暂时无法安装"
-    val desc = if (canInstall) {
-        "点击安装按钮开始安装$pkgName，如有需要的依赖也将一并安装"
-    } else {
-        "$pkgName 有依赖或冲突项无法满足，请检查"
+    val title = when {
+        hardBlock -> "暂时无法安装"
+        needsConflictWarn -> "将卸载冲突项后安装"
+        else -> "已准备好安装"
+    }
+    val desc = when {
+        hardBlock -> "$pkgName 有依赖或冲突项无法满足，请检查"
+        needsConflictWarn -> buildString {
+            append(pkgName)
+            append(" 可以进行安装，但相关冲突项将会被卸载：")
+            append(willRemoveConflicts.joinToString("、"))
+            append("，请慎重考虑")
+        }
+        else -> "点击安装按钮开始安装$pkgName，如有需要的依赖也将一并安装"
     }
 
     Card(modifier = Modifier.fillMaxWidth()) {
