@@ -90,7 +90,7 @@ object RuntimeEnvironmentResetter {
                 post { listener.onStepUpdate(Step.KILLING_SESSIONS, "正在关闭所有会话...") }
                 try {
                     // Java 体系：通过广播通知 TermuxService
-                    context.sendBroadcast(Intent(TermuxConstants.TERMUX_SERVICE.ACTION_KILL_SESSIONS))
+                    context.sendBroadcast(Intent("com.termux.kill_sessions"))
                 } catch (_: Throwable) { /* 无 TermuxService 时静默忽略 */ }
                 try {
                     // Compose Kotlin 体系
