@@ -84,6 +84,16 @@
 # 查找 Java 回调。该 aar 体积不大，整体保留以避免 R8 删除运行时需要的方法/字段。
 -keep class com.awkoo.libterminal.** { *; }
 
+# --- 2.5 termux-shared local-socket.cpp: JniResult 构造 -----------------------
+# local-socket.cpp 在 JNI 层 FindClass("com/termux/shared/jni/models/JniResult")
+# 然后 GetMethodID("<init>", "(IILjava/lang/String;I)V") 构造返回值对象。
+# R8 侧看不到 native 调用，默认整类删除 → native 侧 FindClass 失败。
+-keep class com.termux.shared.jni.models.JniResult { *; }
+
+# --- 2.6 libjpeg-turbo (extern) —— 如果启用 extern/jpeg-turbo --------------------
+# turbojpeg-jni.c 里对 com/libjpegturbo/TJ* 的 JNI 回调；与 wolfssl 同属 extern，
+# 目前项目并未直接使用，保留 -dontwarn 兜底即可，无需 keep。
+
 # ===========================================================================
 #  3. Gson —— 按字段名读写 + TypeToken 泛型签名
 # ===========================================================================
@@ -120,6 +130,18 @@
 -keep class com.termux.app.plugin.PluginManifest$* { *; }
 -keep class com.termux.app.plugin.ComposeUiNode { *; }
 -keep class com.termux.app.plugin.ComposeUiNode$* { *; }
+
+# --- Gson 在 Android 上的 Unsafe 实例化路径（Kotlin data class 兜底）----------
+# Gson 的 ConstructorConstructor 找不到 Kotlin data class 的无参构造函数时，
+# 会 fallback 到 UnsafeAllocator：Class.forName("sun.misc.Unsafe") → getField("theUnsafe")
+# → allocateInstance(cls)。R8 看不到 Gson 内部这条字符串反射链，会把 Unsafe 的可调用
+# 方法当作无用代码裁掉，导致 release 下 Gson 报 "Abstract classes can't be instantiated"。
+# （debug 下没这问题，因为没开启 R8。）
+-keep class sun.misc.Unsafe { *; }
+-keep class dalvik.system.VMRuntime { *; }
+# Gson 内部执行 Unsafe 反射的核心类也整体保留，避免 R8 做激进方法内联 / 重写
+-keep class com.google.gson.internal.UnsafeAllocator { *; }
+-keep class com.google.gson.internal.ConstructorConstructor { *; }
 
 # ===========================================================================
 #  4. Class.forName / getMethod —— 按字符串加载的类
@@ -167,7 +189,42 @@
 -keep class * implements androidx.room.migration.AutoMigrationSpec { *; }
 
 # ===========================================================================
-#  8. 既有规则（保留） -------------------------------------------------------
+#  8. kotlinx-serialization —— 编译期生成的 serializer 类
+# ===========================================================================
+# kotlinx-serialization-json 为每个 @Serializable 类在编译期生成一个
+# <Class>$serializer 内部类（Kotlin 1.7+ 起叫 <Class>$$serializer），
+# 运行时由 Json 引擎通过 generatedSerializer() 或 SerializersModule 查找。
+# R8 看不到这种「间接注册」路径，会把 serializer 当成无引用类裁掉 → release 下
+#     SerializationException: Serializer for class 'Xxx' is not found.
+# 来源：https://github.com/Kotlin/kotlinx.serialization/blob/master/docs/serialization-and-code-minification.md
+# 涉及的 @Serializable 类：
+#   QuickCommandStore.QuickCommand / QuickCommandGroup
+#   AgentScriptJudge.JudgeHistoryEntry / AgentScriptJudgeResult
+#   PrefsViewModel (嵌套)
+#   ServerProfile (com.gaurav.avnc.model)
+
+# Signature 是 kotlinx.serialization 还原泛型的关键（同 Gson）
+# Annotation 保留 @Serializable / @SerialName 等标记
+-keepattributes Signature, InnerClasses, EnclosingMethod, *Annotation*
+
+# kotlinx.serialization 运行时本身 —— 内部有 SerializersModule 反射路径
+-keep class kotlinx.serialization.** { *; }
+-dontwarn kotlinx.serialization.**
+
+# 保留编译器生成的 serializer 内部类（命名：Outer$$serializer 或 Outer$serializer）
+# 这是 Json.encodeToString/decodeFromString 在没有显式 SerializersModule 时
+# 通过 generatedSerializer() fallback 找到 serializer 的唯一入口
+-keepclassmembers class **$$serializer { *; }
+-keepclassmembers class **$serializer { *; }
+
+# 保留 companion object 的 serializer() 方法 —— kotlinx.serialization 也会
+# 按 "serializer" 方法名反射查找
+-keepclassmembers class ** {
+    public static kotlinx.serialization.KSerializer serializer(...);
+}
+
+# ===========================================================================
+#  9. 既有规则（保留） -------------------------------------------------------
 # ===========================================================================
 # tink 引用了依赖图中不存在的 protobuf
 # sshlib 带来的 JVM 版 tink 1.20.0 依赖 com.google.protobuf，而 protobuf 并未进入
