@@ -122,14 +122,22 @@
 -keep class com.termux.app.compose.QemuVmConfig { *; }
 -keep class com.termux.app.compose.QemuVmConfig$* { *; }
 -keep class com.termux.app.activities.ThirdPartyCenterActivity$ThirdPartyResource { *; }
--keep class com.termux.app.plugin.PluginLoader$InstallRecord { *; }
 
-# 插件清单 PluginManifest / 插件 Compose JSON DSL ComposeUiNode 均为整棵嵌套结构，
-# 嵌套类型必须显式保留（否则会被 shrink 删除成员类型）。
+# 插件清单 PluginManifest / 插件 Compose JSON DSL ComposeUiNode 及其所有嵌套 /
+# 关联 data class（PluginEntryPoints、PluginActionRef、PluginResourceCardRef 等）
+# 均通过 Gson 反射反序列化。Kotlin 为 data class 生成的 no-arg constructor 在
+# 代码中没有直接调用点（Kotlin 调用方全用具参构造），R8 会把它当成无用代码裁掉，
+# Gson 通过 ConstructorConstructor 反射查找时找不到就报
+#   "Abstract classes can't be instantiated"
+# 整包保留插件 Gson 模型的无参构造器和全部字段。
+-keepclassmembers class com.termux.app.plugin.** {
+    <init>();
+    <fields>;
+}
+# 顶层 data class 本身也要 keep（R8 可能因无显式字节码引用而移除类元信息）
 -keep class com.termux.app.plugin.PluginManifest { *; }
--keep class com.termux.app.plugin.PluginManifest$* { *; }
 -keep class com.termux.app.plugin.ComposeUiNode { *; }
--keep class com.termux.app.plugin.ComposeUiNode$* { *; }
+-keep class com.termux.app.plugin.PluginLoader$InstallRecord { *; }
 
 # --- Gson 在 Android 上的 Unsafe 实例化路径（Kotlin data class 兜底）----------
 # Gson 的 ConstructorConstructor 找不到 Kotlin data class 的无参构造函数时，

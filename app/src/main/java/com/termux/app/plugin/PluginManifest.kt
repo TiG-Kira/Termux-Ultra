@@ -3,9 +3,9 @@ package com.termux.app.plugin
 import com.google.gson.Gson
 
 data class PluginManifest(
-    val id: String,
-    val name: String,
-    val version: String,
+    val id: String = "",
+    val name: String = "",
+    val version: String = "1.0.0",
     val minHostVersion: String = "2.0.0",
     val description: String = "",
     val author: String = "",
@@ -49,34 +49,34 @@ data class PluginEntryPoints(
 )
 
 data class PluginResourceCardRef(
-    val id: String,
-    val title: String,
-    val description: String,
+    val id: String = "",
+    val title: String = "",
+    val description: String = "",
     val icon: String? = null,
-    val action: PluginActionRef
+    val action: PluginActionRef = PluginActionRef()
 )
 
 data class PluginActionRef(
-    val type: String,
+    val type: String = "command",
     val command: String? = null,
     val url: String? = null,
     val hostActionId: String? = null
 )
 
 data class PluginSettingItemRef(
-    val id: String,
-    val label: String,
+    val id: String = "",
+    val label: String = "",
     val type: String = "switch",
     val defaultValue: Any? = null,
     val options: List<String>? = null
 )
 
 data class PluginSkillRef(
-    val id: String,
-    val name: String,
-    val description: String,
-    val category: String,
-    val handler: String,
+    val id: String = "",
+    val name: String = "",
+    val description: String = "",
+    val category: String = "",
+    val handler: String = "",
     val requiresClick: Boolean = true,
     val hasOutput: Boolean = false,
     val riskLevel: String = "NONE",
@@ -98,8 +98,8 @@ data class PluginH5HomeRef(
 }
 
 data class PluginPageRef(
-    val id: String,
-    val title: String,
+    val id: String = "",
+    val title: String = "",
     val icon: String? = null,
     val type: String = "h5",
     val entry: String? = null
@@ -110,7 +110,7 @@ data class PluginPageRef(
 
 data class PluginSystemPromptRef(
     val mode: String = "APPEND",
-    val content: String,
+    val content: String = "",
     val cardFormat: Map<String, Any>? = null
 ) {
     fun getPromptMode(): PromptModifyMode {
