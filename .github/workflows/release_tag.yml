@@ -158,15 +158,29 @@ jobs:
             exit 1
           fi
 
-          # ── 找到上一个已发布 Release 的 tag 作为 diff 起点 ──
-          # gh release list 按时间倒序，取第 1 个；若仓库尚无 release 则 OLD_TAG 为空，
-          # 回退为 git log --all 截取，保证首次发布也有可用的 changelog。
-          OLD_TAG=$(gh release list --limit 1 --json tagName -r .[].tagName 2>/dev/null || true)
+          # ── 找到仓库当前 tag 作为 diff 起点 ──
+          # 规则：取 main HEAD 上已有的 tag（git describe），而非上一个"已发布"的 release tag。
+          # 这样用户输入 3.3.11.R7 时，changlog 就是 3.3.10.R7..HEAD，符合预期。
+          # 两种异常回退：
+          #   a) HEAD 没有 tag（首次发布或 tag 未 push） → 回退为 gh release list 最新 release
+          #   b) 连 release 也没有（真·首次） → git log --all 截取
+          OLD_TAG=$(git describe --tags --abbrev=0 HEAD 2>/dev/null || true)
+          if [ -z "$OLD_TAG" ]; then
+            OLD_TAG=$(gh release list --limit 1 --json tagName -r .[].tagName 2>/dev/null || true)
+            if [ -n "$OLD_TAG" ]; then
+              echo "⚠️  HEAD 没有本地 tag，回退用最新 release tag: $OLD_TAG"
+            fi
+          fi
           if [ -n "$OLD_TAG" ]; then
-            echo "✅ 上一个 Release tag: $OLD_TAG  →  新 tag: $TAG"
+            # 禁止把自己当起点（HEAD 已经是 NEW_TAG 的情况不该出现，防重已拦截）
+            if [ "$OLD_TAG" = "$TAG" ]; then
+              echo "::error::仓库当前 tag ($OLD_TAG) 与目标 tag 相同，请输入更高版本号"
+              exit 1
+            fi
+            echo "✅ 仓库当前 tag: $OLD_TAG  →  新 tag: $TAG"
             RANGE="$OLD_TAG"
           else
-            echo "⚠️  仓库尚无任何 Release，使用 git log --all 作为 changelog 来源"
+            echo "⚠️  仓库尚无任何 tag / release，使用 git log --all 作为 changelog 来源"
             RANGE=""
           fi
 
