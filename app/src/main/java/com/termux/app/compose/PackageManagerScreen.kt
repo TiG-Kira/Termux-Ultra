@@ -576,6 +576,144 @@ object PkgRepo {
         return out
     }
 
+    // ─────────────────── apt / termux-apt-repo 检测与兜底恢复 ────────────────────
+
+    /** 会让软件包管理直接失去功能的关键包——卸载它们会连带搞挂 apt 链路 */
+    val CRITICAL_APT_PACKAGES: Set<String> = setOf(
+        "apt",
+        "apt-static",
+        "apt-android-7",
+        "apt-android-5",
+        "termux-apt-repo",
+        "termux-package-manager",
+        "dpkg",
+        "libdpkg",
+        "termux-tools", // 提供 pkg wrapper
+    )
+
+    /** apt + pkg + dpkg 三者都能跑 = 软件包管理基础环境完整 */
+    suspend fun isAptAvailable(context: Context): Boolean {
+        val (code, _) = AppShell.exec(
+            context,
+            "command -v apt >/dev/null 2>&1 && command -v pkg >/dev/null 2>&1 && command -v dpkg >/dev/null 2>&1"
+        )
+        return code == 0
+    }
+
+    /** termux-apt-repo 是否安装（负责拉仓库索引） */
+    suspend fun isTermuxAptRepoInstalled(context: Context): Boolean {
+        val (code, _) = AppShell.exec(
+            context,
+            "command -v termux-apt-repo >/dev/null 2>&1"
+        )
+        return code == 0
+    }
+
+    /**
+     * 兜底恢复：依次尝试三条路径，任一成功即返回 (true, 日志)。
+     * 1. pkg install termux-apt-repo（apt 还能跑，只是 repo 丢了）
+     * 2. 从 termux-packages 主仓库下载 apt / dpkg / termux-apt-repo 的 .deb 然后 dpkg -i
+     * 3. 下载失败或 dpkg 也无法运行 → 返回 (false, 失败日志)
+     *
+     * 返回的 Boolean 表示"apt 链路是否已恢复"，String 是完整日志（供 UI 展示）。
+     */
+    suspend fun recoverApt(context: Context): Pair<Boolean, String> {
+        val sb = StringBuilder()
+        val prefix = TermuxConstants.TERMUX_PREFIX_DIR_PATH
+        val arch = "aarch64" // Termux 目前最普遍；fallback 会多试
+        val candidateArches = listOf("aarch64", "arm", "x86_64", "i686")
+
+        // —— 步骤 0：如果 apt 还能跑，先试 pkg install 补 termux-apt-repo ——
+        val (aptCode, _) = AppShell.exec(context, "command -v apt >/dev/null 2>&1")
+        if (aptCode == 0) {
+            sb.appendLine("[0] apt 可执行，尝试 pkg install termux-apt-repo ...")
+            val (code, out) = AppShell.exec(
+                context,
+                "export DEBIAN_FRONTEND=noninteractive && pkg install -y termux-apt-repo 2>&1",
+                timeout = 120
+            )
+            sb.appendLine(out.takeIf { it.isNotBlank() } ?: "(无输出)")
+            if (code == 0 && isAptAvailable(context)) {
+                sb.appendLine("✅ 通过 pkg install 恢复成功")
+                return true to sb.toString()
+            }
+            sb.appendLine("❌ pkg install 失败（code=$code）")
+        } else {
+            sb.appendLine("[0] apt 二进制已丢失，无法通过 pkg 恢复")
+        }
+
+        // —— 步骤 1：尝试从 termux-packages 下载 .deb 然后 dpkg -i ——
+        // 需要下载的关键包：apt + dpkg + termux-apt-repo
+        // 从 apt-cache policy 拿版本号（如果还能跑），否则取仓库最新
+        sb.appendLine("[1] 尝试从 termux-packages 下载 deb 进行恢复 ...")
+        val dlDir = "$prefix/tmp/apt-recover"
+        val (mkdirCode, _) = AppShell.exec(context, "mkdir -p '$dlDir'")
+        if (mkdirCode != 0) {
+            sb.appendLine("❌ 无法创建临时目录 $dlDir")
+            return false to sb.toString()
+        }
+
+        val packages = listOf("apt", "dpkg", "termux-apt-repo")
+        // Termux 主仓库 URL（含 4 种架构的软映射 aarch64 → stable/aarch64）
+        val repoBase = "https://packages.termux.dev/apt/termux-main"
+
+        for (arch in candidateArches) {
+            sb.appendLine("  尝试 arch=$arch ...")
+            var downloaded = 0
+            for (pkgName in packages) {
+                val pkgUrl = "$repoBase/pool/stable/${arch.substring(0, 1)}/$pkgName/"
+                // 先用 apt-cache 拿版本号（apt 还能跑的情况下）
+                var version = ""
+                val (cacheCode, cacheOut) = AppShell.exec(
+                    context, "apt-cache show $pkgName 2>/dev/null | grep -E '^Version:' | head -1 | awk '{print \$2}'"
+                )
+                if (cacheCode == 0 && cacheOut.isNotBlank()) {
+                    version = cacheOut.trim()
+                }
+                if (version.isBlank()) {
+                    sb.appendLine("    ⚠ 拿不到 $pkgName 的版本号，跳过下载")
+                    continue
+                }
+                // Termux apt 包的文件名规则: <pkgname>_<version>_<arch>.deb
+                val debFile = "$dlDir/${pkgName}_${version}_${arch}.deb"
+                val dlCmd = "curl -fsSL -o '$debFile' '${pkgUrl}${pkgName}_${version}_${arch}.deb' 2>&1"
+                val (dlCode, dlOut) = AppShell.exec(context, dlCmd, timeout = 60)
+                if (dlCode == 0 && File(debFile).length() > 0) {
+                    downloaded++
+                    sb.appendLine("    ✔ 下载 $pkgName ($version)")
+                } else {
+                    sb.appendLine("    ✘ $pkgName 下载失败: ${dlOut.take(120)}")
+                }
+            }
+            if (downloaded == packages.size) break
+        }
+
+        // dpkg -i 所有下载好的 deb
+        val debFiles = listOfNotNull(File(dlDir).listFiles { it.name.endsWith(".deb") }?.toList()).flatten()
+        if (debFiles.isNotEmpty()) {
+            sb.appendLine("  执行 dpkg -i ${debFiles.size} 个包 ...")
+            val (dpkgCode, dpkgOut) = AppShell.exec(
+                context,
+                "dpkg -i ${debFiles.joinToString(" ") { "'$it'" }} 2>&1 || true",
+                timeout = 120
+            )
+            sb.appendLine(dpkgOut.takeIf { it.isNotBlank() } ?: "(无输出)")
+            if (isAptAvailable(context)) {
+                // 补一下依赖
+                AppShell.exec(context, "export DEBIAN_FRONTEND=noninteractive && apt-get install -f -y 2>&1", timeout = 120)
+                sb.appendLine("✅ 通过 deb 下载 + dpkg -i 恢复成功")
+                return true to sb.toString()
+            } else {
+                sb.appendLine("❌ dpkg -i 执行后 apt 仍不可用")
+            }
+        } else {
+            sb.appendLine("❌ 全部 deb 下载失败，无可安装文件")
+        }
+
+        sb.appendLine("❌ 所有恢复路径均已失败，需要用户手动干预或重装 Termux")
+        return false to sb.toString()
+    }
+
     private suspend fun getInstalledNames(context: Context): Set<String> {
         return getInstalled(context).map { it.name }.toSet()
     }
@@ -799,6 +937,10 @@ fun PackageManagerScreen(
     var loadingAvailable by remember { mutableStateOf(false) }
     var showDetail by remember { mutableStateOf<PackageInfo?>(null) }
 
+    // apt 兜底恢复 UI state
+    var aptRecoveryStep by remember { mutableStateOf<Int?>(null) } // null=未触发, 0=尝试中, 1=恢复中, 2=恢复失败
+    var aptRecoveryLog by remember { mutableStateOf("") }
+
     // 分类视图状态
     val pkgPrefs = remember {
         context.getSharedPreferences("app_settings", android.content.Context.MODE_PRIVATE)
@@ -896,6 +1038,24 @@ fun PackageManagerScreen(
 
     LaunchedEffect(Unit) {
         isLoading = true
+        // —— 入口 apt 可用性检测 + 兜底恢复 ——
+        if (!PkgRepo.isAptAvailable(context)) {
+            aptRecoveryStep = 0
+            aptRecoveryLog = "apt / pkg / dpkg 链路检测失败，正在尝试自动恢复 ..."
+            delay(400) // 给 UI 一帧时间渲染
+            aptRecoveryStep = 1
+            val (ok, log) = PkgRepo.recoverApt(context)
+            aptRecoveryLog = log
+            if (!ok) {
+                aptRecoveryStep = 2
+                // 恢复失败：OverlayDialog 弹窗报错，isLoading 保持 true，页面停在 loading
+                // 等用户确认后按 onBackPressed 退出
+                isLoading = false
+                return@LaunchedEffect
+            }
+            aptRecoveryStep = null
+            Toast.makeText(context, "apt 已恢复，正在加载软件包列表 ...", Toast.LENGTH_SHORT).show()
+        }
         installedList = PkgRepo.getInstalled(context)
         isLoading = false
     }
@@ -1259,6 +1419,90 @@ fun PackageManagerScreen(
         }
     }
     }
+
+    // —— apt 兜底恢复对话框 ——
+    OverlayDialog(
+        show = aptRecoveryStep != null,
+        title = when (aptRecoveryStep) {
+            0 -> "检测 apt 链路"
+            1 -> "尝试自动恢复"
+            else -> "apt 恢复失败"
+        },
+        summary = when (aptRecoveryStep) {
+            0 -> "正在检测 apt / pkg / dpkg 是否可执行 ..."
+            1 -> "软件包管理依赖 apt 链路，正在尝试自动恢复 ..."
+            else -> "自动恢复失败，请手动干预或重装 Termux 后再试"
+        },
+        onDismissRequest = { if (aptRecoveryStep == 2) onBackPressed() },
+        content = {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                if (aptRecoveryStep == 0 || aptRecoveryStep == 1) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(24.dp),
+                            color = MiuixTheme.colorScheme.primary,
+                            strokeWidth = 3.dp
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        Text(
+                            text = "正在处理 ...",
+                            fontSize = 14.sp,
+                            color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                        )
+                    }
+                    Spacer(Modifier.height(12.dp))
+                }
+
+                if (aptRecoveryStep == 2) {
+                    Text(
+                        text = "软件包管理功能无法正常运行",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color(0xFFDC2626)
+                    )
+                    Spacer(Modifier.height(12.dp))
+                }
+
+                if (aptRecoveryLog.isNotBlank()) {
+                    Box(
+                        modifier = Modifier.fillMaxWidth()
+                            .height(240.dp)
+                            .background(
+                                color = if (isDark) Color(0xFF1A1A1A) else Color(0xFFF5F5F5),
+                                shape = RoundedCornerShape(8.dp)
+                            )
+                            .padding(12.dp)
+                    ) {
+                        Text(
+                            text = aptRecoveryLog,
+                            fontSize = 11.sp,
+                            color = if (isDark) Color.White.copy(alpha = 0.7f) else Color.Black.copy(alpha = 0.6f),
+                            lineHeight = 15.sp,
+                            modifier = Modifier.verticalScroll(rememberScrollState())
+                        )
+                    }
+                    Spacer(Modifier.height(12.dp))
+                }
+
+                if (aptRecoveryStep == 2) {
+                    Row(modifier = Modifier.fillMaxWidth()) {
+                        TextButton(
+                            text = "退出软件包管理",
+                            onClick = { onBackPressed() },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
+            }
+        }
+    )
 }
 
 @Composable

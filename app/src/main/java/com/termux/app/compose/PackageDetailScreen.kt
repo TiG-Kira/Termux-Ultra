@@ -747,6 +747,8 @@ fun PackageDetailScreen(
                     val allRemove = aptSimRemove?.willRemovePackages.orEmpty()
                         .filter { it in installedNames }
                     val cascade = allRemove.filter { it != self }
+                    // 卸载目标（含连带）里命中 apt/dpkg/termux-apt-repo 等关键包 → 严重警告
+                    val criticalHits = allRemove.filter { it in PkgRepo.CRITICAL_APT_PACKAGES }
                     Column {
                         // 主说明 —— 不带连带时一行搞定；有连带则展示可滚动列表
                         Text(
@@ -792,6 +794,54 @@ fun PackageDetailScreen(
                                 }
                             }
                         }
+
+                        // —— apt 关键包严重警告 ——
+                        if (criticalHits.isNotEmpty()) {
+                            Spacer(Modifier.height(10.dp))
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(
+                                        color = if (isDark) Color(0xFF3B1414) else Color(0xFFFFEBEE),
+                                        shape = RoundedCornerShape(8.dp)
+                                    )
+                                    .padding(12.dp)
+                            ) {
+                                Column {
+                                    Text(
+                                        text = "⚠️ 严重警告：将卸载软件包管理的核心组件！",
+                                        fontSize = 13.sp,
+                                        color = DangerRed,
+                                        fontWeight = FontWeight.SemiBold,
+                                        lineHeight = 18.sp
+                                    )
+                                    Spacer(Modifier.height(6.dp))
+                                    Text(
+                                        text = "此次卸载将移除以下关键包，软件包管理功能依赖它们才能正常运行：",
+                                        fontSize = 12.sp,
+                                        color = colorScheme.onSurface.copy(alpha = 0.85f),
+                                        lineHeight = 18.sp
+                                    )
+                                    criticalHits.forEach {
+                                        Text(
+                                            text = "  • $it",
+                                            fontSize = 12.sp,
+                                            color = DangerRed,
+                                            fontWeight = FontWeight.Medium,
+                                            lineHeight = 18.sp
+                                        )
+                                    }
+                                    Spacer(Modifier.height(6.dp))
+                                    Text(
+                                        text = "卸载后，软件包管理功能将无法使用，直到 apt 链路被手动恢复（重新安装上述包或重装 Termux）。请务必确认！",
+                                        fontSize = 12.sp,
+                                        color = DangerRed,
+                                        lineHeight = 18.sp
+                                    )
+                                }
+                            }
+                        }
+
                         Spacer(Modifier.height(16.dp))
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -808,7 +858,9 @@ fun PackageDetailScreen(
                                     startOperation(isInstall = false)
                                 },
                                 modifier = Modifier.weight(1f),
-                                colors = ButtonDefaults.buttonColors(color = DangerRed)
+                                colors = ButtonDefaults.buttonColors(
+                                    color = if (criticalHits.isNotEmpty()) Color(0xFFB71C1C) else DangerRed
+                                )
                             ) {
                                 Text("卸载", color = Color.White, fontWeight = FontWeight.Medium)
                             }
