@@ -1,18 +1,19 @@
-<!-- Termux Ultra monochrome (themed icon) layer: prompt glyph only (scaled 2x from original). -->
+<!-- Termux Ultra monochrome (themed icon) layer: prompt glyph only. -->
+<!-- Glyph scaled ~1.14x to fill adaptive launcher icon's safe-zone (circle r=36) without clipping. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
     <path
-        android:pathData="M14.92,26.78 L43.54,55.44 L13.82,83.8"
+        android:pathData="M31.82,38.55 L48.06,54.82 L31.20,70.91"
         android:strokeColor="#FFFFFF"
-        android:strokeWidth="18"
+        android:strokeWidth="10.21"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>
     <path
-        android:pathData="M60.54,81.42 L94.4,81.42"
+        android:pathData="M57.71,69.56 L76.93,69.56"
         android:strokeColor="#FFFFFF"
-        android:strokeWidth="18"
+        android:strokeWidth="10.21"
         android:strokeLineCap="round"/>
 </vector>
