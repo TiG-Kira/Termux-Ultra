@@ -145,9 +145,6 @@ final class TermuxInstaller {
                         return;
                     }
 
-                    final byte[] buffer = new byte[8096];
-                    final List<Pair<String, String>> symlinks = new ArrayList<>(50);
-
                     final String bootstrapArch = BootstrapDownloader.getArchForAbi();
                     if (callback != null) {
                         activity.runOnUiThread(callback::onDownloadStart);
@@ -160,74 +157,7 @@ final class TermuxInstaller {
                         activity.runOnUiThread(callback::onInstallStart);
                     }
 
-                    Logger.logInfo(LOG_TAG, "Bootstrap zip downloaded (" + zipBytes.length + " bytes), extracting to prefix staging directory \"" + TERMUX_STAGING_PREFIX_DIR_PATH + "\".");
-                    try (ZipInputStream zipInput = new ZipInputStream(new ByteArrayInputStream(zipBytes))) {
-                        ZipEntry zipEntry;
-                        while ((zipEntry = zipInput.getNextEntry()) != null) {
-                            if (zipEntry.getName().equals("SYMLINKS.txt")) {
-                                BufferedReader symlinksReader = new BufferedReader(new InputStreamReader(zipInput));
-                                String line;
-                                while ((line = symlinksReader.readLine()) != null) {
-                                    String[] parts = line.split("←");
-                                    if (parts.length != 2)
-                                        throw new RuntimeException("Malformed symlink line: " + line);
-                                    String oldPath = parts[0];
-                                    String newPath = TERMUX_STAGING_PREFIX_DIR_PATH + "/" + parts[1];
-                                    symlinks.add(Pair.create(oldPath, newPath));
-
-                                    error = ensureDirectoryExists(new File(newPath).getParentFile());
-                                    if (error != null) {
-                                        reportBootstrapError(activity, whenDone, callback, Error.getErrorMarkdownString(error));
-                                        return;
-                                    }
-                                }
-                            } else {
-                                String zipEntryName = zipEntry.getName();
-                                File targetFile = new File(TERMUX_STAGING_PREFIX_DIR_PATH, zipEntryName);
-                                boolean isDirectory = zipEntry.isDirectory();
-
-                                error = ensureDirectoryExists(isDirectory ? targetFile : targetFile.getParentFile());
-                                if (error != null) {
-                                    reportBootstrapError(activity, whenDone, callback, Error.getErrorMarkdownString(error));
-                                    return;
-                                }
-
-                                if (!isDirectory) {
-                                    try (FileOutputStream outStream = new FileOutputStream(targetFile)) {
-                                        int readBytes;
-                                        while ((readBytes = zipInput.read(buffer)) != -1)
-                                            outStream.write(buffer, 0, readBytes);
-                                    }
-                                    // Termux bootstrap zip 里的 Unix 权限 ZipInputStream 不会自动恢复，
-                                    // 必须手动 chmod。不仅 bin/ 下的命令，usr/bin/ 和 usr/sbin/ 下
-                                    // 的 dpkg、apt、chmod、cp、mkdir 等核心工具也需要执行权限。
-                                    boolean isExecutable = zipEntryName.startsWith("bin/")
-                                        || zipEntryName.startsWith("usr/bin/")
-                                        || zipEntryName.startsWith("usr/sbin/")
-                                        || zipEntryName.startsWith("usr/libexec/")
-                                        || zipEntryName.startsWith("libexec/")
-                                        || zipEntryName.startsWith("lib/apt/apt-helper")
-                                        || zipEntryName.startsWith("lib/apt/methods");
-                                    if (isExecutable) {
-                                        Os.chmod(targetFile.getAbsolutePath(), 0755);
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    if (symlinks.isEmpty())
-                        throw new RuntimeException("No SYMLINKS.txt encountered");
-                    for (Pair<String, String> symlink : symlinks) {
-                        Os.symlink(symlink.first, symlink.second);
-                    }
-
-                    Logger.logInfo(LOG_TAG, "Moving termux prefix staging to prefix directory.");
-
-                    if (!TERMUX_STAGING_PREFIX_DIR.renameTo(TERMUX_PREFIX_DIR)) {
-                        throw new RuntimeException("Moving termux prefix staging to prefix directory failed");
-                    }
-
+                    extractBootstrapZip(zipBytes);
                     Logger.logInfo(LOG_TAG, "Bootstrap packages installed successfully.");
                     activity.runOnUiThread(whenDone);
 
@@ -372,8 +302,88 @@ final class TermuxInstaller {
         }.start();
     }
 
-    private static Error ensureDirectoryExists(File directory) {
+    static Error ensureDirectoryExists(File directory) {
         return FileUtils.createDirectoryFile(directory.getAbsolutePath());
+    }
+
+    /**
+     * 把已校验通过的 bootstrap zip 解压到 staging 目录，处理 SYMLINKS.txt，
+     * 修正 Unix 权限，然后 atomic rename staging -> prefix。
+     *
+     * 调用方必须确保调用前 staging 和 prefix 目录都已清空，且 zip 已完成 SHA-256 校验。
+     * 任何异常（解压失败、symlink 格式错误、rename 失败）都会抛出 RuntimeException。
+     *
+     * 本方法为 OOBE bootstrap 和「重置运行环境」功能共享。
+     */
+    static void extractBootstrapZip(byte[] zipBytes) {
+        Logger.logInfo(LOG_TAG, "Bootstrap zip (" + zipBytes.length + " bytes), extracting to prefix staging directory "" + TERMUX_STAGING_PREFIX_DIR_PATH + "".");
+
+        final byte[] buffer = new byte[8096];
+        final List<Pair<String, String>> symlinks = new ArrayList<>(50);
+
+        Error error;
+        try (ZipInputStream zipInput = new ZipInputStream(new ByteArrayInputStream(zipBytes))) {
+            ZipEntry zipEntry;
+            while ((zipEntry = zipInput.getNextEntry()) != null) {
+                if (zipEntry.getName().equals("SYMLINKS.txt")) {
+                    BufferedReader symlinksReader = new BufferedReader(new InputStreamReader(zipInput));
+                    String line;
+                    while ((line = symlinksReader.readLine()) != null) {
+                        String[] parts = line.split("←");
+                        if (parts.length != 2)
+                            throw new RuntimeException("Malformed symlink line: " + line);
+                        String oldPath = parts[0];
+                        String newPath = TERMUX_STAGING_PREFIX_DIR_PATH + "/" + parts[1];
+                        symlinks.add(Pair.create(oldPath, newPath));
+
+                        error = ensureDirectoryExists(new File(newPath).getParentFile());
+                        if (error != null)
+                            throw new RuntimeException(Error.getErrorMarkdownString(error));
+                    }
+                } else {
+                    String zipEntryName = zipEntry.getName();
+                    File targetFile = new File(TERMUX_STAGING_PREFIX_DIR_PATH, zipEntryName);
+                    boolean isDirectory = zipEntry.isDirectory();
+
+                    error = ensureDirectoryExists(isDirectory ? targetFile : targetFile.getParentFile());
+                    if (error != null)
+                        throw new RuntimeException(Error.getErrorMarkdownString(error));
+
+                    if (!isDirectory) {
+                        try (FileOutputStream outStream = new FileOutputStream(targetFile)) {
+                            int readBytes;
+                            while ((readBytes = zipInput.read(buffer)) != -1)
+                                outStream.write(buffer, 0, readBytes);
+                        }
+                        boolean isExecutable = zipEntryName.startsWith("bin/")
+                            || zipEntryName.startsWith("usr/bin/")
+                            || zipEntryName.startsWith("usr/sbin/")
+                            || zipEntryName.startsWith("usr/libexec/")
+                            || zipEntryName.startsWith("libexec/")
+                            || zipEntryName.startsWith("lib/apt/apt-helper")
+                            || zipEntryName.startsWith("lib/apt/methods");
+                        if (isExecutable)
+                            Os.chmod(targetFile.getAbsolutePath(), 0755);
+                    }
+                }
+            }
+        } catch (Throwable t) {
+            // 解压阶段可能 OOM / IOException，统一包装成 RuntimeException 向上抛
+            if (t instanceof RuntimeException)
+                throw (RuntimeException) t;
+            throw new RuntimeException(t);
+        }
+
+        if (symlinks.isEmpty())
+            throw new RuntimeException("No SYMLINKS.txt encountered");
+        for (Pair<String, String> symlink : symlinks)
+            Os.symlink(symlink.first, symlink.second);
+
+        Logger.logInfo(LOG_TAG, "Moving termux prefix staging to prefix directory.");
+        if (!TERMUX_STAGING_PREFIX_DIR.renameTo(TERMUX_PREFIX_DIR))
+            throw new RuntimeException("Moving termux prefix staging to prefix directory failed");
+
+        Logger.logInfo(LOG_TAG, "Bootstrap packages extracted successfully.");
     }
 
 }
