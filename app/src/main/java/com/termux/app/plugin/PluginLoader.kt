@@ -316,9 +316,9 @@ object PluginLoader {
     }
 
     private data class InstallRecord(
-        val id: String,
-        val version: String,
-        val installedAt: Long,
-        val state: String
+        val id: String = "",
+        val version: String = "",
+        val installedAt: Long = 0L,
+        val state: String = "INSTALLED"
     )
 }

@@ -3,7 +3,7 @@ package com.termux.app.plugin
 import com.google.gson.Gson
 
 data class ComposeUiNode(
-    val type: String,
+    val type: String = "",
     val props: Map<String, Any?> = emptyMap(),
     val children: List<ComposeUiNode>? = null
 )
