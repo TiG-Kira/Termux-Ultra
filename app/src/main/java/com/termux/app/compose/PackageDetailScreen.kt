@@ -878,18 +878,25 @@ fun PackageDetailScreen(
                     computeWillUninstallConflicts(detail ?: pkg)
                 }
                 val cascadePkgs = allRemovePkgs.filter { it !in directConflictPkgs }
+                // 命中 apt 关键包 → 严重警告（和卸载弹窗一致）
+                val criticalHits = allRemovePkgs.filter { it in PkgRepo.CRITICAL_APT_PACKAGES }
 
                 if (allRemovePkgs.isNotEmpty()) {
                     OverlayDialog(
                         show = showConflictConfirm,
-                        title = "⚠ 严重警告：将卸载多个软件包",
+                        title = if (criticalHits.isNotEmpty()) "⚠ 严重警告：将卸载软件包管理核心组件"
+                                else "⚠ 严重警告：将卸载多个软件包",
                         summary = "",
                         onDismissRequest = { showConflictConfirm = false },
                         content = {
                             Column {
                                 // 顶部简短警示语
                                 Text(
-                                    text = "安装 ${pkg.name} 将强制卸载以下已安装的软件包，此操作不可撤销且极可能破坏 Termux 环境的稳定性！",
+                                    text = if (criticalHits.isNotEmpty()) {
+                                        "安装 ${pkg.name} 将强制卸载软件包管理的核心组件！此操作不可撤销，卸载后软件包管理功能将无法使用，直到 apt 链路被手动恢复。"
+                                    } else {
+                                        "安装 ${pkg.name} 将强制卸载以下已安装的软件包，此操作不可撤销且极可能破坏 Termux 环境的稳定性！"
+                                    },
                                     fontSize = 14.sp,
                                     color = colorScheme.onSurface,
                                     lineHeight = 20.sp,
@@ -927,7 +934,7 @@ fun PackageDetailScreen(
                                                 Text(
                                                     text = "  • $it",
                                                     fontSize = 13.sp,
-                                                    color = colorScheme.onSurface,
+                                                    color = if (it in PkgRepo.CRITICAL_APT_PACKAGES) DangerRed else colorScheme.onSurface,
                                                     lineHeight = 18.sp
                                                 )
                                             }
@@ -950,7 +957,7 @@ fun PackageDetailScreen(
                                                 Text(
                                                     text = "  • $it",
                                                     fontSize = 13.sp,
-                                                    color = colorScheme.onSurface,
+                                                    color = if (it in PkgRepo.CRITICAL_APT_PACKAGES) DangerRed else colorScheme.onSurface,
                                                     lineHeight = 18.sp
                                                 )
                                             }
@@ -966,7 +973,7 @@ fun PackageDetailScreen(
                                         )
                                         Spacer(Modifier.height(8.dp))
                                         Text(
-                                            text = "总计将卸载 ${allRemovePkgs.size} 个包",
+                                            text = "总计将卸载 ${allRemovePkgs.size} 个包${if (criticalHits.isNotEmpty()) "（含 ${criticalHits.size} 个软件包管理关键组件）" else ""}",
                                             fontSize = 13.sp,
                                             color = DangerRed,
                                             fontWeight = FontWeight.SemiBold
@@ -996,6 +1003,53 @@ fun PackageDetailScreen(
                                     }
                                 }
 
+                                // —— apt 关键包严重警告（仅当命中时显示）——
+                                if (criticalHits.isNotEmpty()) {
+                                    Spacer(Modifier.height(12.dp))
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .background(
+                                                color = if (isDark) Color(0xFF3B1414) else Color(0xFFFFEBEE),
+                                                shape = RoundedCornerShape(8.dp)
+                                            )
+                                            .padding(12.dp)
+                                    ) {
+                                        Column {
+                                            Text(
+                                                text = "⚠️ 严重警告：将卸载软件包管理的核心组件！",
+                                                fontSize = 13.sp,
+                                                color = DangerRed,
+                                                fontWeight = FontWeight.SemiBold,
+                                                lineHeight = 18.sp
+                                            )
+                                            Spacer(Modifier.height(6.dp))
+                                            Text(
+                                                text = "此次安装将连带移除以下关键包，软件包管理功能依赖它们才能正常运行：",
+                                                fontSize = 12.sp,
+                                                color = colorScheme.onSurface.copy(alpha = 0.85f),
+                                                lineHeight = 18.sp
+                                            )
+                                            criticalHits.forEach {
+                                                Text(
+                                                    text = "  • $it",
+                                                    fontSize = 12.sp,
+                                                    color = DangerRed,
+                                                    fontWeight = FontWeight.Medium,
+                                                    lineHeight = 18.sp
+                                                )
+                                            }
+                                            Spacer(Modifier.height(6.dp))
+                                            Text(
+                                                text = "安装完成后，软件包管理功能将无法使用，直到 apt 链路被手动恢复（重新安装上述包或重装 Termux）。请务必确认！",
+                                                fontSize = 12.sp,
+                                                color = DangerRed,
+                                                lineHeight = 18.sp
+                                            )
+                                        }
+                                    }
+                                }
+
                                 Spacer(Modifier.height(12.dp))
 
                                 // 底部红色建议卡
@@ -1009,7 +1063,10 @@ fun PackageDetailScreen(
                                         .padding(12.dp)
                                 ) {
                                     Text(
-                                        text = "建议先取消安装，在终端中执行 pkg install ${pkg.name} 仔细审阅 apt 的输出，确认无误后再操作。",
+                                        text = if (criticalHits.isNotEmpty())
+                                            "强烈建议取消安装！软件包管理核心组件一旦被移除，恢复难度大、耗时长。请仔细评估后果后再操作。"
+                                        else
+                                            "建议先取消安装，在终端中执行 pkg install ${pkg.name} 仔细审阅 apt 的输出，确认无误后再操作。",
                                         fontSize = 13.sp,
                                         color = DangerRed,
                                         fontWeight = FontWeight.Medium,
@@ -1032,7 +1089,9 @@ fun PackageDetailScreen(
                                             startOperation(isInstall = true)
                                         },
                                         modifier = Modifier.weight(1f),
-                                        colors = ButtonDefaults.buttonColors(color = DangerRed)
+                                        colors = ButtonDefaults.buttonColors(
+                                            color = if (criticalHits.isNotEmpty()) Color(0xFFB71C1C) else DangerRed
+                                        )
                                     ) {
                                         Text("确认安装", color = Color.White, fontWeight = FontWeight.Medium)
                                     }
