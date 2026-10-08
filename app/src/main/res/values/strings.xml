@@ -702,6 +702,12 @@
     <string name="apk_download_failed">APK file download failed</string>
     <string name="request_install_permission_failed">Failed to request install permission</string>
     <string name="download_failed_with_code">Download failed: %1$d</string>
+    <string name="update_url_not_allowed">Update source is not trusted, download blocked</string>
+    <string name="apk_verify_failed_format">The downloaded file is not a valid APK</string>
+    <string name="apk_verify_failed_checksum">Checksum mismatch, the update package has been discarded</string>
+    <string name="apk_verify_failed_package">Package name mismatch, the update package has been discarded</string>
+    <string name="apk_verify_failed_signature">Signing certificate mismatch, the update package has been discarded</string>
+    <string name="apk_verify_failed_downgrade">The downloaded version is older than the installed one</string>
     <string name="beta_version">Beta</string>
     <string name="internal_version">Internal Build</string>
     <string name="workflow_build">Workflow</string>

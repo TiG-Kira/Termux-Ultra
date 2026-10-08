@@ -631,6 +631,12 @@
     <string name="apk_download_failed">APK 文件下载失败</string>
     <string name="request_install_permission_failed">请求安装权限失败</string>
     <string name="download_failed_with_code">下载失败: %1$d</string>
+    <string name="update_url_not_allowed">更新来源不受信任，已阻止下载</string>
+    <string name="apk_verify_failed_format">下载的文件不是有效的 APK</string>
+    <string name="apk_verify_failed_checksum">校验和不匹配，已丢弃该更新包</string>
+    <string name="apk_verify_failed_package">包名不匹配，已丢弃该更新包</string>
+    <string name="apk_verify_failed_signature">签名证书不匹配，已丢弃该更新包</string>
+    <string name="apk_verify_failed_downgrade">下载的版本低于当前已安装版本</string>
     <string name="beta_version">Beta 版本</string>
     <string name="internal_version">内部版本</string>
     <string name="workflow_build">Workflow</string>
