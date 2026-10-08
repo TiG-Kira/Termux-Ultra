@@ -986,6 +986,9 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
                         error = event.message.error ?: "AgentPaw 执行出错"
                     )
                     is AgentEvent.Cancelled -> updateStream(event.message.content)
+                    // v0.2.0 新增事件：AssistantTurn（assistant 回合结束、即将进入工具调用）
+                    // 和 AdaptivePaced（AI 智能步间延时）。我们暂不展示，直接忽略。
+                    else -> Unit
                 }
             }
         } finally {
