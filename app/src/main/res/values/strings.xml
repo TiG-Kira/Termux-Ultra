@@ -823,6 +823,27 @@
     <string name="root_manage_grant_root">Grant ROOT Permission</string>
     <string name="root_manage_loose_mode">Loose Mode (Disable auto-block)</string>
 
+
+    <!-- Reset Runtime Environment -->
+    <string name="reset_runtime_env_title">重置运行环境</string>
+    <string name="reset_runtime_env_summary">清除所有环境数据并重跑 bootstrap</string>
+    <string name="reset_runtime_env_warning_title">确认重置？</string>
+    <string name="reset_runtime_env_warning_body">此操作将清除 $PREFIX 和 $HOME 内所有数据（约 30MB 系统文件 + 你的个人文件），重新下载并解压 bootstrap。仅限于环境损坏或放弃数据时使用。</string>
+    <string name="reset_runtime_env_confirm">确认重置</string>
+    <string name="reset_runtime_env_cancel">取消</string>
+    <string name="reset_runtime_env_step_downloading">正在下载 bootstrap...</string>
+    <string name="reset_runtime_env_step_verifying">正在校验完整性...</string>
+    <string name="reset_runtime_env_step_killing">正在关闭所有会话...</string>
+    <string name="reset_runtime_env_step_purging_prefix">正在清除环境文件...</string>
+    <string name="reset_runtime_env_step_purging_home">正在清除个人文件...</string>
+    <string name="reset_runtime_env_step_extracting">正在解压 bootstrap...</string>
+    <string name="reset_runtime_env_step_symlinks">正在重建存储链接...</string>
+    <string name="reset_runtime_env_step_done">重置完成</string>
+    <string name="reset_runtime_env_success_title">重置成功</string>
+    <string name="reset_runtime_env_fail_before_purge">重置失败：%1$s，可重试</string>
+    <string name="reset_runtime_env_fail_after_purge">重置失败：%1$s。运行环境已受损，建议清除 Termux Ultra 应用数据来重置状态。</string>
+    <string name="reset_runtime_env_retry">重试</string>
+    <string name="reset_runtime_env_done_button">完成</string>
     <!-- Card Layout -->
     <string name="card_layout_title">Card Layout</string>
     <string name="card_layout_summary">Choose how function cards are arranged on the home page</string>
