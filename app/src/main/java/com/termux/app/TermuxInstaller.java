@@ -316,7 +316,7 @@ final class TermuxInstaller {
      * 本方法为 OOBE bootstrap 和「重置运行环境」功能共享。
      */
     static void extractBootstrapZip(byte[] zipBytes) {
-        Logger.logInfo(LOG_TAG, "Bootstrap zip (" + zipBytes.length + " bytes), extracting to prefix staging directory "" + TERMUX_STAGING_PREFIX_DIR_PATH + "".");
+        Logger.logInfo(LOG_TAG, "Bootstrap zip (" + zipBytes.length + " bytes), extracting to prefix staging directory \"" + TERMUX_STAGING_PREFIX_DIR_PATH + "\".");
 
         final byte[] buffer = new byte[8096];
         final List<Pair<String, String>> symlinks = new ArrayList<>(50);
