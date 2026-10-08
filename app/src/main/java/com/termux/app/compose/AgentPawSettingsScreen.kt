@@ -41,6 +41,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.paw.agent.device.DevicePermissionManager
+import com.paw.agent.device.PhoneControlMode
 import com.paw.agent.device.shizuku.ShizukuStatus
 import com.termux.R
 import kotlinx.coroutines.Dispatchers
@@ -91,6 +92,8 @@ fun AgentPawSettingsScreen(onBack: () -> Unit) {
     var stream by remember { mutableStateOf(AgentPawPrefs.isStreamEnabled(context)) }
     var visionMode by remember { mutableStateOf(AgentPawPrefs.getVisionMode(context)) }
     var unlimitedToolRounds by remember { mutableStateOf(AgentPawPrefs.isUnlimitedToolRounds(context)) }
+    var controlMode by remember { mutableStateOf(AgentPawPrefs.getControlMode(context)) }
+    var adaptivePacingEnabled by remember { mutableStateOf(AgentPawPrefs.isAdaptivePacingEnabled(context)) }
 
     // 数值/文本草稿：rememberSaveable 保证旋转重建后仍是用户刚输入的值，而不是磁盘旧值
     var temperature by rememberSaveable { mutableStateOf(AgentPawPrefs.getTemperature(context).toString()) }
@@ -136,6 +139,7 @@ fun AgentPawSettingsScreen(onBack: () -> Unit) {
     // 权限类状态不走草稿：它们由系统设置页决定，用户可能刚从系统设置返回，故每次 ON_RESUME 重查
     var accessibilityEnabled by remember { mutableStateOf(DevicePermissionManager.isAccessibilityServiceEnabled(context)) }
     var overlayGranted by remember { mutableStateOf(Settings.canDrawOverlays(context)) }
+    var rootAvailable by remember { mutableStateOf(DevicePermissionManager.isRootAvailable()) }
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
@@ -143,6 +147,7 @@ fun AgentPawSettingsScreen(onBack: () -> Unit) {
                 Lifecycle.Event.ON_RESUME -> {
                     accessibilityEnabled = DevicePermissionManager.isAccessibilityServiceEnabled(context)
                     overlayGranted = Settings.canDrawOverlays(context)
+                    rootAvailable = DevicePermissionManager.isRootAvailable()
                 }
                 // 跳到系统设置页授权时同样会暂停，先把未落盘的改动写完再离开
                 Lifecycle.Event.ON_PAUSE -> flushPendingSave()
@@ -261,8 +266,20 @@ fun AgentPawSettingsScreen(onBack: () -> Unit) {
                             AgentPawPrefs.setVisionMode(context, mode)
                         },
                         visionOptions = visionOptions,
+                        controlMode = controlMode,
+                        onControlModeChange = { mode ->
+                            controlMode = mode
+                            AgentPawPrefs.setControlMode(context, mode)
+                        },
+                        adaptivePacingEnabled = adaptivePacingEnabled,
+                        onAdaptivePacingChange = {
+                            adaptivePacingEnabled = it
+                            AgentPawPrefs.setAdaptivePacingEnabled(context, it)
+                        },
                         accessibilityEnabled = accessibilityEnabled,
                         overlayGranted = overlayGranted,
+                        rootAvailable = rootAvailable,
+                        onRefreshRoot = { rootAvailable = DevicePermissionManager.isRootAvailable() },
                         shizukuStatus = shizukuStatus
                     )
                 }
@@ -410,7 +427,7 @@ private fun LazyListScope.generationContent(
 }
 
 /**
- * 手机控制与权限子页：执行策略 + 视觉策略 + 系统权限。
+ * 手机控制与权限子页：执行策略 + 视觉策略 + 执行通道优先级 + 步间节奏 + 系统权限。
  *
  * 权限类状态由调用方在 ON_RESUME 时重查后传入；跳系统设置授权的 Toast 行为沿用原实现。
  */
@@ -423,8 +440,14 @@ private fun LazyListScope.controlContent(
     visionMode: String,
     onVisionModeChange: (String) -> Unit,
     visionOptions: List<Pair<String, Pair<Int, Int>>>,
+    controlMode: PhoneControlMode,
+    onControlModeChange: (PhoneControlMode) -> Unit,
+    adaptivePacingEnabled: Boolean,
+    onAdaptivePacingChange: (Boolean) -> Unit,
     accessibilityEnabled: Boolean,
     overlayGranted: Boolean,
+    rootAvailable: Boolean,
+    onRefreshRoot: () -> Unit,
     shizukuStatus: ShizukuStatus
 ) {
     item(key = "section_exec") {
@@ -455,6 +478,47 @@ private fun LazyListScope.controlContent(
                         isError = parseMaxToolRounds(maxToolRounds) == null
                     )
                 }
+            }
+        }
+    }
+
+    // v0.2.0 执行通道优先级：AUTO / ROOT / SHIZUKU / ACCESSIBILITY
+    item(key = "section_control_mode") {
+        SmallTitle(text = stringResource(R.string.agentpaw_control_mode_category))
+    }
+    item(key = "card_control_mode") {
+        SettingCard {
+            Column {
+                Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                    Text(
+                        text = stringResource(R.string.agentpaw_control_mode_title),
+                        fontSize = 14.sp,
+                        color = MiuixTheme.colorScheme.onSurface
+                    )
+                    FieldHint(text = stringResource(R.string.agentpaw_control_mode_desc))
+                }
+                PhoneControlMode.entries.forEach { mode ->
+                    RadioButtonPreference(
+                        title = stringResource(controlModeTitle(mode)),
+                        summary = stringResource(controlModeDesc(mode)),
+                        selected = controlMode == mode,
+                        onClick = { onControlModeChange(mode) }
+                    )
+                }
+            }
+        }
+    }
+
+    // v0.2.0 AI 智能步间节奏
+    item(key = "card_adaptive_pacing") {
+        SettingCard {
+            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                SwitchPreference(
+                    title = stringResource(R.string.agentpaw_adaptive_pacing_title),
+                    summary = stringResource(R.string.agentpaw_adaptive_pacing_desc),
+                    checked = adaptivePacingEnabled,
+                    onCheckedChange = onAdaptivePacingChange
+                )
             }
         }
     }
@@ -524,6 +588,18 @@ private fun LazyListScope.controlContent(
                         }
                     }
                 )
+                // v0.2.0 ROOT 权限状态行（放在 Shizuku 之后、悬浮窗之前，与上游 ExpertSettingsPage 分组对齐）
+                StatusPreference(
+                    title = stringResource(R.string.agentpaw_root_title),
+                    summary = stringResource(R.string.agentpaw_root_desc),
+                    statusText = stringResource(
+                        if (rootAvailable) R.string.agentpaw_root_granted
+                        else R.string.agentpaw_root_not_granted
+                    ),
+                    ok = rootAvailable,
+                    actionText = stringResource(R.string.agentpaw_root_retest),
+                    onAction = { onRefreshRoot() }
+                )
                 StatusPreference(
                     title = stringResource(R.string.agentpaw_overlay_title),
                     summary = stringResource(R.string.agentpaw_overlay_desc),
@@ -550,6 +626,21 @@ private fun LazyListScope.controlContent(
     }
 
     item(key = "control_spacer") { Spacer(Modifier.height(16.dp)) }
+}
+
+/** PhoneControlMode 各自的标题与描述，集中在这里方便 strings.xml 管理。 */
+private fun controlModeTitle(mode: PhoneControlMode): Int = when (mode) {
+    PhoneControlMode.AUTO -> R.string.agentpaw_control_mode_auto
+    PhoneControlMode.ROOT -> R.string.agentpaw_control_mode_root
+    PhoneControlMode.SHIZUKU -> R.string.agentpaw_control_mode_shizuku
+    PhoneControlMode.ACCESSIBILITY -> R.string.agentpaw_control_mode_accessibility
+}
+
+private fun controlModeDesc(mode: PhoneControlMode): Int = when (mode) {
+    PhoneControlMode.AUTO -> R.string.agentpaw_control_mode_auto_desc
+    PhoneControlMode.ROOT -> R.string.agentpaw_control_mode_root_desc
+    PhoneControlMode.SHIZUKU -> R.string.agentpaw_control_mode_shizuku_desc
+    PhoneControlMode.ACCESSIBILITY -> R.string.agentpaw_control_mode_accessibility_desc
 }
 
 /** 三个页面的导航状态。 */

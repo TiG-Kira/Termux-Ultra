@@ -1681,4 +1681,28 @@
     <string name="agentpaw_field_not_saved">Value out of range, not saved; the last saved value is still in use</string>
     <string name="agentpaw_save_failed">Failed to save AgentPaw settings</string>
 
+    <!-- v0.2.0: execution channel priority (PhoneControlMode) -->
+    <string name="agentpaw_control_mode_category">Execution channel</string>
+    <string name="agentpaw_control_mode_title">Execution channel priority</string>
+    <string name="agentpaw_control_mode_desc">Which channel AgentPaw uses for taps, swipes, screenshots and key events. AUTO picks the best available channel for you; forcing a specific channel is useful for testing or on devices where one channel behaves better than others.</string>
+    <string name="agentpaw_control_mode_auto">AUTO (recommended)</string>
+    <string name="agentpaw_control_mode_auto_desc">Try ROOT first, then Shizuku, then Accessibility</string>
+    <string name="agentpaw_control_mode_root">ROOT only</string>
+    <string name="agentpaw_control_mode_root_desc">Use ROOT (su) exclusively; fails cleanly if unavailable</string>
+    <string name="agentpaw_control_mode_shizuku">Shizuku only</string>
+    <string name="agentpaw_control_mode_shizuku_desc">Use Shizuku exclusively; falls through to Accessibility if unavailable</string>
+    <string name="agentpaw_control_mode_accessibility">Accessibility only</string>
+    <string name="agentpaw_control_mode_accessibility_desc">Use Accessibility Service exclusively (compatible with all devices)</string>
+
+    <!-- v0.2.0: AI adaptive step pacing -->
+    <string name="agentpaw_adaptive_pacing_title">AI adaptive step pacing</string>
+    <string name="agentpaw_adaptive_pacing_desc">After each tap / swipe / launch, insert a brief AI-tailored delay based on the tool type, so animations, keyboard and network have time to settle before the next action — avoids missed clicks on slow devices or heavy apps.</string>
+
+    <!-- v0.2.0: ROOT permission status -->
+    <string name="agentpaw_root_title">ROOT (superuser)</string>
+    <string name="agentpaw_root_desc">Privileged channel for high-speed screenshots, monkey-level input and system control. Not required, but highly recommended.</string>
+    <string name="agentpaw_root_granted">Available</string>
+    <string name="agentpaw_root_not_granted">Not available</string>
+    <string name="agentpaw_root_retest">Retest</string>
+
 </resources>
