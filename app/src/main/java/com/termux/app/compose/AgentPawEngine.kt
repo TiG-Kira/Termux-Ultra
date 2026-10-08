@@ -34,6 +34,13 @@ import java.io.File
 object AgentPawEngine {
 
     /**
+     * 是否启用 AI 智能步间节奏（v0.2.0 新增）。封装 Agent.run 的 enableAdaptivePacing
+     * 参数读取逻辑，调用方直接透传即可，不必各自 import AgentPawPrefs。
+     */
+    fun isAdaptivePacingEnabled(context: Context): Boolean =
+        AgentPawPrefs.isAdaptivePacingEnabled(context)
+
+    /**
      * 由 Termux Agent 的 LLM 配置 + AgentPaw 行为参数构造 LlmConfig。
      *
      * 连接信息（baseUrl / apiKey / model）完全沿用 Termux Agent 当前生效的配置，
@@ -75,7 +82,11 @@ object AgentPawEngine {
      */
     fun buildToolRegistry(context: Context): ToolRegistry {
         val appContext = context.applicationContext
-        val phoneController = HybridPhoneController(appContext)
+        val phoneController = HybridPhoneController(appContext).apply {
+            // v0.2.0 执行策略：让用户选择 AUTO / ROOT / SHIZUKU / ACCESSIBILITY
+            // 之间的优先级；默认 AUTO 会在 ROOT 不可用时自动回退到 Shizuku，再回退到无障碍。
+            controlMode = AgentPawPrefs.getControlMode(context)
+        }
         val sandboxRoot = File(appContext.filesDir, "agentpaw_sandbox").apply { mkdirs() }
         val skills = SkillRegistry(
             listOf(

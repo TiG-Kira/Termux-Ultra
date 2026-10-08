@@ -1625,4 +1625,28 @@
     <string name="agentpaw_field_not_saved">当前取值无效，未保存，仍沿用上次保存的值</string>
     <string name="agentpaw_save_failed">AgentPaw 设置保存失败</string>
 
+    <!-- v0.2.0: 执行通道优先级 (PhoneControlMode) -->
+    <string name="agentpaw_control_mode_category">执行通道</string>
+    <string name="agentpaw_control_mode_title">执行通道优先级</string>
+    <string name="agentpaw_control_mode_desc">AgentPaw 在点击、滑动、截屏和按键事件时使用的执行通道。AUTO 会自动挑选当前可用的最优通道；强制锁定某个通道适合测试，或在某些设备上某个通道更稳定时使用。</string>
+    <string name="agentpaw_control_mode_auto">自动（推荐）</string>
+    <string name="agentpaw_control_mode_auto_desc">优先 ROOT → 其次 Shizuku → 最后无障碍</string>
+    <string name="agentpaw_control_mode_root">仅 ROOT</string>
+    <string name="agentpaw_control_mode_root_desc">只走 ROOT (su) 提权；ROOT 不可用时执行直接失败</string>
+    <string name="agentpaw_control_mode_shizuku">仅 Shizuku</string>
+    <string name="agentpaw_control_mode_shizuku_desc">只走 Shizuku；不可用时回退到无障碍</string>
+    <string name="agentpaw_control_mode_accessibility">仅无障碍</string>
+    <string name="agentpaw_control_mode_accessibility_desc">只走无障碍服务（所有设备通用）</string>
+
+    <!-- v0.2.0: AI 智能步间节奏 -->
+    <string name="agentpaw_adaptive_pacing_title">AI 智能步间节奏</string>
+    <string name="agentpaw_adaptive_pacing_desc">在每次点击 / 滑动 / 启动应用后，AI 会根据工具类型和上下文自动插入一小段自适应延时，让动画、键盘、网络加载有时间稳定下来再执行下一步——避免慢设备或重应用上漏点、漏操作。</string>
+
+    <!-- v0.2.0: ROOT 权限状态 -->
+    <string name="agentpaw_root_title">ROOT（超级用户）</string>
+    <string name="agentpaw_root_desc">特权通道，支持高速截屏、monkey 级输入和系统级控制。非必需，但强烈推荐。</string>
+    <string name="agentpaw_root_granted">可用</string>
+    <string name="agentpaw_root_not_granted">不可用</string>
+    <string name="agentpaw_root_retest">重新检测</string>
+
 </resources>

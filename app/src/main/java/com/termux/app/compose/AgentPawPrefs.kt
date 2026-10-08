@@ -1,6 +1,7 @@
 package com.termux.app.compose
 
 import android.content.Context
+import com.paw.agent.device.PhoneControlMode
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -25,6 +26,8 @@ object AgentPawPrefs {
     private const val KEY_STREAM = "stream"
     private const val KEY_VISION_MODE = "vision_mode"
     private const val KEY_SYSTEM_PROMPT = "system_prompt"
+    private const val KEY_CONTROL_MODE = "control_mode"
+    private const val KEY_ADAPTIVE_PACING = "adaptive_pacing"
 
     /** 与 AgentPaw 上游 LlmConfig 默认值保持一致 */
     const val DEFAULT_TEMPERATURE = 0.7f
@@ -35,6 +38,13 @@ object AgentPawPrefs {
 
     /** 截屏分辨率模式的可选值，与 AgentPaw 截屏工具的取图策略一一对应。 */
     val VISION_MODES = listOf(DEFAULT_VISION_MODE, "FAST", "HIGH")
+
+    /**
+     * 手机执行策略的可选值，与 AgentPaw 上游 [PhoneControlMode] 枚举保持一致。
+     * AUTO：智能判断优先级（ROOT → Shizuku → 无障碍）；
+     * ROOT / SHIZUKU / ACCESSIBILITY：强制锁定对应通道。
+     */
+    val CONTROL_MODES = PhoneControlMode.entries
 
     /** 手动模式：进入后持续由 AgentPaw 处理对话，直到用户手动退出。 */
     private val _manualMode = MutableStateFlow(false)
@@ -104,6 +114,35 @@ object AgentPawPrefs {
 
     fun setStreamEnabled(context: Context, enabled: Boolean) {
         prefs(context).edit().putBoolean(KEY_STREAM, enabled).apply()
+    }
+
+    /**
+     * 手机执行策略（v0.2.0 新增）。决定 HybridPhoneController 在 ROOT / Shizuku / 无障碍
+     * 三者之间的优先级。默认 AUTO：按 ROOT → Shizuku → 无障碍 的可用情况自动回退。
+     * 磁盘上的值做一次白名单校验，避免旧版本写入的非法字符串把 RadioButtonPreference
+     * 的选中态搞成"没有任何一项匹配"。
+     */
+    fun getControlMode(context: Context): PhoneControlMode {
+        val stored = prefs(context).getString(KEY_CONTROL_MODE, PhoneControlMode.AUTO.name)
+            ?: PhoneControlMode.AUTO.name
+        return PhoneControlMode.entries.firstOrNull { it.name == stored } ?: PhoneControlMode.AUTO
+    }
+
+    fun setControlMode(context: Context, mode: PhoneControlMode) {
+        prefs(context).edit().putString(KEY_CONTROL_MODE, mode.name).apply()
+    }
+
+    /**
+     * AI 智能步间节奏（v0.2.0 新增）。开启后 Agent.run 每轮工具调用之间会用
+     * AdaptivePacingEngine 根据工具类型、上下文意图和节奏 profile 自适应延时——
+     * 让 LaunchApp / Swipe / Tap 之后等待最恰当的稳定时间，避免操作过密漏击或
+     * 过慢卡顿。默认开启。
+     */
+    fun isAdaptivePacingEnabled(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_ADAPTIVE_PACING, true)
+
+    fun setAdaptivePacingEnabled(context: Context, enabled: Boolean) {
+        prefs(context).edit().putBoolean(KEY_ADAPTIVE_PACING, enabled).apply()
     }
 
     /** 自定义系统提示词；为空时使用 AgentPaw 内置默认提示词 */

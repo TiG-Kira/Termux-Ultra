@@ -965,7 +965,12 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
             AgentStopFloatingButton.show(getApplication()) { cancelGeneration() }
 
             val agent = AgentPawEngine.buildAgent(pawEngineParts.llmClient, pawEngineParts.toolRegistry)
-            agent.run(llmConfig, history, isCancelled = { cancelled }).collect { event ->
+            agent.run(
+                config = llmConfig,
+                history = history,
+                isCancelled = { cancelled },
+                enableAdaptivePacing = AgentPawEngine.isAdaptivePacingEnabled(this),
+            ).collect { event ->
                 when (event) {
                     is AgentEvent.AssistantDelta -> {
                         lastBody = event.message.content
