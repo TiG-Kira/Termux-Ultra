@@ -376,12 +376,18 @@ final class TermuxInstaller {
 
         if (symlinks.isEmpty())
             throw new RuntimeException("No SYMLINKS.txt encountered");
-        for (Pair<String, String> symlink : symlinks)
-            Os.symlink(symlink.first, symlink.second);
+        try {
+            for (Pair<String, String> symlink : symlinks)
+                Os.symlink(symlink.first, symlink.second);
 
-        Logger.logInfo(LOG_TAG, "Moving termux prefix staging to prefix directory.");
-        if (!TERMUX_STAGING_PREFIX_DIR.renameTo(TERMUX_PREFIX_DIR))
-            throw new RuntimeException("Moving termux prefix staging to prefix directory failed");
+            Logger.logInfo(LOG_TAG, "Moving termux prefix staging to prefix directory.");
+            if (!TERMUX_STAGING_PREFIX_DIR.renameTo(TERMUX_PREFIX_DIR))
+                throw new RuntimeException("Moving termux prefix staging to prefix directory failed");
+        } catch (Throwable t) {
+            if (t instanceof RuntimeException)
+                throw (RuntimeException) t;
+            throw new RuntimeException(t);
+        }
 
         Logger.logInfo(LOG_TAG, "Bootstrap packages extracted successfully.");
     }
