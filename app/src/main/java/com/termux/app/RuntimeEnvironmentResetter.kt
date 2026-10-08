@@ -94,7 +94,7 @@ object RuntimeEnvironmentResetter {
                 } catch (_: Throwable) { /* 无 TermuxService 时静默忽略 */ }
                 try {
                     // Compose Kotlin 体系
-                    ComposeSessionManager.killAllSessions()
+                    ComposeSessionManager.getInstance(context).killAllSessions()
                 } catch (_: Throwable) { /* Compose 体系不存在时忽略 */ }
                 // 给 OS 足够时间释放文件句柄（否则 prefix 删除可能因文件占用失败）
                 Thread.sleep(600)
