@@ -307,6 +307,24 @@ final class TermuxInstaller {
     }
 
     /**
+     * 判断 target 规范化后是否位于 rootDirPath 之内（Zip Slip 防护）。
+     *
+     * 两侧都取 canonical path：既消除 entry name 里的 ../ 与绝对路径，也消除
+     * rootDirPath 自身可能存在的符号链接，避免绕过。取不到 canonical path 时
+     * 一律按"不安全"处理。
+     */
+    static boolean isPathInside(String rootDirPath, File target) {
+        try {
+            String root = new File(rootDirPath).getCanonicalPath();
+            if (root.endsWith("/")) root = root.substring(0, root.length() - 1);
+            String dest = target.getCanonicalPath();
+            return dest.equals(root) || dest.startsWith(root + "/");
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /**
      * 把已校验通过的 bootstrap zip 解压到 staging 目录，处理 SYMLINKS.txt，
      * 修正 Unix 权限，然后 atomic rename staging -> prefix。
      *
@@ -334,6 +352,9 @@ final class TermuxInstaller {
                             throw new RuntimeException("Malformed symlink line: " + line);
                         String oldPath = parts[0];
                         String newPath = TERMUX_STAGING_PREFIX_DIR_PATH + "/" + parts[1];
+                        // Zip Slip 防护：SYMLINKS.txt 的目标路径可能带 ../，必须确认仍在 staging 目录内
+                        if (!isPathInside(TERMUX_STAGING_PREFIX_DIR_PATH, new File(newPath)))
+                            throw new RuntimeException("Symlink target outside of staging prefix directory: " + parts[1]);
                         symlinks.add(Pair.create(oldPath, newPath));
 
                         error = ensureDirectoryExists(new File(newPath).getParentFile());
@@ -343,6 +364,9 @@ final class TermuxInstaller {
                 } else {
                     String zipEntryName = zipEntry.getName();
                     File targetFile = new File(TERMUX_STAGING_PREFIX_DIR_PATH, zipEntryName);
+                    // Zip Slip 防护：entry name 可能带 ../ 或绝对路径，必须确认解压后仍在 staging 目录内
+                    if (!isPathInside(TERMUX_STAGING_PREFIX_DIR_PATH, targetFile))
+                        throw new RuntimeException("Zip entry outside of staging prefix directory: " + zipEntryName);
                     boolean isDirectory = zipEntry.isDirectory();
 
                     error = ensureDirectoryExists(isDirectory ? targetFile : targetFile.getParentFile());
