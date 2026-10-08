@@ -66,6 +66,8 @@ import com.termux.R
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Launch
 import androidx.compose.material.icons.rounded.*
+import androidx.compose.material3.CircularProgressIndicator
+import com.termux.app.RuntimeEnvironmentResetter
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.graphics.painter.Painter
@@ -132,6 +134,14 @@ fun SettingsScreen(
     var showResetConfigWarning by remember { mutableStateOf(false) }
     var showWhitelistDialog by remember { mutableStateOf(false) }
     var tempWhitelistSkills by remember { mutableStateOf<Set<SkillType>>(emptySet()) }
+
+    // ---------- Reset Runtime Env state ----------
+    var showResetEnvConfirm by remember { mutableStateOf(false) }
+    var showResetEnvProgress by remember { mutableStateOf(false) }
+    var resetEnvStep by remember { mutableStateOf(RuntimeEnvironmentResetter.Step.DOWNLOADING) }
+    var resetEnvMessage by remember { mutableStateOf("") }
+    var resetEnvFailMode by remember { mutableStateOf<Int?>(null) }
+    var resetEnvErrorMsg by remember { mutableStateOf("") }
 
     // Whitelistable skills definition：与 SkillType.requiresClick() 中可白名单化的类型保持一致
     val whitelistSkillLabels = remember {
@@ -1550,6 +1560,169 @@ fun SettingsScreen(
                                         },
                                         modifier = Modifier.fillMaxWidth()
                                     )
+                                }
+                            }
+                        )
+                    }
+                }
+            }
+
+            // ---------- 重置运行环境 ----------
+            item(key = "card_reset_runtime_env") {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                ) {
+                    Column {
+                        ArrowPreference(
+                            title = context.getString(R.string.reset_runtime_env_title),
+                            summary = context.getString(R.string.reset_runtime_env_summary),
+                            onClick = { showResetEnvConfirm = true },
+                            startAction = {
+                                SettingIcon(
+                                    Icons.Rounded.Warning,
+                                    contentDescription = context.getString(R.string.reset_runtime_env_title)
+                                )
+                            }
+                        )
+
+                        // ---------- 二次确认弹窗 ----------
+                        OverlayDialog(
+                            title = context.getString(R.string.reset_runtime_env_warning_title),
+                            summary = context.getString(R.string.reset_runtime_env_warning_body),
+                            show = showResetEnvConfirm,
+                            onDismissRequest = { showResetEnvConfirm = false },
+                            content = {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    TextButton(
+                                        text = context.getString(R.string.reset_runtime_env_cancel),
+                                        onClick = { showResetEnvConfirm = false },
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    val confirmColor = Color(0xFFE53935)
+                                    TextButton(
+                                        text = context.getString(R.string.reset_runtime_env_confirm),
+                                        textColor = confirmColor,
+                                        onClick = {
+                                            showResetEnvConfirm = false
+                                            resetEnvFailMode = null
+                                            resetEnvErrorMsg = ""
+                                            RuntimeEnvironmentResetter.reset(
+                                                context,
+                                                object : RuntimeEnvironmentResetter.Listener {
+                                                    override fun onStepUpdate(step: RuntimeEnvironmentResetter.Step, msg: String) {
+                                                        resetEnvStep = step; resetEnvMessage = msg
+                                                    }
+                                                    override fun onSuccess() {
+                                                        resetEnvFailMode = null; showResetEnvProgress = true
+                                                    }
+                                                    override fun onFailBeforePurge(msg: String) {
+                                                        resetEnvFailMode = 0; resetEnvErrorMsg = msg; showResetEnvProgress = true
+                                                    }
+                                                    override fun onFailAfterPurge(msg: String) {
+                                                        resetEnvFailMode = 1; resetEnvErrorMsg = msg; showResetEnvProgress = true
+                                                    }
+                                                }
+                                            )
+                                            showResetEnvProgress = true
+                                        },
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
+                            }
+                        )
+
+                        // ---------- 进度 + 结果弹窗 ----------
+                        OverlayDialog(
+                            title = when (resetEnvFailMode) {
+                                null -> if (resetEnvStep == RuntimeEnvironmentResetter.Step.DONE)
+                                    context.getString(R.string.reset_runtime_env_success_title)
+                                    else context.getString(R.string.reset_runtime_env_title)
+                                0 -> context.getString(R.string.reset_runtime_env_title) + " — 下载/校验失败"
+                                1 -> context.getString(R.string.reset_runtime_env_title) + " — 环境已受损"
+                                else -> context.getString(R.string.reset_runtime_env_title)
+                            },
+                            summary = when (resetEnvFailMode) {
+                                null -> if (resetEnvStep == RuntimeEnvironmentResetter.Step.DONE)
+                                    "prefix 与 home 已恢复到全新安装状态"
+                                    else resetEnvMessage
+                                0 -> context.getString(R.string.reset_runtime_env_fail_before_purge, resetEnvErrorMsg)
+                                1 -> context.getString(R.string.reset_runtime_env_fail_after_purge, resetEnvErrorMsg)
+                                else -> resetEnvMessage
+                            },
+                            show = showResetEnvProgress,
+                            onDismissRequest = { if (resetEnvFailMode != 0) showResetEnvProgress = false },
+                            content = {
+                                when {
+                                    resetEnvFailMode == null && resetEnvStep == RuntimeEnvironmentResetter.Step.DONE -> {
+                                        TextButton(
+                                            text = context.getString(R.string.reset_runtime_env_done_button),
+                                            onClick = { showResetEnvProgress = false },
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
+                                    }
+                                    resetEnvFailMode == 0 -> {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                        ) {
+                                            TextButton(
+                                                text = context.getString(R.string.reset_runtime_env_cancel),
+                                                onClick = { showResetEnvProgress = false },
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                            TextButton(
+                                                text = context.getString(R.string.reset_runtime_env_retry),
+                                                onClick = {
+                                                    showResetEnvProgress = false
+                                                    resetEnvFailMode = null; resetEnvErrorMsg = ""
+                                                    RuntimeEnvironmentResetter.reset(
+                                                        context,
+                                                        object : RuntimeEnvironmentResetter.Listener {
+                                                            override fun onStepUpdate(step: RuntimeEnvironmentResetter.Step, msg: String) {
+                                                                resetEnvStep = step; resetEnvMessage = msg
+                                                            }
+                                                            override fun onSuccess() {
+                                                                resetEnvFailMode = null; showResetEnvProgress = true
+                                                            }
+                                                            override fun onFailBeforePurge(msg: String) {
+                                                                resetEnvFailMode = 0; resetEnvErrorMsg = msg; showResetEnvProgress = true
+                                                            }
+                                                            override fun onFailAfterPurge(msg: String) {
+                                                                resetEnvFailMode = 1; resetEnvErrorMsg = msg; showResetEnvProgress = true
+                                                            }
+                                                        }
+                                                    )
+                                                    showResetEnvProgress = true
+                                                },
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                        }
+                                    }
+                                    resetEnvFailMode == 1 -> {
+                                        TextButton(
+                                            text = context.getString(R.string.ok),
+                                            onClick = { showResetEnvProgress = false },
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
+                                    }
+                                    else -> {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            CircularProgressIndicator(
+                                                modifier = Modifier.padding(end = 16.dp),
+                                                strokeWidth = 2.dp
+                                            )
+                                            Text(text = resetEnvMessage)
+                                        }
+                                    }
                                 }
                             }
                         )
