@@ -97,7 +97,9 @@ import androidx.compose.foundation.Canvas
 import com.termux.R
 import com.termux.app.TermuxService
 import com.termux.shared.termux.shell.command.runner.terminal.TermuxSession
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
@@ -473,6 +475,9 @@ fun OverviewScreen(
     
     // CPU/GPU monitoring loop
     LaunchedEffect(sessions, composeSessionInfos, isComposeRuntime) {
+        // 采样涉及 /proc 遍历、dumpsys Binder 调用等重 IO，必须在 IO 线程跑：
+        // LaunchedEffect 默认在主线程，readGpuUsage() 里的 exec + waitFor 会直接 ANR
+        withContext(Dispatchers.IO) {
         // First call to initialize baseline
         val sessionPids = if (isComposeRuntime) {
             composeSessionInfos.mapNotNull { it.session.pid.takeIf { it > 0 } }.toSet()
@@ -516,10 +521,13 @@ fun OverviewScreen(
             
             delay(1000)
         }
+        }
     }
     
     // Process list monitoring
     LaunchedEffect(sessions, composeSessionInfos, isComposeRuntime) {
+        // 遍历 /proc + 执行 ps，同样是重 IO，不能占主线程
+        withContext(Dispatchers.IO) {
         while (true) {
             val sessionPids = if (isComposeRuntime) {
                 composeSessionInfos.mapNotNull { it.session.pid.takeIf { it > 0 } }.toSet()
@@ -528,6 +536,7 @@ fun OverviewScreen(
             }
             processList = readProcessList(sessionPids)
             delay(2000)
+        }
         }
     }
     
