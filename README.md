@@ -428,7 +428,19 @@ Termux-Ultra/
 
 ### 签名
 
-项目内置 `ki-terminal-release.jks` 签名配置（alias: `ki-terminal`），Debug 与 Release 均使用该签名。
+Release 签名使用 `ki-terminal-release.jks`（alias: `ki-terminal`）。该 keystore 已被 `.gitignore` 忽略，**不会入库**。
+
+- **CI**：由仓库 Secrets 提供（`JKS_BASE64` + 口令），在 `release_apk.yml` 的两个构建作业里解码写入 `app/ki-terminal-release.jks`，参与 `assembleRelease`。
+- **本地**：密钥材料不存在于仓库，需自备 keystore 并通过 Gradle 属性或环境变量传入：
+
+  ```bash
+  ./gradlew assembleRelease -Ptermux.storePassword=<口令> -Ptermux.keyPassword=<口令>
+  # 或 export KI_TERMINAL_STORE_PASSWORD / KI_TERMINAL_KEY_PASSWORD
+  ```
+
+- **Debug**：不走 release 签名配置，使用默认的 `~/.android/debug.keystore`。
+
+> 切勿把 keystore 或其口令写进 workflow、`build.gradle` 等入库文件 —— 本仓库是公开的，详见 `SECURITY.md`。
 
 ## 技术栈
 
