@@ -1,18 +1,18 @@
-<!-- Termux Ultra monochrome (themed icon) layer: prompt glyph only -->
+<!-- Termux Ultra monochrome (themed icon) layer: prompt glyph only (scaled 2x from original). -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
     <path
-        android:pathData="M34.46,40.39 L48.77,54.72 L33.91,68.9"
+        android:pathData="M14.92,26.78 L43.54,55.44 L13.82,83.8"
         android:strokeColor="#FFFFFF"
-        android:strokeWidth="9"
+        android:strokeWidth="18"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>
     <path
-        android:pathData="M57.27,67.71 L74.2,67.71"
+        android:pathData="M60.54,81.42 L94.4,81.42"
         android:strokeColor="#FFFFFF"
-        android:strokeWidth="9"
+        android:strokeWidth="18"
         android:strokeLineCap="round"/>
 </vector>
