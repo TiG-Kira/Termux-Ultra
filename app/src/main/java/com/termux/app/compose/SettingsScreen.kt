@@ -1162,10 +1162,6 @@ fun SettingsScreen(
                                 SettingIcon(Icons.Rounded.Folder, contentDescription = context.getString(R.string.pkg_view_mode))
                             }
                         )
-                        HorizontalDivider(
-                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f),
-                            modifier = Modifier.padding(start = 72.dp, end = 16.dp)
-                        )
                         ArrowPreference(
                             title = context.getString(R.string.pkg_edit_sources),
                             summary = context.getString(R.string.pkg_edit_sources_desc),
