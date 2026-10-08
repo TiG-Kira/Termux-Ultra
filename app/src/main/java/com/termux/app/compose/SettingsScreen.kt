@@ -1604,10 +1604,8 @@ fun SettingsScreen(
                                         onClick = { showResetEnvConfirm = false },
                                         modifier = Modifier.weight(1f)
                                     )
-                                    val confirmColor = Color(0xFFE53935)
                                     TextButton(
                                         text = context.getString(R.string.reset_runtime_env_confirm),
-                                        textColor = confirmColor,
                                         onClick = {
                                             showResetEnvConfirm = false
                                             resetEnvFailMode = null
