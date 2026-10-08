@@ -39,7 +39,7 @@ object ActionExecutor {
                     true
                 }
                 actionStr.startsWith("http://") || actionStr.startsWith("https://") -> {
-                    PluginManager.openUrl(context, actionStr)
+                    PluginManager.openUrl(context, pluginId, actionStr)
                     true
                 }
                 else -> false

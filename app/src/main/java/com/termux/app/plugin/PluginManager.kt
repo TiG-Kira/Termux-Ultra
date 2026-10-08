@@ -75,6 +75,9 @@ object PluginManager {
             val systemPrompt = plugin.manifest.systemPrompt ?: continue
             val content = systemPrompt.content.trim()
             if (content.isBlank()) continue
+            // 注入 System Prompt 就是在改写 Agent 行为，必须持有 AGENT_MODIFY。
+            // 修复前只按 enabled 拼接，没声明该权限的插件一样能往提示词里塞指令。
+            if (!PluginSecurity.canModifyAgent(context, plugin.id).allowed) continue
 
             sb.append("\n\n")
             when (systemPrompt.getPromptMode()) {
@@ -104,6 +107,8 @@ object PluginManager {
 
         for (plugin in enabledPlugins) {
             val skillRefs = plugin.manifest.entryPoints?.agentSkills ?: continue
+            // 技能卡片与 System Prompt 同属 Agent 行为改写，同样要求 AGENT_MODIFY
+            if (!PluginSecurity.canModifyAgent(context, plugin.id).allowed) continue
             for (ref in skillRefs) {
                 skills.add(
                     PluginSkill(
@@ -237,7 +242,15 @@ object PluginManager {
         }
     }
 
-    fun openUrl(context: Context, url: String) {
+    fun openUrl(context: Context, pluginId: String, url: String) {
+        // 外链既可能是插件自己声明的跳转，也可能是页面里被注入的地址：
+        // 没有 INTERNET_ACCESS 的插件不应获得出网能力，也不该拉起浏览器带走出站意图。
+        val check = PluginSecurity.canAccessInternet(context, pluginId, url)
+        if (!check.allowed) {
+            Logger.logWarn("PluginManager", "插件 '$pluginId' 打开外链被拒绝: ${check.reason}")
+            return
+        }
+
         val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url))
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         context.startActivity(intent)

@@ -207,7 +207,9 @@ object PluginLoader {
 
                     if (manifestFile.exists()) {
                         val manifest = PluginManifestParser.parse(manifestFile.readText()).getOrNull()
-                        if (manifest != null) {
+                        // manifest 就放在插件目录里，安装后可能被改写：id 与安装目录对不上时
+                        // 插件会顶着别人的身份拿权限，这里直接跳过登记。
+                        if (manifest != null && PluginSecurity.validatePluginIntegrity(context, record.id)) {
                             val grantedPerms = loadGrantedPermissions(context, record.id)
                             plugins.add(
                                 InstalledPlugin(

@@ -5,7 +5,6 @@ import com.termux.app.compose.topBarClearance
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
-import android.net.Uri
 import android.os.Bundle
 import android.view.WindowManager
 import android.webkit.JavascriptInterface
@@ -212,8 +211,8 @@ class PluginWebViewActivity : ComponentActivity() {
                                 ): Boolean {
                                     val url = request.url.toString()
                                     return if (url.startsWith("http://") || url.startsWith("https://")) {
-                                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
-                                        startActivity(intent)
+                                        // 与 JS bridge 的 openUrl 收敛到同一出口，统一受 INTERNET_ACCESS 约束
+                                        PluginManager.openUrl(view.context, pluginId, url)
                                         true
                                     } else {
                                         false
@@ -314,7 +313,22 @@ class PluginWebViewActivity : ComponentActivity() {
 
         @JavascriptInterface
         fun readFile(path: String): String {
-            val content = PluginManager.getPluginFileContent(this@PluginWebViewActivity, pluginId, path)
+            // 插件包内的文件读取此前完全不受权限约束，任何启用中的插件都能通过 bridge 读。
+            // 先把相对路径解析成真实文件再交给 canAccessFileSystem，让权限位与沙盒边界一起参与判定。
+            val file = PluginLoader.getPluginFile(this@PluginWebViewActivity, pluginId, path)
+            // 用规范化路径传给 canAccessFileSystem：先消解 ".."，既满足其内部路径逃逸检测，
+            // 又不误伤「含 .. 但解析后仍落在插件目录内」的合法相对路径（原行为允许这类读取）。
+            val canonical = file?.let { f ->
+                try { f.canonicalPath } catch (_: Exception) { f.absolutePath }
+            }
+            val allowed = canonical != null && PluginSecurity.canAccessFileSystem(
+                this@PluginWebViewActivity, pluginId, canonical, false
+            ).allowed
+            val content = if (allowed) {
+                PluginManager.getPluginFileContent(this@PluginWebViewActivity, pluginId, path)
+            } else {
+                null
+            }
             return if (content != null) {
                 gson.toJson(mapOf("success" to true, "content" to content))
             } else {
@@ -324,7 +338,7 @@ class PluginWebViewActivity : ComponentActivity() {
 
         @JavascriptInterface
         fun openUrl(url: String) {
-            PluginManager.openUrl(this@PluginWebViewActivity, url)
+            PluginManager.openUrl(this@PluginWebViewActivity, pluginId, url)
         }
 
         @JavascriptInterface

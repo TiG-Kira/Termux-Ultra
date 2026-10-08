@@ -90,7 +90,9 @@ CROSS_APP_BRIDGE        跨应用调用
 
 权限按需申请。h5Home.type=compose 的主页不需要 H5_WEBVIEW。
 调用 JS Bridge 的 exec() 需要 TERMUX_SESSION_ACCESS。
+调用 JS Bridge 的 readFile() 需要 FILE_SYSTEM_READ，openUrl() 需要 INTERNET_ACCESS。
 resourceCards.action.type=SHELL_COMMAND 也需要 TERMUX_SESSION_ACCESS（或 ROOT_EXECUTE）。
+systemPrompt 与 agentSkills 属于改写 Agent 行为，需要 AGENT_MODIFY；未声明则宿主不会注入。
 
 ## action.type 可选值
 SHELL_COMMAND  执行 shell 命令（用 command 字段）
