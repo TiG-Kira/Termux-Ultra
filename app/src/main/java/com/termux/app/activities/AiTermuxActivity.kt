@@ -969,7 +969,7 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
                 config = llmConfig,
                 history = history,
                 isCancelled = { cancelled },
-                enableAdaptivePacing = AgentPawEngine.isAdaptivePacingEnabled(this),
+                enableAdaptivePacing = AgentPawEngine.isAdaptivePacingEnabled(ctx),
             ).collect { event ->
                 when (event) {
                     is AgentEvent.AssistantDelta -> {
