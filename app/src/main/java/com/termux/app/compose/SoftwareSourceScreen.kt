@@ -428,7 +428,10 @@ fun SoftwareSourceScreen(
                     contentPadding = PaddingValues(
                         start = 12.dp,
                         end = 12.dp,
-                        top = 6.dp,
+                        // 需要留出 GlassTopAppBar 的高度，否则内容会冲顶栏。
+                        // topBarClearance(innerPadding) 就是 Scaffold 给出的 top bar 实际高度
+                        // （会随折叠动态变化），额外 +6.dp 是和其他子页面一致的视觉间距。
+                        top = topBarClearance(innerPadding) + 6.dp,
                         bottom = 16.dp
                     ),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
