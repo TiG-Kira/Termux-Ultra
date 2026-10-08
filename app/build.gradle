@@ -121,9 +121,24 @@ android {
     signingConfigs {
         release {
             storeFile file("ki-terminal-release.jks")
-            storePassword "ki-terminal"
-            keyAlias "ki-terminal"
-            keyPassword "ki-terminal"
+            // 【安全】签名口令一律外置，不得写回本文件：本仓库是公开的，
+            // 一旦口令与私钥同时落到明文仓库里，任何人都能签出外观无差的包。
+            //
+            // 取值顺序沿用本项目既有约定（见上方 enableR8）：Gradle 属性 → 环境变量 → 默认。
+            //   CI：由 Secrets 注入同名环境变量（见 .github/workflows/release_apk.yml）
+            //   本地：./gradlew assembleRelease -Ptermux.storePassword=... -Ptermux.keyPassword=...
+            //        或先 export KI_TERMINAL_STORE_PASSWORD / KI_TERMINAL_KEY_PASSWORD
+            // 口令留空时不会污染 debug 构建，但 release 签名任务会直接失败——这是刻意的：
+            // 宁可构建报错，也不要静默产出一个签名不对的包。
+            storePassword (project.findProperty("termux.storePassword")
+                ?: System.getenv("KI_TERMINAL_STORE_PASSWORD")
+                ?: "").toString()
+            keyAlias (project.findProperty("termux.keyAlias")
+                ?: System.getenv("KI_TERMINAL_KEY_ALIAS")
+                ?: "ki-terminal").toString()
+            keyPassword (project.findProperty("termux.keyPassword")
+                ?: System.getenv("KI_TERMINAL_KEY_PASSWORD")
+                ?: "").toString()
         }
     }
 
