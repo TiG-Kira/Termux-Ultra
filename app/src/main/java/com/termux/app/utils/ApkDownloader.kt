@@ -25,9 +25,13 @@ object ApkDownloader {
     private const val UPDATE_DIR = "updates"
 
     // 更新包只能来自 GitHub Release，避免被重定向到任意镜像或 CDN。
+    // 注意：GitHub Release 资产会经 302 跳转到官方 CDN release-assets.githubusercontent.com，
+    // OkHttp 跟随重定向后 response.request.url 为最终地址，该 host 必须纳入白名单，
+    // 否则合法下载会被误判为不受信任来源而失败。
     private val ALLOWED_DOWNLOAD_HOSTS = setOf(
         "github.com",
         "objects.githubusercontent.com",
+        "release-assets.githubusercontent.com",
         "raw.githubusercontent.com"
     )
 
