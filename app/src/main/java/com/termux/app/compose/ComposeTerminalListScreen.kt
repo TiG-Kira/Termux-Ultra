@@ -2,6 +2,7 @@ package com.termux.app.compose
 
 import android.content.Context
 import android.content.Intent
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -57,6 +58,9 @@ import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.theme.MiuixTheme
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Warning
+import com.termux.app.vortex.VorteXSandbox
 
 /**
  * 终端会话列表页。
@@ -124,6 +128,39 @@ fun ComposeTerminalListScreen(
                         }
                     },
                     actions = {
+                        // VorteX 沙箱入口：位于「+」按钮左侧。
+                        // 总开关关闭时图标置灰，点击给出提示（不静默无响应）。
+                        val vortexSandboxEnabled = VorteXSandbox.isEnabled(context)
+                        GlassIconButton(
+                            onClick = {
+                                if (!vortexSandboxEnabled) {
+                                    Toast.makeText(
+                                        context,
+                                        context.getString(R.string.vortex_sandbox_disabled_toast),
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                    return@GlassIconButton
+                                }
+                                // 限制同时仅一个手动沙箱会话：已存在则切换过去
+                                val title = context.getString(R.string.vortex_sandbox_session_title)
+                                val existing = sessionManager.sessions.value.firstOrNull { it.name == title }
+                                if (existing != null) {
+                                    sessionManager.switchTo(existing.session.id)
+                                } else {
+                                    val created = sessionManager.createSandboxSession(startImmediately = true)
+                                    sessionManager.switchTo(created.id)
+                                    VorteXSandbox.setActiveManualSessionId(created.id)
+                                }
+                            }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Warning,
+                                contentDescription = stringResource(R.string.vortex_sandbox_title),
+                                modifier = Modifier.size(24.dp),
+                                tint = if (vortexSandboxEnabled) MiuixTheme.colorScheme.onSurface
+                                else MiuixTheme.colorScheme.onSurface.copy(alpha = 0.35f)
+                            )
+                        }
                         GlassIconButton(onClick = {
                             // 直接用 ComposeSessionManager 创建会话，不依赖 Java 版 onNewTerminal。
                             // 效仿 Java 版策略：只创建未初始化的终端条目（不拉起进程、不跳转），
