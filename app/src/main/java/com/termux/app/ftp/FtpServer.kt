@@ -27,21 +27,12 @@ class FtpServer(
     private val running = AtomicBoolean(false)
     private var serverThread: Thread? = null
 
-    /** 把监听地址解析成 InetAddress；解析失败时回退到回环地址，绝不落到 0.0.0.0 全网卡监听。 */
-    private fun resolveBindAddress(): InetAddress {
-        return try {
-            InetAddress.getByName(bindAddress)
-        } catch (e: Exception) {
-            InetAddress.getByName("127.0.0.1")
-        }
-    }
-
     fun start() {
         if (running.get()) return
         running.set(true)
         serverThread = thread {
             try {
-                val addr = resolveBindAddress()
+                val addr = resolveBindAddress(bindAddress)
                 serverSocket = ServerSocket(port, 50, addr)
                 serverSocket?.reuseAddress = true
                 while (running.get()) {
@@ -233,7 +224,7 @@ class FtpClientHandler(
         }
         try {
             dataServerSocket?.close()
-            val addr = resolveBindAddress()
+            val addr = resolveBindAddress(bindAddress)
             dataServerSocket = ServerSocket(0, 5, addr)
             dataPort = dataServerSocket!!.localPort
             val serverIp = getServerBindAddress()
@@ -254,7 +245,7 @@ class FtpClientHandler(
         }
         try {
             dataServerSocket?.close()
-            val addr = resolveBindAddress()
+            val addr = resolveBindAddress(bindAddress)
             dataServerSocket = ServerSocket(0, 5, addr)
             dataPort = dataServerSocket!!.localPort
             sendResponse(writer, 229, "Entering Extended Passive Mode (|||$dataPort|)")
@@ -559,5 +550,17 @@ class FtpClientHandler(
             }
         }
         return "/" + stack.joinToString("/")
+    }
+}
+
+/**
+ * 把监听地址解析成 [InetAddress]；解析失败时回退到回环地址，
+ * 绝不落到 0.0.0.0（全网卡监听）。供 [FtpServer] 与 [FtpClientHandler] 共用。
+ */
+private fun resolveBindAddress(addr: String): InetAddress {
+    return try {
+        InetAddress.getByName(addr)
+    } catch (e: Exception) {
+        InetAddress.getByName("127.0.0.1")
     }
 }
