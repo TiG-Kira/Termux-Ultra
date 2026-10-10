@@ -241,7 +241,9 @@ object VorteXSandbox {
             ).waitFor()
         } catch (_: Throwable) {
         }
-        // $PREFIX 影子层：整目录删掉即可（引导脚本会重建硬链接副本）。
+        // $PREFIX 影子层：整目录删掉即可（引导脚本会 cp -a 重建一份真实拷贝）。
+        // 必须是真实拷贝而非硬链接——硬链接共享 inode，沙箱内改写文件会写穿到真实环境，
+        // 违背「所有改动在会话完全结束后消失」这一硬要求。
         // 必须删——否则沙箱里装的包会残留到下一个会话。
         try {
             File(getRootDir(context), "run/usr").deleteRecursively()

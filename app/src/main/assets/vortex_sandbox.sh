@@ -76,8 +76,7 @@ reset_run() {
     mkdir -p "$RUN" 2>/dev/null
     seed_run
     # $PREFIX 影子层同样重置：否则沙箱里装的包会残留到下次会话。
-    # 注意不能 rm -rf $RUN_PREFIX 后再 cp -al —— 那会让硬链接重新指向真实文件，
-    # 但由于是整体重建，语义上正确（重建后仍是硬链接，删真实文件不受影响）。
+    # 整体删除即可——引导脚本会重新 cp -a 出全新的一份（真实拷贝，非硬链接）。
     rm -rf "$RUN_PREFIX" 2>/dev/null
 }
 
@@ -120,14 +119,19 @@ build_proot_binds() {
     #
     # 为什么必须影子化：proot 的 -b 是可写绑定，若直接把真实 $PREFIX 挂进去，
     # 沙箱内的虚拟 ROOT 就能 `rm -rf $PREFIX` 把真实 Termux 本体删掉——
-    # 实测 T6 确实删光了 files/usr。因此 $PREFIX 也要有一层影子。
+    # 实测 T6 确实删光了 files/usr。
     #
-    # 用 `cp -al`（硬链接）而非全量复制：usr 约 95MB，硬链接几乎零额外空间，
-    # 且用户装包后再更新真实 prefix 时，影子层仍指向同一 inode，不会失效。
-    # 注意硬链接只能保护「删除」——沙箱内**修改**文件内容会影响真实文件，
-    # 所以对会被写的目录（bin/lib/pkg 缓存）后续可考虑再降级为真实拷贝。
-    seed_prefix
-    PROOT_BINDS_STR="$PROOT_BINDS_STR -b $RUN_PREFIX:$REAL_PREFIX"
+    # 为什么必须是**真实拷贝**而不是硬链接：`cp -al` 只防删除，防不住原地改写。
+    # 硬链接共享 inode，沙箱里 `echo x > $PREFIX/bin/xxx` 会直接写穿到真实文件，
+    # 违背「所有改动在沙箱会话完全结束后消失」这一硬要求。
+    # 因此这里用 `cp -a` 真拷贝（usr 约 95MB），会话重置时整体丢弃。
+    # 拷贝失败或 inode 自检不通过 → 不 bind prefix（此时沙箱内 $PREFIX 不可见，
+    # 命令会报 no such file，比"写穿到真实文件"安全得多）。
+    if seed_prefix; then
+        PROOT_BINDS_STR="$PROOT_BINDS_STR -b $RUN_PREFIX:$REAL_PREFIX"
+    else
+        echo "[VorteX Sandbox] 警告：\$PREFIX 影子层不可用，沙箱内 \$PREFIX 将不可见。" >&2
+    fi
 
     # 影子内存储
     if [ "$ISOLATE_STORAGE" = "1" ]; then
@@ -136,14 +140,34 @@ build_proot_binds() {
     fi
 }
 
-# 播种影子 $PREFIX（仅首次，便宜的硬链接拷贝）
+# 播种影子 $PREFIX（真实拷贝，非硬链接）。
+#
+# 顺序很关键：先探测 cp -a 是否真正产生独立 inode，若是硬链接/引用则拒绝使用，
+# 宁可退化为「不 bind prefix、$PREFIX 保持真实」也不能给出假的隔离承诺。
 seed_prefix() {
     mkdir -p "$RUN_PREFIX" 2>/dev/null
-    if [ -z "$(ls -A "$RUN_PREFIX" 2>/dev/null)" ]; then
-        cp -al "$REAL_PREFIX/." "$RUN_PREFIX/" 2>/dev/null \
-            || cp -a "$REAL_PREFIX/." "$RUN_PREFIX/" 2>/dev/null \
-            || true
+    [ -n "$(ls -A "$RUN_PREFIX" 2>/dev/null)" ] && return 0
+
+    cp -a "$REAL_PREFIX/." "$RUN_PREFIX/" 2>/dev/null || {
+        rm -rf "$RUN_PREFIX" 2>/dev/null
+        mkdir -p "$RUN_PREFIX" 2>/dev/null
+        return 1
+    }
+
+    # 自检：影子里的可执行文件必须与真实文件 inode 不同，否则说明拷贝退化成了硬链接。
+    _real_bin="$REAL_PREFIX/bin/bash"
+    _shadow_bin="$RUN_PREFIX/bin/bash"
+    if [ -e "$_real_bin" ] && [ -e "$_shadow_bin" ]; then
+        _ri=$(stat -c %i "$_real_bin" 2>/dev/null)
+        _si=$(stat -c %i "$_shadow_bin" 2>/dev/null)
+        if [ -n "$_ri" ] && [ "$_ri" = "$_si" ]; then
+            echo "[VorteX Sandbox] 错误：\$PREFIX 影子层与真实文件共享 inode（硬链接退化），" >&2
+            echo "[VorteX Sandbox] 已放弃 \$PREFIX 影子化以避免给出虚假的隔离承诺。" >&2
+            rm -rf "$RUN_PREFIX" 2>/dev/null
+            return 1
+        fi
     fi
+    return 0
 }
 
 # 组装并执行 proot。$1 = 传给 bash 的模式参数（-i / -c ...）
