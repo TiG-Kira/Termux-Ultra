@@ -225,7 +225,8 @@ class ComposeSessionManager private constructor(private val context: Context) {
         } ?: return
         // 沙箱会话结束 → 彻底回收影子空间（约 95MB 的 $PREFIX 拷贝等）。
         // 必须在 finish 之前取名字：finish 后 sessionName 可能已被重置。
-        VorteXSandbox.onSessionEnded(context, info.sessionName.value.ifEmpty { info.name })
+        val endedName = info.sessionName.value
+        VorteXSandbox.onSessionEnded(context, if (endedName.isNotEmpty()) endedName else info.name.orEmpty())
         info.session.finishIfRunning()
         TerminalSessionCompat.unregister(sessionId)
 
@@ -246,7 +247,8 @@ class ComposeSessionManager private constructor(private val context: Context) {
     fun killAllSessions() {
         synchronized(sessionsLock) {
             _sessions.value.forEach {
-                VorteXSandbox.onSessionEnded(context, it.sessionName.value.ifEmpty { it.name })
+                val endedName = it.sessionName.value
+                VorteXSandbox.onSessionEnded(context, if (endedName.isNotEmpty()) endedName else it.name.orEmpty())
                 it.session.finishIfRunning()
                 TerminalSessionCompat.unregister(it.session.id)
             }

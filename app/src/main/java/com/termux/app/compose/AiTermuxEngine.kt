@@ -1598,7 +1598,7 @@ object SkillExecutor {
 
             val t0 = System.currentTimeMillis()
             val process = ProcessBuilder(
-                File(TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH, "bash"),
+                File(TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH, "bash").absolutePath,
                 bootstrap, "--run", command
             ).apply {
                 environment()["VORTEX_ROOT"] = vortexRoot
