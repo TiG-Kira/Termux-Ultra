@@ -72,12 +72,11 @@ seed_run() {
 }
 
 reset_run() {
+    # 沙箱只是**临时**占用空间：会话一结束就把影子层全部清掉，
+    # 包括约 95MB 的 $PREFIX 拷贝——否则用户会平白看到近百 MB 不明占用。
     rm -rf "$RUN" 2>/dev/null
-    mkdir -p "$RUN" 2>/dev/null
-    seed_run
-    # $PREFIX 影子层同样重置：否则沙箱里装的包会残留到下次会话。
-    # 整体删除即可——引导脚本会重新 cp -a 出全新的一份（真实拷贝，非硬链接）。
     rm -rf "$RUN_PREFIX" 2>/dev/null
+    rm -rf "$RUN_STORAGE" 2>/dev/null
 }
 
 # ---------------------------------------------------------------------------
@@ -203,7 +202,7 @@ run_in_proot() {
     #
     # /sdcard 不单独 bind：现代 Android 上它只是 /storage/emulated/0 的符号链接，
     # 且 Termux 沙箱上下文对其无权限，bind 反而会触发 proot warning。
-    exec proot --link2symlink \
+    proot --link2symlink \
         -0 \
         $PROOT_BINDS_STR \
         -w "$REAL_HOME" \
@@ -265,14 +264,23 @@ do_check() {
 # 入口
 # ---------------------------------------------------------------------------
 
+# 无论正常退出、命令失败还是被信号打断，都必须清掉影子空间。
+# 沙箱只是临时占用空间：一旦沙箱不运行了，影子 $PREFIX（~95MB）必须消失。
+# 用 trap 而非在分支里手写 reset_run —— 后者在 exec / 信号路径上会漏掉。
+trap 'reset_run' EXIT INT TERM
+
 case "$1" in
     --check)
+        # 自检不应触发清理（此时沙箱并未运行）
+        trap - EXIT INT TERM
         do_check
         ;;
 
     --run)
         shift
         CMD="$1"
+        # 单次调用（插件 / Agent）走这里：命令结束即视为沙箱结束，
+        # EXIT trap 会把影子 prefix 一并清掉，不留 ~95MB 残留。
         if have_proot; then
             run_in_proot -c "$CMD"
         else
@@ -283,15 +291,14 @@ case "$1" in
 
     --interactive|"")
         if have_proot; then
-            printf '\n[VorteX Sandbox] proot 隔离已启用（虚拟 ROOT，会话结束自动重置）\n'
-            printf '[VorteX Sandbox] 真实 %s 已被影子层遮蔽，删除操作不会泄漏。\n\n' "$REAL_HOME"
+            printf '\n[VorteX Sandbox] proot 隔离已启用（虚拟 ROOT，会话结束自动清空并回收空间）\n'
+            printf '[VorteX Sandbox] 真实 %s 已被影子层遮蔽，删除与改写都不会泄漏。\n' "$REAL_HOME"
+            printf '[VorteX Sandbox] 本会话的所有改动在退出时彻底消失，影子 $PREFIX 也会被删除。\n\n'
             run_in_proot -i
-            reset_run
         else
             setup_fallback
-            printf '\n[VorteX Sandbox] 已进入轻量隔离沙箱（仅 $HOME 隔离，会话结束自动重置）\n\n'
+            printf '\n[VorteX Sandbox] 已进入轻量隔离沙箱（仅 $HOME 隔离）\n\n'
             "$REAL_PREFIX/bin/bash" -i
-            reset_run
         fi
         ;;
 

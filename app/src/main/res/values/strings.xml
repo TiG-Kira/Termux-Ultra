@@ -839,6 +839,7 @@
     <string name="vortex_sandbox_plugin_disabled_summary">Enable VorteX Sandbox in Settings to use this option</string>
     <string name="vortex_sandbox_session_title">沙箱会话</string>
     <string name="vortex_sandbox_disabled_toast">VorteX Sandbox is not enabled</string>
+    <string name="vortex_sandbox_preparing">Preparing sandbox…</string>
 
 
     <!-- Reset Runtime Environment -->

@@ -227,6 +227,15 @@ fun TerminalDetailScreenCompose(
     val currentSessionIsDead = currentSession.pid == -1 || sessionExited
     val sessionExitCode = currentSession.exitStatus
 
+    // 沙箱会话自然结束（用户在沙箱里敲 exit）时也要回收影子空间。
+    // killSession 覆盖的是「手动关闭」，这条覆盖「进程自己退出」——
+    // 两者都会走 onSessionEnded，这里做幂等保护（purgeAll 重复调用无副作用）。
+    LaunchedEffect(sessionExited, currentSessionIsDead) {
+        if (currentSessionIsDead) {
+            VorteXSandbox.onSessionEnded(context, currentSessionName)
+        }
+    }
+
     // 死会话内按 Enter → 移除该会话；若无剩余会话则返回，否则已切换到其余会话
     LaunchedEffect(removeRequested) {
         if (removeRequested) {
@@ -669,8 +678,11 @@ fun TerminalDetailScreenCompose(
                     onClick = { updateInteractionTime(); showSessionList = true },
                     onLongClick = {
                         updateInteractionTime()
-                        renameValue = currentSessionName
-                        showRenameDialog = true
+                        // 沙箱会话禁止重命名：清理逻辑以标题「沙箱会话」为锚点
+                        if (currentSessionName != context.getString(R.string.vortex_sandbox_session_title)) {
+                            renameValue = currentSessionName
+                            showRenameDialog = true
+                        }
                     }
                 ),
             contentAlignment = Alignment.Center
@@ -762,8 +774,11 @@ fun TerminalDetailScreenCompose(
                     onClick = { updateInteractionTime(); showSessionList = true },
                     onLongClick = {
                         updateInteractionTime()
-                        renameValue = currentSessionName
-                        showRenameDialog = true
+                        // 沙箱会话禁止重命名：清理逻辑以标题「沙箱会话」为锚点
+                        if (currentSessionName != context.getString(R.string.vortex_sandbox_session_title)) {
+                            renameValue = currentSessionName
+                            showRenameDialog = true
+                        }
                     }
                 ),
             contentAlignment = Alignment.Center

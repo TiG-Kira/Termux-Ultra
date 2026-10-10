@@ -724,6 +724,7 @@
     <string name="vortex_sandbox_plugin_disabled_summary">请在设置中开启 VorteX 沙箱后使用此选项</string>
     <string name="vortex_sandbox_session_title">沙箱会话</string>
     <string name="vortex_sandbox_disabled_toast">VorteX 沙箱未开启</string>
+    <string name="vortex_sandbox_preparing">正在准备沙箱环境…</string>
 
     <!-- 卡片布局 -->
     <string name="card_layout_title">提示卡片布局</string>

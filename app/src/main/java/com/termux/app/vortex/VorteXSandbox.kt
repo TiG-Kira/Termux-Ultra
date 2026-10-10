@@ -252,6 +252,106 @@ object VorteXSandbox {
     }
 
     // ------------------------------------------------------------------
+    // 预热（准备中提示）与彻底清理
+    // ------------------------------------------------------------------
+
+    /** 影子 prefix 目录：约 95MB 的真实拷贝，是沙箱启动延迟的唯一来源。 */
+    private fun runPrefixDir(context: Context) = File(getRootDir(context), "run/usr")
+
+    /** 沙箱是否已就绪（影子 prefix 已存在，无需再拷贝）。 */
+    fun isPrepared(context: Context): Boolean {
+        val dir = runPrefixDir(context)
+        return dir.isDirectory && dir.list().isNullOrEmpty().not()
+    }
+
+    /**
+     * 预热沙箱：把「拷贝 $PREFIX 到影子层」这一步提前做掉，让后续进入沙箱时几乎无延迟。
+     *
+     * 必须放后台线程——这是 95MB 级的磁盘 IO，跑在主线程会 ANR。
+     * 已在准备中时直接回调 [onReady]，重复调用安全。
+     *
+     * @param onReady 准备完成回调（可能在任意线程触发，调用方需自行切回主线程）
+     */
+    @Volatile
+    private var preparing = false
+
+    /** 预热进行中时的等待者，prepareAsync 重入时统一回调。 */
+    private val prepareWaiters = mutableListOf<() -> Unit>()
+
+    fun prepareAsync(context: Context, onReady: () -> Unit) {
+        if (isPrepared(context)) {
+            onReady()
+            return
+        }
+        synchronized(this) {
+            // 重入时不能直接 return——否则第二次调用的 onReady 永远不触发，
+            // UI 会永久停在「准备中」。改为登记为等待者，由首个任务完成后统一回调。
+            prepareWaiters.add(onReady)
+            if (preparing) return
+            preparing = true
+        }
+        val appContext = context.applicationContext
+        Thread({
+            try {
+                ensureInitialized(appContext)
+                prepareShadowPrefix(appContext)
+            } catch (_: Throwable) {
+                // 预热失败不阻断：真正进入沙箱时引导脚本还会再试一次
+            } finally {
+                val callbacks = synchronized(this) {
+                    preparing = false
+                    val c = prepareWaiters.toList()
+                    prepareWaiters.clear()
+                    c
+                }
+                callbacks.forEach { it() }
+            }
+        }, "vortex-sandbox-prepare").apply { isDaemon = true }.start()
+    }
+
+    /**
+     * 同步准备影子 prefix（供引导脚本之外的路径调用）。
+     * 幂等：已存在则直接返回。
+     */
+    fun prepareShadowPrefix(context: Context) {
+        val target = runPrefixDir(context)
+        if (isPrepared(context)) return
+        target.mkdirs()
+        val src = File(TermuxConstants.TERMUX_PREFIX_DIR_PATH)
+        try {
+            val cmd = "cp -a '${src.absolutePath}/.' '${target.absolutePath}/' 2>/dev/null || true"
+            Runtime.getRuntime().exec(arrayOf("sh", "-c", cmd)).waitFor()
+        } catch (_: Throwable) {
+        }
+    }
+
+    /**
+     * 彻底清理沙箱占用的空间。
+     *
+     * 沙箱只是**临时**占用空间：会话一结束就必须把影子 prefix（~95MB）与影子 HOME 全部删除，
+     * 否则用户会平白看到近百 MB 的「不明占用」。调用方应在会话真正结束
+     * （进程退出 / 被 kill / 应用退出）后调用本方法。
+     */
+    fun purgeAll(context: Context) {
+        try {
+            File(getRootDir(context), "run").deleteRecursively()
+        } catch (_: Throwable) {
+        }
+        activeManualSessionId = null
+    }
+
+    /**
+     * 会话结束钩子：若结束的是手动沙箱会话，则彻底回收空间。
+     *
+     * @param sessionName 会话标题；非沙箱会话会被忽略
+     */
+    fun onSessionEnded(context: Context, sessionName: String?) {
+        if (sessionName == SANDBOX_SESSION_TITLE) {
+            purgeAll(context)
+        }
+    }
+
+    // ------------------------------------------------------------------
     // 命令包裹（插件 / Agent 执行路径）
     // ------------------------------------------------------------------
 
