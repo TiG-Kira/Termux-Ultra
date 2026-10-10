@@ -144,7 +144,7 @@ fun FileManagerScreen(
             showWarningCard = true
         }
         sftpUsername = prefs.getString("sftp_username", "termux") ?: "termux"
-        sftpPassword = prefs.getString("sftp_password", "termux123") ?: "termux123"
+        sftpPassword = com.termux.app.ftp.FtpCredentialStore.getPassword(context)
         sftpPort = prefs.getInt("sftp_port", 8021)
 
         val appPrefs = context.getSharedPreferences("app_settings", android.content.Context.MODE_PRIVATE)
@@ -201,29 +201,9 @@ fun FileManagerScreen(
         notificationManager.createNotificationChannel(channel)
     }
 
-    fun getLocalIpAddress(): String {
-        try {
-            val interfaces = java.net.NetworkInterface.getNetworkInterfaces()
-            while (interfaces.hasMoreElements()) {
-                val networkInterface = interfaces.nextElement()
-                val addresses = networkInterface.inetAddresses
-                while (addresses.hasMoreElements()) {
-                    val address = addresses.nextElement()
-                    val host = address.hostAddress
-                    if (!address.isLoopbackAddress && address is java.net.Inet4Address && !host.isNullOrEmpty()) {
-                        return host
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-        return "127.0.0.1"
-    }
-
     fun showSftpNotification() {
         createNotificationChannel()
-        val ipAddress = getLocalIpAddress()
+        val bindAddress = com.termux.app.ftp.FtpServiceManager.getBindAddress()
 
         val intent = android.content.Intent(context, com.termux.app.ftp.FtpInfoActivity::class.java)
         intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -236,7 +216,7 @@ fun FileManagerScreen(
 
         val notification = NotificationCompat.Builder(context, sftpChannelId)
             .setContentTitle("正在使用 FTP 服务")
-            .setContentText("地址: ftp://$ipAddress:$sftpPort\n点击通知显示 FTP 详情")
+            .setContentText("地址: ftp://$bindAddress:$sftpPort\n点击通知显示 FTP 详情")
             .setSmallIcon(R.drawable.ic_web)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setOngoing(true)
@@ -256,8 +236,8 @@ fun FileManagerScreen(
         val prefs = context.getSharedPreferences("termux_prefs", android.content.Context.MODE_PRIVATE)
         prefs.edit()
             .putString("sftp_username", sftpUsername)
-            .putString("sftp_password", sftpPassword)
             .apply()
+        com.termux.app.ftp.FtpCredentialStore.setPassword(context, sftpPassword)
         if (com.termux.app.ftp.FtpServiceManager.isRunning()) {
             com.termux.app.ftp.FtpServiceManager.restartWithNewConfig(context)
         }
@@ -282,6 +262,16 @@ fun FileManagerScreen(
             isSftpEnabled = started
             if (started) {
                 showSftpNotification()
+            } else {
+                val weak = !com.termux.app.ftp.FtpServiceManager.isPasswordStrong(
+                    com.termux.app.ftp.FtpCredentialStore.getPassword(context)
+                )
+                val msg = if (weak) {
+                    "请先在「FTP 信息」页设置强密码后再启用服务"
+                } else {
+                    "FTP 服务启动失败，请检查端口是否被占用"
+                }
+                android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_LONG).show()
             }
         } else {
             com.termux.app.ftp.FtpServiceManager.stop(context)
