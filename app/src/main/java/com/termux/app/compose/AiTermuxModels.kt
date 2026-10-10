@@ -736,8 +736,10 @@ object AiTermuxPrefs {
 
     fun saveConfig(context: Context, cfg: AiTermuxConfig) {
         // api_key 属于凭据，走加密存储；其余非敏感字段留在普通 prefs
+        // 注意：这里的 apply { } 是 Kotlin 作用域函数，块内必须再调用 Editor.apply() 才会真正落盘
         securePrefs(context).edit().apply {
             putString("api_key", cfg.providerConfig.apiKey)
+            apply()
         }
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().apply {
             putString("provider", cfg.providerConfig.provider)
@@ -852,8 +854,10 @@ object AiTermuxPrefs {
     /** 将某个 LlmProfile 应用为当前生效配置（写入旧字段 provider/api_key/base_url/model/temperature） */
     fun applyLlmProfile(context: Context, profile: LlmProfile) {
         // api_key 属于凭据，单独走加密存储；其余非敏感字段留在明文 prefs
+        // 注意：这里的 apply { } 是 Kotlin 作用域函数，块内必须再调用 Editor.apply() 才会真正落盘
         securePrefs(context).edit().apply {
             putString("api_key", profile.apiKey)
+            apply()
         }
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().apply {
             putString("provider", profile.provider)
@@ -1172,8 +1176,10 @@ object AiTermuxPrefs {
 
     fun saveFallbackOnlineConfig(context: Context, cfg: FallbackOnlineConfig) {
         // api_key 属于凭据，单独走加密存储；其余非敏感字段留在明文 prefs
+        // 注意：这里的 apply { } 是 Kotlin 作用域函数，块内必须再调用 Editor.apply() 才会真正落盘
         securePrefs(context).edit().apply {
             putString(KEY_FALLBACK_ONLINE_API_KEY, cfg.apiKey)
+            apply()
         }
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().apply {
             putBoolean(KEY_FALLBACK_ONLINE_ENABLED, cfg.enabled)
