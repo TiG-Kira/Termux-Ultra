@@ -7,6 +7,7 @@ import java.io.FileOutputStream
 import java.io.InputStreamReader
 import java.io.OutputStreamWriter
 import java.io.PrintWriter
+import java.net.InetAddress
 import java.net.ServerSocket
 import java.net.Socket
 import java.text.SimpleDateFormat
@@ -19,24 +20,35 @@ class FtpServer(
     private val port: Int,
     private val username: String,
     private val password: String,
-    private val rootDir: String
+    private val rootDir: String,
+    private val bindAddress: String = "127.0.0.1"
 ) {
     private var serverSocket: ServerSocket? = null
     private val running = AtomicBoolean(false)
     private var serverThread: Thread? = null
+
+    /** 把监听地址解析成 InetAddress；解析失败时回退到回环地址，绝不落到 0.0.0.0 全网卡监听。 */
+    private fun resolveBindAddress(): InetAddress {
+        return try {
+            InetAddress.getByName(bindAddress)
+        } catch (e: Exception) {
+            InetAddress.getByName("127.0.0.1")
+        }
+    }
 
     fun start() {
         if (running.get()) return
         running.set(true)
         serverThread = thread {
             try {
-                serverSocket = ServerSocket(port)
+                val addr = resolveBindAddress()
+                serverSocket = ServerSocket(port, 50, addr)
                 serverSocket?.reuseAddress = true
                 while (running.get()) {
                     try {
                         val clientSocket = serverSocket?.accept() ?: break
                         thread {
-                            FtpClientHandler(clientSocket, username, password, rootDir).handle()
+                            FtpClientHandler(clientSocket, username, password, rootDir, bindAddress).handle()
                         }
                     } catch (e: Exception) {
                         if (running.get()) e.printStackTrace()
@@ -66,7 +78,8 @@ class FtpClientHandler(
     private val clientSocket: Socket,
     private val username: String,
     private val password: String,
-    private val rootDir: String
+    private val rootDir: String,
+    private val bindAddress: String = "127.0.0.1"
 ) {
     private var currentDir = "/"
     private var authenticated = false
@@ -75,6 +88,9 @@ class FtpClientHandler(
     private var dataSocket: Socket? = null
     private var passiveMode = false
     private var userOk = false
+
+    /** PASV 向客户端回报的监听地址：直接用绑定的地址（回环即 127.0.0.1），不再扫描网卡。 */
+    private fun getServerBindAddress(): String = bindAddress
 
     fun handle() {
         try {
@@ -210,23 +226,6 @@ class FtpClientHandler(
         }
     }
 
-    private fun getServerIpAddress(): String {
-        try {
-            val interfaces = java.net.NetworkInterface.getNetworkInterfaces()
-            while (interfaces.hasMoreElements()) {
-                val networkInterface = interfaces.nextElement()
-                val addresses = networkInterface.inetAddresses
-                while (addresses.hasMoreElements()) {
-                    val address = addresses.nextElement()
-                    if (!address.isLoopbackAddress && address is java.net.Inet4Address) {
-                        return address.hostAddress
-                    }
-                }
-            }
-        } catch (e: Exception) {}
-        return "127.0.0.1"
-    }
-
     private fun handlePasv(writer: PrintWriter) {
         if (!authenticated) {
             sendResponse(writer, 530, "Not logged in")
@@ -234,9 +233,10 @@ class FtpClientHandler(
         }
         try {
             dataServerSocket?.close()
-            dataServerSocket = ServerSocket(0, 5)
+            val addr = resolveBindAddress()
+            dataServerSocket = ServerSocket(0, 5, addr)
             dataPort = dataServerSocket!!.localPort
-            val serverIp = getServerIpAddress()
+            val serverIp = getServerBindAddress()
             val localAddr = serverIp.replace(".", ",")
             val p1 = dataPort / 256
             val p2 = dataPort % 256
@@ -254,7 +254,8 @@ class FtpClientHandler(
         }
         try {
             dataServerSocket?.close()
-            dataServerSocket = ServerSocket(0, 5)
+            val addr = resolveBindAddress()
+            dataServerSocket = ServerSocket(0, 5, addr)
             dataPort = dataServerSocket!!.localPort
             sendResponse(writer, 229, "Entering Extended Passive Mode (|||$dataPort|)")
             passiveMode = true
