@@ -351,6 +351,25 @@ object VorteXSandbox {
         }
     }
 
+    /**
+     * 回收「一次 Agent 对话 / 一次插件调用」产生的影子空间。
+     *
+     * 这两条路径不走引导脚本的 `--interactive`，因此不共享 EXIT trap，
+     * 必须在调用方明确告知「这次调用结束了」时手动回收，否则每次对话
+     * 都会留下约 95MB 残留。
+     */
+    fun onEphemeralRunEnded(context: Context) {
+        purgeAll(context)
+    }
+
+    /** Agent 是否正在使用 VorteX 沙箱（决定调用结束后要不要回收）。 */
+    fun isAgentUsingSandbox(context: Context): Boolean =
+        isEnabled(context) && isAgentAuthorized(context)
+
+    /** 指定插件是否正在使用 VorteX 沙箱。 */
+    fun isPluginUsingSandbox(context: Context, pluginId: String): Boolean =
+        shouldPluginUseSandbox(context, pluginId)
+
     // ------------------------------------------------------------------
     // 命令包裹（插件 / Agent 执行路径）
     // ------------------------------------------------------------------

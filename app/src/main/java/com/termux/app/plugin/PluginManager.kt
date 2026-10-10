@@ -203,6 +203,7 @@ object PluginManager {
 
         // 若插件开启了「使用 VorteX 沙箱运行」，则把命令包裹进沙箱执行，所有写入局限于
         // 沙箱可写层；总开关关闭时 wrapPluginCommand 会原样返回，不影响原有行为。
+        val useSandbox = VorteXSandbox.isPluginUsingSandbox(context, pluginId)
         val effectiveCommand = VorteXSandbox.wrapPluginCommand(context, pluginId, command)
 
         return try {
@@ -244,6 +245,13 @@ object PluginManager {
             }
         } catch (e: Exception) {
             Result.failure(e)
+        } finally {
+            // 插件调用结束即回收影子空间（含约 95MB 的 $PREFIX 拷贝）。
+            // 引导脚本的 --run 已有 EXIT trap 双保险，这里覆盖 TermuxTask
+            // 启动失败等脚本根本没跑起来的异常路径。
+            if (useSandbox) {
+                VorteXSandbox.onEphemeralRunEnded(context)
+            }
         }
     }
 

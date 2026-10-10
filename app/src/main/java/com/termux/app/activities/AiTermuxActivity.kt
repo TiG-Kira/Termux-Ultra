@@ -87,6 +87,7 @@ import androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner
 import com.termux.R
 import com.termux.app.TermuxService
 import com.termux.app.compose.*
+import com.termux.app.vortex.VorteXSandbox
 import com.termux.app.compose.pagePaddingWithoutTop
 import com.termux.app.compose.standaloneContentPadding
 import com.termux.app.utils.SnackbarHelper
@@ -999,6 +1000,12 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
         } finally {
             AgentStopFloatingButton.hide()
             isStreaming = false
+            // 一轮对话结束 → 回收 Agent 沙箱的影子空间（约 95MB 的 $PREFIX 拷贝）。
+            // 放在 finally 里，保证 Completed / Failed / Cancelled / 异常四条路径都会走到；
+            // 否则每次对话都会在磁盘上留下近百 MB 残留。
+            if (AgentPawEngine.isAgentUsingSandbox(ctx)) {
+                VorteXSandbox.onEphemeralRunEnded(ctx)
+            }
         }
     }
 
