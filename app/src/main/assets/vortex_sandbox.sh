@@ -41,12 +41,23 @@ VORTEX_ROOT="${VORTEX_ROOT:-$(cd "$(dirname "$0")/.." 2>/dev/null && pwd)}"
 REAL_HOME="${VORTEX_REAL_HOME:-/data/data/com.termux/files/home}"
 SNAP="$VORTEX_ROOT/snapshot/home"
 RUN="$VORTEX_ROOT/run/home"
+RUN_PREFIX="$VORTEX_ROOT/run/usr"
 RUN_STORAGE="$VORTEX_ROOT/run/storage"
 SNAP_STORAGE="$VORTEX_ROOT/snapshot/storage"
 ISOLATE_STORAGE="${VORTEX_ISOLATE_STORAGE:-1}"
 
 REAL_PREFIX="${PREFIX:-/data/data/com.termux/files/usr}"
 REAL_STORAGE="/storage/emulated/0"
+
+# 关键：**必须自建 PATH**。
+# 会话由 libterminal 直接 exec 本脚本，继承的 PATH 可能为空或不含 $PREFIX/bin，
+# 此时 `command -v proot` 会找不到 proot → 静默降级成弱隔离（危险）。
+# 所以这里无条件把 $PREFIX/bin 放到最前，保证 proot 探测可靠。
+case ":$PATH:" in
+    *":$REAL_PREFIX/bin:"*) ;;
+    *) PATH="$REAL_PREFIX/bin:$PATH" ;;
+esac
+export PATH
 
 mkdir -p "$SNAP" "$RUN" 2>/dev/null
 
@@ -64,6 +75,10 @@ reset_run() {
     rm -rf "$RUN" 2>/dev/null
     mkdir -p "$RUN" 2>/dev/null
     seed_run
+    # $PREFIX 影子层同样重置：否则沙箱里装的包会残留到下次会话。
+    # 注意不能 rm -rf $RUN_PREFIX 后再 cp -al —— 那会让硬链接重新指向真实文件，
+    # 但由于是整体重建，语义上正确（重建后仍是硬链接，删真实文件不受影响）。
+    rm -rf "$RUN_PREFIX" 2>/dev/null
 }
 
 # ---------------------------------------------------------------------------
@@ -86,42 +101,88 @@ seed_storage() {
 
 # 构造 proot 的 bind 参数数组。真实路径一律换成「宿主可见」的真实值，
 # proot -b 不会跟随符号链接，所以 $HOME/storage 的真身要单独 bind。
+# 构造 proot 的 bind 参数（POSIX 兼容：不能使用 bash 数组，
+# 因为脚本 shebang 是 /system/bin/sh 即 mksh，数组语法会报 "not found"）。
+# 结果写入 PROOT_BINDS_STR，以空格分隔（路径均不含空格）。
 build_proot_binds() {
-    PROOT_BINDS=(-b /dev -b /proc -b /sys -b /data -b /system -b /apex -b /sdcard -b "$REAL_PREFIX:$REAL_PREFIX")
+    # 关键：**不能** `-b /data`。
+    # 真实 HOME 就在 /data/data/com.termux/files/home，整挂 /data 会让真实路径重新可见，
+    # 影子绑定被旁路，绝对路径隔离直接失效。因此只精确绑定 $PREFIX。
+    #
+    # /sdcard 不单独 bind：现代 Android 上它只是 /storage/emulated/0 的符号链接，
+    # 且 Termux 沙箱上下文对其无权限，bind 反而会触发 proot warning。
+    PROOT_BINDS_STR="-b /dev -b /proc -b /sys -b /system -b /apex"
 
     # 影子 HOME：沙箱内所有 /data/data/com.termux/files/home 路径都落到这里
-    PROOT_BINDS+=(-b "$RUN:$REAL_HOME")
+    PROOT_BINDS_STR="$PROOT_BINDS_STR -b $RUN:$REAL_HOME"
+
+    # 影子 $PREFIX（$RUN_PREFIX）。
+    #
+    # 为什么必须影子化：proot 的 -b 是可写绑定，若直接把真实 $PREFIX 挂进去，
+    # 沙箱内的虚拟 ROOT 就能 `rm -rf $PREFIX` 把真实 Termux 本体删掉——
+    # 实测 T6 确实删光了 files/usr。因此 $PREFIX 也要有一层影子。
+    #
+    # 用 `cp -al`（硬链接）而非全量复制：usr 约 95MB，硬链接几乎零额外空间，
+    # 且用户装包后再更新真实 prefix 时，影子层仍指向同一 inode，不会失效。
+    # 注意硬链接只能保护「删除」——沙箱内**修改**文件内容会影响真实文件，
+    # 所以对会被写的目录（bin/lib/pkg 缓存）后续可考虑再降级为真实拷贝。
+    seed_prefix
+    PROOT_BINDS_STR="$PROOT_BINDS_STR -b $RUN_PREFIX:$REAL_PREFIX"
 
     # 影子内存储
     if [ "$ISOLATE_STORAGE" = "1" ]; then
         seed_storage
-        PROOT_BINDS+=(-b "$RUN_STORAGE:$REAL_STORAGE")
-        # $HOME/storage/shared 是指向 /storage/emulated/0 的符号链接；
-        # 在影子 HOME 里它会解析到影子存储，无需额外 bind（proot 会在影子层里重解析）。
+        PROOT_BINDS_STR="$PROOT_BINDS_STR -b $RUN_STORAGE:$REAL_STORAGE"
+    fi
+}
+
+# 播种影子 $PREFIX（仅首次，便宜的硬链接拷贝）
+seed_prefix() {
+    mkdir -p "$RUN_PREFIX" 2>/dev/null
+    if [ -z "$(ls -A "$RUN_PREFIX" 2>/dev/null)" ]; then
+        cp -al "$REAL_PREFIX/." "$RUN_PREFIX/" 2>/dev/null \
+            || cp -a "$REAL_PREFIX/." "$RUN_PREFIX/" 2>/dev/null \
+            || true
     fi
 }
 
 # 组装并执行 proot。$1 = 传给 bash 的模式参数（-i / -c ...）
 run_in_proot() {
+    # 先播种影子层：没有这一步 proot 里的 $HOME 会是空目录，
+    # 用户在沙箱内看不到自己的任何文件（环境就"不完整"了）。
+    seed_run
+
     build_proot_binds
     unset LD_PRELOAD
+
+    # 环境在宿主侧导出后由 proot 继承。
+    # 不用 `env -i`：精简 bootstrap 里可能没有 coreutils 的 env，
+    # 且 proot 对 `-b /data` + `-b $PREFIX` 叠加时的可执行路径解析不稳。
+    HOME="$REAL_HOME"
+    PREFIX="$REAL_PREFIX"
+    PATH="$REAL_PREFIX/bin:/system/bin"
+    LD_LIBRARY_PATH="$REAL_PREFIX/lib"
+    TMPDIR="$REAL_PREFIX/tmp"
+    SHELL="$REAL_PREFIX/bin/bash"
+    TERM="${TERM:-xterm-256color}"
+    LANG="${LANG:-en_US.UTF-8}"
+    VORTEX_SANDBOX=1
+    VORTEX_VIRTUAL_ROOT=1
+    VORTEX_ROOT="$VORTEX_ROOT"
+    VORTEX_PROOT=1
+    export HOME PREFIX PATH LD_LIBRARY_PATH TMPDIR SHELL TERM LANG
+    export VORTEX_SANDBOX VORTEX_VIRTUAL_ROOT VORTEX_ROOT VORTEX_PROOT
+
+    # 关键：**不能** `-b /data`。
+    # 真实 HOME 就在 /data/data/com.termux/files/home，整挂 /data 会让真实路径重新可见，
+    # 影子绑定被旁路，绝对路径隔离直接失效。因此只精确绑定 $PREFIX。
+    #
+    # /sdcard 不单独 bind：现代 Android 上它只是 /storage/emulated/0 的符号链接，
+    # 且 Termux 沙箱上下文对其无权限，bind 反而会触发 proot warning。
     exec proot --link2symlink \
         -0 \
-        "${PROOT_BINDS[@]}" \
+        $PROOT_BINDS_STR \
         -w "$REAL_HOME" \
-        /usr/bin/env -i \
-        HOME="$REAL_HOME" \
-        PREFIX="$REAL_PREFIX" \
-        PATH="$REAL_PREFIX/bin:/system/bin" \
-        LD_LIBRARY_PATH="$REAL_PREFIX/lib" \
-        TMPDIR="$REAL_PREFIX/tmp" \
-        SHELL="$REAL_PREFIX/bin/bash" \
-        TERM="${TERM:-xterm-256color}" \
-        LANG="${LANG:-en_US.UTF-8}" \
-        VORTEX_SANDBOX=1 \
-        VORTEX_VIRTUAL_ROOT=1 \
-        VORTEX_ROOT="$VORTEX_ROOT" \
-        VORTEX_PROOT=1 \
         "$REAL_PREFIX/bin/bash" "$@"
 }
 
@@ -166,6 +227,7 @@ do_check() {
         echo "isolation=proot"
         echo "proot_path=$(command -v proot)"
         echo "shadow_home=$RUN -> $REAL_HOME"
+        echo "shadow_prefix=$RUN_PREFIX -> $REAL_PREFIX"
         [ "$ISOLATE_STORAGE" = "1" ] && echo "shadow_storage=$RUN_STORAGE -> $REAL_STORAGE" || echo "shadow_storage=shared($REAL_STORAGE)"
     else
         echo "isolation=fallback"
@@ -191,7 +253,7 @@ case "$1" in
             run_in_proot -c "$CMD"
         else
             setup_fallback
-            bash -c "$CMD"
+            "$REAL_PREFIX/bin/bash" -c "$CMD"
         fi
         ;;
 
@@ -204,7 +266,7 @@ case "$1" in
         else
             setup_fallback
             printf '\n[VorteX Sandbox] 已进入轻量隔离沙箱（仅 $HOME 隔离，会话结束自动重置）\n\n'
-            bash -i
+            "$REAL_PREFIX/bin/bash" -i
             reset_run
         fi
         ;;

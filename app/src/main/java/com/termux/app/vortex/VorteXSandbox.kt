@@ -241,6 +241,12 @@ object VorteXSandbox {
             ).waitFor()
         } catch (_: Throwable) {
         }
+        // $PREFIX 影子层：整目录删掉即可（引导脚本会重建硬链接副本）。
+        // 必须删——否则沙箱里装的包会残留到下一个会话。
+        try {
+            File(getRootDir(context), "run/usr").deleteRecursively()
+        } catch (_: Throwable) {
+        }
     }
 
     // ------------------------------------------------------------------
