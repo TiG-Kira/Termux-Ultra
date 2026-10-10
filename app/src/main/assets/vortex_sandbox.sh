@@ -72,6 +72,10 @@ SNAP_MARKER="$SNAP/.vortex_snapshot_ok"
 PREFIX_MARKER="$RUN_PREFIX/.vortex_prefix_ok"
 RUN_MARKER="$RUN/.vortex_run_ok"
 
+# 内存储告警哨兵：脚本侧无法直接驱动 UI 的 Snackbar，
+# 因此把「内存储已被重定向」这一事实写进哨兵文件，由宿主侧轮询后转成 Snackbar。
+NOTICE_FILE="$VORTEX_ROOT/.vortex_storage_notice"
+
 # ---------------------------------------------------------------------------
 # 快照 / 重置
 # ---------------------------------------------------------------------------
@@ -113,6 +117,9 @@ reset_run() {
     # 连 run/ 这一层空壳目录一并删掉：只删子项会留下几 KB 的空目录，
     # 在「沙箱是否还在占用空间」这个问题上给出模棱两可的答案。
     rm -rf "$VORTEX_ROOT/run" 2>/dev/null
+    # 通知标记也一并清掉：下次进沙箱是全新会话，
+    # 内存储告警应当重新提示一次。
+    rm -f "$NOTICE_FILE" "$VORTEX_ROOT/.vortex_storage_notified" 2>/dev/null
 }
 
 # ---------------------------------------------------------------------------
@@ -124,26 +131,31 @@ have_proot() {
     command -v proot >/dev/null 2>&1
 }
 
-# 内存储影子化：快照阶段已抓取的话这里直接播种
+# 内存储重定位：把真实内存储路径 bind 到一个**空临时目录**。
 #
-# 注意：新版快照只存空目录占位（快照内存储动辄几十 GB，绝不能真拷贝）。
-# 但旧版本可能已留下含大文件的快照，故这里加体积上限：
-# 超限时只建空目录占位，宁可沙箱内内存储为空，也不要把几十 GB 拖进影子层。
+# 为什么是「空目录」而不是「影子拷贝」：
+#   - 影子拷贝意味着把用户动辄几十 GB 的内存储复制一遍，既慢又毫无意义；
+#   - 沙箱的定位是「用户 Termux 环境的隔离预演」，内存储不在其列；
+#   - 需求明确：**沙箱内坚决不允许访问 Android 内部存储**。
+#
+# 因此这里 bind 到空目录：路径可见、内容为空，用户的任何访问都读不到东西，
+# 与「不存在」相比又能保留路径结构，避免脚本因路径缺失而行为诡异。
+#
+# 副作用正是我们要的：访问必然落空，用户立刻知道内存储不可用。
+# 同时写哨兵文件，由宿主侧转成 Snackbar 明确告知原因与替代方案。
 seed_storage() {
     [ "$ISOLATE_STORAGE" = "1" ] || return 0
     mkdir -p "$RUN_STORAGE" 2>/dev/null
-    [ -n "$(ls -A "$RUN_STORAGE" 2>/dev/null)" ] && return 0
-    [ -d "$SNAP_STORAGE" ] || return 0
+    # 保持为空。不播种任何内容——这正是本函数的核心语义。
+    notice_storage_blocked
+}
 
-    # 超过 32MB 视为旧版残留快照，只占位不复制。
-    _snap_kb=$(du -sk "$SNAP_STORAGE" 2>/dev/null | cut -f1)
-    if [ -n "$_snap_kb" ] && [ "$_snap_kb" -gt 32768 ]; then
-        echo "[VorteX Sandbox] 警告：检测到旧版内存储快照（${_snap_kb}KB），已跳过复制。" >&2
-        echo "[VorteX Sandbox] 提示：可在「设置 → 安全设置 → VorteX Sandbox」关闭再开启以清理。" >&2
-        return 0
-    fi
-
-    cp -a "$SNAP_STORAGE/." "$RUN_STORAGE/" 2>/dev/null || true
+# 记录「内存储已被重定位」这一事实，供宿主侧转成 Snackbar。
+# 首次进入沙箱时提示一次即可（每次都提示会很吵）。
+notice_storage_blocked() {
+    [ -f "$VORTEX_ROOT/.vortex_storage_notified" ] && return 0
+    echo "blocked" > "$NOTICE_FILE" 2>/dev/null || true
+    : > "$VORTEX_ROOT/.vortex_storage_notified" 2>/dev/null || true
 }
 
 # 构造 proot 的 bind 参数数组。真实路径一律换成「宿主可见」的真实值，

@@ -471,8 +471,21 @@ object VorteXSandbox {
             File(getRootDir(context), "run").deleteRecursively()
         } catch (_: Throwable) {
         }
+        // 告警哨兵与「已通知」标记一并清掉：空间已回收，
+        // 下次会话是全新状态，不该复用上一次的提示记录。
+        try {
+            File(getRootDir(context), NOTICE_FILE).delete()
+            File(getRootDir(context), NOTIFIED_MARKER).delete()
+        } catch (_: Throwable) {
+        }
         activeManualSessionId = null
     }
+
+    /** 引导脚本写入的「内存储已被重定向」告警哨兵文件名。 */
+    const val NOTICE_FILE = ".vortex_storage_notice"
+
+    /** 引导脚本侧的「已提示过」标记文件名。 */
+    const val NOTIFIED_MARKER = ".vortex_storage_notified"
 
     /**
      * 会话结束钩子：若结束的是手动沙箱会话，则彻底回收空间。
@@ -503,6 +516,64 @@ object VorteXSandbox {
     /** 指定插件是否正在使用 VorteX 沙箱。 */
     fun isPluginUsingSandbox(context: Context, pluginId: String): Boolean =
         shouldPluginUseSandbox(context, pluginId)
+
+    // ------------------------------------------------------------------
+    // 内存储：重定向 + 告警 + 样本导入
+    // ------------------------------------------------------------------
+
+    /**
+     * 检查引导脚本是否留下了「内存储已被重定向」的哨兵，若有则投递 Snackbar 告警。
+     *
+     * 由 UI 侧周期调用（见 `VorteXSandboxNoticeHost`）。引导脚本运行在 libterminal
+     * 的独立进程，无法直接驱动 Compose 的 Snackbar，故以哨兵文件作为跨进程信使。
+     * 读完即删，确保同一条告警只提示一次。
+     */
+    fun consumeStorageNotice(context: Context) {
+        val f = File(getRootDir(context), NOTICE_FILE)
+        if (!f.exists()) return
+        try {
+            if (f.delete()) {
+                VorteXSandboxNotice.post(
+                    "VorteX 沙箱内已屏蔽 Android 内部存储（/sdcard 等）：" +
+                        "沙箱只预演 Termux 环境。若需处理内存储中的文件，" +
+                        "请先用 Termux:API 的存储权限把样本复制到 \$HOME 下再执行。"
+                )
+            }
+        } catch (_: Throwable) {
+        }
+    }
+
+    /**
+     * 把用户内存储中的文件复制进沙箱可写层，供 Agent / 插件在沙箱内处理。
+     *
+     * 沙箱内**一律禁止**访问内存储，因此 Agent 与插件遇到位于内存储的输入
+     * （样本文件、素材、待处理文档等）时，必须先经此函数导入到 \$HOME，
+     * 再在沙箱内继续处理——而不是让沙箱去挂载内存储。
+     *
+     * @param realPath 用户内存储中的**真实**绝对路径（如 `/sdcard/Download/a.bin`）
+     * @return 沙箱内的可写副本路径；失败时返回 null
+     */
+    fun importFromRealStorage(context: Context, realPath: String): String? {
+        val src = File(realPath)
+        if (!src.exists()) return null
+        val imports = File(getRunHome(context), "vortex_imports")
+        if (!imports.exists() && !imports.mkdirs()) return null
+
+        // 保留一份原始文件名，多个同名文件靠目录分层避免互相覆盖。
+        val safeName = realPath.trim('/').replace('/', '_').ifEmpty { "import" }
+        val target = File(imports, safeName)
+        return try {
+            if (src.isDirectory) {
+                src.copyRecursively(target, overwrite = true)
+            } else {
+                target.parentFile?.mkdirs()
+                src.copyTo(target, overwrite = true)
+            }
+            target.absolutePath
+        } catch (_: Throwable) {
+            null
+        }
+    }
 
     // ------------------------------------------------------------------
     // 命令包裹（插件 / Agent 执行路径）

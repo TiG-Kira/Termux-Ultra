@@ -1591,6 +1591,30 @@ object SkillExecutor {
         val vortexRoot = VorteXSandbox.getRootDir(appCtx).absolutePath
         val realHome = File(TermuxConstants.TERMUX_HOME_DIR_PATH).absolutePath
 
+        // 样本导入：沙箱内**禁止**访问 Android 内存储，但 Agent 常需要处理用户放在
+        // /sdcard 里的样本（图片、音视频、文档等）。这里把命令里显式给出的内存储
+        // 路径复制进沙箱可写层，并把命令中的路径改写为副本——
+        // 这样 Agent 能在沙箱里处理真实素材，又不破坏「沙箱不碰内存储」这条底线。
+        var effectiveCommand = command
+        val storageNotes = StringBuilder()
+        if (params.has("storage_files")) {
+            try {
+                val arr = params.getAsJsonArray("storage_files")
+                for (i in 0 until arr.size()) {
+                    val real = arr[i].asString
+                    val imported = VorteXSandbox.importFromRealStorage(appCtx, real)
+                    if (imported == null) {
+                        storageNotes.append("\n- 导入失败（不存在或无权读取）：$real")
+                    } else {
+                        effectiveCommand = effectiveCommand.replace(real, imported)
+                        storageNotes.append("\n- 已导入到沙箱可写层：$imported")
+                    }
+                }
+            } catch (_: Exception) {
+                storageNotes.append("\n- storage_files 参数解析失败")
+            }
+        }
+
         return try {
             // 后台准备影子 prefix：首次要拷 ~95MB，不放这里会让本函数阻塞过久。
             // 预热完成后脚本内部会秒级启动；这里不额外阻塞 UI（Agent 回合内执行）。
@@ -1599,7 +1623,7 @@ object SkillExecutor {
             val t0 = System.currentTimeMillis()
             val process = ProcessBuilder(
                 File(TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH, "bash").absolutePath,
-                bootstrap, "--run", command
+                bootstrap, "--run", effectiveCommand
             ).apply {
                 environment()["VORTEX_ROOT"] = vortexRoot
                 environment()["VORTEX_REAL_HOME"] = realHome
@@ -1610,19 +1634,28 @@ object SkillExecutor {
             val exitCode = process.waitFor()
             val elapsed = System.currentTimeMillis() - t0
 
+            val importNote = if (storageNotes.isNotEmpty()) {
+                "\n已处理内存储样本（沙箱内不允许直接访问内存储）：$storageNotes"
+            } else {
+                ""
+            }
+
             SkillExecutionResult(
                 true,
                 "已在 VorteX 沙箱中预演完成（${elapsed}ms，退出码 $exitCode）。" +
                     "沙箱内所有改动均未触及真实环境，且已随预演结束清除。" +
+                    importNote +
+                    "\n沙箱内无法访问 Android 内存储；若用户素材在内存储，请通过 storage_files 参数" +
+                    "指定，由系统复制到沙箱可写层后再处理。" +
                     "请把下面的实际输出如实转述给用户，并明确询问：" +
                     "是否要在此结果基础上，于真实环境执行同一条命令。" +
                     "\n\n--- 沙箱实际输出 ---\n$output",
                 SkillCardData(
                     skillType = SkillType.RUN_COMMAND_SANDBOX,
                     title = "沙箱预演结果",
-                    description = command,
+                    description = effectiveCommand,
                     status = SkillStatus.COMPLETED,
-                    command = command,
+                    command = effectiveCommand,
                     output = output
                 )
             )

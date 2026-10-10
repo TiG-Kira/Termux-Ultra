@@ -1326,6 +1326,12 @@ fun TerminalDetailScreenCompose(
             // 挂载风险确认宿主：收集VorteX Guard Engine Snackbar 事件（仅提示/完全拦截），与 Java 版控制台行为一致
             RiskConfirmDialogHost(snackbarHostState)
 
+            // VorteX 沙箱告警宿主：沙箱内访问 Android 内存储等事件以 Snackbar 提示
+            com.termux.app.vortex.VorteXSandboxNoticeHost(
+                enabled = currentSessionName == context.getString(R.string.vortex_sandbox_session_title),
+                snackbarHostState = snackbarHostState,
+            )
+
             // 快捷指令 BottomSheet：长按 TopBar 键盘按钮触发
             QuickCommandSheet(
                 show = showQuickCommandSheet,
