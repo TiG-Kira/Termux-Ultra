@@ -4,6 +4,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.LocalContext
+import com.termux.app.utils.SnackbarHelper
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -40,8 +41,8 @@ object VorteXSandboxNotice {
 
     data class Notice(
         val message: String,
-        /** Android 的 Snackbar 时长语义（`android.view.Snackbar.LENGTH_*`）。 */
-        val duration: Int = android.view.Snackbar.LENGTH_LONG,
+        /** 时长语义：短 / 长。仅用于无Compose 宿主时的降级展示。 */
+        val long: Boolean = true,
     )
 
     /** 上次投递时间，key = 消息文本。 */
@@ -52,7 +53,7 @@ object VorteXSandboxNotice {
      * 因为告警属于「尽力而为」的提示，绝不能因此拖慢命令执行。
      */
     @JvmStatic
-    fun post(message: String, duration: Int = android.view.Snackbar.LENGTH_LONG) {
+    fun post(message: String, long: Boolean = true) {
         val now = System.currentTimeMillis()
         synchronized(lastPosted) {
             val last = lastPosted[message] ?: 0L
@@ -63,7 +64,7 @@ object VorteXSandboxNotice {
             if (now - last < DEDUP_WINDOW_MS) return
             lastPosted[message] = now
         }
-        _events.tryEmit(Notice(message, duration))
+        _events.tryEmit(Notice(message, long))
     }
 }
 
@@ -95,11 +96,19 @@ fun VorteXSandboxNoticeHost(
                     )
                 }
             } else {
-                android.widget.Snackbar.make(
-                    context.findViewById(android.R.id.content),
-                    notice.message,
-                    notice.duration,
-                ).show()
+                // 无 Compose 宿主时降级：走项目统一的 SnackbarHelper（Material 版），
+                // 而不是直接用 android.widget.Snackbar——
+                // 后者与本文件引用的 Miuix Snackbar 同名会解析冲突，
+                // 且项目里 SnackbarHelper 已处理了底部insets 适配。
+                SnackbarHelper.show(
+                    context = context,
+                    text = notice.message,
+                    duration = if (notice.long) {
+                        com.google.android.material.snackbar.Snackbar.LENGTH_LONG
+                    } else {
+                        com.google.android.material.snackbar.Snackbar.LENGTH_SHORT
+                    },
+                )
             }
         }
     }
