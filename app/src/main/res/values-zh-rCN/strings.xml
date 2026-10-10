@@ -714,6 +714,17 @@
     <string name="root_manage_grant_root">授予 ROOT 权限</string>
     <string name="root_manage_loose_mode">宽松模式（取消自动拦截）</string>
 
+    <!-- VorteX 沙箱 -->
+    <string name="vortex_sandbox_title">VorteX 沙箱</string>
+    <string name="vortex_sandbox_summary">带虚拟 ROOT 的隔离测试环境，会话结束自动重置</string>
+    <string name="vortex_sandbox_agent_title">授权 Termux Agent 使用沙箱</string>
+    <string name="vortex_sandbox_agent_summary">允许 Termux Agent 在隔离沙箱内运行（总开关关闭时不可用）</string>
+    <string name="vortex_sandbox_plugin_title">使用 VorteX 沙箱运行</string>
+    <string name="vortex_sandbox_plugin_summary">本插件执行的所有终端命令均在沙箱内运行</string>
+    <string name="vortex_sandbox_plugin_disabled_summary">请在设置中开启 VorteX 沙箱后使用此选项</string>
+    <string name="vortex_sandbox_session_title">沙箱会话</string>
+    <string name="vortex_sandbox_disabled_toast">VorteX 沙箱未开启</string>
+
     <!-- 卡片布局 -->
     <string name="card_layout_title">提示卡片布局</string>
     <string name="card_layout_summary">开启后主页的提示/状态卡片以横向滑动形式展示</string>

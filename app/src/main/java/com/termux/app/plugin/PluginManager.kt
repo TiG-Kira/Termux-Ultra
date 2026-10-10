@@ -8,6 +8,7 @@ import com.termux.shared.compat.ShellEnvironmentCompat
 import com.termux.shared.compat.TermuxTaskCompat
 import com.termux.shared.termux.shell.command.environment.TermuxShellEnvironment
 import com.termux.shared.termux.TermuxConstants
+import com.termux.app.vortex.VorteXSandbox
 import com.termux.shared.logger.Logger
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
@@ -200,12 +201,16 @@ object PluginManager {
             return Result.failure(SecurityException(security.reason ?: "命令被插件安全策略拒绝"))
         }
 
+        // 若插件开启了「使用 VorteX 沙箱运行」，则把命令包裹进沙箱执行，所有写入局限于
+        // 沙箱可写层；总开关关闭时 wrapPluginCommand 会原样返回，不影响原有行为。
+        val effectiveCommand = VorteXSandbox.wrapPluginCommand(context, pluginId, command)
+
         return try {
             val shellPath = TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/bash"
             val executionCommand = ExecutionCommand(
                 System.currentTimeMillis().toInt(),
                 shellPath,
-                arrayOf("-c", command),
+                arrayOf("-c", effectiveCommand),
                 null,
                 null,
                 "app-shell",

@@ -103,6 +103,8 @@ import com.awkoo.libterminal.view.TerminalView as LibTerminalView
 import com.termux.app.terminal.shell.pid
 import com.termux.app.terminal.shell.sessionExited
 import com.termux.shared.view.KeyboardUtils
+import com.termux.app.vortex.VorteXSandbox
+import android.widget.Toast
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -492,6 +494,37 @@ fun TerminalDetailScreenCompose(
         lastInteractionFromTopBar = true
     }
 
+    /**
+     * 进入 VorteX 沙箱会话。
+     * - 总开关关闭时给出提示并直接返回；
+     * - 限制同时仅允许手动启动一个沙箱会话：若已存在「沙箱会话」则切换到它，否则新建。
+     */
+    fun addSandboxSession() {
+        val ctx = context
+        if (!VorteXSandbox.isEnabled(ctx)) {
+            Toast.makeText(ctx, ctx.getString(R.string.vortex_sandbox_disabled_toast), Toast.LENGTH_SHORT).show()
+            return
+        }
+        val title = ctx.getString(R.string.vortex_sandbox_session_title)
+        val existing = sessionManager.sessions.value.firstOrNull { it.name == title }
+        if (existing != null) {
+            sessionManager.switchTo(existing.session.id)
+        } else {
+            val newSession = sessionManager.createSandboxSession(startImmediately = true)
+            sessionManager.switchTo(newSession.id)
+            VorteXSandbox.setActiveManualSessionId(newSession.id)
+        }
+        if (isCompact) {
+            showTopBarTemporarily()
+        } else {
+            showLargeContent = true
+        }
+        showNewSessionLabel = true
+        sessionKey++
+        lastInteractionTime = System.currentTimeMillis()
+        lastInteractionFromTopBar = true
+    }
+
     // 键盘底色深浅。导航栏透明后，桌布透出来的是键盘底（工具栏展开时），
     // 图标明暗得跟着键盘走，跟状态栏看 topBarOpaqueBg 是同一个道理。
     val keyboardSurfaceIsLight = MiuixTheme.colorScheme.surface.luminance() > 0.5f
@@ -645,6 +678,10 @@ fun TerminalDetailScreenCompose(
                 tint = effectiveTopBarContentColor
             )
         }
+        SandboxTopBarButton(
+            collapsed = isCompact,
+            onClick = { updateInteractionTime(); addSandboxSession() }
+        )
         OverlayIconDropdownMenu(
             entry = addSessionEntry,
             backgroundColor = Color.Transparent,
@@ -734,6 +771,10 @@ fun TerminalDetailScreenCompose(
                 tint = effectiveTopBarContentColor
             )
         }
+        SandboxTopBarButton(
+            collapsed = isCompact,
+            onClick = { updateInteractionTime(); addSandboxSession() }
+        )
         OverlayIconDropdownMenu(
             entry = addSessionEntry,
             backgroundColor = Color.Transparent,
@@ -796,6 +837,32 @@ fun TerminalDetailScreenCompose(
             }
         } else {
             // 展开态也要占 48dp，和玻璃态一致；IconButton 默认只有 40dp，图标会跟着态切换左右跳 4dp。
+            IconButton(onClick = onClick, minWidth = 48.dp, minHeight = 48.dp) { glyph() }
+        }
+    }
+
+    /**
+     * 顶栏沙箱入口按钮：位于「加号」左侧。总开关关闭时图标置灰（仍可点击给出提示）。
+     */
+    @Composable
+    fun SandboxTopBarButton(
+        collapsed: Boolean,
+        onClick: () -> Unit
+    ) {
+        val enabled = VorteXSandbox.isEnabled(context)
+        val tint = if (enabled) effectiveTopBarContentColor
+        else effectiveTopBarContentColor.copy(alpha = 0.35f)
+        val glyph: @Composable () -> Unit = {
+            Icon(
+                imageVector = Icons.Rounded.Layers,
+                contentDescription = context.getString(R.string.vortex_sandbox_title),
+                modifier = Modifier.size(24.dp),
+                tint = tint
+            )
+        }
+        if (collapsed) {
+            GlassIconButton(onClick = onClick, size = 48.dp, padding = 0.dp) { glyph() }
+        } else {
             IconButton(onClick = onClick, minWidth = 48.dp, minHeight = 48.dp) { glyph() }
         }
     }

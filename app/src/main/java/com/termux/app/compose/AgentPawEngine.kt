@@ -25,6 +25,7 @@ import com.paw.agent.core.tool.android.TapTool
 import com.paw.agent.core.tool.android.WaitTool
 import com.paw.agent.core.tool.android.SwipeTool
 import com.paw.agent.device.HybridPhoneController
+import com.termux.app.vortex.VorteXSandbox
 import java.io.File
 
 /**
@@ -87,7 +88,13 @@ object AgentPawEngine {
             // 之间的优先级；默认 AUTO 会在 ROOT 不可用时自动回退到 Shizuku，再回退到无障碍。
             controlMode = AgentPawPrefs.getControlMode(context)
         }
-        val sandboxRoot = File(appContext.filesDir, "agentpaw_sandbox").apply { mkdirs() }
+        // 若 VorteX 沙箱总开关开启且已授权 Termux Agent 使用沙箱，则把 Agent 的 ShellTool
+        // 工作目录指向沙箱可写层，使其产物与命令均收束在隔离环境内；否则沿用原 agentpaw_sandbox。
+        val sandboxRoot = if (VorteXSandbox.isEnabled(appContext) && VorteXSandbox.isAgentAuthorized(appContext)) {
+            VorteXSandbox.getAgentSandboxRoot(appContext)
+        } else {
+            File(appContext.filesDir, "agentpaw_sandbox").apply { mkdirs() }
+        }
         val skills = SkillRegistry(
             listOf(
                 ReturnHomeAndResetSkill(),

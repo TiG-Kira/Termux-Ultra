@@ -5,6 +5,7 @@ import com.awkoo.libterminal.engine.TerminalSession
 import com.awkoo.libterminal.process.ITerminalProcess
 import com.termux.shared.termux.shell.command.environment.TermuxShellEnvironment
 import com.termux.shared.compat.ShellEnvironmentCompat
+import com.termux.app.vortex.VorteXSandbox
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -158,6 +159,42 @@ class ComposeSessionManager private constructor(private val context: Context) {
             args = args,
             env = env,
             sessionName = "",
+            startImmediately = startImmediately
+        )
+    }
+
+    /**
+     * 创建并进入一个 VorteX 沙箱会话。
+     *
+     * 与默认 shell 不同，这里把 shell 指向 VorteX 沙箱引导脚本（交互模式），
+     * 并把 $HOME 与 cwd 重定向到沙箱可写层、注入 VORTEX_ROOT / VORTEX_SANDBOX 环境变量，
+     * 使该会话完全运行在隔离环境内，且自带虚拟 ROOT。
+     *
+     * 会话标题固定为 [VorteXSandbox.SANDBOX_SESSION_TITLE]（"沙箱会话"），
+     * 由调用方配合「同时仅允许一个手动沙箱会话」的限制使用。
+     */
+    fun createSandboxSession(startImmediately: Boolean = true): TerminalSession {
+        VorteXSandbox.ensureInitialized(context)
+        val runHome = VorteXSandbox.getRunHome(context).absolutePath
+        val vortexRoot = VorteXSandbox.getRootDir(context).absolutePath
+        val bootstrap = VorteXSandbox.getBootstrapExecutable(context).absolutePath
+
+        val envClient = ShellEnvironmentCompat(TermuxShellEnvironment())
+        val baseEnv = envClient.buildEnvironment(context, false, runHome).toMutableList()
+        // 覆盖 HOME 并注入 VORTEX_* 变量（去重，避免重复项）
+        val env = baseEnv
+            .filter { !it.startsWith("HOME=") && !it.startsWith("VORTEX_") }
+            .toMutableList()
+        env.add("HOME=$runHome")
+        env.add("VORTEX_ROOT=$vortexRoot")
+        env.add("VORTEX_SANDBOX=1")
+
+        return createSession(
+            shellPath = bootstrap,
+            cwd = runHome,
+            args = arrayOf("--interactive"),
+            env = env.toTypedArray(),
+            sessionName = context.getString(R.string.vortex_sandbox_session_title),
             startImmediately = startImmediately
         )
     }

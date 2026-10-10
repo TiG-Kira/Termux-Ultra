@@ -32,7 +32,11 @@ import top.yukonga.miuix.kmp.basic.HorizontalDivider
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.window.WindowDialog
+import top.yukonga.miuix.kmp.preference.SwitchPreference
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import com.termux.R
+import com.termux.app.vortex.VorteXSandbox
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -345,6 +349,24 @@ fun PluginContentDialog(
                         }
                     }
                 }
+
+                // VorteX 沙箱：插件「使用沙箱运行」开关（总开关关闭时此开关不可用）
+                val vortexEnabled = VorteXSandbox.isEnabled(context)
+                var pluginSandbox by remember(plugin.id) {
+                    mutableStateOf(VorteXSandbox.isPluginSandboxEnabled(context, plugin.id))
+                }
+                SwitchPreference(
+                    title = stringResource(R.string.vortex_sandbox_plugin_title),
+                    summary = if (vortexEnabled)
+                        stringResource(R.string.vortex_sandbox_plugin_summary)
+                    else stringResource(R.string.vortex_sandbox_plugin_disabled_summary),
+                    checked = pluginSandbox,
+                    enabled = vortexEnabled,
+                    onCheckedChange = {
+                        pluginSandbox = it
+                        VorteXSandbox.setPluginSandboxEnabled(context, plugin.id, it)
+                    }
+                )
 
                 Spacer(Modifier.height(12.dp))
                 Button(
