@@ -352,7 +352,7 @@ fun PluginContentDialog(
 
                 // VorteX 沙箱：插件「使用沙箱运行」开关（总开关关闭时此开关不可用）
                 val vortexEnabled = VorteXSandbox.isEnabled(context)
-                var pluginSandbox by remember(plugin.id) {
+                val pluginSandboxState = remember(plugin.id) {
                     mutableStateOf(VorteXSandbox.isPluginSandboxEnabled(context, plugin.id))
                 }
                 SwitchPreference(
@@ -360,10 +360,10 @@ fun PluginContentDialog(
                     summary = if (vortexEnabled)
                         stringResource(R.string.vortex_sandbox_plugin_summary)
                     else stringResource(R.string.vortex_sandbox_plugin_disabled_summary),
-                    checked = pluginSandbox,
+                    checked = pluginSandboxState.value,
                     enabled = vortexEnabled,
                     onCheckedChange = {
-                        pluginSandbox = it
+                        pluginSandboxState.value = it
                         VorteXSandbox.setPluginSandboxEnabled(context, plugin.id, it)
                     }
                 )

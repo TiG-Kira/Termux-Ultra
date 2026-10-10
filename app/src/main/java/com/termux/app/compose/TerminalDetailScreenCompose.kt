@@ -630,6 +630,32 @@ fun TerminalDetailScreenCompose(
         }
     }
 
+    /**
+     * 顶栏沙箱入口按钮：位于「加号」左侧。总开关关闭时图标置灰（仍可点击给出提示）。
+     */
+    @Composable
+    fun SandboxTopBarButton(
+        collapsed: Boolean,
+        onClick: () -> Unit
+    ) {
+        val enabled = VorteXSandbox.isEnabled(context)
+        val tint = if (enabled) effectiveTopBarContentColor
+        else effectiveTopBarContentColor.copy(alpha = 0.35f)
+        val glyph: @Composable () -> Unit = {
+            Icon(
+                imageVector = Icons.Rounded.Shield,
+                contentDescription = context.getString(R.string.vortex_sandbox_title),
+                modifier = Modifier.size(24.dp),
+                tint = tint
+            )
+        }
+        if (collapsed) {
+            GlassIconButton(onClick = onClick, size = 48.dp, padding = 0.dp) { glyph() }
+        } else {
+            IconButton(onClick = onClick, minWidth = 48.dp, minHeight = 48.dp) { glyph() }
+        }
+    }
+
     @Composable
     fun SmallTopActionButtons() {
         val terminalInteractionSource = remember { MutableInteractionSource() }
@@ -837,32 +863,6 @@ fun TerminalDetailScreenCompose(
             }
         } else {
             // 展开态也要占 48dp，和玻璃态一致；IconButton 默认只有 40dp，图标会跟着态切换左右跳 4dp。
-            IconButton(onClick = onClick, minWidth = 48.dp, minHeight = 48.dp) { glyph() }
-        }
-    }
-
-    /**
-     * 顶栏沙箱入口按钮：位于「加号」左侧。总开关关闭时图标置灰（仍可点击给出提示）。
-     */
-    @Composable
-    fun SandboxTopBarButton(
-        collapsed: Boolean,
-        onClick: () -> Unit
-    ) {
-        val enabled = VorteXSandbox.isEnabled(context)
-        val tint = if (enabled) effectiveTopBarContentColor
-        else effectiveTopBarContentColor.copy(alpha = 0.35f)
-        val glyph: @Composable () -> Unit = {
-            Icon(
-                imageVector = Icons.Rounded.Layers,
-                contentDescription = context.getString(R.string.vortex_sandbox_title),
-                modifier = Modifier.size(24.dp),
-                tint = tint
-            )
-        }
-        if (collapsed) {
-            GlassIconButton(onClick = onClick, size = 48.dp, padding = 0.dp) { glyph() }
-        } else {
             IconButton(onClick = onClick, minWidth = 48.dp, minHeight = 48.dp) { glyph() }
         }
     }
