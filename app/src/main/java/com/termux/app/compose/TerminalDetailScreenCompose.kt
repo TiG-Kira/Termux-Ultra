@@ -643,7 +643,7 @@ fun TerminalDetailScreenCompose(
         else effectiveTopBarContentColor.copy(alpha = 0.35f)
         val glyph: @Composable () -> Unit = {
             Icon(
-                imageVector = Icons.Rounded.Shield,
+                imageVector = Icons.Rounded.Warning,
                 contentDescription = context.getString(R.string.vortex_sandbox_title),
                 modifier = Modifier.size(24.dp),
                 tint = tint
