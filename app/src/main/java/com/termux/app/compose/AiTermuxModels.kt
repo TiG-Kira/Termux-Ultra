@@ -860,9 +860,12 @@ object AiTermuxPrefs {
             putString("base_url", profile.apiBaseUrl)
             putString("model", profile.model)
             putFloat("temperature", profile.temperature)
-            putString(KEY_ACTIVE_PROFILE_ID, profile.id)
             apply()
         }
+        // 激活 Profile id 的读取方（getActiveLlmProfileId / saveLlmProfiles / deleteLlmProfile）
+        // 都从加密存储读取，写入必须落在同一处；写进明文 prefs 的值在本进程内读不到，
+        // 要等下次启动 migrateSecretsIfNeeded 搬运后才生效，且可能覆盖加密存储中的新值
+        securePrefs(context).edit().putString(KEY_ACTIVE_PROFILE_ID, profile.id).apply()
     }
 
         // ---------- Chat History ----------
