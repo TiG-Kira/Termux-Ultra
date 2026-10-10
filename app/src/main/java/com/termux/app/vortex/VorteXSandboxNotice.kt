@@ -26,7 +26,7 @@ object VorteXSandboxNotice {
      * 单次告警限流：同一条消息在该秒数内不重复投递。
      *
      * 必要性——用户在控制台敲 `cd /sdcard` 时，proot 会拦截**每一次**路径解析，
-     * 一次 `ls /sdcard/*` 就可能产生几十上百次访问。若不去重，
+     * 一次 `ls /sdcard` 加通配就可能产生几十上百次访问。若不去重，
      * Snackbar 会连珠炮般刷屏，反而看不到真正重要的提示。
      */
     private const val DEDUP_WINDOW_MS = 5000L
