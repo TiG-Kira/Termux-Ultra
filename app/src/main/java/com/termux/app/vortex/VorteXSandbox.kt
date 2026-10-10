@@ -49,6 +49,14 @@ object VorteXSandbox {
     fun getRunHome(context: Context): File =
         File(getRootDir(context), "run/home").also { it.mkdirs() }
 
+    /** 内存储影子层（对应真实 `/storage/emulated/0`）。 */
+    fun getRunStorage(context: Context): File =
+        File(getRootDir(context), "run/storage").also { it.mkdirs() }
+
+    /** 内存储快照目录。 */
+    fun getSnapshotStorage(context: Context): File =
+        File(getRootDir(context), "snapshot/storage").also { it.mkdirs() }
+
     /**
      * Agent 运行时根目录：当 Termux Agent 被授权使用沙箱时，其 ShellTool 的工作目录
      * 指向此处，从而把 Agent 的产物（下载、生成文件）也收束在沙箱内。
@@ -134,6 +142,10 @@ object VorteXSandbox {
      * 抓取当前用户环境为最小化初始快照。策略：
      * 把当前 Termux $HOME 整体复制到 snapshot（保留用户全部环境与配置），
      * 失败则退化为递归拷贝。
+     *
+     * 注意：这里复制的是**用户数据**（$HOME），不复制 `$PREFIX`（usr/bin、lib）——
+     * 沙箱运行时通过 proot 直接 bind 真实 `$PREFIX`，因此用户环境完整可用，
+     * 又不会让存储占用翻倍。
      */
     fun takeSnapshot(context: Context) {
         val src = TermuxConstants.TERMUX_HOME_DIR_PATH
@@ -148,7 +160,61 @@ object VorteXSandbox {
                 // 快照抓取失败不应阻断开关开启；run 层为空时会回退到原始 $HOME。
             }
         }
+        takeStorageSnapshot(context)
     }
+
+    /**
+     * 抓取内存储（`/storage/emulated/0`）为快照。
+     *
+     * 只抓一层目录项做「懒拷贝占位」代价太高（用户内存储动辄几个 GB），
+     * 因此这里只记录存在性，真正的播种交给引导脚本在会话启动时按需复制。
+     */
+    private fun takeStorageSnapshot(context: Context) {
+        val real = File("/storage/emulated/0")
+        val snap = getSnapshotStorage(context)
+        try {
+            if (!real.isDirectory) return
+            // 只快照顶层目录结构（空目录占位），文件内容在会话启动时按需复制。
+            real.listFiles()?.forEach { child ->
+                val target = File(snap, child.name)
+                if (child.isDirectory) {
+                    if (!target.exists()) target.mkdirs()
+                } else if (!target.exists()) {
+                    try { child.copyTo(target, overwrite = false) } catch (_: Throwable) {}
+                }
+            }
+        } catch (_: Throwable) {
+        }
+    }
+
+    /**
+     * 探测当前环境是否具备 proot（决定沙箱是「绝对路径级隔离」还是「仅 $HOME 隔离」）。
+     * 结果做短时缓存，避免设置页每次重组都起子进程。
+     */
+    @Volatile
+    private var prootAvailableCache: Boolean? = null
+
+    fun isProotAvailable(context: Context): Boolean {
+        prootAvailableCache?.let { return it }
+        val result = try {
+            val p = ProcessBuilder(
+                "sh", "-c",
+                "command -v proot >/dev/null 2>&1 && echo yes || echo no"
+            ).redirectErrorStream(true).start()
+            val out = p.inputStream.bufferedReader().use { it.readText() }.trim()
+            p.waitFor()
+            out.contains("yes")
+        } catch (_: Throwable) {
+            false
+        }
+        prootAvailableCache = result
+        return result
+    }
+
+    /** 沙箱当前隔离能力的可读描述，用于设置页副标题与自检。 */
+    fun isolationSummary(context: Context): String =
+        if (isProotAvailable(context)) "proot 隔离：绝对路径亦受保护"
+        else "轻量隔离：请先 pkg install proot"
 
     /** 将当前会话可写层重置回最小化初始快照（供调试/手动重置调用）。 */
     fun resetSandbox(context: Context) {
@@ -162,6 +228,17 @@ object VorteXSandbox {
             val snap = getSnapshotHome(context).absolutePath
             val cmd = "cp -a '$snap/.' '${runHome.absolutePath}/' 2>/dev/null || true"
             Runtime.getRuntime().exec(arrayOf("sh", "-c", cmd)).waitFor()
+        } catch (_: Throwable) {
+        }
+        // 内存储影子层同样重置
+        try {
+            val runStorage = getRunStorage(context)
+            runStorage.deleteRecursively()
+            runStorage.mkdirs()
+            val snapStorage = getSnapshotStorage(context).absolutePath
+            Runtime.getRuntime().exec(
+                arrayOf("sh", "-c", "cp -a '$snapStorage/.' '${runStorage.absolutePath}/' 2>/dev/null || true")
+            ).waitFor()
         } catch (_: Throwable) {
         }
     }

@@ -4,6 +4,7 @@ import android.content.Context
 import com.awkoo.libterminal.engine.TerminalSession
 import com.awkoo.libterminal.process.ITerminalProcess
 import com.termux.shared.termux.shell.command.environment.TermuxShellEnvironment
+import com.termux.shared.termux.TermuxConstants
 import com.termux.shared.compat.ShellEnvironmentCompat
 import com.termux.R
 import com.termux.app.vortex.VorteXSandbox
@@ -176,23 +177,27 @@ class ComposeSessionManager private constructor(private val context: Context) {
      */
     fun createSandboxSession(startImmediately: Boolean = true): TerminalSession {
         VorteXSandbox.ensureInitialized(context)
-        val runHome = VorteXSandbox.getRunHome(context).absolutePath
         val vortexRoot = VorteXSandbox.getRootDir(context).absolutePath
         val bootstrap = VorteXSandbox.getBootstrapExecutable(context).absolutePath
 
         val envClient = ShellEnvironmentCompat(TermuxShellEnvironment())
-        val baseEnv = envClient.buildEnvironment(context, false, runHome).toMutableList()
-        // 覆盖 HOME 并注入 VORTEX_* 变量（去重，避免重复项）
+        // 注意：HOME **不**在这里改写成 run/home。
+        // proot 方案下，沙箱内看到的 $HOME 必须仍是真实绝对路径
+        // （/data/data/com.termux/files/home），只是该路径被 proot 影子化遮蔽；
+        // 若在此处提前改成 run/home，proot 的 -b 绑定会失效并造成路径混淆。
+        // 轻量降级模式所需的 HOME 重定向由引导脚本自行完成。
+        val realHome = File(TermuxConstants.TERMUX_HOME_DIR_PATH).absolutePath
+        val baseEnv = envClient.buildEnvironment(context, false, realHome).toMutableList()
         val env = baseEnv
-            .filter { !it.startsWith("HOME=") && !it.startsWith("VORTEX_") }
+            .filter { !it.startsWith("VORTEX_") }
             .toMutableList()
-        env.add("HOME=$runHome")
         env.add("VORTEX_ROOT=$vortexRoot")
+        env.add("VORTEX_REAL_HOME=$realHome")
         env.add("VORTEX_SANDBOX=1")
 
         return createSession(
             shellPath = bootstrap,
-            cwd = runHome,
+            cwd = realHome,
             args = arrayOf("--interactive"),
             env = env.toTypedArray(),
             sessionName = context.getString(R.string.vortex_sandbox_session_title),

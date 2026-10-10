@@ -1544,6 +1544,51 @@ fun SettingsScreen(
                                 SettingIcon(Icons.Rounded.SmartToy, contentDescription = "Agent 脚本判定")
                             }
                         )
+                        // ---------- VorteX 沙箱 ----------
+                        var sandboxEnabled by remember {
+                            mutableStateOf(VorteXSandbox.isEnabled(context))
+                        }
+                        SwitchPreference(
+                            title = context.getString(R.string.vortex_sandbox_title),
+                            summary = if (sandboxEnabled)
+                                context.getString(R.string.vortex_sandbox_summary) + "\n" +
+                                    VorteXSandbox.isolationSummary(context)
+                            else
+                                context.getString(R.string.vortex_sandbox_summary),
+                            checked = sandboxEnabled,
+                            onCheckedChange = {
+                                sandboxEnabled = it
+                                VorteXSandbox.setEnabled(context, it)
+                            },
+                            startAction = {
+                                SettingIcon(
+                                    Icons.Rounded.Warning,
+                                    contentDescription = context.getString(R.string.vortex_sandbox_title)
+                                )
+                            }
+                        )
+                        var sandboxAgentAuth by remember {
+                            mutableStateOf(VorteXSandbox.isAgentAuthorized(context))
+                        }
+                        SwitchPreference(
+                            title = context.getString(R.string.vortex_sandbox_agent_title),
+                            summary = if (sandboxEnabled)
+                                context.getString(R.string.vortex_sandbox_agent_summary)
+                            else
+                                "需开启 VorteX 沙箱后可用",
+                            checked = sandboxAgentAuth && sandboxEnabled,
+                            enabled = sandboxEnabled,
+                            onCheckedChange = {
+                                sandboxAgentAuth = it
+                                VorteXSandbox.setAgentAuthorized(context, it)
+                            },
+                            startAction = {
+                                SettingIcon(
+                                    Icons.Rounded.SmartToy,
+                                    contentDescription = context.getString(R.string.vortex_sandbox_agent_title)
+                                )
+                            }
+                        )
                         // ---------- Agent 判定历史 ----------
                         var agentHistory by remember {
                             mutableStateOf(com.termux.app.compose.AgentScriptJudge.getHistory(context))
