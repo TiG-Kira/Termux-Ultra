@@ -176,7 +176,10 @@ class ComposeSessionManager private constructor(private val context: Context) {
      * 由调用方配合「同时仅允许一个手动沙箱会话」的限制使用。
      */
     fun createSandboxSession(startImmediately: Boolean = true): TerminalSession {
-        VorteXSandbox.ensureInitialized(context)
+        // 注意：不要在这里同步调ensureInitialized()——它可能触发全量 $HOME 拷贝，
+        // 而本方法由终端列表页的按钮回调直接调用（运行在 UI 线程），会 ANR 闪退。
+        // 引导脚本自身在会话启动时会做完整性校验与重播，这里只做幂等且廉价的准备。
+        VorteXSandbox.ensureInitializedAsync(context)
         val vortexRoot = VorteXSandbox.getRootDir(context).absolutePath
         val bootstrap = VorteXSandbox.getBootstrapExecutable(context).absolutePath
 

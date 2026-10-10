@@ -503,37 +503,6 @@ fun TerminalDetailScreenCompose(
         lastInteractionFromTopBar = true
     }
 
-    /**
-     * 进入 VorteX 沙箱会话。
-     * - 总开关关闭时给出提示并直接返回；
-     * - 限制同时仅允许手动启动一个沙箱会话：若已存在「沙箱会话」则切换到它，否则新建。
-     */
-    fun addSandboxSession() {
-        val ctx = context
-        if (!VorteXSandbox.isEnabled(ctx)) {
-            Toast.makeText(ctx, ctx.getString(R.string.vortex_sandbox_disabled_toast), Toast.LENGTH_SHORT).show()
-            return
-        }
-        val title = ctx.getString(R.string.vortex_sandbox_session_title)
-        val existing = sessionManager.sessions.value.firstOrNull { it.name == title }
-        if (existing != null) {
-            sessionManager.switchTo(existing.session.id)
-        } else {
-            val newSession = sessionManager.createSandboxSession(startImmediately = true)
-            sessionManager.switchTo(newSession.id)
-            VorteXSandbox.setActiveManualSessionId(newSession.id)
-        }
-        if (isCompact) {
-            showTopBarTemporarily()
-        } else {
-            showLargeContent = true
-        }
-        showNewSessionLabel = true
-        sessionKey++
-        lastInteractionTime = System.currentTimeMillis()
-        lastInteractionFromTopBar = true
-    }
-
     // 键盘底色深浅。导航栏透明后，桌布透出来的是键盘底（工具栏展开时），
     // 图标明暗得跟着键盘走，跟状态栏看 topBarOpaqueBg 是同一个道理。
     val keyboardSurfaceIsLight = MiuixTheme.colorScheme.surface.luminance() > 0.5f
@@ -639,32 +608,6 @@ fun TerminalDetailScreenCompose(
         }
     }
 
-    /**
-     * 顶栏沙箱入口按钮：位于「加号」左侧。总开关关闭时图标置灰（仍可点击给出提示）。
-     */
-    @Composable
-    fun SandboxTopBarButton(
-        collapsed: Boolean,
-        onClick: () -> Unit
-    ) {
-        val enabled = VorteXSandbox.isEnabled(context)
-        val tint = if (enabled) effectiveTopBarContentColor
-        else effectiveTopBarContentColor.copy(alpha = 0.35f)
-        val glyph: @Composable () -> Unit = {
-            Icon(
-                imageVector = Icons.Rounded.Warning,
-                contentDescription = context.getString(R.string.vortex_sandbox_title),
-                modifier = Modifier.size(24.dp),
-                tint = tint
-            )
-        }
-        if (collapsed) {
-            GlassIconButton(onClick = onClick, size = 48.dp, padding = 0.dp) { glyph() }
-        } else {
-            IconButton(onClick = onClick, minWidth = 48.dp, minHeight = 48.dp) { glyph() }
-        }
-    }
-
     @Composable
     fun SmallTopActionButtons() {
         val terminalInteractionSource = remember { MutableInteractionSource() }
@@ -716,10 +659,6 @@ fun TerminalDetailScreenCompose(
                 tint = effectiveTopBarContentColor
             )
         }
-        SandboxTopBarButton(
-            collapsed = isCompact,
-            onClick = { updateInteractionTime(); addSandboxSession() }
-        )
         OverlayIconDropdownMenu(
             entry = addSessionEntry,
             backgroundColor = Color.Transparent,
@@ -812,10 +751,6 @@ fun TerminalDetailScreenCompose(
                 tint = effectiveTopBarContentColor
             )
         }
-        SandboxTopBarButton(
-            collapsed = isCompact,
-            onClick = { updateInteractionTime(); addSandboxSession() }
-        )
         OverlayIconDropdownMenu(
             entry = addSessionEntry,
             backgroundColor = Color.Transparent,
@@ -1390,6 +1325,12 @@ fun TerminalDetailScreenCompose(
 
             // 挂载风险确认宿主：收集VorteX Guard Engine Snackbar 事件（仅提示/完全拦截），与 Java 版控制台行为一致
             RiskConfirmDialogHost(snackbarHostState)
+
+            // VorteX 沙箱告警宿主：沙箱内访问 Android 内存储等事件以 Snackbar 提示
+            com.termux.app.vortex.VorteXSandboxNoticeHost(
+                enabled = currentSessionName == context.getString(R.string.vortex_sandbox_session_title),
+                snackbarHostState = snackbarHostState,
+            )
 
             // 快捷指令 BottomSheet：长按 TopBar 键盘按钮触发
             QuickCommandSheet(

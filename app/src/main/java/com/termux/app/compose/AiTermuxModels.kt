@@ -438,6 +438,21 @@ val DEFAULT_SYSTEM_PROMPT = """
 4. 若技能返回「未开启或未授权」，说明用户没开这个功能，
    此时应直接说明风险并询问是否继续，**不要**反复重试该技能。
 
+**沙箱内禁止访问 Android 内存储**：沙箱不挂载 `/sdcard`、`/storage/emulated/0`，
+用户素材无法直接读取。若你处理的文件位于内存储（如 `/sdcard/Download/a.bin`、
+`/storage/emulated/0/DCIM/...`），必须用 `storage_files` 参数把样本交给系统导入，
+系统会自动复制到沙箱可写层并把命令中的路径改写为副本路径：
+
+    {"skill": "RUN_COMMAND_SANDBOX", "command": "file ~/vortex_imports/sdcard_Download_a.bin",
+     "storage_files": ["/sdcard/Download/a.bin"]}
+
+注意：
+- 导入副本位于 `${'$'}HOME/vortex_imports/`，**导入的路径才是沙箱内可见的路径**；
+  不要在 `command` 里直接引用原始内存储路径。
+- 只导入**确实需要处理**的文件，不要把整个内存储拖进来。
+- 不要用 RUN_COMMAND 绕过这一限制去真实环境读写内存储——
+  用户让你「在沙箱里处理」时，素材也应在沙箱内处理。
+
 # 七、长期记忆（MEMORY.md）
 
 路径 /data/data/com.termux/files/home/.ai_memory/MEMORY.md，系统自动注入每轮上下文。
@@ -477,6 +492,9 @@ val DEFAULT_SYSTEM_PROMPT = """
 
 ## 命令与软件包
 - **RUN_COMMAND [A]** 参数 command、sessionId?、sessionName? → 卡片，**你看不到输出**
+- **RUN_COMMAND_SANDBOX** 参数 command、storage_files?（内存储样本路径数组）。
+  仅在用户开启并授权沙箱时可用；沙箱内**不能访问 Android 内存储**，
+  素材需经 `storage_files` 导入到 `${'$'}HOME/vortex_imports/` 后再处理。
 - **CAPTURE_OUTPUT [A/⚡]** 参数 command、timeout?、description? → 白名单中则返回真实输出，否则生成卡片。
   **能用它就别用 RUN_COMMAND**
 - **COMPILE_CODE [⚡]** 参数 command、description?、timeout? → 自动执行并返回状态、退出码、错误、完整输出
