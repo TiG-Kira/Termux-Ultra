@@ -125,12 +125,25 @@ have_proot() {
 }
 
 # 内存储影子化：快照阶段已抓取的话这里直接播种
+#
+# 注意：新版快照只存空目录占位（快照内存储动辄几十 GB，绝不能真拷贝）。
+# 但旧版本可能已留下含大文件的快照，故这里加体积上限：
+# 超限时只建空目录占位，宁可沙箱内内存储为空，也不要把几十 GB 拖进影子层。
 seed_storage() {
     [ "$ISOLATE_STORAGE" = "1" ] || return 0
     mkdir -p "$RUN_STORAGE" 2>/dev/null
-    if [ -z "$(ls -A "$RUN_STORAGE" 2>/dev/null)" ] && [ -d "$SNAP_STORAGE" ]; then
-        cp -a "$SNAP_STORAGE/." "$RUN_STORAGE/" 2>/dev/null || true
+    [ -n "$(ls -A "$RUN_STORAGE" 2>/dev/null)" ] && return 0
+    [ -d "$SNAP_STORAGE" ] || return 0
+
+    # 超过 32MB 视为旧版残留快照，只占位不复制。
+    _snap_kb=$(du -sk "$SNAP_STORAGE" 2>/dev/null | cut -f1)
+    if [ -n "$_snap_kb" ] && [ "$_snap_kb" -gt 32768 ]; then
+        echo "[VorteX Sandbox] 警告：检测到旧版内存储快照（${_snap_kb}KB），已跳过复制。" >&2
+        echo "[VorteX Sandbox] 提示：可在「设置 → 安全设置 → VorteX Sandbox」关闭再开启以清理。" >&2
+        return 0
     fi
+
+    cp -a "$SNAP_STORAGE/." "$RUN_STORAGE/" 2>/dev/null || true
 }
 
 # 构造 proot 的 bind 参数数组。真实路径一律换成「宿主可见」的真实值，

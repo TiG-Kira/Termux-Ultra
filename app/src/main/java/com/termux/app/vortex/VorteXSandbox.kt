@@ -246,8 +246,19 @@ object VorteXSandbox {
             val cmd = "tar -C '$src' --exclude=./storage -cf - . 2>/dev/null | tar -C '$dst' -xf - 2>/dev/null"
             Runtime.getRuntime().exec(arrayOf("sh", "-c", cmd)).waitFor() == 0
         } catch (_: Throwable) {
+            // 兜底也必须排除 storage：copyRecursively 会**跟随符号链接**，
+            // 直接把 /storage/emulated/0 的几十 GB 拖进快照，且这还是在主线程上。
             try {
-                File(src).copyRecursively(File(dst), overwrite = true)
+                val srcFile = File(src)
+                srcFile.listFiles()?.forEach { child ->
+                    if (child.name == "storage") return@forEach
+                    val target = File(dst, child.name)
+                    try {
+                        if (child.isDirectory) child.copyRecursively(target, overwrite = true)
+                        else child.copyTo(target, overwrite = true)
+                    } catch (_: Throwable) {
+                    }
+                }
                 true
             } catch (_: Throwable) {
                 false
