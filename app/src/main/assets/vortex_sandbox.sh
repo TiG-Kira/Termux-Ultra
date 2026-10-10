@@ -61,14 +61,41 @@ export PATH
 
 mkdir -p "$SNAP" "$RUN" 2>/dev/null
 
+# 完成标记：只有播种全部成功才落。
+#
+# 为什么不能只靠「目录非空」判断就绪：拷贝中途被杀死（ANR 闪退、应用被杀、
+# 磁盘满）会留下**半成品目录**，它同样是非空的。若据此认定「已就绪、跳过播种」，
+# 残缺状态会被固化，之后每次进沙箱都从这堆残缺数据播种——用户在 .bashrc 里
+# 引用的脚本（ty-hook.sh、broot launcher 等）就集体消失，且**永不恢复**。
+# 这正是「首次开启沙箱闪退一次后功能彻底崩掉」的根因。
+SNAP_MARKER="$SNAP/.vortex_snapshot_ok"
+PREFIX_MARKER="$RUN_PREFIX/.vortex_prefix_ok"
+RUN_MARKER="$RUN/.vortex_run_ok"
+
 # ---------------------------------------------------------------------------
 # 快照 / 重置
 # ---------------------------------------------------------------------------
 
+# 从快照播种 run 层。
+# 判据是标记文件而非目录非空：半成品 run 层必须被丢弃重播，否则用户环境残缺。
 seed_run() {
-    if [ -z "$(ls -A "$RUN" 2>/dev/null)" ]; then
-        cp -a "$SNAP/." "$RUN/" 2>/dev/null || cp -r "$SNAP/." "$RUN/" 2>/dev/null || true
+    if [ -f "$RUN_MARKER" ]; then
+        return 0
     fi
+    # 无标记却非空 → 上次播种中途夭折，清干净重来。
+    if [ -n "$(ls -A "$RUN" 2>/dev/null)" ]; then
+        rm -rf "$RUN" 2>/dev/null
+        mkdir -p "$RUN" 2>/dev/null
+    fi
+    cp -a "$SNAP/." "$RUN/" 2>/dev/null || true
+    if [ ! -f "$SNAP_MARKER" ]; then
+        # 快照不完整（多半是首次初始化时被 ANR 闪退打断）。
+        # run 层此时也必然残缺，如实告知用户——宁可让用户知道环境不完整，
+        # 也不要让他对着一个「凭空少了几十个脚本」的环境一头雾水。
+        echo "[VorteX Sandbox] 警告：初始快照不完整，\$HOME 中可能有文件缺失。" >&2
+        echo "[VorteX Sandbox] 提示：到「设置 → 安全设置 → VorteX Sandbox」关闭再开启以重建快照。" >&2
+    fi
+    : > "$RUN_MARKER" 2>/dev/null || true
 }
 
 reset_run() {
@@ -146,7 +173,13 @@ build_proot_binds() {
 # 宁可退化为「不 bind prefix、$PREFIX 保持真实」也不能给出假的隔离承诺。
 seed_prefix() {
     mkdir -p "$RUN_PREFIX" 2>/dev/null
-    [ -n "$(ls -A "$RUN_PREFIX" 2>/dev/null)" ] && return 0
+    [ -f "$PREFIX_MARKER" ] && return 0
+    # 无标记却非空 → 上次拷贝中途夭折的残缺层（例如上一轮 ANR 闪退留下的）。
+    # 残缺的 $PREFIX 会让沙箱内出现「一半命令找不到」的怪现象，必须整体重来。
+    if [ -n "$(ls -A "$RUN_PREFIX" 2>/dev/null)" ]; then
+        rm -rf "$RUN_PREFIX" 2>/dev/null
+        mkdir -p "$RUN_PREFIX" 2>/dev/null
+    fi
 
     cp -a "$REAL_PREFIX/." "$RUN_PREFIX/" 2>/dev/null || {
         rm -rf "$RUN_PREFIX" 2>/dev/null
@@ -167,6 +200,7 @@ seed_prefix() {
             return 1
         fi
     fi
+    : > "$PREFIX_MARKER" 2>/dev/null || true
     return 0
 }
 
