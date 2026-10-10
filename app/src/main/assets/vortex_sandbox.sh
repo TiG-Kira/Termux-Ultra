@@ -87,7 +87,15 @@ seed_run() {
         rm -rf "$RUN" 2>/dev/null
         mkdir -p "$RUN" 2>/dev/null
     fi
-    cp -a "$SNAP/." "$RUN/" 2>/dev/null || true
+    # 播种用 tar 管道，并**排除 storage**：Termux 的 $HOME/storage 是指向
+    # /storage/emulated/0 的符号链接，一旦被穿透就会把用户整个内存储
+    # 拖进沙箱可写层（可达数 GB），且沙箱内的写入会污染真实内存储。
+    # 沙箱内的 $HOME/storage 由 seed_storage 单独用空目录占位。
+    (cd "$SNAP" && tar --exclude=./storage -cf - . 2>/dev/null) | (cd "$RUN" && tar -xf - 2>/dev/null) || true
+    # storage 占位：只建软链形态的入口，不复制内容。
+    if [ ! -e "$RUN/storage" ]; then
+        mkdir -p "$RUN/storage" 2>/dev/null || true
+    fi
     if [ ! -f "$SNAP_MARKER" ]; then
         # 快照不完整（多半是首次初始化时被 ANR 闪退打断）。
         # run 层此时也必然残缺，如实告知用户——宁可让用户知道环境不完整，

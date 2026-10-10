@@ -235,7 +235,15 @@ object VorteXSandbox {
         try { marker.delete() } catch (_: Throwable) {}
 
         val ok = try {
-            val cmd = "cp -a '$src/.' '$dst/' 2>/dev/null"
+            // 用 tar 管道而非 cp -a，目的有两个：
+            //
+            // 1) **显式排除 storage**。Termux 的 $HOME/storage 是指向
+            //    /storage/emulated/0 的符号链接，一旦被穿透就会把用户的整个内存储
+            //    拖进快照（可达数 GB）。`cp -a` 通常会原样保留软链，但一旦目标
+            //    环境对软链的处理不一致（部分 Android 版本 / FUSE 层），就可能穿透。
+            //    这里从源侧就把它排除掉，不把正确性押在软链语义上。
+            // 2) 退出码可靠反映成功与否，供上面写完成标记用。
+            val cmd = "tar -C '$src' --exclude=./storage -cf - . 2>/dev/null | tar -C '$dst' -xf - 2>/dev/null"
             Runtime.getRuntime().exec(arrayOf("sh", "-c", cmd)).waitFor() == 0
         } catch (_: Throwable) {
             try {
@@ -254,21 +262,28 @@ object VorteXSandbox {
     /**
      * 抓取内存储（`/storage/emulated/0`）为快照。
      *
-     * 只抓一层目录项做「懒拷贝占位」代价太高（用户内存储动辄几个 GB），
-     * 因此这里只记录存在性，真正的播种交给引导脚本在会话启动时按需复制。
+     * **只记录顶层目录名，一个文件都不复制。**
+     *
+     * 曾经这里对顶层**文件**也调`copyTo`，看起来只是「拷贝顶层」很轻，
+     * 实际是灾难：用户内存储顶层散落着大量大文件（安装包、压缩包、影音、
+     * 文档，动辄单个几百 MB，累计可达数 GB），而 `takeSnapshot()` 是在
+     * `setEnabled()` 的 UI 线程里同步调用的——这意味着**点一下开关就要在主线程
+     * 同步复制几个 GB**，必然 ANR 闪退，且拷到一半被杀留下半成品快照，
+     * 进而引发「沙箱环境缺文件且永不恢复」的问题。
+     *
+     * 沙箱的定位是「用户 Termux 环境的隔离预演」，不需要复制用户的内存储内容。
+     * 真正的播种交给引导脚本按需进行（它同样只建空目录占位）。
      */
     private fun takeStorageSnapshot(context: Context) {
         val real = File("/storage/emulated/0")
         val snap = getSnapshotStorage(context)
         try {
             if (!real.isDirectory) return
-            // 只快照顶层目录结构（空目录占位），文件内容在会话启动时按需复制。
+            // 仅占位：建空目录即可，不递归、不复制任何文件内容。
             real.listFiles()?.forEach { child ->
-                val target = File(snap, child.name)
                 if (child.isDirectory) {
+                    val target = File(snap, child.name)
                     if (!target.exists()) target.mkdirs()
-                } else if (!target.exists()) {
-                    try { child.copyTo(target, overwrite = false) } catch (_: Throwable) {}
                 }
             }
         } catch (_: Throwable) {
