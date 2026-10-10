@@ -829,6 +829,18 @@
     <string name="root_manage_grant_root">Grant ROOT Permission</string>
     <string name="root_manage_loose_mode">Loose Mode (Disable auto-block)</string>
 
+    <!-- VorteX Sandbox -->
+    <string name="vortex_sandbox_title">VorteX Sandbox</string>
+    <string name="vortex_sandbox_summary">Isolated test environment with virtual ROOT; resets automatically when the session ends</string>
+    <string name="vortex_sandbox_agent_title">Authorize Termux Agent to use Sandbox</string>
+    <string name="vortex_sandbox_agent_summary">Allow Termux Agent to run inside the isolated sandbox (unavailable when the master switch is off)</string>
+    <string name="vortex_sandbox_plugin_title">Run with VorteX Sandbox</string>
+    <string name="vortex_sandbox_plugin_summary">All terminal commands executed by this plugin run inside the sandbox</string>
+    <string name="vortex_sandbox_plugin_disabled_summary">Enable VorteX Sandbox in Settings to use this option</string>
+    <string name="vortex_sandbox_session_title">沙箱会话</string>
+    <string name="vortex_sandbox_disabled_toast">VorteX Sandbox is not enabled</string>
+    <string name="vortex_sandbox_preparing">Preparing sandbox…</string>
+
 
     <!-- Reset Runtime Environment -->
     <string name="reset_runtime_env_title">重置运行环境</string>

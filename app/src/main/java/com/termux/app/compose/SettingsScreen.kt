@@ -68,6 +68,7 @@ import androidx.compose.material.icons.automirrored.rounded.Launch
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.CircularProgressIndicator
 import com.termux.app.RuntimeEnvironmentResetter
+import com.termux.app.vortex.VorteXSandbox
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.graphics.painter.Painter
@@ -961,6 +962,42 @@ fun SettingsScreen(
                 )
             }),
 
+        // ===== VorteX Sandbox =====
+        SearchableSetting(sec_security, context.getString(R.string.vortex_sandbox_title),
+            context.getString(R.string.vortex_sandbox_summary),
+            keywords = listOf("沙箱", "sandbox", "vortex", "隔离", "虚拟root", "测试环境", "演练"),
+            render = {
+                var sandboxEnabled by remember { mutableStateOf(VorteXSandbox.isEnabled(context)) }
+                SwitchPreference(
+                    title = context.getString(R.string.vortex_sandbox_title),
+                    summary = context.getString(R.string.vortex_sandbox_summary),
+                    checked = sandboxEnabled,
+                    onCheckedChange = {
+                        sandboxEnabled = it
+                        VorteXSandbox.setEnabled(context, it)
+                    },
+                    startAction = { SettingIcon(Icons.Rounded.Shield, contentDescription = context.getString(R.string.vortex_sandbox_title)) }
+                )
+            }),
+        SearchableSetting(sec_security, context.getString(R.string.vortex_sandbox_agent_title),
+            context.getString(R.string.vortex_sandbox_agent_summary),
+            keywords = listOf("沙箱", "agent", "授权", "authorize", "vortex", "termux agent"),
+            render = {
+                val sandboxOn = VorteXSandbox.isEnabled(context)
+                var agentAuth by remember { mutableStateOf(VorteXSandbox.isAgentAuthorized(context)) }
+                SwitchPreference(
+                    title = context.getString(R.string.vortex_sandbox_agent_title),
+                    summary = context.getString(R.string.vortex_sandbox_agent_summary),
+                    checked = agentAuth,
+                    enabled = sandboxOn,
+                    onCheckedChange = {
+                        agentAuth = it
+                        VorteXSandbox.setAgentAuthorized(context, it)
+                    },
+                    startAction = { SettingIcon(Icons.Rounded.Memory, contentDescription = context.getString(R.string.vortex_sandbox_agent_title)) }
+                )
+            }),
+
         // SettingsGroupCard 里的条目（动态展开）
     ) + buildList {
         addAll(dataSettings.map { it.toSearchable(sec_backup) })
@@ -1505,6 +1542,51 @@ fun SettingsScreen(
                             enabled = agentJudgeEnabled && hasAgentCfg,
                             startAction = {
                                 SettingIcon(Icons.Rounded.SmartToy, contentDescription = "Agent 脚本判定")
+                            }
+                        )
+                        // ---------- VorteX 沙箱 ----------
+                        var sandboxEnabled by remember {
+                            mutableStateOf(VorteXSandbox.isEnabled(context))
+                        }
+                        SwitchPreference(
+                            title = context.getString(R.string.vortex_sandbox_title),
+                            summary = if (sandboxEnabled)
+                                context.getString(R.string.vortex_sandbox_summary) + "\n" +
+                                    VorteXSandbox.isolationSummary(context)
+                            else
+                                context.getString(R.string.vortex_sandbox_summary),
+                            checked = sandboxEnabled,
+                            onCheckedChange = {
+                                sandboxEnabled = it
+                                VorteXSandbox.setEnabled(context, it)
+                            },
+                            startAction = {
+                                SettingIcon(
+                                    Icons.Rounded.Warning,
+                                    contentDescription = context.getString(R.string.vortex_sandbox_title)
+                                )
+                            }
+                        )
+                        var sandboxAgentAuth by remember {
+                            mutableStateOf(VorteXSandbox.isAgentAuthorized(context))
+                        }
+                        SwitchPreference(
+                            title = context.getString(R.string.vortex_sandbox_agent_title),
+                            summary = if (sandboxEnabled)
+                                context.getString(R.string.vortex_sandbox_agent_summary)
+                            else
+                                "需开启 VorteX 沙箱后可用",
+                            checked = sandboxAgentAuth && sandboxEnabled,
+                            enabled = sandboxEnabled,
+                            onCheckedChange = {
+                                sandboxAgentAuth = it
+                                VorteXSandbox.setAgentAuthorized(context, it)
+                            },
+                            startAction = {
+                                SettingIcon(
+                                    Icons.Rounded.SmartToy,
+                                    contentDescription = context.getString(R.string.vortex_sandbox_agent_title)
+                                )
                             }
                         )
                         // ---------- Agent 判定历史 ----------

@@ -4,7 +4,10 @@ import android.content.Context
 import com.awkoo.libterminal.engine.TerminalSession
 import com.awkoo.libterminal.process.ITerminalProcess
 import com.termux.shared.termux.shell.command.environment.TermuxShellEnvironment
+import com.termux.shared.termux.TermuxConstants
 import com.termux.shared.compat.ShellEnvironmentCompat
+import com.termux.R
+import com.termux.app.vortex.VorteXSandbox
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -163,6 +166,46 @@ class ComposeSessionManager private constructor(private val context: Context) {
     }
 
     /**
+     * 创建并进入一个 VorteX 沙箱会话。
+     *
+     * 与默认 shell 不同，这里把 shell 指向 VorteX 沙箱引导脚本（交互模式），
+     * 并把 $HOME 与 cwd 重定向到沙箱可写层、注入 VORTEX_ROOT / VORTEX_SANDBOX 环境变量，
+     * 使该会话完全运行在隔离环境内，且自带虚拟 ROOT。
+     *
+     * 会话标题固定为 [VorteXSandbox.SANDBOX_SESSION_TITLE]（"沙箱会话"），
+     * 由调用方配合「同时仅允许一个手动沙箱会话」的限制使用。
+     */
+    fun createSandboxSession(startImmediately: Boolean = true): TerminalSession {
+        VorteXSandbox.ensureInitialized(context)
+        val vortexRoot = VorteXSandbox.getRootDir(context).absolutePath
+        val bootstrap = VorteXSandbox.getBootstrapExecutable(context).absolutePath
+
+        val envClient = ShellEnvironmentCompat(TermuxShellEnvironment())
+        // 注意：HOME **不**在这里改写成 run/home。
+        // proot 方案下，沙箱内看到的 $HOME 必须仍是真实绝对路径
+        // （/data/data/com.termux/files/home），只是该路径被 proot 影子化遮蔽；
+        // 若在此处提前改成 run/home，proot 的 -b 绑定会失效并造成路径混淆。
+        // 轻量降级模式所需的 HOME 重定向由引导脚本自行完成。
+        val realHome = File(TermuxConstants.TERMUX_HOME_DIR_PATH).absolutePath
+        val baseEnv = envClient.buildEnvironment(context, false, realHome).toMutableList()
+        val env = baseEnv
+            .filter { !it.startsWith("VORTEX_") }
+            .toMutableList()
+        env.add("VORTEX_ROOT=$vortexRoot")
+        env.add("VORTEX_REAL_HOME=$realHome")
+        env.add("VORTEX_SANDBOX=1")
+
+        return createSession(
+            shellPath = bootstrap,
+            cwd = realHome,
+            args = arrayOf("--interactive"),
+            env = env.toTypedArray(),
+            sessionName = context.getString(R.string.vortex_sandbox_session_title),
+            startImmediately = startImmediately
+        )
+    }
+
+    /**
      * 切换当前活跃会话。id 必须存在于 sessions 列表中。
      */
     fun switchTo(sessionId: Int) {
@@ -180,6 +223,10 @@ class ComposeSessionManager private constructor(private val context: Context) {
             removedIndex = _sessions.value.indexOfFirst { it.session.id == sessionId }
             _sessions.value.getOrNull(removedIndex)
         } ?: return
+        // 沙箱会话结束 → 彻底回收影子空间（约 95MB 的 $PREFIX 拷贝等）。
+        // 必须在 finish 之前取名字：finish 后会话对象可能已被重置。
+        // 沙箱会话禁止重命名，name 即始终为「沙箱会话」，可直接判定。
+        VorteXSandbox.onSessionEnded(context, info.name)
         info.session.finishIfRunning()
         TerminalSessionCompat.unregister(sessionId)
 
@@ -200,6 +247,7 @@ class ComposeSessionManager private constructor(private val context: Context) {
     fun killAllSessions() {
         synchronized(sessionsLock) {
             _sessions.value.forEach {
+                VorteXSandbox.onSessionEnded(context, it.name)
                 it.session.finishIfRunning()
                 TerminalSessionCompat.unregister(it.session.id)
             }
