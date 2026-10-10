@@ -23,6 +23,7 @@ import com.termux.app.ssh.SshConnection
 import com.termux.app.ssh.SshConnectionManager
 import com.termux.app.vnc.VncConnection
 import com.termux.app.vnc.VncConnectionManager
+import com.termux.app.vortex.VorteXSandbox
 import com.termux.shared.compat.ShellEnvironmentCompat
 import com.termux.shared.compat.TermuxTaskCompat
 import com.gaurav.avnc.ui.vnc.VncActivity
@@ -604,6 +605,7 @@ object SkillExecutor {
             SkillType.FILE_GENERATE -> execFileGenerate(params)
             SkillType.FILE_MODIFY -> execFileModify(params)
             SkillType.RUN_COMMAND -> execRunCommand(context, termuxService, params)
+            SkillType.RUN_COMMAND_SANDBOX -> execRunCommandInSandbox(context, params)
             SkillType.CAPTURE_OUTPUT -> execCaptureOutput(context, termuxService, params)
             SkillType.PACKAGE_INSTALL -> execPackageInstall(context, termuxService, params)
             SkillType.PACKAGE_UNINSTALL -> execPackageUninstall(context, termuxService, params)
@@ -1548,6 +1550,87 @@ object SkillExecutor {
             }
         } catch (e: Exception) {
             SkillExecutionResult(false, "执行命令出错: ${e.message}")
+        }
+    }
+
+    /**
+     * 在 VorteX 沙箱中预演一条命令。
+     *
+     * 用途是**危险脚本的预演**：Agent 判断某条命令风险较高时，先在沙箱里跑一遍，
+     * 把真实输出拿给用户看，由用户决定是否在真实环境执行。
+     *
+     * 之所以必须走引导脚本的 `--run` 而不是复用 [execCaptureOutput]：
+     * 后者是在真实 Termux 会话里执行，只有 `execRunCommand` 走沙箱才谈得上隔离。
+     *
+     * 无论成功失败，结束前都会回收影子空间（约 95MB）——沙箱是临时占用空间。
+     */
+    private suspend fun execRunCommandInSandbox(
+        context: Context,
+        params: JsonObject
+    ): SkillExecutionResult {
+        val appCtx = context.applicationContext
+        // 总开关或 Agent 授权任一关闭即不可用——不允许绕过授权用沙箱。
+        if (!VorteXSandbox.isAgentUsingSandbox(appCtx)) {
+            return SkillExecutionResult(
+                false,
+                "VorteX 沙箱未开启或未授权 Termux Agent 使用，无法在沙箱中预演。" +
+                    "请到「设置 → 安全设置 → 授权 Termux Agent 使用沙箱」开启后重试；" +
+                    "若只想在真实环境执行，请改用 RUN_COMMAND。"
+            )
+        }
+
+        val command = try {
+            params.get("command").asString
+        } catch (_: Exception) {
+            return SkillExecutionResult(false, "RUN_COMMAND_SANDBOX 缺少 command 参数")
+        }
+        if (command.isBlank()) return SkillExecutionResult(false, "command 为空")
+
+        VorteXSandbox.ensureInitialized(appCtx)
+        val bootstrap = VorteXSandbox.getBootstrapExecutable(appCtx).absolutePath
+        val vortexRoot = VorteXSandbox.getRootDir(appCtx).absolutePath
+        val realHome = File(TermuxConstants.TERMUX_HOME_DIR_PATH).absolutePath
+
+        return try {
+            // 后台准备影子 prefix：首次要拷 ~95MB，不放这里会让本函数阻塞过久。
+            // 预热完成后脚本内部会秒级启动；这里不额外阻塞 UI（Agent 回合内执行）。
+            VorteXSandbox.prepareShadowPrefix(appCtx)
+
+            val t0 = System.currentTimeMillis()
+            val process = ProcessBuilder(
+                File(TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH, "bash"),
+                bootstrap, "--run", command
+            ).apply {
+                environment()["VORTEX_ROOT"] = vortexRoot
+                environment()["VORTEX_REAL_HOME"] = realHome
+                redirectErrorStream(true)
+            }.start()
+
+            val output = process.inputStream.bufferedReader().use { it.readText() }
+            val exitCode = process.waitFor()
+            val elapsed = System.currentTimeMillis() - t0
+
+            SkillExecutionResult(
+                true,
+                "已在 VorteX 沙箱中预演完成（${elapsed}ms，退出码 $exitCode）。" +
+                    "沙箱内所有改动均未触及真实环境，且已随预演结束清除。" +
+                    "请把下面的实际输出如实转述给用户，并明确询问：" +
+                    "是否要在此结果基础上，于真实环境执行同一条命令。" +
+                    "\n\n--- 沙箱实际输出 ---\n$output",
+                SkillCardData(
+                    skillType = SkillType.RUN_COMMAND_SANDBOX,
+                    title = "沙箱预演结果",
+                    description = command,
+                    status = SkillStatus.COMPLETED,
+                    command = command,
+                    output = output
+                )
+            )
+        } catch (e: Exception) {
+            SkillExecutionResult(false, "沙箱预演失败: ${e.message}")
+        } finally {
+            // 一轮预演结束即回收影子空间（含 ~95MB 的 $PREFIX 拷贝）。
+            VorteXSandbox.onEphemeralRunEnded(appCtx)
         }
     }
 

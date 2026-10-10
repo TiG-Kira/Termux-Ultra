@@ -87,7 +87,6 @@ import androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner
 import com.termux.R
 import com.termux.app.TermuxService
 import com.termux.app.compose.*
-import com.termux.app.vortex.VorteXSandbox
 import com.termux.app.compose.pagePaddingWithoutTop
 import com.termux.app.compose.standaloneContentPadding
 import com.termux.app.utils.SnackbarHelper
@@ -1000,12 +999,6 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
         } finally {
             AgentStopFloatingButton.hide()
             isStreaming = false
-            // 一轮对话结束 → 回收 Agent 沙箱的影子空间（约 95MB 的 $PREFIX 拷贝）。
-            // 放在 finally 里，保证 Completed / Failed / Cancelled / 异常四条路径都会走到；
-            // 否则每次对话都会在磁盘上留下近百 MB 残留。
-            if (AgentPawEngine.isAgentUsingSandbox(ctx)) {
-                VorteXSandbox.onEphemeralRunEnded(ctx)
-            }
         }
     }
 
@@ -1805,6 +1798,7 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
             SkillType.RUN_COMMAND -> "执行命令：$command"
             SkillType.CUSTOM_COMMAND -> "执行自定义命令：$command"
             SkillType.CAPTURE_OUTPUT -> "执行并捕获输出：$command"
+            SkillType.RUN_COMMAND_SANDBOX -> "沙箱预演：$command"
             SkillType.COMPILE_CODE -> "执行编译命令：$command"
             SkillType.SUB_AGENT -> "子 Agent 执行：$command"
             SkillType.FILE_DELETE -> "删除：${if (params.has("path")) params.get("path").asString else ""}"
@@ -4631,6 +4625,7 @@ private fun SkillCard(msgId: String, card: SkillCardData, errorMsg: String?, vm:
         SkillType.GET_SESSION_INFO, SkillType.GET_CURRENT_SESSION,
         SkillType.RUN_COMMAND, SkillType.CAPTURE_OUTPUT,
         SkillType.CUSTOM_COMMAND, SkillType.COMPILE_CODE -> R.drawable.ic_terminal
+        SkillType.RUN_COMMAND_SANDBOX -> R.drawable.ic_warning
         SkillType.RUN_VM_QEMU, SkillType.CREATE_VM_QEMU,
         SkillType.VM_LIST -> R.drawable.ic_computer
         SkillType.CONNECT_VNC -> R.drawable.ic_vnc

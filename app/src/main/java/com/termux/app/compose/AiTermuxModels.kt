@@ -162,6 +162,14 @@ enum class SkillType {
     TASK_UPDATE,          // 更新任务状态（done / in_progress / pending / cancelled）
     TASK_DELETE,          // 删除任务（通过 taskId 或 title 匹配删除）
     TASK_LIST             // 查看当前任务列表
+    ,
+    /**
+     * 在 VorteX 沙箱中执行命令。
+     *
+     * 用于危险脚本的**预演**：Agent 判断某条命令风险较高时，先在沙箱里跑一遍看实际效果，
+     * 再把结果告诉用户，由用户决定是否在真实环境执行。沙箱内所有改动仅限内部、会话结束即消失。
+     */
+    RUN_COMMAND_SANDBOX
 }
 
 /** 需用户点击才能执行的技能（仅生成卡片，未真正执行）
@@ -218,6 +226,13 @@ data class SkillCardData(
     val filePath: String? = null,             // 文件路径
     val command: String? = null,              // 执行的命令
     val output: String? = null,               // 输出/结果
+    /**
+     * 沙箱预演场景下用户的选择：
+     * - "promote"：用户看完沙箱实际效果后，确认在真实环境执行同一命令
+     * - "discard"：用户放弃，不在真实环境执行
+     * 预演本身（RUN_COMMAND_SANDBOX）不设此值。
+     */
+    val sandboxDecision: String? = null,
     // 询问用户相关
     val askQuestion: String? = null,          // 问题文本
     val askType: String? = null,              // "text" / "single" / "multi"
@@ -403,6 +418,25 @@ val DEFAULT_SYSTEM_PROMPT = """
 - 根目录 /data/data/com.termux/；家目录 ~/ = files/home；前缀 files/usr
 - Shell：bash；包管理器：pkg install / apt install
 - 支持 proot 容器、QEMU 虚拟机、VNC、SSH；Ubuntu 容器：~/debian-container/run.sh
+
+# 六点五、危险命令：先在 VorteX 沙箱预演（重要）
+
+用户可能开启并授权了 VorteX 沙箱（技能 `RUN_COMMAND_SANDBOX`）。
+它是**虚拟 ROOT 的隔离测试环境**：真实环境完全不受影响，会话结束所有改动即消失。
+
+**何时使用**：你判断一条命令风险较高时——尤其是删除、覆盖安装、批量改名、
+格式化、跑来路不明的脚本、或会改动系统状态的操作——**先在沙箱预演**，
+拿到真实输出后再让用户决定是否在真实环境执行。例如：
+
+    {"skill": "RUN_COMMAND_SANDBOX", "command": "rm -rf ~/testdir && echo done"}
+
+**硬性要求**：
+1. 预演结果必须**如实转述**实际输出，禁止脑补或美化；命令失败就说失败。
+2. 预演后**必须明确询问用户**：「是否在真实环境执行这条命令？」
+   把决定权交给用户，不要自己替他做主，也**不要**未经确认就自动改用 RUN_COMMAND 真实执行。
+3. 沙箱预演**不能替代**风险确认——它只是让用户看清后果。
+4. 若技能返回「未开启或未授权」，说明用户没开这个功能，
+   此时应直接说明风险并询问是否继续，**不要**反复重试该技能。
 
 # 七、长期记忆（MEMORY.md）
 
