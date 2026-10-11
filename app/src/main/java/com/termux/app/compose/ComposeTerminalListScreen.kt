@@ -59,8 +59,6 @@ import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import androidx.compose.material3.CircularProgressIndicator
 import top.yukonga.miuix.kmp.theme.MiuixTheme
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Warning
 import com.termux.app.vortex.VorteXSandbox
 
 /**
@@ -169,7 +167,7 @@ fun ComposeTerminalListScreen(
                             }
                         ) {
                             Icon(
-                                imageVector = Icons.Rounded.Warning,
+                                painter = painterResource(R.drawable.ic_sandbox),
                                 contentDescription = stringResource(R.string.vortex_sandbox_title),
                                 modifier = Modifier.size(24.dp),
                                 tint = if (vortexSandboxEnabled) MiuixTheme.colorScheme.onSurface
