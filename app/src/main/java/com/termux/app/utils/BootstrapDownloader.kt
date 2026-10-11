@@ -37,6 +37,9 @@ object BootstrapDownloader {
     // zip 在源码树里的目录；Release 资产是平铺的，没有这一层，故按源分别拼进目录 URL。
     private const val REMOTE_DIR = "app/bootstrap/"
 
+    /** bootstrap 下载页：在线安装超时的用户可在外部浏览器手动取包，再走「从本地安装」。 */
+    const val DOWNLOAD_PAGE_URL = "https://github.com/$REPO/releases/tag/$REF"
+
     // arch -> 期望 SHA-256（与 app/bootstrap/*.zip 一致；改 zip 必须同步此处）。
     @JvmStatic
     fun getExpectedSha256(arch: String): String? = EXPECTED_SHA256[arch]
@@ -174,13 +177,28 @@ object BootstrapDownloader {
 
     /** 检查 zip 魔数 (PK\x03\x04) + SHA-256。package-private，供同包及 resetter 调用。 */
     @JvmStatic
-    fun isValidBootstrap(bytes: ByteArray, expectedSha256: String): Boolean {
+    fun isValidBootstrap(bytes: ByteArray, expectedSha256: String): Boolean =
+        isZipMagic(bytes) && sha256Hex(bytes).equals(expectedSha256, ignoreCase = true)
+
+    /** zip 魔数 (PK\x03\x04)。本地包校验先过这一关，避免把任意文件喂进解压器。 */
+    @JvmStatic
+    fun isZipMagic(bytes: ByteArray): Boolean {
         if (bytes.size < 4) return false
-        if (bytes[0] != 0x50.toByte() || bytes[1] != 0x4B.toByte()
-            || bytes[2] != 0x03.toByte() || bytes[3] != 0x04.toByte()) return false
-        val digest = MessageDigest.getInstance("SHA-256").digest(bytes)
-        val actual = digest.joinToString("") { b -> "%02x".format(Locale.ROOT, b.toInt() and 0xFF) }
-        return actual.equals(expectedSha256, ignoreCase = true)
+        return bytes[0] == 0x50.toByte() && bytes[1] == 0x4B.toByte()
+            && bytes[2] == 0x03.toByte() && bytes[3] == 0x04.toByte()
+    }
+
+    /** 单次计算 SHA-256 十六进制串；本地包校验与「不匹配」提示共用，避免重复摘要。 */
+    @JvmStatic
+    fun sha256Hex(bytes: ByteArray): String =
+        MessageDigest.getInstance("SHA-256").digest(bytes)
+            .joinToString("") { b -> "%02x".format(Locale.ROOT, b.toInt() and 0xFF) }
+
+    /** 字节内容是否与指定架构的官方包一致（含大小写不敏感比较）。 */
+    @JvmStatic
+    fun hasExpectedSha256(bytes: ByteArray, arch: String): Boolean {
+        val expected = EXPECTED_SHA256[arch] ?: return false
+        return sha256Hex(bytes).equals(expected, ignoreCase = true)
     }
 
     // ----- internals -----

@@ -59,6 +59,24 @@ final class TermuxInstaller {
 
     static void setupBootstrapIfNeeded(final Activity activity, final Runnable whenDone,
                                        final BootstrapCallback callback) {
+        setupBootstrapIfNeededInternal(activity, whenDone, callback, null);
+    }
+
+    /**
+     * 与 {@link #setupBootstrapIfNeeded(Activity, Runnable, BootstrapCallback)} 同流程，
+     * 但 zip 字节来自用户本地选择的文件而非网络下载。
+     *
+     * 校验（魔数 + SHA-256）在 UI 层完成，进入本方法即已确认「允许安装」，
+     * 因此这里不再回退到在线下载 —— 否则「从本地安装」失败会静默变成在线下载，
+     * 与用户在超时场景下的选择相悖。
+     */
+    static void setupBootstrapFromLocal(final Activity activity, final Runnable whenDone,
+                                        final BootstrapCallback callback, final byte[] zipBytes) {
+        setupBootstrapIfNeededInternal(activity, whenDone, callback, zipBytes);
+    }
+
+    private static void setupBootstrapIfNeededInternal(final Activity activity, final Runnable whenDone,
+                                                       final BootstrapCallback callback, final byte[] localZipBytes) {
         String bootstrapErrorMessage;
         Error filesDirectoryAccessibleError;
 
@@ -150,8 +168,16 @@ final class TermuxInstaller {
                         activity.runOnUiThread(callback::onDownloadStart);
                     }
 
-                    Logger.logInfo(LOG_TAG, "Downloading bootstrap zip for arch: " + bootstrapArch);
-                    final byte[] zipBytes = BootstrapDownloader.getBootstrapZip(bootstrapArch);
+                    final byte[] zipBytes;
+                    if (localZipBytes != null) {
+                        // 本地包：字节已在 UI 层读出并完成「魔数 + SHA-256（+用户确认）」校验。
+                        Logger.logInfo(LOG_TAG, "Using local bootstrap zip for arch: " + bootstrapArch
+                            + " (" + localZipBytes.length + " bytes)");
+                        zipBytes = localZipBytes;
+                    } else {
+                        Logger.logInfo(LOG_TAG, "Downloading bootstrap zip for arch: " + bootstrapArch);
+                        zipBytes = BootstrapDownloader.getBootstrapZip(bootstrapArch);
+                    }
 
                     if (callback != null) {
                         activity.runOnUiThread(callback::onInstallStart);

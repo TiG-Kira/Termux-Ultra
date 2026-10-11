@@ -24,6 +24,7 @@ import androidx.core.content.ContextCompat
 import com.termux.app.compose.KiTerminalTheme
 import com.termux.app.compose.OobePermissionIds
 import com.termux.app.compose.OobeScreen
+import com.termux.app.utils.BootstrapDownloader
 
 class OobeActivity : ComponentActivity() {
 
@@ -34,6 +35,10 @@ class OobeActivity : ComponentActivity() {
         const val EULA_LAST_MODIFIED = "20260916"
 
         private const val TAG_PERM = "OobePermissions"
+
+        // bootstrap zip 通常 ~30MB。读取上限放宽到 256MB，既容纳正常包，
+        // 又避免用户误选超大文件时把内存撑爆（低端机 OOM 会直接崩）。
+        private const val MAX_LOCAL_ZIP_BYTES = 256L * 1024 * 1024
     }
 
     private var isUpgrade by mutableStateOf(false)
@@ -57,6 +62,19 @@ class OobeActivity : ComponentActivity() {
     
     private var releaseNotes by mutableStateOf<String?>(null)
 
+    // ===== 安装方式：online（在线下载，默认）/ local（用户选择的本地自备 bootstrap）=====
+    private val InstallModeOnline = "online"
+    private val InstallModeLocal = "local"
+
+    // 放在方式常量之后：属性按声明顺序初始化，否则 installMode 会读到未初始化的 InstallModeOnline。
+    private var installMode by mutableStateOf(InstallModeOnline)
+    private var localZipName by mutableStateOf<String?>(null)
+    private var localZipState by mutableStateOf<String?>(null)
+    // 选中的包：用户确认「来源可信」后放行安装，需保留字节直到真正安装。
+    private var pendingLocalZip by mutableStateOf<LocalBootstrap?>(null)
+    // 与官方 SHA-256 不一致时的二次确认弹窗（null=不显示）。
+    private var untrustedSourcePrompt by mutableStateOf<UntrustedSourcePrompt?>(null)
+
     private val normalPermissions = arrayOf(
         Manifest.permission.INTERNET,
         Manifest.permission.ACCESS_NETWORK_STATE,
@@ -66,7 +84,13 @@ class OobeActivity : ComponentActivity() {
 
     private lateinit var requestPermissionsLauncher: ActivityResultLauncher<Array<String>>
     private lateinit var manageStorageLauncher: ActivityResultLauncher<Intent>
+    private lateinit var pickLocalZipLauncher: ActivityResultLauncher<Array<String>>
 
+    /** 「从本地安装」选中的 bootstrap 包。shaMatches=false 表示与内置官方校验不一致。 */
+    private data class LocalBootstrap(val name: String, val bytes: ByteArray, val shaMatches: Boolean)
+
+    /** 非官方校验包的确认弹窗数据：保留字节与文件名，确认后直接进入安装。 */
+    private data class UntrustedSourcePrompt(val name: String, val bytes: ByteArray)
     override fun attachBaseContext(newBase: android.content.Context) {
         super.attachBaseContext(LocaleHelper.attachBaseContext(newBase))
     }
@@ -104,6 +128,14 @@ class OobeActivity : ComponentActivity() {
                 updatePermissionStatus()
             }
 
+            // 「从本地安装」的文件选择器。ACTION_OPEN_DOCUMENT 由系统选择器代读，
+            // 本应用无需持有存储权限即可拿到内容，因此不依赖「文件存储」授权是否完成。
+            pickLocalZipLauncher = registerForActivityResult(
+                ActivityResultContracts.OpenDocument()
+            ) { uri ->
+                if (uri != null) onLocalZipPicked(uri)
+            }
+
             updatePermissionStatus()
             fetchReleaseNotes()
 
@@ -134,6 +166,17 @@ class OobeActivity : ComponentActivity() {
                             bootstrapError = bootstrapError,
                             releaseNotes = releaseNotes,
                             currentVersionName = com.termux.BuildConfig.VERSION_NAME,
+                            installMode = installMode,
+                            localZipName = localZipName,
+                            localZipState = localZipState,
+                            downloadPageUrl = BootstrapDownloader.DOWNLOAD_PAGE_URL,
+                            untrustedSourcePromptActive = untrustedSourcePrompt != null,
+                            onInstallModeChange = { mode -> changeInstallMode(mode) },
+                            onPickLocalBootstrap = { pickLocalBootstrap() },
+                            onStartLocalBootstrap = { performLocalBootstrap() },
+                            onConfirmUntrustedSource = { confirmUntrustedSource() },
+                            onDismissUntrustedSource = { untrustedSourcePrompt = null },
+                            onOpenBootstrapDownloadPage = { openBootstrapDownloadPage() },
                             onGrantAllPermissions = { grantAllPermissions() },
                             onStartBootstrap = { performBootstrap() },
                             onRetryBootstrap = { retryBootstrap() },
@@ -200,7 +243,12 @@ class OobeActivity : ComponentActivity() {
         }
     }
 
+    /** 安装页主按钮：按当前方式分派到在线下载或本地安装。 */
     private fun performBootstrap() {
+        if (installMode == InstallModeLocal) performLocalBootstrap() else performOnlineBootstrap()
+    }
+
+    private fun performOnlineBootstrap() {
         isBootstrapping = true
         isDownloading = true
         isInstalling = false
@@ -210,39 +258,165 @@ class OobeActivity : ComponentActivity() {
         bootstrapComplete = false
 
         // OOBE 自带 Compose 进度与两阶段文案，用回调接住阶段与失败，避免叠系统弹窗。
-        val callback = object : TermuxInstaller.BootstrapCallback {
-            override fun onDownloadStart() {
-                isDownloading = true
-                isInstalling = false
-            }
+        TermuxInstaller.setupBootstrapIfNeeded(this, bootstrapDoneRunnable(), bootstrapProgressCallback())
+    }
 
-            override fun onInstallStart() {
-                isDownloading = false
-                isInstalling = true
-            }
-
-            override fun onError(message: String) {
-                isBootstrapping = false
-                isDownloading = false
-                isInstalling = false
-                bootstrapError = message
-            }
+    /**
+     * 「从本地安装」：字节已在选择时读出并通过（必要的）校验，
+     * 这里只负责把两阶段进度与终态接回 Compose 状态机。
+     */
+    private fun performLocalBootstrap() {
+        val local = pendingLocalZip
+        if (local == null) {
+            // 理论上不会进这里（UI 已按 state 禁用按钮），兜底防误触发。
+            bootstrapError = "未选择本地 bootstrap 文件"
+            return
         }
 
-        TermuxInstaller.setupBootstrapIfNeeded(
-            this,
-            { // whenDone：已在 UI 线程
-                // Bootstrap zip 解压成功后，立即建立 storage symlinks
-                try {
-                    TermuxInstaller.setupStorageSymlinks(this)
-                } catch (_: Throwable) {}
-                isBootstrapping = false
-                isDownloading = false
-                isInstalling = false
-                bootstrapComplete = true
-            },
-            callback
+        isBootstrapping = true
+        isDownloading = false
+        isInstalling = true
+        bootstrapError = null
+        bootstrapComplete = false
+
+        TermuxInstaller.setupBootstrapFromLocal(
+            this, bootstrapDoneRunnable(), bootstrapProgressCallback(), local.bytes
         )
+    }
+
+    /** 解压成功收尾：建立 storage symlinks 并把三态全部落定。 */
+    private fun bootstrapDoneRunnable(): Runnable = Runnable {
+        try {
+            TermuxInstaller.setupStorageSymlinks(this)
+        } catch (_: Throwable) {}
+        isBootstrapping = false
+        isDownloading = false
+        isInstalling = false
+        bootstrapComplete = true
+    }
+
+    private fun bootstrapProgressCallback() = object : TermuxInstaller.BootstrapCallback {
+        override fun onDownloadStart() {
+            isDownloading = true
+            isInstalling = false
+        }
+
+        override fun onInstallStart() {
+            isDownloading = false
+            isInstalling = true
+        }
+
+        override fun onError(message: String) {
+            isBootstrapping = false
+            isDownloading = false
+            isInstalling = false
+            bootstrapError = message
+        }
+    }
+
+    /** 用户切换安装方式时清空上一方式的中间状态，避免两种方式的进度/错误互相污染。 */
+    private fun changeInstallMode(mode: String) {
+        if (isBootstrapping || isDownloading || isInstalling) return
+        installMode = mode
+        bootstrapError = null
+        bootstrapComplete = false
+        if (mode != InstallModeLocal) {
+            localZipName = null
+            localZipState = null
+            pendingLocalZip = null
+        }
+    }
+
+    private fun pickLocalBootstrap() {
+        try {
+            // MIME 不做过窄限定：不同设备对 zip 的标注差异较大（application/zip、
+            // application/octet-stream、application/x-zip-compressed），限定过窄会选不到文件。
+            pickLocalZipLauncher.launch(arrayOf("*/*"))
+        } catch (t: Throwable) {
+            Log.w(TAG_PERM, "Failed to launch local bootstrap picker", t)
+            localZipState = "无法打开文件选择器"
+        }
+    }
+
+    /**
+     * 读取并校验用户选中的本地 bootstrap。
+     *
+     * 判定顺序：非 zip → 直接拒绝；官方 SHA-256 一致 → 放行；
+     * 结构合法但校验不一致 → 弹窗请用户确认来源可信，确认后才进入安装。
+     */
+    private fun onLocalZipPicked(uri: Uri) {
+        val name = resolveDisplayName(uri) ?: "bootstrap.zip"
+        try {
+            val bytes = contentResolver.openInputStream(uri)?.use { it.readBytes() }
+            if (bytes == null || bytes.isEmpty()) {
+                localZipName = name
+                localZipState = "无法读取所选文件"
+                pendingLocalZip = null
+                return
+            }
+            if (bytes.size > MAX_LOCAL_ZIP_BYTES) {
+                localZipName = name
+                localZipState = "文件过大（超过 ${MAX_LOCAL_ZIP_BYTES / 1024 / 1024}MB），请确认选择的是 bootstrap 包"
+                pendingLocalZip = null
+                return
+            }
+
+            localZipName = name
+            // 先把字节留下：无论走哪条分支，用户确认后都要用它直接安装。
+            pendingLocalZip = LocalBootstrap(name, bytes, shaMatches = false)
+
+            when {
+                !BootstrapDownloader.isZipMagic(bytes) -> {
+                    localZipState = "该文件不是有效的 bootstrap 包（zip 格式校验失败）"
+                    pendingLocalZip = null
+                }
+                BootstrapDownloader.hasExpectedSha256(bytes, BootstrapDownloader.getArchForAbi()) -> {
+                    localZipState = "已通过官方校验，可以开始安装"
+                    pendingLocalZip = LocalBootstrap(name, bytes, shaMatches = true)
+                }
+                else -> {
+                    // 非官方来源包：本地状态先提示待确认，同时弹窗要求确认来源可信。
+                    localZipState = "签名与官方不一致，待确认来源"
+                    untrustedSourcePrompt = UntrustedSourcePrompt(name, bytes)
+                }
+            }
+        } catch (t: Throwable) {
+            Log.w(TAG_PERM, "Failed to read local bootstrap", t)
+            localZipName = name
+            localZipState = "读取失败：${t.message ?: "未知错误"}"
+            pendingLocalZip = null
+        }
+    }
+
+    /** 用户在二次确认弹窗中选择继续：来源被认可，直接开始本地安装。 */
+    private fun confirmUntrustedSource() {
+        val prompt = untrustedSourcePrompt ?: return
+        untrustedSourcePrompt = null
+        pendingLocalZip = LocalBootstrap(prompt.name, prompt.bytes, shaMatches = true)
+        localZipState = "已确认来源可信，可以开始安装"
+    }
+
+    /** 打开 bootstrap 下载页，引导在线安装超时的用户手动取包后走「从本地安装」。 */
+    private fun openBootstrapDownloadPage() {
+        try {
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(BootstrapDownloader.DOWNLOAD_PAGE_URL)))
+        } catch (t: Throwable) {
+            Log.w(TAG_PERM, "No activity to open bootstrap download page", t)
+        }
+    }
+
+    /** 从 SAF Uri 取展示用文件名，取不到则返回 null（调用方给默认名）。 */
+    private fun resolveDisplayName(uri: Uri): String? {
+        return try {
+            contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)
+                ?.use { cursor ->
+                    val idx = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                    if (idx >= 0 && cursor.moveToFirst()) cursor.getString(idx) else null
+                }
+        } catch (t: Throwable) {
+            Log.w(TAG_PERM, "Failed to resolve display name for $uri", t)
+            null
+        }
     }
 
     private fun retryBootstrap() {
