@@ -3,6 +3,9 @@ package com.termux.app.vortex
 import android.content.Context
 import com.termux.shared.termux.TermuxConstants
 import java.io.File
+import java.nio.file.Files
+import java.nio.file.LinkOption
+import java.nio.file.StandardCopyOption
 
 /**
  * VorteX 沙箱核心管理器。
@@ -174,12 +177,13 @@ object VorteXSandbox {
     fun isSnapshotComplete(context: Context): Boolean = snapshotMarker(context).exists()
 
     /**
-     * 确保沙箱已就位：解压引导脚本、建立目录、并在快照缺失或残缺时重抓初始快照。
+     * 确保沙箱已就位：解压引导脚本、建立目录、并在快照缺失或残缺时重抓初始快照；
+     * 快照完整时则把**真实环境的新变化增量同步进快照**（见 [syncSnapshotFromReal]）。
      *
      * 幂等，且**可自愈**：半成品快照会被识别并重新抓取（而不是像旧实现那样
      * 把残缺状态当成完成，从此再也修复不了）。
      *
-     * ⚠️ 本方法含全量磁盘 IO（拷贝整个 $HOME），必须在后台线程调用。
+     * ⚠️ 本方法含磁盘 IO（残缺时拷贝整个 $HOME，完整时增量遍历比对），必须在后台线程调用。
      */
     fun ensureInitialized(context: Context) {
         getRootDir(context)
@@ -203,8 +207,149 @@ object VorteXSandbox {
                 snapshotHome.mkdirs()
             }
             takeSnapshot(context)
+        } else {
+            // 快照完整：真实环境此后新增/修改/删除的文件要同步进来，
+            // 否则用户在真实 $HOME 里加的文件永远进不了沙箱（快照只有在
+            // 残缺时才会重抓，「完整但过期」此前无人负责）。
+            syncSnapshotFromReal(context)
         }
         getRunHome(context).mkdirs()
+    }
+
+    // ------------------------------------------------------------------
+    // 快照与真实环境同步（真实 → 快照，单向）
+    // ------------------------------------------------------------------
+
+    /** rsync 探测结果缓存：路径；空串表示系统里没有 rsync，避免反复起进程。 */
+    @Volatile
+    private var rsyncPathCache: String? = null
+
+    private val snapshotSyncLock = Any()
+
+    private fun locateRsync(): String? {
+        rsyncPathCache?.let { return it.ifEmpty { null } }
+        val found = try {
+            val p = ProcessBuilder("sh", "-c", "command -v rsync 2>/dev/null")
+                .redirectErrorStream(true).start()
+            val out = p.inputStream.bufferedReader().use { it.readText() }.trim()
+            p.waitFor()
+            out.lineSequence().firstOrNull { it.isNotBlank() }
+        } catch (_: Throwable) {
+            null
+        }
+        rsyncPathCache = found.orEmpty()
+        return found
+    }
+
+    /**
+     * 把**真实用户环境**增量同步进最小快照（真实 → 快照，严格单向）。
+     *
+     * 解决的问题：快照只在缺失/残缺时才重抓，一旦「完整」就再也不更新——
+     * 用户在真实 `$HOME` 里新加的文件进不了快照，沙箱里永远看不到，
+     * 环境越用越「旧」。
+     *
+     * 规则：
+     *  - 每次进入沙箱（[ensureInitialized]）同步一次，之后会话从快照播种即得最新内容；
+     *  - **单向**：沙箱内改动写在 run 层、会话结束即丢，绝不回写真实环境；
+     *  - 口径与 [takeSnapshot] 一致：顶层 `storage` 不参与（内存储由 [takeStorageSnapshot] 单独管理），
+     *    快照完成标记不会被删除；
+     *  - 软链原样复制、**绝不跟随**（防止 `~/storage` 之类链接把整块内存储拖进来）；
+     *  - 优先用 rsync（若用户装了）：`-a --delete` 一并处理新增/更新/删除且保留软链；
+     *    没有 rsync 时用内置增量遍历兜底（逐文件按 size + mtime 判定）。
+     *
+     * 同步失败不影响既有快照——宁可继续用旧快照，也不留下半同步状态。
+     *
+     * ⚠️ 含遍历/拷贝 IO，必须在后台线程调用。
+     */
+    fun syncSnapshotFromReal(context: Context): Boolean {
+        val src = File(TermuxConstants.TERMUX_HOME_DIR_PATH)
+        val dst = getSnapshotHome(context)
+        if (!src.isDirectory || !snapshotMarker(context).exists()) return false
+
+        return synchronized(snapshotSyncLock) {
+            // 1) rsync 优先：排除顶层 storage 与完成标记；--delete 同步删除。
+            //    被 --exclude 的目标侧文件（marker）不会被 --delete 删掉。
+            val rsync = locateRsync()
+            if (rsync != null) {
+                val ok = runCatching {
+                    val cmd = "'$rsync' -a --delete " +
+                        "--exclude=/storage --exclude=/${SNAPSHOT_MARKER} " +
+                        "'${src.absolutePath}/' '${dst.absolutePath}/'"
+                    ProcessBuilder("sh", "-c", cmd).redirectErrorStream(true).start().waitFor() == 0
+                }.getOrDefault(false)
+                if (ok) return@synchronized true
+            }
+            // 2) 没有 rsync（Termux 默认不带）：内置增量兜底。
+            runCatching {
+                incrementalSync(src, dst)
+                true
+            }.getOrDefault(false)
+        }
+    }
+
+    /**
+     * 内置增量同步：真实 → 快照新增/更新，快照 → 删除真实中已不存在的条目。
+     * 逐条按「存在性 + size + mtime（容差 1s）」判定，只拷贝真正变化的部分。
+     */
+    private fun incrementalSync(srcRoot: File, dstRoot: File) {
+        // 遍历护栏：软链与顶层 storage 都不进入子树。
+        fun enterable(f: File, root: File): Boolean {
+            if (f == root) return true
+            if (Files.isSymbolicLink(f.toPath())) return false
+            return !(f.isDirectory && f.name == "storage" && f.parentFile?.path == root.path)
+        }
+
+        // 第一趟：真实 → 快照（新增 / 更新）
+        srcRoot.walkTopDown().onEnter { enterable(it, srcRoot) }.forEach { s ->
+            val rel = s.toRelativeString(srcRoot)
+            if (rel.isEmpty() || rel == SNAPSHOT_MARKER) return@forEach
+            val d = File(dstRoot, rel)
+            try {
+                val sp = s.toPath()
+                if (Files.isSymbolicLink(sp)) {
+                    if (!Files.exists(d.toPath(), LinkOption.NOFOLLOW_LINKS)) {
+                        d.parentFile?.mkdirs()
+                        Files.createSymbolicLink(d.toPath(), Files.readSymbolicLink(sp))
+                    }
+                    return@forEach
+                }
+                if (s.isDirectory) {
+                    if (!d.isDirectory) {
+                        d.deleteRecursively()
+                        d.mkdirs()
+                    }
+                    return@forEach
+                }
+                if (!s.isFile) return@forEach
+                val dp = d.toPath()
+                val stale = !Files.isRegularFile(dp) ||
+                    Files.size(dp) != s.length() ||
+                    Math.abs(Files.getLastModifiedTime(dp).toMillis() - s.lastModified()) > 1000L
+                if (stale) {
+                    d.parentFile?.mkdirs()
+                    Files.copy(
+                        sp, dp,
+                        StandardCopyOption.REPLACE_EXISTING,
+                        StandardCopyOption.COPY_ATTRIBUTES
+                    )
+                }
+            } catch (_: Throwable) {
+                // 单条失败不拖垮整体；下一轮进入沙箱会重试
+            }
+        }
+
+        // 第二趟：快照 → 删除真实中已不存在的（storage 与完成标记除外）
+        dstRoot.walkTopDown().onEnter { enterable(it, dstRoot) }.forEach { d ->
+            val rel = d.toRelativeString(dstRoot)
+            if (rel.isEmpty() || rel == SNAPSHOT_MARKER) return@forEach
+            val s = File(srcRoot, rel)
+            val stillThere = runCatching {
+                Files.exists(s.toPath(), LinkOption.NOFOLLOW_LINKS)
+            }.getOrDefault(true)
+            if (!stillThere) {
+                runCatching { d.deleteRecursively() }
+            }
+        }
     }
 
     /**
