@@ -968,15 +968,46 @@ fun SettingsScreen(
             keywords = listOf("沙箱", "sandbox", "vortex", "隔离", "虚拟root", "测试环境", "演练"),
             render = {
                 var sandboxEnabled by remember { mutableStateOf(VorteXSandbox.isEnabled(context)) }
+                // null=空闲；true=正在开启（准备环境）；false=正在关闭
+                var sandboxBusy by remember { mutableStateOf<Boolean?>(null) }
                 SwitchPreference(
                     title = context.getString(R.string.vortex_sandbox_title),
                     summary = context.getString(R.string.vortex_sandbox_summary),
                     checked = sandboxEnabled,
+                    enabled = sandboxBusy == null,
                     onCheckedChange = {
-                        sandboxEnabled = it
-                        VorteXSandbox.setEnabled(context, it)
+                        if (sandboxBusy == null) {
+                            sandboxEnabled = it
+                            sandboxBusy = it
+                            VorteXSandbox.setEnabledAsync(context, it) {
+                                Handler(Looper.getMainLooper()).post {
+                                    sandboxBusy = null
+                                    VorteXSandbox.consumeSnapshotPartialNotice(context)
+                                        ?.let { msg -> showSnackbar(msg, true) }
+                                }
+                            }
+                        }
                     },
                     startAction = { SettingIcon(painterResource(R.drawable.ic_sandbox), contentDescription = context.getString(R.string.vortex_sandbox_title)) }
+                )
+                OverlayDialog(
+                    title = context.getString(R.string.vortex_sandbox_title),
+                    show = sandboxBusy != null,
+                    onDismissRequest = {},
+                    content = {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.padding(end = 16.dp),
+                                strokeWidth = 2.dp
+                            )
+                            Text(
+                                text = if (sandboxBusy == true) "正在准备环境" else "正在关闭沙盒"
+                            )
+                        }
+                    }
                 )
             }),
         SearchableSetting(sec_security, context.getString(R.string.vortex_sandbox_agent_title),
@@ -1548,6 +1579,8 @@ fun SettingsScreen(
                         var sandboxEnabled by remember {
                             mutableStateOf(VorteXSandbox.isEnabled(context))
                         }
+                        // null=空闲；true=正在开启（准备环境）；false=正在关闭
+                        var sandboxBusy by remember { mutableStateOf<Boolean?>(null) }
                         SwitchPreference(
                             title = context.getString(R.string.vortex_sandbox_title),
                             summary = if (sandboxEnabled)
@@ -1556,15 +1589,44 @@ fun SettingsScreen(
                             else
                                 context.getString(R.string.vortex_sandbox_summary),
                             checked = sandboxEnabled,
+                            enabled = sandboxBusy == null,
                             onCheckedChange = {
-                                sandboxEnabled = it
-                                VorteXSandbox.setEnabled(context, it)
+                                if (sandboxBusy == null) {
+                                    sandboxEnabled = it
+                                    sandboxBusy = it
+                                    VorteXSandbox.setEnabledAsync(context, it) {
+                                        Handler(Looper.getMainLooper()).post {
+                                            sandboxBusy = null
+                                            VorteXSandbox.consumeSnapshotPartialNotice(context)
+                                                ?.let { msg -> showSnackbar(msg, true) }
+                                        }
+                                    }
+                                }
                             },
                             startAction = {
                                 SettingIcon(
                                     painterResource(R.drawable.ic_sandbox),
                                     contentDescription = context.getString(R.string.vortex_sandbox_title)
                                 )
+                            }
+                        )
+                        OverlayDialog(
+                            title = context.getString(R.string.vortex_sandbox_title),
+                            show = sandboxBusy != null,
+                            onDismissRequest = {},
+                            content = {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.padding(end = 16.dp),
+                                        strokeWidth = 2.dp
+                                    )
+                                    Text(
+                                        text = if (sandboxBusy == true) "正在准备环境" else "正在关闭沙盒"
+                                    )
+                                }
                             }
                         )
                         var sandboxAgentAuth by remember {

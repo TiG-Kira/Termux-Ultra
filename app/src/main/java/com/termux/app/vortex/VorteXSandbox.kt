@@ -80,9 +80,33 @@ object VorteXSandbox {
      * 重活交给后台线程。开关瞬间生效与否无关紧要：进入沙箱时脚本还会再校验一次。
      */
     fun setEnabled(context: Context, enabled: Boolean) {
+        setEnabledAsync(context, enabled)
+    }
+
+    /**
+     * 异步开启/关闭总开关：开关状态立即落盘（UI 立刻翻转），真正耗时的初始化 /
+     * 清理放到后台线程执行，完成后回调 [onDone]（**可能在任意线程**，调用方需自行切主线程）。
+     *
+     * 供设置页开关使用——配合弹窗转圈提示，既不阻塞 UI 主线程，也不会让用户
+     * 以为「点了没反应」。
+     */
+    fun setEnabledAsync(context: Context, enabled: Boolean, onDone: (() -> Unit)? = null) {
         VorteXSandboxPrefs.setEnabled(context, enabled)
+        val appContext = context.applicationContext
+        Thread({
+            try {
+                applyEnabled(appContext, enabled)
+            } catch (_: Throwable) {
+            } finally {
+                onDone?.invoke()
+            }
+        }, "vortex-sandbox-toggle").apply { isDaemon = true }.start()
+    }
+
+    /** 开关生效的实体动作：开启走后台初始化，关闭做状态回收与空间清理。⚠️ 含磁盘 IO。 */
+    private fun applyEnabled(context: Context, enabled: Boolean) {
         if (enabled) {
-            ensureInitializedAsync(context)
+            ensureInitialized(context)
         } else {
             // 总开关关闭后，Agent / 插件均不可再使用沙箱。
             VorteXSandboxPrefs.setAgentAuthorized(context, false)
@@ -234,7 +258,9 @@ object VorteXSandbox {
         // 先清掉旧标记：本次拷贝成功前，快照一律视为不可用。
         try { marker.delete() } catch (_: Throwable) {}
 
-        val ok = try {
+        var ok = false
+        val errLog = File(getRootDir(context), ".vortex_snapshot_err.log")
+        try {
             // 用 tar 管道而非 cp -a，目的有两个：
             //
             // 1) **显式排除 storage**。Termux 的 $HOME/storage 是指向
@@ -243,8 +269,40 @@ object VorteXSandbox {
             //    环境对软链的处理不一致（部分 Android 版本 / FUSE 层），就可能穿透。
             //    这里从源侧就把它排除掉，不把正确性押在软链语义上。
             // 2) 退出码可靠反映成功与否，供上面写完成标记用。
-            val cmd = "tar -C '$src' --exclude=./storage -cf - . 2>/dev/null | tar -C '$dst' -xf - 2>/dev/null"
-            Runtime.getRuntime().exec(arrayOf("sh", "-c", cmd)).waitFor() == 0
+            //
+            // stderr 落到 errLog 而不是丢弃：部分文件复制失败（权限、坏扇区、
+            // 被占用）不会让整条管道失败，靠日志才能揪出是哪些文件，进而做占位。
+            try { errLog.delete() } catch (_: Throwable) {}
+            val cmd = "tar -C '$src' --exclude=./storage -cf - . 2>'${errLog.absolutePath}'" +
+                " | tar -C '$dst' -xf - 2>>'${errLog.absolutePath}'"
+            ok = try {
+                Runtime.getRuntime().exec(arrayOf("sh", "-c", cmd)).waitFor() == 0
+            } catch (_: Throwable) {
+                false
+            }
+
+            // ---- 部分失败：解析失败条目并用空占位文件补上（「模拟文件」办法） ----
+            val errText = try {
+                if (errLog.exists()) errLog.readText() else ""
+            } catch (_: Throwable) { "" }
+            val failed = parseSnapshotFailures(errText)
+            if (failed.isNotEmpty()) {
+                val placed = placeholderizeSnapshotFailures(src, dst, failed)
+                // 占位后快照仍可用（哪怕整体退出码非 0），照常落完成标记，
+                // 否则会陷入「每次开启都重抓、每次都失败」的死循环。
+                val usable = File(dst).list()?.isNotEmpty() == true
+                if (usable) ok = true
+                if (placed.isNotEmpty()) {
+                    val sample = placed.take(5).joinToString("、")
+                    val msg = "最小快照有 ${placed.size} 个文件复制失败，" +
+                        "已在沙箱内改用空占位文件指向（内容为空，仅供路径存在）：" +
+                        sample + if (placed.size > 5) " 等" else ""
+                    try {
+                        File(getRootDir(context), SNAPSHOT_PARTIAL_FILE).writeText(msg)
+                    } catch (_: Throwable) {}
+                    VorteXSandboxNotice.post(msg)
+                }
+            }
         } catch (_: Throwable) {
             // 兜底也必须排除 storage：copyRecursively 会**跟随符号链接**，
             // 直接把 /storage/emulated/0 的几十 GB 拖进快照，且这还是在主线程上。
@@ -262,11 +320,82 @@ object VorteXSandbox {
                 true
             } catch (_: Throwable) {
                 false
-            }
+            }.let { ok = it }
+        } finally {
+            try { errLog.delete() } catch (_: Throwable) {}
         }
         takeStorageSnapshot(context)
         if (ok) {
             try { marker.createNewFile() } catch (_: Throwable) {}
+        }
+    }
+
+    /** 快照部分失败的提示哨兵文件名（由 UI 侧消费后删除）。 */
+    private const val SNAPSHOT_PARTIAL_FILE = ".vortex_snapshot_partial"
+
+    /**
+     * 从 tar 的 stderr 中解析出复制失败的相对路径。
+     *
+     * 兼容 GNU tar（`tar: ./a/b: Cannot stat: ...`）与 busybox/toybox tar
+     * （`tar: can't open './a/b'`）两种格式：只要行内含 `./xxx` 形态的 token 即取。
+     */
+    private fun parseSnapshotFailures(logText: String): List<String> {
+        if (logText.isBlank()) return emptyList()
+        val out = LinkedHashSet<String>()
+        val re = Regex("['\"]?(\\./[^\\s:'\"\\)]+)['\"]?")
+        for (line in logText.lineSequence()) {
+            if (line.isBlank() || "Removing leading" in line) continue
+            val m = re.find(line) ?: continue
+            val rel = m.groupValues[1].removePrefix("./").trimEnd('/')
+            if (rel.isEmpty()) continue
+            out.add(rel)
+        }
+        return out.toList()
+    }
+
+    /**
+     * 给复制失败的条目建**空占位**：目录补成空目录，文件补成 0 字节空文件。
+     *
+     * 目的：让沙箱内的路径始终存在（脚本 `source` / `test -f` 不再报「文件不存在」），
+     * 而失败本身通过提示告知用户——比「路径凭空消失」温和得多，也不会误导成
+     * 「文件本来就没有」。
+     *
+     * @return 实际成功建出占位的条目
+     */
+    private fun placeholderizeSnapshotFailures(srcRoot: String, dstRoot: String, paths: List<String>): List<String> {
+        val placed = mutableListOf<String>()
+        for (rel in paths) {
+            try {
+                val dstF = File(dstRoot, rel)
+                if (dstF.exists()) continue
+                val srcF = File(srcRoot, rel)
+                if (srcF.isDirectory) {
+                    dstF.mkdirs()
+                } else {
+                    dstF.parentFile?.mkdirs()
+                    dstF.createNewFile()
+                }
+                if (dstF.exists()) placed.add(rel)
+            } catch (_: Throwable) {
+            }
+        }
+        return placed
+    }
+
+    /**
+     * 取走「快照部分失败」提示并删除哨兵（一次性）。
+     *
+     * @return 提示文本；无待提示内容时返回 null
+     */
+    fun consumeSnapshotPartialNotice(context: Context): String? {
+        val f = File(getRootDir(context), SNAPSHOT_PARTIAL_FILE)
+        if (!f.exists()) return null
+        return try {
+            val text = f.readText().trim()
+            f.delete()
+            text.ifEmpty { null }
+        } catch (_: Throwable) {
+            null
         }
     }
 
@@ -529,6 +658,8 @@ object VorteXSandbox {
      * 读完即删，确保同一条告警只提示一次。
      */
     fun consumeStorageNotice(context: Context) {
+        // 快照部分失败的提示（抓快照时写下的哨兵）一并投递，两条互不干扰。
+        consumeSnapshotPartialNotice(context)?.let { VorteXSandboxNotice.post(it) }
         val f = File(getRootDir(context), NOTICE_FILE)
         if (!f.exists()) return
         try {

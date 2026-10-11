@@ -7,7 +7,9 @@
 #      **包括使用绝对路径的删除操作**——这是早期仅重定向 $HOME 方案最大的漏洞。
 #   2. 沙箱内保留用户完整的 Termux 环境：直接复用真实 $PREFIX（usr/bin、lib、pkg 全部可用），
 #      不复制、不重装，因此 $PREFIX 体积不翻倍。
-#   3. 提供虚拟 ROOT：proot -0 让所有进程以 uid 0 视角运行。
+#   3. 提供虚拟 ROOT：proot -0 让所有进程以 uid 0 视角运行，
+#      并伪造 /proc/self（SELinux 上下文 u:r:su:s0、status Uid=0）与 su/sudo 模拟器，
+#      让脚本确信运行在真实 root 环境中，而特权命令只在沙箱容器内模拟执行。
 #   4. 会话退出后自动重置回最小化初始快照。
 #
 # 实现方式（与 QEMU 的 proot 集成同源思路，见 QemuVmConfig.generateContainerScript）：
@@ -45,6 +47,16 @@ RUN_PREFIX="$VORTEX_ROOT/run/usr"
 RUN_STORAGE="$VORTEX_ROOT/run/storage"
 SNAP_STORAGE="$VORTEX_ROOT/snapshot/storage"
 ISOLATE_STORAGE="${VORTEX_ISOLATE_STORAGE:-1}"
+
+# 影子 /proc（虚拟 ROOT 身份伪造）与 su/sudo 模拟脚本所在目录。
+RUN_PROC="$VORTEX_ROOT/run/proc"
+TOOLS_DIR="$VORTEX_ROOT/run/tools"
+PROCWATCH_PIDFILE="$VORTEX_ROOT/.vortex_procwatch_pid"
+# 为「接下来 N 个 PID」预留占位视图，消除新进程刚 fork、影子目录尚未建好的竞态。
+PROCWATCH_PENDING_K=16
+# 真实 /proc 在沙箱内的进程别名（影子条目经它软链回真实 /proc）。
+# 放在 /dev 下：-b /dev 的绑定前缀更短，proot 取最长匹配，此处不会被旁路。
+REAL_PROC_ALIAS="/dev/.vortex_realproc"
 
 REAL_PREFIX="${PREFIX:-/data/data/com.termux/files/usr}"
 REAL_STORAGE="/storage/emulated/0"
@@ -114,7 +126,10 @@ reset_run() {
     # 沙箱只是**临时**占用空间：会话一结束就把影子层全部清掉，
     # 包括约 95MB 的 $PREFIX 拷贝——否则用户会平白看到近百 MB 不明占用。
     #
-    # 连 run/ 这一层空壳目录一并删掉：只删子项会留下几 KB 的空目录，
+    # 先停影子 /proc 的 watcher，再删 run：否则 watcher 可能在删除途中
+    # 又把 PID 目录补回来，留下删不干净的残余。
+    stop_procwatch
+    # run/ 这一层空壳目录也一并删掉：只删子项会留下几 KB 的空目录，
     # 在「沙箱是否还在占用空间」这个问题上给出模棱两可的答案。
     rm -rf "$VORTEX_ROOT/run" 2>/dev/null
     # 通知标记也一并清掉：下次进沙箱是全新会话，
@@ -158,6 +173,318 @@ notice_storage_blocked() {
     : > "$VORTEX_ROOT/.vortex_storage_notified" 2>/dev/null || true
 }
 
+# ===========================================================================
+# 虚拟 ROOT 身份伪造：影子 /proc + su/sudo 模拟
+# ===========================================================================
+# 目标：让沙箱内的脚本确信自己运行在**真实的 Android root 设备**上：
+#   1. cat /proc/self/attr/current   → u:r:su:s0（root shell 的 SELinux 上下文）
+#   2. /proc/self/status 的 Uid/Gid  → 0
+#   3. su / sudo                      → 只在 proot 容器内模拟执行，
+#                                       绝不触达真实特权命令（不逃逸），
+#                                       原样返回被调命令的输出与退出码。
+#
+# 原理：proot 的路径解析逐组件进行，一旦某前缀命中绑定，剩余组件直接落到
+# 绑定目标上（不再经过 /proc/self → /proc/<pid> 的扩展改写）。因此整体把
+# /proc 绑到影子目录 $RUN_PROC 后：
+#   - 影子内预置真实目录 self / thread-self，attr/current、status 在其中被伪造，
+#     其余条目软链到真实 /proc 的进程别名 $REAL_PROC_ALIAS（内容动态、真实）；
+#   - 显式 /proc/<pid> 读取（ps、cat /proc/$$）需要影子里存在对应 PID 目录：
+#     启动时全量建立，随后由后台 watcher 持续补全新 PID、回收死 PID；
+#     为消除「新进程刚 fork、影子目录还没建好」的竞态，watcher 还会为
+#     接下来 PROCWATCH_PENDING_K 个 PID 预留结构完整的占位视图；
+#   - 非本应用 UID 的进程（老 Android 无 hidepid 时可见）保持真实软链，
+#     避免把别人的进程也伪装成 root 而露馅。
+#
+# 降级：影子 /proc 建不起来时退回真实 -b /proc（身份伪造失效但隔离不受影响）。
+
+# 把 status 中的身份字段归零，其余字段保持真实（UID/GID/Groups → root）。
+fake_status_file() {
+    # $1 = 真实 status 路径；$2 = 输出路径
+    [ -r "$1" ] || return 1
+    fs_tmp="$2.tmp.$$"
+    : > "$fs_tmp" || return 1
+    while IFS= read -r fs_line || [ -n "$fs_line" ]; do
+        case "$fs_line" in
+            Uid:*)    printf 'Uid:\t0\t0\t0\t0\n' ;;
+            Gid:*)    printf 'Gid:\t0\t0\t0\t0\n' ;;
+            Groups:*) printf 'Groups:\t0\n' ;;
+            *)        printf '%s\n' "$fs_line" ;;
+        esac
+    done < "$1" >> "$fs_tmp" || { rm -f "$fs_tmp"; return 1; }
+    mv -f "$fs_tmp" "$2" || { rm -f "$fs_tmp"; return 1; }
+    return 0
+}
+
+# 伪造 SELinux 上下文：current = u:r:su:s0（root shell），其余文件留空可读写。
+write_fake_attr() {
+    # $1 = 影子 attr 目录
+    mkdir -p "$1" 2>/dev/null || return 1
+    printf 'u:r:su:s0' > "$1/current" || return 1
+    for wa_f in exec fscreate keycreate prev sockcreate lsm; do
+        [ -e "$1/$wa_f" ] || : > "$1/$wa_f" 2>/dev/null
+    done
+    return 0
+}
+
+# 构造单个 PID（或 self）的影子视图：
+#   - attr/current 与 status 伪造为 root；
+#   - cwd/exe/root 这类「路径字符串」型软链复制真实目标串（readlink 输出正常）；
+#   - 其余条目软链到 $REAL_PROC_ALIAS/<pid>/<name>，内容按读取者动态解析。
+shadow_pid_view() {
+    # $1 = 影子目录；$2 = 真实路径（/proc/<pid> 或 /proc/self）
+    sv_d="$1"
+    sv_src="$2"
+    sv_suffix="${sv_src#/proc}"
+    mkdir -p "$sv_d" 2>/dev/null || return 1
+    write_fake_attr "$sv_d/attr" || return 1
+    fake_status_file "$sv_src/status" "$sv_d/status" || rm -f "$sv_d/status"
+    # 路径型软链：复制真实目标串，readlink 出来是正常路径。
+    for sv_n in cwd exe root; do
+        [ -e "$sv_src/$sv_n" ] || [ -L "$sv_src/$sv_n" ] || continue
+        sv_t=$(readlink "$sv_src/$sv_n" 2>/dev/null)
+        [ -n "$sv_t" ] && ln -sfn "$sv_t" "$sv_d/$sv_n" 2>/dev/null
+    done
+    for sv_e in "$sv_src"/*; do
+        [ -e "$sv_e" ] || [ -L "$sv_e" ] || continue
+        sv_n="${sv_e##*/}"
+        case "$sv_n" in attr|status|cwd|exe|root) continue ;; esac
+        ln -sfn "$REAL_PROC_ALIAS$sv_suffix/$sv_n" "$sv_d/$sv_n" 2>/dev/null
+    done
+    return 0
+}
+
+# 为「尚未存在」的 PID 预留占位视图：结构完整（attr/status/软链齐全），
+# 进程真正 fork 出来时目录已在，watcher 随后再用真实数据精化。
+# 占位的 stat/cmdline 等软链指向尚不存在的 PID → 读取即 ENOENT，
+# ps 之类工具会自动跳过，不会把占位当成幽灵进程列出来。
+make_pending_view() {
+    # $1 = 影子目录；$2 = 预留的 PID
+    mv_d="$1"
+    mv_pid="$2"
+    mkdir -p "$mv_d/attr" 2>/dev/null || return 1
+    write_fake_attr "$mv_d/attr" || return 1
+    fake_status_file /proc/self/status "$mv_d/status" 2>/dev/null || rm -f "$mv_d/status"
+    for mv_e in /proc/self/*; do
+        [ -e "$mv_e" ] || [ -L "$mv_e" ] || continue
+        mv_n="${mv_e##*/}"
+        case "$mv_n" in attr|status) continue ;; esac
+        ln -sfn "$REAL_PROC_ALIAS/$mv_pid/$mv_n" "$mv_d/$mv_n" 2>/dev/null
+    done
+    return 0
+}
+
+# 从 status 中读出真实 Uid（shell 内建实现，零外部依赖）。
+read_real_uid() {
+    while IFS= read -r ru_line; do
+        case "$ru_line" in
+            Uid:*) set -- $ru_line; printf '%s' "$2"; return 0 ;;
+        esac
+    done < "$1" 2>/dev/null
+    return 1
+}
+
+# 预留接下来 K 个 PID 的占位视图。
+add_pending_views() {
+    # $1 = 当前最大 PID
+    ap_max="$1"
+    ap_pm=$(cat /proc/sys/kernel/pid_max 2>/dev/null)
+    case "$ap_pm" in ''|*[!0-9]*) ap_pm=32768 ;; esac
+    ap_n=0
+    while [ "$ap_n" -lt "$PROCWATCH_PENDING_K" ] && [ "$ap_max" -lt "$ap_pm" ]; do
+        ap_max=$((ap_max + 1))
+        ap_n=$((ap_n + 1))
+        ap_d="$RUN_PROC/$ap_max"
+        [ -e "$ap_d" ] || [ -L "$ap_d" ] && continue
+        make_pending_view "$ap_d" "$ap_max" || return 1
+        sc_pending="$sc_pending $ap_max "
+    done
+    return 0
+}
+
+# 扫描一轮：补建缺失 PID、精化占位、回收死 PID、为下一批 PID 预留占位。
+# （sc_pending 为跨轮持久的占位 PID 清单，watcher 子进程内维护）
+sc_pending=""
+procwatch_scan() {
+    sc_max=0
+    for sc_e in /proc/[0-9]*; do
+        [ -d "$sc_e" ] || continue
+        sc_pid="${sc_e##*/}"
+        case "$sc_pid" in *[!0-9]*) continue ;; esac
+        [ "$sc_pid" -gt "$sc_max" ] 2>/dev/null && sc_max=$sc_pid
+        sc_d="$RUN_PROC/$sc_pid"
+
+        if [ -d "$sc_d" ]; then
+            # 已有视图：若它是占位且真实进程已出现 → 用真实数据精化。
+            case " $sc_pending " in
+                *" $sc_pid "*)
+                    sc_uid=$(read_real_uid "$sc_e/status")
+                    if [ "$sc_uid" = "$SC_OWN_UID" ]; then
+                        shadow_pid_view "$sc_d" "$sc_e"
+                    else
+                        rm -rf "$sc_d" 2>/dev/null
+                        ln -sfn "$REAL_PROC_ALIAS/$sc_pid" "$sc_d" 2>/dev/null
+                    fi
+                    sc_pending=$(printf '%s' "$sc_pending" | sed "s/ $sc_pid / /g")
+                    ;;
+            esac
+            continue
+        fi
+        if [ -L "$sc_d" ]; then
+            continue
+        fi
+
+        # 影子中缺失 → 新进程：本应用 UID 的伪造为 root 视图，其余保持真实软链。
+        sc_uid=$(read_real_uid "$sc_e/status")
+        if [ "$sc_uid" = "$SC_OWN_UID" ]; then
+            shadow_pid_view "$sc_d" "$sc_e"
+        else
+            ln -sfn "$REAL_PROC_ALIAS/$sc_pid" "$sc_d" 2>/dev/null
+        fi
+    done
+
+    # 回收死 PID 的影子目录（占位的等它真正出现，不清）。
+    for sc_d in "$RUN_PROC"/[0-9]*; do
+        [ -e "$sc_d" ] || [ -L "$sc_d" ] || continue
+        sc_n="${sc_d##*/}"
+        [ -d "/proc/$sc_n" ] && continue
+        case " $sc_pending " in *" $sc_n "*) continue ;; esac
+        rm -rf "$sc_d" 2>/dev/null
+    done
+
+    add_pending_views "$sc_max"
+    return 0
+}
+
+# 后台 watcher：持续 procwatch_scan，维持影子 /proc 与真实进程表同步。
+procwatch_loop() {
+    while :; do
+        [ -f "$PROCWATCH_PIDFILE" ] || exit 0
+        [ -d "$RUN_PROC" ] || exit 0
+        procwatch_scan
+        sleep 0.2
+    done
+}
+
+start_procwatch() {
+    if [ -f "$PROCWATCH_PIDFILE" ]; then
+        pw_old=$(cat "$PROCWATCH_PIDFILE" 2>/dev/null)
+        [ -n "$pw_old" ] && kill "$pw_old" 2>/dev/null
+        rm -f "$PROCWATCH_PIDFILE"
+    fi
+    : > "$PROCWATCH_PIDFILE" 2>/dev/null || return 1
+    ( procwatch_loop ) >/dev/null 2>&1 &
+    echo $! > "$PROCWATCH_PIDFILE" 2>/dev/null
+    return 0
+}
+
+stop_procwatch() {
+    if [ -f "$PROCWATCH_PIDFILE" ]; then
+        pw_old=$(cat "$PROCWATCH_PIDFILE" 2>/dev/null)
+        [ -n "$pw_old" ] && kill "$pw_old" 2>/dev/null
+        rm -f "$PROCWATCH_PIDFILE"
+    fi
+    return 0
+}
+
+# 建立影子 /proc 并启动 watcher；任何一步失败返回非 0（调用方退回真实 /proc）。
+seed_shadow_proc() {
+    mkdir -p "$RUN_PROC" 2>/dev/null || return 1
+    SC_OWN_UID=$(read_real_uid /proc/self/status) || SC_OWN_UID=0
+    shadow_pid_view "$RUN_PROC/self" "/proc/self" || return 1
+    shadow_pid_view "$RUN_PROC/thread-self" "/proc/self" || return 1
+    sc_pending=""
+    procwatch_scan || return 1
+    start_procwatch || return 1
+    return 0
+}
+
+# ---------------------------------------------------------------------------
+# su / sudo 模拟（不逃逸、不真实执行特权命令）
+# ---------------------------------------------------------------------------
+# proot 模式：命令在容器内执行（伤害被影子层吸收），原样透传输出与退出码。
+# 轻量降级模式（无 proot、无容器可隔离）：只模拟、不执行，返回成功值。
+#
+# 覆盖两处入口，双保险：
+#   1. PATH：把模拟脚本种进影子 $PREFIX/bin（沙箱 PATH 首段）；
+#   2. 绝对路径：绑定覆盖 /system/bin|/system/xbin|/sbin 下的 su、sudo，
+#      即便脚本绕过 PATH 用绝对路径调用，拿到的也是模拟器。
+plant_su_mocks() {
+    mkdir -p "$TOOLS_DIR" 2>/dev/null || return 1
+
+    cat > "$TOOLS_DIR/su" <<'VORTEX_EOF'
+#!/system/bin/sh
+# VorteX 沙箱 su 模拟器：只在沙箱容器内执行，绝不调用真实 su。
+vc_cmd=""
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -c) vc_cmd="$2"; shift 2 ;;
+        -*) shift ;;
+        *) break ;;
+    esac
+done
+if [ -n "$vc_cmd" ]; then
+    exec "${SHELL:-/system/bin/sh}" -c "$vc_cmd"
+fi
+# `su <user> [cmd...]`：第一个参数若不是可执行命令，则视为用户名忽略。
+if [ $# -gt 0 ] && ! command -v "$1" >/dev/null 2>&1; then
+    shift
+fi
+# 这里**不能用 exec "$@"**：exec 只做文件执行（查 PATH，不认内建命令），
+# `su -c` 常见用法里的 echo / cd 等内建会变成 "not found"。
+# 直接执行则走正常的命令查找顺序（函数 → 内建 → PATH），退出码原样透传。
+if [ $# -gt 0 ]; then
+    "$@"
+    exit $?
+fi
+exec "${SHELL:-/system/bin/sh}" -i
+VORTEX_EOF
+
+    cat > "$TOOLS_DIR/sudo" <<'VORTEX_EOF'
+#!/system/bin/sh
+# VorteX 沙箱 sudo 模拟器：只在沙箱容器内执行，绝不调用真实 sudo。
+# 选项解析后，被提权的命令在沙箱容器内运行，输出与退出码原样返回。
+vc_login=0
+vc_shell=0
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -u|-g) shift 2 ;;              # 目标用户被忽略：沙箱内已是虚拟 ROOT
+        -i) vc_login=1; shift ;;
+        -s) vc_shell=1; shift ;;
+        -V|--version)
+            echo "VorteX sandbox sudo (simulated) 1.0"
+            exit 0 ;;
+        -h|--help)
+            echo "usage: sudo [-u user] [-g group] [-i|-s] command [args]"
+            exit 0 ;;
+        -n|-E|-H|-k|-K|-b|-S) shift ;; # 常用开关：静默忽略
+        --) shift; break ;;
+        -*) shift ;;
+        *) break ;;
+    esac
+done
+if [ $# -eq 0 ]; then
+    if [ "$vc_login" = 1 ] || [ "$vc_shell" = 1 ]; then
+        exec "${SHELL:-/system/bin/sh}" -i
+    fi
+    exit 0
+fi
+# 不用 exec "$@"：exec 不认内建命令（echo 等会 not found），
+# 直接执行才能得到与真实 sudo 一致的输出与退出码。
+"$@"
+exit $?
+VORTEX_EOF
+
+    chmod 0755 "$TOOLS_DIR/su" "$TOOLS_DIR/sudo" 2>/dev/null || return 1
+
+    # 种进影子 $PREFIX/bin：沙箱 PATH 首段命中（覆盖可能存在的真实拷贝）。
+    if [ -d "$RUN_PREFIX/bin" ]; then
+        cp -f "$TOOLS_DIR/su" "$RUN_PREFIX/bin/su" 2>/dev/null
+        cp -f "$TOOLS_DIR/sudo" "$RUN_PREFIX/bin/sudo" 2>/dev/null
+        chmod 0755 "$RUN_PREFIX/bin/su" "$RUN_PREFIX/bin/sudo" 2>/dev/null
+    fi
+    return 0
+}
+
 # 构造 proot 的 bind 参数数组。真实路径一律换成「宿主可见」的真实值，
 # proot -b 不会跟随符号链接，所以 $HOME/storage 的真身要单独 bind。
 # 构造 proot 的 bind 参数（POSIX 兼容：不能使用 bash 数组，
@@ -170,7 +497,16 @@ build_proot_binds() {
     #
     # /sdcard 不单独 bind：现代 Android 上它只是 /storage/emulated/0 的符号链接，
     # 且 Termux 沙箱上下文对其无权限，bind 反而会触发 proot warning。
-    PROOT_BINDS_STR="-b /dev -b /proc -b /sys -b /system -b /apex"
+    PROOT_BINDS_STR="-b /dev -b /sys -b /system -b /apex"
+
+    # 影子 /proc（虚拟 ROOT 身份伪造）：attr/current → u:r:su:s0、status Uid=0。
+    # 建不起来则退回真实 -b /proc（身份伪造失效，但隔离不受影响）。
+    if seed_shadow_proc; then
+        PROOT_BINDS_STR="$PROOT_BINDS_STR -b $RUN_PROC:/proc -b /proc:$REAL_PROC_ALIAS"
+    else
+        echo "[VorteX Sandbox] 警告：影子 /proc 不可用，/proc/self 身份伪造已停用。" >&2
+        PROOT_BINDS_STR="$PROOT_BINDS_STR -b /proc"
+    fi
 
     # 影子 HOME：沙箱内所有 /data/data/com.termux/files/home 路径都落到这里
     PROOT_BINDS_STR="$PROOT_BINDS_STR -b $RUN:$REAL_HOME"
@@ -197,6 +533,15 @@ build_proot_binds() {
     if [ "$ISOLATE_STORAGE" = "1" ]; then
         seed_storage
         PROOT_BINDS_STR="$PROOT_BINDS_STR -b $RUN_STORAGE:$REAL_STORAGE"
+    fi
+
+    # su / sudo 模拟：绝对路径入口一律绑定到模拟器（真身绝不进入沙箱），
+    # PATH 入口由 plant_su_mocks 种进影子 $PREFIX/bin（上面 seed_prefix 之后）。
+    if plant_su_mocks; then
+        PROOT_BINDS_STR="$PROOT_BINDS_STR -b $TOOLS_DIR/su:/system/bin/su -b $TOOLS_DIR/su:/system/xbin/su -b $TOOLS_DIR/su:/sbin/su"
+        PROOT_BINDS_STR="$PROOT_BINDS_STR -b $TOOLS_DIR/sudo:/system/bin/sudo -b $TOOLS_DIR/sudo:/system/xbin/sudo -b $TOOLS_DIR/sudo:/sbin/sudo"
+    else
+        echo "[VorteX Sandbox] 警告：su/sudo 模拟器生成失败，沙箱内特权命令将不可用。" >&2
     fi
 }
 
@@ -249,6 +594,13 @@ run_in_proot() {
     # 环境在宿主侧导出后由 proot 继承。
     # 不用 `env -i`：精简 bootstrap 里可能没有 coreutils 的 env，
     # 且 proot 对 `-b /data` + `-b $PREFIX` 叠加时的可执行路径解析不稳。
+    #
+    # 先记下宿主 PATH 并定位 proot：下面会把 PATH 收窄成沙箱内的样子
+    # （$PREFIX/bin:/system/bin），proot 结束后必须恢复，否则脚本退出时的
+    # reset trap（rm、stop_procwatch）会因找不到命令而清不掉影子空间。
+    _host_path="$PATH"
+    _proot_bin=$(command -v proot 2>/dev/null)
+    [ -n "$_proot_bin" ] || _proot_bin=proot
     HOME="$REAL_HOME"
     PREFIX="$REAL_PREFIX"
     PATH="$REAL_PREFIX/bin:/system/bin"
@@ -270,11 +622,22 @@ run_in_proot() {
     #
     # /sdcard 不单独 bind：现代 Android 上它只是 /storage/emulated/0 的符号链接，
     # 且 Termux 沙箱上下文对其无权限，bind 反而会触发 proot warning。
-    proot --link2symlink \
+    # --link2symlink 是 Termux proot 的补丁选项（app 数据分区不支持硬链接，
+    # 需要把硬链接降级成软链接），上游/发行版 proot 并没有——不探测就带上会
+    # 直接 `unknown option` 启动失败，整个沙箱都进不去。这里实测一次再决定。
+    _popt_link2symlink=""
+    if "$_proot_bin" --link2symlink --version >/dev/null 2>&1; then
+        _popt_link2symlink="--link2symlink"
+    fi
+    "$_proot_bin" $_popt_link2symlink \
         -0 \
         $PROOT_BINDS_STR \
         -w "$REAL_HOME" \
         "$REAL_PREFIX/bin/bash" "$@"
+    _vortex_rc=$?
+    PATH="$_host_path"
+    export PATH
+    return $_vortex_rc
 }
 
 # ---------------------------------------------------------------------------
@@ -293,10 +656,20 @@ setup_fallback() {
     if [ ! -f "$VORTEX_BIN/id" ]; then
         printf '#!/system/bin/sh\nprintf "uid=0(root) gid=0(root) groups=0(root)\\n"\n' > "$VORTEX_BIN/id"
         printf '#!/system/bin/sh\necho root\n' > "$VORTEX_BIN/whoami"
-        printf '#!/system/bin/sh\nexec "$@"\n' > "$VORTEX_BIN/su"
-        printf '#!/system/bin/sh\nexec "$@"\n' > "$VORTEX_BIN/sudo"
-        chmod 0755 "$VORTEX_BIN/id" "$VORTEX_BIN/whoami" "$VORTEX_BIN/su" "$VORTEX_BIN/sudo" 2>/dev/null
     fi
+    # 轻量模式没有 proot 容器可隔离，特权命令**只模拟、不执行**：
+    # 打印模拟提示并返回成功值，绝不触达真实 su/sudo（不逃逸、不真实执行）。
+    cat > "$VORTEX_BIN/su" <<'VORTEX_EOF'
+#!/system/bin/sh
+echo "[VorteX Sandbox] su 已模拟执行（轻量模式不执行真实特权命令）：$*" >&2
+exit 0
+VORTEX_EOF
+    cat > "$VORTEX_BIN/sudo" <<'VORTEX_EOF'
+#!/system/bin/sh
+echo "[VorteX Sandbox] sudo 已模拟执行（轻量模式不执行真实特权命令）：$*" >&2
+exit 0
+VORTEX_EOF
+    chmod 0755 "$VORTEX_BIN/id" "$VORTEX_BIN/whoami" "$VORTEX_BIN/su" "$VORTEX_BIN/sudo" 2>/dev/null
     case ":$PATH:" in
         *":$VORTEX_BIN:"*) ;;
         *) export PATH="$VORTEX_BIN:$PATH" ;;
@@ -319,10 +692,13 @@ do_check() {
         echo "proot_path=$(command -v proot)"
         echo "shadow_home=$RUN -> $REAL_HOME"
         echo "shadow_prefix=$RUN_PREFIX -> $REAL_PREFIX"
+        echo "shadow_proc=$RUN_PROC (attr/current=u:r:su:s0, status Uid=0)"
+        echo "su_sudo=simulated (容器内模拟执行，不调用真实特权命令)"
         [ "$ISOLATE_STORAGE" = "1" ] && echo "shadow_storage=$RUN_STORAGE -> $REAL_STORAGE" || echo "shadow_storage=shared($REAL_STORAGE)"
     else
         echo "isolation=fallback"
         echo "shadow_home=$RUN (绝对路径不隔离)"
+        echo "su_sudo=simulated (轻量模式只模拟、不执行)"
     fi
     echo "real_home=$REAL_HOME"
     echo "snapshot=$SNAP"
@@ -361,6 +737,8 @@ case "$1" in
         if have_proot; then
             printf '\n[VorteX Sandbox] proot 隔离已启用（虚拟 ROOT，会话结束自动清空并回收空间）\n'
             printf '[VorteX Sandbox] 真实 %s 已被影子层遮蔽，删除与改写都不会泄漏。\n' "$REAL_HOME"
+            printf '[VorteX Sandbox] 身份伪造已启用：/proc/self/attr/current=u:r:su:s0，uid=0；\n'
+            printf '[VorteX Sandbox] su/sudo 为沙箱内模拟执行，不调用真实特权命令。\n'
             printf '[VorteX Sandbox] 本会话的所有改动在退出时彻底消失，影子 $PREFIX 也会被删除。\n\n'
             run_in_proot -i
         else
