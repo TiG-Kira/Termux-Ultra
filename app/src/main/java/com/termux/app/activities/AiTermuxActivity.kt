@@ -4625,7 +4625,7 @@ private fun SkillCard(msgId: String, card: SkillCardData, errorMsg: String?, vm:
         SkillType.GET_SESSION_INFO, SkillType.GET_CURRENT_SESSION,
         SkillType.RUN_COMMAND, SkillType.CAPTURE_OUTPUT,
         SkillType.CUSTOM_COMMAND, SkillType.COMPILE_CODE -> R.drawable.ic_terminal
-        SkillType.RUN_COMMAND_SANDBOX -> R.drawable.ic_warning
+        SkillType.RUN_COMMAND_SANDBOX -> R.drawable.ic_sandbox
         SkillType.RUN_VM_QEMU, SkillType.CREATE_VM_QEMU,
         SkillType.VM_LIST -> R.drawable.ic_computer
         SkillType.CONNECT_VNC -> R.drawable.ic_vnc

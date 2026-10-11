@@ -976,7 +976,7 @@ fun SettingsScreen(
                         sandboxEnabled = it
                         VorteXSandbox.setEnabled(context, it)
                     },
-                    startAction = { SettingIcon(Icons.Rounded.Shield, contentDescription = context.getString(R.string.vortex_sandbox_title)) }
+                    startAction = { SettingIcon(painterResource(R.drawable.ic_sandbox), contentDescription = context.getString(R.string.vortex_sandbox_title)) }
                 )
             }),
         SearchableSetting(sec_security, context.getString(R.string.vortex_sandbox_agent_title),
@@ -1562,7 +1562,7 @@ fun SettingsScreen(
                             },
                             startAction = {
                                 SettingIcon(
-                                    Icons.Rounded.Warning,
+                                    painterResource(R.drawable.ic_sandbox),
                                     contentDescription = context.getString(R.string.vortex_sandbox_title)
                                 )
                             }
