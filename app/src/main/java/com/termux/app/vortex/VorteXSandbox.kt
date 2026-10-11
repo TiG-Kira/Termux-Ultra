@@ -184,7 +184,11 @@ object VorteXSandbox {
     fun ensureInitialized(context: Context) {
         getRootDir(context)
         val bootstrap = getBootstrapExecutable(context)
-        if (!bootstrap.exists() || bootstrap.length() == 0L) {
+        // 必须比对内容而不是「存在即跳过」：引导脚本是从 assets 解出的，
+        // app 升级后 assets 里的脚本变了，磁盘上却还是旧版本——旧脚本缺少
+        // 身份伪造 / su 模拟等新能力，用户升级后照样跑旧逻辑（实测反馈
+        // 「沙箱里 su 没被承接、context 还是 untrusted_app」正是这个原因）。
+        if (!bootstrapUpToDate(context, bootstrap)) {
             extractBootstrap(context, bootstrap)
         }
         val snapshotHome = getSnapshotHome(context)
@@ -238,6 +242,23 @@ object VorteXSandbox {
             target.setExecutable(true)
         } catch (_: Throwable) {
             // 解压失败则退化为普通文件；引导脚本内部以 sh 显式调用自身，不强制 +x。
+        }
+    }
+
+    /**
+     * 磁盘上的引导脚本是否与 assets 中一致（即是否为当前 app 版本的脚本）。
+     *
+     * 脚本只有几十 KB，直接整份比对即可；内容一致时**绝不重写**，
+     * 避免覆盖一个正在执行中的脚本。
+     */
+    private fun bootstrapUpToDate(context: Context, target: File): Boolean {
+        if (!target.exists() || target.length() == 0L) return false
+        return try {
+            val onDisk = target.readBytes()
+            context.assets.open(ASSET_BOOTSTRAP).use { it.readBytes() }.contentEquals(onDisk)
+        } catch (_: Throwable) {
+            // 读不到 assets（理论上不会发生）时保持现状，不因误判反复重写。
+            true
         }
     }
 
