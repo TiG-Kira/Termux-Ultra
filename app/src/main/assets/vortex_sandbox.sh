@@ -44,8 +44,10 @@
 #   VORTEX_FORCE_NO_PROOT    1=强制禁用 proot（仅用于对照排查）
 #   VORTEX_UI_OFF            1=关闭初始化进度面板（纯文本输出）
 #   VORTEX_PROOT_TIMEOUT     冒烟校验超时秒数（默认 20）
-#   DISABLE_AUTO_UPDATE      由本脚本注入 true 给沙箱内 shell：关掉 oh-my-bash /
-#                            oh-my-zsh 的启动升级检查（否则会阻塞在交互式询问上）
+#   DISABLE_AUTO_UPDATE      由本脚本注入 true 给沙箱内 shell：关掉 oh-my-zsh 的
+#                            启动升级检查（否则会阻塞在交互式询问上）
+#   UPDATE_OSH_DAYS          由本脚本注入极大值给沙箱内 shell：让 oh-my-bash 的
+#                            启动升级检查永不过期（它不认 DISABLE_AUTO_UPDATE）
 # ============================================================================
 
 VORTEX_ROOT="${VORTEX_ROOT:-$(cd "$(dirname "$0")/.." 2>/dev/null && pwd)}"
@@ -523,15 +525,22 @@ run_in_proot() {
     #      察觉不到）。
     #   2. `read -p` 的提示只在 stdin 是终端时才打印；一旦不是，用户看不到任何
     #      提问，只能对着没有提示符的控制台干等 —— 正是「卡死且无反馈」的成因。
-    # 而且沙箱内升级毫无意义：写入照样被影子化丢弃。用框架官方开关跳过整段检查。
+    # 而且沙箱内升级毫无意义：写入照样被影子化丢弃。注意两个框架的变量**不通用**：
+    #   - oh-my-zsh 认 DISABLE_AUTO_UPDATE=true；
+    #   - oh-my-bash **不认** DISABLE_AUTO_UPDATE（对它为空操作），它的开关是
+    #     UPDATE_OSH_DAYS（check_for_upgrade.sh: `${UPDATE_OSH_DAYS:-13}`，单位天），
+    #     设成极大值即永不过期、永不提问。
+    #   - 另注意 DISABLE_UPDATE_PROMPT=true 是**反向**的（免询问直接 git pull），
+    #     沙箱内绝不能用。
     DISABLE_AUTO_UPDATE=true
+    UPDATE_OSH_DAYS=3652500
     SHADOW_LIB_OK=0
     [ -f "$SHADOW_LIB" ] && SHADOW_LIB_OK=1
     export HOME PREFIX PATH LD_LIBRARY_PATH TMPDIR PROOT_TMP_DIR SHELL TERM LANG
     export VORTEX_SANDBOX VORTEX_VIRTUAL_ROOT VORTEX_ROOT VORTEX_PROOT
     export VORTEX_SHADOW_TMP VORTEX_SHADOW_ROOTS VORTEX_SHADOW_NOTICE VORTEX_SHADOW_NOTIFIED
     export VORTEX_FAKE_STATUS VORTEX_FAKE_ATTR
-    export DISABLE_AUTO_UPDATE
+    export DISABLE_AUTO_UPDATE UPDATE_OSH_DAYS
 
     _popt_link2symlink=""
     if "$_proot_bin" --link2symlink --version >/dev/null 2>&1; then
@@ -552,6 +561,7 @@ run_in_proot() {
                 VORTEX_FAKE_STATUS="$VORTEX_FAKE_STATUS" \
                 VORTEX_FAKE_ATTR="$VORTEX_FAKE_ATTR" \
                 DISABLE_AUTO_UPDATE="$DISABLE_AUTO_UPDATE" \
+                UPDATE_OSH_DAYS="$UPDATE_OSH_DAYS" \
                 "$REAL_PREFIX/bin/bash" "$@"
     else
         echo "[VorteX Sandbox] 警告：影子写库缺失，写入将直接落到真实文件（隔离失效）。" >&2
@@ -581,6 +591,7 @@ setup_fallback() {
     export VORTEX_VIRTUAL_ROOT=1
     # 同 run_in_proot：关掉 shell 框架的启动升级检查，避免阻塞在交互式提问上。
     export DISABLE_AUTO_UPDATE=true
+    export UPDATE_OSH_DAYS=3652500
 
     case ":$PATH:" in
         *":$ESSENTIAL:"*) ;;
