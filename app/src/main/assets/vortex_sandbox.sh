@@ -44,6 +44,8 @@
 #   VORTEX_FORCE_NO_PROOT    1=强制禁用 proot（仅用于对照排查）
 #   VORTEX_UI_OFF            1=关闭初始化进度面板（纯文本输出）
 #   VORTEX_PROOT_TIMEOUT     冒烟校验超时秒数（默认 20）
+#   DISABLE_AUTO_UPDATE      由本脚本注入 true 给沙箱内 shell：关掉 oh-my-bash /
+#                            oh-my-zsh 的启动升级检查（否则会阻塞在交互式询问上）
 # ============================================================================
 
 VORTEX_ROOT="${VORTEX_ROOT:-$(cd "$(dirname "$0")/.." 2>/dev/null && pwd)}"
@@ -512,12 +514,24 @@ run_in_proot() {
     VORTEX_SHADOW_NOTIFIED="$TMP/.vortex_shadow_notified"
     VORTEX_FAKE_STATUS="$FAKE_STATUS"
     VORTEX_FAKE_ATTR="$FAKE_ATTR"
+    # shell 框架（oh-my-bash / oh-my-zsh）的**启动升级检查必须关掉**：
+    # 它们的 tools/check_for_upgrade.sh 会先 `read -rp '...? [Y/n]:'` 阻塞等待用户
+    # 输入，答 Y 还要 `git pull` 联网。沙箱内该询问有两个致命点：
+    #   1. 判断依据是 ~/.osh-update 的时间戳，而沙箱对 $HOME 的写入是**影子写**，
+    #      会话结束即丢弃 —— 时间戳永远写不回真实文件，于是**每次进沙箱都判定
+    #      过期、每次都弹这个阻塞询问**（正常会话答过一次就能管 13 天，所以平时
+    #      察觉不到）。
+    #   2. `read -p` 的提示只在 stdin 是终端时才打印；一旦不是，用户看不到任何
+    #      提问，只能对着没有提示符的控制台干等 —— 正是「卡死且无反馈」的成因。
+    # 而且沙箱内升级毫无意义：写入照样被影子化丢弃。用框架官方开关跳过整段检查。
+    DISABLE_AUTO_UPDATE=true
     SHADOW_LIB_OK=0
     [ -f "$SHADOW_LIB" ] && SHADOW_LIB_OK=1
     export HOME PREFIX PATH LD_LIBRARY_PATH TMPDIR PROOT_TMP_DIR SHELL TERM LANG
     export VORTEX_SANDBOX VORTEX_VIRTUAL_ROOT VORTEX_ROOT VORTEX_PROOT
     export VORTEX_SHADOW_TMP VORTEX_SHADOW_ROOTS VORTEX_SHADOW_NOTICE VORTEX_SHADOW_NOTIFIED
     export VORTEX_FAKE_STATUS VORTEX_FAKE_ATTR
+    export DISABLE_AUTO_UPDATE
 
     _popt_link2symlink=""
     if "$_proot_bin" --link2symlink --version >/dev/null 2>&1; then
@@ -537,6 +551,7 @@ run_in_proot() {
                 VORTEX_SHADOW_NOTIFIED="$VORTEX_SHADOW_NOTIFIED" \
                 VORTEX_FAKE_STATUS="$VORTEX_FAKE_STATUS" \
                 VORTEX_FAKE_ATTR="$VORTEX_FAKE_ATTR" \
+                DISABLE_AUTO_UPDATE="$DISABLE_AUTO_UPDATE" \
                 "$REAL_PREFIX/bin/bash" "$@"
     else
         echo "[VorteX Sandbox] 警告：影子写库缺失，写入将直接落到真实文件（隔离失效）。" >&2
@@ -564,6 +579,8 @@ setup_fallback() {
     export HOME="$REAL_HOME"
     export VORTEX_SANDBOX=1
     export VORTEX_VIRTUAL_ROOT=1
+    # 同 run_in_proot：关掉 shell 框架的启动升级检查，避免阻塞在交互式提问上。
+    export DISABLE_AUTO_UPDATE=true
 
     case ":$PATH:" in
         *":$ESSENTIAL:"*) ;;
@@ -737,7 +754,8 @@ case "$1" in
             printf '[VorteX Sandbox] 真实 %s 以链接视图呈现：写入被影子化到临时存储区，底层数据不变。\n' "$REAL_HOME"
             printf '[VorteX Sandbox] 身份伪造已启用：/proc/self/attr/current=u:r:su:s0，uid=0；\n'
             printf '[VorteX Sandbox] su/sudo 为沙箱内模拟执行（持久于 essential/），不调用真实特权命令。\n'
-            printf '[VorteX Sandbox] 本会话的所有改动在退出时彻底消失，临时存储区 (tmp/) 被删除。\n\n'
+            printf '[VorteX Sandbox] 本会话的所有改动在退出时彻底消失，临时存储区 (tmp/) 被删除。\n'
+            printf '[VorteX Sandbox] 已跳过 shell 框架的启动升级检查（沙箱内升级会随会话丢弃，且会卡住初始化）。\n\n'
             run_in_proot -i
         else
             setup_fallback
