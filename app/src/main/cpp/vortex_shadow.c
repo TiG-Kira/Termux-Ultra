@@ -84,6 +84,9 @@ DEF_REAL(DIR*,   opendir,  (const char*));
 DEF_REAL(struct dirent*, readdir,  (DIR*));
 DEF_REAL(int,    readdir_r,(DIR*, struct dirent*, struct dirent**));
 DEF_REAL(int,    closedir, (DIR*));
+DEF_REAL(void,   rewinddir,(DIR*));
+DEF_REAL(void,   seekdir,  (DIR*, long));
+DEF_REAL(long,   telldir,  (DIR*));
 #undef DEF_REAL
 
 static void resolve_real(void) {
@@ -115,6 +118,9 @@ static void resolve_real(void) {
     real_readdir  = (struct dirent*(*)(DIR*))              dlsym(RTLD_NEXT, "readdir");
     real_readdir_r= (int(*)(DIR*, struct dirent*, struct dirent**)) dlsym(RTLD_NEXT, "readdir_r");
     real_closedir = (int(*)(DIR*))                         dlsym(RTLD_NEXT, "closedir");
+    real_rewinddir= (void(*)(DIR*))                        dlsym(RTLD_NEXT, "rewinddir");
+    real_seekdir  = (void(*)(DIR*, long))                  dlsym(RTLD_NEXT, "seekdir");
+    real_telldir  = (long(*)(DIR*))                        dlsym(RTLD_NEXT, "telldir");
 }
 
 /* ---- 路径工具 ----------------------------------------------------------- */
@@ -616,6 +622,7 @@ static DIR* vortex_opendir_impl(const char* path) {
 
     struct vortex_dir* vd = calloc(1, sizeof(struct vortex_dir));
     if (!vd) return real_opendir(path);
+    vd->magic = VORTEX_DIR_MAGIC;
 
     char realp[PATH_MAX], shadp[PATH_MAX];
     snprintf(realp, sizeof realp, "%s/%s", g_roots[idx], rel);
@@ -655,9 +662,7 @@ DIR* opendir(const char* path) {
 struct dirent* readdir(DIR* dirp) {
     /* 仅对我们自己的流做合并；其它（含真实返回的非 vortex_dir）交回真实实现。 */
     struct vortex_dir* vd = (struct vortex_dir*)dirp;
-    /* 仅靠指针判断不安全：用 count/pos 在堆上，且真实 DIR* 不可能满足此结构。
-     * 这里接受风险——本库只对自己 opendir 返回的流调用，调用方成对使用。 */
-    if (vd == NULL) return real_readdir(dirp);
+    if (vd == NULL || vd->magic != VORTEX_DIR_MAGIC) return real_readdir(dirp);
     if (vd->pos >= vd->count) return NULL;
     const char* nm = vd->names[vd->pos++];
     memset(&vd->ent, 0, sizeof vd->ent);
@@ -671,6 +676,8 @@ struct dirent* readdir(DIR* dirp) {
 }
 
 int readdir_r(DIR* dirp, struct dirent* entry, struct dirent** result) {
+    struct vortex_dir* vd = (struct vortex_dir*)dirp;
+    if (vd == NULL || vd->magic != VORTEX_DIR_MAGIC) return real_readdir_r(dirp, entry, result);
     struct dirent* e = readdir(dirp);
     if (!e) { *result = NULL; return 0; }
     *entry = *e;
@@ -680,11 +687,33 @@ int readdir_r(DIR* dirp, struct dirent* entry, struct dirent** result) {
 
 int closedir(DIR* dirp) {
     struct vortex_dir* vd = (struct vortex_dir*)dirp;
-    if (vd == NULL) return real_closedir(dirp);
+    if (vd == NULL || vd->magic != VORTEX_DIR_MAGIC) return real_closedir(dirp);
     for (int i = 0; i < vd->count; i++) free(vd->names[i]);
     free(vd->names);
     free(vd);
     return 0;
+}
+
+/* 以下三个按 magic 分流：受控目录走我们的流，否则交回真实实现，
+ * 避免把自定义结构体当真实 DIR* 写入而崩溃。 */
+void rewinddir(DIR* dirp) {
+    struct vortex_dir* vd = (struct vortex_dir*)dirp;
+    if (vd == NULL || vd->magic != VORTEX_DIR_MAGIC) { real_rewinddir(dirp); return; }
+    vd->pos = 0;
+}
+
+void seekdir(DIR* dirp, long loc) {
+    struct vortex_dir* vd = (struct vortex_dir*)dirp;
+    if (vd == NULL || vd->magic != VORTEX_DIR_MAGIC) { real_seekdir(dirp, loc); return; }
+    if (loc < 0) loc = 0;
+    if (loc > vd->count) loc = vd->count;
+    vd->pos = (int)loc;
+}
+
+long telldir(DIR* dirp) {
+    struct vortex_dir* vd = (struct vortex_dir*)dirp;
+    if (vd == NULL || vd->magic != VORTEX_DIR_MAGIC) return real_telldir(dirp);
+    return (long)vd->pos;
 }
 
 /* ---- 构造函数：读取配置 ------------------------------------------------ */
