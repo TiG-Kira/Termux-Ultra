@@ -1434,12 +1434,19 @@ private fun OobeInstallPage(
             onOpen = onOpenBootstrapDownloadPage
         )
 
+        // 主体可滚动：方式选择器、下载页提示、本地包选择器在小屏或大字体下会超出
+        // 剩余高度，此前这里没有任何滚动能力，「从本地安装」的入口会被裁掉且无从访问。
+        // 滚动挂在 Box 上而非内层：Box 会以无限高度约束测量，contentAlignment 的居中
+        // 因此不会产生偏移，短内容观感与原先完全一致，超长时本容器接管滚动。
+        // 底部主按钮留在滚动区外，始终常驻可见。
         Box(
             modifier = Modifier
                 .weight(1f)
-                .fillMaxWidth(),
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState()),
             contentAlignment = Alignment.Center
         ) {
+            Spacer(modifier = Modifier.height(8.dp))
             when {
                 // 失败态排在最前：bootstrapError 是唯一可信的终态信号，
                 // 任何残留的进行中/完成标记都不该盖掉失败原因与重试入口。
@@ -1586,6 +1593,7 @@ private fun OobeInstallPage(
                     }
                 }
             }
+            Spacer(modifier = Modifier.height(16.dp))
         }
 
         when {
