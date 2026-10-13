@@ -247,13 +247,16 @@ object VorteXSandbox {
      * 在安装时把 .so 解到应用私有目录；而 LD_PRELOAD 需要文件的真实路径。故这里用
      * `ZipFile` 读取 `lib/<abi>/libvortex_shadow.so` 并写出。
      *
-     * 同名文件已存在且非空则直接复用（避免每次进沙箱都重解）。
+     * 已解出过则复用，但必须校验**版本戳**（APK 内该条目的 CRC+大小）：
+     * 「解出一次就永不重抽」是致命疏漏——修过影子库的 bug（如 fortify 把
+     * `__open_2` 拦截器改写成自调用导致栈溢出/自旋）后，老用户升级 APK
+     * 仍会继续跑 files 目录里的旧 .so，崩溃与卡死照旧。无戳或戳不一致
+     * 一律重解。
      *
      * ⚠️ 含磁盘 IO，必须在后台线程调用。
      */
     fun extractShadowLib(context: Context): Boolean {
         val target = getShadowLibFile(context)
-        if (target.exists() && target.length() > 0L) return true
         return try {
             val abi = Build.SUPPORTED_ABIS.firstOrNull() ?: "arm64-v8a"
             val apk = context.applicationInfo.sourceDir
@@ -262,13 +265,21 @@ object VorteXSandbox {
                 val entry = zf.getEntry("lib/$abi/libvortex_shadow.so")
                     ?: zf.getEntry("lib/arm64-v8a/libvortex_shadow.so")
                     ?: return false
+                val stamp = File(target.parentFile, ".libvortex_version")
+                val stampText = "${entry.crc}:${entry.size}"
+                if (target.exists() && target.length() == entry.size &&
+                    stamp.isFile && stamp.readText().trim() == stampText
+                ) {
+                    return true
+                }
                 target.parentFile?.mkdirs()
                 zf.getInputStream(entry).use { ins ->
                     target.outputStream().use { outs -> ins.copyTo(outs) }
                 }
+                target.setExecutable(true)
+                stamp.writeText(stampText)
+                target.exists() && target.length() > 0L
             }
-            target.setExecutable(true)
-            target.exists() && target.length() > 0L
         } catch (_: Throwable) {
             false
         }
