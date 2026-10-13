@@ -1280,7 +1280,7 @@ private fun QuickEntryButton(
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(16.dp))
-            .background(MiuixTheme.colorScheme.surface)
+            .background(MiuixTheme.colorScheme.surfaceContainer)
             .clickable(onClick = onClick)
             .height(100.dp)
             .padding(vertical = 14.dp, horizontal = 6.dp),

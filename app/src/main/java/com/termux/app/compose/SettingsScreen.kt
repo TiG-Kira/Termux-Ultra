@@ -66,7 +66,7 @@ import com.termux.R
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Launch
 import androidx.compose.material.icons.rounded.*
-import androidx.compose.material3.CircularProgressIndicator
+import top.yukonga.miuix.kmp.basic.CircularProgressIndicator
 import com.termux.app.RuntimeEnvironmentResetter
 import com.termux.app.vortex.VorteXSandbox
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -998,8 +998,7 @@ fun SettingsScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             CircularProgressIndicator(
-                                modifier = Modifier.padding(end = 16.dp),
-                                strokeWidth = 2.dp
+                                modifier = Modifier.padding(end = 16.dp)
                             )
                             Text(
                                 text = if (sandboxBusy == true) "正在准备环境" else "正在关闭沙盒"
@@ -1616,8 +1615,7 @@ fun SettingsScreen(
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     CircularProgressIndicator(
-                                        modifier = Modifier.padding(end = 16.dp),
-                                        strokeWidth = 2.dp
+                                        modifier = Modifier.padding(end = 16.dp)
                                     )
                                     Text(
                                         text = if (sandboxBusy == true) "正在准备环境" else "正在关闭沙盒"
@@ -1855,8 +1853,7 @@ fun SettingsScreen(
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
                                             CircularProgressIndicator(
-                                                modifier = Modifier.padding(end = 16.dp),
-                                                strokeWidth = 2.dp
+                                                modifier = Modifier.padding(end = 16.dp)
                                             )
                                             Text(text = resetEnvMessage)
                                         }

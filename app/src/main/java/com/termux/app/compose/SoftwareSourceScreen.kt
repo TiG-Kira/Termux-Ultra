@@ -24,7 +24,7 @@ import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Link
 import androidx.compose.material.icons.rounded.NetworkPing
-import androidx.compose.material3.CircularProgressIndicator
+import top.yukonga.miuix.kmp.basic.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -394,7 +394,7 @@ fun SoftwareSourceScreen(
                     modifier = Modifier.align(Alignment.Center),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    CircularProgressIndicator(color = AccentBlue)
+                    CircularProgressIndicator()
                     Spacer(Modifier.height(12.dp))
                     Text(
                         text = stringResource(R.string.initializing),
@@ -535,7 +535,7 @@ private fun SourceCard(
                     // Ping
                     GlassIconButton(onClick = onPing) {
                         if (isPinging) {
-                            CircularProgressIndicator(modifier = Modifier.size(20.dp), color = AccentBlue, strokeWidth = 2.dp)
+                            CircularProgressIndicator(modifier = Modifier.size(20.dp))
                         } else {
                             val color = when {
                                 pingResult == null -> MiuixTheme.colorScheme.onSurfaceVariantSummary

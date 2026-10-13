@@ -27,7 +27,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.CircularProgressIndicator
+import top.yukonga.miuix.kmp.basic.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -420,7 +420,7 @@ fun PackageDetailScreen(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center
                 ) {
-                    CircularProgressIndicator(color = AccentBlue)
+                    CircularProgressIndicator()
                     Spacer(Modifier.height(12.dp))
                     Text(
                         text = "正在检查依赖和冲突项",
@@ -700,7 +700,7 @@ fun PackageDetailScreen(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()
-                        .background(colorScheme.surface)
+                        .background(colorScheme.surfaceContainer)
                         .padding(
                             start = 16.dp,
                             end = 16.dp,
@@ -1156,7 +1156,7 @@ fun PackageDetailScreen(
                                 horizontalArrangement = Arrangement.Center,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                CircularProgressIndicator(modifier = Modifier.size(24.dp), color = AccentBlue, strokeWidth = 3.dp)
+                                CircularProgressIndicator(modifier = Modifier.size(24.dp))
                                 Spacer(Modifier.width(12.dp))
                                 Text(
                                     text = stringResource(R.string.common_processing),
