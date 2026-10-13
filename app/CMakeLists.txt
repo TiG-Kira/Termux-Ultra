@@ -131,3 +131,17 @@ add_library(termux SHARED
     ${TERMUX_CPP_DIR}/termux.c
     ${TERMUX_CPP_DIR}/native_crash_handler.c
 )
+
+###############################################################################
+# VorteX Shadow — 用户态 copy-on-write 叠加层（LD_PRELOAD）
+#
+# 非 root Android 上无法用 overlayfs，故在 libc 层拦截 open/unlink/rename/...
+# 实现「常规目录以链接视图呈现、写入被影子化、删除仅作用于沙箱内部」的语义。
+# 由引导脚本以 LD_PRELOAD 注入到沙箱子进程，通过 VORTEX_SHADOW_* 环境变量配置。
+###############################################################################
+add_library(vortex_shadow SHARED
+    ${TERMUX_CPP_DIR}/vortex_shadow.c
+)
+
+find_library(LIB_LOG log)
+target_link_libraries(vortex_shadow ${LIB_LOG})

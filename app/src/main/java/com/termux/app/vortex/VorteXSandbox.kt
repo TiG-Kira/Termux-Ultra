@@ -1,30 +1,38 @@
 package com.termux.app.vortex
 
 import android.content.Context
+import android.os.Build
 import com.termux.shared.termux.TermuxConstants
 import java.io.File
-import java.nio.file.Files
-import java.nio.file.LinkOption
-import java.nio.file.StandardCopyOption
+import java.util.zip.ZipFile
 
 /**
  * VorteX 沙箱核心管理器。
  *
- * VorteX 沙箱是一个与 Termux 真实用户环境**隔离**、但又**包含当前用户全部环境**的测试环境：
+ * 沙箱是一个与 Termux 真实用户环境**隔离**的测试环境：所有修改都局限于沙箱内部，
+ * 不会泄漏到真实环境；会话结束时一切修改自动消失，不留残余。沙箱同时提供
+ * **虚拟 ROOT 权限**（uid 0 视角），用于预演危险脚本。
  *
- * - 沙箱内的所有修改（文件写入、配置变更、乃至虚拟 ROOT 下的操作）都局限于沙箱内部，
- *   不会泄漏到真实用户环境；
- * - 会话结束时沙箱自动重置到最小化初始快照，不留残余；
- * - 沙箱提供**虚拟 ROOT 权限**——即便当前并非 ROOT 用户，也能以 uid 0 的视角执行命令，
- *   用于预演危险脚本或正式应用上线前的演练。
+ * ## 最小快照拆分（本版核心改动）
  *
- * 目录结构（位于应用私有 files 目录，与 Termux shell 同 UID 可访问）：
+ * 旧实现把整个 `$HOME` 拷贝成快照、再把 `$PREFIX` 拷 95MB 成影子层——既慢又占空间。
+ * 本版按用户需求把沙箱目录拆成两块：
+ *
  * ```
  *   <filesDir>/vortex/
- *     vortex_sandbox.sh   # 引导脚本（从 assets 解出的可执行脚本）
- *     snapshot/home/      # 最小化初始快照（开启总开关时从当前 $HOME 抓取）
- *     run/home/           # 当前会话可写层；会话结束被重置回 snapshot
+ *     essential/   # 「必要更改区」：**持久化**。仅含 su/sudo 模拟器与伪装 ROOT 所需的
+ *                  #   文件篡改组件（由引导脚本幂等播种）。重启沙箱后仍在，无需重生成。
+ *     tmp/         # 「临时存储区」：**会话级、易失**。影子写（copy-up）的副本、
+ *                  #   删除 whiteout 标记、运行时 /proc 影子、导入样本等都落在这里。
+ *                  #   会话结束整目录清空，一切修改即消失。
+ *     lib/         # 运行时从 APK 解出的 LD_PRELOAD 影子写拦截库（libvortex_shadow.so）
+ *     vortex_sandbox.sh  # 引导脚本
  * ```
+ *
+ * 常规目录（真实 `$HOME`、`$PREFIX`）不再拷贝，而是以**链接视图**呈现：读取走真实文件，
+ * 写入被 LD_PRELOAD 拦截、copy-up 到 `tmp/` 影子副本后虚拟写——写调用返回成功，
+ * 真实底层数据不变（影子写入机制）。这与 overlayfs 的 copy-up / whiteout 语义同源，
+ * 只是实现在用户态（无 root 的 Android 无法挂 overlayfs）。
  *
  * 总开关、Agent 授权、插件开关三套状态由 [VorteXSandboxPrefs] 持久化。
  */
@@ -44,29 +52,37 @@ object VorteXSandbox {
     fun getBootstrapExecutable(context: Context): File =
         File(getRootDir(context), ASSET_BOOTSTRAP)
 
-    /** 最小化初始快照目录（会话重置目标）。 */
-    fun getSnapshotHome(context: Context): File =
-        File(getRootDir(context), "snapshot/home").also { it.mkdirs() }
-
-    /** 当前会话可写层目录（沙箱内 $HOME 实际指向这里）。 */
-    fun getRunHome(context: Context): File =
-        File(getRootDir(context), "run/home").also { it.mkdirs() }
-
-    /** 内存储影子层（对应真实 `/storage/emulated/0`）。 */
-    fun getRunStorage(context: Context): File =
-        File(getRootDir(context), "run/storage").also { it.mkdirs() }
-
-    /** 内存储快照目录。 */
-    fun getSnapshotStorage(context: Context): File =
-        File(getRootDir(context), "snapshot/storage").also { it.mkdirs() }
+    /**
+     * 「必要更改区」根目录（**持久化**）。
+     *
+     * 只放伪装 ROOT 所必需的文件篡改组件（su/sudo 模拟器脚本等）。这些文件极小、
+     * 且跨会话保留——重启沙箱后无需重新生成，正是「最小快照默认仅含 su/sudo
+     * 及相关篡改组件」的落点。用户区（home / prefix）不在此列，它们以链接视图呈现。
+     */
+    fun getEssentialDir(context: Context): File =
+        File(getRootDir(context), "essential").also { it.mkdirs() }
 
     /**
-     * Agent 运行时根目录：当 Termux Agent 被授权使用沙箱时，其 ShellTool 的工作目录
-     * 指向此处，从而把 Agent 的产物（下载、生成文件）也收束在沙箱内。
+     * 「临时存储区」根目录（**会话级、易失**）。
+     *
+     * 影子写副本、删除 whiteout、运行时 /proc 影子、样本导入全部落在这里。
+     * 会话结束（[purgeAll]）整体清空，一切修改即消失。
+     */
+    fun getTmpDir(context: Context): File =
+        File(getRootDir(context), "tmp").also { it.mkdirs() }
+
+    /** LD_PRELOAD 影子写拦截库（从 APK 解出的 .so）所在文件。 */
+    fun getShadowLibFile(context: Context): File =
+        File(File(getRootDir(context), "lib"), "libvortex_shadow.so")
+
+    /**
+     * Agent 运行时根目录：当 Termux Agent 被授权使用沙箱时，其工作目录指向**真实
+     * `$HOME`**——沙箱内对该目录的写入会被 LD_PRELOAD 影子化，从而把 Agent 的产物
+     * 收束在沙箱（tmp/）内，绝不污染真实环境。
      */
     fun getAgentSandboxRoot(context: Context): File {
         ensureInitialized(context)
-        return getRunHome(context)
+        return File(TermuxConstants.TERMUX_HOME_DIR_PATH)
     }
 
     // ------------------------------------------------------------------
@@ -76,11 +92,12 @@ object VorteXSandbox {
     fun isEnabled(context: Context): Boolean = VorteXSandboxPrefs.isEnabled(context)
 
     /**
-     * 开启/关闭总开关。开启时初始化沙箱并保留最小化初始快照；关闭时回收 Agent 授权。
+     * 开启/关闭总开关。开启时初始化沙箱；关闭时回收 Agent 授权并清空临时存储区。
      *
-     * 注意：初始化可能涉及数十 MB 的磁盘 IO，**绝不能**在调用方（设置页开关回调，运行在
-     * UI 线程）同步执行——那会直接 ANR 闪退。因此这里只落盘开关状态并立即返回，
-     * 重活交给后台线程。开关瞬间生效与否无关紧要：进入沙箱时脚本还会再校验一次。
+     * 注意：初始化可能涉及磁盘 IO（解压引导脚本与 .so），**绝不能**在调用方
+     * （设置页开关回调，运行在 UI 线程）同步执行——那会直接 ANR 闪退。因此这里只
+     * 落盘开关状态并立即返回，重活交给后台线程。开关瞬间生效与否无关紧要：
+     * 进入沙箱时脚本还会再校验一次。
      */
     fun setEnabled(context: Context, enabled: Boolean) {
         setEnabledAsync(context, enabled)
@@ -89,9 +106,6 @@ object VorteXSandbox {
     /**
      * 异步开启/关闭总开关：开关状态立即落盘（UI 立刻翻转），真正耗时的初始化 /
      * 清理放到后台线程执行，完成后回调 [onDone]（**可能在任意线程**，调用方需自行切主线程）。
-     *
-     * 供设置页开关使用——配合弹窗转圈提示，既不阻塞 UI 主线程，也不会让用户
-     * 以为「点了没反应」。
      */
     fun setEnabledAsync(context: Context, enabled: Boolean, onDone: (() -> Unit)? = null) {
         VorteXSandboxPrefs.setEnabled(context, enabled)
@@ -106,28 +120,17 @@ object VorteXSandbox {
         }, "vortex-sandbox-toggle").apply { isDaemon = true }.start()
     }
 
-    /** 开关生效的实体动作：开启走后台初始化，关闭做状态回收与空间清理。⚠️ 含磁盘 IO。 */
+    /** 开关生效的实体动作：开启走后台初始化，关闭做状态回收与临时区清理。⚠️ 含磁盘 IO。 */
     private fun applyEnabled(context: Context, enabled: Boolean) {
         if (enabled) {
             ensureInitialized(context)
         } else {
             // 总开关关闭后，Agent / 插件均不可再使用沙箱。
             VorteXSandboxPrefs.setAgentAuthorized(context, false)
-            // 关闭时顺手丢弃残缺的快照。
-            //
-            // 为什么必须丢：首次开启若因 ANR 闪退而夭折，snapshot 会停在半成品状态
-            // （拷贝到一半被杀）。它没有完成标记，但**目录非空**——若保留下来，
-            // 下次开启会走「快照已就绪」的快速路径，用户拿到的仍是那个缺了一堆
-            // 文件的环境，且没有任何途径恢复。这里显式删除，让下次开启从头重建。
-            if (!isSnapshotComplete(context)) {
-                try {
-                    getSnapshotHome(context).deleteRecursively()
-                } catch (_: Throwable) {
-                }
-            }
-            // run 层是临时空间，关闭即清。
+            // 仅清临时存储区（tmp/）。「必要更改区」(essential/) 持久保留，
+            // 因为它只装 su/sudo 等伪装 ROOT 组件，跨会话保留无害且符合「最小快照持久化」。
             try {
-                File(getRootDir(context), "run").deleteRecursively()
+                getTmpDir(context).deleteRecursively()
             } catch (_: Throwable) {
             }
         }
@@ -156,206 +159,32 @@ object VorteXSandbox {
         isPluginSandboxEnabled(context, pluginId)
 
     // ------------------------------------------------------------------
-    // 初始化 / 快照 / 重置
+    // 初始化
     // ------------------------------------------------------------------
 
     /**
-     * 快照完成标记文件。
+     * 确保沙箱就位：解压引导脚本、从 APK 解出 LD_PRELOAD 影子写库、建立目录、并保证
+     * 「必要更改区」可写。幂等，且必须在后台线程调用（含磁盘 IO）。
      *
-     * 为什么必须要标记：过去用「snapshot 目录非空」判断快照是否完成，
-     * 但拷贝中途被杀死（ANR 闪退 / 应用被杀）会留下**半成品目录**——它非空，
-     * 于是被误判为完成，之后永远不再重抓。用户表现为「开了沙箱后 .bashrc 引用的
-     * 若干脚本凭空消失，且再开关一次也恢复不了」，因为坏快照已经固化。
-     *
-     * 只有拷贝全部成功才落这个标记；检测到目录非空但无标记 → 判定为残缺并重抓。
-     */
-    private const val SNAPSHOT_MARKER = ".vortex_snapshot_ok"
-
-    private fun snapshotMarker(context: Context) = File(getSnapshotHome(context), SNAPSHOT_MARKER)
-
-    /** 快照是否完整可用。 */
-    fun isSnapshotComplete(context: Context): Boolean = snapshotMarker(context).exists()
-
-    /**
-     * 确保沙箱已就位：解压引导脚本、建立目录、并在快照缺失或残缺时重抓初始快照；
-     * 快照完整时则把**真实环境的新变化增量同步进快照**（见 [syncSnapshotFromReal]）。
-     *
-     * 幂等，且**可自愈**：半成品快照会被识别并重新抓取（而不是像旧实现那样
-     * 把残缺状态当成完成，从此再也修复不了）。
-     *
-     * ⚠️ 本方法含磁盘 IO（残缺时拷贝整个 $HOME，完整时增量遍历比对），必须在后台线程调用。
+     * 与旧实现的关键区别：这里**不再拷贝整个 `$HOME` 快照，也不再拷贝 95MB 的
+     * `$PREFIX` 影子层**。用户区以链接视图呈现，写入走 tmp/ 影子副本（见
+     * `vortex_shadow.c`）。「必要更改区」(essential/) 由引导脚本幂等播种 su/sudo
+     * 模拟器等少量文件，本方法只保证目录存在。
      */
     fun ensureInitialized(context: Context) {
         getRootDir(context)
         val bootstrap = getBootstrapExecutable(context)
-        // 必须比对内容而不是「存在即跳过」：引导脚本是从 assets 解出的，
-        // app 升级后 assets 里的脚本变了，磁盘上却还是旧版本——旧脚本缺少
-        // 身份伪造 / su 模拟等新能力，用户升级后照样跑旧逻辑（实测反馈
-        // 「沙箱里 su 没被承接、context 还是 untrusted_app」正是这个原因）。
         if (!bootstrapUpToDate(context, bootstrap)) {
             extractBootstrap(context, bootstrap)
         }
-        val snapshotHome = getSnapshotHome(context)
-        if (!isSnapshotComplete(context)) {
-            // 目录非空却无完成标记 = 上次拷贝中途夭折的残缺快照，先清干净再重抓，
-            // 否则 cp 会把新旧内容混在一起，更难收拾。
-            if (snapshotHome.list().isNullOrEmpty().not()) {
-                try {
-                    snapshotHome.deleteRecursively()
-                } catch (_: Throwable) {
-                }
-                snapshotHome.mkdirs()
-            }
-            takeSnapshot(context)
-        } else {
-            // 快照完整：真实环境此后新增/修改/删除的文件要同步进来，
-            // 否则用户在真实 $HOME 里加的文件永远进不了沙箱（快照只有在
-            // 残缺时才会重抓，「完整但过期」此前无人负责）。
-            syncSnapshotFromReal(context)
-        }
-        getRunHome(context).mkdirs()
+        // 解出 LD_PRELOAD 影子写库（extractNativeLibs=false，APK 不自动解压 .so）。
+        extractShadowLib(context)
+        // essential/、tmp/ 目录存在性由对应 getter 保证；这里补一遍避免竞态。
+        getEssentialDir(context)
+        getTmpDir(context)
     }
 
-    // ------------------------------------------------------------------
-    // 快照与真实环境同步（真实 → 快照，单向）
-    // ------------------------------------------------------------------
-
-    /** rsync 探测结果缓存：路径；空串表示系统里没有 rsync，避免反复起进程。 */
-    @Volatile
-    private var rsyncPathCache: String? = null
-
-    private val snapshotSyncLock = Any()
-
-    private fun locateRsync(): String? {
-        rsyncPathCache?.let { return it.ifEmpty { null } }
-        val found = try {
-            val p = ProcessBuilder("sh", "-c", "command -v rsync 2>/dev/null")
-                .redirectErrorStream(true).start()
-            val out = p.inputStream.bufferedReader().use { it.readText() }.trim()
-            p.waitFor()
-            out.lineSequence().firstOrNull { it.isNotBlank() }
-        } catch (_: Throwable) {
-            null
-        }
-        rsyncPathCache = found.orEmpty()
-        return found
-    }
-
-    /**
-     * 把**真实用户环境**增量同步进最小快照（真实 → 快照，严格单向）。
-     *
-     * 解决的问题：快照只在缺失/残缺时才重抓，一旦「完整」就再也不更新——
-     * 用户在真实 `$HOME` 里新加的文件进不了快照，沙箱里永远看不到，
-     * 环境越用越「旧」。
-     *
-     * 规则：
-     *  - 每次进入沙箱（[ensureInitialized]）同步一次，之后会话从快照播种即得最新内容；
-     *  - **单向**：沙箱内改动写在 run 层、会话结束即丢，绝不回写真实环境；
-     *  - 口径与 [takeSnapshot] 一致：顶层 `storage` 不参与（内存储由 [takeStorageSnapshot] 单独管理），
-     *    快照完成标记不会被删除；
-     *  - 软链原样复制、**绝不跟随**（防止 `~/storage` 之类链接把整块内存储拖进来）；
-     *  - 优先用 rsync（若用户装了）：`-a --delete` 一并处理新增/更新/删除且保留软链；
-     *    没有 rsync 时用内置增量遍历兜底（逐文件按 size + mtime 判定）。
-     *
-     * 同步失败不影响既有快照——宁可继续用旧快照，也不留下半同步状态。
-     *
-     * ⚠️ 含遍历/拷贝 IO，必须在后台线程调用。
-     */
-    fun syncSnapshotFromReal(context: Context): Boolean {
-        val src = File(TermuxConstants.TERMUX_HOME_DIR_PATH)
-        val dst = getSnapshotHome(context)
-        if (!src.isDirectory || !snapshotMarker(context).exists()) return false
-
-        return synchronized(snapshotSyncLock) {
-            // 1) rsync 优先：排除顶层 storage 与完成标记；--delete 同步删除。
-            //    被 --exclude 的目标侧文件（marker）不会被 --delete 删掉。
-            val rsync = locateRsync()
-            if (rsync != null) {
-                val ok = runCatching {
-                    val cmd = "'$rsync' -a --delete " +
-                        "--exclude=/storage --exclude=/${SNAPSHOT_MARKER} " +
-                        "'${src.absolutePath}/' '${dst.absolutePath}/'"
-                    ProcessBuilder("sh", "-c", cmd).redirectErrorStream(true).start().waitFor() == 0
-                }.getOrDefault(false)
-                if (ok) return@synchronized true
-            }
-            // 2) 没有 rsync（Termux 默认不带）：内置增量兜底。
-            runCatching {
-                incrementalSync(src, dst)
-                true
-            }.getOrDefault(false)
-        }
-    }
-
-    /**
-     * 内置增量同步：真实 → 快照新增/更新，快照 → 删除真实中已不存在的条目。
-     * 逐条按「存在性 + size + mtime（容差 1s）」判定，只拷贝真正变化的部分。
-     */
-    private fun incrementalSync(srcRoot: File, dstRoot: File) {
-        // 遍历护栏：软链与顶层 storage 都不进入子树。
-        fun enterable(f: File, root: File): Boolean {
-            if (f == root) return true
-            if (Files.isSymbolicLink(f.toPath())) return false
-            return !(f.isDirectory && f.name == "storage" && f.parentFile?.path == root.path)
-        }
-
-        // 第一趟：真实 → 快照（新增 / 更新）
-        srcRoot.walkTopDown().onEnter { enterable(it, srcRoot) }.forEach { s ->
-            val rel = s.toRelativeString(srcRoot)
-            if (rel.isEmpty() || rel == SNAPSHOT_MARKER) return@forEach
-            val d = File(dstRoot, rel)
-            try {
-                val sp = s.toPath()
-                if (Files.isSymbolicLink(sp)) {
-                    if (!Files.exists(d.toPath(), LinkOption.NOFOLLOW_LINKS)) {
-                        d.parentFile?.mkdirs()
-                        Files.createSymbolicLink(d.toPath(), Files.readSymbolicLink(sp))
-                    }
-                    return@forEach
-                }
-                if (s.isDirectory) {
-                    if (!d.isDirectory) {
-                        d.deleteRecursively()
-                        d.mkdirs()
-                    }
-                    return@forEach
-                }
-                if (!s.isFile) return@forEach
-                val dp = d.toPath()
-                val stale = !Files.isRegularFile(dp) ||
-                    Files.size(dp) != s.length() ||
-                    Math.abs(Files.getLastModifiedTime(dp).toMillis() - s.lastModified()) > 1000L
-                if (stale) {
-                    d.parentFile?.mkdirs()
-                    Files.copy(
-                        sp, dp,
-                        StandardCopyOption.REPLACE_EXISTING,
-                        StandardCopyOption.COPY_ATTRIBUTES
-                    )
-                }
-            } catch (_: Throwable) {
-                // 单条失败不拖垮整体；下一轮进入沙箱会重试
-            }
-        }
-
-        // 第二趟：快照 → 删除真实中已不存在的（storage 与完成标记除外）
-        dstRoot.walkTopDown().onEnter { enterable(it, dstRoot) }.forEach { d ->
-            val rel = d.toRelativeString(dstRoot)
-            if (rel.isEmpty() || rel == SNAPSHOT_MARKER) return@forEach
-            val s = File(srcRoot, rel)
-            val stillThere = runCatching {
-                Files.exists(s.toPath(), LinkOption.NOFOLLOW_LINKS)
-            }.getOrDefault(true)
-            if (!stillThere) {
-                runCatching { d.deleteRecursively() }
-            }
-        }
-    }
-
-    /**
-     * 后台执行 [ensureInitialized]，避免调用方（尤其是设置页开关回调）被磁盘 IO 阻塞。
-     * 已在初始化中时直接返回，重复调用安全。
-     */
+    /** 后台执行 [ensureInitialized]，避免调用方被磁盘 IO 阻塞。重复调用安全。 */
     @Volatile
     private var initializing = false
 
@@ -402,204 +231,111 @@ object VorteXSandbox {
             val onDisk = target.readBytes()
             context.assets.open(ASSET_BOOTSTRAP).use { it.readBytes() }.contentEquals(onDisk)
         } catch (_: Throwable) {
-            // 读不到 assets（理论上不会发生）时保持现状，不因误判反复重写。
             true
         }
     }
 
     /**
-     * 抓取当前用户环境为最小化初始快照。
+     * 从安装包（APK）解出 LD_PRELOAD 影子写拦截库 `libvortex_shadow.so` 到
+     * `<root>/lib/`，供引导脚本以 `LD_PRELOAD` 注入沙箱子进程。
      *
-     * **只有拷贝全部成功才写完成标记**——中途夭折（ANR 闪退、应用被杀、磁盘满）时
-     * 不落标记，让下一次 [ensureInitialized] 能识别出这是残缺快照并重新抓。
-     * 这正是「开了沙箱闪退一次之后功能彻底崩掉」的根因修复点。
+     * 为什么必须手动解压：`AndroidManifest` 设了 `extractNativeLibs="false"`，系统不会
+     * 在安装时把 .so 解到应用私有目录；而 LD_PRELOAD 需要文件的真实路径。故这里用
+     * `ZipFile` 读取 `lib/<abi>/libvortex_shadow.so` 并写出。
      *
-     * 注意：这里复制的是**用户数据**（$HOME），不复制 `$PREFIX`（usr/bin、lib）——
-     * 沙箱运行时由引导脚本 cp -a 出独立的 $PREFIX 影子层。
+     * 同名文件已存在且非空则直接复用（避免每次进沙箱都重解）。
+     *
+     * ⚠️ 含磁盘 IO，必须在后台线程调用。
      */
-    fun takeSnapshot(context: Context) {
-        val src = TermuxConstants.TERMUX_HOME_DIR_PATH
-        val dst = getSnapshotHome(context).absolutePath
-        val marker = snapshotMarker(context)
-        // 先清掉旧标记：本次拷贝成功前，快照一律视为不可用。
-        try { marker.delete() } catch (_: Throwable) {}
-
-        var ok = false
-        val errLog = File(getRootDir(context), ".vortex_snapshot_err.log")
-        try {
-            // 用 tar 管道而非 cp -a，目的有两个：
-            //
-            // 1) **显式排除 storage**。Termux 的 $HOME/storage 是指向
-            //    /storage/emulated/0 的符号链接，一旦被穿透就会把用户的整个内存储
-            //    拖进快照（可达数 GB）。`cp -a` 通常会原样保留软链，但一旦目标
-            //    环境对软链的处理不一致（部分 Android 版本 / FUSE 层），就可能穿透。
-            //    这里从源侧就把它排除掉，不把正确性押在软链语义上。
-            // 2) 退出码可靠反映成功与否，供上面写完成标记用。
-            //
-            // stderr 落到 errLog 而不是丢弃：部分文件复制失败（权限、坏扇区、
-            // 被占用）不会让整条管道失败，靠日志才能揪出是哪些文件，进而做占位。
-            try { errLog.delete() } catch (_: Throwable) {}
-            val cmd = "tar -C '$src' --exclude=./storage -cf - . 2>'${errLog.absolutePath}'" +
-                " | tar -C '$dst' -xf - 2>>'${errLog.absolutePath}'"
-            ok = try {
-                Runtime.getRuntime().exec(arrayOf("sh", "-c", cmd)).waitFor() == 0
-            } catch (_: Throwable) {
-                false
-            }
-
-            // ---- 部分失败：解析失败条目并用空占位文件补上（「模拟文件」办法） ----
-            val errText = try {
-                if (errLog.exists()) errLog.readText() else ""
-            } catch (_: Throwable) { "" }
-            val failed = parseSnapshotFailures(errText)
-            if (failed.isNotEmpty()) {
-                val placed = placeholderizeSnapshotFailures(src, dst, failed)
-                // 占位后快照仍可用（哪怕整体退出码非 0），照常落完成标记，
-                // 否则会陷入「每次开启都重抓、每次都失败」的死循环。
-                val usable = File(dst).list()?.isNotEmpty() == true
-                if (usable) ok = true
-                if (placed.isNotEmpty()) {
-                    val sample = placed.take(5).joinToString("、")
-                    val msg = "最小快照有 ${placed.size} 个文件复制失败，" +
-                        "已在沙箱内改用空占位文件指向（内容为空，仅供路径存在）：" +
-                        sample + if (placed.size > 5) " 等" else ""
-                    try {
-                        File(getRootDir(context), SNAPSHOT_PARTIAL_FILE).writeText(msg)
-                    } catch (_: Throwable) {}
-                    VorteXSandboxNotice.post(msg)
-                }
-            }
-        } catch (_: Throwable) {
-            // 兜底也必须排除 storage：copyRecursively 会**跟随符号链接**，
-            // 直接把 /storage/emulated/0 的几十 GB 拖进快照，且这还是在主线程上。
-            try {
-                val srcFile = File(src)
-                srcFile.listFiles()?.forEach { child ->
-                    if (child.name == "storage") return@forEach
-                    val target = File(dst, child.name)
-                    try {
-                        if (child.isDirectory) child.copyRecursively(target, overwrite = true)
-                        else child.copyTo(target, overwrite = true)
-                    } catch (_: Throwable) {
-                    }
-                }
-                true
-            } catch (_: Throwable) {
-                false
-            }.let { ok = it }
-        } finally {
-            try { errLog.delete() } catch (_: Throwable) {}
-        }
-        takeStorageSnapshot(context)
-        if (ok) {
-            try { marker.createNewFile() } catch (_: Throwable) {}
-        }
-    }
-
-    /** 快照部分失败的提示哨兵文件名（由 UI 侧消费后删除）。 */
-    private const val SNAPSHOT_PARTIAL_FILE = ".vortex_snapshot_partial"
-
-    /**
-     * 从 tar 的 stderr 中解析出复制失败的相对路径。
-     *
-     * 兼容 GNU tar（`tar: ./a/b: Cannot stat: ...`）与 busybox/toybox tar
-     * （`tar: can't open './a/b'`）两种格式：只要行内含 `./xxx` 形态的 token 即取。
-     */
-    private fun parseSnapshotFailures(logText: String): List<String> {
-        if (logText.isBlank()) return emptyList()
-        val out = LinkedHashSet<String>()
-        val re = Regex("['\"]?(\\./[^\\s:'\"\\)]+)['\"]?")
-        for (line in logText.lineSequence()) {
-            if (line.isBlank() || "Removing leading" in line) continue
-            val m = re.find(line) ?: continue
-            val rel = m.groupValues[1].removePrefix("./").trimEnd('/')
-            if (rel.isEmpty()) continue
-            out.add(rel)
-        }
-        return out.toList()
-    }
-
-    /**
-     * 给复制失败的条目建**空占位**：目录补成空目录，文件补成 0 字节空文件。
-     *
-     * 目的：让沙箱内的路径始终存在（脚本 `source` / `test -f` 不再报「文件不存在」），
-     * 而失败本身通过提示告知用户——比「路径凭空消失」温和得多，也不会误导成
-     * 「文件本来就没有」。
-     *
-     * @return 实际成功建出占位的条目
-     */
-    private fun placeholderizeSnapshotFailures(srcRoot: String, dstRoot: String, paths: List<String>): List<String> {
-        val placed = mutableListOf<String>()
-        for (rel in paths) {
-            try {
-                val dstF = File(dstRoot, rel)
-                if (dstF.exists()) continue
-                val srcF = File(srcRoot, rel)
-                if (srcF.isDirectory) {
-                    dstF.mkdirs()
-                } else {
-                    dstF.parentFile?.mkdirs()
-                    dstF.createNewFile()
-                }
-                if (dstF.exists()) placed.add(rel)
-            } catch (_: Throwable) {
-            }
-        }
-        return placed
-    }
-
-    /**
-     * 取走「快照部分失败」提示并删除哨兵（一次性）。
-     *
-     * @return 提示文本；无待提示内容时返回 null
-     */
-    fun consumeSnapshotPartialNotice(context: Context): String? {
-        val f = File(getRootDir(context), SNAPSHOT_PARTIAL_FILE)
-        if (!f.exists()) return null
+    fun extractShadowLib(context: Context): Boolean {
+        val target = getShadowLibFile(context)
+        if (target.exists() && target.length() > 0L) return true
         return try {
-            val text = f.readText().trim()
-            f.delete()
-            text.ifEmpty { null }
-        } catch (_: Throwable) {
-            null
-        }
-    }
-
-    /**
-     * 抓取内存储（`/storage/emulated/0`）为快照。
-     *
-     * **只记录顶层目录名，一个文件都不复制。**
-     *
-     * 曾经这里对顶层**文件**也调`copyTo`，看起来只是「拷贝顶层」很轻，
-     * 实际是灾难：用户内存储顶层散落着大量大文件（安装包、压缩包、影音、
-     * 文档，动辄单个几百 MB，累计可达数 GB），而 `takeSnapshot()` 是在
-     * `setEnabled()` 的 UI 线程里同步调用的——这意味着**点一下开关就要在主线程
-     * 同步复制几个 GB**，必然 ANR 闪退，且拷到一半被杀留下半成品快照，
-     * 进而引发「沙箱环境缺文件且永不恢复」的问题。
-     *
-     * 沙箱的定位是「用户 Termux 环境的隔离预演」，不需要复制用户的内存储内容。
-     * 真正的播种交给引导脚本按需进行（它同样只建空目录占位）。
-     */
-    private fun takeStorageSnapshot(context: Context) {
-        val real = File("/storage/emulated/0")
-        val snap = getSnapshotStorage(context)
-        try {
-            if (!real.isDirectory) return
-            // 仅占位：建空目录即可，不递归、不复制任何文件内容。
-            real.listFiles()?.forEach { child ->
-                if (child.isDirectory) {
-                    val target = File(snap, child.name)
-                    if (!target.exists()) target.mkdirs()
+            val abi = Build.SUPPORTED_ABIS.firstOrNull() ?: "arm64-v8a"
+            val apk = context.applicationInfo.sourceDir
+            ZipFile(apk).use { zf ->
+                // 主 ABI 优先，失败回退到 arm64-v8a（Termux 主战场）。
+                val entry = zf.getEntry("lib/$abi/libvortex_shadow.so")
+                    ?: zf.getEntry("lib/arm64-v8a/libvortex_shadow.so")
+                    ?: return false
+                target.parentFile?.mkdirs()
+                zf.getInputStream(entry).use { ins ->
+                    target.outputStream().use { outs -> ins.copyTo(outs) }
                 }
             }
+            target.setExecutable(true)
+            target.exists() && target.length() > 0L
         } catch (_: Throwable) {
+            false
         }
     }
 
+    // ------------------------------------------------------------------
+    // 就绪判定 / 预热
+    // ------------------------------------------------------------------
+
     /**
-     * 探测当前环境是否具备 proot（决定沙箱是「绝对路径级隔离」还是「仅 $HOME 隔离」）。
-     * 结果做短时缓存，避免设置页每次重组都起子进程。
+     * 沙箱是否已就绪（影子写库已解出，且「必要更改区」已播种）。
+     *
+     * 旧实现靠「95MB 影子 prefix 拷贝完成」判定就绪，那次拷贝是进入沙箱延迟的唯一来源。
+     * 新实现去掉了那次拷贝，就绪 = 库已解出 + essential/ 非空（su/sudo 模拟器已就位），
+     * 因此预热几乎瞬时完成。
      */
+    fun isPrepared(context: Context): Boolean {
+        val lib = getShadowLibFile(context)
+        if (!lib.exists() || lib.length() == 0L) return false
+        val essential = getEssentialDir(context)
+        val seeded = File(essential, "su").exists() || File(essential, "sudo").exists()
+        return essential.list()?.isNotEmpty() == true && seeded
+    }
+
+    /**
+     * 预热沙箱：确保初始化完成（解库 + essential 目录就绪）。
+     *
+     * 旧版这里要拷 95MB 的 `$PREFIX` 影子层（必须放后台线程，否则 ANR）。新版无此重活，
+     * 预热极快，但仍保留异步入口以兼容调用方（设置页 / 终端列表页）。
+     *
+     * @param onReady 准备完成回调（可能在任意线程触发，调用方需自行切回主线程）
+     */
+    @Volatile
+    private var preparing = false
+
+    /** 预热进行中时的等待者，prepareAsync 重入时统一回调。 */
+    private val prepareWaiters = mutableListOf<() -> Unit>()
+
+    fun prepareAsync(context: Context, onReady: () -> Unit) {
+        if (isPrepared(context)) {
+            onReady()
+            return
+        }
+        synchronized(this) {
+            // 重入时不能直接 return——否则第二次调用的 onReady 永远不触发。
+            prepareWaiters.add(onReady)
+            if (preparing) return
+            preparing = true
+        }
+        val appContext = context.applicationContext
+        Thread({
+            try {
+                ensureInitialized(appContext)
+            } catch (_: Throwable) {
+            } finally {
+                val callbacks = synchronized(this) {
+                    preparing = false
+                    val c = prepareWaiters.toList()
+                    prepareWaiters.clear()
+                    c
+                }
+                callbacks.forEach { it() }
+            }
+        }, "vortex-sandbox-prepare").apply { isDaemon = true }.start()
+    }
+
+    // ------------------------------------------------------------------
+    // proot 探测 / 隔离能力描述
+    // ------------------------------------------------------------------
+
+    /** 探测当前环境是否具备 proot（决定沙箱是「绝对路径级隔离」还是「仅 LD_PRELOAD 影子」）。 */
     @Volatile
     private var prootAvailableCache: Boolean? = null
 
@@ -622,155 +358,47 @@ object VorteXSandbox {
 
     /** 沙箱当前隔离能力的可读描述，用于设置页副标题与自检。 */
     fun isolationSummary(context: Context): String =
-        if (isProotAvailable(context)) "proot 隔离：绝对路径亦受保护"
-        else "轻量隔离：请先 pkg install proot"
+        if (isProotAvailable(context)) {
+            "proot 隔离 + LD_PRELOAD 影子写：绝对路径受保护，写入不落盘"
+        } else {
+            "轻量影子写：请先 pkg install proot 以获得绝对路径隔离"
+        }
 
-    /** 将当前会话可写层重置回最小化初始快照（供调试/手动重置调用）。 */
+    /**
+     * 手动重置沙箱：清空临时存储区（tmp/），让下一会话从「链接视图 + 必要更改区」重新起步。
+     * 「必要更改区」(essential/) 保留。供调试 / 手动重置调用。
+     */
     fun resetSandbox(context: Context) {
-        val runHome = getRunHome(context)
         try {
-            runHome.deleteRecursively()
+            getTmpDir(context).deleteRecursively()
         } catch (_: Throwable) {
         }
-        runHome.mkdirs()
-        try {
-            val snap = getSnapshotHome(context).absolutePath
-            val cmd = "cp -a '$snap/.' '${runHome.absolutePath}/' 2>/dev/null || true"
-            Runtime.getRuntime().exec(arrayOf("sh", "-c", cmd)).waitFor()
-        } catch (_: Throwable) {
-        }
-        // 内存储影子层同样重置
-        try {
-            val runStorage = getRunStorage(context)
-            runStorage.deleteRecursively()
-            runStorage.mkdirs()
-            val snapStorage = getSnapshotStorage(context).absolutePath
-            Runtime.getRuntime().exec(
-                arrayOf("sh", "-c", "cp -a '$snapStorage/.' '${runStorage.absolutePath}/' 2>/dev/null || true")
-            ).waitFor()
-        } catch (_: Throwable) {
-        }
-        // $PREFIX 影子层：整目录删掉即可（引导脚本会 cp -a 重建一份真实拷贝）。
-        // 必须是真实拷贝而非硬链接——硬链接共享 inode，沙箱内改写文件会写穿到真实环境，
-        // 违背「所有改动在会话完全结束后消失」这一硬要求。
-        // 必须删——否则沙箱里装的包会残留到下一个会话。
-        try {
-            File(getRootDir(context), "run/usr").deleteRecursively()
-        } catch (_: Throwable) {
-        }
+        getTmpDir(context).mkdirs()
     }
 
     // ------------------------------------------------------------------
-    // 预热（准备中提示）与彻底清理
+    // 彻底清理（会话结束）
     // ------------------------------------------------------------------
 
-    /** 影子 prefix 目录：约 95MB 的真实拷贝，是沙箱启动延迟的唯一来源。 */
-    private fun runPrefixDir(context: Context) = File(getRootDir(context), "run/usr")
-
-    /** 影子 prefix 拷贝完成标记——语义同 [SNAPSHOT_MARKER]。 */
-    private const val PREFIX_MARKER = ".vortex_prefix_ok"
-
     /**
-     * 沙箱是否已就绪（影子 prefix 已存在**且完整**）。
+     * 彻底清理**临时**占用空间：清空 tmp/（影子副本、whiteout、运行时 /proc、导入样本）。
      *
-     * 必须靠标记文件而非「目录非空」：拷贝中途夭折会留下半成品目录，
-     * 同样会被误判为就绪，之后再也不会重试——这正是用户反馈的
-     * 「首次开启闪退后功能彻底崩掉」。
-     */
-    fun isPrepared(context: Context): Boolean {
-        val dir = runPrefixDir(context)
-        return dir.isDirectory && File(dir, PREFIX_MARKER).exists()
-    }
-
-    /**
-     * 预热沙箱：把「拷贝 $PREFIX 到影子层」这一步提前做掉，让后续进入沙箱时几乎无延迟。
+     * 一切修改都落在 tmp/，清空即「所有改动在会话完全结束后消失」。「必要更改区」
+     * (essential/) 不在此清——它只装 su/sudo 等伪装 ROOT 组件，本就要求持久。
      *
-     * 必须放后台线程——这是 95MB 级的磁盘 IO，跑在主线程会 ANR。
-     * 已在准备中时直接回调 [onReady]，重复调用安全。
-     *
-     * @param onReady 准备完成回调（可能在任意线程触发，调用方需自行切回主线程）
-     */
-    @Volatile
-    private var preparing = false
-
-    /** 预热进行中时的等待者，prepareAsync 重入时统一回调。 */
-    private val prepareWaiters = mutableListOf<() -> Unit>()
-
-    fun prepareAsync(context: Context, onReady: () -> Unit) {
-        if (isPrepared(context)) {
-            onReady()
-            return
-        }
-        synchronized(this) {
-            // 重入时不能直接 return——否则第二次调用的 onReady 永远不触发，
-            // UI 会永久停在「准备中」。改为登记为等待者，由首个任务完成后统一回调。
-            prepareWaiters.add(onReady)
-            if (preparing) return
-            preparing = true
-        }
-        val appContext = context.applicationContext
-        Thread({
-            try {
-                ensureInitialized(appContext)
-                prepareShadowPrefix(appContext)
-            } catch (_: Throwable) {
-                // 预热失败不阻断：真正进入沙箱时引导脚本还会再试一次
-            } finally {
-                val callbacks = synchronized(this) {
-                    preparing = false
-                    val c = prepareWaiters.toList()
-                    prepareWaiters.clear()
-                    c
-                }
-                callbacks.forEach { it() }
-            }
-        }, "vortex-sandbox-prepare").apply { isDaemon = true }.start()
-    }
-
-    /**
-     * 同步准备影子 prefix（供引导脚本之外的路径调用）。
-     * 幂等：已完整存在则直接返回；残缺则清掉重来。
-     *
-     * ⚠️ 含 95MB 级磁盘 IO，必须在后台线程调用（见 [prepareAsync]）。
-     */
-    fun prepareShadowPrefix(context: Context) {
-        val target = runPrefixDir(context)
-        if (isPrepared(context)) return
-        // 无标记但目录非空 = 上次拷贝中途夭折的残缺层，清干净重来。
-        if (target.list().isNullOrEmpty().not()) {
-            try { target.deleteRecursively() } catch (_: Throwable) {}
-        }
-        target.mkdirs()
-        val marker = File(target, PREFIX_MARKER)
-        val src = File(TermuxConstants.TERMUX_PREFIX_DIR_PATH)
-        val ok = try {
-            val cmd = "cp -a '${src.absolutePath}/.' '${target.absolutePath}/' 2>/dev/null"
-            Runtime.getRuntime().exec(arrayOf("sh", "-c", cmd)).waitFor() == 0
-        } catch (_: Throwable) {
-            false
-        }
-        if (ok) {
-            try { marker.createNewFile() } catch (_: Throwable) {}
-        }
-    }
-
-    /**
-     * 彻底清理沙箱占用的空间。
-     *
-     * 沙箱只是**临时**占用空间：会话一结束就必须把影子 prefix（~95MB）与影子 HOME 全部删除，
-     * 否则用户会平白看到近百 MB 的「不明占用」。调用方应在会话真正结束
-     * （进程退出 / 被 kill / 应用退出）后调用本方法。
+     * 调用方应在会话真正结束（进程退出 / 被 kill / 应用退出）后调用本方法。
      */
     fun purgeAll(context: Context) {
         try {
-            File(getRootDir(context), "run").deleteRecursively()
+            getTmpDir(context).deleteRecursively()
         } catch (_: Throwable) {
         }
-        // 告警哨兵与「已通知」标记一并清掉：空间已回收，
-        // 下次会话是全新状态，不该复用上一次的提示记录。
+        // 告警哨兵与「已通知」标记一并清掉：空间已回收，下次会话是全新状态。
         try {
             File(getRootDir(context), NOTICE_FILE).delete()
             File(getRootDir(context), NOTIFIED_MARKER).delete()
+            File(getTmpDir(context), SHADOWING_NOTICE).delete()
+            File(getTmpDir(context), SHADOWING_NOTIFIED).delete()
         } catch (_: Throwable) {
         }
         activeManualSessionId = null
@@ -782,8 +410,14 @@ object VorteXSandbox {
     /** 引导脚本侧的「已提示过」标记文件名。 */
     const val NOTIFIED_MARKER = ".vortex_storage_notified"
 
+    /** LD_PRELOAD 首次影子化时写的哨兵文件名（宿主侧据此弹 Snackbar）。 */
+    const val SHADOWING_NOTICE = ".vortex_shadowing"
+
+    /** 影子化提示的「已提示过」标记文件名（每会话仅提示一次）。 */
+    const val SHADOWING_NOTIFIED = ".vortex_shadow_notified"
+
     /**
-     * 会话结束钩子：若结束的是手动沙箱会话，则彻底回收空间。
+     * 会话结束钩子：若结束的是手动沙箱会话，则彻底回收临时空间。
      *
      * @param sessionName 会话标题；非沙箱会话会被忽略
      */
@@ -794,11 +428,10 @@ object VorteXSandbox {
     }
 
     /**
-     * 回收「一次 Agent 对话 / 一次插件调用」产生的影子空间。
+     * 回收「一次 Agent 对话 / 一次插件调用」产生的临时空间。
      *
      * 这两条路径不走引导脚本的 `--interactive`，因此不共享 EXIT trap，
-     * 必须在调用方明确告知「这次调用结束了」时手动回收，否则每次对话
-     * 都会留下约 95MB 残留。
+     * 必须在调用方明确告知「这次调用结束了」时手动回收，否则每次对话都会留下残余。
      */
     fun onEphemeralRunEnded(context: Context) {
         purgeAll(context)
@@ -824,8 +457,6 @@ object VorteXSandbox {
      * 读完即删，确保同一条告警只提示一次。
      */
     fun consumeStorageNotice(context: Context) {
-        // 快照部分失败的提示（抓快照时写下的哨兵）一并投递，两条互不干扰。
-        consumeSnapshotPartialNotice(context)?.let { VorteXSandboxNotice.post(it) }
         val f = File(getRootDir(context), NOTICE_FILE)
         if (!f.exists()) return
         try {
@@ -841,11 +472,28 @@ object VorteXSandbox {
     }
 
     /**
-     * 把用户内存储中的文件复制进沙箱可写层，供 Agent / 插件在沙箱内处理。
+     * 检查 LD_PRELOAD 是否写来了「检测到修改，正在影子化」的哨兵，若有则投递 Snackbar。
      *
-     * 沙箱内**一律禁止**访问内存储，因此 Agent 与插件遇到位于内存储的输入
-     * （样本文件、素材、待处理文档等）时，必须先经此函数导入到 \$HOME，
-     * 再在沙箱内继续处理——而不是让沙箱去挂载内存储。
+     * 触发时机：沙箱内首次出现对受控目录（真实 `$HOME` / `$PREFIX`）的写入，影子写库
+     * copy-up 真实内容到 tmp/ 后写入该哨兵。宿主侧轮询到此即提示用户「修改已被影子化」，
+     * 读完即删（节流由影子写库的 NOTIFIED 标记保证，每会话仅一次）。
+     */
+    fun consumeShadowingNotice(context: Context) {
+        val f = File(getTmpDir(context), SHADOWING_NOTICE)
+        if (!f.exists()) return
+        try {
+            if (f.delete()) {
+                VorteXSandboxNotice.post(context.getString(R.string.vortex_shadowing_notice))
+            }
+        } catch (_: Throwable) {
+        }
+    }
+
+    /**
+     * 把用户内存储中的文件复制进沙箱临时存储区，供 Agent / 插件在沙箱内处理。
+     *
+     * 沙箱内**一律禁止**访问内存储，因此遇到位于内存储的输入（样本文件、素材、待处理
+     * 文档等）时，必须先经此函数导入到临时区（tmp/imports），再在沙箱内继续处理。
      *
      * @param realPath 用户内存储中的**真实**绝对路径（如 `/sdcard/Download/a.bin`）
      * @return 沙箱内的可写副本路径；失败时返回 null
@@ -853,7 +501,7 @@ object VorteXSandbox {
     fun importFromRealStorage(context: Context, realPath: String): String? {
         val src = File(realPath)
         if (!src.exists()) return null
-        val imports = File(getRunHome(context), "vortex_imports")
+        val imports = File(getTmpDir(context), "imports")
         if (!imports.exists() && !imports.mkdirs()) return null
 
         // 保留一份原始文件名，多个同名文件靠目录分层避免互相覆盖。
@@ -878,7 +526,8 @@ object VorteXSandbox {
 
     /**
      * 若插件被授权在沙箱中运行，则将 [command] 包裹为「在 VorteX 沙箱内执行」的形式；
-     * 否则原样返回。
+     * 否则原样返回。引导脚本内部会注入 LD_PRELOAD 影子写库，并处理 su/sudo 模拟与
+     * 虚拟 ROOT。
      */
     fun wrapPluginCommand(context: Context, pluginId: String, command: String): String {
         if (!shouldPluginUseSandbox(context, pluginId)) return command

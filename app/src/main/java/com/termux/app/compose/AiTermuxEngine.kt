@@ -1616,9 +1616,9 @@ object SkillExecutor {
         }
 
         return try {
-            // 后台准备影子 prefix：首次要拷 ~95MB，不放这里会让本函数阻塞过久。
-            // 预热完成后脚本内部会秒级启动；这里不额外阻塞 UI（Agent 回合内执行）。
-            VorteXSandbox.prepareShadowPrefix(appCtx)
+            // 确保沙箱就位：解出 LD_PRELOAD 影子写库、保证「必要更改区」目录就绪。
+            // 新版已去掉 95MB 的 $PREFIX 影子拷贝，此调用极快，不阻塞 Agent 回合。
+            VorteXSandbox.ensureInitialized(appCtx)
 
             val t0 = System.currentTimeMillis()
             val process = ProcessBuilder(
