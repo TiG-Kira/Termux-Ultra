@@ -57,7 +57,7 @@ import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
-import androidx.compose.material3.CircularProgressIndicator
+import top.yukonga.miuix.kmp.basic.CircularProgressIndicator
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import com.termux.app.vortex.VorteXSandbox
 
@@ -200,27 +200,22 @@ fun ComposeTerminalListScreen(
     }
 
     // ---------- 沙箱准备中 ----------
-    // 无标题（title 传空串）的 WindowDialog，只有 Loading 提示。
+    // OverlayDialog 是「标题 → 摘要 → 内容」三段式结构，标题 chrome 区固定占位：
+    // 空 title 会让上方留出一大片空白。与 SettingsScreen 沙盒 busy 弹窗对齐——
+    // 标题承载文案，content 只放转圈。
     // 准备期间禁止关闭：影子层拷贝必须跑完，否则半成品目录会被当成已就绪。
     OverlayDialog(
         show = sandboxPreparing,
-        title = "",
-        summary = "",
+        title = stringResource(R.string.vortex_sandbox_preparing),
         onDismissRequest = { /* 准备中不可取消 */ },
         content = {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            Box(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 20.dp),
+                contentAlignment = Alignment.Center
             ) {
                 CircularProgressIndicator(
-                    modifier = Modifier.size(24.dp),
-                    strokeWidth = 2.dp,
-                    color = MiuixTheme.colorScheme.primary
-                )
-                Text(
-                    text = stringResource(R.string.vortex_sandbox_preparing),
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.size(36.dp),
+                    strokeWidth = 3.dp
                 )
             }
         }
