@@ -5,7 +5,6 @@ import android.content.Context
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
-import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.DecayAnimationSpec
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.spring
@@ -37,6 +36,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -111,8 +111,10 @@ fun MainScreen(
     // 各页面把各自的 TopAppBar 内容写入此槽，由 MainScreen 的 Scaffold.topBar 统一渲染
     // 浮动玻璃底栏的取景层（miuix-blur）：底栏透过它折射页面内容
     val glassNavBackdrop = rememberMiuixLayerBackdrop()
+    val currentSelectedTab by rememberUpdatedState(selectedTab)
+    val currentShowVnc by rememberUpdatedState(showVnc)
     val topBarContent = remember {
-        mutableStateOf<@Composable () -> Unit>({ MainTopBar(selectedTab, showVnc, scrollBehavior, glassNavBackdrop) })
+        mutableStateOf<@Composable () -> Unit>({ MainTopBar(currentSelectedTab, currentShowVnc, scrollBehavior, glassNavBackdrop) })
     }
     val snackbarHostState = remember { SnackbarHostState() }
     var remoteSubTab by remember { mutableStateOf(0) }
@@ -122,7 +124,6 @@ fun MainScreen(
     val systemNavBarsHeight = with(density) {
         WindowInsets.navigationBars.getBottom(density).toDp()
     }
-    val dragOffsetAnimatable = remember { Animatable(0f) }
     var isSwipingInProgress by remember { mutableStateOf(false) }
     var isOverviewEditMode by remember { mutableStateOf(false) }
     var swipeTargetTab by remember { mutableStateOf<Int?>(null) }
@@ -225,14 +226,6 @@ fun MainScreen(
 
     val liquidGlassBackdrop = rememberLayerBackdrop()
 
-    val direction = if (selectedTab > previousTab) 1 else -1
-    val isRemoteWithVnc = selectedTab == 3 && showVnc
-    val dragOffset = if (isSwipingInProgress) rawDragOffset else dragOffsetAnimatable.value
-    val swipeProgress = if (isSwipingInProgress && swipeTargetTab != null) {
-        (kotlin.math.abs(rawDragOffset) / screenWidthPx).coerceIn(0f, 1f)
-    } else {
-        0f
-    }
 
     // 若当前选中页被屏蔽，回退到第一个可用页
     LaunchedEffect(availableTabs) {
@@ -531,7 +524,7 @@ fun MainScreen(
                                 animate(
                                     initialValue = 0f,
                                     targetValue = 1f,
-                                    animationSpec = tween(300)
+                                    animationSpec = tween(AppMotion.SLOW)
                                 ) { fraction, _ ->
                                     rawDragOffset = startOffset + (endOffset - startOffset) * fraction
                                     if (!isSubTabSwipe) {
@@ -594,7 +587,7 @@ fun MainScreen(
                                 animate(
                                     initialValue = 0f,
                                     targetValue = 1f,
-                                    animationSpec = tween(300)
+                                    animationSpec = tween(AppMotion.SLOW)
                                 ) { fraction, _ ->
                                     rawDragOffset = startOffset * (1f - fraction)
                                     if (!isSubTabSwipe) {
@@ -671,9 +664,9 @@ fun MainScreen(
                         EnterTransition.None togetherWith ExitTransition.None
                     } else {
                         fadeIn(
-                            animationSpec = tween(durationMillis = 300)
+                            animationSpec = tween(durationMillis = AppMotion.SLOW)
                         ) togetherWith fadeOut(
-                            animationSpec = tween(durationMillis = 150)
+                            animationSpec = tween(durationMillis = AppMotion.FAST)
                         )
                     }
                 }

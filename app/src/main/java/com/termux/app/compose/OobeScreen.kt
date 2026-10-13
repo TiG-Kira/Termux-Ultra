@@ -393,30 +393,30 @@ fun OobeScreen(
                             if (isForward) {
                                 // 前进：新页从右滑入 + fadeIn，旧页向左滑出小距离 + fadeOut
                                 androidx.compose.animation.slideInHorizontally(
-                                    animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing)
+                                    animationSpec = tween(durationMillis = AppMotion.NORMAL, easing = FastOutSlowInEasing)
                                 ) { fullWidth -> fullWidth } +
                                 androidx.compose.animation.fadeIn(
-                                    animationSpec = tween(durationMillis = 200, delayMillis = 60, easing = LinearOutSlowInEasing)
+                                    animationSpec = tween(durationMillis = AppMotion.NORMAL, delayMillis = 60, easing = LinearOutSlowInEasing)
                                 ) togetherWith
                                 androidx.compose.animation.slideOutHorizontally(
-                                    animationSpec = tween(durationMillis = 200, easing = FastOutLinearInEasing)
+                                    animationSpec = tween(durationMillis = AppMotion.NORMAL, easing = FastOutLinearInEasing)
                                 ) { fullWidth -> -fullWidth / 5 } +
                                 androidx.compose.animation.fadeOut(
-                                    animationSpec = tween(durationMillis = 120, easing = FastOutLinearInEasing)
+                                    animationSpec = tween(durationMillis = AppMotion.FAST, easing = FastOutLinearInEasing)
                                 )
                             } else {
                                 // 后退：新页从左滑入小距离 + fadeIn，旧页向右滑出 + fadeOut
                                 androidx.compose.animation.slideInHorizontally(
-                                    animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing)
+                                    animationSpec = tween(durationMillis = AppMotion.NORMAL, easing = FastOutSlowInEasing)
                                 ) { fullWidth -> -fullWidth / 5 } +
                                 androidx.compose.animation.fadeIn(
-                                    animationSpec = tween(durationMillis = 200, delayMillis = 60, easing = LinearOutSlowInEasing)
+                                    animationSpec = tween(durationMillis = AppMotion.NORMAL, delayMillis = 60, easing = LinearOutSlowInEasing)
                                 ) togetherWith
                                 androidx.compose.animation.slideOutHorizontally(
-                                    animationSpec = tween(durationMillis = 200, easing = FastOutLinearInEasing)
+                                    animationSpec = tween(durationMillis = AppMotion.NORMAL, easing = FastOutLinearInEasing)
                                 ) { fullWidth -> fullWidth } +
                                 androidx.compose.animation.fadeOut(
-                                    animationSpec = tween(durationMillis = 120, easing = FastOutLinearInEasing)
+                                    animationSpec = tween(durationMillis = AppMotion.FAST, easing = FastOutLinearInEasing)
                                 )
                             }
                         }

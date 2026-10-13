@@ -29,7 +29,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.material3.CircularProgressIndicator
+import top.yukonga.miuix.kmp.basic.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -1274,8 +1274,7 @@ fun PackageManagerScreen(
                     Box(modifier = Modifier.fillMaxSize()) {
                         if (isLoading || loadingAvailable) {
                             CircularProgressIndicator(
-                                modifier = Modifier.align(Alignment.Center),
-                                color = Color(0xFF2563EB)
+                                modifier = Modifier.align(Alignment.Center)
                             )
                         } else {
                             LazyColumn(
@@ -1357,9 +1356,7 @@ fun PackageManagerScreen(
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         CircularProgressIndicator(
-                                            modifier = Modifier.size(24.dp),
-                                            color = MiuixTheme.colorScheme.primary,
-                                            strokeWidth = 3.dp
+                                            modifier = Modifier.size(24.dp)
                                         )
                                         Spacer(Modifier.width(12.dp))
                                         Text(
@@ -1446,9 +1443,7 @@ fun PackageManagerScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         CircularProgressIndicator(
-                            modifier = Modifier.size(24.dp),
-                            color = MiuixTheme.colorScheme.primary,
-                            strokeWidth = 3.dp
+                            modifier = Modifier.size(24.dp)
                         )
                         Spacer(Modifier.width(12.dp))
                         Text(

@@ -423,14 +423,14 @@ fun TerminalDetailScreenCompose(
             lastInteractionFromTopBar = true
             coroutineScope.launch {
                 try {
-                    animate(initialValue = smallTitleAlpha, targetValue = 0f, animationSpec = tween(100, easing = FastOutLinearInEasing)) { value, _ ->
+                    animate(initialValue = smallTitleAlpha, targetValue = 0f, animationSpec = tween(AppMotion.FAST, easing = FastOutLinearInEasing)) { value, _ ->
                         smallTitleAlpha = value
                     }
                     topBarSlideProgress = 1f
                     isCompact = false
                     isTopBarCollapsed = false
                     delay(200)
-                    animate(initialValue = 1f, targetValue = 0f, animationSpec = tween(220, easing = FastOutSlowInEasing)) { value, _ ->
+                    animate(initialValue = 1f, targetValue = 0f, animationSpec = tween(AppMotion.NORMAL, easing = FastOutSlowInEasing)) { value, _ ->
                         topBarSlideProgress = value
                     }
                     showLargeContent = true
@@ -464,13 +464,13 @@ fun TerminalDetailScreenCompose(
                 try {
                     showLargeContent = false
                     delay(100)
-                    animate(initialValue = topBarSlideProgress, targetValue = 1f, animationSpec = tween(220, easing = FastOutSlowInEasing)) { value, _ ->
+                    animate(initialValue = topBarSlideProgress, targetValue = 1f, animationSpec = tween(AppMotion.NORMAL, easing = FastOutSlowInEasing)) { value, _ ->
                         topBarSlideProgress = value
                     }
                     isCompact = true
                     delay(200)
                     if (isTopBarCollapsed) {
-                        animate(initialValue = smallTitleAlpha, targetValue = 1f, animationSpec = tween(120)) { value, _ ->
+                        animate(initialValue = smallTitleAlpha, targetValue = 1f, animationSpec = tween(AppMotion.FAST)) { value, _ ->
                             smallTitleAlpha = value
                         }
                     }
@@ -877,12 +877,12 @@ fun TerminalDetailScreenCompose(
                     visible = !isTopBarCollapsed,
                     enter = expandHorizontally(
                         expandFrom = Alignment.End,
-                        animationSpec = tween(220, easing = FastOutSlowInEasing)
-                    ) + fadeIn(tween(150)),
+                        animationSpec = tween(AppMotion.NORMAL, easing = FastOutSlowInEasing)
+                    ) + fadeIn(tween(AppMotion.FAST)),
                     exit = shrinkHorizontally(
                         shrinkTowards = Alignment.End,
-                        animationSpec = tween(220, easing = FastOutSlowInEasing)
-                    ) + fadeOut(tween(150))
+                        animationSpec = tween(AppMotion.NORMAL, easing = FastOutSlowInEasing)
+                    ) + fadeOut(tween(AppMotion.FAST))
                 ) {
                     TopBarActionCard {
                         if (showLargeButtons) LargeTopActionButtons() else SmallTopActionButtons()
@@ -902,7 +902,7 @@ fun TerminalDetailScreenCompose(
                                 animate(
                                     initialValue = smallTitleAlpha,
                                     targetValue = if (newCollapsed) 1f else 0f,
-                                    animationSpec = tween(200, easing = FastOutSlowInEasing)
+                                    animationSpec = tween(AppMotion.NORMAL, easing = FastOutSlowInEasing)
                                 ) { value, _ ->
                                     smallTitleAlpha = value
                                 }
@@ -948,13 +948,13 @@ fun TerminalDetailScreenCompose(
                 // 从透明处漏出，白色图标又叠在白底上导致整条顶栏看不见
                 val topBarColor by animateColorAsState(
                     targetValue = if (isCompact) terminalBgColor else topBarOpaqueBg,
-                    animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
+                    animationSpec = tween(durationMillis = AppMotion.NORMAL, easing = FastOutSlowInEasing),
                     label = "topBarBg"
                 )
                 val titleAlpha by animateFloatAsState(
                     targetValue = if (showLargeContent) 1f else 0f,
                     animationSpec = tween(
-                        durationMillis = if (showLargeContent) 150 else 100,
+                        durationMillis = AppMotion.FAST,
                         easing = FastOutLinearInEasing
                     ),
                     label = "titleAlpha"

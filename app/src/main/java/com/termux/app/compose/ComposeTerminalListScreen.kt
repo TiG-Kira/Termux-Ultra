@@ -57,7 +57,7 @@ import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
-import androidx.compose.material3.CircularProgressIndicator
+import top.yukonga.miuix.kmp.basic.CircularProgressIndicator
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import com.termux.app.vortex.VorteXSandbox
 
@@ -214,9 +214,7 @@ fun ComposeTerminalListScreen(
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 CircularProgressIndicator(
-                    modifier = Modifier.size(24.dp),
-                    strokeWidth = 2.dp,
-                    color = MiuixTheme.colorScheme.primary
+                    modifier = Modifier.size(24.dp)
                 )
                 Text(
                     text = stringResource(R.string.vortex_sandbox_preparing),
