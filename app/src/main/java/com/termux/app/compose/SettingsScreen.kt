@@ -139,7 +139,7 @@ fun SettingsScreen(
     // ---------- Reset Runtime Env state ----------
     var showResetEnvConfirm by remember { mutableStateOf(false) }
     var showResetEnvProgress by remember { mutableStateOf(false) }
-    var resetEnvStep by remember { mutableStateOf(RuntimeEnvironmentResetter.Step.DOWNLOADING) }
+    var resetEnvStep by remember { mutableStateOf(RuntimeEnvironmentResetter.Step.PREPARING) }
     var resetEnvMessage by remember { mutableStateOf("") }
     var resetEnvFailMode by remember { mutableStateOf<Int?>(null) }
     var resetEnvErrorMsg by remember { mutableStateOf("") }
@@ -1760,7 +1760,7 @@ fun SettingsScreen(
                                                     override fun onFailBeforePurge(msg: String) {
                                                         resetEnvFailMode = 0; resetEnvErrorMsg = msg; showResetEnvProgress = true
                                                     }
-                                                    override fun onFailAfterPurge(msg: String) {
+                                                    override fun onFallbackToSettings(msg: String) {
                                                         resetEnvFailMode = 1; resetEnvErrorMsg = msg; showResetEnvProgress = true
                                                     }
                                                 }
@@ -1779,16 +1779,16 @@ fun SettingsScreen(
                                 null -> if (resetEnvStep == RuntimeEnvironmentResetter.Step.DONE)
                                     context.getString(R.string.reset_runtime_env_success_title)
                                     else context.getString(R.string.reset_runtime_env_title)
-                                0 -> context.getString(R.string.reset_runtime_env_title) + " — 下载/校验失败"
-                                1 -> context.getString(R.string.reset_runtime_env_title) + " — 环境已受损"
+                                0 -> context.getString(R.string.reset_runtime_env_title) + " — 清除未开始"
+                                1 -> context.getString(R.string.reset_runtime_env_title) + " — 需手动清除"
                                 else -> context.getString(R.string.reset_runtime_env_title)
                             },
                             summary = when (resetEnvFailMode) {
                                 null -> if (resetEnvStep == RuntimeEnvironmentResetter.Step.DONE)
-                                    "prefix 与 home 已恢复到全新安装状态"
+                                    context.getString(R.string.reset_runtime_env_success_summary)
                                     else resetEnvMessage
                                 0 -> context.getString(R.string.reset_runtime_env_fail_before_purge, resetEnvErrorMsg)
-                                1 -> context.getString(R.string.reset_runtime_env_fail_after_purge, resetEnvErrorMsg)
+                                1 -> context.getString(R.string.reset_runtime_env_fail_fallback, resetEnvErrorMsg)
                                 else -> resetEnvMessage
                             },
                             show = showResetEnvProgress,
@@ -1829,7 +1829,7 @@ fun SettingsScreen(
                                                             override fun onFailBeforePurge(msg: String) {
                                                                 resetEnvFailMode = 0; resetEnvErrorMsg = msg; showResetEnvProgress = true
                                                             }
-                                                            override fun onFailAfterPurge(msg: String) {
+                                                            override fun onFallbackToSettings(msg: String) {
                                                                 resetEnvFailMode = 1; resetEnvErrorMsg = msg; showResetEnvProgress = true
                                                             }
                                                         }
