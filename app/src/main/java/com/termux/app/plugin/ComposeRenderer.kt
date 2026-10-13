@@ -6,7 +6,13 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.*
+import top.yukonga.miuix.kmp.basic.BasicComponent
+import top.yukonga.miuix.kmp.basic.Button
+import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.HorizontalDivider
+import top.yukonga.miuix.kmp.basic.Slider
+import top.yukonga.miuix.kmp.basic.Switch
+import top.yukonga.miuix.kmp.basic.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -61,12 +67,10 @@ object ComposeRenderer {
                 val title = (node.props["title"] as? String).orEmpty()
                 val subtitle = node.props["subtitle"] as? String
                 val onClick = node.props["onClick"] as? String
-                ListItem(
-                    headlineContent = { Text(title) },
-                    supportingContent = subtitle?.let { { Text(it) } },
-                    modifier = if (onClick != null) Modifier.clickable {
-                        ActionExecutor.execute(context, pluginId, onClick)
-                    } else Modifier
+                BasicComponent(
+                    title = title,
+                    summary = subtitle,
+                    onClick = onClick?.let { { ActionExecutor.execute(context, pluginId, it) } }
                 )
             }
 

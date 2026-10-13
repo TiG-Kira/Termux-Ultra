@@ -106,7 +106,7 @@ import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Wifi
-import androidx.compose.material3.Icon as MaterialIcon
+import top.yukonga.miuix.kmp.basic.Icon as MaterialIcon
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import kotlinx.coroutines.delay
 

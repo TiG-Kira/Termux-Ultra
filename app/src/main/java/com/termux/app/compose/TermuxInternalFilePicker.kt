@@ -16,6 +16,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import top.yukonga.miuix.kmp.basic.Text
 import androidx.compose.ui.unit.sp
 import com.termux.R
 import kotlinx.coroutines.Dispatchers
@@ -286,7 +287,7 @@ fun TermuxInternalFilePicker(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
-                            androidx.compose.material3.Text(
+                            Text(
                                 text = "当前: ${toDisplayPath(currentDir)}",
                                 fontSize = 11.sp,
                                 color = MiuixTheme.colorScheme.onSurfaceVariantSummary,

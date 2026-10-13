@@ -9,6 +9,7 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import top.yukonga.miuix.kmp.basic.TextField
 import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.runtime.*
 import androidx.compose.runtime.snapshotFlow
@@ -344,10 +345,10 @@ fun TextEditorScreen(
                 title = "保存文件",
                 summary = "保存到: $pickedDir",
                 content = {
-                    androidx.compose.material3.OutlinedTextField(
+                    TextField(
                         value = fileNameInput,
                         onValueChange = { fileNameInput = it },
-                        label = { Text("文件名") },
+                        label = "文件名",
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )

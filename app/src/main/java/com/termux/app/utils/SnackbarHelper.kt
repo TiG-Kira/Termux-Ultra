@@ -10,6 +10,8 @@ import com.google.android.material.snackbar.Snackbar
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import top.yukonga.miuix.kmp.basic.SnackbarDuration
+import top.yukonga.miuix.kmp.basic.SnackbarHostState
 
 /**
  * 统一 Snackbar 工具类，用于替代项目中的 Toast 调用。
@@ -116,16 +118,16 @@ object SnackbarHelper {
      */
     fun show(
         scope: CoroutineScope,
-        snackbarHostState: androidx.compose.material3.SnackbarHostState,
+        snackbarHostState: SnackbarHostState,
         text: String,
         durationMillis: Long = 2000L
     ) {
         scope.launch(Dispatchers.Main) {
             try {
                 val duration = if (durationMillis >= 5000L) {
-                    androidx.compose.material3.SnackbarDuration.Long
+                    SnackbarDuration.Long
                 } else {
-                    androidx.compose.material3.SnackbarDuration.Short
+                    SnackbarDuration.Short
                 }
                 snackbarHostState.showSnackbar(
                     message = text,
