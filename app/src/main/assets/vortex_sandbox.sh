@@ -14,13 +14,20 @@
 #      精确路径重定向到伪文件，su/sudo 为容器内模拟器，特权命令绝不触达真实系统。
 #   4. 「必要更改区」(essential/) 持久化：仅含 su/sudo 模拟器与伪装 ROOT 所需的文件
 #      篡改组件，由本脚本幂等播种，重启沙箱后仍在。
-#   5. 「临时存储区」(tmp/) 易失：影子写副本、删除 whiteout、运行时 /proc 影子、导入
-#      样本都落于此；会话退出（EXIT trap）整体清空，一切修改即消失。
+#   5. 「临时存储区」(tmp/) 易失：影子写副本、删除 whiteout、导入样本都落于此；
+#      会话退出（EXIT trap）整体清空，一切修改即消失。
 #
 # 最小快照拆分（用户需求落点）：
 #   - essential/  ← 持久，仅 su/sudo 及篡改组件（必要更改区）
 #   - tmp/        ← 易失，影子写 / whiteout / 运行时 / 导入（临时存储区）
 #   - 用户区（$HOME / $PREFIX）← 链接视图，写入被影子化
+#
+# 初始化可观测性（本次重点）：
+#   交互式进入时，控制台先渲染一块**实时进度面板**（步骤列表 + 转圈 + 进度条 + 耗时），
+#   逐推进、逐点亮；结束后整块擦除，恢复常规控制台并交出命令输入提示。
+#   每一步都带**硬超时**：超时或失败只降级告警，绝不阻塞。proot 正式拉起前还会做一次
+#   带超时的「可用性冒烟」——冒烟不过就直接降级为轻量影子模式，**保证用户一定能拿到
+#   可输入的 shell**，绝不会停在「只有横幅、没有提示符」的黑屏状态。
 #
 # 用法：
 #   vortex_sandbox.sh --interactive        进入交互式沙箱 shell（退出即重置）
@@ -35,6 +42,8 @@
 #   VORTEX_FAKE_STATUS       伪 /proc/self/status 文件（内部：本脚本生成后交给影子库）
 #   VORTEX_FAKE_ATTR         伪 /proc/self/attr/current 文件（内部）
 #   VORTEX_FORCE_NO_PROOT    1=强制禁用 proot（仅用于对照排查）
+#   VORTEX_UI_OFF            1=关闭初始化进度面板（纯文本输出）
+#   VORTEX_PROOT_TIMEOUT     冒烟校验超时秒数（默认 20）
 # ============================================================================
 
 VORTEX_ROOT="${VORTEX_ROOT:-$(cd "$(dirname "$0")/.." 2>/dev/null && pwd)}"
@@ -46,7 +55,7 @@ REAL_STORAGE="/storage/emulated/0"
 
 # 「必要更改区」：持久化，仅装 su/sudo 模拟器与伪装 ROOT 组件。
 ESSENTIAL="$VORTEX_ROOT/essential"
-# 「临时存储区」：会话级、易失。影子写副本 / whiteout / 运行时 /proc / 导入样本。
+# 「临时存储区」：会话级、易失。影子写副本 / whiteout / 导入样本。
 TMP="$VORTEX_ROOT/tmp"
 RUN_STORAGE="$TMP/storage"      # 影子内存储（空占位）
 # su/sudo 模拟器所在（持久，种在 essential/）。
@@ -60,6 +69,7 @@ FAKE_STATUS="$TMP/.vortex_fake_status"
 FAKE_ATTR="$TMP/.vortex_fake_attr_current"
 
 ISOLATE_STORAGE="${VORTEX_ISOLATE_STORAGE:-1}"
+PROOT_TIMEOUT="${VORTEX_PROOT_TIMEOUT:-20}"
 
 # 关键：**必须自建 PATH**。会话由 libterminal 直接 exec 本脚本，继承的 PATH 可能为空或
 # 不含 $PREFIX/bin，此时 `command -v proot` 会找不到 proot → 静默降级成弱隔离（危险）。
@@ -79,6 +89,12 @@ mkdir -p "$ESSENTIAL" "$TMP" 2>/dev/null
 
 NOTICE_FILE="$VORTEX_ROOT/.vortex_storage_notice"
 
+# 手动会话存活标记：--interactive 启动时创建，退出回收时摘除。
+# 一次性运行（--run）与手动会话共用 tmp/：其 EXIT trap 见到本标记即
+# 只清哨兵、不碰 tmp/——否则会把活会话的影子存储区连锅端。
+ACTIVE_SESSION_MARKER="$TMP/.vortex_active_session"
+VORTEX_SESSION_OWNER=0
+
 # ---------------------------------------------------------------------------
 # 环境准备
 # ---------------------------------------------------------------------------
@@ -88,6 +104,197 @@ have_proot() {
     command -v proot >/dev/null 2>&1
 }
 
+# ---------------------------------------------------------------------------
+# 初始化进度面板
+# ---------------------------------------------------------------------------
+# 只在「交互式 + stdout 是终端 + TERM 非 dumb」时启用；其余场景（--run 被解析输出、
+# 重定向到文件、Agent 调用）自动退化为纯文本，绝不往管道里灌 ANSI。
+#
+# 面板为**固定高度**（标题 + 分隔 + N 步 + 进度条 + 分隔），行数可预先算出，
+# 结束时精确上移擦除，不留残影、不吞掉后续 shell 的输出。
+
+VS_TOTAL=7
+VS_ST1=o; VS_ST2=o; VS_ST3=o; VS_ST4=o; VS_ST5=o; VS_ST6=o; VS_ST7=o
+VS_X1=_;  VS_X2=_;  VS_X3=_;  VS_X4=_;  VS_X5=_;  VS_X6=_;  VS_X7=_
+
+VORTEX_UI=0
+VORTEX_UI_LINES=0
+VORTEX_SPIN_I=0
+VORTEX_T0=0
+
+# 毫秒时间戳：date 支持 %N 时用纳秒精度，否则退化为秒。
+vs_now() {
+    _n=$(date +%s%N 2>/dev/null)
+    case "$_n" in
+        '' | *[!0-9]*) printf '%s' "$(( $(date +%s) * 1000 ))" ;;
+        *) printf '%s' "$(( _n / 1000000 ))" ;;
+    esac
+}
+
+# 毫秒 → "1.2s"
+vs_ms() {
+    printf '%d.%ds' "$(( $1 / 1000 ))" "$(( ($1 % 1000) / 100 ))"
+}
+
+vs_ui_init() {
+    VORTEX_UI=0
+    [ "${VORTEX_UI_OFF:-0}" = "1" ] && return 0
+    [ -t 1 ] 2>/dev/null || return 0
+    case "${TERM:-dumb}" in dumb | "") return 0 ;; esac
+    VORTEX_UI=1
+    VORTEX_T0=$(vs_now)
+    printf '\033[?25l'    # 隐藏光标，避免面板刷新时光标乱跳
+}
+
+vs_ui_fini() {
+    [ "$VORTEX_UI" = 1 ] || return 0
+    vs_clear
+    printf '\033[?25h'    # 恢复光标
+    VORTEX_UI=0
+}
+
+# 擦掉已绘制的面板：上移 N 行并清到屏幕底。
+vs_clear() {
+    [ "$VORTEX_UI" = 1 ] || return 0
+    if [ "$VORTEX_UI_LINES" -gt 0 ] 2>/dev/null; then
+        printf '\033[%sA\033[J' "$VORTEX_UI_LINES"
+    fi
+    VORTEX_UI_LINES=0
+}
+
+vs_set() { eval "VS_ST$1=\$2"; eval "VS_X$1=\$3"; }
+vs_get_st() { eval "_vs_v=\$VS_ST$1"; }
+
+vs_spin() {
+    case $(( VORTEX_SPIN_I % 10 )) in
+        0) printf '\342\240\213' ;; 1) printf '\342\240\231' ;; 2) printf '\342\240\271' ;;
+        3) printf '\342\240\270' ;; 4) printf '\342\240\274' ;; 5) printf '\342\240\264' ;;
+        6) printf '\342\240\246' ;; 7) printf '\342\240\247' ;; 8) printf '\342\240\207' ;;
+        9) printf '\342\240\217' ;;
+    esac
+    VORTEX_SPIN_I=$(( VORTEX_SPIN_I + 1 ))
+}
+
+vs_row() {
+    _ri=$1
+    vs_get_st "$_ri"; _rst=$_vs_v
+    eval "_rx=\$VS_X$_ri"
+    case "$_ri" in
+        1) _rlb='环境探测' ;;
+        2) _rlb='播种必要更改区' ;;
+        3) _rlb='准备临时存储区' ;;
+        4) _rlb='生成伪ROOT身份' ;;
+        5) _rlb='构造proot绑定' ;;
+        6) _rlb='校验proot可用性' ;;
+        7) _rlb='启动沙箱shell' ;;
+        *) _rlb='' ;;
+    esac
+    case "$_rst" in
+        '+') printf '  \033[32m\342\234\224\033[0m %s' "$_rlb" ;;
+        '!') printf '  \033[33m!\033[0m \033[33m%s\033[0m' "$_rlb" ;;
+        'x') printf '  \033[31m\342\234\230\033[0m \033[31m%s\033[0m' "$_rlb" ;;
+        'r') printf '  \033[36m%s\033[0m %s' "$(vs_spin)" "$_rlb" ;;
+        *)   printf '  \033[2m\342\227\213 %s\033[0m' "$_rlb" ;;
+    esac
+    [ "$_rx" != "_" ] && printf ' \033[2m\302\267 %s\033[0m' "$_rx"
+    printf '\n'
+}
+
+vs_render() {
+    [ "$VORTEX_UI" = 1 ] || return 0
+    vs_clear
+    _ln=0
+    printf '\033[1;36mVorteX Sandbox\033[0m \033[2m\302\267 沙箱初始化\033[0m\n'; _ln=$((_ln + 1))
+    printf '\033[2m────────────────────────────────\033[0m\n';                   _ln=$((_ln + 1))
+    _ri=1
+    while [ "$_ri" -le "$VS_TOTAL" ]; do
+        vs_row "$_ri"
+        _ln=$((_ln + 1))
+        _ri=$((_ri + 1))
+    done
+    _done=0
+    _ri=1
+    while [ "$_ri" -le "$VS_TOTAL" ]; do
+        vs_get_st "$_ri"
+        case "$_vs_v" in '+' | '!') _done=$((_done + 1)) ;; esac
+        _ri=$((_ri + 1))
+    done
+    _bw=24
+    _f=$(( _done * _bw / VS_TOTAL ))
+    _e=$(( _bw - _f ))
+    printf '  '
+    _k=0; while [ "$_k" -lt "$_f" ]; do printf '\033[36m\342\226\223\033[0m'; _k=$((_k + 1)); done
+    _k=0; while [ "$_k" -lt "$_e" ]; do printf '\033[2m\342\226\221\033[0m'; _k=$((_k + 1)); done
+    printf ' \033[2m%d/%d\033[0m' "$_done" "$VS_TOTAL"
+    if [ "$VORTEX_T0" -gt 0 ] 2>/dev/null; then
+        printf ' \033[2m\302\267 %s\033[0m' "$(vs_ms $(( $(vs_now) - VORTEX_T0 )) )"
+    fi
+    printf '\n'; _ln=$((_ln + 1))
+    printf '\033[2m────────────────────────────────\033[0m\n';                   _ln=$((_ln + 1))
+    VORTEX_UI_LINES=$_ln
+}
+
+vs_plain() {
+    # 非面板模式下的纯文本进度（--run / 重定向 / Agent 场景）
+    [ "$VORTEX_UI" = 1 ] && return 0
+    printf '[VorteX Sandbox] %s\n' "$1" >&2
+}
+
+# 后台跑一段命令并**边等边转圈**；$1=步骤号 $2=超时秒 其余=命令。
+# 超时后强杀并返回 124，绝不无限等待——这是「任何环节都不得卡死」的落点。
+vs_step() {
+    _sn=$1; shift
+    _sto=$1; shift
+    vs_set "$_sn" r _
+    vs_plain "… $* (≤${_sto}s)"
+    _sf="$VORTEX_ROOT/.vortex_step.$$"
+    rm -f "$_sf" 2>/dev/null
+    ( "$@" >/dev/null 2>&1; echo $? > "$_sf" ) &
+    _spid=$!
+    _st0=$(vs_now)
+    _guard=0
+    _max=$(( _sto * 10 + 40 ))
+    while [ ! -s "$_sf" ] && [ "$_guard" -lt "$_max" ]; do
+        vs_set "$_sn" r "$(vs_ms $(( $(vs_now) - _st0 )) )"
+        vs_render
+        _guard=$(( _guard + 1 ))
+        sleep 0.1
+    done
+    if [ ! -s "$_sf" ]; then
+        kill -9 "$_spid" 2>/dev/null
+        echo 124 > "$_sf" 2>/dev/null
+    fi
+    wait "$_spid" 2>/dev/null
+    _src=$(cat "$_sf" 2>/dev/null)
+    rm -f "$_sf" 2>/dev/null
+    case "${_src:-1}" in
+        0)   vs_set "$_sn" + "$(vs_ms $(( $(vs_now) - _st0 )) )" ; _rc=0 ;;
+        124) vs_set "$_sn" ! "超时${_sto}s" ; _rc=124 ;;
+        *)   vs_set "$_sn" ! "rc=${_src:-1}" ; _rc=${_src:-1} ;;
+    esac
+    vs_render
+    return $_rc
+}
+
+# 同步小步骤：标为运行中→渲染→执行→标记结果（毫秒级，不进后台）。
+vs_quick() {
+    _sn=$1; shift
+    vs_set "$_sn" r _
+    vs_plain "… $*"
+    _st0=$(vs_now)
+    vs_render
+    "$@"
+    _rc=$?
+    if [ "$_rc" = 0 ]; then
+        vs_set "$_sn" + "$(vs_ms $(( $(vs_now) - _st0 )) )"
+    else
+        vs_set "$_sn" ! "rc=$_rc"
+    fi
+    vs_render
+    return $_rc
+}
+
+# ---------------------------------------------------------------------------
 # 幂等播种「必要更改区」：仅生成 su/sudo 模拟器脚本（持久）。
 # 与旧实现不同，这里**不拷贝任何用户数据**，因此瞬时完成、且跨会话保留。
 seed_essential() {
@@ -179,7 +386,7 @@ notice_storage_blocked() {
 #   2. /proc/self/status 的 Uid/Gid  → 0
 #   3. su / sudo                      → 只在沙箱容器内模拟执行，绝不触达真实特权命令
 #
-# 原理（旧实现已替换）：**不再**用 proot 把整个 /proc 绑成软链农场。那样会让
+# 原理：**不再**用 proot 把整个 /proc 绑成软链农场。那样会让
 # /proc/self/fd、/proc/self/maps、/proc/self/comm 等条目全部变成指向 proot 虚拟路径
 # (/dev/.vortex_realproc/...) 的软链；proot 解析软链目标时不套用 bind，必然 ENOENT，
 # 于是动态链接器的 readlink("/proc/self/fd/N") 整片失败，沙箱初始化时刷出大量
@@ -198,14 +405,10 @@ fake_status_file() {
     : > "$fs_tmp" || return 1
     while IFS= read -r fs_line || [ -n "$fs_line" ]; do
         case "$fs_line" in
-            Uid:*)    printf 'Uid:	0	0	0	0
-' ;;
-            Gid:*)    printf 'Gid:	0	0	0	0
-' ;;
-            Groups:*) printf 'Groups:	0
-' ;;
-            *)        printf '%s
-' "$fs_line" ;;
+            Uid:*)    printf 'Uid:\t0\t0\t0\t0\n' ;;
+            Gid:*)    printf 'Gid:\t0\t0\t0\t0\n' ;;
+            Groups:*) printf 'Groups:\t0\n' ;;
+            *)        printf '%s\n' "$fs_line" ;;
         esac
     done < "$1" >> "$fs_tmp" || { rm -f "$fs_tmp"; return 1; }
     mv -f "$fs_tmp" "$2" || { rm -f "$fs_tmp"; return 1; }
@@ -235,26 +438,52 @@ seed_fake_proc() {
 #   - 影子写库经 LD_PRELOAD 注入沙箱子进程（而非 proot 自身），避免干扰 proot 的
 #     内部临时文件 / --link2symlink 链接农场。
 
+# 只有当**宿主侧来源路径确实存在**时才追加绑定：proot 绑到不存在的宿主路径会静默
+# 失效甚至让路径翻译落空，直接跳过更安全。
+vs_bind() {
+    [ -e "$1" ] || return 0
+    PROOT_BINDS_STR="$PROOT_BINDS_STR -b $1:$2"
+}
+
 build_proot_binds() {
-    PROOT_BINDS_STR="-b /dev -b /sys -b /system -b /apex"
+    PROOT_BINDS_STR="-b /dev -b /sys -b /system -b /apex -b /proc"
 
     if [ "$ISOLATE_STORAGE" = "1" ]; then
-        seed_storage
-        PROOT_BINDS_STR="$PROOT_BINDS_STR -b $RUN_STORAGE:$REAL_STORAGE"
+        vs_bind "$RUN_STORAGE" "$REAL_STORAGE"
     fi
 
     if seed_essential; then
-        PROOT_BINDS_STR="$PROOT_BINDS_STR -b $ESSENTIAL/su:/system/bin/su -b $ESSENTIAL/su:/system/xbin/su -b $ESSENTIAL/su:/sbin/su"
-        PROOT_BINDS_STR="$PROOT_BINDS_STR -b $ESSENTIAL/sudo:/system/bin/sudo -b $ESSENTIAL/sudo:/system/xbin/sudo -b $ESSENTIAL/sudo:/sbin/sudo"
+        vs_bind "$ESSENTIAL/su"   /system/bin/su
+        vs_bind "$ESSENTIAL/su"   /system/xbin/su
+        vs_bind "$ESSENTIAL/su"   /sbin/su
+        vs_bind "$ESSENTIAL/sudo" /system/bin/sudo
+        vs_bind "$ESSENTIAL/sudo" /system/xbin/sudo
+        vs_bind "$ESSENTIAL/sudo" /sbin/sudo
     else
         echo "[VorteX Sandbox] 警告：必要更改区播种失败，su/sudo 模拟器将不可用。" >&2
     fi
 }
 
+# 生成 proot 冒烟脚本：用与正式启动完全相同的参数拉起一个瞬时命令，
+# 命中约定输出才算通过。写成独立文件是为了让 `timeout` 能直接杀到 proot 进程本身
+# （脚本内 exec 掉 sh，proot 即 timeout 的直接子进程）。
+build_smoke_script() {
+    _smoke="$VORTEX_ROOT/.vortex_smoke.$$"
+    _sb="$REAL_PREFIX/bin/echo"
+    [ -x "$_sb" ] || _sb=/system/bin/echo
+    [ -x "$_sb" ] || return 1
+    {
+        printf '_out=$("%s" %s -0 %s -w "%s" "%s" VORTEX_PROOT_OK 2>/dev/null)\n' \
+            "$_proot_bin" "$_popt_link2symlink" "$PROOT_BINDS_STR" "$REAL_HOME" "$_sb"
+        printf 'case "$_out" in *VORTEX_PROOT_OK*) exit 0 ;; esac\n'
+        printf 'exit 1\n'
+    } > "$_smoke" 2>/dev/null || return 1
+    echo "$_smoke"
+}
+
 # 组装并执行 proot。$1 = 传给 bash 的模式参数（-i / -c ...）
 run_in_proot() {
     build_proot_binds
-    seed_fake_proc || echo "[VorteX Sandbox] 警告：伪 ROOT 身份文件生成失败，/proc/self 身份伪造将失效。" >&2
 
     _host_path="$PATH"
     _proot_bin=$(command -v proot 2>/dev/null)
@@ -264,6 +493,9 @@ run_in_proot() {
     PATH="$ESSENTIAL:$REAL_PREFIX/bin:/system/bin"
     LD_LIBRARY_PATH="$REAL_PREFIX/lib"
     TMPDIR="$REAL_PREFIX/tmp"
+    # proot 自身的临时目录（--link2symlink 链接农场）必须落在真实可写目录上。
+    mkdir -p "$REAL_PREFIX/tmp" 2>/dev/null
+    PROOT_TMP_DIR="$REAL_PREFIX/tmp"
     SHELL="$REAL_PREFIX/bin/bash"
     TERM="${TERM:-xterm-256color}"
     LANG="${LANG:-en_US.UTF-8}"
@@ -282,7 +514,7 @@ run_in_proot() {
     VORTEX_FAKE_ATTR="$FAKE_ATTR"
     SHADOW_LIB_OK=0
     [ -f "$SHADOW_LIB" ] && SHADOW_LIB_OK=1
-    export HOME PREFIX PATH LD_LIBRARY_PATH TMPDIR SHELL TERM LANG
+    export HOME PREFIX PATH LD_LIBRARY_PATH TMPDIR PROOT_TMP_DIR SHELL TERM LANG
     export VORTEX_SANDBOX VORTEX_VIRTUAL_ROOT VORTEX_ROOT VORTEX_PROOT
     export VORTEX_SHADOW_TMP VORTEX_SHADOW_ROOTS VORTEX_SHADOW_NOTICE VORTEX_SHADOW_NOTIFIED
     export VORTEX_FAKE_STATUS VORTEX_FAKE_ATTR
@@ -321,7 +553,7 @@ run_in_proot() {
 }
 
 # ---------------------------------------------------------------------------
-# 轻量降级方案（proot 不可用）：仍注入 LD_PRELOAD 影子写
+# 轻量降级方案（proot 不可用 / 冒烟失败）：仍注入 LD_PRELOAD 影子写
 # ---------------------------------------------------------------------------
 # 无 proot 时**绝对路径不被屏蔽**（无法靠 ptrace 兜住 rm -rf 真实路径），但 LD_PRELOAD
 # 影子写依旧生效：对受控目录的写入仍被 copy-up / 白化，返回成功而不落盘。
@@ -349,12 +581,64 @@ setup_fallback() {
     else
         echo "[VorteX Sandbox] 警告：影子写库缺失，轻量模式下写入将落到真实文件。" >&2
     fi
+}
 
-    cat >&2 <<'EOF'
-[VorteX Sandbox] 警告：未检测到 proot，已降级为「仅 LD_PRELOAD 影子写」的轻量隔离。
-[VorteX Sandbox] 此模式下 **绝对路径不被 ptrace 屏蔽**；请执行 `pkg install proot` 后重试
-[VorteX Sandbox] 以获得完整隔离。受控目录（$HOME / $PREFIX）内的写入仍会被影子化。
-EOF
+# ---------------------------------------------------------------------------
+# 交互式初始化流水线（全程可见 + 每步硬超时）
+# ---------------------------------------------------------------------------
+vs_probe_env() {
+    mkdir -p "$ESSENTIAL" "$TMP" 2>/dev/null || return 1
+    [ -d "$REAL_HOME" ] || return 1
+    return 0
+}
+
+init_interactive() {
+    vs_ui_init
+
+    HAVE_PROOT=0
+    have_proot && HAVE_PROOT=1
+    SMOKE_OK=0
+
+    # 1 环境探测
+    vs_quick 1 vs_probe_env
+
+    # 2 播种必要更改区
+    vs_quick 2 seed_essential
+
+    # 3 准备临时存储区
+    vs_quick 3 seed_storage
+
+    # 4 生成伪 ROOT 身份
+    vs_quick 4 seed_fake_proc
+
+    # 5 构造 proot 绑定
+    vs_quick 5 build_proot_binds
+
+    # 6 proot 可用性冒烟（带硬超时，绝不让流程停在这一步）
+    if [ "$HAVE_PROOT" = "1" ]; then
+        _proot_bin=$(command -v proot 2>/dev/null)
+        [ -n "$_proot_bin" ] || _proot_bin=proot
+        _popt_link2symlink=""
+        if "$_proot_bin" --link2symlink --version >/dev/null 2>&1; then
+            _popt_link2symlink="--link2symlink"
+        fi
+        _smoke=$(build_smoke_script)
+        if [ -n "$_smoke" ]; then
+            if command -v timeout >/dev/null 2>&1; then
+                vs_step 6 "$PROOT_TIMEOUT" timeout "$PROOT_TIMEOUT" /system/bin/sh "$_smoke"
+            else
+                vs_step 6 "$PROOT_TIMEOUT" /system/bin/sh "$_smoke"
+            fi
+            [ $? = 0 ] && SMOKE_OK=1
+            rm -f "$_smoke" 2>/dev/null
+        else
+            vs_set 6 ! '无冒烟程序'
+            vs_render
+        fi
+    else
+        vs_set 6 ! '未安装proot'
+        vs_render
+    fi
 }
 
 # ---------------------------------------------------------------------------
@@ -386,12 +670,28 @@ do_check() {
 # 无论正常退出、命令失败还是被信号打断，都必须清掉**临时存储区**（tmp/）。
 # 「必要更改区」(essential/) 持久保留——它只装 su/sudo 等伪装 ROOT 组件。
 # 用 trap 而非在分支里手写 —— 后者在 exec / 信号路径上会漏掉。
+# 面板擦除放在 reset_run 开头：任何退出路径都不会把面板/隐藏光标留在终端上。
 trap 'reset_run' EXIT INT TERM
 
 reset_run() {
-    rm -rf "$TMP" 2>/dev/null
-    rm -f "$NOTICE_FILE" "$VORTEX_ROOT/.vortex_storage_notified" 2>/dev/null
-    rm -f "$TMP/.vortex_shadowing" "$TMP/.vortex_shadow_notified" 2>/dev/null
+    vs_ui_fini
+    if [ "$VORTEX_SESSION_OWNER" = "1" ]; then
+        # 手动会话退出：摘自己的标记，走完整回收。
+        rm -f "$ACTIVE_SESSION_MARKER" 2>/dev/null
+        rm -rf "$TMP" 2>/dev/null
+        rm -f "$NOTICE_FILE" "$VORTEX_ROOT/.vortex_storage_notified" 2>/dev/null
+    elif [ -f "$ACTIVE_SESSION_MARKER" ]; then
+        # 一次性运行退出，但手动会话还活着：tmp/ 是它的运行时，绝不能动。
+        rm -f "$NOTICE_FILE" "$VORTEX_ROOT/.vortex_storage_notified" 2>/dev/null
+    else
+        rm -rf "$TMP" 2>/dev/null
+        rm -f "$NOTICE_FILE" "$VORTEX_ROOT/.vortex_storage_notified" 2>/dev/null
+    fi
+    rm -f "$VORTEX_ROOT/.vortex_step.$$" "$VORTEX_ROOT/.vortex_smoke.$$" 2>/dev/null
+}
+
+banner() {
+    printf '\n[VorteX Sandbox] %s\n' "$1"
 }
 
 case "$1" in
@@ -407,13 +707,33 @@ case "$1" in
             run_in_proot -c "$CMD"
         else
             setup_fallback
+            printf '[VorteX Sandbox] 已进入轻量隔离（仅 LD_PRELOAD 影子写，未安装 proot）\n' >&2
             "$REAL_PREFIX/bin/bash" -c "$CMD"
         fi
         ;;
 
     --interactive|"")
-        if have_proot; then
-            printf '\n[VorteX Sandbox] proot 隔离 + LD_PRELOAD 影子写已启用（虚拟 ROOT，会话结束自动清空）\n'
+        # 标记本进程为手动会话所有者：退出时完整回收；其间到来的一次性运行
+        # （--run）见到标记则只清哨兵，不碰共享的 tmp/。
+        : > "$ACTIVE_SESSION_MARKER" 2>/dev/null
+        VORTEX_SESSION_OWNER=1
+
+        init_interactive
+
+        # 第 7 步：真正拉起 shell。到这一步为止，前面任何失败都只是降级告警，
+        # 不会把用户丢在一个没有提示符的控制台里。
+        vs_set 7 r _
+        vs_render
+
+        if [ "$SMOKE_OK" = "1" ]; then
+            # 并发回收可能已把 tmp/ 清掉，正式启动前补一次，保证绑定与伪身份文件就位。
+            mkdir -p "$TMP" "$RUN_STORAGE" 2>/dev/null
+            seed_fake_proc 2>/dev/null
+            build_proot_binds 2>/dev/null
+            vs_set 7 + _
+            vs_render
+            vs_ui_fini
+            banner 'proot 隔离 + LD_PRELOAD 影子写已启用（虚拟 ROOT，会话结束自动清空）'
             printf '[VorteX Sandbox] 真实 %s 以链接视图呈现：写入被影子化到临时存储区，底层数据不变。\n' "$REAL_HOME"
             printf '[VorteX Sandbox] 身份伪造已启用：/proc/self/attr/current=u:r:su:s0，uid=0；\n'
             printf '[VorteX Sandbox] su/sudo 为沙箱内模拟执行（持久于 essential/），不调用真实特权命令。\n'
@@ -421,7 +741,21 @@ case "$1" in
             run_in_proot -i
         else
             setup_fallback
-            printf '\n[VorteX Sandbox] 已进入轻量隔离沙箱（仅 LD_PRELOAD 影子写）\n\n'
+            if [ "$HAVE_PROOT" = "1" ]; then
+                vs_set 7 ! 'proot不可用·已降级'
+            else
+                vs_set 7 + '轻量模式'
+            fi
+            vs_render
+            vs_ui_fini
+            banner '已进入轻量隔离沙箱（仅 LD_PRELOAD 影子写）'
+            if [ "$HAVE_PROOT" = "1" ]; then
+                printf '[VorteX Sandbox] proot 可用性校验未通过（超时 %ss 或无法拉起子进程），已自动降级，\n' "$PROOT_TIMEOUT"
+                printf '[VorteX Sandbox] 避免停在无提示的控制台。受控目录（$HOME / $PREFIX）内的写入仍会被影子化。\n\n'
+            else
+                printf '[VorteX Sandbox] 未检测到 proot；请执行 `pkg install proot` 后重试以获得完整隔离。\n'
+                printf '[VorteX Sandbox] 当前绝对路径不被 ptrace 屏蔽，但受控目录内的写入仍会被影子化。\n\n'
+            fi
             "$REAL_PREFIX/bin/bash" -i
         fi
         ;;
