@@ -382,9 +382,22 @@ static int vortex_dispatch_open(const char* path, int flags, mode_t mode) {
         return real_open(sp, flags, mode);
     }
 
-    /* 只读：影子存在则读影子（看到修改），否则透传真实文件。 */
+    /* 只读：影子存在则读影子（看到修改），否则透传真实文件。
+     *
+     * **目录是例外，绝不能被影子目录顶替**：影子目录里只有本会话改动过的那几个子项，
+     * 一旦把 open() 指向它，调用方拿到的就是一个「只剩零星子项」的目录 —— 连 libc
+     * 自己的 opendir() 内部走的 openat 也一并中招，于是**往目录里新建一个文件后，
+     * 该目录原有的真实文件全部消失**（ls / 通配符都只剩新建的那个）。
+     * 目录内容一律在**枚举层**（opendir / fdopendir → readdir）做「真实 + 影子」合并；
+     * 只有当真实目录本身不存在（沙箱内新建的目录）时才打开影子目录。 */
     if (real_access(sp, F_OK) == 0) {
-        return real_open(sp, flags, mode);
+        struct stat sst, rst;
+        int shadow_is_dir = (vortex_stat_real(sp, &sst, 1) == 0 && S_ISDIR(sst.st_mode));
+        int real_is_dir   = (vortex_stat_real(path, &rst, 1) == 0 && S_ISDIR(rst.st_mode));
+        if (!(shadow_is_dir && real_is_dir)) {
+            return real_open(sp, flags, mode);
+        }
+        /* 真实目录在：开真实目录，子项差异交给枚举层合并。 */
     }
     return real_open(path, flags, mode);
 }
@@ -779,6 +792,8 @@ struct vortex_dir {
     unsigned int magic;   /* 标记：非受控目录返回的是真实 DIR*，readdir 需据此分流 */
     int    fd;            /* fdopendir 来源的真实 fd（closedir 负责关闭）；opendir 来源为 -1 */
     char** names;
+    unsigned char* types; /* 与 names 同序：真实/影子目录项自带的 d_type */
+    ino_t* inos;          /* 与 names 同序：真实/影子目录项自带的 d_ino */
     int    count;
     int    pos;
     struct dirent ent;
@@ -786,13 +801,32 @@ struct vortex_dir {
 
 #define VORTEX_DIR_MAGIC 0x56525844u  /* "VRXD" */
 
-static void vortex_dir_add(char*** names, int* count, const char* name) {
+/* 某些文件系统（以及合成项）会给出 0 号 inode，而 **bash 的 glob 实现把
+ * d_ino == 0 的目录项当作「已删除」直接跳过**。合成流若一律填 0，沙箱内的
+ * 通配符展开就会全部落空（`ls` 却正常，因为 toybox 不检查 d_ino）——典型症状
+ * 是 oh-my-bash 只加载一半、提示函数 command not found、补全失效。
+ * 故 0 号一律替换为按名字散列的稳定合成值（同一次/多次枚举都保持一致）。 */
+static ino_t vortex_synth_ino(const char* name) {
+    unsigned long long h = 1469598103934665603ULL;   /* FNV-1a 64 */
+    for (const unsigned char* p = (const unsigned char*)name; *p; p++) {
+        h ^= *p;
+        h *= 1099511628211ULL;
+    }
+    return (ino_t)(h | (1ULL << 62));   /* 恒非零 */
+}
+
+static void vortex_dir_add(char*** names, unsigned char** types, ino_t** inos,
+                           int* count, const char* name, unsigned char type, ino_t ino) {
     /* 去重：影子项覆盖真实项（同名只留一次）。 */
     for (int i = 0; i < *count; i++) {
         if (strcmp((*names)[i], name) == 0) return;
     }
     *names = realloc(*names, (size_t)(*count + 1) * sizeof(char*));
+    *types = realloc(*types, (size_t)(*count + 1) * sizeof(unsigned char));
+    *inos  = realloc(*inos,  (size_t)(*count + 1) * sizeof(ino_t));
     (*names)[*count] = strdup(name);
+    (*types)[*count] = type;
+    (*inos)[*count]  = ino ? ino : vortex_synth_ino(name);
     (*count)++;
 }
 
@@ -817,7 +851,8 @@ static DIR* vortex_dir_build(int idx, const char* rel) {
             char child[PATH_MAX];
             snprintf(child, sizeof child, "%s/%s", rel, e->d_name);
             if (vortex_whiteout_exists(idx, child)) continue;
-            vortex_dir_add(&vd->names, &vd->count, e->d_name);
+            vortex_dir_add(&vd->names, &vd->types, &vd->inos, &vd->count,
+                           e->d_name, e->d_type, e->d_ino);
         }
         real_closedir(rd);
     }
@@ -827,7 +862,8 @@ static DIR* vortex_dir_build(int idx, const char* rel) {
         struct dirent* e;
         while ((e = real_readdir(sd))) {
             if (strcmp(e->d_name, ".") == 0 || strcmp(e->d_name, "..") == 0) continue;
-            vortex_dir_add(&vd->names, &vd->count, e->d_name);
+            vortex_dir_add(&vd->names, &vd->types, &vd->inos, &vd->count,
+                           e->d_name, e->d_type, e->d_ino);
         }
         real_closedir(sd);
     }
@@ -901,12 +937,13 @@ struct dirent* readdir(DIR* dirp) {
     struct vortex_dir* vd = (struct vortex_dir*)dirp;
     if (vd == NULL || vd->magic != VORTEX_DIR_MAGIC) return real_readdir(dirp);
     if (vd->pos >= vd->count) return NULL;
-    const char* nm = vd->names[vd->pos++];
+    const int i = vd->pos++;
+    const char* nm = vd->names[i];
     memset(&vd->ent, 0, sizeof vd->ent);
     strncpy(vd->ent.d_name, nm, sizeof vd->ent.d_name - 1);
     vd->ent.d_name[sizeof vd->ent.d_name - 1] = '\0';
-    vd->ent.d_type = DT_UNKNOWN;
-    vd->ent.d_ino = 0;
+    vd->ent.d_type = vd->types ? vd->types[i] : (unsigned char)DT_UNKNOWN;
+    vd->ent.d_ino  = (vd->inos && vd->inos[i]) ? vd->inos[i] : vortex_synth_ino(nm);
     vd->ent.d_reclen = (unsigned short)(sizeof vd->ent);
     vd->ent.d_off = vd->pos;
     return &vd->ent;
@@ -930,6 +967,8 @@ int closedir(DIR* dirp) {
     if (vd->fd >= 0) close(vd->fd);   /* fdopendir 来源：fd 归本流所有，在此关闭 */
     for (int i = 0; i < vd->count; i++) free(vd->names[i]);
     free(vd->names);
+    free(vd->types);
+    free(vd->inos);
     free(vd);
     return 0;
 }
