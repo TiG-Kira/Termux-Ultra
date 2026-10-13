@@ -226,11 +226,14 @@ class ComposeSessionManager private constructor(private val context: Context) {
             removedIndex = _sessions.value.indexOfFirst { it.session.id == sessionId }
             _sessions.value.getOrNull(removedIndex)
         } ?: return
-        // 沙箱会话结束 → 彻底回收影子空间（约 95MB 的 $PREFIX 拷贝等）。
-        // 必须在 finish 之前取名字：finish 后会话对象可能已被重置。
-        // 沙箱会话禁止重命名，name 即始终为「沙箱会话」，可直接判定。
-        VorteXSandbox.onSessionEnded(context, info.name)
+        // 沙箱会话结束 → 彻底回收影子空间。
+        // 注意顺序：**先 finish 再回收**。tmp/proc 是 proot guest 的 /proc 绑定，
+        // 会话还活着就删会把 guest 的 /proc 抽空，bash 疯狂 ENOENT 直至卡死；
+        // 回收本身已切后台线程，不会再阻塞 UI。
+        // 名字必须在 finish 前取：finish 后会话对象可能已被重置。
+        val sessionName = info.name
         info.session.finishIfRunning()
+        VorteXSandbox.onSessionEnded(context, sessionName)
         TerminalSessionCompat.unregister(sessionId)
 
         synchronized(sessionsLock) {
@@ -250,8 +253,10 @@ class ComposeSessionManager private constructor(private val context: Context) {
     fun killAllSessions() {
         synchronized(sessionsLock) {
             _sessions.value.forEach {
-                VorteXSandbox.onSessionEnded(context, it.name)
+                // 同 killSession：先 finish 再回收，别抽活会话的 /proc。
+                val name = it.name
                 it.session.finishIfRunning()
+                VorteXSandbox.onSessionEnded(context, name)
                 TerminalSessionCompat.unregister(it.session.id)
             }
             _sessions.value = emptyList()

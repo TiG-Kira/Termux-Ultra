@@ -154,6 +154,8 @@ fun ComposeTerminalListScreen(
                                 // 属磁盘 IO，必须放后台并给出「准备中」提示，不能卡住 UI。
                                 sandboxPreparing = true
                                 VorteXSandbox.prepareAsync(context) {
+                                    // 先在后台等待在途回收完成，保证 tmp/ 是干净 slate。
+                                    VorteXSandbox.awaitPendingPurge()
                                     // 回调在后台线程，需切回主线程操作会话与状态
                                     scope.launch {
                                         sandboxPreparing = false
