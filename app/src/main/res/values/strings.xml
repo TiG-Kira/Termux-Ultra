@@ -840,7 +840,7 @@
     <string name="vortex_sandbox_session_title">沙箱会话</string>
     <string name="vortex_sandbox_disabled_toast">VorteX Sandbox is not enabled</string>
     <string name="vortex_sandbox_preparing">Preparing sandbox…</string>
-
+    <string name="vortex_shadowing_notice">检测到修改，正在影子化</string>
 
     <!-- Reset Runtime Environment -->
     <string name="reset_runtime_env_title">重置运行环境</string>

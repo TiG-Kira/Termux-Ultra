@@ -982,8 +982,6 @@ fun SettingsScreen(
                             VorteXSandbox.setEnabledAsync(context, it) {
                                 Handler(Looper.getMainLooper()).post {
                                     sandboxBusy = null
-                                    VorteXSandbox.consumeSnapshotPartialNotice(context)
-                                        ?.let { msg -> showSnackbar(msg, true) }
                                 }
                             }
                         }
@@ -1597,8 +1595,6 @@ fun SettingsScreen(
                                     VorteXSandbox.setEnabledAsync(context, it) {
                                         Handler(Looper.getMainLooper()).post {
                                             sandboxBusy = null
-                                            VorteXSandbox.consumeSnapshotPartialNotice(context)
-                                                ?.let { msg -> showSnackbar(msg, true) }
                                         }
                                     }
                                 }

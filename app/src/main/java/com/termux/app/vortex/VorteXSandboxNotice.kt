@@ -118,6 +118,7 @@ fun VorteXSandboxNoticeHost(
         if (!enabled) return@LaunchedEffect
         while (enabled) {
             VorteXSandbox.consumeStorageNotice(context)
+            VorteXSandbox.consumeShadowingNotice(context)
             delay(pollIntervalMs)
         }
     }
