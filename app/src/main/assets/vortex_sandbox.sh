@@ -9,9 +9,9 @@
 #      用户态的等价实现（无 root 的 Android 无法挂 overlayfs）。
 #   2. 沙箱内保留用户完整的 Termux 环境：直接复用真实 $PREFIX、$HOME，不复制、不重装，
 #      因此沙箱近乎零磁盘占用（旧实现要拷 95MB $PREFIX + 整份 $HOME 快照）。
-#   3. 提供虚拟 ROOT：proot -0 让所有进程以 uid 0 视角运行，并伪造 /proc/self
-#      （SELinux 上下文 u:r:su:s0、status Uid=0）与 su/sudo 模拟器，让脚本确信运行在
-#      真实 root 环境中，而特权命令只在沙箱容器内模拟执行。
+#   3. 提供虚拟 ROOT：proot -0 让所有进程以 uid 0 视角运行；root 身份线索
+#      （/proc/self/attr/current=u:r:su:s0、/proc/self/status 的 Uid=0）由影子库按
+#      精确路径重定向到伪文件，su/sudo 为容器内模拟器，特权命令绝不触达真实系统。
 #   4. 「必要更改区」(essential/) 持久化：仅含 su/sudo 模拟器与伪装 ROOT 所需的文件
 #      篡改组件，由本脚本幂等播种，重启沙箱后仍在。
 #   5. 「临时存储区」(tmp/) 易失：影子写副本、删除 whiteout、运行时 /proc 影子、导入
@@ -32,6 +32,8 @@
 #   VORTEX_REAL_HOME         真实 HOME 绝对路径（默认 /data/data/com.termux/files/home）
 #   VORTEX_REAL_PREFIX       真实 PREFIX 绝对路径（默认 /data/data/com.termux/files/usr）
 #   VORTEX_ISOLATE_STORAGE   1=内存储也影子化（默认 1）；0=与真实环境共享 /storage/emulated/0
+#   VORTEX_FAKE_STATUS       伪 /proc/self/status 文件（内部：本脚本生成后交给影子库）
+#   VORTEX_FAKE_ATTR         伪 /proc/self/attr/current 文件（内部）
 #   VORTEX_FORCE_NO_PROOT    1=强制禁用 proot（仅用于对照排查）
 # ============================================================================
 
@@ -46,22 +48,16 @@ REAL_STORAGE="/storage/emulated/0"
 ESSENTIAL="$VORTEX_ROOT/essential"
 # 「临时存储区」：会话级、易失。影子写副本 / whiteout / 运行时 /proc / 导入样本。
 TMP="$VORTEX_ROOT/tmp"
-RUN_PROC="$TMP/proc"            # 影子 /proc（虚拟 ROOT 身份伪造，运行时生成）
 RUN_STORAGE="$TMP/storage"      # 影子内存储（空占位）
 # su/sudo 模拟器所在（持久，种在 essential/）。
 TOOLS_DIR="$ESSENTIAL"
 # LD_PRELOAD 影子写拦截库（由宿主从 APK 解出）。
 SHADOW_LIB="${VORTEX_SHADOW_LIB:-$VORTEX_ROOT/lib/libvortex_shadow.so}"
 
-PROCWATCH_PIDFILE="$VORTEX_ROOT/.vortex_procwatch_pid"
-PROCWATCH_PENDING_K=16
-REAL_PROC_ALIAS="/dev/.vortex_realproc"
-
-# 手动会话存活标记：--interactive 启动时创建，退出回收时摘除。
-# 一次性运行（--run）与手动会话共用 tmp/ 和 procwatch：其 EXIT trap 见到本标记即
-# 只清哨兵、不碰 tmp/ 与 watcher——否则会把活会话的 /proc 影子连锅端。
-ACTIVE_SESSION_MARKER="$TMP/.vortex_active_session"
-VORTEX_SESSION_OWNER=0
+# root 身份伪文件：影子库按精确路径把 /proc/self/status 与 /proc/self/attr/current
+# 重定向到这两个普通文件（不再覆盖整个 /proc）。
+FAKE_STATUS="$TMP/.vortex_fake_status"
+FAKE_ATTR="$TMP/.vortex_fake_attr_current"
 
 ISOLATE_STORAGE="${VORTEX_ISOLATE_STORAGE:-1}"
 
@@ -176,202 +172,51 @@ notice_storage_blocked() {
 }
 
 # ---------------------------------------------------------------------------
-# 虚拟 ROOT 身份伪造：影子 /proc + su/sudo 模拟
+# 虚拟 ROOT 身份伪造：伪身份文件 + su/sudo 模拟
 # ---------------------------------------------------------------------------
 # 目标：让沙箱内的脚本确信自己运行在**真实的 Android root 设备**上：
 #   1. cat /proc/self/attr/current   → u:r:su:s0（root shell 的 SELinux 上下文）
 #   2. /proc/self/status 的 Uid/Gid  → 0
 #   3. su / sudo                      → 只在沙箱容器内模拟执行，绝不触达真实特权命令
 #
-# 原理：proot 的路径解析逐组件进行，一旦某前缀命中绑定，剩余组件直接落到绑定目标上。
-# 因此整体把 /proc 绑到影子目录 $RUN_PROC 后，影子内预置伪造的 self / thread-self，
-# 其余条目软链到真实 /proc 的进程别名 $REAL_PROC_ALIAS；显式 /proc/<pid> 由后台 watcher
-# 持续补建。非本应用 UID 的进程保持真实软链，避免把别人的进程伪装成 root 而露馅。
+# 原理（旧实现已替换）：**不再**用 proot 把整个 /proc 绑成软链农场。那样会让
+# /proc/self/fd、/proc/self/maps、/proc/self/comm 等条目全部变成指向 proot 虚拟路径
+# (/dev/.vortex_realproc/...) 的软链；proot 解析软链目标时不套用 bind，必然 ENOENT，
+# 于是动态链接器的 readlink("/proc/self/fd/N") 整片失败，沙箱初始化时刷出大量
+#   WARNING: linker: unable to get realpath for the library "..."
+# 且软链农场快照的是外层 shell 的 pid，cwd/exe/root 会指错进程。
 #
-# 降级：影子 /proc 建不起来时退回真实 -b /proc（身份伪造失效但隔离不受影响）。
+# 现在只生成两个普通文件，由影子库（LD_PRELOAD）按**精确路径**重定向：
+#   /proc/self/status       → $FAKE_STATUS
+#   /proc/self/attr/current → $FAKE_ATTR
+# /proc 本体保持真实，其余条目语义完好。
 
+# 在真实 /proc/self/status 基础上把 Uid/Gid/Groups 改写成 0。
 fake_status_file() {
     [ -r "$1" ] || return 1
     fs_tmp="$2.tmp.$$"
     : > "$fs_tmp" || return 1
     while IFS= read -r fs_line || [ -n "$fs_line" ]; do
         case "$fs_line" in
-            Uid:*)    printf 'Uid:\t0\t0\t0\t0\n' ;;
-            Gid:*)    printf 'Gid:\t0\t0\t0\t0\n' ;;
-            Groups:*) printf 'Groups:\t0\n' ;;
-            *)        printf '%s\n' "$fs_line" ;;
+            Uid:*)    printf 'Uid:	0	0	0	0
+' ;;
+            Gid:*)    printf 'Gid:	0	0	0	0
+' ;;
+            Groups:*) printf 'Groups:	0
+' ;;
+            *)        printf '%s
+' "$fs_line" ;;
         esac
     done < "$1" >> "$fs_tmp" || { rm -f "$fs_tmp"; return 1; }
     mv -f "$fs_tmp" "$2" || { rm -f "$fs_tmp"; return 1; }
     return 0
 }
 
-write_fake_attr() {
-    mkdir -p "$1" 2>/dev/null || return 1
-    printf 'u:r:su:s0' > "$1/current" || return 1
-    for wa_f in exec fscreate keycreate prev sockcreate lsm; do
-        [ -e "$1/$wa_f" ] || : > "$1/$wa_f" 2>/dev/null
-    done
-    return 0
-}
-
-shadow_pid_view() {
-    sv_d="$1"
-    sv_src="$2"
-    sv_suffix="${sv_src#/proc}"
-    mkdir -p "$sv_d" 2>/dev/null || return 1
-    write_fake_attr "$sv_d/attr" || return 1
-    fake_status_file "$sv_src/status" "$sv_d/status" || rm -f "$sv_d/status"
-    for sv_n in cwd exe root; do
-        [ -e "$sv_src/$sv_n" ] || [ -L "$sv_src/$sv_n" ] || continue
-        sv_t=$(readlink "$sv_src/$sv_n" 2>/dev/null)
-        [ -n "$sv_t" ] && ln -sfn "$sv_t" "$sv_d/$sv_n" 2>/dev/null
-    done
-    for sv_e in "$sv_src"/*; do
-        [ -e "$sv_e" ] || [ -L "$sv_e" ] || continue
-        sv_n="${sv_e##*/}"
-        case "$sv_n" in attr|status|cwd|exe|root) continue ;; esac
-        ln -sfn "$REAL_PROC_ALIAS$sv_suffix/$sv_n" "$sv_d/$sv_n" 2>/dev/null
-    done
-    return 0
-}
-
-make_pending_view() {
-    mv_d="$1"
-    mv_pid="$2"
-    mkdir -p "$mv_d/attr" 2>/dev/null || return 1
-    write_fake_attr "$mv_d/attr" || return 1
-    fake_status_file /proc/self/status "$mv_d/status" 2>/dev/null || rm -f "$mv_d/status"
-    for mv_e in /proc/self/*; do
-        [ -e "$mv_e" ] || [ -L "$mv_e" ] || continue
-        mv_n="${mv_e##*/}"
-        case "$mv_n" in attr|status) continue ;; esac
-        ln -sfn "$REAL_PROC_ALIAS/$mv_pid/$mv_n" "$mv_d/$mv_n" 2>/dev/null
-    done
-    return 0
-}
-
-read_real_uid() {
-    while IFS= read -r ru_line; do
-        case "$ru_line" in
-            Uid:*) set -- $ru_line; printf '%s' "$2"; return 0 ;;
-        esac
-    done < "$1" 2>/dev/null
-    return 1
-}
-
-add_pending_views() {
-    ap_max="$1"
-    ap_pm=$(cat /proc/sys/kernel/pid_max 2>/dev/null)
-    case "$ap_pm" in ''|*[!0-9]*) ap_pm=32768 ;; esac
-    ap_n=0
-    while [ "$ap_n" -lt "$PROCWATCH_PENDING_K" ] && [ "$ap_max" -lt "$ap_pm" ]; do
-        ap_max=$((ap_max + 1))
-        ap_n=$((ap_n + 1))
-        ap_d="$RUN_PROC/$ap_max"
-        [ -e "$ap_d" ] || [ -L "$ap_d" ] && continue
-        make_pending_view "$ap_d" "$ap_max" || return 1
-        sc_pending="$sc_pending $ap_max "
-    done
-    return 0
-}
-
-sc_pending=""
-procwatch_scan() {
-    sc_max=0
-    for sc_e in /proc/[0-9]*; do
-        [ -d "$sc_e" ] || continue
-        sc_pid="${sc_e##*/}"
-        case "$sc_pid" in *[!0-9]*) continue ;; esac
-        [ "$sc_pid" -gt "$sc_max" ] 2>/dev/null && sc_max=$sc_pid
-        sc_d="$RUN_PROC/$sc_pid"
-
-        if [ -d "$sc_d" ]; then
-            case " $sc_pending " in
-                *" $sc_pid "*)
-                    sc_uid=$(read_real_uid "$sc_e/status")
-                    if [ "$sc_uid" = "$SC_OWN_UID" ]; then
-                        shadow_pid_view "$sc_d" "$sc_e"
-                    else
-                        rm -rf "$sc_d" 2>/dev/null
-                        ln -sfn "$REAL_PROC_ALIAS/$sc_pid" "$sc_d" 2>/dev/null
-                    fi
-                    sc_pending=$(printf '%s' "$sc_pending" | sed "s/ $sc_pid / /g")
-                    ;;
-            esac
-            continue
-        fi
-        if [ -L "$sc_d" ]; then
-            continue
-        fi
-
-        sc_uid=$(read_real_uid "$sc_e/status")
-        if [ "$sc_uid" = "$SC_OWN_UID" ]; then
-            shadow_pid_view "$sc_d" "$sc_e"
-        else
-            ln -sfn "$REAL_PROC_ALIAS/$sc_pid" "$sc_d" 2>/dev/null
-        fi
-    done
-
-    for sc_d in "$RUN_PROC"/[0-9]*; do
-        [ -e "$sc_d" ] || [ -L "$sc_d" ] || continue
-        sc_n="${sc_d##*/}"
-        [ -d "/proc/$sc_n" ] && continue
-        case " $sc_pending " in *" $sc_n "*) continue ;; esac
-        rm -rf "$sc_d" 2>/dev/null
-    done
-
-    add_pending_views "$sc_max"
-    return 0
-}
-
-procwatch_loop() {
-    while :; do
-        [ -f "$PROCWATCH_PIDFILE" ] || exit 0
-        [ -d "$RUN_PROC" ] || exit 0
-        procwatch_scan
-        sleep 0.2
-    done
-}
-
-start_procwatch() {
-    if [ -f "$PROCWATCH_PIDFILE" ]; then
-        kill_procwatch_pid "$(cat "$PROCWATCH_PIDFILE" 2>/dev/null)"
-        rm -f "$PROCWATCH_PIDFILE"
-    fi
-    : > "$PROCWATCH_PIDFILE" 2>/dev/null || return 1
-    ( procwatch_loop ) >/dev/null 2>&1 &
-    echo $! > "$PROCWATCH_PIDFILE" 2>/dev/null
-    return 0
-}
-
-stop_procwatch() {
-    if [ -f "$PROCWATCH_PIDFILE" ]; then
-        kill_procwatch_pid "$(cat "$PROCWATCH_PIDFILE" 2>/dev/null)"
-        rm -f "$PROCWATCH_PIDFILE"
-    fi
-    return 0
-}
-
-# 只杀「确实是本脚本 procwatch」的进程：pidfile 里的 PID 可能已被系统回收给无关
-# 进程（其他会话的 shell 等），无身份校验的 kill 会误杀——曾致正常会话崩坏。
-# 校验不通过时仅删 pidfile：旧 watcher 每轮自检 pidfile 消失即自行退场（≤0.2s）。
-kill_procwatch_pid() {
-    [ -n "$1" ] || return 0
-    [ "$1" = "$$" ] && return 0
-    grep -qa "vortex_sandbox" "/proc/$1/cmdline" 2>/dev/null || return 0
-    kill "$1" 2>/dev/null
-    return 0
-}
-
-seed_shadow_proc() {
-    mkdir -p "$RUN_PROC" 2>/dev/null || return 1
-    SC_OWN_UID=$(read_real_uid /proc/self/status) || SC_OWN_UID=0
-    shadow_pid_view "$RUN_PROC/self" "/proc/self" || return 1
-    shadow_pid_view "$RUN_PROC/thread-self" "/proc/self" || return 1
-    sc_pending=""
-    procwatch_scan || return 1
-    start_procwatch || return 1
+# 幂等生成伪身份文件（会话级，随 tmp/ 一起清空）。
+seed_fake_proc() {
+    mkdir -p "$TMP" 2>/dev/null || return 1
+    fake_status_file /proc/self/status "$FAKE_STATUS" || return 1
+    printf 'u:r:su:s0' > "$FAKE_ATTR" || return 1
     return 0
 }
 
@@ -382,6 +227,9 @@ seed_shadow_proc() {
 #   - **不再** `-b $RUN:$REAL_HOME` / `-b $RUN_PREFIX:$REAL_PREFIX`：用户区不再拷贝，
 #     而是以链接视图呈现，写入由 LD_PRELOAD 影子化。这样彻底去掉 95MB $PREFIX 拷贝
 #     与整份 $HOME 快照，沙箱近乎零磁盘占用。
+#   - **不再**把整个 /proc 绑成软链农场：那会让 /proc/self/fd 等条目 ENOENT，动态
+#     链接器 readlink("/proc/self/fd/N") 整片失败并刷出 linker 告警。root 身份改由
+#     影子库按精确路径重定向（见上方「虚拟 ROOT 身份伪造」）。
 #   - su/sudo 模拟器从 essential/（持久）绑定到 /system/bin|/system/xbin|/sbin，
 #     即便脚本绕过 PATH 用绝对路径调用，拿到的也是模拟器。
 #   - 影子写库经 LD_PRELOAD 注入沙箱子进程（而非 proot 自身），避免干扰 proot 的
@@ -389,13 +237,6 @@ seed_shadow_proc() {
 
 build_proot_binds() {
     PROOT_BINDS_STR="-b /dev -b /sys -b /system -b /apex"
-
-    if seed_shadow_proc; then
-        PROOT_BINDS_STR="$PROOT_BINDS_STR -b $RUN_PROC:/proc -b /proc:$REAL_PROC_ALIAS"
-    else
-        echo "[VorteX Sandbox] 警告：影子 /proc 不可用，/proc/self 身份伪造已停用。" >&2
-        PROOT_BINDS_STR="$PROOT_BINDS_STR -b /proc"
-    fi
 
     if [ "$ISOLATE_STORAGE" = "1" ]; then
         seed_storage
@@ -413,6 +254,7 @@ build_proot_binds() {
 # 组装并执行 proot。$1 = 传给 bash 的模式参数（-i / -c ...）
 run_in_proot() {
     build_proot_binds
+    seed_fake_proc || echo "[VorteX Sandbox] 警告：伪 ROOT 身份文件生成失败，/proc/self 身份伪造将失效。" >&2
 
     _host_path="$PATH"
     _proot_bin=$(command -v proot 2>/dev/null)
@@ -436,11 +278,14 @@ run_in_proot() {
     VORTEX_SHADOW_ROOTS="$REAL_HOME:$REAL_PREFIX"
     VORTEX_SHADOW_NOTICE="$TMP/.vortex_shadowing"
     VORTEX_SHADOW_NOTIFIED="$TMP/.vortex_shadow_notified"
+    VORTEX_FAKE_STATUS="$FAKE_STATUS"
+    VORTEX_FAKE_ATTR="$FAKE_ATTR"
     SHADOW_LIB_OK=0
     [ -f "$SHADOW_LIB" ] && SHADOW_LIB_OK=1
     export HOME PREFIX PATH LD_LIBRARY_PATH TMPDIR SHELL TERM LANG
     export VORTEX_SANDBOX VORTEX_VIRTUAL_ROOT VORTEX_ROOT VORTEX_PROOT
     export VORTEX_SHADOW_TMP VORTEX_SHADOW_ROOTS VORTEX_SHADOW_NOTICE VORTEX_SHADOW_NOTIFIED
+    export VORTEX_FAKE_STATUS VORTEX_FAKE_ATTR
 
     _popt_link2symlink=""
     if "$_proot_bin" --link2symlink --version >/dev/null 2>&1; then
@@ -458,6 +303,8 @@ run_in_proot() {
                 VORTEX_SHADOW_ROOTS="$VORTEX_SHADOW_ROOTS" \
                 VORTEX_SHADOW_NOTICE="$VORTEX_SHADOW_NOTICE" \
                 VORTEX_SHADOW_NOTIFIED="$VORTEX_SHADOW_NOTIFIED" \
+                VORTEX_FAKE_STATUS="$VORTEX_FAKE_STATUS" \
+                VORTEX_FAKE_ATTR="$VORTEX_FAKE_ATTR" \
                 "$REAL_PREFIX/bin/bash" "$@"
     else
         echo "[VorteX Sandbox] 警告：影子写库缺失，写入将直接落到真实文件（隔离失效）。" >&2
@@ -481,6 +328,7 @@ run_in_proot() {
 
 setup_fallback() {
     seed_essential
+    seed_fake_proc
     export HOME="$REAL_HOME"
     export VORTEX_SANDBOX=1
     export VORTEX_VIRTUAL_ROOT=1
@@ -496,6 +344,8 @@ setup_fallback() {
         export VORTEX_SHADOW_ROOTS="$REAL_HOME:$REAL_PREFIX"
         export VORTEX_SHADOW_NOTICE="$TMP/.vortex_shadowing"
         export VORTEX_SHADOW_NOTIFIED="$TMP/.vortex_shadow_notified"
+        export VORTEX_FAKE_STATUS="$FAKE_STATUS"
+        export VORTEX_FAKE_ATTR="$FAKE_ATTR"
     else
         echo "[VorteX Sandbox] 警告：影子写库缺失，轻量模式下写入将落到真实文件。" >&2
     fi
@@ -517,7 +367,7 @@ do_check() {
         echo "shadow_home=$REAL_HOME (链接视图，写入被影子化到 $TMP)"
         echo "shadow_prefix=$REAL_PREFIX (链接视图，写入被影子化到 $TMP)"
         echo "essential=$ESSENTIAL (持久：su/sudo 模拟器)"
-        echo "shadow_proc=$RUN_PROC (attr/current=u:r:su:s0, status Uid=0)"
+        echo "fake_proc=$FAKE_STATUS,$FAKE_ATTR (影子库按精确路径重定向 /proc/self)"
         echo "su_sudo=simulated (容器内模拟执行，不调用真实特权命令)"
         echo "shadow_lib=${SHADOW_LIB_OK:-unknown}"
     else
@@ -539,23 +389,9 @@ do_check() {
 trap 'reset_run' EXIT INT TERM
 
 reset_run() {
-    if [ "$VORTEX_SESSION_OWNER" = "1" ]; then
-        # 手动会话退出：摘自己的标记，走完整回收。
-        rm -f "$ACTIVE_SESSION_MARKER" 2>/dev/null
-        stop_procwatch
-        rm -rf "$TMP" 2>/dev/null
-        rm -f "$NOTICE_FILE" "$VORTEX_ROOT/.vortex_storage_notified" 2>/dev/null
-        rm -f "$TMP/.vortex_shadowing" "$TMP/.vortex_shadow_notified" 2>/dev/null
-    elif [ -f "$ACTIVE_SESSION_MARKER" ]; then
-        # 一次性运行退出，但手动会话还活着：tmp/ 与 procwatch 是它的运行时，不能动。
-        rm -f "$NOTICE_FILE" "$VORTEX_ROOT/.vortex_storage_notified" 2>/dev/null
-        rm -f "$TMP/.vortex_shadowing" "$TMP/.vortex_shadow_notified" 2>/dev/null
-    else
-        stop_procwatch
-        rm -rf "$TMP" 2>/dev/null
-        rm -f "$NOTICE_FILE" "$VORTEX_ROOT/.vortex_storage_notified" 2>/dev/null
-        rm -f "$TMP/.vortex_shadowing" "$TMP/.vortex_shadow_notified" 2>/dev/null
-    fi
+    rm -rf "$TMP" 2>/dev/null
+    rm -f "$NOTICE_FILE" "$VORTEX_ROOT/.vortex_storage_notified" 2>/dev/null
+    rm -f "$TMP/.vortex_shadowing" "$TMP/.vortex_shadow_notified" 2>/dev/null
 }
 
 case "$1" in
@@ -576,10 +412,6 @@ case "$1" in
         ;;
 
     --interactive|"")
-        # 标记本进程为手动会话所有者：退出时完整回收；其间到来的一次性运行
-        # （--run）见到标记则只清哨兵，不碰共享的 tmp/ 与 procwatch。
-        : > "$ACTIVE_SESSION_MARKER" 2>/dev/null
-        VORTEX_SESSION_OWNER=1
         if have_proot; then
             printf '\n[VorteX Sandbox] proot 隔离 + LD_PRELOAD 影子写已启用（虚拟 ROOT，会话结束自动清空）\n'
             printf '[VorteX Sandbox] 真实 %s 以链接视图呈现：写入被影子化到临时存储区，底层数据不变。\n' "$REAL_HOME"

@@ -55,6 +55,18 @@ static int          g_nroots = 0;
 static char         g_notice[PATH_MAX];
 static char         g_notified[PATH_MAX];
 
+/* ---- 伪 ROOT 身份重定向 --------------------------------------------------
+ *
+ * 沙箱**不再**用 proot 把整个 /proc 换成软链农场。那样做时 /proc/self/fd、
+ * /proc/self/maps、/proc/self/comm 等条目都是指向 proot 虚拟路径
+ * (/dev/.vortex_realproc/...) 的软链，而 proot 解析软链目标时不套用 bind，
+ * 必然 ENOENT —— 动态链接器的 readlink("/proc/self/fd/N") 于是整片失败，
+ * 沙箱初始化时刷出大量
+ *   WARNING: linker: unable to get realpath for the library "..."
+ * 现在 /proc 保持真实，只把「root 身份」这两条线索按精确路径重定向到伪文件。 */
+static char g_fake_status[PATH_MAX];
+static char g_fake_attr[PATH_MAX];
+
 /* ---- 真实函数指针（RTLD_NEXT，避免递归拦截自己）------------------------ */
 #define DEF_REAL(ret, name, args) static ret (*real_##name) args
 DEF_REAL(int,    open,     (const char*, int, ...));
@@ -169,6 +181,23 @@ static int is_intercepted(const char* path, char* rel, size_t relsz) {
         }
     }
     return -1;
+}
+
+/* 伪 ROOT 身份重定向：/proc/self(/thread-self)/status 与 .../attr/current 指向伪文件。
+ * 命中返回伪文件绝对路径，否则 NULL。与影子写无关，独立生效。 */
+static const char* vortex_fake_proc_target(const char* path) {
+    if (!path || path[0] != '/') return NULL;
+    if (g_fake_status[0] &&
+        (strcmp(path, "/proc/self/status") == 0 ||
+         strcmp(path, "/proc/thread-self/status") == 0)) {
+        return g_fake_status;
+    }
+    if (g_fake_attr[0] &&
+        (strcmp(path, "/proc/self/attr/current") == 0 ||
+         strcmp(path, "/proc/thread-self/attr/current") == 0)) {
+        return g_fake_attr;
+    }
+    return NULL;
 }
 
 /* 影子副本路径：<tmp>/shadow/<idx>/<rel> */
@@ -317,6 +346,12 @@ static int vortex_shadow_delete(int idx, const char* rel) {
 /* ---- open / open64 / openat -------------------------------------------- */
 
 static int vortex_dispatch_open(const char* path, int flags, mode_t mode) {
+    /* 伪 ROOT 身份：root 身份线索不走影子层，直接读伪文件。 */
+    const char* fake = vortex_fake_proc_target(path);
+    if (fake) {
+        int ffd = real_open(fake, flags, mode);
+        if (ffd >= 0) return ffd;
+    }
     char rel[PATH_MAX];
     int idx = is_intercepted(path, rel, sizeof rel);
     if (idx < 0) return real_open(path, flags, mode);
@@ -645,6 +680,8 @@ static int vortex_stat_real(const char* path, struct stat* buf, int follow) {
 }
 
 static int vortex_dispatch_stat(const char* path, struct stat* buf, int follow) {
+    const char* fake = vortex_fake_proc_target(path);
+    if (fake) return vortex_stat_real(fake, buf, follow);
     char rel[PATH_MAX];
     int idx = is_intercepted(path, rel, sizeof rel);
     if (idx < 0 || rel[0] == '\0') {
@@ -692,6 +729,8 @@ int fstatat(int dirfd, const char* path, struct stat* buf, int flag) {
 
 int access(const char* path, int mode) {
     if (!real_access) return vortex_not_ready();
+    const char* fake = vortex_fake_proc_target(path);
+    if (fake) return real_access(fake, mode);
     char rel[PATH_MAX];
     int idx = is_intercepted(path, rel, sizeof rel);
     if (idx < 0 || rel[0] == '\0') return real_access(path, mode);
@@ -711,6 +750,8 @@ int faccessat(int dirfd, const char* path, int mode, int flags) {
     if (!real_faccessat) return vortex_not_ready();
     char a[PATH_MAX];
     if (!resolve_at(dirfd, path, a)) return real_faccessat(dirfd, path, mode, flags);
+    const char* fake = vortex_fake_proc_target(a);
+    if (fake) return real_faccessat(AT_FDCWD, fake, mode, flags);
     char rel[PATH_MAX];
     int idx = is_intercepted(a, rel, sizeof rel);
     if (idx < 0 || rel[0] == '\0') return real_faccessat(dirfd, path, mode, flags);
@@ -930,6 +971,13 @@ long telldir(DIR* dirp) {
 
 __attribute__((constructor)) static void vortex_init(void) {
     resolve_real();
+
+    /* 伪 ROOT 身份重定向与影子写相互独立：即使影子层未启用（缺 VORTEX_SHADOW_*），
+     * root 身份线索也要照常伪造，故先于下面的启用判定读取。 */
+    const char* fstat = getenv("VORTEX_FAKE_STATUS");
+    const char* fattr = getenv("VORTEX_FAKE_ATTR");
+    if (fstat) snprintf(g_fake_status, sizeof g_fake_status, "%s", fstat);
+    if (fattr) snprintf(g_fake_attr, sizeof g_fake_attr, "%s", fattr);
 
     const char* disable = getenv("VORTEX_SHADOW_DISABLE");
     if (disable && disable[0] == '1') { g_enabled = 0; return; }
