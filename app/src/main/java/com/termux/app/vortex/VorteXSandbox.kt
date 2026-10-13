@@ -5,6 +5,9 @@ import android.os.Build
 import com.termux.R
 import com.termux.shared.termux.TermuxConstants
 import java.io.File
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import java.util.zip.ZipFile
 
 /**
@@ -388,21 +391,58 @@ object VorteXSandbox {
      * (essential/) 不在此清——它只装 su/sudo 等伪装 ROOT 组件，本就要求持久。
      *
      * 调用方应在会话真正结束（进程退出 / 被 kill / 应用退出）后调用本方法。
+     *
+     * ⚠️ 回收全程在专用后台线程执行：tmp/proc 下有为设备上每个进程建的符号链接
+     * （可达上万条），主线程同步 `deleteRecursively` 会直接卡死 UI（ANR 闪退）。
      */
     fun purgeAll(context: Context) {
+        purgeExecutor.execute { doPurge(context.applicationContext) }
+    }
+
+    /**
+     * 空间回收专用单线程：purgeAll 与一次性运行回收都排入此队列，FIFO 串行，
+     * 避免两条路径并发删同一棵树；[awaitPendingPurge] 借 FIFO 语义等待全部在途
+     * 回收完成。
+     */
+    private val purgeExecutor: ExecutorService = Executors.newSingleThreadExecutor { r ->
+        Thread(r, "vortex-sandbox-purge").apply { isDaemon = true }
+    }
+
+    /** 回收动作本体（在 [purgeExecutor] 上执行）：先摘 procwatch pidfile，再清 tmp/ 与哨兵。 */
+    private fun doPurge(appContext: Context) {
+        // 先摘 procwatch pidfile：后台 watcher 每 0.2s 自检，发现 pidfile
+        // 消失即自行退场；否则它会不断重建 tmp/proc，回收永远不干净。
         try {
-            getTmpDir(context).deleteRecursively()
+            File(getRootDir(appContext), PROCWATCH_PIDFILE).delete()
+        } catch (_: Throwable) {
+        }
+        try {
+            getTmpDir(appContext).deleteRecursively()
         } catch (_: Throwable) {
         }
         // 告警哨兵与「已通知」标记一并清掉：空间已回收，下次会话是全新状态。
         try {
-            File(getRootDir(context), NOTICE_FILE).delete()
-            File(getRootDir(context), NOTIFIED_MARKER).delete()
-            File(getTmpDir(context), SHADOWING_NOTICE).delete()
-            File(getTmpDir(context), SHADOWING_NOTIFIED).delete()
+            File(getRootDir(appContext), NOTICE_FILE).delete()
+            File(getRootDir(appContext), NOTIFIED_MARKER).delete()
+            File(getTmpDir(appContext), SHADOWING_NOTICE).delete()
+            File(getTmpDir(appContext), SHADOWING_NOTIFIED).delete()
         } catch (_: Throwable) {
         }
         activeManualSessionId = null
+    }
+
+    /**
+     * 等待在途的空间回收全部完成（**新建沙箱会话前调用**，保证 tmp/ 是干净 slate）。
+     *
+     * 利用单线程队列的 FIFO 语义：提交一个空任务并等待其结束，即保证此前排队的
+     * 所有回收均已完成。无在途任务时立即返回；超时后放弃等待，由引导脚本交互
+     * 启动时的清零兜底。
+     */
+    fun awaitPendingPurge(timeoutMs: Long = 10_000) {
+        try {
+            purgeExecutor.submit(Runnable { }).get(timeoutMs, TimeUnit.MILLISECONDS)
+        } catch (_: Throwable) {
+        }
     }
 
     /** 引导脚本写入的「内存储已被重定向」告警哨兵文件名。 */
@@ -410,6 +450,9 @@ object VorteXSandbox {
 
     /** 引导脚本侧的「已提示过」标记文件名。 */
     const val NOTIFIED_MARKER = ".vortex_storage_notified"
+
+    /** 引导脚本 procwatch 后台守护的 pidfile（与 `vortex_sandbox.sh` 保持同名）。 */
+    const val PROCWATCH_PIDFILE = ".vortex_procwatch_pid"
 
     /** LD_PRELOAD 首次影子化时写的哨兵文件名（宿主侧据此弹 Snackbar）。 */
     const val SHADOWING_NOTICE = ".vortex_shadowing"
@@ -431,11 +474,20 @@ object VorteXSandbox {
     /**
      * 回收「一次 Agent 对话 / 一次插件调用」产生的临时空间。
      *
-     * 这两条路径不走引导脚本的 `--interactive`，因此不共享 EXIT trap，
-     * 必须在调用方明确告知「这次调用结束了」时手动回收，否则每次对话都会留下残余。
+     * 这两条路径走引导脚本 `--run`（非 `--interactive`），与手动会话**共用同一个
+     * tmp 目录**（不存在独立的 run.* 子目录）；其 EXIT trap（reset_run）已在正常退出时
+     * 自清 tmp/，本方法只覆盖脚本被 SIGKILL 等 trap 未执行的异常路径——此时残余
+     * 同样直接落在 tmp/ 下，故回收目标就是 tmp/ 本身（复用 [doPurge]）。
+     *
+     * ⚠️ 手动沙箱会话存活期间不清：tmp/proc 是活会话的运行时 /proc 影子，连锅端会
+     * 直接崩掉该会话。该会话结束时 [onSessionEnded] → purgeAll 会连残余一并回收，
+     * 此处跳过不会漏。门禁确认放在回收队列内执行，避开与「新建会话」的竞速窗口。
      */
     fun onEphemeralRunEnded(context: Context) {
-        purgeAll(context)
+        val appContext = context.applicationContext
+        purgeExecutor.execute {
+            if (activeManualSessionId == null) doPurge(appContext)
+        }
     }
 
     /** Agent 是否正在使用 VorteX 沙箱（决定调用结束后要不要回收）。 */

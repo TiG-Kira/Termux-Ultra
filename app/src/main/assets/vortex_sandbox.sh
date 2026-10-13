@@ -57,6 +57,12 @@ PROCWATCH_PIDFILE="$VORTEX_ROOT/.vortex_procwatch_pid"
 PROCWATCH_PENDING_K=16
 REAL_PROC_ALIAS="/dev/.vortex_realproc"
 
+# 手动会话存活标记：--interactive 启动时创建，退出回收时摘除。
+# 一次性运行（--run）与手动会话共用 tmp/ 和 procwatch：其 EXIT trap 见到本标记即
+# 只清哨兵、不碰 tmp/ 与 watcher——否则会把活会话的 /proc 影子连锅端。
+ACTIVE_SESSION_MARKER="$TMP/.vortex_active_session"
+VORTEX_SESSION_OWNER=0
+
 ISOLATE_STORAGE="${VORTEX_ISOLATE_STORAGE:-1}"
 
 # 关键：**必须自建 PATH**。会话由 libterminal 直接 exec 本脚本，继承的 PATH 可能为空或
@@ -330,8 +336,7 @@ procwatch_loop() {
 
 start_procwatch() {
     if [ -f "$PROCWATCH_PIDFILE" ]; then
-        pw_old=$(cat "$PROCWATCH_PIDFILE" 2>/dev/null)
-        [ -n "$pw_old" ] && kill "$pw_old" 2>/dev/null
+        kill_procwatch_pid "$(cat "$PROCWATCH_PIDFILE" 2>/dev/null)"
         rm -f "$PROCWATCH_PIDFILE"
     fi
     : > "$PROCWATCH_PIDFILE" 2>/dev/null || return 1
@@ -342,10 +347,20 @@ start_procwatch() {
 
 stop_procwatch() {
     if [ -f "$PROCWATCH_PIDFILE" ]; then
-        pw_old=$(cat "$PROCWATCH_PIDFILE" 2>/dev/null)
-        [ -n "$pw_old" ] && kill "$pw_old" 2>/dev/null
+        kill_procwatch_pid "$(cat "$PROCWATCH_PIDFILE" 2>/dev/null)"
         rm -f "$PROCWATCH_PIDFILE"
     fi
+    return 0
+}
+
+# 只杀「确实是本脚本 procwatch」的进程：pidfile 里的 PID 可能已被系统回收给无关
+# 进程（其他会话的 shell 等），无身份校验的 kill 会误杀——曾致正常会话崩坏。
+# 校验不通过时仅删 pidfile：旧 watcher 每轮自检 pidfile 消失即自行退场（≤0.2s）。
+kill_procwatch_pid() {
+    [ -n "$1" ] || return 0
+    [ "$1" = "$$" ] && return 0
+    grep -qa "vortex_sandbox" "/proc/$1/cmdline" 2>/dev/null || return 0
+    kill "$1" 2>/dev/null
     return 0
 }
 
@@ -524,10 +539,23 @@ do_check() {
 trap 'reset_run' EXIT INT TERM
 
 reset_run() {
-    stop_procwatch
-    rm -rf "$TMP" 2>/dev/null
-    rm -f "$NOTICE_FILE" "$VORTEX_ROOT/.vortex_storage_notified" 2>/dev/null
-    rm -f "$TMP/.vortex_shadowing" "$TMP/.vortex_shadow_notified" 2>/dev/null
+    if [ "$VORTEX_SESSION_OWNER" = "1" ]; then
+        # 手动会话退出：摘自己的标记，走完整回收。
+        rm -f "$ACTIVE_SESSION_MARKER" 2>/dev/null
+        stop_procwatch
+        rm -rf "$TMP" 2>/dev/null
+        rm -f "$NOTICE_FILE" "$VORTEX_ROOT/.vortex_storage_notified" 2>/dev/null
+        rm -f "$TMP/.vortex_shadowing" "$TMP/.vortex_shadow_notified" 2>/dev/null
+    elif [ -f "$ACTIVE_SESSION_MARKER" ]; then
+        # 一次性运行退出，但手动会话还活着：tmp/ 与 procwatch 是它的运行时，不能动。
+        rm -f "$NOTICE_FILE" "$VORTEX_ROOT/.vortex_storage_notified" 2>/dev/null
+        rm -f "$TMP/.vortex_shadowing" "$TMP/.vortex_shadow_notified" 2>/dev/null
+    else
+        stop_procwatch
+        rm -rf "$TMP" 2>/dev/null
+        rm -f "$NOTICE_FILE" "$VORTEX_ROOT/.vortex_storage_notified" 2>/dev/null
+        rm -f "$TMP/.vortex_shadowing" "$TMP/.vortex_shadow_notified" 2>/dev/null
+    fi
 }
 
 case "$1" in
@@ -548,6 +576,10 @@ case "$1" in
         ;;
 
     --interactive|"")
+        # 标记本进程为手动会话所有者：退出时完整回收；其间到来的一次性运行
+        # （--run）见到标记则只清哨兵，不碰共享的 tmp/ 与 procwatch。
+        : > "$ACTIVE_SESSION_MARKER" 2>/dev/null
+        VORTEX_SESSION_OWNER=1
         if have_proot; then
             printf '\n[VorteX Sandbox] proot 隔离 + LD_PRELOAD 影子写已启用（虚拟 ROOT，会话结束自动清空）\n'
             printf '[VorteX Sandbox] 真实 %s 以链接视图呈现：写入被影子化到临时存储区，底层数据不变。\n' "$REAL_HOME"
