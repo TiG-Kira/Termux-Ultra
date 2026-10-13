@@ -456,13 +456,29 @@ int openat(int dirfd, const char* path, int flags, ...) {
 /* _FORTIFY_SOURCE 会把「两参 open」「三参 openat」分别改写成 __open_2 / __openat_2。
  * toybox（ls/find/du…）正是经这两个入口打开目录；只拦 open/openat 会让它们绕过影子层、
  * 拿到未合并的真实目录 —— 表现为「沙箱里看不到新建目录，ls 报 No such file or directory」。
- * 二者语义与 open/openat 等价（此时必无 O_CREAT 的 mode 参数），直接转接本层即可。 */
+ * 二者语义与 open/openat 等价（此时必无 O_CREAT 的 mode 参数），直接转接本层即可。
+ *
+ * 【致命细节】函数体内**绝不能写字面量的 open(path, flags) / openat(dirfd, path, flags)
+ * 调用**：本库自身也在 -D_FORTIFY_SOURCE=2（AGP 的 CMake 构建默认带上）下编译，
+ * fortify 头文件会把这两处字面量调用**原样改写回 __open_2 / __openat_2** —— 拦截器
+ * 调用自身，无限递归/自旋：
+ *   - arm64 尾调用编译成 `b .`（原地跳转）→ 首个调用者（toybox / termux bash）静默挂死，
+ *     表现为「横幅之后永远等不到提示符」；
+ *   - x86_64 编译成 callq → 栈耗尽 SIGSEGV，会话退出码 139。
+ * 手动 ndk-clang 直编（不带 fortify）复现不了，必须以 Gradle/CMake 产物反汇编为准。
+ * 这里直接调用内部实现（普通函数调用，fortify 不会改写无 open 语义的调用点）。 */
 int __open_2(const char* path, int flags) {
-    return open(path, flags);
+    if (!real_open) return vortex_raw_openat(AT_FDCWD, path, flags, 0);
+    return vortex_dispatch_open(path, flags, 0);
 }
 
 int __openat_2(int dirfd, const char* path, int flags) {
-    return openat(dirfd, path, flags);
+    if (!real_open) return vortex_raw_openat(dirfd, path, flags, 0);
+    char abspath[PATH_MAX];
+    if (resolve_at(dirfd, path, abspath)) {
+        return vortex_dispatch_open(abspath, flags, 0);
+    }
+    return real_openat(dirfd, path, flags, 0);
 }
 
 /* ---- unlink / rmdir / remove / unlinkat -------------------------------- */
