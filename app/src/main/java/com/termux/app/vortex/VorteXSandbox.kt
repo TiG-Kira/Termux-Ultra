@@ -2,6 +2,7 @@ package com.termux.app.vortex
 
 import android.content.Context
 import android.os.Build
+import com.termux.R
 import com.termux.shared.termux.TermuxConstants
 import java.io.File
 import java.util.zip.ZipFile
