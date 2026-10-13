@@ -3,7 +3,7 @@
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](./LICENSE)
 [![Platform: Android](https://img.shields.io/badge/Platform-Android%209.0%2B-green.svg)]()
 [![Based on Termux v0.119.0](https://img.shields.io/badge/Base-Termux%20v0.119.0-orange.svg)](https://github.com/termux/termux-app/releases/tag/v0.119.0-beta.3)
-[![v3.3.3.R7](https://img.shields.io/badge/v3.3.3.R7-stable-brightgreen.svg)](https://github.com/TiG-Kira/Termux-Ultra/releases)
+[![v3.5.4.R8](https://img.shields.io/badge/v3.5.4.R8-stable-brightgreen.svg)](https://github.com/TiG-Kira/Termux-Ultra/releases)
 
 [![Build status](https://github.com/TiG-Kira/Termux-Ultra/actions/workflows/ci.yml/badge.svg)](https://github.com/TiG-Kira/Termux-Ultra/actions)
 [![Docs](https://img.shields.io/badge/Docs-GitHub%20Pages-blue.svg)](https://tig-kira.github.io/Termux-Ultra/)
@@ -16,11 +16,11 @@
 
 | 分支 | 基底 | 版本 | 状态 |
 |------|------|------|------|
-| **`main`** 🎯 | 上游 Termux `v0.119.0-beta.3` | 3.x.x.R7 | **正式版主线**，承接功能开发、Bug 修复、架构优化 |
+| **`main`** 🎯 | 上游 Termux `v0.119.0-beta.3` | 3.x.x.R8 | **正式版主线**，承接功能开发、Bug 修复、架构优化 |
 | `release/r1-r4` | 上游 Termux `v0.118.3` | 1.8.0.R4 | 📦 v1.8.x 历史快照，**停止功能更新**，仅做紧急阻断 Bug 修复 |
 | `archived/corebump/2.x` | 上游 Termux `v0.119.0-beta.3` | 2.0.0.R5 | 📂 归档快照，保留 2.x 内部开发步骤 |
 
-> ✅ **当前主线为 `3.3.3.R7`**，基于上游 Termux v0.119.0，包含 libterminal 引擎、玻璃顶栏、插件系统、Termux Agent、AgentPaw 手机操控引擎等核心功能。
+> ✅ **当前主线为 `3.5.4.R8`**，基于上游 Termux v0.119.0，包含 libterminal 引擎、玻璃顶栏、插件系统、Termux Agent、AgentPaw 手机操控引擎等核心功能。
 > 由于上游长期未更新 Release，内部测试上游 Beta 稳定，将直接作为 0.119.0 基底。
 
 
