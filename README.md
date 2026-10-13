@@ -71,7 +71,7 @@
 
 > 📅 **2026-09-25 ~ 2026-09-29**
 
-- **关闭 R8 代码收缩**（默认）：Gson `TypeToken` 泛型签名、`Class.forName`、JNI 回调等动态引用点难以穷举 -keep 且仍偶发崩溃，维护成本高于体积收益；需要时可用 `-Ptermux.enableR8=true` 显式开启
+- **R8 代码收缩暂时默认关闭**（3.0.x 期间）：Gson `TypeToken` 泛型签名、`Class.forName`、JNI 回调等动态引用点难以穷举 -keep 且仍偶发崩溃，维护成本高于体积收益；**后续已补齐反向调用 keep 规则并重新默认启用**（见文末[技术栈](#技术栈)表），本条仅记录当时状态，现已不适用
 - **APK 体积路线调整**：ReDex / strip_so 重打包方案实测收益有限（整体仍 ~103MB）且可靠性风险更高，已从发布流程移除；减重改由 bootstrap 在线下载承担
 - **集成工具默认关闭**：新安装用户不再默认启用 5 款 Termux 插件，需在设置中手动开启
 - **恢复经典引擎终端设置项**并接入 libterminal；重写存储管理占用统计，分类之和精确等于系统值
@@ -462,7 +462,7 @@ Release 签名使用 `ki-terminal-release.jks`（alias: `ki-terminal`）。该 k
 | 构建 | Gradle（AGP 9.1.0）、CMake 3.22.1、NDK 28.2.13676358、JDK 21 |
 | 集成插件 | termux-api、termux-boot、termux-styling、termux-tasker、termux-widget |
 | 包名 | `com.termux`（sharedUserId） |
-| 混淆 | R8 默认关闭（`-Ptermux.enableR8=true` 可显式开启） |
+| 混淆 | R8 默认**启用**（`termux.enableR8` 默认 `true`）：只收缩不重命名（`-dontobfuscate`），keep 规则见 `app/proguard-rules.pro`；回退用 `-Ptermux.enableR8=false` 或 `TERMUX_ENABLE_R8=false` |
 
 ## 插件开发指南
 
