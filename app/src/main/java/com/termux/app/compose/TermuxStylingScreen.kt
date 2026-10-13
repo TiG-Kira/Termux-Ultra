@@ -11,8 +11,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -405,8 +403,8 @@ private fun TerminalPreviewCard(
     val fontFamily = typeface?.let { FontFamily(it) }
 
     Card(
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = colors.background),
+        cornerRadius = 16.dp,
+        colors = CardDefaults.defaultColors(colors.background),
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp)

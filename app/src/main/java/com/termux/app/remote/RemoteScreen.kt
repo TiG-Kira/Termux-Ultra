@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import com.termux.R
+import com.termux.app.compose.AppMotion
 import com.termux.app.vnc.VncConnection
 import com.termux.app.vnc.VncConnectionManager
 import com.termux.app.vnc.connectToVnc
@@ -160,7 +161,7 @@ fun RemoteScreen(
                                     animate(
                                         initialValue = 0f,
                                         targetValue = 1f,
-                                        animationSpec = tween(300)
+                                        animationSpec = tween(AppMotion.SLOW)
                                     ) { fraction, _ ->
                                         if (exceeded) {
                                             contentAlphaState = (1f - fraction).coerceIn(0f, 1f)
@@ -196,7 +197,7 @@ fun RemoteScreen(
                                     animate(
                                         initialValue = 0f,
                                         targetValue = 1f,
-                                        animationSpec = tween(250)
+                                        animationSpec = tween(AppMotion.NORMAL)
                                     ) { fraction, _ ->
                                         topBarDragOffset.floatValue = startOffset * (1f - fraction)
                                         val progress = if (screenWidthPx > 0f) {
@@ -488,10 +489,10 @@ fun RemoteScreen(
                                     val direction = if (targetState > initialState) 1 else -1
                                     slideIntoContainer(
                                         if (direction > 0) AnimatedContentTransitionScope.SlideDirection.Left else AnimatedContentTransitionScope.SlideDirection.Right,
-                                        animationSpec = tween(200)
+                                        animationSpec = tween(AppMotion.NORMAL)
                                     ) togetherWith slideOutOfContainer(
                                         if (direction > 0) AnimatedContentTransitionScope.SlideDirection.Left else AnimatedContentTransitionScope.SlideDirection.Right,
-                                        animationSpec = tween(200)
+                                        animationSpec = tween(AppMotion.NORMAL)
                                     )
                                 }
                             },
