@@ -1,8 +1,11 @@
 package com.termux.app.compose
 
+import android.app.Activity
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -33,7 +36,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
@@ -47,7 +49,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.res.stringResource
-import kotlinx.coroutines.launch
+import com.termux.app.activities.PackageTaskActivity
 import top.yukonga.miuix.kmp.glass.GlassIconButton
 import top.yukonga.miuix.kmp.glass.GlassTopAppBar
 import top.yukonga.miuix.kmp.basic.Button
@@ -122,20 +124,13 @@ fun PackageDetailScreen(
     // 本页在 MainScreen 取景层之外，自建一层供玻璃顶栏折射页面内容
     val glassPage = rememberGlassPageBackdrop()
     val scrollBehavior = MiuixScrollBehavior()
-    val scope = rememberCoroutineScope()
     val isDark = isSystemInDarkTheme()
     val colorScheme = MiuixTheme.colorScheme
 
     var detail by remember { mutableStateOf<PackageInfo?>(pkg) }
     var isLoading by remember { mutableStateOf(true) }
-    var showLockDialog by remember { mutableStateOf(false) }
     var showUninstallConfirm by remember { mutableStateOf(false) }
     var showConflictConfirm by remember { mutableStateOf(false) }
-    var showProgressDialog by remember { mutableStateOf(false) }
-    var progressTitle by remember { mutableStateOf("") }
-    var progressLog by remember { mutableStateOf("") }
-    var progressSuccess by remember { mutableStateOf<Boolean?>(null) }
-    var pendingAction by remember { mutableStateOf<(() -> Unit)?>(null) }
 
     // 预加载依赖/冲突包详情 + 已安装包名 + 已安装版本
     var installedNames by remember { mutableStateOf<Set<String>>(emptySet()) }
@@ -151,26 +146,13 @@ fun PackageDetailScreen(
     var depDetails by remember { mutableStateOf<Map<String, PackageInfo?>>(emptyMap()) }
     var confDetails by remember { mutableStateOf<Map<String, PackageInfo?>>(emptyMap()) }
 
-    // 观察 LiveUpdateState 的实时 log 和后台恢复请求
-    val livePkgLog by LiveUpdateState.pkgLog.collectAsState()
+    // 观察 LiveUpdateState — 任务状态恢复（后台完成时静默刷新详情）
     val pkgStateSnap by LiveUpdateState.pkgState.collectAsState()
 
-    // 后台恢复请求 — 切回前台后自动恢复弹窗
-    LaunchedEffect(Unit) {
-        LiveUpdateState.pkgResumeRequest.collect { shouldResume ->
-            if (shouldResume && LiveUpdateState.hasPkg()) {
-                LiveUpdateState.consumeResumeRequest()
-                val snap = LiveUpdateState.getPkgStateSnapshot()
-                if (snap != null) {
-                    showProgressDialog = true
-                    progressTitle = when (snap.operation) {
-                        LiveUpdateState.PkgOperation.INSTALL -> "正在安装 ${snap.packageName}"
-                        LiveUpdateState.PkgOperation.UNINSTALL -> "正在卸载 ${snap.packageName}"
-                        else -> "正在处理 ${snap.packageName}"
-                    }
-                    progressSuccess = null
-                }
-            }
+    // 任务页返回结果：沿用旧进度弹窗关闭时的行为 — 刷新列表并关闭详情页
+    val taskLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            onChanged(result.data?.getBooleanExtra(PackageTaskActivity.EXTRA_SUCCESS, false) ?: false)
         }
     }
 
@@ -206,60 +188,21 @@ fun PackageDetailScreen(
         isLoading = false
     }
 
-    fun isLockError(log: String): Boolean {
-        val lower = log.lowercase()
-        return lower.contains("could not get lock") ||
-               lower.contains("dpkg is locked") ||
-               lower.contains("wait for it to finish") ||
-               lower.contains("/var/lib/dpkg/lock") ||
-               lower.contains("/var/cache/apt/archives/lock") ||
-               lower.contains("cache/apt/archives/lock")
-    }
-
-    fun runInstallUninstall(isInstall: Boolean, forceRemoveLock: Boolean = false, backgrounded: Boolean = false) {
-        progressTitle = if (isInstall) "正在安装 ${pkg.name}" else "正在卸载 ${pkg.name}"
-        progressLog = ""
-        progressSuccess = null
-        if (!backgrounded) showProgressDialog = true
-        val op = if (isInstall) LiveUpdateState.PkgOperation.INSTALL else LiveUpdateState.PkgOperation.UNINSTALL
-        LiveUpdateState.startPkg(op, pkg.name, backgrounded = backgrounded)
-        // 使用 LiveUpdateState.pkgScope — 独立于 UI 生命周期，切后台不取消
-        LiveUpdateState.pkgScope.launch {
-            val result = if (isInstall) {
-                PkgRepo.install(context, pkg.name, onOutput = { LiveUpdateState.appendPkgLog(it) })
-            } else {
-                PkgRepo.uninstall(context, pkg.name, onOutput = { LiveUpdateState.appendPkgLog(it) })
-            }
-            val ok = result.first
-            val log = result.second
-            LiveUpdateState.finishPkg(ok)
-            if (!ok && !forceRemoveLock && isLockError(log)) {
-                progressLog = log
-                progressSuccess = false
-                if (backgrounded) {
-                    // 后台运行遇到锁 — 重新弹窗让用户处理
-                    showProgressDialog = true
-                } else {
-                    showProgressDialog = false
-                }
-                pendingAction = { runInstallUninstall(isInstall, forceRemoveLock = true, backgrounded = backgrounded) }
-                showLockDialog = true
-            } else {
-                progressLog = log
-                progressSuccess = ok
-                if (backgrounded) showProgressDialog = true
-            }
-        }
-    }
-
+    // 安装/卸载统一走独立任务页（PackageTaskActivity）：任务不随页面退出中断
     fun startOperation(isInstall: Boolean) {
-        runInstallUninstall(isInstall, forceRemoveLock = false)
+        val op = if (isInstall) LiveUpdateState.PkgOperation.INSTALL else LiveUpdateState.PkgOperation.UNINSTALL
+        taskLauncher.launch(PackageTaskActivity.newTaskIntent(context, op, pkg.name))
     }
 
-    fun dismissProgress() {
-        showProgressDialog = false
-        val success = progressSuccess ?: false
-        onChanged(success)
+    // 用户按返回离开任务页后任务在后台完成：静默刷新详情与已安装状态
+    LaunchedEffect(pkgStateSnap) {
+        val s = pkgStateSnap ?: return@LaunchedEffect
+        if (s.finished && s.packageName == pkg.name) {
+            detail = PkgRepo.getDetail(context, pkg.name) ?: detail
+            val installed = PkgRepo.getInstalled(context)
+            installedNames = installed.map { it.name }.toSet()
+            installedVersions = installed.associate { it.name to it.version }
+        }
     }
 
     fun openHomepage(url: String) {
@@ -384,7 +327,7 @@ fun PackageDetailScreen(
                 },
                 scrollBehavior = scrollBehavior,
                 navigationIcon = {
-                    GlassIconButton(onClick = { if (!showProgressDialog && !showLockDialog) onBack() }) {
+                    GlassIconButton(onClick = onBack) {
                         Icon(
                             imageVector = MiuixGlassIcons.ChevronBackward,
                             contentDescription = stringResource(R.string.back),
@@ -1101,132 +1044,6 @@ fun PackageDetailScreen(
                     )
                 }
             }
-
-            OverlayDialog(
-                show = showLockDialog,
-                title = stringResource(R.string.pkg_manager_busy),
-                summary = "检测到 Termux 的 apt/dpkg 正在被其他进程占用。\n\n强行解除锁可能导致：\n• 正在进行的安装/升级进程被中断\n• 数据库状态不一致\n• 已下载的包文件残留\n\n建议：先关闭其他正在运行的 Termux 会话，然后再试。",
-                onDismissRequest = {
-                    showLockDialog = false
-                    pendingAction = null
-                },
-                content = {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        TextButton(
-                            text = stringResource(R.string.cancel),
-                            onClick = { showLockDialog = false; pendingAction = null },
-                            modifier = Modifier.weight(1f)
-                        )
-                        TextButton(
-                            text = "强行解除",
-                            onClick = {
-                                showLockDialog = false
-                                val action = pendingAction
-                                pendingAction = null
-                                scope.launch {
-                                    PkgRepo.forceRemoveLocks(context)
-                                    Toast.makeText(context, "锁已解除，正在继续...", Toast.LENGTH_SHORT).show()
-                                    action?.invoke()
-                                }
-                            },
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                }
-            )
-
-            OverlayDialog(
-                show = showProgressDialog,
-                title = progressTitle.ifBlank { "正在处理" },
-                summary = "",
-                onDismissRequest = { if (progressSuccess != null) dismissProgress() },
-                content = {
-                    val logScrollState = rememberScrollState()
-                    Column(
-                        modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        // Loading indicator + "处理中..." 一行居中
-                        if (progressSuccess == null) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.Center,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                CircularProgressIndicator(modifier = Modifier.size(24.dp))
-                                Spacer(Modifier.width(12.dp))
-                                Text(
-                                    text = stringResource(R.string.common_processing),
-                                    fontSize = 14.sp,
-                                    color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                                )
-                            }
-                            Spacer(Modifier.height(12.dp))
-                            // 后台运行按钮
-                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                TextButton(
-                                    text = "后台运行",
-                                    onClick = {
-                                        LiveUpdateState.markPkgBackgrounded()
-                                        showProgressDialog = false
-                                    },
-                                    modifier = Modifier.weight(1f)
-                                )
-                            }
-                            Spacer(Modifier.height(8.dp))
-                        }
-
-                        // Result text
-                        if (progressSuccess != null) {
-                            Text(
-                                text = if (progressSuccess == true) "操作成功" else "操作失败",
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = if (progressSuccess == true) AccentBlue else DangerRed
-                            )
-                            Spacer(Modifier.height(12.dp))
-                        }
-
-                        // Log area — 加载中和完成后都显示，实时更新
-                        val displayLog = if (progressSuccess == null) livePkgLog else progressLog
-                        val clippedLog = if (displayLog.length > 5000) displayLog.substring(displayLog.length - 5000) else displayLog
-                        if (clippedLog.isNotBlank()) {
-                            Box(
-                                modifier = Modifier.fillMaxWidth()
-                                    .height(200.dp)
-                                    .background(
-                                        color = if (isDark) Color(0xFF1A1A1A) else Color(0xFFF5F5F5),
-                                        shape = RoundedCornerShape(8.dp)
-                                    )
-                                    .padding(12.dp)
-                            ) {
-                                Text(
-                                    text = clippedLog,
-                                    fontSize = 12.sp,
-                                    color = if (isDark) Color.White.copy(alpha = 0.8f) else Color.Black.copy(alpha = 0.7f),
-                                    lineHeight = 16.sp,
-                                    modifier = Modifier.verticalScroll(logScrollState)
-                                )
-                            }
-                            Spacer(Modifier.height(12.dp))
-                        }
-
-                        // Close button at bottom
-                        if (progressSuccess != null) {
-                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                TextButton(
-                                    text = stringResource(R.string.low_android_force_disable_confirm),
-                                    onClick = { dismissProgress() },
-                                    modifier = Modifier.weight(1f)
-                                )
-                            }
-                        }
-                    }
-                }
-            )
         }
     }
 }

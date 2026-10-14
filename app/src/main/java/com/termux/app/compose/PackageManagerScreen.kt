@@ -2,8 +2,12 @@ package com.termux.app.compose
 
 import android.content.Context
 import com.termux.R
+import android.app.Activity
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import com.termux.app.activities.PackageTaskActivity
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -80,6 +84,7 @@ import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.glass.ChevronBackward
 import top.yukonga.miuix.kmp.icon.glass.MiuixGlassIcons
 import top.yukonga.miuix.kmp.icon.glass.Download
+import top.yukonga.miuix.kmp.icon.glass.Ok
 import top.yukonga.miuix.kmp.icon.glass.Play
 import top.yukonga.miuix.kmp.icon.glass.Refresh
 import top.yukonga.miuix.kmp.theme.MiuixTheme
@@ -923,11 +928,6 @@ fun PackageManagerScreen(
     val isDark = isSystemInDarkTheme()
     val scope = rememberCoroutineScope()
 
-    var showProgressDialog by remember { mutableStateOf(false) }
-    var progressTitle by remember { mutableStateOf("") }
-    var progressLog by remember { mutableStateOf("") }
-    var progressSuccess by remember { mutableStateOf<Boolean?>(null) }
-
     var selectedTab by remember { mutableStateOf(0) }
     var installedList by remember { mutableStateOf<List<PackageInfo>>(emptyList()) }
     var availableList by remember { mutableStateOf<List<PackageInfo>>(emptyList()) }
@@ -936,6 +936,30 @@ fun PackageManagerScreen(
     var isLoading by remember { mutableStateOf(true) }
     var loadingAvailable by remember { mutableStateOf(false) }
     var showDetail by remember { mutableStateOf<PackageInfo?>(null) }
+
+    // 包任务页返回结果：刷新列表并给出结果反馈
+    val taskLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode != Activity.RESULT_OK) return@rememberLauncherForActivityResult
+        val data = result.data
+        val ok = data?.getBooleanExtra(PackageTaskActivity.EXTRA_SUCCESS, false) ?: false
+        val op = data?.getStringExtra(PackageTaskActivity.EXTRA_OPERATION)?.let {
+            runCatching { LiveUpdateState.PkgOperation.valueOf(it) }.getOrNull()
+        }
+        scope.launch {
+            installedList = PkgRepo.getInstalled(context)
+            if (ok && op == LiveUpdateState.PkgOperation.UPDATE && searchQuery.isBlank()) {
+                availableList = PkgRepo.getAvailableAll(context)
+            }
+        }
+        val toast = when (op) {
+            LiveUpdateState.PkgOperation.INSTALL -> if (ok) "安装成功" else "安装失败"
+            LiveUpdateState.PkgOperation.UNINSTALL -> if (ok) "卸载成功" else "卸载失败"
+            LiveUpdateState.PkgOperation.UPDATE -> if (ok) "刷新成功" else "刷新失败"
+            LiveUpdateState.PkgOperation.UPGRADE -> if (ok) "升级成功" else "升级失败"
+            null -> if (ok) "操作成功" else "操作失败"
+        }
+        Toast.makeText(context, toast, Toast.LENGTH_SHORT).show()
+    }
 
     // apt 兜底恢复 UI state
     var aptRecoveryStep by remember { mutableStateOf<Int?>(null) } // null=未触发, 0=尝试中, 1=恢复中, 2=恢复失败
@@ -1013,28 +1037,8 @@ fun PackageManagerScreen(
         scrollBehavior.state.heightOffset = 0f
     }
 
-    // 观察 LiveUpdateState — 实时 log + 后台任务按钮 + 恢复请求
-    val livePkgLog by LiveUpdateState.pkgLog.collectAsState()
+    // 观察 LiveUpdateState — 顶栏后台任务按钮 + 任务状态恢复
     val pkgStateSnap by LiveUpdateState.pkgState.collectAsState()
-
-    LaunchedEffect(LiveUpdateState.pkgResumeRequest) {
-        LiveUpdateState.pkgResumeRequest.collect { shouldResume ->
-            if (shouldResume && LiveUpdateState.hasPkg()) {
-                LiveUpdateState.consumeResumeRequest()
-                val snap = LiveUpdateState.getPkgStateSnapshot()
-                if (snap != null) {
-                    showProgressDialog = true
-                    progressTitle = when (snap.operation) {
-                        LiveUpdateState.PkgOperation.UPDATE -> "正在刷新软件源"
-                        LiveUpdateState.PkgOperation.UPGRADE -> "正在升级所有包"
-                        LiveUpdateState.PkgOperation.INSTALL -> "正在安装 ${snap.packageName}"
-                        LiveUpdateState.PkgOperation.UNINSTALL -> "正在卸载 ${snap.packageName}"
-                    }
-                    progressSuccess = null
-                }
-            }
-        }
-    }
 
     LaunchedEffect(Unit) {
         isLoading = true
@@ -1156,48 +1160,33 @@ fun PackageManagerScreen(
                             }
                         },
                         actions = {
-                            // 后台任务恢复按钮 — 有运行中的包操作时显示
-                            if (pkgStateSnap != null && !pkgStateSnap!!.finished) {
+                            // 后台任务入口 — 有包任务（运行中或刚完成）时显示，点击回到任务页
+                            if (pkgStateSnap != null) {
                                 GlassIconButton(
-                                    onClick = {
-                                        LiveUpdateState.requestResumePkg()
-                                        showProgressDialog = true
-                                        progressSuccess = null
-                                        progressTitle = when (pkgStateSnap!!.operation) {
-                                            LiveUpdateState.PkgOperation.UPDATE -> "正在刷新软件源"
-                                            LiveUpdateState.PkgOperation.UPGRADE -> "正在升级所有包"
-                                            LiveUpdateState.PkgOperation.INSTALL -> "正在安装 ${pkgStateSnap!!.packageName}"
-                                            LiveUpdateState.PkgOperation.UNINSTALL -> "正在卸载 ${pkgStateSnap!!.packageName}"
-                                        }
-                                    }
+                                    onClick = { taskLauncher.launch(PackageTaskActivity.restoreIntent(context)) }
                                 ) {
-                                    Icon(
-                                        imageVector = MiuixGlassIcons.Play,
-                                        contentDescription = stringResource(R.string.resume_background),
-                                        tint = MiuixTheme.colorScheme.primary,
-                                        modifier = Modifier.size(24.dp)
-                                    )
+                                    if (pkgStateSnap!!.finished) {
+                                        Icon(
+                                            imageVector = MiuixGlassIcons.Ok,
+                                            contentDescription = "查看任务结果",
+                                            tint = MiuixTheme.colorScheme.primary,
+                                            modifier = Modifier.size(24.dp)
+                                        )
+                                    } else {
+                                        Icon(
+                                            imageVector = MiuixGlassIcons.Play,
+                                            contentDescription = stringResource(R.string.resume_background),
+                                            tint = MiuixTheme.colorScheme.primary,
+                                            modifier = Modifier.size(24.dp)
+                                        )
+                                    }
                                 }
                             }
                             GlassIconButton(
                                 onClick = {
-                                    progressTitle = "正在刷新软件源"
-                                    progressLog = ""
-                                    progressSuccess = null
-                                    showProgressDialog = true
-                                    LiveUpdateState.startPkg(LiveUpdateState.PkgOperation.UPDATE, "", backgrounded = false)
-                                    LiveUpdateState.pkgScope.launch {
-                                        val (ok, log) = PkgRepo.update(context, onOutput = { LiveUpdateState.appendPkgLog(it) })
-                                        LiveUpdateState.finishPkg(ok)
-                                        progressLog = log
-                                        progressSuccess = ok
-                                        if (ok) {
-                                            installedList = PkgRepo.getInstalled(context)
-                                            if (searchQuery.isBlank()) {
-                                                availableList = PkgRepo.getAvailableAll(context)
-                                            }
-                                        }
-                                    }
+                                    taskLauncher.launch(
+                                        PackageTaskActivity.newTaskIntent(context, LiveUpdateState.PkgOperation.UPDATE, "")
+                                    )
                                 }
                             ) {
                                 Icon(
@@ -1209,20 +1198,9 @@ fun PackageManagerScreen(
                             }
                             GlassIconButton(
                                 onClick = {
-                                    progressTitle = "正在升级所有包"
-                                    progressLog = ""
-                                    progressSuccess = null
-                                    showProgressDialog = true
-                                    LiveUpdateState.startPkg(LiveUpdateState.PkgOperation.UPGRADE, "", backgrounded = false)
-                                    LiveUpdateState.pkgScope.launch {
-                                        val (ok, log) = PkgRepo.upgradeAll(context, onOutput = { LiveUpdateState.appendPkgLog(it) })
-                                        LiveUpdateState.finishPkg(ok)
-                                        progressLog = log
-                                        progressSuccess = ok
-                                        if (ok) {
-                                            installedList = PkgRepo.getInstalled(context)
-                                        }
-                                    }
+                                    taskLauncher.launch(
+                                        PackageTaskActivity.newTaskIntent(context, LiveUpdateState.PkgOperation.UPGRADE, "")
+                                    )
                                 }
                             ) {
                                 Icon(
@@ -1336,81 +1314,6 @@ fun PackageManagerScreen(
                             }
                         }
                     }
-
-                    OverlayDialog(
-                        show = showProgressDialog,
-                        title = progressTitle.ifBlank { "正在处理" },
-                        summary = "",
-                        onDismissRequest = { if (progressSuccess != null) showProgressDialog = false },
-                        content = {
-                            val logScrollState = rememberScrollState()
-                            Column(
-                                modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
-                                // Loading indicator + "处理中..." 一行居中
-                                if (progressSuccess == null) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.Center,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        CircularProgressIndicator(
-                                            modifier = Modifier.size(24.dp)
-                                        )
-                                        Spacer(Modifier.width(12.dp))
-                                        Text(
-                                            text = stringResource(R.string.common_processing),
-                                            fontSize = 14.sp,
-                                            color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                                        )
-                                    }
-                                    Spacer(Modifier.height(12.dp))
-                                }
-                                if (progressSuccess != null) {
-                                    Text(
-                                        text = if (progressSuccess == true) "操作成功" else "操作失败",
-                                        fontSize = 15.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = if (progressSuccess == true) MiuixTheme.colorScheme.primary else Color(0xFFDC2626)
-                                    )
-                                    Spacer(Modifier.height(12.dp))
-                                }
-                                // Log area — 加载中和完成后都显示，实时更新
-                                val displayLog = if (progressSuccess == null) livePkgLog else progressLog
-                                val clippedLog = if (displayLog.length > 5000) displayLog.substring(displayLog.length - 5000) else displayLog
-                                if (clippedLog.isNotBlank()) {
-                                    Box(
-                                        modifier = Modifier.fillMaxWidth()
-                                            .height(200.dp)
-                                            .background(
-                                                color = if (isDark) Color(0xFF1A1A1A) else Color(0xFFF5F5F5),
-                                                shape = RoundedCornerShape(8.dp)
-                                            )
-                                            .padding(12.dp)
-                                    ) {
-                                        Text(
-                                            text = clippedLog,
-                                            fontSize = 12.sp,
-                                            color = if (isDark) Color.White.copy(alpha = 0.8f) else Color.Black.copy(alpha = 0.7f),
-                                            lineHeight = 16.sp,
-                                            modifier = Modifier.verticalScroll(logScrollState)
-                                        )
-                                    }
-                                    Spacer(Modifier.height(12.dp))
-                                }
-                                if (progressSuccess != null) {
-                                    Row(modifier = Modifier.fillMaxWidth()) {
-                                        TextButton(
-                                            text = stringResource(R.string.low_android_force_disable_confirm),
-                                            onClick = { showProgressDialog = false },
-                                            modifier = Modifier.fillMaxWidth()
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    )
                 }
             }
         }
