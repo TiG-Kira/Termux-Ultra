@@ -32,9 +32,7 @@ object LiveUpdateState {
         /** 进度 0-100；-1 表示 indeterminate */
         val progress: Int = -1,
         val finished: Boolean = false,
-        val success: Boolean = false,
-        /** 后台运行模式：UI 隐藏操作弹窗，由 LiveUpdate 通知承载 */
-        val backgrounded: Boolean = false
+        val success: Boolean = false
     )
 
     private val _pkgState = MutableStateFlow<PkgState?>(null)
@@ -44,10 +42,6 @@ object LiveUpdateState {
     private val _pkgLog = MutableStateFlow("")
     val pkgLog: StateFlow<String> = _pkgLog.asStateFlow()
 
-    /** 后台操作结束后恢复弹窗标记 — 置位后 UI 观察到此值变为 true 时弹回 */
-    private val _pkgResumeRequest = MutableStateFlow(false)
-    val pkgResumeRequest: StateFlow<Boolean> = _pkgResumeRequest.asStateFlow()
-
     /** 全局包操作协程 — 独立于 Activity/Composable 生命周期 */
     val pkgScope: CoroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
@@ -55,10 +49,9 @@ object LiveUpdateState {
 
     /** 开始包操作（初始进度 -1 indeterminate） */
     @JvmStatic
-    fun startPkg(operation: PkgOperation, packageName: String, backgrounded: Boolean = false) {
-        _pkgState.value = PkgState(operation, packageName, progress = -1, backgrounded = backgrounded)
+    fun startPkg(operation: PkgOperation, packageName: String) {
+        _pkgState.value = PkgState(operation, packageName, progress = -1)
         _pkgLog.value = ""
-        _pkgResumeRequest.value = false
         notifyChanged()
     }
 
@@ -79,18 +72,12 @@ object LiveUpdateState {
         _pkgLog.value = if (next.length > 20000) next.substring(next.length - 20000) else next
     }
 
-    /** 包操作完成 */
+    /** 包操作完成。完成态保留到 clearPkg()（任务页对勾退出时消费），供任务页与调用方恢复状态 */
     @JvmStatic
     fun finishPkg(success: Boolean) {
         val current = _pkgState.value ?: return
         _pkgState.value = current.copy(finished = true, success = success)
         notifyChanged()
-        // 5 秒后清除，让完成态有机会被看到
-        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-            _pkgState.value = null
-            _pkgLog.value = ""
-            notifyChanged()
-        }, 5000)
     }
 
     /** 取消/清除包状态 */
@@ -98,26 +85,6 @@ object LiveUpdateState {
     fun clearPkg() {
         _pkgState.value = null
         _pkgLog.value = ""
-        notifyChanged()
-    }
-
-    /** 后台操作 → 请求前台 UI 恢复弹窗（PackageManagerScreen 右上角按钮调用） */
-    @JvmStatic
-    fun requestResumePkg() {
-        _pkgResumeRequest.value = true
-    }
-
-    /** UI 消费完恢复请求后调用 */
-    @JvmStatic
-    fun consumeResumeRequest() {
-        _pkgResumeRequest.value = false
-    }
-
-    /** 前台操作转后台 — 更新 PkgState.backgrounded 标志（通知和右上角按钮靠此判断） */
-    @JvmStatic
-    fun markPkgBackgrounded() {
-        val cur = _pkgState.value ?: return
-        _pkgState.value = cur.copy(backgrounded = true)
         notifyChanged()
     }
 

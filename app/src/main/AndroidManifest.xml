@@ -152,6 +152,11 @@
             android:exported="false" />
 
         <activity
+            android:name=".app.activities.PackageTaskActivity"
+            android:label="软件包任务"
+            android:exported="false" />
+
+        <activity
             android:name=".app.activities.TextEditorActivity"
             android:label="文本编辑器"
             android:exported="false" />
