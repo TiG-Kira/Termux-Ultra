@@ -45,6 +45,13 @@
 #define PATH_MAX 4096
 #endif
 
+#ifndef RENAME_EXCHANGE
+#define RENAME_EXCHANGE (1u << 1)
+#endif
+#ifndef RENAME_NOREPLACE
+#define RENAME_NOREPLACE (1u << 0)
+#endif
+
 #define VORTEX_MAX_ROOTS 16
 
 /* ---- 运行时配置（构造函数里读取一次）---------------------------------- */
@@ -189,32 +196,40 @@ static void vortex_abs_path(const char* path, char* out, size_t outsz) {
  * `/data/data/com.termux/files/home/../usr/bin/rm` 的前缀是 `$HOME`，但其真实
  * 目标是 `$PREFIX` 下的文件 —— 影子层会按错误的 rel 记账，真实文件反而
  * **穿透**到磁盘（删除/写入直接落盘）。同理 `a/../b` 的多次访问必须得到
- * 同一 rel，否则同一文件会被记成两个影子副本。 */
+ * 同一 rel，否则同一文件会被记成两个影子副本。
+ *
+ * 实现为**双指针原地压缩**（不另开大数组）：读指针只前进，写指针始终
+ * ≤ 读指针所在的字节，故不会覆盖尚未读取的内容。若用 `char* parts[]`
+ * 之类的临时数组，栈占用会到十几 KB，在深调用链里足以打穿栈金丝雀。 */
 static void vortex_canonicalize(char* p) {
     if (!p || p[0] != '/') return;
-    char* parts[PATH_MAX / 2];
-    int nparts = 0;
-    const char* s = p;
-    while (*s) {
-        while (*s == '/') s++;
-        if (!*s) break;
-        const char* start = s;
-        while (*s && *s != '/') s++;
-        size_t len = (size_t)(s - start);
-        if (len == 1 && start[0] == '.') continue;
-        if (len == 2 && start[0] == '.' && start[1] == '.') {
-            if (nparts > 0) nparts--;   /* .. 消掉上一级；顶部的 .. 保留（不越出 /） */
+    char* w = p + 1;                 /* 保留开头的 '/' */
+    char* r = p + 1;
+    for (;;) {
+        while (*r == '/') r++;       /* 跳过多余斜杠 */
+        if (*r == '\0') break;
+        char* seg_end = r;
+        while (*seg_end && *seg_end != '/') seg_end++;
+        size_t len = (size_t)(seg_end - r);
+        if (len == 1 && r[0] == '.') {
+            r = seg_end;
+            continue;                /* 跳过 '.' */
+        }
+        if (len == 2 && r[0] == '.' && r[1] == '.') {
+            r = seg_end;
+            if (w > p + 1) {
+                /* 回退到该段之前的分隔符位置（停在 '/' 上，由下一轮重写）。
+                 * 注意必须**停在分隔符处**：若停到段首，下一轮的 `if (w != p+1)`
+                 * 会再写一个 '/'，路径里就会残留 `//`（如 `/tmp//dg`）。 */
+                w--;
+                while (w > p + 1 && *w != '/') w--;
+            }
             continue;
         }
-        if (nparts < (int)(sizeof parts / sizeof parts[0]))
-            parts[nparts++] = (char*)start;
-    }
-    char* w = p + 1;   /* 保留开头的 '/' */
-    for (int i = 0; i < nparts; i++) {
-        size_t len = strlen(parts[i]);
         if (w != p + 1) *w++ = '/';
-        memmove(w, parts[i], len);
+        memmove(w, r, len);
         w += len;
+        r = seg_end;
     }
     *w = '\0';
 }
@@ -262,14 +277,26 @@ static const char* vortex_fake_proc_target(const char* path) {
     return NULL;
 }
 
-/* 影子副本路径：<tmp>/shadow/<idx>/<rel> */
+/* 影子副本路径：<tmp>/shadow/<idx>/<rel>；rel 为空（受控根本身）时即影子根目录。 */
 static void shadow_path(int idx, const char* rel, char* out) {
-    snprintf(out, PATH_MAX, "%s/shadow/%d/%s", g_tmp, idx, rel);
+    if (rel[0] == '\0')
+        snprintf(out, PATH_MAX, "%s/shadow/%d", g_tmp, idx);
+    else
+        snprintf(out, PATH_MAX, "%s/shadow/%d/%s", g_tmp, idx, rel);
 }
 
-/* whiteout 标记路径：<tmp>/whiteout/<idx>/<rel> */
+/* whiteout 标记路径：<tmp>/whiteout/<idx>/<rel>.wht
+ *
+ * 为什么带后缀：标记必须能与「其子项标记的路径中间层」共存。若直接用
+ * `<rel>` 本身当标记文件，则「目录 dir 被删」（whiteout/0/dir 是文件）与
+ * 「dir/child 被删」（需要 whiteout/0/dir 作为目录）互相矛盾 —— 目录一旦
+ * 有被删子项，它自身的删除标记就再也写不进去（或反过来把子项标记挤掉）。
+ * 用 .wht 后缀后，路径树里的目录纯粹是结构节点，永远不与标记文件冲突。 */
 static void whiteout_path(int idx, const char* rel, char* out) {
-    snprintf(out, PATH_MAX, "%s/whiteout/%d/%s", g_tmp, idx, rel);
+    if (rel[0] == '\0')
+        snprintf(out, PATH_MAX, "%s/whiteout/%d.wht", g_tmp, idx);
+    else
+        snprintf(out, PATH_MAX, "%s/whiteout/%d/%s.wht", g_tmp, idx, rel);
 }
 
 /* 该条目的 whiteout 标记是否存在。
@@ -282,6 +309,20 @@ static int vortex_whiteout_exists(int idx, const char* rel) {
     struct stat st;
     if (vortex_stat_real(wp, &st, 0) != 0) return 0;
     return S_ISREG(st.st_mode);
+}
+
+/* 任一**祖先目录**被 whiteout 覆盖则返回 1（overlay 语义：目录删除即整个子树隐藏）。
+ * 没有这一层判定，`rm -rf dir` 之后直接 stat `dir/file` 仍能命中真实文件 —— 沙箱
+ * 里目录已经没了，里面的文件却还能读到。 */
+static int vortex_whiteout_covered(int idx, const char* rel) {
+    char tmp[PATH_MAX];
+    snprintf(tmp, sizeof tmp, "%s", rel);
+    for (char* slash = strrchr(tmp, '/'); slash; slash = strrchr(tmp, '/')) {
+        *slash = '\0';
+        if (tmp[0] == '\0') break;
+        if (vortex_whiteout_exists(idx, tmp)) return 1;
+    }
+    return 0;
 }
 
 /* 逐级建父目录。**不含末节本身**：末节由调用方按自身类型创建（普通文件 / 软链 /
@@ -395,13 +436,81 @@ static void clear_whiteout(int idx, const char* rel) {
     real_unlink(wp);
 }
 
-/* 影子化删除：删影子副本 + 写 whiteout，返回成功。 */
+/* 把 dir_rel 这级真实目录里、**本会话尚未改动**（无影子副本）的子项逐个 whiteout，
+ * 让它们继续不出现在沙箱视图中。用于「目录被删除后又被重建」的场景。 */
+static void vortex_hide_real_children(int idx, const char* dir_rel) {
+    char realdir[PATH_MAX];
+    snprintf(realdir, sizeof realdir, "%s/%s", g_roots[idx], dir_rel);
+    DIR* d = real_opendir(realdir);
+    if (!d) return;
+    struct dirent* e;
+    while ((e = real_readdir(d))) {
+        if (strcmp(e->d_name, ".") == 0 || strcmp(e->d_name, "..") == 0) continue;
+        char child_rel[PATH_MAX], child_shadow[PATH_MAX];
+        snprintf(child_rel, sizeof child_rel, "%s/%s", dir_rel, e->d_name);
+        shadow_path(idx, child_rel, child_shadow);
+        if (real_access(child_shadow, F_OK) == 0) continue;  /* 本会话已改动：保留 */
+        set_whiteout(idx, child_rel);
+    }
+    real_closedir(d);
+}
+
+/* 逐级清除祖先 whiteout 标记，并**重新隐藏被删目录的原有子项**。
+ *
+ * 语义：`rm -rf dir` 之后 dir 及其全部内容在沙箱里消失；若随后 `mkdir dir` 或
+ * `echo x > dir/new`，目录被「重新创建」——此时旧子项**不该**重新出现（真实文件
+ * 系统里它们已被删掉了）。因此每清除一级祖先标记，就遍历该级真实目录，为每个
+ * **尚未被本会话改动**（无影子副本）的子项补一条 whiteout，把它们继续挡在视图外。
+ * 仅清到**最深的未标记祖先**为止——再往上仍属被删的整棵子树，语义上保持隐藏。 */
+static void clear_whiteout_covered(int idx, const char* rel) {
+    char tmp[PATH_MAX];
+    snprintf(tmp, sizeof tmp, "%s", rel);
+    for (char* slash = strrchr(tmp, '/'); slash; slash = strrchr(tmp, '/')) {
+        *slash = '\0';
+        if (tmp[0] == '\0') break;
+        if (!vortex_whiteout_exists(idx, tmp)) break;   /* 未标记：祖先链在此恢复可见 */
+        vortex_hide_real_children(idx, tmp);            /* 保持旧子项的「已删除」视图 */
+        clear_whiteout(idx, tmp);
+    }
+}
+
+/* 影子化删除：删影子副本 + 写 whiteout，返回成功。
+ * 目录的影子副本要**递归**清掉（里面可能堆着 copy-up 出来的子项），
+ * 否则该目录在沙箱内删除后，shadow/ 里仍残留整棵子树。 */
 static int vortex_shadow_delete(int idx, const char* rel) {
     char sp[PATH_MAX];
     shadow_path(idx, rel, sp);
-    real_unlink(sp);
-    real_rmdir(sp);
+    struct stat st;
+    if (vortex_stat_real(sp, &st, 1) == 0 && S_ISDIR(st.st_mode)) {
+        vortex_rm_rf(sp);
+    } else {
+        real_unlink(sp);
+        real_rmdir(sp);
+    }
     set_whiteout(idx, rel);
+    return 0;
+}
+
+/* 删除分派：把路径归一化后落影子删除。
+ * 返回  0 = 已影子删除（成功）；
+ *       1 = 未命中受控根（调用方应透传真实删除）；
+ *      -1 = 命中但失败（errno 已设：EBUSY=根目录 / ENOENT=已删除）。 */
+static int vortex_delete_dispatch(const char* path) {
+    char canon[PATH_MAX];
+    vortex_abs_path(path, canon, sizeof canon);
+    vortex_canonicalize(canon);
+    char rel[PATH_MAX];
+    int idx = is_intercepted(canon, rel, sizeof rel);
+    if (idx < 0) return 1;                  /* 未命中：调用方透传真实删除 */
+    if (rel[0] == '\0') {                   /* 受控根本身不可删 */
+        errno = EBUSY;
+        return -1;
+    }
+    if (vortex_whiteout_exists(idx, rel)) {
+        errno = ENOENT;                     /* 已删：重复删除报不存在 */
+        return -1;
+    }
+    vortex_shadow_delete(idx, rel);
     return 0;
 }
 
@@ -414,8 +523,13 @@ static int vortex_dispatch_open(const char* path, int flags, mode_t mode) {
         int ffd = real_open(fake, flags, mode);
         if (ffd >= 0) return ffd;
     }
+    /* 相对路径 / 含 `..` 的路径一律先拼绝对 + 归一化：
+     * 否则 `rm ./x`、`cd ~/../usr && rm x` 这类相对访问会漏过前缀匹配直接穿透。 */
+    char canon[PATH_MAX];
+    vortex_abs_path(path, canon, sizeof canon);
+    vortex_canonicalize(canon);
     char rel[PATH_MAX];
-    int idx = is_intercepted(path, rel, sizeof rel);
+    int idx = is_intercepted(canon, rel, sizeof rel);
     if (idx < 0) return real_open(path, flags, mode);
     if (rel[0] == '\0') return real_open(path, flags, mode); /* 根目录本身不拦 */
 
@@ -423,16 +537,53 @@ static int vortex_dispatch_open(const char* path, int flags, mode_t mode) {
     whiteout_path(idx, rel, wp);
     shadow_path(idx, rel, sp);
 
-    if (vortex_whiteout_exists(idx, rel)) {
-        errno = ENOENT;
-        return -1;
-    }
-
     int write_op = (flags & (O_WRONLY | O_RDWR | O_CREAT | O_TRUNC | O_APPEND)) != 0;
 
-    if (write_op) {
+    if (vortex_whiteout_exists(idx, rel)) {
+        /* 已被影子删除的条目：读取一律 ENOENT（沙箱里确实没了）。
+         * 但**写入必须重建**——`echo hi > f`（先 shell 展开/检测再写）、
+         * 编辑器「删除后另存」等场景会先 open 探测再创建；若此处返回
+         * ENOENT，删除后就再也写不进任何文件（表现为「写入被阻止」）。 */
+        if (!write_op) {
+            errno = ENOENT;
+            return -1;
+        }
+        /* 重建：清掉 whiteout，从真实文件重新 copy-up（保留原内容），
+         * 再在影子副本上按 flags 打开。 */
+        clear_whiteout(idx, rel);
         if (real_access(sp, F_OK) != 0) {
-            if (vortex_copy_up(path, sp) != 0) {
+            if (vortex_copy_up(canon, sp) != 0) {
+                ensure_parent_dirs(sp);
+                int fd = real_open(sp, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+                if (fd >= 0) close(fd);
+            }
+        }
+        vortex_notify_shadowing();
+        return real_open(sp, flags, mode);
+    }
+    /* 祖先目录被删：整棵子树在沙箱里不可见（读取 ENOENT）；但**写入要重建**，
+     * 否则 `rm -rf dir` 之后再也无法 `mkdir -p dir` 之类的重建操作落地。 */
+    if (vortex_whiteout_covered(idx, rel)) {
+        if (!write_op) {
+            errno = ENOENT;
+            return -1;
+        }
+        clear_whiteout_covered(idx, rel);   /* 逐级清掉祖先标记 */
+    }
+
+    if (write_op) {
+        /* O_EXCL 语义：沙箱视图里**已存在**才报 EEXIST。视图存在 = 影子副本在，
+         * 或真实文件在（且未被 whiteout——whiteout 分支已在上面处理过）。
+         * 原实现先 copy-up 建好影子再拿 O_CREAT|O_EXCL 打开，导致 `cp` 之类的
+         * 工具一律 EEXIST。这里自行判定后剥掉 O_EXCL 再打开。 */
+        if ((flags & O_EXCL) &&
+            (real_access(sp, F_OK) == 0 || real_access(canon, F_OK) == 0)) {
+            errno = EEXIST;
+            return -1;
+        }
+        int oflags = flags & ~O_EXCL;
+        if (real_access(sp, F_OK) != 0) {
+            if (vortex_copy_up(canon, sp) != 0) {
                 /* 拷贝失败（真实路径缺失等）则退化为建立空影子。 */
                 ensure_parent_dirs(sp);
                 int fd = real_open(sp, O_WRONLY | O_CREAT | O_TRUNC, 0644);
@@ -441,7 +592,7 @@ static int vortex_dispatch_open(const char* path, int flags, mode_t mode) {
         }
         clear_whiteout(idx, rel);
         vortex_notify_shadowing();
-        return real_open(sp, flags, mode);
+        return real_open(sp, oflags, mode);
     }
 
     /* 只读：影子存在则读影子（看到修改），否则透传真实文件。
@@ -455,13 +606,13 @@ static int vortex_dispatch_open(const char* path, int flags, mode_t mode) {
     if (real_access(sp, F_OK) == 0) {
         struct stat sst, rst;
         int shadow_is_dir = (vortex_stat_real(sp, &sst, 1) == 0 && S_ISDIR(sst.st_mode));
-        int real_is_dir   = (vortex_stat_real(path, &rst, 1) == 0 && S_ISDIR(rst.st_mode));
+        int real_is_dir   = (vortex_stat_real(canon, &rst, 1) == 0 && S_ISDIR(rst.st_mode));
         if (!(shadow_is_dir && real_is_dir)) {
             return real_open(sp, flags, mode);
         }
         /* 真实目录在：开真实目录，子项差异交给枚举层合并。 */
     }
-    return real_open(path, flags, mode);
+    return real_open(canon, flags, mode);
 }
 
 int open(const char* path, int flags, ...) {
@@ -554,47 +705,84 @@ int __openat_2(int dirfd, const char* path, int flags) {
 
 int unlink(const char* path) {
     if (!real_unlinkat) return vortex_not_ready();
-    char rel[PATH_MAX];
-    int idx = is_intercepted(path, rel, sizeof rel);
-    if (idx < 0 || rel[0] == '\0') return real_unlinkat(AT_FDCWD, path, 0);
-    return vortex_shadow_delete(idx, rel);
+    int r = vortex_delete_dispatch(path);
+    if (r > 0) return real_unlinkat(AT_FDCWD, path, 0);   /* 未命中：真实删除 */
+    if (r == 0) return 0;                                  /* 已影子删除 */
+    return -1;                                             /* EBUSY/ENOENT */
 }
 
 int rmdir(const char* path) {
     if (!real_unlinkat) return vortex_not_ready();
-    char rel[PATH_MAX];
-    int idx = is_intercepted(path, rel, sizeof rel);
-    if (idx < 0 || rel[0] == '\0') return real_unlinkat(AT_FDCWD, path, AT_REMOVEDIR);
-    return vortex_shadow_delete(idx, rel);
+    int r = vortex_delete_dispatch(path);
+    if (r > 0) return real_unlinkat(AT_FDCWD, path, AT_REMOVEDIR);
+    if (r == 0) return 0;
+    return -1;
 }
 
 int remove(const char* path) {
     if (!real_remove) return vortex_not_ready();
-    char rel[PATH_MAX];
-    int idx = is_intercepted(path, rel, sizeof rel);
-    if (idx < 0 || rel[0] == '\0') return real_remove(path);
-    struct stat st;
-    if (vortex_stat_real(path, &st, 0) == 0 && S_ISDIR(st.st_mode)) {
-        return vortex_shadow_delete(idx, rel);
-    }
-    return vortex_shadow_delete(idx, rel);
+    int r = vortex_delete_dispatch(path);
+    if (r > 0) return real_remove(path);
+    if (r == 0) return 0;
+    return -1;
 }
 
 int unlinkat(int dirfd, const char* path, int flag) {
     if (!real_unlinkat) return vortex_not_ready();
     char abspath[PATH_MAX];
     if (!resolve_at(dirfd, path, abspath)) return real_unlinkat(dirfd, path, flag);
-    char rel[PATH_MAX];
-    int idx = is_intercepted(abspath, rel, sizeof rel);
-    if (idx < 0 || rel[0] == '\0') return real_unlinkat(dirfd, path, flag);
-    if (flag & AT_REMOVEDIR) return vortex_shadow_delete(idx, rel);
-    return vortex_shadow_delete(idx, rel);
+    int r = vortex_delete_dispatch(abspath);
+    if (r > 0) return real_unlinkat(dirfd, path, flag);   /* 未命中：真实删除 */
+    if (r == 0) return 0;
+    return -1;
 }
 
 /* ---- rename / link / symlink ------------------------------------------- */
 
 /* 前向声明：vortex_shadow_move 在下方定义前需调用。 */
 static int vortex_copy_up_relative(int idx, const char* rel, const char* shadow_dst);
+
+/* 把「真实根 + rel」这棵子树递归复制到 shadow_dst（含目录结构、文件内容与软链）。
+ * 用于 mv 整个目录：影子目录里只有本会话改动过的零星子项，必须先把真实子树
+ * 物化出来，否则移动后目录里凭空少掉大量文件。 */
+static int vortex_copy_tree(const char* real, const char* shadow) {
+    struct stat st;
+    if (vortex_stat_real(real, &st, 1) != 0) return -1;
+    if (S_ISDIR(st.st_mode)) {
+        real_mkdir(shadow, st.st_mode & 07777);
+        DIR* d = real_opendir(real);
+        if (!d) return -1;
+        struct dirent* e;
+        char rp[PATH_MAX], sp[PATH_MAX];
+        while ((e = real_readdir(d))) {
+            if (strcmp(e->d_name, ".") == 0 || strcmp(e->d_name, "..") == 0) continue;
+            snprintf(rp, sizeof rp, "%s/%s", real, e->d_name);
+            snprintf(sp, sizeof sp, "%s/%s", shadow, e->d_name);
+            vortex_copy_tree(rp, sp);
+        }
+        real_closedir(d);
+        return 0;
+    }
+    return vortex_copy_up(real, shadow);
+}
+
+/* 把 old_rel 的影子目录（本会话已改动的子项）覆盖复制到目标影子目录。 */
+static void vortex_overlay_tree(int idx, const char* old_rel, const char* dst_shadow) {
+    char spo[PATH_MAX];
+    shadow_path(idx, old_rel, spo);
+    DIR* d = real_opendir(spo);
+    if (!d) return;
+    struct dirent* e;
+    char sp[PATH_MAX];
+    while ((e = real_readdir(d))) {
+        if (strcmp(e->d_name, ".") == 0 || strcmp(e->d_name, "..") == 0) continue;
+        snprintf(sp, sizeof sp, "%s/%s", spo, e->d_name);
+        char sdst[PATH_MAX];
+        snprintf(sdst, sizeof sdst, "%s/%s", dst_shadow, e->d_name);
+        vortex_copy_tree(sp, sdst);
+    }
+    real_closedir(d);
+}
 
 static int vortex_shadow_move(int idx, const char* rel_old, const char* rel_new) {
     char spo[PATH_MAX], spn[PATH_MAX], wpo[PATH_MAX], wpn[PATH_MAX];
@@ -604,13 +792,22 @@ static int vortex_shadow_move(int idx, const char* rel_old, const char* rel_new)
     whiteout_path(idx, rel_new, wpn);
     real_unlink(spn);
     real_unlink(wpn);
-        if (real_access(spo, F_OK) == 0) {
-            ensure_parent_dirs(spn);
-            real_rename(spo, spn);
-        } else {
-            /* 旧文件无影子副本：先 copy-up 再移动，保证内容一致。 */
-            vortex_copy_up_relative(idx, rel_old, spn);
-        }
+
+    /* 目录：先把整棵子树（真实 + 本会话影子改动）物化到目标影子目录，再删旧。 */
+    char real_old[PATH_MAX];
+    snprintf(real_old, sizeof real_old, "%s/%s", g_roots[idx], rel_old);
+    struct stat rst;
+    if (vortex_stat_real(real_old, &rst, 0) == 0 && S_ISDIR(rst.st_mode)) {
+        vortex_copy_tree(real_old, spn);
+        /* 再把本会话对该目录做出的影子改动叠上去（覆盖复制）。 */
+        vortex_overlay_tree(idx, rel_old, spn);
+    } else if (real_access(spo, F_OK) == 0) {
+        ensure_parent_dirs(spn);
+        real_rename(spo, spn);
+    } else {
+        /* 旧文件无影子副本：先 copy-up 再移动，保证内容一致。 */
+        vortex_copy_up_relative(idx, rel_old, spn);
+    }
     set_whiteout(idx, rel_old);
     clear_whiteout(idx, rel_new);
     return 0;
@@ -625,25 +822,60 @@ static int vortex_copy_up_relative(int idx, const char* rel, const char* shadow_
 
 int rename(const char* oldpath, const char* newpath) {
     if (!real_renameat) return vortex_not_ready();
+    char co[PATH_MAX], cn[PATH_MAX];
+    vortex_abs_path(oldpath, co, sizeof co); vortex_canonicalize(co);
+    vortex_abs_path(newpath, cn, sizeof cn); vortex_canonicalize(cn);
     char ro[PATH_MAX], rn[PATH_MAX];
-    int io = is_intercepted(oldpath, ro, sizeof ro);
-    int in = is_intercepted(newpath, rn, sizeof rn);
+    int io = is_intercepted(co, ro, sizeof ro);
+    int in = is_intercepted(cn, rn, sizeof rn);
     if (io >= 0 && in >= 0 && io == in && ro[0] && rn[0]) {
         return vortex_shadow_move(io, ro, rn);
     }
-    if (io >= 0 && ro[0]) {
-        /* 旧在受控根：影子删除旧；新不在根则不做真实移动（变更不落盘）。 */
-        return vortex_shadow_delete(io, ro);
-    }
-    if (in >= 0 && rn[0]) {
-        /* 新在受控根：把旧内容 copy-up 到新影子（旧本身保留）。 */
-        char spn[PATH_MAX];
+    if (io >= 0 && in >= 0 && io != in && ro[0] && rn[0]) {
+        /* 跨受控根移动（如 mv $HOME/f $PREFIX/f）：新根 copy-up 旧内容，
+         * 旧根影子删除。两侧都只动影子层。源若只是影子文件（沙箱内新建、
+         * 真实盘上从未存在），必须从影子副本搬，不能从真实路径读。 */
+        char spn[PATH_MAX], spo[PATH_MAX];
         shadow_path(in, rn, spn);
-        if (real_access(spn, F_OK) != 0) vortex_copy_up(newpath, spn);
+        shadow_path(io, ro, spo);
+        if (real_access(spo, F_OK) == 0) {
+            ensure_parent_dirs(spn);
+            real_unlink(spn);
+            real_rename(spo, spn);
+        } else {
+            vortex_copy_up(co, spn);
+        }
         clear_whiteout(in, rn);
+        vortex_shadow_delete(io, ro);
         return 0;
     }
-    return real_renameat(AT_FDCWD, oldpath, AT_FDCWD, newpath);
+    if (io >= 0 && ro[0]) {
+        /* 旧在受控根、新在根外：把旧内容搬进新位置（真实写新位置——新位置本就不在
+         * 受控范围），再影子删除旧。绝不能只删旧不搬内容，否则文件凭空丢失。
+         * 源可能是影子文件（真实盘上不存在），此时直接搬影子副本。 */
+        char spo[PATH_MAX];
+        shadow_path(io, ro, spo);
+        if (real_access(spo, F_OK) == 0) {
+            ensure_parent_dirs(cn);
+            real_unlink(cn);
+            if (real_rename(spo, cn) != 0) return -1;
+        } else {
+            if (vortex_copy_up(co, cn) != 0) return -1;
+        }
+        vortex_shadow_delete(io, ro);
+        return 0;
+    }
+    if (in >= 0 && rn[0]) {
+        /* 新在受控根、旧在根外：把**旧的内容** copy-up 到新影子。
+         * 【原 bug】旧实现 copy 的是 newpath（尚不存在的目的地），得到空文件。 */
+        char spn[PATH_MAX];
+        shadow_path(in, rn, spn);
+        vortex_copy_up(co, spn);
+        clear_whiteout(in, rn);
+        vortex_notify_shadowing();
+        return 0;
+    }
+    return real_renameat(AT_FDCWD, co, AT_FDCWD, cn);
 }
 
 int renameat(int dirfd, const char* oldpath, int newdirfd, const char* newpath) {
@@ -654,31 +886,86 @@ int renameat(int dirfd, const char* oldpath, int newdirfd, const char* newpath) 
     return rename(a, b);
 }
 
+/* renameat2（RENAME_EXCHANGE / RENAME_NOREPLACE 等，mv、coreutils 高级用法会直连）。
+ * 原库完全没拦它 —— 沙箱内 `mv` 走到 syscall 层就**穿透**真实磁盘。透传一律用
+ * **原始 syscall**（内核层，绝不会再回环进本库），不依赖 libc 是否导出该符号。 */
+int renameat2(int dirfd, const char* oldpath, int newdirfd, const char* newpath, unsigned int flags) {
+    char a[PATH_MAX], b[PATH_MAX];
+    if (!resolve_at(dirfd, oldpath, a)) goto raw;
+    if (!resolve_at(newdirfd, newpath, b)) goto raw;
+    if (flags != 0) {
+        char ra[PATH_MAX], rb[PATH_MAX];
+        int ia = is_intercepted(a, ra, sizeof ra);
+        int ib = is_intercepted(b, rb, sizeof rb);
+        /* 两侧都在影子层内：EXCHANGE 语义可用影子操作模拟；跨层则拒绝。 */
+        if (flags == RENAME_EXCHANGE && ia >= 0 && ib >= 0 && ra[0] && rb[0]) {
+            char spa[PATH_MAX], spb[PATH_MAX];
+            shadow_path(ia, ra, spa);
+            shadow_path(ib, rb, spb);
+            char tmpswap[PATH_MAX];
+            snprintf(tmpswap, sizeof tmpswap, "%s/.vortex_swap.%d", g_tmp, (int)getpid());
+            real_rename(spa, tmpswap);
+            real_rename(spb, spa);
+            real_rename(tmpswap, spb);
+            return 0;
+        }
+        /* 其余带 flag 的调用若涉及受控根：拒绝而不是穿透。 */
+        if (ia >= 0 || ib >= 0) { errno = EINVAL; return -1; }
+    }
+    return rename(a, b);
+raw:
+#ifdef SYS_renameat2
+    return (int)syscall(SYS_renameat2, dirfd, oldpath, newdirfd, newpath, flags);
+#else
+    errno = ENOSYS;
+    return -1;
+#endif
+}
+
 int link(const char* oldpath, const char* newpath) {
     if (!real_linkat) return vortex_not_ready();
+    char co[PATH_MAX], cn[PATH_MAX];
+    vortex_abs_path(oldpath, co, sizeof co); vortex_canonicalize(co);
+    vortex_abs_path(newpath, cn, sizeof cn); vortex_canonicalize(cn);
     char rn[PATH_MAX];
-    int in = is_intercepted(newpath, rn, sizeof rn);
+    int in = is_intercepted(cn, rn, sizeof rn);
     if (in >= 0 && rn[0]) {
-        char spn[PATH_MAX];
+        char spn[PATH_MAX], spo[PATH_MAX];
         shadow_path(in, rn, spn);
-        if (real_access(spn, F_OK) != 0) vortex_copy_up(oldpath, spn);
+        /* 源可能是影子文件（真实盘上不存在）：逐根探查源影子副本。 */
+        spo[0] = '\0';
+        char srel[PATH_MAX];
+        int si = is_intercepted(co, srel, sizeof srel);
+        if (si >= 0 && srel[0]) shadow_path(si, srel, spo);
+        if (real_access(spn, F_OK) != 0) {
+            if (spo[0] != '\0' && real_access(spo, F_OK) == 0) {
+                ensure_parent_dirs(spn);
+                vortex_copy_up(spo, spn);   /* 源在影子层：直接从影子副本复制 */
+            } else {
+                vortex_copy_up(co, spn);
+            }
+        }
         clear_whiteout(in, rn);
+        vortex_notify_shadowing();
         return 0;
     }
-    return real_linkat(AT_FDCWD, oldpath, AT_FDCWD, newpath, 0);
+    return real_linkat(AT_FDCWD, co, AT_FDCWD, cn, 0);
 }
 
 int linkat(int dirfd, const char* oldpath, int newdirfd, const char* newpath, int flags) {
     if (!real_linkat) return vortex_not_ready();
-    char b[PATH_MAX];
+    char a[PATH_MAX], b[PATH_MAX];
+    if (!resolve_at(dirfd, oldpath, a)) return real_linkat(dirfd, oldpath, newdirfd, newpath, flags);
     if (!resolve_at(newdirfd, newpath, b)) return real_linkat(dirfd, oldpath, newdirfd, newpath, flags);
-    return link(oldpath, b);
+    return link(a, b);
 }
 
 int symlink(const char* target, const char* linkpath) {
     if (!real_symlinkat) return vortex_not_ready();
+    char cn[PATH_MAX];
+    vortex_abs_path(linkpath, cn, sizeof cn); vortex_canonicalize(cn);
     char rn[PATH_MAX];
-    int in = is_intercepted(linkpath, rn, sizeof rn);
+    int in = is_intercepted(cn, rn, sizeof rn);
     if (in >= 0 && rn[0]) {
         char spn[PATH_MAX];
         shadow_path(in, rn, spn);
@@ -686,9 +973,10 @@ int symlink(const char* target, const char* linkpath) {
         ensure_parent_dirs(spn);
         real_symlink(target, spn);
         clear_whiteout(in, rn);
+        vortex_notify_shadowing();
         return 0;
     }
-    return real_symlinkat(target, AT_FDCWD, linkpath);
+    return real_symlinkat(target, AT_FDCWD, cn);
 }
 
 int symlinkat(const char* target, int newdirfd, const char* linkpath) {
@@ -702,13 +990,19 @@ int symlinkat(const char* target, int newdirfd, const char* linkpath) {
 
 int truncate(const char* path, off_t length) {
     if (!real_truncate) return vortex_not_ready();
+    char canon[PATH_MAX];
+    vortex_abs_path(path, canon, sizeof canon); vortex_canonicalize(canon);
     char rel[PATH_MAX];
-    int idx = is_intercepted(path, rel, sizeof rel);
-    if (idx < 0 || rel[0] == '\0') return real_truncate(path, length);
+    int idx = is_intercepted(canon, rel, sizeof rel);
+    if (idx < 0 || rel[0] == '\0') return real_truncate(canon, length);
+    if (vortex_whiteout_exists(idx, rel) || vortex_whiteout_covered(idx, rel)) {
+        errno = ENOENT;
+        return -1;
+    }
     char sp[PATH_MAX];
     shadow_path(idx, rel, sp);
     if (real_access(sp, F_OK) != 0) {
-        if (vortex_copy_up(path, sp) != 0) return -1;
+        if (vortex_copy_up(canon, sp) != 0) return -1;
     }
     clear_whiteout(idx, rel);
     vortex_notify_shadowing();
@@ -723,6 +1017,7 @@ int ftruncate(int fd, off_t length) {
     ssize_t n = readlink(fdlink, path, PATH_MAX - 1);
     if (n > 0) {
         path[n] = '\0';
+        vortex_canonicalize(path);
         char rel[PATH_MAX];
         int idx = is_intercepted(path, rel, sizeof rel);
         if (idx >= 0 && rel[0]) {
@@ -742,14 +1037,31 @@ int ftruncate(int fd, off_t length) {
 
 int mkdir(const char* path, mode_t mode) {
     if (!real_mkdirat) return vortex_not_ready();
+    char canon[PATH_MAX];
+    vortex_abs_path(path, canon, sizeof canon); vortex_canonicalize(canon);
     char rel[PATH_MAX];
-    int idx = is_intercepted(path, rel, sizeof rel);
-    if (idx < 0 || rel[0] == '\0') return real_mkdirat(AT_FDCWD, path, mode);
+    int idx = is_intercepted(canon, rel, sizeof rel);
+    if (idx < 0 || rel[0] == '\0') return real_mkdirat(AT_FDCWD, canon, mode);
+    if (vortex_whiteout_exists(idx, rel)) {
+        /* 目录被删除后重建：先保持旧子项的「已删除」视图，再清 whiteout 建影子目录。 */
+        vortex_hide_real_children(idx, rel);
+        clear_whiteout(idx, rel);
+    }
+    /* 祖先目录被删：先逐级还原祖先链，再在影子层建目录。 */
+    clear_whiteout_covered(idx, rel);
     char sp[PATH_MAX];
     shadow_path(idx, rel, sp);
     ensure_parent_dirs(sp);
-    real_mkdir(sp, mode);
-    clear_whiteout(idx, rel);
+    struct stat st;
+    if (real_mkdir(sp, mode) != 0) {
+        /* 已存在目录：成功复用；已存在其它类型（文件/软链）：EEXIST。 */
+        if (real_access(sp, F_OK) == 0 &&
+            vortex_stat_real(sp, &st, 0) == 0 && S_ISDIR(st.st_mode)) {
+            return 0;
+        }
+        return -1;
+    }
+    vortex_notify_shadowing();
     return 0;
 }
 
@@ -773,12 +1085,18 @@ static int vortex_stat_real(const char* path, struct stat* buf, int follow) {
 static int vortex_dispatch_stat(const char* path, struct stat* buf, int follow) {
     const char* fake = vortex_fake_proc_target(path);
     if (fake) return vortex_stat_real(fake, buf, follow);
+    char canon[PATH_MAX];
+    vortex_abs_path(path, canon, sizeof canon); vortex_canonicalize(canon);
     char rel[PATH_MAX];
-    int idx = is_intercepted(path, rel, sizeof rel);
+    int idx = is_intercepted(canon, rel, sizeof rel);
     if (idx < 0 || rel[0] == '\0') {
-        return vortex_stat_real(path, buf, follow);
+        return vortex_stat_real(canon, buf, follow);
     }
     if (vortex_whiteout_exists(idx, rel)) {
+        errno = ENOENT;
+        return -1;
+    }
+    if (vortex_whiteout_covered(idx, rel)) {
         errno = ENOENT;
         return -1;
     }
@@ -787,7 +1105,7 @@ static int vortex_dispatch_stat(const char* path, struct stat* buf, int follow) 
     if (real_access(sp, F_OK) == 0) {
         return vortex_stat_real(sp, buf, follow);
     }
-    return vortex_stat_real(path, buf, follow);
+    return vortex_stat_real(canon, buf, follow);
 }
 
 int stat(const char* path, struct stat* buf) {
@@ -822,17 +1140,19 @@ int access(const char* path, int mode) {
     if (!real_access) return vortex_not_ready();
     const char* fake = vortex_fake_proc_target(path);
     if (fake) return real_access(fake, mode);
+    char canon[PATH_MAX];
+    vortex_abs_path(path, canon, sizeof canon); vortex_canonicalize(canon);
     char rel[PATH_MAX];
-    int idx = is_intercepted(path, rel, sizeof rel);
-    if (idx < 0 || rel[0] == '\0') return real_access(path, mode);
-    if (vortex_whiteout_exists(idx, rel)) {
+    int idx = is_intercepted(canon, rel, sizeof rel);
+    if (idx < 0 || rel[0] == '\0') return real_access(canon, mode);
+    if (vortex_whiteout_exists(idx, rel) || vortex_whiteout_covered(idx, rel)) {
         errno = ENOENT;
         return -1;
     }
     char sp[PATH_MAX];
     shadow_path(idx, rel, sp);
     if (real_access(sp, F_OK) == 0) return real_access(sp, mode);
-    return real_access(path, mode);
+    return real_access(canon, mode);
 }
 
 /* toybox 的 rm/install/cp 等做权限探测走 faccessat；不拦就会绕过影子层，
@@ -841,11 +1161,12 @@ int faccessat(int dirfd, const char* path, int mode, int flags) {
     if (!real_faccessat) return vortex_not_ready();
     char a[PATH_MAX];
     if (!resolve_at(dirfd, path, a)) return real_faccessat(dirfd, path, mode, flags);
+    vortex_canonicalize(a);
     const char* fake = vortex_fake_proc_target(a);
     if (fake) return real_faccessat(AT_FDCWD, fake, mode, flags);
     char rel[PATH_MAX];
     int idx = is_intercepted(a, rel, sizeof rel);
-    if (idx < 0 || rel[0] == '\0') return real_faccessat(dirfd, path, mode, flags);
+    if (idx < 0 || rel[0] == '\0') return real_faccessat(AT_FDCWD, a, mode, flags);
     if (vortex_whiteout_exists(idx, rel)) {
         errno = ENOENT;
         return -1;
@@ -856,7 +1177,7 @@ int faccessat(int dirfd, const char* path, int mode, int flags) {
     if (real_faccessat(AT_FDCWD, sp, F_OK, 0) == 0) {
         return real_faccessat(AT_FDCWD, sp, mode, flags);
     }
-    return real_faccessat(dirfd, path, mode, flags);
+    return real_faccessat(AT_FDCWD, a, mode, flags);
 }
 
 /* ---- 目录枚举（让「删除」在 ls 中也可见）------------------------------ */
@@ -949,11 +1270,19 @@ static DIR* vortex_dir_build(int idx, const char* rel) {
 }
 
 static DIR* vortex_opendir_impl(const char* path) {
+    char canon[PATH_MAX];
+    vortex_abs_path(path, canon, sizeof canon); vortex_canonicalize(canon);
     char rel[PATH_MAX];
-    int idx = is_intercepted(path, rel, sizeof rel);
-    if (idx < 0) return real_opendir(path);
+    int idx = is_intercepted(canon, rel, sizeof rel);
+    if (idx < 0) return real_opendir(canon);
+    /* 目录自身被 whiteout：opendir 内部的 openat 是 libc 内部调用，**不经过**
+     * 本库的 open 拦截**，此处必须自行判定，否则已删除目录仍能被枚举。 */
+    if (rel[0] && vortex_whiteout_exists(idx, rel)) {
+        errno = ENOENT;
+        return NULL;
+    }
     DIR* d = vortex_dir_build(idx, rel);
-    return d ? d : real_opendir(path);
+    return d ? d : real_opendir(canon);
 }
 
 DIR* opendir(const char* path) {
