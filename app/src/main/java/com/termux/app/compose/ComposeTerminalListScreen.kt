@@ -3,6 +3,11 @@ package com.termux.app.compose
 import android.content.Context
 import android.content.Intent
 import android.widget.Toast
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -24,6 +29,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.termux.R
@@ -33,6 +39,7 @@ import com.termux.app.terminal.shell.pidState
 import com.termux.app.terminal.shell.lastCommandState
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import top.yukonga.miuix.kmp.glass.GlassMotion
 import top.yukonga.miuix.kmp.glass.GlassIconButton
 import top.yukonga.miuix.kmp.glass.GlassTopAppBar
 import top.yukonga.miuix.kmp.glass.GlassTopAppBarDefaults
@@ -56,7 +63,6 @@ import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
-import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.basic.CircularProgressIndicator
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import com.termux.app.vortex.VorteXSandbox
@@ -261,7 +267,15 @@ fun ComposeTerminalListScreen(
                     if (!it) searchQuery = ""
                 },
                 outsideEndAction = {
-                    if (searchExpanded) {
+                    AnimatedVisibility(
+                        visible = searchExpanded,
+                        enter = fadeIn(animationSpec = GlassMotion.fadeIn()) + slideInHorizontally(
+                            animationSpec = GlassMotion.navShowHide<IntOffset>()
+                        ) { it / 2 },
+                        exit = fadeOut(animationSpec = GlassMotion.fadeOut()) + slideOutHorizontally(
+                            animationSpec = GlassMotion.navShowHide<IntOffset>()
+                        ) { it / 2 }
+                    ) {
                         Text(
                             modifier = Modifier
                                 .padding(start = 12.dp)

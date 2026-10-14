@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.offset
@@ -196,6 +197,12 @@ fun MainScreen(
         else -> systemNavBarsHeight + navContainerHeight + 12.dp
     }
 
+    // 输入法或弹层抬起时底栏下沉出屏，两者都落下后才上浮回位。行程取自身的总高加一点余量，
+    // 保证收到底的主体也完全越过屏幕下边缘。
+    val imeVisible = WindowInsets.ime.getBottom(density) > 0
+    val navBarVisible = !imeVisible && !MainNavBarVisibility.hidden
+    val navBarTravel = totalNavHeight + 16.dp
+
     LaunchedEffect(navStyle) {
         if (navStyle == 2) {
             // Mark that glass nav rendering is in progress
@@ -290,7 +297,9 @@ fun MainScreen(
                         selectedIndex = availableTabs.indexOf(selectedTab).coerceAtLeast(0),
                         itemCount = availableTabs.size,
                         backdrop = liquidGlassBackdrop,
-                        modifier = Modifier.padding(bottom = systemNavBarsHeight),
+                        modifier = Modifier
+                            .padding(bottom = systemNavBarsHeight)
+                            .mainNavBarSlide(navBarVisible, navBarTravel),
                         onIndexChange = { index ->
                             val actualTab = availableTabs.getOrElse(index) { selectedTab }
                             if (actualTab != selectedTab) {
@@ -379,6 +388,7 @@ fun MainScreen(
                             )
                         },
                         selectedIndex = availableTabs.indexOf(selectedTab).coerceAtLeast(0),
+                        visible = navBarVisible,
                         onSelect = { index ->
                             val actualTab = availableTabs.getOrElse(index) { selectedTab }
                             if (actualTab != selectedTab) {
@@ -387,16 +397,20 @@ fun MainScreen(
                             }
                         },
                         backdrop = glassNavBackdrop,
-                        modifier = Modifier.padding(
-                            start = 24.dp,
-                            end = 24.dp,
-                            bottom = systemNavBarsHeight
-                        )
+                        modifier = Modifier
+                            .padding(
+                                start = 24.dp,
+                                end = 24.dp,
+                                bottom = systemNavBarsHeight
+                            )
+                            .mainNavBarSlide(navBarVisible, navBarTravel, fade = false)
                     )
                 }
                 // 经典底栏：miuix 原生 NavigationBar（原默认样式，现更名为经典）
                 1 -> {
-                    NavigationBar() {
+                    NavigationBar(
+                        modifier = Modifier.mainNavBarSlide(navBarVisible, navBarTravel)
+                    ) {
                         if (0 in availableTabs) {
                             NavigationBarItem(
                                 icon = Icons.Rounded.Dashboard,
