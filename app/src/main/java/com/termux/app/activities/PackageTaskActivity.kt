@@ -49,16 +49,13 @@ import com.termux.app.compose.KiTerminalTheme
 import com.termux.app.compose.LiveUpdateState
 import com.termux.app.compose.NavigationHelper
 import com.termux.app.compose.PkgRepo
-import com.termux.app.compose.pagePaddingWithoutTop
-import com.termux.app.compose.rememberGlassPageBackdrop
-import com.termux.app.compose.topBarClearance
 import kotlinx.coroutines.launch
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.Scaffold
+import top.yukonga.miuix.kmp.basic.SmallTopAppBar
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.glass.GlassIconButton
-import top.yukonga.miuix.kmp.glass.GlassTopAppBar
 import top.yukonga.miuix.kmp.icon.glass.ChevronBackward
 import top.yukonga.miuix.kmp.icon.glass.MiuixGlassIcons
 import top.yukonga.miuix.kmp.icon.glass.Ok
@@ -150,7 +147,6 @@ private fun PackageTaskScreen(onClose: () -> Unit) {
     val appContext = context.applicationContext
     val state by LiveUpdateState.pkgState.collectAsState()
     val log by LiveUpdateState.pkgLog.collectAsState()
-    val glassPage = rememberGlassPageBackdrop()
     val scrollState = rememberScrollState()
     val scope = rememberCoroutineScope()
     val snap = state
@@ -182,10 +178,9 @@ private fun PackageTaskScreen(onClose: () -> Unit) {
     Scaffold(
         contentWindowInsets = WindowInsets(0),
         topBar = {
-            GlassTopAppBar(
+            SmallTopAppBar(
                 title = taskTitle(snap),
                 subtitle = taskSubtitle(snap),
-                backdrop = glassPage.backdrop,
                 navigationIcon = {
                     GlassIconButton(onClick = onClose) {
                         Icon(
@@ -195,7 +190,7 @@ private fun PackageTaskScreen(onClose: () -> Unit) {
                             modifier = Modifier.size(24.dp)
                         )
                     }
-                }
+                },
             )
         }
     ) { innerPadding ->
@@ -203,18 +198,16 @@ private fun PackageTaskScreen(onClose: () -> Unit) {
             modifier = Modifier
                 .fillMaxSize()
                 .background(MiuixTheme.colorScheme.surface)
-                .then(glassPage.contentModifier)
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(pagePaddingWithoutTop(innerPadding))
+                    .padding(innerPadding)
                     .verticalScroll(scrollState)
             ) {
                 LaunchedEffect(log) {
                     scrollState.animateScrollTo(scrollState.maxValue)
                 }
-                Spacer(Modifier.height(topBarClearance(innerPadding)))
                 Text(
                     text = log.ifBlank { "正在准备任务 ..." },
                     fontSize = 12.sp,
