@@ -1,6 +1,7 @@
 package com.termux.app.terminal.shell
 
 import android.content.Context
+import android.util.Log
 import com.awkoo.libterminal.engine.TerminalSession
 import com.awkoo.libterminal.process.ITerminalProcess
 import com.termux.shared.termux.shell.command.environment.TermuxShellEnvironment
@@ -52,6 +53,12 @@ class ComposeSessionManager private constructor(private val context: Context) {
 
     /** 会话状态观察协程作用域。 */
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    /** PREFIX 属主修复每进程只尝试一次，避免反复弹 su 授权。 */
+    private val ownershipRepairAttempted = java.util.concurrent.atomic.AtomicBoolean(false)
+
+    /** exec 探测结果缓存（路径 → 可执行），属主修复成功后清空。 */
+    private val execProbeCache = java.util.concurrent.ConcurrentHashMap<String, Boolean>()
 
     /**
      * 创建新会话、启动 shell、设为当前活跃会话。
@@ -136,16 +143,23 @@ class ComposeSessionManager private constructor(private val context: Context) {
 
         var shellPath: String? = null
         var isLoginShell = false
+        var probeSuspect = false
         if (!isFailsafe) {
-            // 仅普通模式搜索 login/bash/zsh；安全模式效仿 Java 版直接回退到 /system/bin/sh
+            // 仅普通模式搜索 login/bash/zsh；安全模式效仿 Java 版直接回退到 /system/bin/sh。
+            // canExecute 只查权限位，还需真实 exec 探测，拦住「检查放行、execve 才报
+            // Permission denied」的属主/挂载层异常（见 maybeSchedulePrefixOwnershipRepair）
             for (binary in arrayOf("login", "bash", "zsh")) {
                 val f = File(defaultBinPath, binary)
-                if (f.canExecute()) {
+                if (!f.canExecute()) continue
+                if (isActuallyExecutable(f)) {
                     shellPath = f.absolutePath
                     isLoginShell = true
                     break
                 }
+                probeSuspect = true
             }
+            if (shellPath == null) probeSuspect = true
+            maybeSchedulePrefixOwnershipRepair(File(defaultBinPath), probeSuspect)
         }
         if (shellPath == null) shellPath = "/system/bin/sh"
 
@@ -163,6 +177,74 @@ class ComposeSessionManager private constructor(private val context: Context) {
             sessionName = "",
             startImmediately = startImmediately
         )
+    }
+
+    /**
+     * 真实 exec 可行性探测。
+     *
+     * File.canExecute() 只查权限位，发现不了属主错乱、挂载 noexec 等
+     * 「检查时放行、execve 时才报 Permission denied」的异常。这里用 ProcessBuilder
+     * 实际 exec 一次（execve 语义与 JNI.createSubprocess 一致），失败即抛 IOException；
+     * 成功则立即销毁进程。结果按进程缓存，避免每次新建会话都空跑候选 shell
+     * （login 会连带跑一次用户 profile）；属主修复成功后清缓存以便重探。
+     */
+    private fun isActuallyExecutable(file: File): Boolean {
+        val path = file.absolutePath
+        execProbeCache[path]?.let { return it }
+        val result = try {
+            val process = ProcessBuilder(path).start()
+            process.destroy()
+            if (!process.waitFor(1, java.util.concurrent.TimeUnit.SECONDS)) {
+                process.destroyForcibly()
+                process.waitFor(1, java.util.concurrent.TimeUnit.SECONDS)
+            }
+            true
+        } catch (_: Throwable) {
+            false
+        }
+        execProbeCache[path] = result
+        return result
+    }
+
+    /**
+     * 候选 shell exec 探测失败时的 $PREFIX 属主自修复。
+     *
+     * root 用户在终端里用 su 跑过 apt/dpkg、或用 root 文件管理器/备份工具碰过 $PREFIX，
+     * 会让文件属主偏离本 app uid，表现为新会话报 exec(".../login"): Permission denied。
+     * 仅在探测确实失败且检测到属主异常时才动手：后台用 su 把 $PREFIX 整体 chown 回本
+     * uid；属主正常（纯 SELinux/挂载等原因）则不动，避免无谓弹出 su 授权。每进程只尝试一次。
+     */
+    private fun maybeSchedulePrefixOwnershipRepair(binDir: File, probeSuspect: Boolean) {
+        if (!probeSuspect) return
+        try {
+            val myUid = android.os.Process.myUid()
+            val anomalous = arrayOf("login", "bash", "zsh", "sh").any { name ->
+                val f = File(binDir, name)
+                f.exists() && android.system.Os.lstat(f.absolutePath).st_uid != myUid
+            }
+            if (!anomalous) return
+            if (!ownershipRepairAttempted.compareAndSet(false, true)) return
+            scope.launch {
+                try {
+                    val cmd = "chown -R $myUid:$myUid ${TermuxConstants.TERMUX_PREFIX_DIR_PATH}"
+                    val process = ProcessBuilder("su", "-c", cmd)
+                        .redirectErrorStream(true)
+                        .start()
+                    val done = process.waitFor(120, java.util.concurrent.TimeUnit.SECONDS)
+                    if (!done) process.destroyForcibly()
+                    process.inputStream.readBytes() // 排空管道，防 banner 填满缓冲卡住 su
+                    if (done && process.exitValue() == 0) {
+                        execProbeCache.clear()
+                        Log.i(TAG, "PREFIX ownership repair done")
+                    } else {
+                        Log.w(TAG, "PREFIX ownership repair ${if (done) "exit=${process.exitValue()}" else "timed out"}")
+                    }
+                } catch (t: Throwable) {
+                    Log.w(TAG, "PREFIX ownership repair failed: ${t.message}")
+                }
+            }
+        } catch (_: Throwable) {
+        }
     }
 
     /**
@@ -279,6 +361,8 @@ class ComposeSessionManager private constructor(private val context: Context) {
     }
 
     companion object {
+        private const val TAG = "ComposeSessionManager"
+
         @Volatile
         private var instance: ComposeSessionManager? = null
 
