@@ -51,6 +51,7 @@ import com.termux.app.compose.NavigationHelper
 import com.termux.app.compose.PkgRepo
 import kotlinx.coroutines.launch
 import top.yukonga.miuix.kmp.basic.Icon
+import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.SmallTopAppBar
 import top.yukonga.miuix.kmp.basic.Text
@@ -182,7 +183,7 @@ private fun PackageTaskScreen(onClose: () -> Unit) {
                 title = taskTitle(snap),
                 subtitle = taskSubtitle(snap),
                 navigationIcon = {
-                    GlassIconButton(onClick = onClose) {
+                    IconButton(onClick = onClose) {
                         Icon(
                             imageVector = MiuixGlassIcons.ChevronBackward,
                             contentDescription = stringResource(R.string.back),
