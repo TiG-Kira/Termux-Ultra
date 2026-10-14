@@ -121,8 +121,10 @@ fun MainScreen(
     var previousTab by remember { mutableStateOf(selectedTab) }
     var rawDragOffset by remember { mutableFloatStateOf(0f) }
     val density = LocalDensity.current
+    // 隐藏手势提示线（小白条）后 navigationBars inset 上报为 0，底栏会贴死屏幕底边；
+    // 保底 12dp 仅在 inset 不足时生效，小白条可见（inset 更大）时保持原行为
     val systemNavBarsHeight = with(density) {
-        WindowInsets.navigationBars.getBottom(density).toDp()
+        maxOf(WindowInsets.navigationBars.getBottom(density), 12.dp.roundToPx()).toDp()
     }
     var isSwipingInProgress by remember { mutableStateOf(false) }
     var isOverviewEditMode by remember { mutableStateOf(false) }
