@@ -99,6 +99,7 @@ DEF_REAL(int,    closedir, (DIR*));
 DEF_REAL(void,   rewinddir,(DIR*));
 DEF_REAL(void,   seekdir,  (DIR*, long));
 DEF_REAL(long,   telldir,  (DIR*));
+DEF_REAL(char*,  getcwd,   (char*, size_t));
 #undef DEF_REAL
 
 /* ---- 早期兜底：真实指针在构造函数运行前为 NULL ----------------------------
@@ -156,11 +157,72 @@ static void resolve_real(void) {
     real_rewinddir= (void(*)(DIR*))                        dlsym(RTLD_NEXT, "rewinddir");
     real_seekdir  = (void(*)(DIR*, long))                  dlsym(RTLD_NEXT, "seekdir");
     real_telldir  = (long(*)(DIR*))                        dlsym(RTLD_NEXT, "telldir");
+    real_getcwd   = (char*(*)(char*, size_t))              dlsym(RTLD_NEXT, "getcwd");
 }
 
 /* ---- 路径工具 ----------------------------------------------------------- */
 
-/* 判断 path 是否落在某受控根下；是则返回根序号并写出 rel（可为空串=根本身）。 */
+/* 把 cwd + 相对路径 拼成绝对路径（不解析 .. / .，仅拼接）。供后续归一化处理。 */
+static void vortex_abs_path(const char* path, char* out, size_t outsz) {
+    if (path && path[0] == '/') {
+        snprintf(out, outsz, "%s", path);
+        return;
+    }
+    if (real_getcwd) {
+        char cwd[PATH_MAX];
+        if (real_getcwd(cwd, sizeof cwd)) {
+            size_t l = strlen(cwd);
+            if (l && cwd[l - 1] != '/' && outsz > l + 1) {
+                snprintf(out, outsz, "%s/%s", cwd, path ? path : "");
+                return;
+            }
+            snprintf(out, outsz, "%s%s", cwd, path ? path : "");
+            return;
+        }
+    }
+    snprintf(out, outsz, "%s", path ? path : "");
+}
+
+/* 原地归一化绝对路径：压缩重复 '/'、消解 '.' 与 '..'。
+ *
+ * 【为什么必须归一化】is_intercepted 是**前缀匹配**：不归一化时
+ * `/data/data/com.termux/files/home/../usr/bin/rm` 的前缀是 `$HOME`，但其真实
+ * 目标是 `$PREFIX` 下的文件 —— 影子层会按错误的 rel 记账，真实文件反而
+ * **穿透**到磁盘（删除/写入直接落盘）。同理 `a/../b` 的多次访问必须得到
+ * 同一 rel，否则同一文件会被记成两个影子副本。 */
+static void vortex_canonicalize(char* p) {
+    if (!p || p[0] != '/') return;
+    char* parts[PATH_MAX / 2];
+    int nparts = 0;
+    const char* s = p;
+    while (*s) {
+        while (*s == '/') s++;
+        if (!*s) break;
+        const char* start = s;
+        while (*s && *s != '/') s++;
+        size_t len = (size_t)(s - start);
+        if (len == 1 && start[0] == '.') continue;
+        if (len == 2 && start[0] == '.' && start[1] == '.') {
+            if (nparts > 0) nparts--;   /* .. 消掉上一级；顶部的 .. 保留（不越出 /） */
+            continue;
+        }
+        if (nparts < (int)(sizeof parts / sizeof parts[0]))
+            parts[nparts++] = (char*)start;
+    }
+    char* w = p + 1;   /* 保留开头的 '/' */
+    for (int i = 0; i < nparts; i++) {
+        size_t len = strlen(parts[i]);
+        if (w != p + 1) *w++ = '/';
+        memmove(w, parts[i], len);
+        w += len;
+    }
+    *w = '\0';
+}
+
+/* 判断 path 是否落在某受控根下；是则返回根序号并写出 rel（可为空串=根本身）。
+ *
+ * 调用方必须**先**把路径拼成绝对路径并归一化（vortex_abs_path + vortex_canonicalize）：
+ * 否则相对路径一律不拦（穿透），含 `..` 的路径会匹配到错误的根（记账错乱）。 */
 static int is_intercepted(const char* path, char* rel, size_t relsz) {
     if (!g_enabled || !path || path[0] != '/') return -1;
     for (int i = 0; i < g_nroots; i++) {
