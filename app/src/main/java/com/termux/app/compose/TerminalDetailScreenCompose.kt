@@ -1426,8 +1426,47 @@ private val REPETITIVE_KEY_NAMES = setOf(
     "UP", "DOWN", "LEFT", "RIGHT", "BKSP", "DEL", "PGUP", "PGDN"
 )
 
-/** 单个按键的最小宽度：低于此值等分出来的键点不中，改用横向滚动。 */
-private val MIN_KEY_WIDTH = 28.dp
+/**
+ * 终端小键盘工具栏的按键尺寸与滚动需求计算器。
+ * 键宽按最宽的一行等分，铺满可用宽度。当等分宽度小于 [MIN_KEY_WIDTH] 时退回横向滚动，
+ * 避免小键盘按键在窄屏设备上被物理截断且不可滑动触达。
+ */
+internal object TerminalKeyboardLayoutCalculator {
+    val MIN_KEY_WIDTH = 28.dp
+    val HORIZONTAL_PADDING = 6.dp
+    val GAP = 3.dp
+
+    data class LayoutResult(
+        val keyWidth: Dp,
+        val needsScroll: Boolean,
+        val contentWidth: Dp
+    )
+
+    fun calculate(toolbarWidth: Dp, maxColumns: Int): LayoutResult {
+        if (maxColumns <= 0) {
+            return LayoutResult(
+                keyWidth = MIN_KEY_WIDTH,
+                needsScroll = false,
+                contentWidth = toolbarWidth
+            )
+        }
+        val available = toolbarWidth - HORIZONTAL_PADDING * 2
+        val totalGap = GAP * (maxColumns - 1)
+        val fitWidth = (available - totalGap) / maxColumns
+        val needsScroll = fitWidth < MIN_KEY_WIDTH
+        val keyWidth = fitWidth.coerceAtLeast(MIN_KEY_WIDTH)
+        val contentWidth = if (needsScroll) {
+            keyWidth * maxColumns + totalGap + HORIZONTAL_PADDING * 2
+        } else {
+            toolbarWidth
+        }
+        return LayoutResult(
+            keyWidth = keyWidth,
+            needsScroll = needsScroll,
+            contentWidth = contentWidth
+        )
+    }
+}
 
 /**
  * 小键盘按键标签的字号策略：优先 11.sp，放不下就自动缩小字号，而不是截断成省略号。
@@ -1735,17 +1774,10 @@ private fun TerminalKeyboardToolbar(
         // 先取出工具栏可用宽度：下方嵌套的 Box 也有 fillMaxWidth，直接写 maxWidth
         // 会被内层作用域的同名属性遮蔽。
         val toolbarWidth = maxWidth
-        val horizontalPadding = 6.dp
-        val gap = 3.dp
         val maxColumns = rows.maxOfOrNull { it.size } ?: 0
-        val available = toolbarWidth - horizontalPadding * 2
-        val fitWidth = if (maxColumns > 0) {
-            (available - gap * (maxColumns - 1)) / maxColumns
-        } else {
-            available
-        }
-        val keyWidth = fitWidth.coerceAtLeast(MIN_KEY_WIDTH)
-        val needsScroll = keyWidth < fitWidth
+        val layout = TerminalKeyboardLayoutCalculator.calculate(toolbarWidth, maxColumns)
+        val keyWidth = layout.keyWidth
+        val needsScroll = layout.needsScroll
 
         Box(
             modifier = Modifier
@@ -1756,14 +1788,14 @@ private fun TerminalKeyboardToolbar(
         ) {
             Column(
                 modifier = Modifier
-                    .width(if (needsScroll) keyWidth * maxColumns + gap * (maxColumns - 1) + horizontalPadding * 2 else toolbarWidth)
+                    .width(layout.contentWidth)
                     .padding(vertical = 4.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 for (row in rows) {
                     Row(
-                        modifier = Modifier.padding(horizontal = horizontalPadding),
-                        horizontalArrangement = Arrangement.spacedBy(gap)
+                        modifier = Modifier.padding(horizontal = TerminalKeyboardLayoutCalculator.HORIZONTAL_PADDING),
+                        horizontalArrangement = Arrangement.spacedBy(TerminalKeyboardLayoutCalculator.GAP)
                     ) {
                         for (key in row) {
                             when (key) {

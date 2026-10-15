@@ -74,7 +74,8 @@ fun TextEditorHomeScreen(
     onClose: () -> Unit,
     onNewFile: () -> Unit,
     onPickFile: () -> Unit,
-    onOpenRecent: (String) -> Unit
+    onOpenRecent: (String) -> Unit,
+    onImportSystemFile: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     val isDark = isSystemInDarkTheme()
@@ -107,6 +108,18 @@ fun TextEditorHomeScreen(
                             tint = MiuixTheme.colorScheme.onSurface,
                             modifier = Modifier.size(24.dp)
                         )
+                    }
+                },
+                actions = {
+                    if (onImportSystemFile != null) {
+                        GlassIconButton(onClick = onImportSystemFile) {
+                            Icon(
+                                painter = androidx.compose.ui.res.painterResource(R.drawable.ic_folder),
+                                contentDescription = "从系统存储导入",
+                                tint = MiuixTheme.colorScheme.onSurface,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
                     }
                 }
             )
@@ -143,7 +156,7 @@ fun TextEditorHomeScreen(
                         iconColor = Color(0xFF2563EB),
                         iconBgColor = Color(0xFF2563EB).copy(alpha = 0.12f),
                         title = stringResource(R.string.text_editor_open_file),
-                        subtitle = "从本地选择文件",
+                        subtitle = "浏览 Termux 文件",
                         onClick = onPickFile
                     )
                 }

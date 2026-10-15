@@ -28,6 +28,7 @@ class TextEditorActivity : ComponentActivity() {
         WindowCompat.setDecorFitsSystemWindows(window, false)
 
         val filePath = intent.getStringExtra("file_path")
+            ?: (if (intent.data?.scheme == "file") intent.data?.path else null)
         val initialText = intent.getStringExtra(Intent.EXTRA_TEXT)
         val readOnly = intent.getBooleanExtra("read_only", false)
 
@@ -56,8 +57,11 @@ class TextEditorActivity : ComponentActivity() {
                                     val target = File(savePath)
                                     target.parentFile?.mkdirs()
                                     target.writeText(newText)
-                                    // 保存成功 → 记录到最近文件列表
+                                    // 保存成功 → 记录到最近文件列表并提示
                                     RecentFilesManager.addRecent(this, target.absolutePath)
+                                    android.widget.Toast.makeText(
+                                        this, "已保存", android.widget.Toast.LENGTH_SHORT
+                                    ).show()
                                 } catch (e: Exception) {
                                     android.widget.Toast.makeText(
                                         this, "保存失败: ${e.message}", android.widget.Toast.LENGTH_SHORT

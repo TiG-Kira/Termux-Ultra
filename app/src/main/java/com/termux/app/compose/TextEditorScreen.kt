@@ -1,16 +1,20 @@
 package com.termux.app.compose
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.flow.collectLatest
 import androidx.compose.ui.Alignment
@@ -22,6 +26,7 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.res.stringResource
@@ -64,11 +69,11 @@ fun TextEditorScreen(
     // 本页在 MainScreen 取景层之外，自建一层供玻璃顶栏折射页面内容
     val glassPage = rememberGlassPageBackdrop()
     val scrollBehavior = MiuixScrollBehavior()
-    var currentFilePath by remember { mutableStateOf(filePath) }
+    var currentFilePath by rememberSaveable { mutableStateOf(filePath) }
     val file = remember(currentFilePath) { currentFilePath?.let { File(it) } }
     val lang = remember(file) { SyntaxHighlighter.detectLanguage(file) }
     var content by remember { mutableStateOf(initialContent) }
-    var modified by remember { mutableStateOf(false) }
+    var modified by rememberSaveable { mutableStateOf(false) }
     var showPermissionDialog by remember { mutableStateOf(false) }
     var showConfirmExit by remember { mutableStateOf(false) }
 
@@ -77,6 +82,13 @@ fun TextEditorScreen(
     var showFileNameDialog by remember { mutableStateOf(false) }
     var pickedDir by remember { mutableStateOf<String?>(null) }
     var fileNameInput by remember { mutableStateOf("") }
+    var pendingExitAfterSave by remember { mutableStateOf(false) }
+    var wordWrap by rememberSaveable { mutableStateOf(false) }
+
+    // 拦截系统返回键/侧滑手势：在有未保存修改时弹出确认对话框，防止数据意外丢失
+    BackHandler(enabled = modified && !readOnly) {
+        showConfirmExit = true
+    }
 
     val fileName = file?.name ?: "未命名文件"
     val fileInfo = SyntaxHighlighter.fileInfo(file)
@@ -97,7 +109,7 @@ fun TextEditorScreen(
         contentWindowInsets = WindowInsets(0),
         topBar = {
             GlassTopAppBar(
-                title = fileName,
+                title = if (modified) "$fileName *" else fileName,
                 backdrop = glassPage.backdrop,
                 scrollBehavior = scrollBehavior,
                 navigationIcon = {
@@ -202,6 +214,15 @@ fun TextEditorScreen(
                                         fontFamily = FontFamily.Monospace
                                     )
                                 }
+                                Text(
+                                    text = if (wordWrap) "· [自动换行]" else "· [单行不折行]",
+                                    fontSize = 12.sp,
+                                    color = if (wordWrap) MiuixTheme.colorScheme.primary else MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                    fontFamily = FontFamily.Monospace,
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .clickable { wordWrap = !wordWrap }
+                                )
                                 Spacer(modifier = Modifier.weight(1f))
                                 Text(
                                     text = if (modified) "● 未保存" else "✓ 已保存",
@@ -223,6 +244,11 @@ fun TextEditorScreen(
 
                 // 编辑器主体
                 item {
+                    val lineCount = if (content.isEmpty()) 1 else content.count { it == '\n' } + 1
+                    val gutterDigits = lineCount.toString().length.coerceAtLeast(2)
+                    val gutterWidth = (gutterDigits * 9 + 18).dp
+                    val editorHScroll = rememberScrollState()
+
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -241,22 +267,29 @@ fun TextEditorScreen(
                                 }
                             }
                         }
-                        val lineCount = if (content.isEmpty()) 1 else content.count { it == '\n' } + 1
-                        Text(
-                            text = (1..lineCount).joinToString("\n"),
-                            fontSize = 14.sp,
-                            lineHeight = 20.sp,
-                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.4f),
-                            fontFamily = FontFamily.Monospace,
+                        Box(
                             modifier = Modifier
+                                .width(gutterWidth)
                                 .align(Alignment.TopStart)
-                                .padding(end = 8.dp)
-                        )
+                        ) {
+                            Text(
+                                text = (1..lineCount).joinToString("\n"),
+                                fontSize = 14.sp,
+                                lineHeight = 20.sp,
+                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.45f),
+                                fontFamily = FontFamily.Monospace,
+                                textAlign = TextAlign.End,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(end = 8.dp)
+                            )
+                        }
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .wrapContentHeight()
-                                .padding(start = 40.dp)
+                                .padding(start = gutterWidth)
+                                .then(if (!wordWrap) Modifier.horizontalScroll(editorHScroll) else Modifier)
                         ) {
                             if (textFieldState.text.isEmpty()) {
                                 Text(
@@ -276,9 +309,15 @@ fun TextEditorScreen(
                                     color = if (isDark) Color(0xFFE5E5EA) else Color(0xFF1C1C1E),
                                     lineHeight = 20.sp
                                 ),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .wrapContentHeight()
+                                modifier = if (wordWrap) {
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .wrapContentHeight()
+                                } else {
+                                    Modifier
+                                        .wrapContentWidth(align = Alignment.Start, unbounded = true)
+                                        .wrapContentHeight()
+                                }
                             )
                         }
                     }
@@ -291,25 +330,47 @@ fun TextEditorScreen(
                 show = showConfirmExit,
                 onDismissRequest = { showConfirmExit = false },
                 title = stringResource(R.string.unsaved_changes),
-                summary = "文件有未保存的修改，确定要关闭吗？",
+                summary = "文件有未保存的修改，确定要退出吗？",
                 content = {
-                    Row(
+                    Column(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        TextButton(
-                            text = stringResource(R.string.cancel),
-                            onClick = { showConfirmExit = false },
-                            modifier = Modifier.weight(1f)
-                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            TextButton(
+                                text = stringResource(R.string.cancel),
+                                onClick = { showConfirmExit = false },
+                                modifier = Modifier.weight(1f)
+                            )
+                            TextButton(
+                                text = "放弃修改",
+                                onClick = {
+                                    showConfirmExit = false
+                                    onClose()
+                                },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
                         TextButton(
                             text = "保存并退出",
                             onClick = {
-                                doSave()
                                 showConfirmExit = false
-                                onClose()
+                                val path = currentFilePath
+                                if (path != null) {
+                                    val ok = onSave(path, content)
+                                    if (ok) {
+                                        modified = false
+                                        onClose()
+                                    }
+                                } else {
+                                    pendingExitAfterSave = true
+                                    showDirPicker = true
+                                }
                             },
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.fillMaxWidth()
                         )
                     }
                 }
@@ -328,7 +389,10 @@ fun TextEditorScreen(
             show = showDirPicker,
             title = "选择保存目录",
             allowFolders = true,
-            onDismiss = { showDirPicker = false },
+            onDismiss = {
+                showDirPicker = false
+                pendingExitAfterSave = false
+            },
             onFileSelected = { path ->
                 pickedDir = path
                 fileNameInput = "untitled"
@@ -340,7 +404,10 @@ fun TextEditorScreen(
         if (showFileNameDialog && pickedDir != null) {
             OverlayDialog(
                 show = true,
-                onDismissRequest = { showFileNameDialog = false },
+                onDismissRequest = {
+                    showFileNameDialog = false
+                    pendingExitAfterSave = false
+                },
                 title = "保存文件",
                 summary = "保存到: $pickedDir",
                 content = {
@@ -358,21 +425,29 @@ fun TextEditorScreen(
                     ) {
                         TextButton(
                             text = stringResource(R.string.cancel),
-                            onClick = { showFileNameDialog = false },
+                            onClick = {
+                                showFileNameDialog = false
+                                pendingExitAfterSave = false
+                            },
                             modifier = Modifier.weight(1f)
                         )
                         TextButton(
                             text = stringResource(R.string.save),
+                            enabled = fileNameInput.isNotBlank(),
                             onClick = {
                                 if (fileNameInput.isNotBlank()) {
-                                    val targetPath = File(pickedDir, fileNameInput).absolutePath
+                                    val targetPath = File(pickedDir, fileNameInput.trim()).absolutePath
                                     val ok = onSave(targetPath, content)
                                     if (ok) {
                                         currentFilePath = targetPath
                                         modified = false
+                                        showFileNameDialog = false
+                                        if (pendingExitAfterSave) {
+                                            pendingExitAfterSave = false
+                                            onClose()
+                                        }
                                     }
                                 }
-                                showFileNameDialog = false
                             },
                             modifier = Modifier.weight(1f)
                         )
@@ -413,7 +488,7 @@ private fun FilePermissionDialog(file: File, onDismiss: () -> Unit) {
                         modifier = Modifier.weight(1f)
                     )
                     TextButton(
-                        text = stringResource(R.string.app_settings),
+                        text = stringResource(R.string.ok),
                         onClick = {
                             try {
                                 file.setReadable(readable)
