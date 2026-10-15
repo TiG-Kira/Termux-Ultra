@@ -34,6 +34,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.CircularProgressIndicator
 import top.yukonga.miuix.kmp.basic.TextField
@@ -65,14 +66,17 @@ import com.termux.app.compose.KiTerminalTheme
 import com.termux.app.compose.LiveUpdateState
 import com.termux.app.compose.NavigationHelper
 import com.termux.app.compose.PkgRepo
+import com.termux.app.compose.pagePaddingWithoutTop
+import com.termux.app.compose.rememberGlassPageBackdrop
+import com.termux.app.compose.topBarClearance
 import kotlinx.coroutines.launch
 import top.yukonga.miuix.kmp.basic.Icon
-import top.yukonga.miuix.kmp.basic.IconButton
+import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.Scaffold
-import top.yukonga.miuix.kmp.basic.SmallTopAppBar
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.glass.GlassIconButton
+import top.yukonga.miuix.kmp.glass.GlassSmallTopAppBar
 import top.yukonga.miuix.kmp.icon.glass.ChevronBackward
 import top.yukonga.miuix.kmp.icon.glass.MiuixGlassIcons
 import top.yukonga.miuix.kmp.icon.glass.Ok
@@ -167,6 +171,10 @@ private fun PackageTaskScreen(onClose: () -> Unit) {
     val scrollState = rememberScrollState()
     val scope = rememberCoroutineScope()
     val snap = state
+    // 本页为独立 Activity，位于 MainScreen 取景层之外：自建一层供玻璃顶栏折射页面内容，
+    // scrollBehavior 驱动穿透渐隐（SmallTopAppBar 会把它 pin 住，顶栏不折叠）
+    val glassPage = rememberGlassPageBackdrop()
+    val scrollBehavior = MiuixScrollBehavior()
 
     // 没有可恢复的任务（状态已被消费或误启动）→ 直接退出
     LaunchedEffect(snap) {
@@ -234,11 +242,13 @@ private fun PackageTaskScreen(onClose: () -> Unit) {
     Scaffold(
         contentWindowInsets = WindowInsets(0),
         topBar = {
-            SmallTopAppBar(
+            GlassSmallTopAppBar(
                 title = taskTitle(snap),
                 subtitle = taskSubtitle(snap),
+                backdrop = glassPage.backdrop,
+                scrollBehavior = scrollBehavior,
                 navigationIcon = {
-                    IconButton(onClick = onClose) {
+                    GlassIconButton(onClick = onClose) {
                         Icon(
                             imageVector = MiuixGlassIcons.ChevronBackward,
                             contentDescription = stringResource(R.string.back),
@@ -253,14 +263,18 @@ private fun PackageTaskScreen(onClose: () -> Unit) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
+                .then(glassPage.contentModifier)
                 .background(MiuixTheme.colorScheme.surface)
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(innerPadding)
+                    .padding(pagePaddingWithoutTop(innerPadding))
+                    .nestedScroll(scrollBehavior.nestedScrollConnection)
                     .verticalScroll(scrollState)
             ) {
+                // 顶部让位：首屏日志从顶栏下沿开始；滚动后内容钻入顶栏的穿透渐隐带
+                Spacer(Modifier.height(topBarClearance(innerPadding)))
                 LaunchedEffect(log) {
                     scrollState.animateScrollTo(scrollState.maxValue)
                 }
