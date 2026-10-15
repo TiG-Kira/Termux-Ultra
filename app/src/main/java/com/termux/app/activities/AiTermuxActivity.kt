@@ -3584,6 +3584,10 @@ private fun AiChatGlassTopBar(
         subtitle = subtitle,
         scrollBehavior = scrollBehavior,
         backdrop = backdrop,
+        // 对话用 animateScrollToItem 跟随最新消息，属自滚动：contentOffset 不会被喂到，
+        // 默认的 collapseRamp 停在 0 会让「更多 / 返回」等按钮拿不到阴影，
+        // 故改由 isContentScrolled 驱动阴影 ramp，与 band / 按钮材质同步
+        rampFromOverlay = true,
         navigationIcon = {
             GlassIconButton(onClick = onBack) {
                 Icon(
