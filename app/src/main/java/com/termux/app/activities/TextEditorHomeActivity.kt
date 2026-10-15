@@ -17,6 +17,7 @@ import androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner
 import com.termux.app.compose.KiTerminalTheme
 import com.termux.app.compose.NavigationHelper
 import com.termux.app.compose.RecentFilesManager
+import com.termux.app.compose.TermuxInternalFilePicker
 import com.termux.app.compose.TextEditorHomeScreen
 import java.io.File
 import java.io.FileOutputStream
@@ -36,6 +37,7 @@ class TextEditorHomeActivity : ComponentActivity() {
 
             // 文件选择器：从系统选择文件后，拿到路径再打开编辑器
             var pendingOpenPath by remember { mutableStateOf<String?>(null) }
+            var showInternalPicker by remember { mutableStateOf(false) }
 
             val filePickerLauncher = rememberLauncherForActivityResult(
                 contract = ActivityResultContracts.GetContent()
@@ -44,6 +46,9 @@ class TextEditorHomeActivity : ComponentActivity() {
                     val path = copyToTempAndGetPath(it)
                     if (path != null) {
                         pendingOpenPath = path
+                        android.widget.Toast.makeText(
+                            this, "已从系统导入文件副本", android.widget.Toast.LENGTH_SHORT
+                        ).show()
                     }
                 }
             }
@@ -63,8 +68,20 @@ class TextEditorHomeActivity : ComponentActivity() {
                     TextEditorHomeScreen(
                         onClose = { finish() },
                         onNewFile = { openEditor(null) },
-                        onPickFile = { filePickerLauncher.launch("*/*") },
-                        onOpenRecent = { path -> openEditor(path) }
+                        onPickFile = { showInternalPicker = true },
+                        onOpenRecent = { path -> openEditor(path) },
+                        onImportSystemFile = { filePickerLauncher.launch("*/*") }
+                    )
+
+                    TermuxInternalFilePicker(
+                        show = showInternalPicker,
+                        title = "选择文件",
+                        allowFolders = false,
+                        onDismiss = { showInternalPicker = false },
+                        onFileSelected = { path ->
+                            showInternalPicker = false
+                            openEditor(path)
+                        }
                     )
                 }
             }
