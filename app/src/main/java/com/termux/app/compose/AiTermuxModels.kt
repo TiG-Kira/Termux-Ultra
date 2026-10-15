@@ -1,6 +1,10 @@
 package com.termux.app.compose
 
 import android.content.Context
+import android.content.SharedPreferences
+import android.util.Log
+import androidx.security.crypto.EncryptedSharedPreferences
+import androidx.security.crypto.MasterKey
 import com.google.gson.Gson
 
 /** AI 提供商配置 */
@@ -158,6 +162,14 @@ enum class SkillType {
     TASK_UPDATE,          // 更新任务状态（done / in_progress / pending / cancelled）
     TASK_DELETE,          // 删除任务（通过 taskId 或 title 匹配删除）
     TASK_LIST             // 查看当前任务列表
+    ,
+    /**
+     * 在 VorteX 沙箱中执行命令。
+     *
+     * 用于危险脚本的**预演**：Agent 判断某条命令风险较高时，先在沙箱里跑一遍看实际效果，
+     * 再把结果告诉用户，由用户决定是否在真实环境执行。沙箱内所有改动仅限内部、会话结束即消失。
+     */
+    RUN_COMMAND_SANDBOX
 }
 
 /** 需用户点击才能执行的技能（仅生成卡片，未真正执行）
@@ -214,6 +226,13 @@ data class SkillCardData(
     val filePath: String? = null,             // 文件路径
     val command: String? = null,              // 执行的命令
     val output: String? = null,               // 输出/结果
+    /**
+     * 沙箱预演场景下用户的选择：
+     * - "promote"：用户看完沙箱实际效果后，确认在真实环境执行同一命令
+     * - "discard"：用户放弃，不在真实环境执行
+     * 预演本身（RUN_COMMAND_SANDBOX）不设此值。
+     */
+    val sandboxDecision: String? = null,
     // 询问用户相关
     val askQuestion: String? = null,          // 问题文本
     val askType: String? = null,              // "text" / "single" / "multi"
@@ -400,6 +419,40 @@ val DEFAULT_SYSTEM_PROMPT = """
 - Shell：bash；包管理器：pkg install / apt install
 - 支持 proot 容器、QEMU 虚拟机、VNC、SSH；Ubuntu 容器：~/debian-container/run.sh
 
+# 六点五、危险命令：先在 VorteX 沙箱预演（重要）
+
+用户可能开启并授权了 VorteX 沙箱（技能 `RUN_COMMAND_SANDBOX`）。
+它是**虚拟 ROOT 的隔离测试环境**：真实环境完全不受影响，会话结束所有改动即消失。
+
+**何时使用**：你判断一条命令风险较高时——尤其是删除、覆盖安装、批量改名、
+格式化、跑来路不明的脚本、或会改动系统状态的操作——**先在沙箱预演**，
+拿到真实输出后再让用户决定是否在真实环境执行。例如：
+
+    {"skill": "RUN_COMMAND_SANDBOX", "command": "rm -rf ~/testdir && echo done"}
+
+**硬性要求**：
+1. 预演结果必须**如实转述**实际输出，禁止脑补或美化；命令失败就说失败。
+2. 预演后**必须明确询问用户**：「是否在真实环境执行这条命令？」
+   把决定权交给用户，不要自己替他做主，也**不要**未经确认就自动改用 RUN_COMMAND 真实执行。
+3. 沙箱预演**不能替代**风险确认——它只是让用户看清后果。
+4. 若技能返回「未开启或未授权」，说明用户没开这个功能，
+   此时应直接说明风险并询问是否继续，**不要**反复重试该技能。
+
+**沙箱内禁止访问 Android 内存储**：沙箱不挂载 `/sdcard`、`/storage/emulated/0`，
+用户素材无法直接读取。若你处理的文件位于内存储（如 `/sdcard/Download/a.bin`、
+`/storage/emulated/0/DCIM/...`），必须用 `storage_files` 参数把样本交给系统导入，
+系统会自动复制到沙箱可写层并把命令中的路径改写为副本路径：
+
+    {"skill": "RUN_COMMAND_SANDBOX", "command": "file ~/vortex_imports/sdcard_Download_a.bin",
+     "storage_files": ["/sdcard/Download/a.bin"]}
+
+注意：
+- 导入副本位于 `${'$'}HOME/vortex_imports/`，**导入的路径才是沙箱内可见的路径**；
+  不要在 `command` 里直接引用原始内存储路径。
+- 只导入**确实需要处理**的文件，不要把整个内存储拖进来。
+- 不要用 RUN_COMMAND 绕过这一限制去真实环境读写内存储——
+  用户让你「在沙箱里处理」时，素材也应在沙箱内处理。
+
 # 七、长期记忆（MEMORY.md）
 
 路径 /data/data/com.termux/files/home/.ai_memory/MEMORY.md，系统自动注入每轮上下文。
@@ -439,6 +492,9 @@ val DEFAULT_SYSTEM_PROMPT = """
 
 ## 命令与软件包
 - **RUN_COMMAND [A]** 参数 command、sessionId?、sessionName? → 卡片，**你看不到输出**
+- **RUN_COMMAND_SANDBOX** 参数 command、storage_files?（内存储样本路径数组）。
+  仅在用户开启并授权沙箱时可用；沙箱内**不能访问 Android 内存储**，
+  素材需经 `storage_files` 导入到 `${'$'}HOME/vortex_imports/` 后再处理。
 - **CAPTURE_OUTPUT [A/⚡]** 参数 command、timeout?、description? → 白名单中则返回真实输出，否则生成卡片。
   **能用它就别用 RUN_COMMAND**
 - **COMPILE_CODE [⚡]** 参数 command、description?、timeout? → 自动执行并返回状态、退出码、错误、完整输出
@@ -477,6 +533,115 @@ val DEFAULT_SYSTEM_PROMPT = """
 object AiTermuxPrefs {
     // ---------- Keys ----------
     private const val PREFS_NAME = "ai_termux_prefs"
+    private const val TAG = "AiTermuxPrefs"
+
+    // ---------- 敏感凭据安全存储 ----------
+    // api_key / fallback_online_api_key / 含 apiKey 的 LLM Profiles 属于凭据，
+    // 迁移到独立 EncryptedSharedPreferences（AES256-SIV 加密键名 / AES256-GCM 加密键值，
+    // 主密钥存于 Android Keystore）。复用 GitHubSessionStore 的范式：进程内缓存 MasterKey
+    // 句柄、commit() 同步落盘、加密不可用时降级明文并落日志。
+    private const val SECURE_PREFS_NAME = "ai_termux_secure_prefs"
+    private const val SECURE_PLAIN_PREFS_NAME = "ai_termux_secure_prefs_plain"
+
+    /** 加密存储句柄；初始化失败时为 null。进程内缓存，避免每次读写都重新派生主密钥。 */
+    @Volatile
+    private var securePrefsHandle: SharedPreferences? = null
+
+    /** 加密存储是否已尝试初始化（失败后不再反复重试，改用降级通道） */
+    @Volatile
+    private var secureInitDone = false
+
+    @Volatile
+    private var securePlainHandle: SharedPreferences? = null
+
+    /** 明文凭据是否已迁移完成（幂等标志） */
+    @Volatile
+    private var secretsMigrated = false
+
+    /**
+     * 返回存放敏感凭据的 SharedPreferences：优先加密存储，Keystore 不可用时降级明文。
+     * 首次取得句柄时会把遗留明文凭据（ai_termux_prefs 中的 api_key 等）迁移过来并清除明文。
+     */
+    private fun securePrefs(context: Context): SharedPreferences {
+        securePrefsHandle?.let {
+            migrateSecretsIfNeeded(context)
+            return it
+        }
+        if (secureInitDone) {
+            val target = securePrefsHandle ?: securePlain(context)
+            migrateSecretsIfNeeded(context)
+            return target
+        }
+        synchronized(this) {
+            if (secureInitDone) {
+                val target = securePrefsHandle ?: securePlain(context)
+                migrateSecretsIfNeeded(context)
+                return target
+            }
+            secureInitDone = true
+            securePrefsHandle = runCatching {
+                val masterKey = MasterKey.Builder(context.applicationContext)
+                    .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+                    .build()
+                EncryptedSharedPreferences.create(
+                    context.applicationContext,
+                    SECURE_PREFS_NAME,
+                    masterKey,
+                    EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                    EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+                )
+            }.onFailure {
+                Log.w(TAG, "EncryptedSharedPreferences unavailable, falling back to plain prefs for AI secrets", it)
+            }.getOrNull()
+            val target = securePrefsHandle ?: securePlain(context)
+            migrateSecretsIfNeeded(context)
+            return target
+        }
+    }
+
+    private fun securePlain(context: Context): SharedPreferences {
+        securePlainHandle?.let { return it }
+        synchronized(this) {
+            if (securePlainHandle == null) {
+                securePlainHandle = runCatching {
+                    context.applicationContext.getSharedPreferences(SECURE_PLAIN_PREFS_NAME, Context.MODE_PRIVATE)
+                }.getOrNull()
+            }
+            return securePlainHandle!!
+        }
+    }
+
+    /**
+     * 一次性把遗留明文凭据从 ai_termux_prefs 迁到安全存储，并清除明文副本。
+     * 幂等：仅执行一次。涉及键：api_key、fallback_online_api_key、llm_profiles_v1、active_llm_profile_id。
+     */
+    private fun migrateSecretsIfNeeded(context: Context) {
+        if (secretsMigrated) return
+        synchronized(this) {
+            if (secretsMigrated) return
+            secretsMigrated = true
+            val legacy = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val secretKeys = setOf("api_key", KEY_FALLBACK_ONLINE_API_KEY, KEY_LLM_PROFILES, KEY_ACTIVE_PROFILE_ID)
+            val target = securePrefsHandle ?: securePlain(context)
+            val edit = target.edit()
+            var moved = false
+            for (k in secretKeys) {
+                if (legacy.contains(k)) {
+                    legacy.getString(k, null)?.let {
+                        edit.putString(k, it)
+                        moved = true
+                    }
+                }
+            }
+            if (moved) {
+                edit.commit()
+                val le = legacy.edit()
+                for (k in secretKeys) if (legacy.contains(k)) le.remove(k)
+                le.commit()
+            }
+        }
+    }
+
     private const val KEY_CHAT_HISTORY = "chat_history"
     private const val KEY_DEVELOPER_MODE = "ai_developer_mode"
     private const val KEY_CUSTOM_SKILLS = "custom_skills"
@@ -534,7 +699,7 @@ object AiTermuxPrefs {
     fun getConfig(context: Context): AiTermuxConfig {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val provider = prefs.getString("provider", "custom") ?: "custom"
-        val apiKey = prefs.getString("api_key", "") ?: ""
+        val apiKey = securePrefs(context).getString("api_key", "") ?: ""
         val apiBaseUrl = prefs.getString("base_url", "") ?: ""
         val model = prefs.getString("model", "") ?: ""
         val temperature = prefs.getFloat("temperature", 0.7f)
@@ -570,9 +735,14 @@ object AiTermuxPrefs {
     }
 
     fun saveConfig(context: Context, cfg: AiTermuxConfig) {
+        // api_key 属于凭据，走加密存储；其余非敏感字段留在普通 prefs
+        // 注意：这里的 apply { } 是 Kotlin 作用域函数，块内必须再调用 Editor.apply() 才会真正落盘
+        securePrefs(context).edit().apply {
+            putString("api_key", cfg.providerConfig.apiKey)
+            apply()
+        }
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().apply {
             putString("provider", cfg.providerConfig.provider)
-            putString("api_key", cfg.providerConfig.apiKey)
             putString("base_url", cfg.providerConfig.apiBaseUrl)
             putString("model", cfg.providerConfig.model)
             putFloat("temperature", cfg.providerConfig.temperature)
@@ -592,8 +762,10 @@ object AiTermuxPrefs {
      * 保证旧用户升级后看到的配置不丢失。迁移幂等，仅执行一次。
      */
     fun getLlmProfiles(context: Context): List<LlmProfile> {
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val raw = prefs.getString(KEY_LLM_PROFILES, null)
+        // 凭据（profiles 内含 apiKey）走加密存储；provider/base_url 等非敏感字段留在明文 prefs
+        val sp = securePrefs(context)
+        val plain = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val raw = sp.getString(KEY_LLM_PROFILES, null)
         if (raw != null) {
             return try {
                 val arr = Gson().fromJson(raw, Array<LlmProfile>::class.java)
@@ -601,11 +773,11 @@ object AiTermuxPrefs {
             } catch (_: Throwable) { emptyList() }
         }
         // 首次：尝试从旧版本配置迁移
-        val provider = prefs.getString("provider", "") ?: ""
-        val apiKey = prefs.getString("api_key", "") ?: ""
-        val baseUrl = prefs.getString("base_url", "") ?: ""
-        val model = prefs.getString("model", "") ?: ""
-        val temperature = prefs.getFloat("temperature", 0.7f)
+        val provider = plain.getString("provider", "") ?: ""
+        val apiKey = sp.getString("api_key", "") ?: ""
+        val baseUrl = plain.getString("base_url", "") ?: ""
+        val model = plain.getString("model", "") ?: ""
+        val temperature = plain.getFloat("temperature", 0.7f)
         if (provider.isNotBlank() && provider != "local" && apiKey.isNotBlank()) {
             val migrated = LlmProfile(
                 name = "默认配置（已迁移）",
@@ -616,19 +788,19 @@ object AiTermuxPrefs {
                 temperature = temperature
             )
             val list = listOf(migrated)
-            prefs.edit()
+            sp.edit()
                 .putString(KEY_LLM_PROFILES, Gson().toJson(list))
                 .putString(KEY_ACTIVE_PROFILE_ID, migrated.id)
                 .apply()
             return list
         }
         // 旧版本没配过在线模型，写入空列表避免每次都走迁移分支
-        prefs.edit().putString(KEY_LLM_PROFILES, "[]").apply()
+        sp.edit().putString(KEY_LLM_PROFILES, "[]").apply()
         return emptyList()
     }
 
     fun saveLlmProfiles(context: Context, profiles: List<LlmProfile>) {
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val prefs = securePrefs(context)
         val activeId = prefs.getString(KEY_ACTIVE_PROFILE_ID, null)
         if (activeId != null && profiles.none { it.id == activeId }) {
             prefs.edit().remove(KEY_ACTIVE_PROFILE_ID).apply()
@@ -649,7 +821,7 @@ object AiTermuxPrefs {
         val list = getLlmProfiles(context).toMutableList()
         val removed = list.removeAll { it.id == id }
         if (removed) {
-            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val prefs = securePrefs(context)
             val activeId = prefs.getString(KEY_ACTIVE_PROFILE_ID, null)
             if (activeId == id) {
                 val nextActive = list.firstOrNull()?.id
@@ -664,12 +836,11 @@ object AiTermuxPrefs {
     }
 
     fun getActiveLlmProfileId(context: Context): String? {
-        return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .getString(KEY_ACTIVE_PROFILE_ID, null)
+        return securePrefs(context).getString(KEY_ACTIVE_PROFILE_ID, null)
     }
 
     fun setActiveLlmProfileId(context: Context, id: String?) {
-        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().apply {
+        securePrefs(context).edit().apply {
             if (id == null) remove(KEY_ACTIVE_PROFILE_ID) else putString(KEY_ACTIVE_PROFILE_ID, id)
             apply()
         }
@@ -682,15 +853,23 @@ object AiTermuxPrefs {
 
     /** 将某个 LlmProfile 应用为当前生效配置（写入旧字段 provider/api_key/base_url/model/temperature） */
     fun applyLlmProfile(context: Context, profile: LlmProfile) {
+        // api_key 属于凭据，单独走加密存储；其余非敏感字段留在明文 prefs
+        // 注意：这里的 apply { } 是 Kotlin 作用域函数，块内必须再调用 Editor.apply() 才会真正落盘
+        securePrefs(context).edit().apply {
+            putString("api_key", profile.apiKey)
+            apply()
+        }
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().apply {
             putString("provider", profile.provider)
-            putString("api_key", profile.apiKey)
             putString("base_url", profile.apiBaseUrl)
             putString("model", profile.model)
             putFloat("temperature", profile.temperature)
-            putString(KEY_ACTIVE_PROFILE_ID, profile.id)
             apply()
         }
+        // 激活 Profile id 的读取方（getActiveLlmProfileId / saveLlmProfiles / deleteLlmProfile）
+        // 都从加密存储读取，写入必须落在同一处；写进明文 prefs 的值在本进程内读不到，
+        // 要等下次启动 migrateSecretsIfNeeded 搬运后才生效，且可能覆盖加密存储中的新值
+        securePrefs(context).edit().putString(KEY_ACTIVE_PROFILE_ID, profile.id).apply()
     }
 
         // ---------- Chat History ----------
@@ -988,9 +1167,10 @@ object AiTermuxPrefs {
 
     fun getFallbackOnlineConfig(context: Context): FallbackOnlineConfig {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val secure = securePrefs(context)
         return FallbackOnlineConfig(
             enabled = prefs.getBoolean(KEY_FALLBACK_ONLINE_ENABLED, false),
-            apiKey = prefs.getString(KEY_FALLBACK_ONLINE_API_KEY, "") ?: "",
+            apiKey = secure.getString(KEY_FALLBACK_ONLINE_API_KEY, "") ?: "",
             baseUrl = prefs.getString(KEY_FALLBACK_ONLINE_BASE_URL, "") ?: "",
             model = prefs.getString(KEY_FALLBACK_ONLINE_MODEL, "") ?: "",
             temperature = prefs.getFloat(KEY_FALLBACK_ONLINE_TEMPERATURE, 0.7f)
@@ -998,9 +1178,14 @@ object AiTermuxPrefs {
     }
 
     fun saveFallbackOnlineConfig(context: Context, cfg: FallbackOnlineConfig) {
+        // api_key 属于凭据，单独走加密存储；其余非敏感字段留在明文 prefs
+        // 注意：这里的 apply { } 是 Kotlin 作用域函数，块内必须再调用 Editor.apply() 才会真正落盘
+        securePrefs(context).edit().apply {
+            putString(KEY_FALLBACK_ONLINE_API_KEY, cfg.apiKey)
+            apply()
+        }
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().apply {
             putBoolean(KEY_FALLBACK_ONLINE_ENABLED, cfg.enabled)
-            putString(KEY_FALLBACK_ONLINE_API_KEY, cfg.apiKey)
             putString(KEY_FALLBACK_ONLINE_BASE_URL, cfg.baseUrl)
             putString(KEY_FALLBACK_ONLINE_MODEL, cfg.model)
             putFloat(KEY_FALLBACK_ONLINE_TEMPERATURE, cfg.temperature)
@@ -1440,19 +1625,23 @@ object AiTermuxPrefs {
      * 用户点击「重置配置状态」时调用。
      */
     fun resetAllAiState(context: Context) {
-        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().apply {
-            // 当前 LLM 配置
-            remove("provider")
+        // 敏感凭据：从安全存储清除（含明文副本一并删除）
+        securePrefs(context).edit().apply {
             remove("api_key")
+            remove(KEY_LLM_PROFILES)
+            remove(KEY_ACTIVE_PROFILE_ID)
+            remove(KEY_FALLBACK_ONLINE_API_KEY)
+            apply()
+        }
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().apply {
+            // 当前 LLM 配置（非敏感）
+            remove("provider")
             remove("base_url")
             remove("model")
             remove("temperature")
             remove("local_model_id")
             remove("custom_system_prompt")
             remove("use_custom_system_prompt")
-            // Profiles
-            remove(KEY_LLM_PROFILES)
-            remove(KEY_ACTIVE_PROFILE_ID)
             // 旧版单对话历史（已迁移到多会话，这里兜底清理）
             remove(KEY_CHAT_HISTORY)
             remove(KEY_TEACHER_CHAT_HISTORY)
@@ -1462,9 +1651,8 @@ object AiTermuxPrefs {
             remove(KEY_LESSONS)
             remove(KEY_LAST_TRAIN_SESSION)
             remove(KEY_TRAIN_HINT_SHOWN)
-            // 降级在线模型
+            // 降级在线模型（非敏感）
             remove(KEY_FALLBACK_ONLINE_ENABLED)
-            remove(KEY_FALLBACK_ONLINE_API_KEY)
             remove(KEY_FALLBACK_ONLINE_BASE_URL)
             remove(KEY_FALLBACK_ONLINE_MODEL)
             remove(KEY_FALLBACK_ONLINE_TEMPERATURE)

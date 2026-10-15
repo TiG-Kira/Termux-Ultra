@@ -224,6 +224,9 @@ object AiLocalModel {
 
     private const val llamaServerPort = 8088
 
+    /** 单轮增量读取 server 日志的字节上限：防止超大日志一次性读进内存 */
+    private const val MAX_LOG_CHUNK_BYTES = 4L * 1024 * 1024
+
     private data class ServerMeta(
         val modelId: String,
         val port: Int,
@@ -411,19 +414,33 @@ object AiLocalModel {
             var lastLogSize = 0L
             var lastCheckPidTime = 0L
             while (System.currentTimeMillis() < deadline) {
-                // 增量读取 server 日志并推送
+                // 增量读取 server 日志并推送：seek 到上次位置只读新增字节，
+                // 避免每轮 readText() 全量读取（O(n²) IO + 内存抖动）
                 runCatching {
                     val curSize = logFile.length()
-                    if (curSize > lastLogSize) {
-                        val appended = logFile.readText().substring(lastLogSize.toInt())
-                        appended.split('\n').forEach { line ->
-                            val trimmed = line.trim()
-                            if (trimmed.isNotEmpty()) {
-                                onLog?.invoke(trimmed)
-                                android.util.Log.d("AiLocalModel", "llama-server: $trimmed")
-                            }
+                    if (curSize < lastLogSize) {
+                        // 日志被重建/截断：重置偏移，否则 curSize 再也追不上 lastLogSize，日志推送永久中断
+                        lastLogSize = 0L
+                    }
+                    val from = lastLogSize
+                    if (curSize > from) {
+                        val chunk = (curSize - from).coerceAtMost(MAX_LOG_CHUNK_BYTES)
+                        val buf = ByteArray(chunk.toInt())
+                        val read = java.io.RandomAccessFile(logFile, "r").use { raf ->
+                            raf.seek(from)
+                            raf.read(buf, 0, buf.size)
                         }
-                        lastLogSize = curSize
+                        if (read > 0) {
+                            val appended = String(buf, 0, read, Charsets.UTF_8)
+                            appended.split('\n').forEach { line ->
+                                val trimmed = line.trim()
+                                if (trimmed.isNotEmpty()) {
+                                    onLog?.invoke(trimmed)
+                                    android.util.Log.d("AiLocalModel", "llama-server: $trimmed")
+                                }
+                            }
+                            lastLogSize = from + read
+                        }
                     }
                 }
                 // 每 10 秒检查一次：pid 是否还活着（crash 检测）

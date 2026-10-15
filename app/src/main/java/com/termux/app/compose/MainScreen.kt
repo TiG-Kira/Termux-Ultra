@@ -5,7 +5,6 @@ import android.content.Context
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
-import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.DecayAnimationSpec
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.spring
@@ -24,6 +23,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.offset
@@ -37,6 +37,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -111,18 +112,21 @@ fun MainScreen(
     // 各页面把各自的 TopAppBar 内容写入此槽，由 MainScreen 的 Scaffold.topBar 统一渲染
     // 浮动玻璃底栏的取景层（miuix-blur）：底栏透过它折射页面内容
     val glassNavBackdrop = rememberMiuixLayerBackdrop()
+    val currentSelectedTab by rememberUpdatedState(selectedTab)
+    val currentShowVnc by rememberUpdatedState(showVnc)
     val topBarContent = remember {
-        mutableStateOf<@Composable () -> Unit>({ MainTopBar(selectedTab, showVnc, scrollBehavior, glassNavBackdrop) })
+        mutableStateOf<@Composable () -> Unit>({ MainTopBar(currentSelectedTab, currentShowVnc, scrollBehavior, glassNavBackdrop) })
     }
     val snackbarHostState = remember { SnackbarHostState() }
     var remoteSubTab by remember { mutableStateOf(0) }
     var previousTab by remember { mutableStateOf(selectedTab) }
     var rawDragOffset by remember { mutableFloatStateOf(0f) }
     val density = LocalDensity.current
+    // 隐藏手势提示线（小白条）后 navigationBars inset 上报为 0，底栏会贴死屏幕底边；
+    // 保底 12dp 仅在 inset 不足时生效，小白条可见（inset 更大）时保持原行为
     val systemNavBarsHeight = with(density) {
-        WindowInsets.navigationBars.getBottom(density).toDp()
+        maxOf(WindowInsets.navigationBars.getBottom(density), 12.dp.roundToPx()).toDp()
     }
-    val dragOffsetAnimatable = remember { Animatable(0f) }
     var isSwipingInProgress by remember { mutableStateOf(false) }
     var isOverviewEditMode by remember { mutableStateOf(false) }
     var swipeTargetTab by remember { mutableStateOf<Int?>(null) }
@@ -193,6 +197,12 @@ fun MainScreen(
         else -> systemNavBarsHeight + navContainerHeight + 12.dp
     }
 
+    // 输入法或弹层抬起时底栏下沉出屏，两者都落下后才上浮回位。行程取自身的总高加一点余量，
+    // 保证收到底的主体也完全越过屏幕下边缘。
+    val imeVisible = WindowInsets.ime.getBottom(density) > 0
+    val navBarVisible = !imeVisible && !MainNavBarVisibility.hidden
+    val navBarTravel = totalNavHeight + 16.dp
+
     LaunchedEffect(navStyle) {
         if (navStyle == 2) {
             // Mark that glass nav rendering is in progress
@@ -225,14 +235,6 @@ fun MainScreen(
 
     val liquidGlassBackdrop = rememberLayerBackdrop()
 
-    val direction = if (selectedTab > previousTab) 1 else -1
-    val isRemoteWithVnc = selectedTab == 3 && showVnc
-    val dragOffset = if (isSwipingInProgress) rawDragOffset else dragOffsetAnimatable.value
-    val swipeProgress = if (isSwipingInProgress && swipeTargetTab != null) {
-        (kotlin.math.abs(rawDragOffset) / screenWidthPx).coerceIn(0f, 1f)
-    } else {
-        0f
-    }
 
     // 若当前选中页被屏蔽，回退到第一个可用页
     LaunchedEffect(availableTabs) {
@@ -295,7 +297,9 @@ fun MainScreen(
                         selectedIndex = availableTabs.indexOf(selectedTab).coerceAtLeast(0),
                         itemCount = availableTabs.size,
                         backdrop = liquidGlassBackdrop,
-                        modifier = Modifier.padding(bottom = systemNavBarsHeight),
+                        modifier = Modifier
+                            .padding(bottom = systemNavBarsHeight)
+                            .mainNavBarSlide(navBarVisible, navBarTravel),
                         onIndexChange = { index ->
                             val actualTab = availableTabs.getOrElse(index) { selectedTab }
                             if (actualTab != selectedTab) {
@@ -384,6 +388,7 @@ fun MainScreen(
                             )
                         },
                         selectedIndex = availableTabs.indexOf(selectedTab).coerceAtLeast(0),
+                        visible = navBarVisible,
                         onSelect = { index ->
                             val actualTab = availableTabs.getOrElse(index) { selectedTab }
                             if (actualTab != selectedTab) {
@@ -392,16 +397,20 @@ fun MainScreen(
                             }
                         },
                         backdrop = glassNavBackdrop,
-                        modifier = Modifier.padding(
-                            start = 24.dp,
-                            end = 24.dp,
-                            bottom = systemNavBarsHeight
-                        )
+                        modifier = Modifier
+                            .padding(
+                                start = 24.dp,
+                                end = 24.dp,
+                                bottom = systemNavBarsHeight
+                            )
+                            .mainNavBarSlide(navBarVisible, navBarTravel, fade = false)
                     )
                 }
                 // 经典底栏：miuix 原生 NavigationBar（原默认样式，现更名为经典）
                 1 -> {
-                    NavigationBar() {
+                    NavigationBar(
+                        modifier = Modifier.mainNavBarSlide(navBarVisible, navBarTravel)
+                    ) {
                         if (0 in availableTabs) {
                             NavigationBarItem(
                                 icon = Icons.Rounded.Dashboard,
@@ -531,7 +540,7 @@ fun MainScreen(
                                 animate(
                                     initialValue = 0f,
                                     targetValue = 1f,
-                                    animationSpec = tween(300)
+                                    animationSpec = tween(AppMotion.SLOW)
                                 ) { fraction, _ ->
                                     rawDragOffset = startOffset + (endOffset - startOffset) * fraction
                                     if (!isSubTabSwipe) {
@@ -594,7 +603,7 @@ fun MainScreen(
                                 animate(
                                     initialValue = 0f,
                                     targetValue = 1f,
-                                    animationSpec = tween(300)
+                                    animationSpec = tween(AppMotion.SLOW)
                                 ) { fraction, _ ->
                                     rawDragOffset = startOffset * (1f - fraction)
                                     if (!isSubTabSwipe) {
@@ -671,9 +680,9 @@ fun MainScreen(
                         EnterTransition.None togetherWith ExitTransition.None
                     } else {
                         fadeIn(
-                            animationSpec = tween(durationMillis = 300)
+                            animationSpec = tween(durationMillis = AppMotion.SLOW)
                         ) togetherWith fadeOut(
-                            animationSpec = tween(durationMillis = 150)
+                            animationSpec = tween(durationMillis = AppMotion.FAST)
                         )
                     }
                 }

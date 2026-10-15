@@ -702,6 +702,12 @@
     <string name="apk_download_failed">APK file download failed</string>
     <string name="request_install_permission_failed">Failed to request install permission</string>
     <string name="download_failed_with_code">Download failed: %1$d</string>
+    <string name="update_url_not_allowed">Update source is not trusted, download blocked</string>
+    <string name="apk_verify_failed_format">The downloaded file is not a valid APK</string>
+    <string name="apk_verify_failed_checksum">Checksum mismatch, the update package has been discarded</string>
+    <string name="apk_verify_failed_package">Package name mismatch, the update package has been discarded</string>
+    <string name="apk_verify_failed_signature">Signing certificate mismatch, the update package has been discarded</string>
+    <string name="apk_verify_failed_downgrade">The downloaded version is older than the installed one</string>
     <string name="beta_version">Beta</string>
     <string name="internal_version">Internal Build</string>
     <string name="workflow_build">Workflow</string>
@@ -823,6 +829,36 @@
     <string name="root_manage_grant_root">Grant ROOT Permission</string>
     <string name="root_manage_loose_mode">Loose Mode (Disable auto-block)</string>
 
+    <!-- VorteX Sandbox -->
+    <string name="vortex_sandbox_title">VorteX Sandbox</string>
+    <string name="vortex_sandbox_summary">Isolated test environment with virtual ROOT; resets automatically when the session ends</string>
+    <string name="vortex_sandbox_agent_title">Authorize Termux Agent to use Sandbox</string>
+    <string name="vortex_sandbox_agent_summary">Allow Termux Agent to run inside the isolated sandbox (unavailable when the master switch is off)</string>
+    <string name="vortex_sandbox_plugin_title">Run with VorteX Sandbox</string>
+    <string name="vortex_sandbox_plugin_summary">All terminal commands executed by this plugin run inside the sandbox</string>
+    <string name="vortex_sandbox_plugin_disabled_summary">Enable VorteX Sandbox in Settings to use this option</string>
+    <string name="vortex_sandbox_session_title">沙箱会话</string>
+    <string name="vortex_sandbox_disabled_toast">VorteX Sandbox is not enabled</string>
+    <string name="vortex_sandbox_preparing">Preparing sandbox…</string>
+    <string name="vortex_shadowing_notice">检测到修改，正在影子化</string>
+
+    <!-- Reset Runtime Environment -->
+    <string name="reset_runtime_env_title">重置运行环境</string>
+    <string name="reset_runtime_env_summary">清除本应用内所有用户数据（应用内所有设置与环境内文件），恢复到全新安装状态</string>
+    <string name="reset_runtime_env_warning_title">确认重置？</string>
+    <string name="reset_runtime_env_warning_body">此操作等同于系统设置中的「清除数据」，将清除本应用内的所有用户数据：包括应用内的所有设置，以及运行环境内的全部文件。\n\n清除后应用会关闭，再次启动将像全新安装一样重新初始化环境。\n\n注意：只会清除本应用的数据，不会删除手机共享存储（下载、相册、音乐、电影等）中的文件。</string>
+    <string name="reset_runtime_env_confirm">确认重置</string>
+    <string name="reset_runtime_env_cancel">取消</string>
+    <string name="reset_runtime_env_step_preparing">正在关闭所有会话...</string>
+    <string name="reset_runtime_env_step_clearing">正在清除应用数据...</string>
+    <string name="reset_runtime_env_step_fallback">已打开应用信息页，请手动清除数据</string>
+    <string name="reset_runtime_env_step_done">清除完成，应用即将关闭</string>
+    <string name="reset_runtime_env_success_title">清除已发起</string>
+    <string name="reset_runtime_env_success_summary">本应用内所有用户数据已清除，应用即将关闭。重新启动后将像全新安装一样重新初始化环境。</string>
+    <string name="reset_runtime_env_fail_before_purge">重置失败：%1$s，可重试</string>
+    <string name="reset_runtime_env_fail_fallback">重置失败：%1$s。已打开应用信息页，请手动点击「清除数据」来完成重置。</string>
+    <string name="reset_runtime_env_retry">重试</string>
+    <string name="reset_runtime_env_done_button">完成</string>
     <!-- Card Layout -->
     <string name="card_layout_title">Card Layout</string>
     <string name="card_layout_summary">Choose how function cards are arranged on the home page</string>
@@ -1252,7 +1288,7 @@
     <string name="skill_description">Skill description</string>
     <string name="implementation">Implementation</string>
     <string name="tab_user">👤 User</string>
-    <string name="copy_all">Copy all</string>
+    <string name="copy_all">Copy</string>
     <string name="confirm_enable">Confirm enable</string>
     <string name="share_session">Share session</string>
     <string name="new_session">New session</string>
@@ -1389,6 +1425,28 @@
     <string name="pkg_view_mode_desc">Change the display mode of the package management page</string>
     <string name="pkg_view_mode_category">Category View</string>
     <string name="pkg_view_mode_list">List View</string>
+    <string name="pkg_mgmt_category">Package Manager</string>
+    <string name="pkg_edit_sources">Edit Software Sources</string>
+    <string name="pkg_edit_sources_desc">View, edit, add or remove apt software sources</string>
+    <string name="pkg_sources_title">Software Sources</string>
+    <string name="pkg_sources_empty">No software sources configured</string>
+    <string name="pkg_source_add">Add Source</string>
+    <string name="pkg_source_edit">Edit Source</string>
+    <string name="pkg_source_url">Source URL</string>
+    <string name="pkg_source_url_hint">https://example.com/apt</string>
+    <string name="pkg_source_suite">Suite / Codename</string>
+    <string name="pkg_source_suite_hint">stable, bullseye, jammy…</string>
+    <string name="pkg_source_components">Components</string>
+    <string name="pkg_source_components_hint">main contrib non-free</string>
+    <string name="pkg_source_options">Options (optional)</string>
+    <string name="pkg_source_options_hint">[arch=amd64 trusted=yes]</string>
+    <string name="pkg_source_ping">Ping</string>
+    <string name="pkg_source_ping_ok">Responded in %d ms</string>
+    <string name="pkg_source_ping_fail">Ping failed</string>
+    <string name="pkg_source_delete">Delete</string>
+    <string name="pkg_source_delete_confirm">Delete this software source?</string>
+    <string name="pkg_source_saved">Source saved</string>
+    <string name="pkg_source_deleted">Source deleted</string>
     <string name="pkg_empty_installed">还没有安装任何软件包</string>
     <string name="pkg_empty_installed_hint">前往「未安装」页面挑选第一个包吧</string>
     <string name="pkg_empty_available">所有可用包都已安装 🎉</string>
@@ -1658,5 +1716,29 @@
     <string name="agentpaw_stream_desc">When on, the reply is rendered token by token; when off, the full reply is shown at once</string>
     <string name="agentpaw_field_not_saved">Value out of range, not saved; the last saved value is still in use</string>
     <string name="agentpaw_save_failed">Failed to save AgentPaw settings</string>
+
+    <!-- v0.2.0: execution channel priority (PhoneControlMode) -->
+    <string name="agentpaw_control_mode_category">Execution channel</string>
+    <string name="agentpaw_control_mode_title">Execution channel priority</string>
+    <string name="agentpaw_control_mode_desc">Which channel AgentPaw uses for taps, swipes, screenshots and key events. AUTO picks the best available channel for you; forcing a specific channel is useful for testing or on devices where one channel behaves better than others.</string>
+    <string name="agentpaw_control_mode_auto">AUTO (recommended)</string>
+    <string name="agentpaw_control_mode_auto_desc">Try ROOT first, then Shizuku, then Accessibility</string>
+    <string name="agentpaw_control_mode_root">ROOT only</string>
+    <string name="agentpaw_control_mode_root_desc">Use ROOT (su) exclusively; fails cleanly if unavailable</string>
+    <string name="agentpaw_control_mode_shizuku">Shizuku only</string>
+    <string name="agentpaw_control_mode_shizuku_desc">Use Shizuku exclusively; falls through to Accessibility if unavailable</string>
+    <string name="agentpaw_control_mode_accessibility">Accessibility only</string>
+    <string name="agentpaw_control_mode_accessibility_desc">Use Accessibility Service exclusively (compatible with all devices)</string>
+
+    <!-- v0.2.0: AI adaptive step pacing -->
+    <string name="agentpaw_adaptive_pacing_title">AI adaptive step pacing</string>
+    <string name="agentpaw_adaptive_pacing_desc">After each tap / swipe / launch, insert a brief AI-tailored delay based on the tool type, so animations, keyboard and network have time to settle before the next action — avoids missed clicks on slow devices or heavy apps.</string>
+
+    <!-- v0.2.0: ROOT permission status -->
+    <string name="agentpaw_root_title">ROOT (superuser)</string>
+    <string name="agentpaw_root_desc">Privileged channel for high-speed screenshots, monkey-level input and system control. Not required, but highly recommended.</string>
+    <string name="agentpaw_root_granted">Available</string>
+    <string name="agentpaw_root_not_granted">Not available</string>
+    <string name="agentpaw_root_retest">Retest</string>
 
 </resources>

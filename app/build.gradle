@@ -29,19 +29,19 @@ android {
     def workflowCliBuild = System.getenv("TERMUX_WORKFLOW_CLI") == "true"
     def splitAPKsForReleaseBuilds = System.getenv("TERMUX_SPLIT_APKS_FOR_RELEASE_BUILDS") ?: "0"
 
-    // R8 代码收缩 / 资源收缩开关，release 默认【关闭】。
-    // 关闭原因：开启后动态引用点（Gson TypeToken 泛型签名、Class.forName、JNI 回调等）
-    // 需要逐一补 -keep 规则，且仍会偶发崩溃（见 crash report #VncConnectionManager），
-    // 维护成本高于其带来的体积收益。APK 减重改由「bootstrap 首次启动在线下载」承担
-    // （详见下方 bootstrap 相关逻辑），不再依赖 R8 收缩。
-    // 如需临时验证 R8 效果，可显式开启：
-    //   ./gradlew assembleRelease -Ptermux.enableR8=true
-    //   （CI 可设环境变量 TERMUX_ENABLE_R8=true）
-    // 开启时动态引用点（Gson 字段反射、Class.forName、JNI 回调）的 -keep 规则集中在
-    // app/proguard-rules.pro，新增此类引用需同步补规则。
+    // R8 代码收缩 / 资源收缩开关，release 默认【启用】。
+    // 只收缩、不重命名（-dontobfuscate，见 app/proguard-rules.pro）：体积收益主要来自
+    // 裁掉第三方依赖里未被引用的部分，与是否重命名无关，同时保住 Gson 字段名、
+    // Class.forName 字符串和可读的线上堆栈。
+    // 反向调用面（Java ↔ native 双向回调、Gson TypeToken / 字段反射、Class.forName、
+    // JavascriptInterface、Parcelable CREATOR、枚举 valueOf、Room 生成实现）已按小节
+    // 在 app/proguard-rules.pro 里显式 -keep；新增这类调用点需同步补规则。
+    // 回退开关（无需改代码）：
+    //   ./gradlew assembleRelease -Ptermux.enableR8=false
+    //   （CI 可设环境变量 TERMUX_ENABLE_R8=false）
     def enableR8 = (project.findProperty("termux.enableR8")
         ?: System.getenv("TERMUX_ENABLE_R8")
-        ?: "false").toString().toBoolean()
+        ?: "true").toString().toBoolean()
 
     // ── 单架构构建开关 ─────────────────────────────────────────────────
     // 用途：把「一次编译四个 ABI」拆成「一个 ABI 一次编译」，用于 CI 矩阵并行构建，
@@ -70,8 +70,8 @@ android {
         applicationId "com.termux"
         minSdkVersion project.properties.minSdkVersion.toInteger()
         targetSdkVersion project.properties.targetSdkVersion.toInteger()
-        versionCode 1438
-        versionName "3.3.8.R7"
+        versionCode 1508
+        versionName "3.8.0.R9"
         // Termux 核心版本号（基于的上游 Termux 版本）
         // 注意：termux_core_version 字符串已在 strings.xml 中定义
         buildConfigField "String", "TERMUX_CORE_VERSION", "\"0.119.0\""
@@ -105,7 +105,10 @@ android {
         externalNativeBuild {
             cmake {
                 arguments "-DANDROID_STL=none"
-                targets "native-vnc", "vncclient", "turbojpeg-static", "wolfssl", "termux"
+                // vortex_shadow：VorteX 沙箱的 LD_PRELOAD 影子写库（app/CMakeLists.txt
+                // 已定义该 target）。漏加它 → 库不构建、不进 APK → 沙箱启动即报
+                // 「影子写库缺失」并退化为零隔离，写入直落真实 $HOME/$PREFIX。
+                targets "native-vnc", "vncclient", "turbojpeg-static", "wolfssl", "termux", "vortex_shadow"
             }
         }
 
@@ -121,9 +124,24 @@ android {
     signingConfigs {
         release {
             storeFile file("ki-terminal-release.jks")
-            storePassword "ki-terminal"
-            keyAlias "ki-terminal"
-            keyPassword "ki-terminal"
+            // 【安全】签名口令一律外置，不得写回本文件：本仓库是公开的，
+            // 一旦口令与私钥同时落到明文仓库里，任何人都能签出外观无差的包。
+            //
+            // 取值顺序沿用本项目既有约定（见上方 enableR8）：Gradle 属性 → 环境变量 → 默认。
+            //   CI：由 Secrets 注入同名环境变量（见 .github/workflows/release_apk.yml）
+            //   本地：./gradlew assembleRelease -Ptermux.storePassword=... -Ptermux.keyPassword=...
+            //        或先 export KI_TERMINAL_STORE_PASSWORD / KI_TERMINAL_KEY_PASSWORD
+            // 口令留空时不会污染 debug 构建，但 release 签名任务会直接失败——这是刻意的：
+            // 宁可构建报错，也不要静默产出一个签名不对的包。
+            storePassword (project.findProperty("termux.storePassword")
+                ?: System.getenv("KI_TERMINAL_STORE_PASSWORD")
+                ?: "").toString()
+            keyAlias (project.findProperty("termux.keyAlias")
+                ?: System.getenv("KI_TERMINAL_KEY_ALIAS")
+                ?: "ki-terminal").toString()
+            keyPassword (project.findProperty("termux.keyPassword")
+                ?: System.getenv("KI_TERMINAL_KEY_PASSWORD")
+                ?: "").toString()
         }
     }
 
@@ -263,7 +281,7 @@ implementation "io.coil-kt:coil:2.7.0"
     implementation "io.github.awkox:libterminal:4.0.3"
 
     // AgentPaw 合作项目核心库（GitHub Packages，仓库源见根 build.gradle；token 配置见 README/根文件注释）
-    implementation "com.paw.agent:agentpaw-core:0.1.4"
+    implementation "com.paw.agent:agentpaw-core:0.2.1"
 
     implementation project(':termux-shared')
     // Integrated Termux add-on tools

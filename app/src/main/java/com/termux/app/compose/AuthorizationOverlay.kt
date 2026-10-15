@@ -32,10 +32,12 @@ import top.yukonga.miuix.kmp.glass.GlassTopAppBar
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.preference.CheckboxPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
+/**
+ * Agent 敏感操作授权遮罩页（风险命令确认流程的宿主页面，与 VorteX 调整弹窗无关）。
+ */
 @Composable
 fun AuthorizationMask() {
     Scaffold(
@@ -66,6 +68,10 @@ fun AuthorizationMask() {
     }
 }
 
+/**
+ * VorteX Guard Engine 调整确认弹窗。只渲染弹窗本身，不再铺全屏「授权」遮罩页；
+ * OverlayDialog 走同包转发（见 MainNavBarDialogs.kt），show 期间主页底栏自动下沉。
+ */
 @Composable
 fun DisableWarningMask() {
     val context = LocalContext.current
@@ -80,108 +86,81 @@ fun DisableWarningMask() {
     val checkboxRes = if (isOff) R.string.risk_command_disable_off_checkbox
         else R.string.risk_command_disable_warn_checkbox
 
-    Scaffold(
-        modifier = Modifier.fillMaxSize(),
-        containerColor = MiuixTheme.colorScheme.surface,
-        topBar = {
-            // 遮罩层是不透明 surface，没有内容可折射，玻璃顶栏退化为实底 pill
-            GlassTopAppBar(
-                title = "授权",
-                backdrop = LocalGlassTopAppBarBackdrop.current,
-            )
-        }
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-        ) {
-            Text(
-                text = "敏感操作需要得到你的授权来继续",
-                fontSize = 14.sp,
-                color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+    OverlayDialog(
+        show = disableWarningState.show,
+        onDismissRequest = {
+            RiskConfirmManager.hideDisableWarning()
+        },
+        title = "调整VorteX Guard Engine模式？",
+        summary = stringResource(summaryRes),
+        content = {
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 24.dp, vertical = 12.dp)
-            )
+                    .padding(top = 4.dp)
+            ) {
+                CheckboxPreference(
+                    title = stringResource(checkboxRes),
+                    checked = checkboxChecked,
+                    onCheckedChange = { checkboxChecked = it },
+                    modifier = Modifier.fillMaxWidth()
+                )
 
-            OverlayDialog(
-                show = disableWarningState.show,
-                onDismissRequest = {
-                    RiskConfirmManager.hideDisableWarning()
-                },
-                title = "调整VorteX Guard Engine模式？",
-                summary = stringResource(summaryRes),
-                content = {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 4.dp)
-                    ) {
-                        CheckboxPreference(
-                            title = stringResource(checkboxRes),
-                            checked = checkboxChecked,
-                            onCheckedChange = { checkboxChecked = it },
-                            modifier = Modifier.fillMaxWidth()
+                Spacer(Modifier.height(16.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(20.dp)
+                ) {
+                    Button(
+                        onClick = {
+                            RiskConfirmManager.hideDisableWarning()
+                        },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(
+                            color = Color.Transparent
                         )
-
-                        Spacer(Modifier.height(16.dp))
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(20.dp)
-                        ) {
-                            Button(
-                                onClick = {
-                                    RiskConfirmManager.hideDisableWarning()
-                                },
-                                modifier = Modifier.weight(1f),
-                                colors = ButtonDefaults.buttonColors(
-                                    color = Color.Transparent
-                                )
-                            ) {
-                                Text(
-                                    text = "取消",
-                                    color = MiuixTheme.colorScheme.onSurface,
-                                    fontSize = 15.sp,
-                                    fontWeight = FontWeight.Medium
-                                )
-                            }
-                            Button(
-                                onClick = {
-                                    isAuthenticating = true
-                                    val activity = context as? FragmentActivity
-                                    if (activity != null && hasDisableBiometricAuth(activity)) {
-                                        launchDisableBiometricAuth(activity) { success ->
-                                            isAuthenticating = false
-                                            if (success) {
-                                                RiskConfirmManager.confirmDisable(context)
-                                            }
-                                        }
-                                    } else {
+                    ) {
+                        Text(
+                            text = "取消",
+                            color = MiuixTheme.colorScheme.onSurface,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                    Button(
+                        onClick = {
+                            isAuthenticating = true
+                            val activity = context as? FragmentActivity
+                            if (activity != null && hasDisableBiometricAuth(activity)) {
+                                launchDisableBiometricAuth(activity) { success ->
+                                    isAuthenticating = false
+                                    if (success) {
                                         RiskConfirmManager.confirmDisable(context)
                                     }
-                                },
-                                enabled = checkboxChecked && !isAuthenticating,
-                                modifier = Modifier.weight(1f),
-                                colors = ButtonDefaults.buttonColors(
-                                    color = if (checkboxChecked && !isAuthenticating) Color(0xFFD32F2F)
-                                        else Color(0xFFBDBDBD)
-                                )
-                            ) {
-                                Text(
-                                    text = "确认调整",
-                                    color = Color.White,
-                                    fontSize = 15.sp,
-                                    fontWeight = FontWeight.Medium
-                                )
+                                }
+                            } else {
+                                RiskConfirmManager.confirmDisable(context)
                             }
-                        }
+                        },
+                        enabled = checkboxChecked && !isAuthenticating,
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(
+                            color = if (checkboxChecked && !isAuthenticating) Color(0xFFD32F2F)
+                                else Color(0xFFBDBDBD)
+                        )
+                    ) {
+                        Text(
+                            text = "确认调整",
+                            color = Color.White,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Medium
+                        )
                     }
                 }
-            )
+            }
         }
-    }
+    )
 }
 
 private fun hasDisableBiometricAuth(activity: FragmentActivity): Boolean {

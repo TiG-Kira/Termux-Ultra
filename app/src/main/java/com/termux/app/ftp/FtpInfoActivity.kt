@@ -77,11 +77,12 @@ fun FtpInfoScreen() {
     val prefs = remember { context.getSharedPreferences("termux_prefs", Context.MODE_PRIVATE) }
     
     var username by remember { mutableStateOf(prefs.getString("sftp_username", "termux") ?: "termux") }
-    var password by remember { mutableStateOf(prefs.getString("sftp_password", "termux123") ?: "termux123") }
+    var password by remember { mutableStateOf(FtpCredentialStore.getPassword(context)) }
     var port by remember { mutableStateOf(prefs.getInt("sftp_port", 8021)) }
+    var bindAddress by remember { mutableStateOf(prefs.getString("sftp_bind_address", "127.0.0.1") ?: "127.0.0.1") }
     var isEditing by remember { mutableStateOf(false) }
-    
-    val ipAddress = getLocalIpAddress(context)
+
+    val isLoopback = bindAddress == "127.0.0.1" || bindAddress.startsWith("127.") || bindAddress == "localhost"
     
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
@@ -124,15 +125,37 @@ fun FtpInfoScreen() {
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Text(
-                        text = "地址: ftp://$ipAddress:$port",
+                        text = "地址: ftp://$bindAddress:$port",
                         style = TextStyle(
                             fontSize = 16.sp,
                             color = MiuixTheme.colorScheme.onSurface,
                             fontWeight = FontWeight.Medium
                         )
                     )
-                    
+
+                    if (!isLoopback) {
+                        Text(
+                            text = "⚠ 当前监听地址非回环，FTP 服务将对所在网络开放，请确保已设置强密码。",
+                            style = TextStyle(
+                                fontSize = 13.sp,
+                                color = MiuixTheme.colorScheme.error
+                            )
+                        )
+                    }
+
                     if (isEditing) {
+                        TextField(
+                            label = "监听地址",
+                            value = bindAddress,
+                            onValueChange = { bindAddress = it.trim() },
+                            modifier = Modifier.fillMaxWidth(),
+                            textStyle = TextStyle(
+                                fontSize = 14.sp,
+                                color = MiuixTheme.colorScheme.onSurface
+                            ),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
+                            keyboardActions = KeyboardActions()
+                        )
                         TextField(
                             label = "端口",
                             value = port.toString(),
@@ -173,6 +196,13 @@ fun FtpInfoScreen() {
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                             keyboardActions = KeyboardActions()
                         )
+                        Text(
+                            text = if (FtpServiceManager.isPasswordStrong(password)) "密码强度: 合格" else "密码强度: 偏弱（需 ≥8 位且含 3 类以上字符）",
+                            style = TextStyle(
+                                fontSize = 13.sp,
+                                color = if (FtpServiceManager.isPasswordStrong(password)) MiuixTheme.colorScheme.primary else MiuixTheme.colorScheme.error
+                            )
+                        )
                     } else {
                         Text(
                             text = "端口: $port",
@@ -189,7 +219,7 @@ fun FtpInfoScreen() {
                             )
                         )
                         Text(
-                            text = "密码: $password",
+                            text = "密码: ${if (password.isEmpty()) "（未设置）" else "•".repeat(password.length.coerceAtMost(16))}",
                             style = TextStyle(
                                 fontSize = 14.sp,
                                 color = MiuixTheme.colorScheme.onSurface
@@ -209,8 +239,9 @@ fun FtpInfoScreen() {
                             prefs.edit()
                                 .putInt("sftp_port", port)
                                 .putString("sftp_username", username)
-                                .putString("sftp_password", password)
+                                .putString("sftp_bind_address", bindAddress.ifEmpty { "127.0.0.1" })
                                 .apply()
+                            FtpCredentialStore.setPassword(context, password)
                             isEditing = false
                         },
                         modifier = Modifier.weight(1f),
@@ -225,7 +256,8 @@ fun FtpInfoScreen() {
                             isEditing = false
                             port = prefs.getInt("sftp_port", 8021)
                             username = prefs.getString("sftp_username", "termux") ?: "termux"
-                            password = prefs.getString("sftp_password", "termux123") ?: "termux123"
+                            password = FtpCredentialStore.getPassword(context)
+                            bindAddress = prefs.getString("sftp_bind_address", "127.0.0.1") ?: "127.0.0.1"
                         },
                         modifier = Modifier.weight(1f),
                         colors = ButtonDefaults.buttonColors(
@@ -248,24 +280,4 @@ fun FtpInfoScreen() {
             }
         }
     }
-}
-
-fun getLocalIpAddress(context: Context): String {
-    try {
-        val interfaces = java.net.NetworkInterface.getNetworkInterfaces()
-        while (interfaces.hasMoreElements()) {
-            val networkInterface = interfaces.nextElement()
-            val addresses = networkInterface.inetAddresses
-            while (addresses.hasMoreElements()) {
-                val address = addresses.nextElement()
-                val host = address.hostAddress
-                if (!address.isLoopbackAddress && address is java.net.Inet4Address && !host.isNullOrEmpty()) {
-                    return host
-                }
-            }
-        }
-    } catch (e: Exception) {
-        e.printStackTrace()
-    }
-    return "127.0.0.1"
 }

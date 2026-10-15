@@ -1,5 +1,10 @@
 package com.termux.app.compose
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -37,6 +42,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import top.yukonga.miuix.kmp.basic.Scaffold
@@ -60,8 +66,7 @@ import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.basic.LinearProgressIndicator
-import top.yukonga.miuix.kmp.overlay.OverlayDialog
-import top.yukonga.miuix.kmp.overlay.OverlayBottomSheet
+import top.yukonga.miuix.kmp.glass.GlassMotion
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import com.termux.R
 import java.io.File
@@ -144,7 +149,7 @@ fun FileManagerScreen(
             showWarningCard = true
         }
         sftpUsername = prefs.getString("sftp_username", "termux") ?: "termux"
-        sftpPassword = prefs.getString("sftp_password", "termux123") ?: "termux123"
+        sftpPassword = com.termux.app.ftp.FtpCredentialStore.getPassword(context)
         sftpPort = prefs.getInt("sftp_port", 8021)
 
         val appPrefs = context.getSharedPreferences("app_settings", android.content.Context.MODE_PRIVATE)
@@ -201,29 +206,9 @@ fun FileManagerScreen(
         notificationManager.createNotificationChannel(channel)
     }
 
-    fun getLocalIpAddress(): String {
-        try {
-            val interfaces = java.net.NetworkInterface.getNetworkInterfaces()
-            while (interfaces.hasMoreElements()) {
-                val networkInterface = interfaces.nextElement()
-                val addresses = networkInterface.inetAddresses
-                while (addresses.hasMoreElements()) {
-                    val address = addresses.nextElement()
-                    val host = address.hostAddress
-                    if (!address.isLoopbackAddress && address is java.net.Inet4Address && !host.isNullOrEmpty()) {
-                        return host
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-        return "127.0.0.1"
-    }
-
     fun showSftpNotification() {
         createNotificationChannel()
-        val ipAddress = getLocalIpAddress()
+        val bindAddress = com.termux.app.ftp.FtpServiceManager.getBindAddress()
 
         val intent = android.content.Intent(context, com.termux.app.ftp.FtpInfoActivity::class.java)
         intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -236,7 +221,7 @@ fun FileManagerScreen(
 
         val notification = NotificationCompat.Builder(context, sftpChannelId)
             .setContentTitle("正在使用 FTP 服务")
-            .setContentText("地址: ftp://$ipAddress:$sftpPort\n点击通知显示 FTP 详情")
+            .setContentText("地址: ftp://$bindAddress:$sftpPort\n点击通知显示 FTP 详情")
             .setSmallIcon(R.drawable.ic_web)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setOngoing(true)
@@ -256,8 +241,8 @@ fun FileManagerScreen(
         val prefs = context.getSharedPreferences("termux_prefs", android.content.Context.MODE_PRIVATE)
         prefs.edit()
             .putString("sftp_username", sftpUsername)
-            .putString("sftp_password", sftpPassword)
             .apply()
+        com.termux.app.ftp.FtpCredentialStore.setPassword(context, sftpPassword)
         if (com.termux.app.ftp.FtpServiceManager.isRunning()) {
             com.termux.app.ftp.FtpServiceManager.restartWithNewConfig(context)
         }
@@ -282,6 +267,16 @@ fun FileManagerScreen(
             isSftpEnabled = started
             if (started) {
                 showSftpNotification()
+            } else {
+                val weak = !com.termux.app.ftp.FtpServiceManager.isPasswordStrong(
+                    com.termux.app.ftp.FtpCredentialStore.getPassword(context)
+                )
+                val msg = if (weak) {
+                    "请先在「FTP 信息」页设置强密码后再启用服务"
+                } else {
+                    "FTP 服务启动失败，请检查端口是否被占用"
+                }
+                android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_LONG).show()
             }
         } else {
             com.termux.app.ftp.FtpServiceManager.stop(context)
@@ -353,126 +348,158 @@ fun FileManagerScreen(
                 },
                 actions = {
                     Row {
-                    if (isInSelectionMode && selectedFiles.isNotEmpty()) {
-                        GlassIconButton(onClick = {
-                            clipboardMode = ClipboardMode.COPY
-                            clipboardFiles = selectedFiles.toSet()
-                            selectedFiles = emptySet()
-                            isInSelectionMode = false
-                        }) {
-                            Icon(
-                                imageVector = MiuixGlassIcons.Copy,
-                                contentDescription = "复制",
-                                modifier = Modifier.size(24.dp),
-                                tint = MiuixTheme.colorScheme.onSurface
+                        AnimatedVisibility(
+                            visible = isInSelectionMode && selectedFiles.isNotEmpty(),
+                            enter = fadeIn(animationSpec = GlassMotion.fadeIn()) + expandHorizontally(
+                                animationSpec = GlassMotion.navShowHide<IntSize>(),
+                                expandFrom = Alignment.End
+                            ),
+                            exit = fadeOut(animationSpec = GlassMotion.fadeOut()) + shrinkHorizontally(
+                                animationSpec = GlassMotion.navShowHide<IntSize>(),
+                                shrinkTowards = Alignment.End
                             )
-                        }
-                        GlassIconButton(onClick = {
-                            clipboardMode = ClipboardMode.CUT
-                            clipboardFiles = selectedFiles.toSet()
-                            selectedFiles = emptySet()
-                            isInSelectionMode = false
-                        }) {
-                            Icon(
-                                imageVector = MiuixGlassIcons.Cut,
-                                contentDescription = "剪切",
-                                modifier = Modifier.size(24.dp),
-                                tint = MiuixTheme.colorScheme.onSurface
-                            )
-                        }
-                        if (selectedFiles.size == 1) {
-                            GlassIconButton(onClick = {
-                                newFileName = File(selectedFiles.first()).name
-                                showRenameDialog = true
-                            }) {
-                                Icon(
-                                    imageVector = MiuixGlassIcons.Rename,
-                                    contentDescription = "重命名",
-                                    modifier = Modifier.size(24.dp),
-                                    tint = MiuixTheme.colorScheme.onSurface
-                                )
-                            }
-                        }
-                        GlassIconButton(onClick = {
-                            showDeleteDialog = true
-                        }) {
-                            Icon(
-                                imageVector = MiuixGlassIcons.Delete,
-                                contentDescription = "删除",
-                                modifier = Modifier.size(24.dp),
-                                tint = MiuixTheme.colorScheme.onSurface
-                            )
-                        }
-                    }
-
-                    if (clipboardMode != ClipboardMode.NONE && clipboardFiles.isNotEmpty()) {
-                        GlassIconButton(onClick = {
-                            showOperationProgress = true
-                            operationProgressText = if (clipboardMode == ClipboardMode.CUT) "移动中..." else "复制中..."
-                            operationProgress = 0f
-                            val filesToProcess = clipboardFiles.toList()
-                            val modeAtStart = clipboardMode
-                            val targetPath = currentPath
-                            coroutineScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-                                filesToProcess.forEachIndexed { index, srcPath ->
-                                    val srcFile = File(srcPath)
-                                    val destFile = File(targetPath, srcFile.name)
-                                    if (modeAtStart == ClipboardMode.CUT) {
-                                        moveFile(srcFile, destFile)
-                                    } else {
-                                        copyFile(srcFile, destFile)
+                        ) {
+                            Row {
+                                GlassIconButton(onClick = {
+                                    clipboardMode = ClipboardMode.COPY
+                                    clipboardFiles = selectedFiles.toSet()
+                                    selectedFiles = emptySet()
+                                    isInSelectionMode = false
+                                }) {
+                                    Icon(
+                                        imageVector = MiuixGlassIcons.Copy,
+                                        contentDescription = "复制",
+                                        modifier = Modifier.size(24.dp),
+                                        tint = MiuixTheme.colorScheme.onSurface
+                                    )
+                                }
+                                GlassIconButton(onClick = {
+                                    clipboardMode = ClipboardMode.CUT
+                                    clipboardFiles = selectedFiles.toSet()
+                                    selectedFiles = emptySet()
+                                    isInSelectionMode = false
+                                }) {
+                                    Icon(
+                                        imageVector = MiuixGlassIcons.Cut,
+                                        contentDescription = "剪切",
+                                        modifier = Modifier.size(24.dp),
+                                        tint = MiuixTheme.colorScheme.onSurface
+                                    )
+                                }
+                                if (selectedFiles.size == 1) {
+                                    GlassIconButton(onClick = {
+                                        newFileName = File(selectedFiles.first()).name
+                                        showRenameDialog = true
+                                    }) {
+                                        Icon(
+                                            imageVector = MiuixGlassIcons.Rename,
+                                            contentDescription = "重命名",
+                                            modifier = Modifier.size(24.dp),
+                                            tint = MiuixTheme.colorScheme.onSurface
+                                        )
                                     }
-                                    operationProgress = (index + 1).toFloat() / filesToProcess.size
                                 }
-                                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                                    clipboardMode = ClipboardMode.NONE
-                                    clipboardFiles = emptySet()
-                                    refreshFiles()
-                                    showOperationProgress = false
+                                GlassIconButton(onClick = {
+                                    showDeleteDialog = true
+                                }) {
+                                    Icon(
+                                        imageVector = MiuixGlassIcons.Delete,
+                                        contentDescription = "删除",
+                                        modifier = Modifier.size(24.dp),
+                                        tint = MiuixTheme.colorScheme.onSurface
+                                    )
                                 }
                             }
-                        }) {
-                            Icon(
-                                imageVector = MiuixGlassIcons.Paste,
-                                contentDescription = "粘贴",
-                                modifier = Modifier.size(24.dp),
-                                tint = MiuixTheme.colorScheme.onSurface
-                            )
                         }
-                    }
 
-                    if (!isInSelectionMode) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically
+                        AnimatedVisibility(
+                            visible = clipboardMode != ClipboardMode.NONE && clipboardFiles.isNotEmpty(),
+                            enter = fadeIn(animationSpec = GlassMotion.fadeIn()) + expandHorizontally(
+                                animationSpec = GlassMotion.navShowHide<IntSize>(),
+                                expandFrom = Alignment.End
+                            ),
+                            exit = fadeOut(animationSpec = GlassMotion.fadeOut()) + shrinkHorizontally(
+                                animationSpec = GlassMotion.navShowHide<IntSize>(),
+                                shrinkTowards = Alignment.End
+                            )
                         ) {
                             GlassIconButton(onClick = {
-                                com.termux.app.ftp.FtpInfoActivity.start(context)
+                                showOperationProgress = true
+                                operationProgressText = if (clipboardMode == ClipboardMode.CUT) "移动中..." else "复制中..."
+                                operationProgress = 0f
+                                val filesToProcess = clipboardFiles.toList()
+                                val modeAtStart = clipboardMode
+                                val targetPath = currentPath
+                                coroutineScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                                    filesToProcess.forEachIndexed { index, srcPath ->
+                                        val srcFile = File(srcPath)
+                                        val destFile = File(targetPath, srcFile.name)
+                                        if (modeAtStart == ClipboardMode.CUT) {
+                                            moveFile(srcFile, destFile)
+                                        } else {
+                                            copyFile(srcFile, destFile)
+                                        }
+                                        operationProgress = (index + 1).toFloat() / filesToProcess.size
+                                    }
+                                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                        clipboardMode = ClipboardMode.NONE
+                                        clipboardFiles = emptySet()
+                                        refreshFiles()
+                                        showOperationProgress = false
+                                    }
+                                }
                             }) {
                                 Icon(
-                                    painter = painterResource(R.drawable.ic_web),
-                                    contentDescription = "FTP 信息",
-                                    modifier = Modifier.size(24.dp),
-                                    tint = MiuixTheme.colorScheme.onSurface
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(4.dp))
-                            top.yukonga.miuix.kmp.basic.Switch(
-                                checked = isSftpEnabled,
-                                onCheckedChange = { toggleSftp() }
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            GlassIconButton(onClick = {
-                                showNewTypeDialog = true
-                            }) {
-                                Icon(
-                                    imageVector = MiuixGlassIcons.AddFolder,
-                                    contentDescription = "文件夹",
+                                    imageVector = MiuixGlassIcons.Paste,
+                                    contentDescription = "粘贴",
                                     modifier = Modifier.size(24.dp),
                                     tint = MiuixTheme.colorScheme.onSurface
                                 )
                             }
                         }
-                    }
+
+                        AnimatedVisibility(
+                            visible = !isInSelectionMode,
+                            enter = fadeIn(animationSpec = GlassMotion.fadeIn()) + expandHorizontally(
+                                animationSpec = GlassMotion.navShowHide<IntSize>(),
+                                expandFrom = Alignment.End
+                            ),
+                            exit = fadeOut(animationSpec = GlassMotion.fadeOut()) + shrinkHorizontally(
+                                animationSpec = GlassMotion.navShowHide<IntSize>(),
+                                shrinkTowards = Alignment.End
+                            )
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                GlassIconButton(onClick = {
+                                    com.termux.app.ftp.FtpInfoActivity.start(context)
+                                }) {
+                                    Icon(
+                                        painter = painterResource(R.drawable.ic_web),
+                                        contentDescription = "FTP 信息",
+                                        modifier = Modifier.size(24.dp),
+                                        tint = MiuixTheme.colorScheme.onSurface
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(4.dp))
+                                top.yukonga.miuix.kmp.basic.Switch(
+                                    checked = isSftpEnabled,
+                                    onCheckedChange = { toggleSftp() }
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                GlassIconButton(onClick = {
+                                    showNewTypeDialog = true
+                                }) {
+                                    Icon(
+                                        imageVector = MiuixGlassIcons.AddFolder,
+                                        contentDescription = "文件夹",
+                                        modifier = Modifier.size(24.dp),
+                                        tint = MiuixTheme.colorScheme.onSurface
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             )

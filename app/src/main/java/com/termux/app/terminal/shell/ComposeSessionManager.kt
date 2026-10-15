@@ -1,10 +1,14 @@
 package com.termux.app.terminal.shell
 
 import android.content.Context
+import android.util.Log
 import com.awkoo.libterminal.engine.TerminalSession
 import com.awkoo.libterminal.process.ITerminalProcess
 import com.termux.shared.termux.shell.command.environment.TermuxShellEnvironment
+import com.termux.shared.termux.TermuxConstants
 import com.termux.shared.compat.ShellEnvironmentCompat
+import com.termux.R
+import com.termux.app.vortex.VorteXSandbox
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -49,6 +53,12 @@ class ComposeSessionManager private constructor(private val context: Context) {
 
     /** 会话状态观察协程作用域。 */
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    /** PREFIX 属主修复每进程只尝试一次，避免反复弹 su 授权。 */
+    private val ownershipRepairAttempted = java.util.concurrent.atomic.AtomicBoolean(false)
+
+    /** exec 探测结果缓存（路径 → 可执行），属主修复成功后清空。 */
+    private val execProbeCache = java.util.concurrent.ConcurrentHashMap<String, Boolean>()
 
     /**
      * 创建新会话、启动 shell、设为当前活跃会话。
@@ -133,16 +143,23 @@ class ComposeSessionManager private constructor(private val context: Context) {
 
         var shellPath: String? = null
         var isLoginShell = false
+        var probeSuspect = false
         if (!isFailsafe) {
-            // 仅普通模式搜索 login/bash/zsh；安全模式效仿 Java 版直接回退到 /system/bin/sh
+            // 仅普通模式搜索 login/bash/zsh；安全模式效仿 Java 版直接回退到 /system/bin/sh。
+            // canExecute 只查权限位，还需真实 exec 探测，拦住「检查放行、execve 才报
+            // Permission denied」的属主/挂载层异常（见 maybeSchedulePrefixOwnershipRepair）
             for (binary in arrayOf("login", "bash", "zsh")) {
                 val f = File(defaultBinPath, binary)
-                if (f.canExecute()) {
+                if (!f.canExecute()) continue
+                if (isActuallyExecutable(f)) {
                     shellPath = f.absolutePath
                     isLoginShell = true
                     break
                 }
+                probeSuspect = true
             }
+            if (shellPath == null) probeSuspect = true
+            maybeSchedulePrefixOwnershipRepair(File(defaultBinPath), probeSuspect)
         }
         if (shellPath == null) shellPath = "/system/bin/sh"
 
@@ -158,6 +175,117 @@ class ComposeSessionManager private constructor(private val context: Context) {
             args = args,
             env = env,
             sessionName = "",
+            startImmediately = startImmediately
+        )
+    }
+
+    /**
+     * 真实 exec 可行性探测。
+     *
+     * File.canExecute() 只查权限位，发现不了属主错乱、挂载 noexec 等
+     * 「检查时放行、execve 时才报 Permission denied」的异常。这里用 ProcessBuilder
+     * 实际 exec 一次（execve 语义与 JNI.createSubprocess 一致），失败即抛 IOException；
+     * 成功则立即销毁进程。结果按进程缓存，避免每次新建会话都空跑候选 shell
+     * （login 会连带跑一次用户 profile）；属主修复成功后清缓存以便重探。
+     */
+    private fun isActuallyExecutable(file: File): Boolean {
+        val path = file.absolutePath
+        execProbeCache[path]?.let { return it }
+        val result = try {
+            val process = ProcessBuilder(path).start()
+            process.destroy()
+            if (!process.waitFor(1, java.util.concurrent.TimeUnit.SECONDS)) {
+                process.destroyForcibly()
+                process.waitFor(1, java.util.concurrent.TimeUnit.SECONDS)
+            }
+            true
+        } catch (_: Throwable) {
+            false
+        }
+        execProbeCache[path] = result
+        return result
+    }
+
+    /**
+     * 候选 shell exec 探测失败时的 $PREFIX 属主自修复。
+     *
+     * root 用户在终端里用 su 跑过 apt/dpkg、或用 root 文件管理器/备份工具碰过 $PREFIX，
+     * 会让文件属主偏离本 app uid，表现为新会话报 exec(".../login"): Permission denied。
+     * 仅在探测确实失败且检测到属主异常时才动手：后台用 su 把 $PREFIX 整体 chown 回本
+     * uid；属主正常（纯 SELinux/挂载等原因）则不动，避免无谓弹出 su 授权。每进程只尝试一次。
+     */
+    private fun maybeSchedulePrefixOwnershipRepair(binDir: File, probeSuspect: Boolean) {
+        if (!probeSuspect) return
+        try {
+            val myUid = android.os.Process.myUid()
+            val anomalous = arrayOf("login", "bash", "zsh", "sh").any { name ->
+                val f = File(binDir, name)
+                f.exists() && android.system.Os.lstat(f.absolutePath).st_uid != myUid
+            }
+            if (!anomalous) return
+            if (!ownershipRepairAttempted.compareAndSet(false, true)) return
+            scope.launch {
+                try {
+                    val cmd = "chown -R $myUid:$myUid ${TermuxConstants.TERMUX_PREFIX_DIR_PATH}"
+                    val process = ProcessBuilder("su", "-c", cmd)
+                        .redirectErrorStream(true)
+                        .start()
+                    val done = process.waitFor(120, java.util.concurrent.TimeUnit.SECONDS)
+                    if (!done) process.destroyForcibly()
+                    process.inputStream.readBytes() // 排空管道，防 banner 填满缓冲卡住 su
+                    if (done && process.exitValue() == 0) {
+                        execProbeCache.clear()
+                        Log.i(TAG, "PREFIX ownership repair done")
+                    } else {
+                        Log.w(TAG, "PREFIX ownership repair ${if (done) "exit=${process.exitValue()}" else "timed out"}")
+                    }
+                } catch (t: Throwable) {
+                    Log.w(TAG, "PREFIX ownership repair failed: ${t.message}")
+                }
+            }
+        } catch (_: Throwable) {
+        }
+    }
+
+    /**
+     * 创建并进入一个 VorteX 沙箱会话。
+     *
+     * 与默认 shell 不同，这里把 shell 指向 VorteX 沙箱引导脚本（交互模式），
+     * 并把 $HOME 与 cwd 重定向到沙箱可写层、注入 VORTEX_ROOT / VORTEX_SANDBOX 环境变量，
+     * 使该会话完全运行在隔离环境内，且自带虚拟 ROOT。
+     *
+     * 会话标题固定为 [VorteXSandbox.SANDBOX_SESSION_TITLE]（"沙箱会话"），
+     * 由调用方配合「同时仅允许一个手动沙箱会话」的限制使用。
+     */
+    fun createSandboxSession(startImmediately: Boolean = true): TerminalSession {
+        // 注意：不要在这里同步调ensureInitialized()——它可能触发全量 $HOME 拷贝，
+        // 而本方法由终端列表页的按钮回调直接调用（运行在 UI 线程），会 ANR 闪退。
+        // 引导脚本自身在会话启动时会做完整性校验与重播，这里只做幂等且廉价的准备。
+        VorteXSandbox.ensureInitializedAsync(context)
+        val vortexRoot = VorteXSandbox.getRootDir(context).absolutePath
+        val bootstrap = VorteXSandbox.getBootstrapExecutable(context).absolutePath
+
+        val envClient = ShellEnvironmentCompat(TermuxShellEnvironment())
+        // 注意：HOME **不**在这里改写成 run/home。
+        // proot 方案下，沙箱内看到的 $HOME 必须仍是真实绝对路径
+        // （/data/data/com.termux/files/home），只是该路径被 proot 影子化遮蔽；
+        // 若在此处提前改成 run/home，proot 的 -b 绑定会失效并造成路径混淆。
+        // 轻量降级模式所需的 HOME 重定向由引导脚本自行完成。
+        val realHome = File(TermuxConstants.TERMUX_HOME_DIR_PATH).absolutePath
+        val baseEnv = envClient.buildEnvironment(context, false, realHome).toMutableList()
+        val env = baseEnv
+            .filter { !it.startsWith("VORTEX_") }
+            .toMutableList()
+        env.add("VORTEX_ROOT=$vortexRoot")
+        env.add("VORTEX_REAL_HOME=$realHome")
+        env.add("VORTEX_SANDBOX=1")
+
+        return createSession(
+            shellPath = bootstrap,
+            cwd = realHome,
+            args = arrayOf("--interactive"),
+            env = env.toTypedArray(),
+            sessionName = context.getString(R.string.vortex_sandbox_session_title),
             startImmediately = startImmediately
         )
     }
@@ -180,7 +308,14 @@ class ComposeSessionManager private constructor(private val context: Context) {
             removedIndex = _sessions.value.indexOfFirst { it.session.id == sessionId }
             _sessions.value.getOrNull(removedIndex)
         } ?: return
+        // 沙箱会话结束 → 彻底回收影子空间。
+        // 注意顺序：**先 finish 再回收**。tmp/proc 是 proot guest 的 /proc 绑定，
+        // 会话还活着就删会把 guest 的 /proc 抽空，bash 疯狂 ENOENT 直至卡死；
+        // 回收本身已切后台线程，不会再阻塞 UI。
+        // 名字必须在 finish 前取：finish 后会话对象可能已被重置。
+        val sessionName = info.name
         info.session.finishIfRunning()
+        VorteXSandbox.onSessionEnded(context, sessionName)
         TerminalSessionCompat.unregister(sessionId)
 
         synchronized(sessionsLock) {
@@ -200,7 +335,10 @@ class ComposeSessionManager private constructor(private val context: Context) {
     fun killAllSessions() {
         synchronized(sessionsLock) {
             _sessions.value.forEach {
+                // 同 killSession：先 finish 再回收，别抽活会话的 /proc。
+                val name = it.name
                 it.session.finishIfRunning()
+                VorteXSandbox.onSessionEnded(context, name)
                 TerminalSessionCompat.unregister(it.session.id)
             }
             _sessions.value = emptyList()
@@ -223,6 +361,8 @@ class ComposeSessionManager private constructor(private val context: Context) {
     }
 
     companion object {
+        private const val TAG = "ComposeSessionManager"
+
         @Volatile
         private var instance: ComposeSessionManager? = null
 

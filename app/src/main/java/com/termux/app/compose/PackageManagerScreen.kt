@@ -2,8 +2,12 @@ package com.termux.app.compose
 
 import android.content.Context
 import com.termux.R
+import android.app.Activity
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import com.termux.app.activities.PackageTaskActivity
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -29,7 +33,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.material3.CircularProgressIndicator
+import top.yukonga.miuix.kmp.basic.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -61,6 +65,7 @@ import com.termux.shared.termux.shell.TermuxShellUtils
 import com.termux.shared.termux.TermuxConstants
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import top.yukonga.miuix.kmp.glass.GlassIconButton
@@ -80,6 +85,7 @@ import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.glass.ChevronBackward
 import top.yukonga.miuix.kmp.icon.glass.MiuixGlassIcons
 import top.yukonga.miuix.kmp.icon.glass.Download
+import top.yukonga.miuix.kmp.icon.glass.Ok
 import top.yukonga.miuix.kmp.icon.glass.Play
 import top.yukonga.miuix.kmp.icon.glass.Refresh
 import top.yukonga.miuix.kmp.theme.MiuixTheme
@@ -132,7 +138,8 @@ object AppShell {
         context: Context,
         command: String,
         timeout: Int = 60,
-        onOutput: (String) -> Unit
+        onOutput: (String) -> Unit,
+        stdin: Channel<String>? = null
     ): Pair<Int, String> = withContext(Dispatchers.IO) {
         val shell = resolveShell()
         if (shell == null) return@withContext Pair(-1, "找不到 shell")
@@ -170,6 +177,21 @@ object AppShell {
                 if (delta.isNotBlank()) onOutput(delta)
                 lastStdoutLen = outLen
                 lastStderrLen = errLen
+            }
+            // 交互式输入：把页面经 stdin 通道提交的答案转交给进程标准输入，让 apt/dpkg 的提示得以继续
+            if (stdin != null) {
+                var received = stdin.tryReceive().getOrNull()
+                while (received != null) {
+                    try {
+                        task?.getProcess()?.outputStream?.let { os ->
+                            os.write((received + "\n").toByteArray())
+                            os.flush()
+                        }
+                    } catch (_: Throwable) {
+                        // 进程可能已退出，忽略写入失败
+                    }
+                    received = stdin.tryReceive().getOrNull()
+                }
             }
             if (ec.hasExecuted() || rd.exitCode != null) break
         }
@@ -214,6 +236,104 @@ data class PackageInfo(
     val section: String = ""
 ) {
     fun resolveSection(): String = section.ifBlank { SectionClassifier.classify(name) }
+}
+
+/**
+ * 解析 apt 依赖/冲突条目字符串，分离纯包名和版本限制。
+ *
+ * apt 版本限制格式: 包名 (操作符 版本号)
+ * 操作符: << (早于), < (早于或等于), = (等于), >= (晚于或等于), >> (晚于)
+ *
+ * 示例:
+ *   "ruby-2 (= 2.7.6-1)" -> PkgDep(name="ruby-2", versionConstraint="= 2.7.6-1")
+ *   "python (>= 10.1.0)" -> PkgDep(name="python", versionConstraint=">= 10.1.0")
+ *   "zlib1g"             -> PkgDep(name="zlib1g", versionConstraint=null)
+ */
+data class PkgDep(
+    val name: String,
+    val versionConstraint: String?
+)
+
+private val depVersionRegex = Regex("^([a-zA-Z0-9][a-zA-Z0-9+._-]*)\\s*(?:\\((<<|<=|=|>=|>>)\\s+([^)]+)\\))?\\s*$")
+
+fun parsePkgDep(raw: String): PkgDep {
+    val trimmed = raw.trim()
+    val match = depVersionRegex.find(trimmed)
+    return if (match != null) {
+        val name = match.groupValues[1]
+        val op = match.groupValues[2]
+        val ver = match.groupValues[3]
+        val constraint = if (op.isNotEmpty() && ver.isNotEmpty()) "$op $ver" else null
+        PkgDep(name = name, versionConstraint = constraint)
+    } else {
+        // 无法解析时退化为去掉括号内容
+        val parenIdx = trimmed.indexOf('(')
+        if (parenIdx > 0) {
+            PkgDep(name = trimmed.substring(0, parenIdx).trim(), versionConstraint = null)
+        } else {
+            PkgDep(name = trimmed, versionConstraint = null)
+        }
+    }
+}
+
+/**
+ * 语义化版本号比较：按 . 拆分各段，按整数优先、字符串次之逐段比较。
+ * 返回 <0 / 0 / >0 分别表示 a<b / a==b / a>b。
+ * 这是 apt 的通用近似实现（termux 上版本格式比较规整，足够用）。
+ */
+fun compareVersions(a: String, b: String): Int {
+    val la = a.trim().split('.', '-', '_')
+    val lb = b.trim().split('.', '-', '_')
+    val maxLen = maxOf(la.size, lb.size)
+    for (i in 0 until maxLen) {
+        val sa = la.getOrNull(i) ?: ""
+        val sb = lb.getOrNull(i) ?: ""
+        if (sa == sb) continue
+        val ia = sa.toLongOrNull()
+        val ib = sb.toLongOrNull()
+        val cmp = when {
+            ia != null && ib != null -> ia.compareTo(ib)
+            ia != null -> -1           // 数字 < 字符串
+            ib != null -> 1
+            else -> sa.compareTo(sb)
+        }
+        if (cmp != 0) return cmp
+    }
+    return 0
+}
+
+/**
+ * 判断已安装版本是否满足 apt 版本约束。
+ *
+ * @param installedVer 已安装版本号，如 "1.2.3"
+ * @param constraint 约束字符串，如 ">= 1.0.0"、"= 2.0"、"<< 3"
+ * @return true 满足或没有约束；false 不满足；null 无法判断（约束格式异常）
+ */
+fun checkVersionConstraint(installedVer: String, constraint: String?): Boolean? {
+    if (constraint.isNullOrBlank()) return true
+    val trimmed = constraint.trim()
+    val (op, ver) = when {
+        trimmed.startsWith(">= ") -> ">=" to trimmed.removePrefix(">= ").trim()
+        trimmed.startsWith("<= ") -> "<=" to trimmed.removePrefix("<= ").trim()
+        trimmed.startsWith(">> ") -> ">>" to trimmed.removePrefix(">> ").trim()
+        trimmed.startsWith("<< ") -> "<<" to trimmed.removePrefix("<< ").trim()
+        trimmed.startsWith("= ") -> "=" to trimmed.removePrefix("= ").trim()
+        trimmed.startsWith(">=") -> ">=" to trimmed.removePrefix(">=").trim()
+        trimmed.startsWith("<=") -> "<=" to trimmed.removePrefix("<=").trim()
+        trimmed.startsWith(">>") -> ">>" to trimmed.removePrefix(">>").trim()
+        trimmed.startsWith("<<") -> "<<" to trimmed.removePrefix("<<").trim()
+        trimmed.startsWith("=") -> "=" to trimmed.removePrefix("=").trim()
+        else -> return null
+    }
+    val cmp = compareVersions(installedVer, ver)
+    return when (op) {
+        ">=" -> cmp >= 0
+        "<=" -> cmp <= 0
+        "=" -> cmp == 0
+        ">>" -> cmp > 0
+        "<<" -> cmp < 0
+        else -> null
+    }
 }
 
 object PkgRepo {
@@ -355,30 +475,106 @@ object PkgRepo {
         )
     }
 
-    suspend fun install(context: Context, name: String, onOutput: ((String) -> Unit)? = null): Pair<Boolean, String> {
+    suspend fun install(context: Context, name: String, onOutput: ((String) -> Unit)? = null, stdin: Channel<String>? = null): Pair<Boolean, String> {
         val cmd = "export DEBIAN_FRONTEND=noninteractive && pkg install -y ${shq(name)} 2>&1"
-        val (code, output) = if (onOutput != null) AppShell.execStreaming(context, cmd, timeout = 180, onOutput = onOutput)
+        val (code, output) = if (onOutput != null) AppShell.execStreaming(context, cmd, timeout = 180, onOutput = onOutput, stdin = stdin)
                              else AppShell.exec(context, cmd, timeout = 180)
         return (code == 0) to output
     }
 
-    suspend fun uninstall(context: Context, name: String, onOutput: ((String) -> Unit)? = null): Pair<Boolean, String> {
+    /**
+     * 运行 `apt-get -s install <name>` 模拟安装，解析 apt 给出的解决方案计划。
+     * 用于判断：apt 能否成功安装；会自动移除哪些冲突包；整体是否可解。
+     *
+     * 返回 null 表示模拟命令本身失败（网络、锁、apt 异常等），无法判断。
+     */
+    data class AptSimResult(
+        val feasible: Boolean,              // apt 认为安装可解
+        val willRemovePackages: Set<String> // apt 计划移除的包名（冲突方）
+    )
+
+    suspend fun aptSimulateInstall(context: Context, name: String): AptSimResult? {
+        val cmd = "apt-get -s install ${shq(name)} 2>&1"
+        val (code, output) = AppShell.exec(context, cmd, timeout = 30)
+        if (code != 0 && !output.contains("Unable to locate package")) {
+            // 0 = 成功；apt 不可解时也可能返回非零但关键看输出内容
+        }
+        val trimmed = output.trim()
+        if (trimmed.isBlank()) return null
+
+        val willRemove = mutableSetOf<String>()
+        var feasible = true
+
+        for (line in trimmed.lines()) {
+            val l = line.trim()
+            when {
+                // Remv <pkg> [version] [reason]  ← apt 计划移除的包
+                l.startsWith("Remv ") -> {
+                    val parts = l.removePrefix("Remv ").split(' ', '\t')
+                    if (parts.isNotEmpty()) willRemove.add(parts[0])
+                }
+                l.startsWith("Conf ") -> { /* 正常安装计划行 */ }
+                l.startsWith("Inst ") -> { /* 正常安装计划行 */ }
+                l.startsWith("Break ") -> { /* apt 自动降级解 */ }
+                // 不可解的标志
+                "Unable to correct problems" in l ||
+                "has unmet dependencies" in l ||
+                "held broken" in l ||
+                l.startsWith("E: ") -> feasible = false
+            }
+        }
+        return AptSimResult(feasible = feasible, willRemovePackages = willRemove)
+    }
+
+    /**
+     * 运行 `apt-get -s remove <name>` 模拟卸载，解析 apt 计划连带移除的所有包。
+     * 用于普通卸载前提示"卸载这个包会把哪些反向依赖也卸了"。
+     */
+    suspend fun aptSimulateRemove(context: Context, name: String): AptSimResult? {
+        val cmd = "apt-get -s remove ${shq(name)} 2>&1"
+        val (code, output) = AppShell.exec(context, cmd, timeout = 30)
+        if (code != 0) { /* 卸载几乎不会返回不可解，忽略错误码 */ }
+        val trimmed = output.trim()
+        if (trimmed.isBlank()) return null
+
+        val willRemove = mutableSetOf<String>()
+        var feasible = true
+
+        for (line in trimmed.lines()) {
+            val l = line.trim()
+            when {
+                l.startsWith("Remv ") -> {
+                    val parts = l.removePrefix("Remv ").split(' ', '\t')
+                    if (parts.isNotEmpty()) willRemove.add(parts[0])
+                }
+                l.startsWith("Inst ") -> { /* 意外安装行（降级解等） */ }
+                "Unable to correct problems" in l ||
+                "has unmet dependencies" in l ||
+                l.startsWith("E: ") -> feasible = false
+            }
+        }
+        // 模拟目标包本身一定会被移除，保险起见
+        willRemove.add(name)
+        return AptSimResult(feasible = feasible, willRemovePackages = willRemove)
+    }
+
+    suspend fun uninstall(context: Context, name: String, onOutput: ((String) -> Unit)? = null, stdin: Channel<String>? = null): Pair<Boolean, String> {
         val cmd = "export DEBIAN_FRONTEND=noninteractive && pkg uninstall -y ${shq(name)} 2>&1"
-        val (code, output) = if (onOutput != null) AppShell.execStreaming(context, cmd, timeout = 60, onOutput = onOutput)
+        val (code, output) = if (onOutput != null) AppShell.execStreaming(context, cmd, timeout = 60, onOutput = onOutput, stdin = stdin)
                              else AppShell.exec(context, cmd, timeout = 60)
         return (code == 0) to output
     }
 
-    suspend fun update(context: Context, onOutput: ((String) -> Unit)? = null): Pair<Boolean, String> {
+    suspend fun update(context: Context, onOutput: ((String) -> Unit)? = null, stdin: Channel<String>? = null): Pair<Boolean, String> {
         val cmd = "export DEBIAN_FRONTEND=noninteractive && pkg update 2>&1"
-        val (code, output) = if (onOutput != null) AppShell.execStreaming(context, cmd, timeout = 180, onOutput = onOutput)
+        val (code, output) = if (onOutput != null) AppShell.execStreaming(context, cmd, timeout = 180, onOutput = onOutput, stdin = stdin)
                              else AppShell.exec(context, cmd, timeout = 180)
         return (code == 0) to output
     }
 
-    suspend fun upgradeAll(context: Context, onOutput: ((String) -> Unit)? = null): Pair<Boolean, String> {
+    suspend fun upgradeAll(context: Context, onOutput: ((String) -> Unit)? = null, stdin: Channel<String>? = null): Pair<Boolean, String> {
         val cmd = "export DEBIAN_FRONTEND=noninteractive && pkg upgrade -y 2>&1"
-        val (code, output) = if (onOutput != null) AppShell.execStreaming(context, cmd, timeout = 300, onOutput = onOutput)
+        val (code, output) = if (onOutput != null) AppShell.execStreaming(context, cmd, timeout = 300, onOutput = onOutput, stdin = stdin)
                              else AppShell.exec(context, cmd, timeout = 300)
         return (code == 0) to output
     }
@@ -400,6 +596,144 @@ object PkgRepo {
         val cmd = "rm -f ${locks.joinToString(" ")} 2>&1"
         val (_, out) = AppShell.exec(context, cmd)
         return out
+    }
+
+    // ─────────────────── apt / termux-apt-repo 检测与兜底恢复 ────────────────────
+
+    /** 会让软件包管理直接失去功能的关键包——卸载它们会连带搞挂 apt 链路 */
+    val CRITICAL_APT_PACKAGES: Set<String> = setOf(
+        "apt",
+        "apt-static",
+        "apt-android-7",
+        "apt-android-5",
+        "termux-apt-repo",
+        "termux-package-manager",
+        "dpkg",
+        "libdpkg",
+        "termux-tools", // 提供 pkg wrapper
+    )
+
+    /** apt + pkg + dpkg 三者都能跑 = 软件包管理基础环境完整 */
+    suspend fun isAptAvailable(context: Context): Boolean {
+        val (code, _) = AppShell.exec(
+            context,
+            "command -v apt >/dev/null 2>&1 && command -v pkg >/dev/null 2>&1 && command -v dpkg >/dev/null 2>&1"
+        )
+        return code == 0
+    }
+
+    /** termux-apt-repo 是否安装（负责拉仓库索引） */
+    suspend fun isTermuxAptRepoInstalled(context: Context): Boolean {
+        val (code, _) = AppShell.exec(
+            context,
+            "command -v termux-apt-repo >/dev/null 2>&1"
+        )
+        return code == 0
+    }
+
+    /**
+     * 兜底恢复：依次尝试三条路径，任一成功即返回 (true, 日志)。
+     * 1. pkg install termux-apt-repo（apt 还能跑，只是 repo 丢了）
+     * 2. 从 termux-packages 主仓库下载 apt / dpkg / termux-apt-repo 的 .deb 然后 dpkg -i
+     * 3. 下载失败或 dpkg 也无法运行 → 返回 (false, 失败日志)
+     *
+     * 返回的 Boolean 表示"apt 链路是否已恢复"，String 是完整日志（供 UI 展示）。
+     */
+    suspend fun recoverApt(context: Context): Pair<Boolean, String> {
+        val sb = StringBuilder()
+        val prefix = TermuxConstants.TERMUX_PREFIX_DIR_PATH
+        val arch = "aarch64" // Termux 目前最普遍；fallback 会多试
+        val candidateArches = listOf("aarch64", "arm", "x86_64", "i686")
+
+        // —— 步骤 0：如果 apt 还能跑，先试 pkg install 补 termux-apt-repo ——
+        val (aptCode, _) = AppShell.exec(context, "command -v apt >/dev/null 2>&1")
+        if (aptCode == 0) {
+            sb.appendLine("[0] apt 可执行，尝试 pkg install termux-apt-repo ...")
+            val (code, out) = AppShell.exec(
+                context,
+                "export DEBIAN_FRONTEND=noninteractive && pkg install -y termux-apt-repo 2>&1",
+                timeout = 120
+            )
+            sb.appendLine(out.takeIf { it.isNotBlank() } ?: "(无输出)")
+            if (code == 0 && isAptAvailable(context)) {
+                sb.appendLine("✅ 通过 pkg install 恢复成功")
+                return true to sb.toString()
+            }
+            sb.appendLine("❌ pkg install 失败（code=$code）")
+        } else {
+            sb.appendLine("[0] apt 二进制已丢失，无法通过 pkg 恢复")
+        }
+
+        // —— 步骤 1：尝试从 termux-packages 下载 .deb 然后 dpkg -i ——
+        // 需要下载的关键包：apt + dpkg + termux-apt-repo
+        // 从 apt-cache policy 拿版本号（如果还能跑），否则取仓库最新
+        sb.appendLine("[1] 尝试从 termux-packages 下载 deb 进行恢复 ...")
+        val dlDir = "$prefix/tmp/apt-recover"
+        val (mkdirCode, _) = AppShell.exec(context, "mkdir -p '$dlDir'")
+        if (mkdirCode != 0) {
+            sb.appendLine("❌ 无法创建临时目录 $dlDir")
+            return false to sb.toString()
+        }
+
+        val packages = listOf("apt", "dpkg", "termux-apt-repo")
+        // Termux 主仓库 URL（含 4 种架构的软映射 aarch64 → stable/aarch64）
+        val repoBase = "https://packages.termux.dev/apt/termux-main"
+
+        for (arch in candidateArches) {
+            sb.appendLine("  尝试 arch=$arch ...")
+            var downloaded = 0
+            for (pkgName in packages) {
+                val pkgUrl = "$repoBase/pool/stable/${arch.substring(0, 1)}/$pkgName/"
+                // 先用 apt-cache 拿版本号（apt 还能跑的情况下）
+                var version = ""
+                val (cacheCode, cacheOut) = AppShell.exec(
+                    context, "apt-cache show $pkgName 2>/dev/null | grep -E '^Version:' | head -1 | awk '{print \$2}'"
+                )
+                if (cacheCode == 0 && cacheOut.isNotBlank()) {
+                    version = cacheOut.trim()
+                }
+                if (version.isBlank()) {
+                    sb.appendLine("    ⚠ 拿不到 $pkgName 的版本号，跳过下载")
+                    continue
+                }
+                // Termux apt 包的文件名规则: <pkgname>_<version>_<arch>.deb
+                val debFile = "$dlDir/${pkgName}_${version}_${arch}.deb"
+                val dlCmd = "curl -fsSL -o '$debFile' '${pkgUrl}${pkgName}_${version}_${arch}.deb' 2>&1"
+                val (dlCode, dlOut) = AppShell.exec(context, dlCmd, timeout = 60)
+                if (dlCode == 0 && File(debFile).length() > 0) {
+                    downloaded++
+                    sb.appendLine("    ✔ 下载 $pkgName ($version)")
+                } else {
+                    sb.appendLine("    ✘ $pkgName 下载失败: ${dlOut.take(120)}")
+                }
+            }
+            if (downloaded == packages.size) break
+        }
+
+        // dpkg -i 所有下载好的 deb
+        val debFiles = listOfNotNull(File(dlDir).listFiles { it.name.endsWith(".deb") }?.toList()).flatten()
+        if (debFiles.isNotEmpty()) {
+            sb.appendLine("  执行 dpkg -i ${debFiles.size} 个包 ...")
+            val (dpkgCode, dpkgOut) = AppShell.exec(
+                context,
+                "dpkg -i ${debFiles.joinToString(" ") { "'$it'" }} 2>&1 || true",
+                timeout = 120
+            )
+            sb.appendLine(dpkgOut.takeIf { it.isNotBlank() } ?: "(无输出)")
+            if (isAptAvailable(context)) {
+                // 补一下依赖
+                AppShell.exec(context, "export DEBIAN_FRONTEND=noninteractive && apt-get install -f -y 2>&1", timeout = 120)
+                sb.appendLine("✅ 通过 deb 下载 + dpkg -i 恢复成功")
+                return true to sb.toString()
+            } else {
+                sb.appendLine("❌ dpkg -i 执行后 apt 仍不可用")
+            }
+        } else {
+            sb.appendLine("❌ 全部 deb 下载失败，无可安装文件")
+        }
+
+        sb.appendLine("❌ 所有恢复路径均已失败，需要用户手动干预或重装 Termux")
+        return false to sb.toString()
     }
 
     private suspend fun getInstalledNames(context: Context): Set<String> {
@@ -611,11 +945,6 @@ fun PackageManagerScreen(
     val isDark = isSystemInDarkTheme()
     val scope = rememberCoroutineScope()
 
-    var showProgressDialog by remember { mutableStateOf(false) }
-    var progressTitle by remember { mutableStateOf("") }
-    var progressLog by remember { mutableStateOf("") }
-    var progressSuccess by remember { mutableStateOf<Boolean?>(null) }
-
     var selectedTab by remember { mutableStateOf(0) }
     var installedList by remember { mutableStateOf<List<PackageInfo>>(emptyList()) }
     var availableList by remember { mutableStateOf<List<PackageInfo>>(emptyList()) }
@@ -624,6 +953,34 @@ fun PackageManagerScreen(
     var isLoading by remember { mutableStateOf(true) }
     var loadingAvailable by remember { mutableStateOf(false) }
     var showDetail by remember { mutableStateOf<PackageInfo?>(null) }
+
+    // 包任务页返回结果：刷新列表并给出结果反馈
+    val taskLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode != Activity.RESULT_OK) return@rememberLauncherForActivityResult
+        val data = result.data
+        val ok = data?.getBooleanExtra(PackageTaskActivity.EXTRA_SUCCESS, false) ?: false
+        val op = data?.getStringExtra(PackageTaskActivity.EXTRA_OPERATION)?.let {
+            runCatching { LiveUpdateState.PkgOperation.valueOf(it) }.getOrNull()
+        }
+        scope.launch {
+            installedList = PkgRepo.getInstalled(context)
+            if (ok && op == LiveUpdateState.PkgOperation.UPDATE && searchQuery.isBlank()) {
+                availableList = PkgRepo.getAvailableAll(context)
+            }
+        }
+        val toast = when (op) {
+            LiveUpdateState.PkgOperation.INSTALL -> if (ok) "安装成功" else "安装失败"
+            LiveUpdateState.PkgOperation.UNINSTALL -> if (ok) "卸载成功" else "卸载失败"
+            LiveUpdateState.PkgOperation.UPDATE -> if (ok) "刷新成功" else "刷新失败"
+            LiveUpdateState.PkgOperation.UPGRADE -> if (ok) "升级成功" else "升级失败"
+            null -> if (ok) "操作成功" else "操作失败"
+        }
+        Toast.makeText(context, toast, Toast.LENGTH_SHORT).show()
+    }
+
+    // apt 兜底恢复 UI state
+    var aptRecoveryStep by remember { mutableStateOf<Int?>(null) } // null=未触发, 0=尝试中, 1=恢复中, 2=恢复失败
+    var aptRecoveryLog by remember { mutableStateOf("") }
 
     // 分类视图状态
     val pkgPrefs = remember {
@@ -697,31 +1054,29 @@ fun PackageManagerScreen(
         scrollBehavior.state.heightOffset = 0f
     }
 
-    // 观察 LiveUpdateState — 实时 log + 后台任务按钮 + 恢复请求
-    val livePkgLog by LiveUpdateState.pkgLog.collectAsState()
+    // 观察 LiveUpdateState — 顶栏后台任务按钮 + 任务状态恢复
     val pkgStateSnap by LiveUpdateState.pkgState.collectAsState()
-
-    LaunchedEffect(LiveUpdateState.pkgResumeRequest) {
-        LiveUpdateState.pkgResumeRequest.collect { shouldResume ->
-            if (shouldResume && LiveUpdateState.hasPkg()) {
-                LiveUpdateState.consumeResumeRequest()
-                val snap = LiveUpdateState.getPkgStateSnapshot()
-                if (snap != null) {
-                    showProgressDialog = true
-                    progressTitle = when (snap.operation) {
-                        LiveUpdateState.PkgOperation.UPDATE -> "正在刷新软件源"
-                        LiveUpdateState.PkgOperation.UPGRADE -> "正在升级所有包"
-                        LiveUpdateState.PkgOperation.INSTALL -> "正在安装 ${snap.packageName}"
-                        LiveUpdateState.PkgOperation.UNINSTALL -> "正在卸载 ${snap.packageName}"
-                    }
-                    progressSuccess = null
-                }
-            }
-        }
-    }
 
     LaunchedEffect(Unit) {
         isLoading = true
+        // —— 入口 apt 可用性检测 + 兜底恢复 ——
+        if (!PkgRepo.isAptAvailable(context)) {
+            aptRecoveryStep = 0
+            aptRecoveryLog = "apt / pkg / dpkg 链路检测失败，正在尝试自动恢复 ..."
+            delay(400) // 给 UI 一帧时间渲染
+            aptRecoveryStep = 1
+            val (ok, log) = PkgRepo.recoverApt(context)
+            aptRecoveryLog = log
+            if (!ok) {
+                aptRecoveryStep = 2
+                // 恢复失败：OverlayDialog 弹窗报错，isLoading 保持 true，页面停在 loading
+                // 等用户确认后按 onBackPressed 退出
+                isLoading = false
+                return@LaunchedEffect
+            }
+            aptRecoveryStep = null
+            Toast.makeText(context, "apt 已恢复，正在加载软件包列表 ...", Toast.LENGTH_SHORT).show()
+        }
         installedList = PkgRepo.getInstalled(context)
         isLoading = false
     }
@@ -822,48 +1177,33 @@ fun PackageManagerScreen(
                             }
                         },
                         actions = {
-                            // 后台任务恢复按钮 — 有运行中的包操作时显示
-                            if (pkgStateSnap != null && !pkgStateSnap!!.finished) {
+                            // 后台任务入口 — 有包任务（运行中或刚完成）时显示，点击回到任务页
+                            if (pkgStateSnap != null) {
                                 GlassIconButton(
-                                    onClick = {
-                                        LiveUpdateState.requestResumePkg()
-                                        showProgressDialog = true
-                                        progressSuccess = null
-                                        progressTitle = when (pkgStateSnap!!.operation) {
-                                            LiveUpdateState.PkgOperation.UPDATE -> "正在刷新软件源"
-                                            LiveUpdateState.PkgOperation.UPGRADE -> "正在升级所有包"
-                                            LiveUpdateState.PkgOperation.INSTALL -> "正在安装 ${pkgStateSnap!!.packageName}"
-                                            LiveUpdateState.PkgOperation.UNINSTALL -> "正在卸载 ${pkgStateSnap!!.packageName}"
-                                        }
-                                    }
+                                    onClick = { taskLauncher.launch(PackageTaskActivity.restoreIntent(context)) }
                                 ) {
-                                    Icon(
-                                        imageVector = MiuixGlassIcons.Play,
-                                        contentDescription = stringResource(R.string.resume_background),
-                                        tint = MiuixTheme.colorScheme.primary,
-                                        modifier = Modifier.size(24.dp)
-                                    )
+                                    if (pkgStateSnap!!.finished) {
+                                        Icon(
+                                            imageVector = MiuixGlassIcons.Ok,
+                                            contentDescription = "查看任务结果",
+                                            tint = MiuixTheme.colorScheme.primary,
+                                            modifier = Modifier.size(24.dp)
+                                        )
+                                    } else {
+                                        Icon(
+                                            imageVector = MiuixGlassIcons.Play,
+                                            contentDescription = stringResource(R.string.resume_background),
+                                            tint = MiuixTheme.colorScheme.primary,
+                                            modifier = Modifier.size(24.dp)
+                                        )
+                                    }
                                 }
                             }
                             GlassIconButton(
                                 onClick = {
-                                    progressTitle = "正在刷新软件源"
-                                    progressLog = ""
-                                    progressSuccess = null
-                                    showProgressDialog = true
-                                    LiveUpdateState.startPkg(LiveUpdateState.PkgOperation.UPDATE, "", backgrounded = false)
-                                    LiveUpdateState.pkgScope.launch {
-                                        val (ok, log) = PkgRepo.update(context, onOutput = { LiveUpdateState.appendPkgLog(it) })
-                                        LiveUpdateState.finishPkg(ok)
-                                        progressLog = log
-                                        progressSuccess = ok
-                                        if (ok) {
-                                            installedList = PkgRepo.getInstalled(context)
-                                            if (searchQuery.isBlank()) {
-                                                availableList = PkgRepo.getAvailableAll(context)
-                                            }
-                                        }
-                                    }
+                                    taskLauncher.launch(
+                                        PackageTaskActivity.newTaskIntent(context, LiveUpdateState.PkgOperation.UPDATE, "")
+                                    )
                                 }
                             ) {
                                 Icon(
@@ -875,20 +1215,9 @@ fun PackageManagerScreen(
                             }
                             GlassIconButton(
                                 onClick = {
-                                    progressTitle = "正在升级所有包"
-                                    progressLog = ""
-                                    progressSuccess = null
-                                    showProgressDialog = true
-                                    LiveUpdateState.startPkg(LiveUpdateState.PkgOperation.UPGRADE, "", backgrounded = false)
-                                    LiveUpdateState.pkgScope.launch {
-                                        val (ok, log) = PkgRepo.upgradeAll(context, onOutput = { LiveUpdateState.appendPkgLog(it) })
-                                        LiveUpdateState.finishPkg(ok)
-                                        progressLog = log
-                                        progressSuccess = ok
-                                        if (ok) {
-                                            installedList = PkgRepo.getInstalled(context)
-                                        }
-                                    }
+                                    taskLauncher.launch(
+                                        PackageTaskActivity.newTaskIntent(context, LiveUpdateState.PkgOperation.UPGRADE, "")
+                                    )
                                 }
                             ) {
                                 Icon(
@@ -940,8 +1269,7 @@ fun PackageManagerScreen(
                     Box(modifier = Modifier.fillMaxSize()) {
                         if (isLoading || loadingAvailable) {
                             CircularProgressIndicator(
-                                modifier = Modifier.align(Alignment.Center),
-                                color = Color(0xFF2563EB)
+                                modifier = Modifier.align(Alignment.Center)
                             )
                         } else {
                             LazyColumn(
@@ -1003,88 +1331,93 @@ fun PackageManagerScreen(
                             }
                         }
                     }
-
-                    OverlayDialog(
-                        show = showProgressDialog,
-                        title = progressTitle.ifBlank { "正在处理" },
-                        summary = "",
-                        onDismissRequest = { if (progressSuccess != null) showProgressDialog = false },
-                        content = {
-                            val logScrollState = rememberScrollState()
-                            Column(
-                                modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
-                                // Loading indicator + "处理中..." 一行居中
-                                if (progressSuccess == null) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.Center,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        CircularProgressIndicator(
-                                            modifier = Modifier.size(24.dp),
-                                            color = MiuixTheme.colorScheme.primary,
-                                            strokeWidth = 3.dp
-                                        )
-                                        Spacer(Modifier.width(12.dp))
-                                        Text(
-                                            text = stringResource(R.string.common_processing),
-                                            fontSize = 14.sp,
-                                            color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                                        )
-                                    }
-                                    Spacer(Modifier.height(12.dp))
-                                }
-                                if (progressSuccess != null) {
-                                    Text(
-                                        text = if (progressSuccess == true) "操作成功" else "操作失败",
-                                        fontSize = 15.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = if (progressSuccess == true) MiuixTheme.colorScheme.primary else Color(0xFFDC2626)
-                                    )
-                                    Spacer(Modifier.height(12.dp))
-                                }
-                                // Log area — 加载中和完成后都显示，实时更新
-                                val displayLog = if (progressSuccess == null) livePkgLog else progressLog
-                                val clippedLog = if (displayLog.length > 5000) displayLog.substring(displayLog.length - 5000) else displayLog
-                                if (clippedLog.isNotBlank()) {
-                                    Box(
-                                        modifier = Modifier.fillMaxWidth()
-                                            .height(200.dp)
-                                            .background(
-                                                color = if (isDark) Color(0xFF1A1A1A) else Color(0xFFF5F5F5),
-                                                shape = RoundedCornerShape(8.dp)
-                                            )
-                                            .padding(12.dp)
-                                    ) {
-                                        Text(
-                                            text = clippedLog,
-                                            fontSize = 12.sp,
-                                            color = if (isDark) Color.White.copy(alpha = 0.8f) else Color.Black.copy(alpha = 0.7f),
-                                            lineHeight = 16.sp,
-                                            modifier = Modifier.verticalScroll(logScrollState)
-                                        )
-                                    }
-                                    Spacer(Modifier.height(12.dp))
-                                }
-                                if (progressSuccess != null) {
-                                    Row(modifier = Modifier.fillMaxWidth()) {
-                                        TextButton(
-                                            text = stringResource(R.string.low_android_force_disable_confirm),
-                                            onClick = { showProgressDialog = false },
-                                            modifier = Modifier.fillMaxWidth()
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    )
                 }
             }
         }
     }
     }
+
+    // —— apt 兜底恢复对话框 ——
+    OverlayDialog(
+        show = aptRecoveryStep != null,
+        title = when (aptRecoveryStep) {
+            0 -> "检测 apt 链路"
+            1 -> "尝试自动恢复"
+            else -> "apt 恢复失败"
+        },
+        summary = when (aptRecoveryStep) {
+            0 -> "正在检测 apt / pkg / dpkg 是否可执行 ..."
+            1 -> "软件包管理依赖 apt 链路，正在尝试自动恢复 ..."
+            else -> "自动恢复失败，请手动干预或重装 Termux 后再试"
+        },
+        onDismissRequest = { if (aptRecoveryStep == 2) onBackPressed() },
+        content = {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                if (aptRecoveryStep == 0 || aptRecoveryStep == 1) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        Text(
+                            text = "正在处理 ...",
+                            fontSize = 14.sp,
+                            color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                        )
+                    }
+                    Spacer(Modifier.height(12.dp))
+                }
+
+                if (aptRecoveryStep == 2) {
+                    Text(
+                        text = "软件包管理功能无法正常运行",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color(0xFFDC2626)
+                    )
+                    Spacer(Modifier.height(12.dp))
+                }
+
+                if (aptRecoveryLog.isNotBlank()) {
+                    Box(
+                        modifier = Modifier.fillMaxWidth()
+                            .height(240.dp)
+                            .background(
+                                color = if (isDark) Color(0xFF1A1A1A) else Color(0xFFF5F5F5),
+                                shape = RoundedCornerShape(8.dp)
+                            )
+                            .padding(12.dp)
+                    ) {
+                        Text(
+                            text = aptRecoveryLog,
+                            fontSize = 11.sp,
+                            color = if (isDark) Color.White.copy(alpha = 0.7f) else Color.Black.copy(alpha = 0.6f),
+                            lineHeight = 15.sp,
+                            modifier = Modifier.verticalScroll(rememberScrollState())
+                        )
+                    }
+                    Spacer(Modifier.height(12.dp))
+                }
+
+                if (aptRecoveryStep == 2) {
+                    Row(modifier = Modifier.fillMaxWidth()) {
+                        TextButton(
+                            text = "退出软件包管理",
+                            onClick = { onBackPressed() },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
+            }
+        }
+    )
 }
 
 @Composable

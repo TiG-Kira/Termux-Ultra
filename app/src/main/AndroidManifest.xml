@@ -152,6 +152,11 @@
             android:exported="false" />
 
         <activity
+            android:name=".app.activities.PackageTaskActivity"
+            android:label="软件包任务"
+            android:exported="false" />
+
+        <activity
             android:name=".app.activities.TextEditorActivity"
             android:label="文本编辑器"
             android:exported="false" />
@@ -502,6 +507,12 @@
             android:name=".app.activities.KeySettingsActivity"
             android:exported="false"
             android:label="@string/key_settings"
+            android:windowSoftInputMode="adjustResize" />
+
+        <activity
+            android:name=".app.activities.SoftwareSourceActivity"
+            android:exported="false"
+            android:label="@string/pkg_sources_title"
             android:windowSoftInputMode="adjustResize" />
 
         <activity

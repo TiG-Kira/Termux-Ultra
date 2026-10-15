@@ -53,18 +53,21 @@ import top.yukonga.miuix.kmp.basic.SearchBar
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.ui.res.stringResource
-import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.preference.SwitchPreference
 import top.yukonga.miuix.kmp.preference.CheckboxPreference
 import top.yukonga.miuix.kmp.preference.OverlayDropdownPreference
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.preference.WindowSpinnerPreference
 import top.yukonga.miuix.kmp.basic.DropdownItem
+import top.yukonga.miuix.kmp.basic.HorizontalDivider
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import com.termux.R
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Launch
 import androidx.compose.material.icons.rounded.*
+import top.yukonga.miuix.kmp.basic.CircularProgressIndicator
+import com.termux.app.RuntimeEnvironmentResetter
+import com.termux.app.vortex.VorteXSandbox
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.graphics.painter.Painter
@@ -131,6 +134,14 @@ fun SettingsScreen(
     var showResetConfigWarning by remember { mutableStateOf(false) }
     var showWhitelistDialog by remember { mutableStateOf(false) }
     var tempWhitelistSkills by remember { mutableStateOf<Set<SkillType>>(emptySet()) }
+
+    // ---------- Reset Runtime Env state ----------
+    var showResetEnvConfirm by remember { mutableStateOf(false) }
+    var showResetEnvProgress by remember { mutableStateOf(false) }
+    var resetEnvStep by remember { mutableStateOf(RuntimeEnvironmentResetter.Step.PREPARING) }
+    var resetEnvMessage by remember { mutableStateOf("") }
+    var resetEnvFailMode by remember { mutableStateOf<Int?>(null) }
+    var resetEnvErrorMsg by remember { mutableStateOf("") }
 
     // Whitelistable skills definition：与 SkillType.requiresClick() 中可白名单化的类型保持一致
     val whitelistSkillLabels = remember {
@@ -520,6 +531,7 @@ fun SettingsScreen(
 
     // ===== 搜索索引：所有可搜索设置项（独立 Card 展示 + 保留交互）=====
     val sec_appearance = context.getString(R.string.appearance)
+    val sec_pkg_mgmt = context.getString(R.string.pkg_mgmt_category)
     val sec_remote = context.getString(R.string.remote)
     val sec_terminal = context.getString(R.string.terminal)
     val sec_tools = context.getString(R.string.integrated_tools_category)
@@ -643,7 +655,7 @@ fun SettingsScreen(
                     startAction = { SettingIcon(Icons.Rounded.SwapHoriz, contentDescription = context.getString(R.string.horizontal_tip_layout)) }
                 )
             }),
-        SearchableSetting(sec_appearance, context.getString(R.string.pkg_view_mode), context.getString(R.string.pkg_view_mode_desc),
+        SearchableSetting(sec_pkg_mgmt, context.getString(R.string.pkg_view_mode), context.getString(R.string.pkg_view_mode_desc),
             keywords = listOf("软件包", "包管理", "package", "分类", "列表", "view mode"),
             render = {
                 OverlayDropdownPreference(
@@ -653,6 +665,16 @@ fun SettingsScreen(
                     selectedIndex = pkgViewModeIndex,
                     onSelectedIndexChange = { idx -> pkgViewModeIndex = idx; prefs.edit().putInt("KEY_PKG_VIEW_MODE", idx).apply() },
                     startAction = { SettingIcon(Icons.Rounded.Folder, contentDescription = context.getString(R.string.pkg_view_mode)) }
+                )
+            }),
+        SearchableSetting(sec_pkg_mgmt, context.getString(R.string.pkg_edit_sources), context.getString(R.string.pkg_edit_sources_desc),
+            keywords = listOf("软件源", "源", "source", "mirror", "apt", "repository"),
+            render = {
+                ArrowPreference(
+                    title = context.getString(R.string.pkg_edit_sources),
+                    summary = context.getString(R.string.pkg_edit_sources_desc),
+                    onClick = { openSoftwareSourceSettings(context) },
+                    startAction = { SettingIcon(Icons.Rounded.Dns, contentDescription = context.getString(R.string.pkg_edit_sources)) }
                 )
             }),
 
@@ -939,6 +961,70 @@ fun SettingsScreen(
                 )
             }),
 
+        // ===== VorteX Sandbox =====
+        SearchableSetting(sec_security, context.getString(R.string.vortex_sandbox_title),
+            context.getString(R.string.vortex_sandbox_summary),
+            keywords = listOf("沙箱", "sandbox", "vortex", "隔离", "虚拟root", "测试环境", "演练"),
+            render = {
+                var sandboxEnabled by remember { mutableStateOf(VorteXSandbox.isEnabled(context)) }
+                // null=空闲；true=正在开启（准备环境）；false=正在关闭
+                var sandboxBusy by remember { mutableStateOf<Boolean?>(null) }
+                SwitchPreference(
+                    title = context.getString(R.string.vortex_sandbox_title),
+                    summary = context.getString(R.string.vortex_sandbox_summary),
+                    checked = sandboxEnabled,
+                    enabled = sandboxBusy == null,
+                    onCheckedChange = {
+                        if (sandboxBusy == null) {
+                            sandboxEnabled = it
+                            sandboxBusy = it
+                            VorteXSandbox.setEnabledAsync(context, it) {
+                                Handler(Looper.getMainLooper()).post {
+                                    sandboxBusy = null
+                                }
+                            }
+                        }
+                    },
+                    startAction = { SettingIcon(painterResource(R.drawable.ic_sandbox), contentDescription = context.getString(R.string.vortex_sandbox_title)) }
+                )
+                OverlayDialog(
+                    title = context.getString(R.string.vortex_sandbox_title),
+                    show = sandboxBusy != null,
+                    onDismissRequest = {},
+                    content = {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.padding(end = 16.dp)
+                            )
+                            Text(
+                                text = if (sandboxBusy == true) "正在准备环境" else "正在关闭沙盒"
+                            )
+                        }
+                    }
+                )
+            }),
+        SearchableSetting(sec_security, context.getString(R.string.vortex_sandbox_agent_title),
+            context.getString(R.string.vortex_sandbox_agent_summary),
+            keywords = listOf("沙箱", "agent", "授权", "authorize", "vortex", "termux agent"),
+            render = {
+                val sandboxOn = VorteXSandbox.isEnabled(context)
+                var agentAuth by remember { mutableStateOf(VorteXSandbox.isAgentAuthorized(context)) }
+                SwitchPreference(
+                    title = context.getString(R.string.vortex_sandbox_agent_title),
+                    summary = context.getString(R.string.vortex_sandbox_agent_summary),
+                    checked = agentAuth,
+                    enabled = sandboxOn,
+                    onCheckedChange = {
+                        agentAuth = it
+                        VorteXSandbox.setAgentAuthorized(context, it)
+                    },
+                    startAction = { SettingIcon(Icons.Rounded.Memory, contentDescription = context.getString(R.string.vortex_sandbox_agent_title)) }
+                )
+            }),
+
         // SettingsGroupCard 里的条目（动态展开）
     ) + buildList {
         addAll(dataSettings.map { it.toSearchable(sec_backup) })
@@ -1120,7 +1206,21 @@ fun SettingsScreen(
                                 SettingIcon(Icons.Rounded.SwapHoriz, contentDescription = context.getString(R.string.horizontal_tip_layout))
                             }
                         )
-                            OverlayDropdownPreference(
+                    }
+                }
+            }
+
+            // ---------- Package Manager ----------
+            item(key = "section_pkg_mgmt") { SmallTitle(text = context.getString(R.string.pkg_mgmt_category)) }
+            item(key = "card_pkg_mgmt") {
+                                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                ) {
+                    Column {
+                        OverlayDropdownPreference(
                             title = context.getString(R.string.pkg_view_mode),
                             summary = context.getString(R.string.pkg_view_mode_desc),
                             items = listOf(
@@ -1134,6 +1234,14 @@ fun SettingsScreen(
                             },
                             startAction = {
                                 SettingIcon(Icons.Rounded.Folder, contentDescription = context.getString(R.string.pkg_view_mode))
+                            }
+                        )
+                        ArrowPreference(
+                            title = context.getString(R.string.pkg_edit_sources),
+                            summary = context.getString(R.string.pkg_edit_sources_desc),
+                            onClick = { openSoftwareSourceSettings(context) },
+                            startAction = {
+                                SettingIcon(Icons.Rounded.Dns, contentDescription = context.getString(R.string.pkg_edit_sources))
                             }
                         )
                     }
@@ -1463,6 +1571,79 @@ fun SettingsScreen(
                                 SettingIcon(Icons.Rounded.SmartToy, contentDescription = "Agent 脚本判定")
                             }
                         )
+                        // ---------- VorteX 沙箱 ----------
+                        var sandboxEnabled by remember {
+                            mutableStateOf(VorteXSandbox.isEnabled(context))
+                        }
+                        // null=空闲；true=正在开启（准备环境）；false=正在关闭
+                        var sandboxBusy by remember { mutableStateOf<Boolean?>(null) }
+                        SwitchPreference(
+                            title = context.getString(R.string.vortex_sandbox_title),
+                            summary = if (sandboxEnabled)
+                                context.getString(R.string.vortex_sandbox_summary) + "\n" +
+                                    VorteXSandbox.isolationSummary(context)
+                            else
+                                context.getString(R.string.vortex_sandbox_summary),
+                            checked = sandboxEnabled,
+                            enabled = sandboxBusy == null,
+                            onCheckedChange = {
+                                if (sandboxBusy == null) {
+                                    sandboxEnabled = it
+                                    sandboxBusy = it
+                                    VorteXSandbox.setEnabledAsync(context, it) {
+                                        Handler(Looper.getMainLooper()).post {
+                                            sandboxBusy = null
+                                        }
+                                    }
+                                }
+                            },
+                            startAction = {
+                                SettingIcon(
+                                    painterResource(R.drawable.ic_sandbox),
+                                    contentDescription = context.getString(R.string.vortex_sandbox_title)
+                                )
+                            }
+                        )
+                        OverlayDialog(
+                            title = context.getString(R.string.vortex_sandbox_title),
+                            show = sandboxBusy != null,
+                            onDismissRequest = {},
+                            content = {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.padding(end = 16.dp)
+                                    )
+                                    Text(
+                                        text = if (sandboxBusy == true) "正在准备环境" else "正在关闭沙盒"
+                                    )
+                                }
+                            }
+                        )
+                        var sandboxAgentAuth by remember {
+                            mutableStateOf(VorteXSandbox.isAgentAuthorized(context))
+                        }
+                        SwitchPreference(
+                            title = context.getString(R.string.vortex_sandbox_agent_title),
+                            summary = if (sandboxEnabled)
+                                context.getString(R.string.vortex_sandbox_agent_summary)
+                            else
+                                "需开启 VorteX 沙箱后可用",
+                            checked = sandboxAgentAuth && sandboxEnabled,
+                            enabled = sandboxEnabled,
+                            onCheckedChange = {
+                                sandboxAgentAuth = it
+                                VorteXSandbox.setAgentAuthorized(context, it)
+                            },
+                            startAction = {
+                                SettingIcon(
+                                    Icons.Rounded.SmartToy,
+                                    contentDescription = context.getString(R.string.vortex_sandbox_agent_title)
+                                )
+                            }
+                        )
                         // ---------- Agent 判定历史 ----------
                         var agentHistory by remember {
                             mutableStateOf(com.termux.app.compose.AgentScriptJudge.getHistory(context))
@@ -1516,6 +1697,166 @@ fun SettingsScreen(
                                         },
                                         modifier = Modifier.fillMaxWidth()
                                     )
+                                }
+                            }
+                        )
+                    }
+                }
+            }
+
+            // ---------- 重置运行环境 ----------
+            item(key = "card_reset_runtime_env") {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                ) {
+                    Column {
+                        ArrowPreference(
+                            title = context.getString(R.string.reset_runtime_env_title),
+                            summary = context.getString(R.string.reset_runtime_env_summary),
+                            onClick = { showResetEnvConfirm = true },
+                            startAction = {
+                                SettingIcon(
+                                    Icons.Rounded.Warning,
+                                    contentDescription = context.getString(R.string.reset_runtime_env_title)
+                                )
+                            }
+                        )
+
+                        // ---------- 二次确认弹窗 ----------
+                        OverlayDialog(
+                            title = context.getString(R.string.reset_runtime_env_warning_title),
+                            summary = context.getString(R.string.reset_runtime_env_warning_body),
+                            show = showResetEnvConfirm,
+                            onDismissRequest = { showResetEnvConfirm = false },
+                            content = {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    TextButton(
+                                        text = context.getString(R.string.reset_runtime_env_cancel),
+                                        onClick = { showResetEnvConfirm = false },
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    TextButton(
+                                        text = context.getString(R.string.reset_runtime_env_confirm),
+                                        onClick = {
+                                            showResetEnvConfirm = false
+                                            resetEnvFailMode = null
+                                            resetEnvErrorMsg = ""
+                                            RuntimeEnvironmentResetter.reset(
+                                                context,
+                                                object : RuntimeEnvironmentResetter.Listener {
+                                                    override fun onStepUpdate(step: RuntimeEnvironmentResetter.Step, msg: String) {
+                                                        resetEnvStep = step; resetEnvMessage = msg
+                                                    }
+                                                    override fun onSuccess() {
+                                                        resetEnvFailMode = null; showResetEnvProgress = true
+                                                    }
+                                                    override fun onFailBeforePurge(msg: String) {
+                                                        resetEnvFailMode = 0; resetEnvErrorMsg = msg; showResetEnvProgress = true
+                                                    }
+                                                    override fun onFallbackToSettings(msg: String) {
+                                                        resetEnvFailMode = 1; resetEnvErrorMsg = msg; showResetEnvProgress = true
+                                                    }
+                                                }
+                                            )
+                                            showResetEnvProgress = true
+                                        },
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
+                            }
+                        )
+
+                        // ---------- 进度 + 结果弹窗 ----------
+                        OverlayDialog(
+                            title = when (resetEnvFailMode) {
+                                null -> if (resetEnvStep == RuntimeEnvironmentResetter.Step.DONE)
+                                    context.getString(R.string.reset_runtime_env_success_title)
+                                    else context.getString(R.string.reset_runtime_env_title)
+                                0 -> context.getString(R.string.reset_runtime_env_title) + " — 清除未开始"
+                                1 -> context.getString(R.string.reset_runtime_env_title) + " — 需手动清除"
+                                else -> context.getString(R.string.reset_runtime_env_title)
+                            },
+                            summary = when (resetEnvFailMode) {
+                                null -> if (resetEnvStep == RuntimeEnvironmentResetter.Step.DONE)
+                                    context.getString(R.string.reset_runtime_env_success_summary)
+                                    else resetEnvMessage
+                                0 -> context.getString(R.string.reset_runtime_env_fail_before_purge, resetEnvErrorMsg)
+                                1 -> context.getString(R.string.reset_runtime_env_fail_fallback, resetEnvErrorMsg)
+                                else -> resetEnvMessage
+                            },
+                            show = showResetEnvProgress,
+                            onDismissRequest = { if (resetEnvFailMode != 0) showResetEnvProgress = false },
+                            content = {
+                                when {
+                                    resetEnvFailMode == null && resetEnvStep == RuntimeEnvironmentResetter.Step.DONE -> {
+                                        TextButton(
+                                            text = context.getString(R.string.reset_runtime_env_done_button),
+                                            onClick = { showResetEnvProgress = false },
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
+                                    }
+                                    resetEnvFailMode == 0 -> {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                        ) {
+                                            TextButton(
+                                                text = context.getString(R.string.reset_runtime_env_cancel),
+                                                onClick = { showResetEnvProgress = false },
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                            TextButton(
+                                                text = context.getString(R.string.reset_runtime_env_retry),
+                                                onClick = {
+                                                    showResetEnvProgress = false
+                                                    resetEnvFailMode = null; resetEnvErrorMsg = ""
+                                                    RuntimeEnvironmentResetter.reset(
+                                                        context,
+                                                        object : RuntimeEnvironmentResetter.Listener {
+                                                            override fun onStepUpdate(step: RuntimeEnvironmentResetter.Step, msg: String) {
+                                                                resetEnvStep = step; resetEnvMessage = msg
+                                                            }
+                                                            override fun onSuccess() {
+                                                                resetEnvFailMode = null; showResetEnvProgress = true
+                                                            }
+                                                            override fun onFailBeforePurge(msg: String) {
+                                                                resetEnvFailMode = 0; resetEnvErrorMsg = msg; showResetEnvProgress = true
+                                                            }
+                                                            override fun onFallbackToSettings(msg: String) {
+                                                                resetEnvFailMode = 1; resetEnvErrorMsg = msg; showResetEnvProgress = true
+                                                            }
+                                                        }
+                                                    )
+                                                    showResetEnvProgress = true
+                                                },
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                        }
+                                    }
+                                    resetEnvFailMode == 1 -> {
+                                        TextButton(
+                                            text = context.getString(R.string.ok),
+                                            onClick = { showResetEnvProgress = false },
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
+                                    }
+                                    else -> {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            CircularProgressIndicator(
+                                                modifier = Modifier.padding(end = 16.dp)
+                                            )
+                                            Text(text = resetEnvMessage)
+                                        }
+                                    }
                                 }
                             }
                         )

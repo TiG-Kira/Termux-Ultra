@@ -631,6 +631,12 @@
     <string name="apk_download_failed">APK 文件下载失败</string>
     <string name="request_install_permission_failed">请求安装权限失败</string>
     <string name="download_failed_with_code">下载失败: %1$d</string>
+    <string name="update_url_not_allowed">更新来源不受信任，已阻止下载</string>
+    <string name="apk_verify_failed_format">下载的文件不是有效的 APK</string>
+    <string name="apk_verify_failed_checksum">校验和不匹配，已丢弃该更新包</string>
+    <string name="apk_verify_failed_package">包名不匹配，已丢弃该更新包</string>
+    <string name="apk_verify_failed_signature">签名证书不匹配，已丢弃该更新包</string>
+    <string name="apk_verify_failed_downgrade">下载的版本低于当前已安装版本</string>
     <string name="beta_version">Beta 版本</string>
     <string name="internal_version">内部版本</string>
     <string name="workflow_build">Workflow</string>
@@ -707,6 +713,18 @@
     <string name="root_manage_title">ROOT 管理</string>
     <string name="root_manage_grant_root">授予 ROOT 权限</string>
     <string name="root_manage_loose_mode">宽松模式（取消自动拦截）</string>
+
+    <!-- VorteX 沙箱 -->
+    <string name="vortex_sandbox_title">VorteX 沙箱</string>
+    <string name="vortex_sandbox_summary">带虚拟 ROOT 的隔离测试环境，会话结束自动重置</string>
+    <string name="vortex_sandbox_agent_title">授权 Termux Agent 使用沙箱</string>
+    <string name="vortex_sandbox_agent_summary">允许 Termux Agent 在隔离沙箱内运行（总开关关闭时不可用）</string>
+    <string name="vortex_sandbox_plugin_title">使用 VorteX 沙箱运行</string>
+    <string name="vortex_sandbox_plugin_summary">本插件执行的所有终端命令均在沙箱内运行</string>
+    <string name="vortex_sandbox_plugin_disabled_summary">请在设置中开启 VorteX 沙箱后使用此选项</string>
+    <string name="vortex_sandbox_session_title">沙箱会话</string>
+    <string name="vortex_sandbox_disabled_toast">VorteX 沙箱未开启</string>
+    <string name="vortex_sandbox_preparing">正在准备沙箱环境…</string>
 
     <!-- 卡片布局 -->
     <string name="card_layout_title">提示卡片布局</string>
@@ -1099,7 +1117,7 @@
     <string name="skill_description">技能描述</string>
     <string name="implementation">实现方式</string>
     <string name="tab_user">👤 用户</string>
-    <string name="copy_all">复制全部</string>
+    <string name="copy_all">复制</string>
     <string name="confirm_enable">确认开启</string>
     <string name="share_session">分享会话</string>
     <string name="new_session">新建会话</string>
@@ -1350,6 +1368,28 @@
     <string name="pkg_view_mode_desc">更改软件包管理页面的展示方式</string>
     <string name="pkg_view_mode_category">分类视图</string>
     <string name="pkg_view_mode_list">列表视图</string>
+    <string name="pkg_mgmt_category">软件包管理</string>
+    <string name="pkg_edit_sources">编辑软件源</string>
+    <string name="pkg_edit_sources_desc">查看、编辑、新增或删除 apt 软件源</string>
+    <string name="pkg_sources_title">软件源</string>
+    <string name="pkg_sources_empty">暂未配置软件源</string>
+    <string name="pkg_source_add">新增软件源</string>
+    <string name="pkg_source_edit">编辑软件源</string>
+    <string name="pkg_source_url">源地址</string>
+    <string name="pkg_source_url_hint">https://example.com/apt</string>
+    <string name="pkg_source_suite">发行版代号</string>
+    <string name="pkg_source_suite_hint">stable, bullseye, jammy…</string>
+    <string name="pkg_source_components">组件</string>
+    <string name="pkg_source_components_hint">main contrib non-free</string>
+    <string name="pkg_source_options">附加选项（可选）</string>
+    <string name="pkg_source_options_hint">[arch=amd64 trusted=yes]</string>
+    <string name="pkg_source_ping">测试连接</string>
+    <string name="pkg_source_ping_ok">响应 %d ms</string>
+    <string name="pkg_source_ping_fail">连接失败</string>
+    <string name="pkg_source_delete">删除</string>
+    <string name="pkg_source_delete_confirm">确定删除此软件源？</string>
+    <string name="pkg_source_saved">已保存</string>
+    <string name="pkg_source_deleted">已删除</string>
     <string name="dangerous_action_confirm">危险操作，需要确认</string>
     <string name="prefs_about_cat_devs">开发者与贡献者</string>
     <string name="prefs_about_cat_device">设备信息</string>
@@ -1602,5 +1642,29 @@
     <string name="agentpaw_stream_desc">开启时逐字实时显示模型输出；关闭后等待完整回复再一次性显示</string>
     <string name="agentpaw_field_not_saved">当前取值无效，未保存，仍沿用上次保存的值</string>
     <string name="agentpaw_save_failed">AgentPaw 设置保存失败</string>
+
+    <!-- v0.2.0: 执行通道优先级 (PhoneControlMode) -->
+    <string name="agentpaw_control_mode_category">执行通道</string>
+    <string name="agentpaw_control_mode_title">执行通道优先级</string>
+    <string name="agentpaw_control_mode_desc">AgentPaw 在点击、滑动、截屏和按键事件时使用的执行通道。AUTO 会自动挑选当前可用的最优通道；强制锁定某个通道适合测试，或在某些设备上某个通道更稳定时使用。</string>
+    <string name="agentpaw_control_mode_auto">自动（推荐）</string>
+    <string name="agentpaw_control_mode_auto_desc">优先 ROOT → 其次 Shizuku → 最后无障碍</string>
+    <string name="agentpaw_control_mode_root">仅 ROOT</string>
+    <string name="agentpaw_control_mode_root_desc">只走 ROOT (su) 提权；ROOT 不可用时执行直接失败</string>
+    <string name="agentpaw_control_mode_shizuku">仅 Shizuku</string>
+    <string name="agentpaw_control_mode_shizuku_desc">只走 Shizuku；不可用时回退到无障碍</string>
+    <string name="agentpaw_control_mode_accessibility">仅无障碍</string>
+    <string name="agentpaw_control_mode_accessibility_desc">只走无障碍服务（所有设备通用）</string>
+
+    <!-- v0.2.0: AI 智能步间节奏 -->
+    <string name="agentpaw_adaptive_pacing_title">AI 智能步间节奏</string>
+    <string name="agentpaw_adaptive_pacing_desc">在每次点击 / 滑动 / 启动应用后，AI 会根据工具类型和上下文自动插入一小段自适应延时，让动画、键盘、网络加载有时间稳定下来再执行下一步——避免慢设备或重应用上漏点、漏操作。</string>
+
+    <!-- v0.2.0: ROOT 权限状态 -->
+    <string name="agentpaw_root_title">ROOT（超级用户）</string>
+    <string name="agentpaw_root_desc">特权通道，支持高速截屏、monkey 级输入和系统级控制。非必需，但强烈推荐。</string>
+    <string name="agentpaw_root_granted">可用</string>
+    <string name="agentpaw_root_not_granted">不可用</string>
+    <string name="agentpaw_root_retest">重新检测</string>
 
 </resources>

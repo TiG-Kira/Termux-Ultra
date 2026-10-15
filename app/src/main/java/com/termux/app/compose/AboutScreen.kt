@@ -58,6 +58,7 @@ import top.yukonga.miuix.kmp.preference.SwitchPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import com.termux.R
 import com.termux.app.utils.UpdateChecker
 import com.termux.app.utils.UpdateResult
@@ -69,7 +70,6 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.zIndex
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.animation.core.animateFloatAsState
 import kotlinx.coroutines.flow.collect
 
 @Composable
@@ -143,7 +143,7 @@ fun AboutScreen(onBack: () -> Unit) {
     // 滚动状态跟踪
     val listState = rememberLazyListState()
     val headerHeightPx = with(density) { 100.dp.toPx() }
-    var scrollFraction by remember { mutableStateOf(0f) }
+    var scrollFraction by remember { mutableFloatStateOf(0f) }
     LaunchedEffect(listState) {
         snapshotFlow { listState.layoutInfo.visibleItemsInfo.firstOrNull()?.offset ?: 0 }
             .collect { offset ->
@@ -155,25 +155,6 @@ fun AboutScreen(onBack: () -> Unit) {
                 }
             }
     }
-
-    // 页面遮罩透明度动画 (亮色: surface, 暗色: surface)
-    val pageMaskAlphaAnim by animateFloatAsState(
-        targetValue = scrollFraction,
-        label = "pageMaskAlpha"
-    )
-
-    // 头部卡片淡出动画
-    val headerAlphaAnim by animateFloatAsState(
-        targetValue = 1f * (1f - scrollFraction),
-        label = "headerAlpha"
-    )
-
-    // 其他卡片: 始终完全不透明 (背景穿透只在 header)
-    val cardsAlphaAnim by animateFloatAsState(
-        targetValue = 1f,
-        label = "cardsAlpha"
-    )
-
 
     // Dual-track background: API 33+ RuntimeShader animated, older Brush fallback
     val useShaderBg = android.os.Build.VERSION.SDK_INT >= 31
@@ -246,7 +227,7 @@ fun AboutScreen(onBack: () -> Unit) {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .graphicsLayer { alpha = headerAlphaAnim }
+                            .graphicsLayer { alpha = 1f - scrollFraction }
                             .padding(top = 60.dp, bottom = 30.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center
@@ -335,7 +316,7 @@ fun AboutScreen(onBack: () -> Unit) {
 
                 item {
                     Card(
-                        modifier = Modifier.graphicsLayer { alpha = cardsAlphaAnim }
+                        modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 16.dp)
                     ) {
@@ -365,7 +346,7 @@ fun AboutScreen(onBack: () -> Unit) {
 
                 item {
                      Card(
-                         modifier = Modifier.graphicsLayer { alpha = cardsAlphaAnim }
+                         modifier = Modifier
                              .fillMaxWidth()
                              .padding(horizontal = 16.dp)
                      ) {
@@ -414,7 +395,7 @@ fun AboutScreen(onBack: () -> Unit) {
 
                  item {
                      Card(
-                         modifier = Modifier.graphicsLayer { alpha = cardsAlphaAnim }
+                         modifier = Modifier
                              .fillMaxWidth()
                              .padding(horizontal = 16.dp)
                      ) {
@@ -453,7 +434,7 @@ fun AboutScreen(onBack: () -> Unit) {
 
                  item {
                      Card(
-                         modifier = Modifier.graphicsLayer { alpha = cardsAlphaAnim }
+                         modifier = Modifier
                              .fillMaxWidth()
                              .padding(horizontal = 16.dp)
                      ) {
@@ -504,7 +485,7 @@ fun AboutScreen(onBack: () -> Unit) {
                          else -> context.getString(R.string.about_check_updates_desc)
                      }
                      Card(
-                         modifier = Modifier.graphicsLayer { alpha = cardsAlphaAnim }
+                         modifier = Modifier
                              .fillMaxWidth()
                              .padding(horizontal = 16.dp)
                      ) {
@@ -535,7 +516,7 @@ fun AboutScreen(onBack: () -> Unit) {
 
                 item {
                     Card(
-                        modifier = Modifier.graphicsLayer { alpha = cardsAlphaAnim }
+                        modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 16.dp)
                     ) {
@@ -562,7 +543,7 @@ fun AboutScreen(onBack: () -> Unit) {
 
                 item {
                     Card(
-                        modifier = Modifier.graphicsLayer { alpha = cardsAlphaAnim }
+                        modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 16.dp)
                     ) {
@@ -615,7 +596,7 @@ fun AboutScreen(onBack: () -> Unit) {
 
                 item {
                     Card(
-                        modifier = Modifier.graphicsLayer { alpha = cardsAlphaAnim }
+                        modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 16.dp)
                     ) {
@@ -638,14 +619,18 @@ fun AboutScreen(onBack: () -> Unit) {
     if (showUpdateDialog && updateResult != null) {
         if (pendingInstallVersion != null && ApkDownloader.hasInstallPermission(context)) {
             val apkFile = ApkDownloader.getDownloadedApkFile(context, pendingInstallVersion!!)
-            if (apkFile.exists()) {
-                LaunchedEffect(Unit) {
-                    ApkDownloader.installApk(context, apkFile)
-                    pendingInstallVersion = null
-                    showUpdateDialog = false
+            LaunchedEffect(pendingInstallVersion) {
+                // 授权往返期间产物可能被替换，安装前在后台重新校验一次
+                val verified = withContext(Dispatchers.IO) {
+                    ApkDownloader.verifyApkFile(context, apkFile).isSuccess
                 }
-            } else {
+                if (verified) {
+                    runCatching { ApkDownloader.installApk(context, apkFile) }
+                } else {
+                    withContext(Dispatchers.IO) { apkFile.delete() }
+                }
                 pendingInstallVersion = null
+                showUpdateDialog = false
             }
         }
 

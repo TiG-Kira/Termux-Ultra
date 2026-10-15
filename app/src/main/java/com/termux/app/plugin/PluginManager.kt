@@ -8,6 +8,7 @@ import com.termux.shared.compat.ShellEnvironmentCompat
 import com.termux.shared.compat.TermuxTaskCompat
 import com.termux.shared.termux.shell.command.environment.TermuxShellEnvironment
 import com.termux.shared.termux.TermuxConstants
+import com.termux.app.vortex.VorteXSandbox
 import com.termux.shared.logger.Logger
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
@@ -75,6 +76,9 @@ object PluginManager {
             val systemPrompt = plugin.manifest.systemPrompt ?: continue
             val content = systemPrompt.content.trim()
             if (content.isBlank()) continue
+            // 注入 System Prompt 就是在改写 Agent 行为，必须持有 AGENT_MODIFY。
+            // 修复前只按 enabled 拼接，没声明该权限的插件一样能往提示词里塞指令。
+            if (!PluginSecurity.canModifyAgent(context, plugin.id).allowed) continue
 
             sb.append("\n\n")
             when (systemPrompt.getPromptMode()) {
@@ -104,6 +108,8 @@ object PluginManager {
 
         for (plugin in enabledPlugins) {
             val skillRefs = plugin.manifest.entryPoints?.agentSkills ?: continue
+            // 技能卡片与 System Prompt 同属 Agent 行为改写，同样要求 AGENT_MODIFY
+            if (!PluginSecurity.canModifyAgent(context, plugin.id).allowed) continue
             for (ref in skillRefs) {
                 skills.add(
                     PluginSkill(
@@ -195,12 +201,17 @@ object PluginManager {
             return Result.failure(SecurityException(security.reason ?: "命令被插件安全策略拒绝"))
         }
 
+        // 若插件开启了「使用 VorteX 沙箱运行」，则把命令包裹进沙箱执行，所有写入局限于
+        // 沙箱可写层；总开关关闭时 wrapPluginCommand 会原样返回，不影响原有行为。
+        val useSandbox = VorteXSandbox.isPluginUsingSandbox(context, pluginId)
+        val effectiveCommand = VorteXSandbox.wrapPluginCommand(context, pluginId, command)
+
         return try {
             val shellPath = TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/bash"
             val executionCommand = ExecutionCommand(
                 System.currentTimeMillis().toInt(),
                 shellPath,
-                arrayOf("-c", command),
+                arrayOf("-c", effectiveCommand),
                 null,
                 null,
                 "app-shell",
@@ -234,10 +245,25 @@ object PluginManager {
             }
         } catch (e: Exception) {
             Result.failure(e)
+        } finally {
+            // 插件调用结束即回收影子空间（含约 95MB 的 $PREFIX 拷贝）。
+            // 引导脚本的 --run 已有 EXIT trap 双保险，这里覆盖 TermuxTask
+            // 启动失败等脚本根本没跑起来的异常路径。
+            if (useSandbox) {
+                VorteXSandbox.onEphemeralRunEnded(context)
+            }
         }
     }
 
-    fun openUrl(context: Context, url: String) {
+    fun openUrl(context: Context, pluginId: String, url: String) {
+        // 外链既可能是插件自己声明的跳转，也可能是页面里被注入的地址：
+        // 没有 INTERNET_ACCESS 的插件不应获得出网能力，也不该拉起浏览器带走出站意图。
+        val check = PluginSecurity.canAccessInternet(context, pluginId, url)
+        if (!check.allowed) {
+            Logger.logWarn("PluginManager", "插件 '$pluginId' 打开外链被拒绝: ${check.reason}")
+            return
+        }
+
         val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url))
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         context.startActivity(intent)

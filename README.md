@@ -3,7 +3,7 @@
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](./LICENSE)
 [![Platform: Android](https://img.shields.io/badge/Platform-Android%209.0%2B-green.svg)]()
 [![Based on Termux v0.119.0](https://img.shields.io/badge/Base-Termux%20v0.119.0-orange.svg)](https://github.com/termux/termux-app/releases/tag/v0.119.0-beta.3)
-[![v3.3.3.R7](https://img.shields.io/badge/v3.3.3.R7-stable-brightgreen.svg)](https://github.com/TiG-Kira/Termux-Ultra/releases)
+[![v3.5.4.R8](https://img.shields.io/badge/v3.5.4.R8-stable-brightgreen.svg)](https://github.com/TiG-Kira/Termux-Ultra/releases)
 
 [![Build status](https://github.com/TiG-Kira/Termux-Ultra/actions/workflows/ci.yml/badge.svg)](https://github.com/TiG-Kira/Termux-Ultra/actions)
 [![Docs](https://img.shields.io/badge/Docs-GitHub%20Pages-blue.svg)](https://tig-kira.github.io/Termux-Ultra/)
@@ -16,11 +16,11 @@
 
 | 分支 | 基底 | 版本 | 状态 |
 |------|------|------|------|
-| **`main`** 🎯 | 上游 Termux `v0.119.0-beta.3` | 3.x.x.R7 | **正式版主线**，承接功能开发、Bug 修复、架构优化 |
+| **`main`** 🎯 | 上游 Termux `v0.119.0-beta.3` | 3.x.x.R8 | **正式版主线**，承接功能开发、Bug 修复、架构优化 |
 | `release/r1-r4` | 上游 Termux `v0.118.3` | 1.8.0.R4 | 📦 v1.8.x 历史快照，**停止功能更新**，仅做紧急阻断 Bug 修复 |
 | `archived/corebump/2.x` | 上游 Termux `v0.119.0-beta.3` | 2.0.0.R5 | 📂 归档快照，保留 2.x 内部开发步骤 |
 
-> ✅ **当前主线为 `3.3.3.R7`**，基于上游 Termux v0.119.0，包含 libterminal 引擎、玻璃顶栏、插件系统、Termux Agent、AgentPaw 手机操控引擎等核心功能。
+> ✅ **当前主线为 `3.5.4.R8`**，基于上游 Termux v0.119.0，包含 libterminal 引擎、玻璃顶栏、插件系统、Termux Agent、AgentPaw 手机操控引擎等核心功能。
 > 由于上游长期未更新 Release，内部测试上游 Beta 稳定，将直接作为 0.119.0 基底。
 
 
@@ -71,7 +71,7 @@
 
 > 📅 **2026-09-25 ~ 2026-09-29**
 
-- **关闭 R8 代码收缩**（默认）：Gson `TypeToken` 泛型签名、`Class.forName`、JNI 回调等动态引用点难以穷举 -keep 且仍偶发崩溃，维护成本高于体积收益；需要时可用 `-Ptermux.enableR8=true` 显式开启
+- **R8 代码收缩暂时默认关闭**（3.0.x 期间）：Gson `TypeToken` 泛型签名、`Class.forName`、JNI 回调等动态引用点难以穷举 -keep 且仍偶发崩溃，维护成本高于体积收益；**后续已补齐反向调用 keep 规则并重新默认启用**（见文末[技术栈](#技术栈)表），本条仅记录当时状态，现已不适用
 - **APK 体积路线调整**：ReDex / strip_so 重打包方案实测收益有限（整体仍 ~103MB）且可靠性风险更高，已从发布流程移除；减重改由 bootstrap 在线下载承担
 - **集成工具默认关闭**：新安装用户不再默认启用 5 款 Termux 插件，需在设置中手动开启
 - **恢复经典引擎终端设置项**并接入 libterminal；重写存储管理占用统计，分类之和精确等于系统值
@@ -428,7 +428,19 @@ Termux-Ultra/
 
 ### 签名
 
-项目内置 `ki-terminal-release.jks` 签名配置（alias: `ki-terminal`），Debug 与 Release 均使用该签名。
+Release 签名使用 `ki-terminal-release.jks`（alias: `ki-terminal`）。该 keystore 已被 `.gitignore` 忽略，**不会入库**。
+
+- **CI**：由仓库 Secrets 提供（`JKS_BASE64` + 口令），在 `release_apk.yml` 的两个构建作业里解码写入 `app/ki-terminal-release.jks`，参与 `assembleRelease`。
+- **本地**：密钥材料不存在于仓库，需自备 keystore 并通过 Gradle 属性或环境变量传入：
+
+  ```bash
+  ./gradlew assembleRelease -Ptermux.storePassword=<口令> -Ptermux.keyPassword=<口令>
+  # 或 export KI_TERMINAL_STORE_PASSWORD / KI_TERMINAL_KEY_PASSWORD
+  ```
+
+- **Debug**：不走 release 签名配置，使用默认的 `~/.android/debug.keystore`。
+
+> 切勿把 keystore 或其口令写进 workflow、`build.gradle` 等入库文件 —— 本仓库是公开的，详见 `SECURITY.md`。
 
 ## 技术栈
 
@@ -450,7 +462,7 @@ Termux-Ultra/
 | 构建 | Gradle（AGP 9.1.0）、CMake 3.22.1、NDK 28.2.13676358、JDK 21 |
 | 集成插件 | termux-api、termux-boot、termux-styling、termux-tasker、termux-widget |
 | 包名 | `com.termux`（sharedUserId） |
-| 混淆 | R8 默认关闭（`-Ptermux.enableR8=true` 可显式开启） |
+| 混淆 | R8 默认**启用**（`termux.enableR8` 默认 `true`）：只收缩不重命名（`-dontobfuscate`），keep 规则见 `app/proguard-rules.pro`；回退用 `-Ptermux.enableR8=false` 或 `TERMUX_ENABLE_R8=false` |
 
 ## 插件开发指南
 

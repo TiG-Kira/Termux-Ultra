@@ -965,7 +965,12 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
             AgentStopFloatingButton.show(getApplication()) { cancelGeneration() }
 
             val agent = AgentPawEngine.buildAgent(pawEngineParts.llmClient, pawEngineParts.toolRegistry)
-            agent.run(llmConfig, history, isCancelled = { cancelled }).collect { event ->
+            agent.run(
+                config = llmConfig,
+                history = history,
+                isCancelled = { cancelled },
+                enableAdaptivePacing = AgentPawEngine.isAdaptivePacingEnabled(ctx),
+            ).collect { event ->
                 when (event) {
                     is AgentEvent.AssistantDelta -> {
                         lastBody = event.message.content
@@ -986,6 +991,9 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
                         error = event.message.error ?: "AgentPaw 执行出错"
                     )
                     is AgentEvent.Cancelled -> updateStream(event.message.content)
+                    // v0.2.0 新增事件：AssistantTurn（assistant 回合结束、即将进入工具调用）
+                    // 和 AdaptivePaced（AI 智能步间延时）。我们暂不展示，直接忽略。
+                    else -> Unit
                 }
             }
         } finally {
@@ -1790,6 +1798,7 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
             SkillType.RUN_COMMAND -> "执行命令：$command"
             SkillType.CUSTOM_COMMAND -> "执行自定义命令：$command"
             SkillType.CAPTURE_OUTPUT -> "执行并捕获输出：$command"
+            SkillType.RUN_COMMAND_SANDBOX -> "沙箱预演：$command"
             SkillType.COMPILE_CODE -> "执行编译命令：$command"
             SkillType.SUB_AGENT -> "子 Agent 执行：$command"
             SkillType.FILE_DELETE -> "删除：${if (params.has("path")) params.get("path").asString else ""}"
@@ -2646,7 +2655,7 @@ private fun AiSetupScreen(vm: AiTermuxViewModel, onBack: () -> Unit) {
                             color = if (isDark) Color(0xFF424242) else Color(0xFFE0E0E0)
                         )
                     ) {
-                        if (testing) androidx.compose.material3.CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                        if (testing) top.yukonga.miuix.kmp.basic.CircularProgressIndicator(modifier = Modifier.size(18.dp))
                         else Text("测试连接", color = MiuixTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
                     }
                     Button(
@@ -3387,10 +3396,8 @@ private fun AiChatScreen(vm: AiTermuxViewModel, conversationId: String, onBack: 
                                     contentAlignment = Alignment.Center
                                 ) {
                                     if (vm.isLoading && !vm.isStreaming) {
-                                        androidx.compose.material3.CircularProgressIndicator(
-                                            modifier = Modifier.size(16.dp),
-                                            strokeWidth = 2.dp,
-                                            color = MiuixTheme.colorScheme.primary
+                                        top.yukonga.miuix.kmp.basic.CircularProgressIndicator(
+                                            modifier = Modifier.size(16.dp)
                                         )
                                     } else if (vm.isStreaming) {
                                         Icon(
@@ -3744,7 +3751,7 @@ fun TaskBar(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
-            .background(MiuixTheme.colorScheme.surface)
+            .background(MiuixTheme.colorScheme.surfaceContainer)
             .border(0.5.dp, MiuixTheme.colorScheme.outline.copy(alpha = 0.55f), RoundedCornerShape(16.dp))
             .padding(horizontal = 14.dp, vertical = 12.dp)
             .clickable(enabled = false) {}
@@ -3909,7 +3916,7 @@ private fun AiChatEmptyState(vm: AiTermuxViewModel, setInput: (String) -> Unit) 
                         modifier = Modifier
                             .weight(1f)
                             .clip(RoundedCornerShape(12.dp))
-                            .background(MiuixTheme.colorScheme.surface)
+                            .background(MiuixTheme.colorScheme.surfaceContainer)
                             .border(0.5.dp, MiuixTheme.colorScheme.outline.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
                             .clickable {
                                 if (!vm.isLoading) vm.sendUserMessage(item.prompt)
@@ -3949,7 +3956,7 @@ private fun TypingIndicator() {
         verticalAlignment = Alignment.CenterVertically
     ) {
         repeat(3) { index ->
-            val alpha by infiniteTransition.animateFloat(
+            val dotAlpha by infiniteTransition.animateFloat(
                 initialValue = 0.3f,
                 targetValue = 1f,
                 animationSpec = infiniteRepeatable(
@@ -3961,7 +3968,7 @@ private fun TypingIndicator() {
             Box(
                 modifier = Modifier
                     .size(6.dp)
-                    .graphicsLayer(alpha = alpha)
+                    .graphicsLayer { alpha = dotAlpha }
                     .background(MiuixTheme.colorScheme.onSurfaceVariantSummary, CircleShape)
             )
         }
@@ -4238,7 +4245,7 @@ private fun ChatBubble(msg: ChatMessage, vm: AiTermuxViewModel, modifier: Modifi
             Row(
                 modifier = Modifier
                     .clip(RoundedCornerShape(10.dp))
-                    .background(MiuixTheme.colorScheme.surface)
+                    .background(MiuixTheme.colorScheme.surfaceContainer)
                     .border(0.5.dp, MiuixTheme.colorScheme.outline.copy(alpha = 0.5f), RoundedCornerShape(10.dp))
                     .clickable { showRawResponse = true }
                     .padding(horizontal = 9.dp, vertical = 5.dp),
@@ -4362,7 +4369,7 @@ private fun PreparingBlock(status: String, details: List<String>) {
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
-            .background(MiuixTheme.colorScheme.surface)
+            .background(MiuixTheme.colorScheme.surfaceContainer)
             .border(0.5.dp, MiuixTheme.colorScheme.outline.copy(alpha = 0.5f), RoundedCornerShape(14.dp))
             .padding(horizontal = 13.dp, vertical = 10.dp)
     ) {
@@ -4375,7 +4382,7 @@ private fun PreparingBlock(status: String, details: List<String>) {
             Box(
                 modifier = Modifier
                     .size(8.dp)
-                    .graphicsLayer(alpha = pulseAlpha)
+                    .graphicsLayer { alpha = pulseAlpha }
                     .clip(CircleShape)
                     .background(MiuixTheme.colorScheme.primary)
             )
@@ -4523,7 +4530,7 @@ private fun ReasoningBlock(reasoning: String, isDone: Boolean) {
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
-            .background(MiuixTheme.colorScheme.surface)
+            .background(MiuixTheme.colorScheme.surfaceContainer)
             .border(0.5.dp, MiuixTheme.colorScheme.outline.copy(alpha = 0.5f), RoundedCornerShape(14.dp))
     ) {
         Row(
@@ -4539,7 +4546,7 @@ private fun ReasoningBlock(reasoning: String, isDone: Boolean) {
                 contentDescription = null,
                 modifier = Modifier
                     .size(15.dp)
-                    .graphicsLayer(alpha = pulseAlpha),
+                    .graphicsLayer { alpha = pulseAlpha },
                 tint = if (!isDone) MiuixTheme.colorScheme.primary
                 else MiuixTheme.colorScheme.onSurfaceVariantSummary
             )
@@ -4616,6 +4623,7 @@ private fun SkillCard(msgId: String, card: SkillCardData, errorMsg: String?, vm:
         SkillType.GET_SESSION_INFO, SkillType.GET_CURRENT_SESSION,
         SkillType.RUN_COMMAND, SkillType.CAPTURE_OUTPUT,
         SkillType.CUSTOM_COMMAND, SkillType.COMPILE_CODE -> R.drawable.ic_terminal
+        SkillType.RUN_COMMAND_SANDBOX -> R.drawable.ic_sandbox
         SkillType.RUN_VM_QEMU, SkillType.CREATE_VM_QEMU,
         SkillType.VM_LIST -> R.drawable.ic_computer
         SkillType.CONNECT_VNC -> R.drawable.ic_vnc
@@ -4654,7 +4662,7 @@ private fun SkillCard(msgId: String, card: SkillCardData, errorMsg: String?, vm:
         modifier = Modifier
             .fillMaxWidth(0.94f)
             .clip(RoundedCornerShape(14.dp))
-            .background(MiuixTheme.colorScheme.surface)
+            .background(MiuixTheme.colorScheme.surfaceContainer)
             .border(0.5.dp, borderColor, RoundedCornerShape(14.dp))
             .then(
                 if (clickable) Modifier.clickable { SkillExecutor.onSkillCardClick(ctx, card) }
@@ -5077,7 +5085,7 @@ private fun AgentSkillCard(msgId: String, card: SkillCardData, errorMsg: String?
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
-            .background(MiuixTheme.colorScheme.surface)
+            .background(MiuixTheme.colorScheme.surfaceContainer)
             .border(0.5.dp, borderColor, RoundedCornerShape(14.dp))
     ) {
         // Header row
@@ -5229,7 +5237,7 @@ private fun AgentSkillCard(msgId: String, card: SkillCardData, errorMsg: String?
                     Box(
                         modifier = Modifier
                             .size(8.dp)
-                            .graphicsLayer(alpha = pulseAlpha)
+                            .graphicsLayer { alpha = pulseAlpha }
                             .clip(CircleShape)
                             .background(statusColor)
                     )

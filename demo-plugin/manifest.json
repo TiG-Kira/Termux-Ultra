@@ -10,7 +10,8 @@
     "H5_WEBVIEW",
     "TERMUX_SESSION_ACCESS",
     "FILE_SYSTEM_READ",
-    "INTERNET_ACCESS"
+    "INTERNET_ACCESS",
+    "AGENT_MODIFY"
   ],
   "entryPoints": {
     "h5Home": {

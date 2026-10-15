@@ -34,6 +34,13 @@ import java.io.File
 object AgentPawEngine {
 
     /**
+     * 是否启用 AI 智能步间节奏（v0.2.0 新增）。封装 Agent.run 的 enableAdaptivePacing
+     * 参数读取逻辑，调用方直接透传即可，不必各自 import AgentPawPrefs。
+     */
+    fun isAdaptivePacingEnabled(context: Context): Boolean =
+        AgentPawPrefs.isAdaptivePacingEnabled(context)
+
+    /**
      * 由 Termux Agent 的 LLM 配置 + AgentPaw 行为参数构造 LlmConfig。
      *
      * 连接信息（baseUrl / apiKey / model）完全沿用 Termux Agent 当前生效的配置，
@@ -75,7 +82,16 @@ object AgentPawEngine {
      */
     fun buildToolRegistry(context: Context): ToolRegistry {
         val appContext = context.applicationContext
-        val phoneController = HybridPhoneController(appContext)
+        val phoneController = HybridPhoneController(appContext).apply {
+            // v0.2.0 执行策略：让用户选择 AUTO / ROOT / SHIZUKU / ACCESSIBILITY
+            // 之间的优先级；默认 AUTO 会在 ROOT 不可用时自动回退到 Shizuku，再回退到无障碍。
+            controlMode = AgentPawPrefs.getControlMode(context)
+        }
+        // 注意：这里**不接入** VorteX 沙箱。
+        // AgentPaw 是附加在 Termux Agent 上的独立功能，用户在设置里授权的是
+        // 「Termux Agent 使用沙箱」，不涵盖 AgentPaw 自带的 ShellTool；
+        // 让它蹭沙箱目录属于越权。AgentPaw 的沙箱预演请走 Termux Agent 的
+        // RUN_COMMAND_SANDBOX 技能（AITermuxEngine.execRunCommandInSandbox）。
         val sandboxRoot = File(appContext.filesDir, "agentpaw_sandbox").apply { mkdirs() }
         val skills = SkillRegistry(
             listOf(

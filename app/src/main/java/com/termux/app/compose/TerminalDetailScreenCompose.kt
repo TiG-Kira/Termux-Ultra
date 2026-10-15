@@ -103,6 +103,8 @@ import com.awkoo.libterminal.view.TerminalView as LibTerminalView
 import com.termux.app.terminal.shell.pid
 import com.termux.app.terminal.shell.sessionExited
 import com.termux.shared.view.KeyboardUtils
+import com.termux.app.vortex.VorteXSandbox
+import android.widget.Toast
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -224,6 +226,15 @@ fun TerminalDetailScreenCompose(
     val removeRequested by currentSession.isRemove.collectAsState()
     val currentSessionIsDead = currentSession.pid == -1 || sessionExited
     val sessionExitCode = currentSession.exitStatus
+
+    // 沙箱会话自然结束（用户在沙箱里敲 exit）时也要回收影子空间。
+    // killSession 覆盖的是「手动关闭」，这条覆盖「进程自己退出」——
+    // 两者都会走 onSessionEnded，这里做幂等保护（purgeAll 重复调用无副作用）。
+    LaunchedEffect(sessionExited, currentSessionIsDead) {
+        if (currentSessionIsDead) {
+            VorteXSandbox.onSessionEnded(context, currentSessionName)
+        }
+    }
 
     // 死会话内按 Enter → 移除该会话；若无剩余会话则返回，否则已切换到其余会话
     LaunchedEffect(removeRequested) {
@@ -412,14 +423,14 @@ fun TerminalDetailScreenCompose(
             lastInteractionFromTopBar = true
             coroutineScope.launch {
                 try {
-                    animate(initialValue = smallTitleAlpha, targetValue = 0f, animationSpec = tween(100, easing = FastOutLinearInEasing)) { value, _ ->
+                    animate(initialValue = smallTitleAlpha, targetValue = 0f, animationSpec = tween(AppMotion.FAST, easing = FastOutLinearInEasing)) { value, _ ->
                         smallTitleAlpha = value
                     }
                     topBarSlideProgress = 1f
                     isCompact = false
                     isTopBarCollapsed = false
                     delay(200)
-                    animate(initialValue = 1f, targetValue = 0f, animationSpec = tween(220, easing = FastOutSlowInEasing)) { value, _ ->
+                    animate(initialValue = 1f, targetValue = 0f, animationSpec = tween(AppMotion.NORMAL, easing = FastOutSlowInEasing)) { value, _ ->
                         topBarSlideProgress = value
                     }
                     showLargeContent = true
@@ -453,13 +464,13 @@ fun TerminalDetailScreenCompose(
                 try {
                     showLargeContent = false
                     delay(100)
-                    animate(initialValue = topBarSlideProgress, targetValue = 1f, animationSpec = tween(220, easing = FastOutSlowInEasing)) { value, _ ->
+                    animate(initialValue = topBarSlideProgress, targetValue = 1f, animationSpec = tween(AppMotion.NORMAL, easing = FastOutSlowInEasing)) { value, _ ->
                         topBarSlideProgress = value
                     }
                     isCompact = true
                     delay(200)
                     if (isTopBarCollapsed) {
-                        animate(initialValue = smallTitleAlpha, targetValue = 1f, animationSpec = tween(120)) { value, _ ->
+                        animate(initialValue = smallTitleAlpha, targetValue = 1f, animationSpec = tween(AppMotion.FAST)) { value, _ ->
                             smallTitleAlpha = value
                         }
                     }
@@ -610,8 +621,11 @@ fun TerminalDetailScreenCompose(
                     onClick = { updateInteractionTime(); showSessionList = true },
                     onLongClick = {
                         updateInteractionTime()
-                        renameValue = currentSessionName
-                        showRenameDialog = true
+                        // 沙箱会话禁止重命名：清理逻辑以标题「沙箱会话」为锚点
+                        if (currentSessionName != context.getString(R.string.vortex_sandbox_session_title)) {
+                            renameValue = currentSessionName
+                            showRenameDialog = true
+                        }
                     }
                 ),
             contentAlignment = Alignment.Center
@@ -699,8 +713,11 @@ fun TerminalDetailScreenCompose(
                     onClick = { updateInteractionTime(); showSessionList = true },
                     onLongClick = {
                         updateInteractionTime()
-                        renameValue = currentSessionName
-                        showRenameDialog = true
+                        // 沙箱会话禁止重命名：清理逻辑以标题「沙箱会话」为锚点
+                        if (currentSessionName != context.getString(R.string.vortex_sandbox_session_title)) {
+                            renameValue = currentSessionName
+                            showRenameDialog = true
+                        }
                     }
                 ),
             contentAlignment = Alignment.Center
@@ -860,12 +877,12 @@ fun TerminalDetailScreenCompose(
                     visible = !isTopBarCollapsed,
                     enter = expandHorizontally(
                         expandFrom = Alignment.End,
-                        animationSpec = tween(220, easing = FastOutSlowInEasing)
-                    ) + fadeIn(tween(150)),
+                        animationSpec = tween(AppMotion.NORMAL, easing = FastOutSlowInEasing)
+                    ) + fadeIn(tween(AppMotion.FAST)),
                     exit = shrinkHorizontally(
                         shrinkTowards = Alignment.End,
-                        animationSpec = tween(220, easing = FastOutSlowInEasing)
-                    ) + fadeOut(tween(150))
+                        animationSpec = tween(AppMotion.NORMAL, easing = FastOutSlowInEasing)
+                    ) + fadeOut(tween(AppMotion.FAST))
                 ) {
                     TopBarActionCard {
                         if (showLargeButtons) LargeTopActionButtons() else SmallTopActionButtons()
@@ -885,7 +902,7 @@ fun TerminalDetailScreenCompose(
                                 animate(
                                     initialValue = smallTitleAlpha,
                                     targetValue = if (newCollapsed) 1f else 0f,
-                                    animationSpec = tween(200, easing = FastOutSlowInEasing)
+                                    animationSpec = tween(AppMotion.NORMAL, easing = FastOutSlowInEasing)
                                 ) { value, _ ->
                                     smallTitleAlpha = value
                                 }
@@ -931,13 +948,13 @@ fun TerminalDetailScreenCompose(
                 // 从透明处漏出，白色图标又叠在白底上导致整条顶栏看不见
                 val topBarColor by animateColorAsState(
                     targetValue = if (isCompact) terminalBgColor else topBarOpaqueBg,
-                    animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
+                    animationSpec = tween(durationMillis = AppMotion.NORMAL, easing = FastOutSlowInEasing),
                     label = "topBarBg"
                 )
                 val titleAlpha by animateFloatAsState(
                     targetValue = if (showLargeContent) 1f else 0f,
                     animationSpec = tween(
-                        durationMillis = if (showLargeContent) 150 else 100,
+                        durationMillis = AppMotion.FAST,
                         easing = FastOutLinearInEasing
                     ),
                     label = "titleAlpha"
@@ -1308,6 +1325,12 @@ fun TerminalDetailScreenCompose(
 
             // 挂载风险确认宿主：收集VorteX Guard Engine Snackbar 事件（仅提示/完全拦截），与 Java 版控制台行为一致
             RiskConfirmDialogHost(snackbarHostState)
+
+            // VorteX 沙箱告警宿主：沙箱内访问 Android 内存储等事件以 Snackbar 提示
+            com.termux.app.vortex.VorteXSandboxNoticeHost(
+                enabled = currentSessionName == context.getString(R.string.vortex_sandbox_session_title),
+                snackbarHostState = snackbarHostState,
+            )
 
             // 快捷指令 BottomSheet：长按 TopBar 键盘按钮触发
             QuickCommandSheet(

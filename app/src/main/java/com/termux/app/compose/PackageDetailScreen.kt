@@ -1,8 +1,11 @@
 package com.termux.app.compose
 
+import android.app.Activity
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -18,6 +21,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -26,13 +30,12 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.CircularProgressIndicator
+import top.yukonga.miuix.kmp.basic.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
@@ -46,7 +49,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.res.stringResource
-import kotlinx.coroutines.launch
+import com.termux.app.activities.PackageTaskActivity
 import top.yukonga.miuix.kmp.glass.GlassIconButton
 import top.yukonga.miuix.kmp.glass.GlassTopAppBar
 import top.yukonga.miuix.kmp.basic.Button
@@ -70,6 +73,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CheckCircleOutline
 import androidx.compose.material.icons.rounded.ErrorOutline
+import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.ui.draw.alpha
 import com.termux.R
 import top.yukonga.miuix.kmp.theme.MiuixTheme
@@ -82,12 +86,29 @@ private val SuccessGreen = Color(0xFF16A34A)
 private enum class DepStatus(val text: String, val color: Color) {
     INSTALLED("已安装", SuccessGreen),
     WILL_INSTALL("将安装", AccentBlue),
+    WILL_UPGRADE("将升级", AccentBlue),
     NOT_SATISFIED("不满足", DangerRed)
 }
 
 private enum class ConfStatus(val text: String, val color: Color) {
     SATISFIED("已满足", SuccessGreen),
+    WILL_UNINSTALL("将卸载", Color(0xFFFF9800)),
     NOT_SATISFIED("不满足", DangerRed)
+}
+
+/**
+ * 把 apt 版本约束字符串（如 ">= 10.1.0"）转成友好显示格式（如 "≥10.1.0"）。
+ */
+private fun translateConstraint(constraint: String): String {
+    val trimmed = constraint.trim()
+    return when {
+        trimmed.startsWith(">= ") -> "≥${trimmed.removePrefix(">= ").trim()}"
+        trimmed.startsWith("<= ") -> "≤${trimmed.removePrefix("<= ").trim()}"
+        trimmed.startsWith(">> ") -> "晚于 ${trimmed.removePrefix(">> ").trim()}"
+        trimmed.startsWith("<< ") -> "早于 ${trimmed.removePrefix("<< ").trim()}"
+        trimmed.startsWith("= ") -> "=${trimmed.removePrefix("= ").trim()}"
+        else -> trimmed
+    }
 }
 
 @Composable
@@ -103,45 +124,35 @@ fun PackageDetailScreen(
     // 本页在 MainScreen 取景层之外，自建一层供玻璃顶栏折射页面内容
     val glassPage = rememberGlassPageBackdrop()
     val scrollBehavior = MiuixScrollBehavior()
-    val scope = rememberCoroutineScope()
     val isDark = isSystemInDarkTheme()
     val colorScheme = MiuixTheme.colorScheme
 
     var detail by remember { mutableStateOf<PackageInfo?>(pkg) }
     var isLoading by remember { mutableStateOf(true) }
-    var showLockDialog by remember { mutableStateOf(false) }
     var showUninstallConfirm by remember { mutableStateOf(false) }
-    var showProgressDialog by remember { mutableStateOf(false) }
-    var progressTitle by remember { mutableStateOf("") }
-    var progressLog by remember { mutableStateOf("") }
-    var progressSuccess by remember { mutableStateOf<Boolean?>(null) }
-    var pendingAction by remember { mutableStateOf<(() -> Unit)?>(null) }
+    var showConflictConfirm by remember { mutableStateOf(false) }
 
-    // 预加载依赖/冲突包详情 + 已安装包名
+    // 预加载依赖/冲突包详情 + 已安装包名 + 已安装版本
     var installedNames by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var installedVersions by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+    // apt 模拟安装结果（判断冲突能否被自动移除等）
+    var aptSim by remember { mutableStateOf<PkgRepo.AptSimResult?>(null) }
+    // apt 模拟卸载结果（判断卸载这个包会连带卸哪些反向依赖）
+    var aptSimRemove by remember { mutableStateOf<PkgRepo.AptSimResult?>(null) }
+    // 解析后的依赖条目：key=原始字符串, value=解析结果(纯包名+版本限制)
+    var depParsed by remember { mutableStateOf<Map<String, PkgDep>>(emptyMap()) }
+    var confParsed by remember { mutableStateOf<Map<String, PkgDep>>(emptyMap()) }
+    // 依赖/冲突包详情，使用解析后的纯包名搜索
     var depDetails by remember { mutableStateOf<Map<String, PackageInfo?>>(emptyMap()) }
     var confDetails by remember { mutableStateOf<Map<String, PackageInfo?>>(emptyMap()) }
 
-    // 观察 LiveUpdateState 的实时 log 和后台恢复请求
-    val livePkgLog by LiveUpdateState.pkgLog.collectAsState()
+    // 观察 LiveUpdateState — 任务状态恢复（后台完成时静默刷新详情）
     val pkgStateSnap by LiveUpdateState.pkgState.collectAsState()
 
-    // 后台恢复请求 — 切回前台后自动恢复弹窗
-    LaunchedEffect(Unit) {
-        LiveUpdateState.pkgResumeRequest.collect { shouldResume ->
-            if (shouldResume && LiveUpdateState.hasPkg()) {
-                LiveUpdateState.consumeResumeRequest()
-                val snap = LiveUpdateState.getPkgStateSnapshot()
-                if (snap != null) {
-                    showProgressDialog = true
-                    progressTitle = when (snap.operation) {
-                        LiveUpdateState.PkgOperation.INSTALL -> "正在安装 ${snap.packageName}"
-                        LiveUpdateState.PkgOperation.UNINSTALL -> "正在卸载 ${snap.packageName}"
-                        else -> "正在处理 ${snap.packageName}"
-                    }
-                    progressSuccess = null
-                }
-            }
+    // 任务页返回结果：沿用旧进度弹窗关闭时的行为 — 刷新列表并关闭详情页
+    val taskLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            onChanged(result.data?.getBooleanExtra(PackageTaskActivity.EXTRA_SUCCESS, false) ?: false)
         }
     }
 
@@ -151,73 +162,47 @@ fun PackageDetailScreen(
         detail = d
 
         // 并行加载已安装包名和依赖/冲突详情
-        val installed = PkgRepo.getInstalled(context).map { it.name }.toSet()
-        installedNames = installed
+        val installed = PkgRepo.getInstalled(context)
+        installedNames = installed.map { it.name }.toSet()
+        installedVersions = installed.associate { it.name to it.version }
 
-        depDetails = d.depends.associate { depName ->
-            depName to PkgRepo.getDetail(context, depName)
+        // 先解析所有依赖/冲突条目
+        depParsed = d.depends.associate { raw -> raw to parsePkgDep(raw) }
+        confParsed = d.conflicts.associate { raw -> raw to parsePkgDep(raw) }
+
+        // 用解析后的纯包名搜索详情（原始字符串作为 key 保留）
+        depDetails = depParsed.mapValues { (_, parsed) ->
+            PkgRepo.getDetail(context, parsed.name)
         }
-        confDetails = d.conflicts.associate { confName ->
-            confName to PkgRepo.getDetail(context, confName)
+        confDetails = confParsed.mapValues { (_, parsed) ->
+            PkgRepo.getDetail(context, parsed.name)
+        }
+
+        // apt 模拟安装 —— 用于准确判断冲突能否被自动移除
+        aptSim = PkgRepo.aptSimulateInstall(context, pkg.name)
+        // apt 模拟卸载 —— 用于判断卸载当前包的连带影响（仅在已安装时运行）
+        if (d.isInstalled) {
+            aptSimRemove = PkgRepo.aptSimulateRemove(context, pkg.name)
         }
 
         isLoading = false
     }
 
-    fun isLockError(log: String): Boolean {
-        val lower = log.lowercase()
-        return lower.contains("could not get lock") ||
-               lower.contains("dpkg is locked") ||
-               lower.contains("wait for it to finish") ||
-               lower.contains("/var/lib/dpkg/lock") ||
-               lower.contains("/var/cache/apt/archives/lock") ||
-               lower.contains("cache/apt/archives/lock")
-    }
-
-    fun runInstallUninstall(isInstall: Boolean, forceRemoveLock: Boolean = false, backgrounded: Boolean = false) {
-        progressTitle = if (isInstall) "正在安装 ${pkg.name}" else "正在卸载 ${pkg.name}"
-        progressLog = ""
-        progressSuccess = null
-        if (!backgrounded) showProgressDialog = true
-        val op = if (isInstall) LiveUpdateState.PkgOperation.INSTALL else LiveUpdateState.PkgOperation.UNINSTALL
-        LiveUpdateState.startPkg(op, pkg.name, backgrounded = backgrounded)
-        // 使用 LiveUpdateState.pkgScope — 独立于 UI 生命周期，切后台不取消
-        LiveUpdateState.pkgScope.launch {
-            val result = if (isInstall) {
-                PkgRepo.install(context, pkg.name, onOutput = { LiveUpdateState.appendPkgLog(it) })
-            } else {
-                PkgRepo.uninstall(context, pkg.name, onOutput = { LiveUpdateState.appendPkgLog(it) })
-            }
-            val ok = result.first
-            val log = result.second
-            LiveUpdateState.finishPkg(ok)
-            if (!ok && !forceRemoveLock && isLockError(log)) {
-                progressLog = log
-                progressSuccess = false
-                if (backgrounded) {
-                    // 后台运行遇到锁 — 重新弹窗让用户处理
-                    showProgressDialog = true
-                } else {
-                    showProgressDialog = false
-                }
-                pendingAction = { runInstallUninstall(isInstall, forceRemoveLock = true, backgrounded = backgrounded) }
-                showLockDialog = true
-            } else {
-                progressLog = log
-                progressSuccess = ok
-                if (backgrounded) showProgressDialog = true
-            }
-        }
-    }
-
+    // 安装/卸载统一走独立任务页（PackageTaskActivity）：任务不随页面退出中断
     fun startOperation(isInstall: Boolean) {
-        runInstallUninstall(isInstall, forceRemoveLock = false)
+        val op = if (isInstall) LiveUpdateState.PkgOperation.INSTALL else LiveUpdateState.PkgOperation.UNINSTALL
+        taskLauncher.launch(PackageTaskActivity.newTaskIntent(context, op, pkg.name))
     }
 
-    fun dismissProgress() {
-        showProgressDialog = false
-        val success = progressSuccess ?: false
-        onChanged(success)
+    // 用户按返回离开任务页后任务在后台完成：静默刷新详情与已安装状态
+    LaunchedEffect(pkgStateSnap) {
+        val s = pkgStateSnap ?: return@LaunchedEffect
+        if (s.finished && s.packageName == pkg.name) {
+            detail = PkgRepo.getDetail(context, pkg.name) ?: detail
+            val installed = PkgRepo.getInstalled(context)
+            installedNames = installed.map { it.name }.toSet()
+            installedVersions = installed.associate { it.name to it.version }
+        }
     }
 
     fun openHomepage(url: String) {
@@ -228,12 +213,105 @@ fun PackageDetailScreen(
         }
     }
 
+    /**
+     * 判断某个已安装的包名是否能被 apt 自动移除（因为目标包声明它为冲突）。
+     * 优先使用 aptSim 的精确结果；若模拟失败，则保守处理。
+     */
+    fun canConflictBeAutoRemoved(conflictPkg: String): Boolean {
+        val sim = aptSim ?: return false  // 无结果 → 保守：无法确认就不认为可移除
+        if (!sim.feasible) return false
+        return conflictPkg in sim.willRemovePackages
+    }
+
+    /** 从 PkgDep 中取出版本操作符（>= / <= / = / >> / <<）。没约束或格式异常返回 null */
+    fun constraintBeforeOp(parsed: PkgDep): String? {
+        val c = parsed.versionConstraint ?: return null
+        val trimmed = c.trim()
+        return when {
+            trimmed.startsWith(">= ") -> ">="
+            trimmed.startsWith("<= ") -> "<="
+            trimmed.startsWith(">> ") -> ">>"
+            trimmed.startsWith("<< ") -> "<<"
+            trimmed.startsWith("= ") -> "="
+            trimmed.startsWith(">=") -> ">="
+            trimmed.startsWith("<=") -> "<="
+            trimmed.startsWith(">>") -> ">>"
+            trimmed.startsWith("<<") -> "<<"
+            trimmed.startsWith("=") -> "="
+            else -> null
+        }
+    }
+
+    /**
+     * 硬阻塞判定（任一为 true 则无法安装）：
+     * 1) 源内找不到的依赖包（不可能装）
+     * 2) 已安装依赖包的版本约束方向不兼容（apt 不会自动降级/换版本）
+     * 3) 已安装的冲突包，apt 模拟显示不会被自动移除
+     */
+    fun computeHardBlock(target: PackageInfo): Boolean {
+        // 1) 源内缺失的依赖
+        if (target.depends.any { depRaw -> depDetails[depRaw] == null }) return true
+
+        // 2) 方向敏感的版本约束：仅当已装版本与约束方向不兼容时才算硬阻塞
+        for (depRaw in target.depends) {
+            val parsed = depParsed[depRaw] ?: continue
+            val pure = parsed.name
+            val installedVer = installedVersions[pure] ?: continue
+            val constraint = parsed.versionConstraint
+            if (constraint.isNullOrBlank()) continue
+            val cmp = compareVersions(installedVer, constraint)
+            val op = constraintBeforeOp(parsed)
+            // 若 cmp 为 null 表示版本解析失败，跳过（不判定为阻塞）
+            if (cmp == null || op == null) continue
+            val blocking = when (op) {
+                // 已装版本过新 → apt 不会降级
+                "<=" -> cmp > 0
+                "<<" -> cmp >= 0
+                // 已装版本过旧且约束是 "必须远晚于"（apt 会升级 ≥ 的场景都覆盖不到 >>）
+                ">>" -> cmp >= 0
+                // 精确匹配：apt 通常不会强制换版本
+                "=" -> cmp != 0
+                // >= 已装版本过旧 → apt 会升级 → 不阻塞
+                ">=" -> false
+                else -> false
+            }
+            if (blocking) return true
+        }
+
+        // 3) 已安装的冲突包中，存在至少一个 apt 无法自动移除
+        for (confRaw in target.conflicts) {
+            val parsed = confParsed[confRaw] ?: continue
+            val pure = parsed.name
+            if (pure !in installedNames) continue
+            if (!canConflictBeAutoRemoved(pure)) return true
+        }
+
+        return false
+    }
+
+    /** 能被 apt 自动移除的直接冲突包列表（供 UI 提示"将卸载"用） */
+    fun computeWillUninstallConflicts(target: PackageInfo): List<String> {
+        return target.conflicts.mapNotNull { confRaw ->
+            val parsed = confParsed[confRaw] ?: return@mapNotNull null
+            val pure = parsed.name
+            if (pure !in installedNames) return@mapNotNull null
+            if (canConflictBeAutoRemoved(pure)) pure else null
+        }
+    }
+
+    /**
+     * apt 计划移除的**完整**包列表——包含直接冲突包及其所有被连带卸载的依赖/反向依赖包。
+     * 用于确认对话框展示全部风险。
+     */
+    fun computeAllWillRemove(target: PackageInfo): List<String> {
+        val sim = aptSim ?: return emptyList()
+        if (!sim.feasible) return emptyList()
+        // 只保留当前已安装的（理论上 willRemovePackages 里的本来就是已装的，保险起见过滤）
+        return sim.willRemovePackages.filter { it in installedNames }.toList()
+    }
+
     fun computeCanInstall(target: PackageInfo): Boolean {
-        // 依赖项：源内不存在（depDetails 为 null）才视为无法满足；源内存在将随安装一并装好
-        val hasUnsatisfiedDep = target.depends.any { depName -> depDetails[depName] == null }
-        // 冲突项：当前已安装才算冲突未满足
-        val hasInstalledConflict = target.conflicts.any { confName -> confName in installedNames }
-        return !hasUnsatisfiedDep && !hasInstalledConflict
+        return !computeHardBlock(target)
     }
 
     Scaffold(
@@ -249,7 +327,7 @@ fun PackageDetailScreen(
                 },
                 scrollBehavior = scrollBehavior,
                 navigationIcon = {
-                    GlassIconButton(onClick = { if (!showProgressDialog && !showLockDialog) onBack() }) {
+                    GlassIconButton(onClick = onBack) {
                         Icon(
                             imageVector = MiuixGlassIcons.ChevronBackward,
                             contentDescription = stringResource(R.string.back),
@@ -285,7 +363,7 @@ fun PackageDetailScreen(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center
                 ) {
-                    CircularProgressIndicator(color = AccentBlue)
+                    CircularProgressIndicator()
                     Spacer(Modifier.height(12.dp))
                     Text(
                         text = "正在检查依赖和冲突项",
@@ -311,9 +389,14 @@ fun PackageDetailScreen(
                     // 安装状态卡 — 仅未安装的软件包显示，置于 TopAppBar 下方、描述上方
                     if (!d.isInstalled) {
                         item {
+                            val hardBlock = computeHardBlock(d)
+                            val willRemoveAll = computeAllWillRemove(d)
+                            val directConflicts = computeWillUninstallConflicts(d)
                             PackageInstallStatusCard(
                                 pkgName = d.name,
-                                canInstall = computeCanInstall(d)
+                                hardBlock = hardBlock,
+                                willRemoveConflicts = willRemoveAll,
+                                directConflictCount = directConflicts.size
                             )
                         }
                     }
@@ -416,32 +499,62 @@ fun PackageDetailScreen(
                                 modifier = Modifier.padding(top = 6.dp)
                             )
                         }
-                        items(d.depends) { depName ->
-                            val depInfo = depDetails[depName]
+                        items(d.depends) { depRaw ->
+                            val parsed = depParsed[depRaw] ?: PkgDep(depRaw, null)
+                            val depInfo = depDetails[depRaw]
+                            val pureName = parsed.name
+                            val isInstalled = pureName in installedNames
+                            val installedVer = installedVersions[pureName]
                             val status = when {
+                                // 源内找不到的依赖 — 不可能装
                                 depInfo == null -> DepStatus.NOT_SATISFIED
-                                depName in installedNames -> DepStatus.INSTALLED
-                                else -> DepStatus.WILL_INSTALL
+                                // 未安装 — apt 会装
+                                !isInstalled -> DepStatus.WILL_INSTALL
+                                // 已安装但无法判断版本（无版本信息）→ 保守视为已满足
+                                installedVer == null -> DepStatus.INSTALLED
+                                // 已安装 — 方向敏感版本判定
+                                else -> {
+                                    val cv = compareVersions(installedVer, parsed.versionConstraint ?: "")
+                                    val op = constraintBeforeOp(parsed)
+                                    when {
+                                        // 无约束 → 已满足
+                                        op == null || cv == null -> DepStatus.INSTALLED
+                                        // 版本满足约束 → 已满足
+                                        (op == ">=" && cv >= 0) ||
+                                        (op == "<=" && cv <= 0) ||
+                                        (op == "=" && cv == 0) ||
+                                        (op == ">>" && cv > 0) ||
+                                        (op == "<<" && cv < 0) -> DepStatus.INSTALLED
+                                        // >= 但 installedVer 更小 → apt 会升级
+                                        op == ">=" && cv < 0 -> DepStatus.WILL_UPGRADE
+                                        // >> 但 installedVer 更小 → apt 会升级
+                                        op == ">>" && cv < 0 -> DepStatus.WILL_UPGRADE
+                                        // 其他方向不兼容（apt 不会降级/换版本）
+                                        else -> DepStatus.NOT_SATISFIED
+                                    }
+                                }
                             }
-                            val summaryLine = if (depInfo != null) {
+                            // 副标题：版本限制 | 详情
+                            val constraintPart = parsed.versionConstraint?.let { translateConstraint(it) }
+                            val infoPart = if (depInfo != null) {
                                 val versionPart = depInfo.version.takeIf { it.isNotBlank() }?.let { "v$it" } ?: ""
                                 val sectionPart = depInfo.section.takeIf { it.isNotBlank() }
-                                val parts = listOfNotNull(versionPart, sectionPart)
-                                parts.joinToString(" · ").ifBlank { "暂无相关信息" }
+                                listOfNotNull(versionPart, sectionPart).joinToString(" · ").ifBlank { "暂无相关信息" }
                             } else {
                                 "暂无相关信息"
                             }
+                            val summaryLine = if (constraintPart != null) "$constraintPart | $infoPart" else infoPart
 
                             Card(
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 ArrowPreference(
-                                    title = depName,
+                                    title = pureName,
                                     summary = summaryLine,
                                     onClick = {
                                         if (depInfo != null) {
                                             onOpenPackageDetail?.invoke(
-                                                depInfo.copy(isInstalled = depName in installedNames)
+                                                depInfo.copy(isInstalled = isInstalled)
                                             )
                                         } else {
                                             Toast.makeText(context, "源内没有此软件包", Toast.LENGTH_SHORT).show()
@@ -468,32 +581,37 @@ fun PackageDetailScreen(
                                 modifier = Modifier.padding(top = 6.dp)
                             )
                         }
-                        items(d.conflicts) { confName ->
-                            val confInfo = confDetails[confName]
-                            val status = if (confName in installedNames) {
-                                ConfStatus.NOT_SATISFIED
-                            } else {
-                                ConfStatus.SATISFIED
+                        items(d.conflicts) { confRaw ->
+                            val parsed = confParsed[confRaw] ?: PkgDep(confRaw, null)
+                            val confInfo = confDetails[confRaw]
+                            val pureName = parsed.name
+                            val isInstalled = pureName in installedNames
+                            val status = when {
+                                !isInstalled -> ConfStatus.SATISFIED
+                                canConflictBeAutoRemoved(pureName) -> ConfStatus.WILL_UNINSTALL
+                                else -> ConfStatus.NOT_SATISFIED
                             }
-                            val summaryLine = if (confInfo != null) {
+                            // 副标题：版本限制 | 详情
+                            val constraintPart = parsed.versionConstraint?.let { translateConstraint(it) }
+                            val infoPart = if (confInfo != null) {
                                 val versionPart = confInfo.version.takeIf { it.isNotBlank() }?.let { "v$it" } ?: ""
                                 val sectionPart = confInfo.section.takeIf { it.isNotBlank() }
-                                val parts = listOfNotNull(versionPart, sectionPart)
-                                parts.joinToString(" · ").ifBlank { "暂无相关信息" }
+                                listOfNotNull(versionPart, sectionPart).joinToString(" · ").ifBlank { "暂无相关信息" }
                             } else {
                                 "暂无相关信息"
                             }
+                            val summaryLine = if (constraintPart != null) "$constraintPart | $infoPart" else infoPart
 
                             Card(
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 ArrowPreference(
-                                    title = confName,
+                                    title = pureName,
                                     summary = summaryLine,
                                     onClick = {
                                         if (confInfo != null) {
                                             onOpenPackageDetail?.invoke(
-                                                confInfo.copy(isInstalled = confName in installedNames)
+                                                confInfo.copy(isInstalled = isInstalled)
                                             )
                                         } else {
                                             Toast.makeText(context, "源内没有此软件包", Toast.LENGTH_SHORT).show()
@@ -518,11 +636,14 @@ fun PackageDetailScreen(
             if (!isLoading) {
                 val d = detail ?: pkg
                 val canInstall = computeCanInstall(d)
+                val hardBlock = computeHardBlock(d)
+                val willRemoveAll = computeAllWillRemove(d)
+                val needsConflictConfirm = willRemoveAll.isNotEmpty()
                 Box(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()
-                        .background(colorScheme.surface)
+                        .background(colorScheme.surfaceContainer)
                         .padding(
                             start = 16.dp,
                             end = 16.dp,
@@ -541,12 +662,16 @@ fun PackageDetailScreen(
                             Text("卸载", fontSize = 15.sp, fontWeight = FontWeight.Medium, color = Color.White)
                         }
                     } else {
+                        val installColor = if (needsConflictConfirm) DangerRed else AccentBlue
                         Button(
-                            onClick = { startOperation(isInstall = true) },
+                            onClick = {
+                                if (needsConflictConfirm) showConflictConfirm = true
+                                else startOperation(isInstall = true)
+                            },
                             modifier = Modifier.fillMaxWidth(),
                             enabled = canInstall,
                             colors = ButtonDefaults.buttonColors(
-                                color = AccentBlue
+                                color = installColor
                             )
                         ) {
                             Text(stringResource(R.string.action_styling_install), fontSize = 15.sp, fontWeight = FontWeight.Medium, color = Color.White)
@@ -558,157 +683,367 @@ fun PackageDetailScreen(
             OverlayDialog(
                 show = showUninstallConfirm,
                 title = "确认卸载",
-                summary = "确定要卸载 ${pkg.name} 吗？此操作不可撤销。",
+                summary = "",
                 onDismissRequest = { showUninstallConfirm = false },
                 content = {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        TextButton(
-                            text = stringResource(R.string.cancel),
-                            onClick = { showUninstallConfirm = false },
-                            modifier = Modifier.weight(1f)
-                        )
-                        Button(
-                            onClick = {
-                                showUninstallConfirm = false
-                                startOperation(isInstall = false)
+                    val self = pkg.name
+                    val allRemove = aptSimRemove?.willRemovePackages.orEmpty()
+                        .filter { it in installedNames }
+                    val cascade = allRemove.filter { it != self }
+                    // 卸载目标（含连带）里命中 apt/dpkg/termux-apt-repo 等关键包 → 严重警告
+                    val criticalHits = allRemove.filter { it in PkgRepo.CRITICAL_APT_PACKAGES }
+                    Column {
+                        // 主说明 —— 不带连带时一行搞定；有连带则展示可滚动列表
+                        Text(
+                            text = if (cascade.isEmpty()) {
+                                "确定要卸载 $self 吗？此操作不可撤销。"
+                            } else {
+                                "确定要卸载 $self 吗？此操作将连带卸载 ${cascade.size} 个反向依赖包，极可能影响 Termux 环境的稳定性，请慎重决断！"
                             },
-                            modifier = Modifier.weight(1f),
-                            colors = ButtonDefaults.buttonColors(color = DangerRed)
-                        ) {
-                            Text("确认卸载", color = Color.White, fontWeight = FontWeight.Medium)
-                        }
-                    }
-                }
-            )
-
-            OverlayDialog(
-                show = showLockDialog,
-                title = stringResource(R.string.pkg_manager_busy),
-                summary = "检测到 Termux 的 apt/dpkg 正在被其他进程占用。\n\n强行解除锁可能导致：\n• 正在进行的安装/升级进程被中断\n• 数据库状态不一致\n• 已下载的包文件残留\n\n建议：先关闭其他正在运行的 Termux 会话，然后再试。",
-                onDismissRequest = {
-                    showLockDialog = false
-                    pendingAction = null
-                },
-                content = {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        TextButton(
-                            text = stringResource(R.string.cancel),
-                            onClick = { showLockDialog = false; pendingAction = null },
-                            modifier = Modifier.weight(1f)
+                            fontSize = 14.sp,
+                            color = colorScheme.onSurface,
+                            lineHeight = 20.sp
                         )
-                        TextButton(
-                            text = "强行解除",
-                            onClick = {
-                                showLockDialog = false
-                                val action = pendingAction
-                                pendingAction = null
-                                scope.launch {
-                                    PkgRepo.forceRemoveLocks(context)
-                                    Toast.makeText(context, "锁已解除，正在继续...", Toast.LENGTH_SHORT).show()
-                                    action?.invoke()
-                                }
-                            },
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                }
-            )
-
-            OverlayDialog(
-                show = showProgressDialog,
-                title = progressTitle.ifBlank { "正在处理" },
-                summary = "",
-                onDismissRequest = { if (progressSuccess != null) dismissProgress() },
-                content = {
-                    val logScrollState = rememberScrollState()
-                    Column(
-                        modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        // Loading indicator + "处理中..." 一行居中
-                        if (progressSuccess == null) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.Center,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                CircularProgressIndicator(modifier = Modifier.size(24.dp), color = AccentBlue, strokeWidth = 3.dp)
-                                Spacer(Modifier.width(12.dp))
-                                Text(
-                                    text = stringResource(R.string.common_processing),
-                                    fontSize = 14.sp,
-                                    color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                                )
-                            }
-                            Spacer(Modifier.height(12.dp))
-                            // 后台运行按钮
-                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                TextButton(
-                                    text = "后台运行",
-                                    onClick = {
-                                        LiveUpdateState.markPkgBackgrounded()
-                                        showProgressDialog = false
-                                    },
-                                    modifier = Modifier.weight(1f)
-                                )
-                            }
+                        if (cascade.isNotEmpty()) {
                             Spacer(Modifier.height(8.dp))
-                        }
-
-                        // Result text
-                        if (progressSuccess != null) {
-                            Text(
-                                text = if (progressSuccess == true) "操作成功" else "操作失败",
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = if (progressSuccess == true) AccentBlue else DangerRed
-                            )
-                            Spacer(Modifier.height(12.dp))
-                        }
-
-                        // Log area — 加载中和完成后都显示，实时更新
-                        val displayLog = if (progressSuccess == null) livePkgLog else progressLog
-                        val clippedLog = if (displayLog.length > 5000) displayLog.substring(displayLog.length - 5000) else displayLog
-                        if (clippedLog.isNotBlank()) {
                             Box(
-                                modifier = Modifier.fillMaxWidth()
-                                    .height(200.dp)
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(max = 280.dp)
                                     .background(
                                         color = if (isDark) Color(0xFF1A1A1A) else Color(0xFFF5F5F5),
                                         shape = RoundedCornerShape(8.dp)
                                     )
                                     .padding(12.dp)
                             ) {
-                                Text(
-                                    text = clippedLog,
-                                    fontSize = 12.sp,
-                                    color = if (isDark) Color.White.copy(alpha = 0.8f) else Color.Black.copy(alpha = 0.7f),
-                                    lineHeight = 16.sp,
-                                    modifier = Modifier.verticalScroll(logScrollState)
-                                )
+                                Column(
+                                    modifier = Modifier.verticalScroll(rememberScrollState())
+                                ) {
+                                    Text(
+                                        text = "连带卸载的反向依赖包（共 ${cascade.size} 个）：",
+                                        fontSize = 12.sp,
+                                        color = colorScheme.onSurfaceVariantSummary,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                    Spacer(Modifier.height(6.dp))
+                                    cascade.forEach {
+                                        Text(
+                                            text = "  • $it",
+                                            fontSize = 13.sp,
+                                            color = colorScheme.onSurface,
+                                            lineHeight = 18.sp
+                                        )
+                                    }
+                                }
                             }
-                            Spacer(Modifier.height(12.dp))
                         }
 
-                        // Close button at bottom
-                        if (progressSuccess != null) {
-                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                TextButton(
-                                    text = stringResource(R.string.low_android_force_disable_confirm),
-                                    onClick = { dismissProgress() },
-                                    modifier = Modifier.weight(1f)
+                        // —— apt 关键包严重警告 ——
+                        if (criticalHits.isNotEmpty()) {
+                            Spacer(Modifier.height(10.dp))
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(
+                                        color = if (isDark) Color(0xFF3B1414) else Color(0xFFFFEBEE),
+                                        shape = RoundedCornerShape(8.dp)
+                                    )
+                                    .padding(12.dp)
+                            ) {
+                                Column {
+                                    Text(
+                                        text = "⚠️ 严重警告：将卸载软件包管理的核心组件！",
+                                        fontSize = 13.sp,
+                                        color = DangerRed,
+                                        fontWeight = FontWeight.SemiBold,
+                                        lineHeight = 18.sp
+                                    )
+                                    Spacer(Modifier.height(6.dp))
+                                    Text(
+                                        text = "此次卸载将移除以下关键包，软件包管理功能依赖它们才能正常运行：",
+                                        fontSize = 12.sp,
+                                        color = colorScheme.onSurface.copy(alpha = 0.85f),
+                                        lineHeight = 18.sp
+                                    )
+                                    criticalHits.forEach {
+                                        Text(
+                                            text = "  • $it",
+                                            fontSize = 12.sp,
+                                            color = DangerRed,
+                                            fontWeight = FontWeight.Medium,
+                                            lineHeight = 18.sp
+                                        )
+                                    }
+                                    Spacer(Modifier.height(6.dp))
+                                    Text(
+                                        text = "卸载后，软件包管理功能将无法使用，直到 apt 链路被手动恢复（重新安装上述包或重装 Termux）。请务必确认！",
+                                        fontSize = 12.sp,
+                                        color = DangerRed,
+                                        lineHeight = 18.sp
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(Modifier.height(16.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            TextButton(
+                                text = stringResource(R.string.cancel),
+                                onClick = { showUninstallConfirm = false },
+                                modifier = Modifier.weight(1f)
+                            )
+                            Button(
+                                onClick = {
+                                    showUninstallConfirm = false
+                                    startOperation(isInstall = false)
+                                },
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.buttonColors(
+                                    color = if (criticalHits.isNotEmpty()) Color(0xFFB71C1C) else DangerRed
                                 )
+                            ) {
+                                Text("卸载", color = Color.White, fontWeight = FontWeight.Medium)
                             }
                         }
                     }
                 }
             )
+
+            // 冲突卸载警告 —— 安装目标包会连带卸载已装冲突包（含完整连带列表 + 稳定性警告）
+            if (true) {
+                val allRemovePkgs = remember(detail, aptSim) {
+                    computeAllWillRemove(detail ?: pkg)
+                }
+                val directConflictPkgs = remember(detail) {
+                    computeWillUninstallConflicts(detail ?: pkg)
+                }
+                val cascadePkgs = allRemovePkgs.filter { it !in directConflictPkgs }
+                // 命中 apt 关键包 → 严重警告（和卸载弹窗一致）
+                val criticalHits = allRemovePkgs.filter { it in PkgRepo.CRITICAL_APT_PACKAGES }
+
+                if (allRemovePkgs.isNotEmpty()) {
+                    OverlayDialog(
+                        show = showConflictConfirm,
+                        title = if (criticalHits.isNotEmpty()) "⚠ 严重警告：将卸载软件包管理核心组件"
+                                else "⚠ 严重警告：将卸载多个软件包",
+                        summary = "",
+                        onDismissRequest = { showConflictConfirm = false },
+                        content = {
+                            Column {
+                                // 顶部简短警示语
+                                Text(
+                                    text = if (criticalHits.isNotEmpty()) {
+                                        "安装 ${pkg.name} 将强制卸载软件包管理的核心组件！此操作不可撤销，卸载后软件包管理功能将无法使用，直到 apt 链路被手动恢复。"
+                                    } else {
+                                        "安装 ${pkg.name} 将强制卸载以下已安装的软件包，此操作不可撤销且极可能破坏 Termux 环境的稳定性！"
+                                    },
+                                    fontSize = 14.sp,
+                                    color = colorScheme.onSurface,
+                                    lineHeight = 20.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                                Spacer(Modifier.height(10.dp))
+
+                                // 可滚动区域 —— 直接冲突 + 连带卸载 + 风险清单
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .heightIn(max = 320.dp)
+                                        .background(
+                                            color = if (isDark) Color(0xFF1A1A1A) else Color(0xFFF5F5F5),
+                                            shape = RoundedCornerShape(8.dp)
+                                        )
+                                        .padding(12.dp)
+                                ) {
+                                    Column(
+                                        modifier = Modifier.verticalScroll(rememberScrollState())
+                                    ) {
+                                        if (directConflictPkgs.isNotEmpty()) {
+                                            Text(
+                                                text = "【直接冲突包】",
+                                                fontSize = 13.sp,
+                                                color = AccentBlue,
+                                                fontWeight = FontWeight.SemiBold
+                                            )
+                                            Text(
+                                                text = "（${pkg.name} 明确声明与之冲突，apt 将自动移除）",
+                                                fontSize = 12.sp,
+                                                color = colorScheme.onSurfaceVariantSummary
+                                            )
+                                            directConflictPkgs.forEach {
+                                                Text(
+                                                    text = "  • $it",
+                                                    fontSize = 13.sp,
+                                                    color = if (it in PkgRepo.CRITICAL_APT_PACKAGES) DangerRed else colorScheme.onSurface,
+                                                    lineHeight = 18.sp
+                                                )
+                                            }
+                                            Spacer(Modifier.height(8.dp))
+                                        }
+
+                                        if (cascadePkgs.isNotEmpty()) {
+                                            Text(
+                                                text = "【连带卸载包】（${cascadePkgs.size} 个）",
+                                                fontSize = 13.sp,
+                                                color = Color(0xFFFF9800),
+                                                fontWeight = FontWeight.SemiBold
+                                            )
+                                            Text(
+                                                text = "（因依赖上述冲突包而被一并移除）",
+                                                fontSize = 12.sp,
+                                                color = colorScheme.onSurfaceVariantSummary
+                                            )
+                                            cascadePkgs.forEach {
+                                                Text(
+                                                    text = "  • $it",
+                                                    fontSize = 13.sp,
+                                                    color = if (it in PkgRepo.CRITICAL_APT_PACKAGES) DangerRed else colorScheme.onSurface,
+                                                    lineHeight = 18.sp
+                                                )
+                                            }
+                                            Spacer(Modifier.height(8.dp))
+                                        }
+
+                                        // 分隔线 + 总计
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(0.5.dp)
+                                                .background(colorScheme.onSurface.copy(alpha = 0.2f))
+                                        )
+                                        Spacer(Modifier.height(8.dp))
+                                        Text(
+                                            text = "总计将卸载 ${allRemovePkgs.size} 个包${if (criticalHits.isNotEmpty()) "（含 ${criticalHits.size} 个软件包管理关键组件）" else ""}",
+                                            fontSize = 13.sp,
+                                            color = DangerRed,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                        Spacer(Modifier.height(8.dp))
+
+                                        // 风险清单
+                                        Text(
+                                            text = "⚠ 卸载这些包可能导致：",
+                                            fontSize = 13.sp,
+                                            color = DangerRed,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                        listOf(
+                                            "命令、工具链、服务无法使用",
+                                            "已安装应用功能缺失或崩溃",
+                                            "Termux 环境无法正常启动",
+                                            "需要重新安装大量依赖包才能恢复"
+                                        ).forEach {
+                                            Text(
+                                                text = "  • $it",
+                                                fontSize = 12.sp,
+                                                color = colorScheme.onSurface.copy(alpha = 0.85f),
+                                                lineHeight = 18.sp
+                                            )
+                                        }
+                                    }
+                                }
+
+                                // —— apt 关键包严重警告（仅当命中时显示）——
+                                if (criticalHits.isNotEmpty()) {
+                                    Spacer(Modifier.height(12.dp))
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .background(
+                                                color = if (isDark) Color(0xFF3B1414) else Color(0xFFFFEBEE),
+                                                shape = RoundedCornerShape(8.dp)
+                                            )
+                                            .padding(12.dp)
+                                    ) {
+                                        Column {
+                                            Text(
+                                                text = "⚠️ 严重警告：将卸载软件包管理的核心组件！",
+                                                fontSize = 13.sp,
+                                                color = DangerRed,
+                                                fontWeight = FontWeight.SemiBold,
+                                                lineHeight = 18.sp
+                                            )
+                                            Spacer(Modifier.height(6.dp))
+                                            Text(
+                                                text = "此次安装将连带移除以下关键包，软件包管理功能依赖它们才能正常运行：",
+                                                fontSize = 12.sp,
+                                                color = colorScheme.onSurface.copy(alpha = 0.85f),
+                                                lineHeight = 18.sp
+                                            )
+                                            criticalHits.forEach {
+                                                Text(
+                                                    text = "  • $it",
+                                                    fontSize = 12.sp,
+                                                    color = DangerRed,
+                                                    fontWeight = FontWeight.Medium,
+                                                    lineHeight = 18.sp
+                                                )
+                                            }
+                                            Spacer(Modifier.height(6.dp))
+                                            Text(
+                                                text = "安装完成后，软件包管理功能将无法使用，直到 apt 链路被手动恢复（重新安装上述包或重装 Termux）。请务必确认！",
+                                                fontSize = 12.sp,
+                                                color = DangerRed,
+                                                lineHeight = 18.sp
+                                            )
+                                        }
+                                    }
+                                }
+
+                                Spacer(Modifier.height(12.dp))
+
+                                // 底部红色建议卡
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(
+                                            color = if (isDark) Color(0xFF3B1414) else Color(0xFFFFEBEE),
+                                            shape = RoundedCornerShape(8.dp)
+                                        )
+                                        .padding(12.dp)
+                                ) {
+                                    Text(
+                                        text = if (criticalHits.isNotEmpty())
+                                            "强烈建议取消安装！软件包管理核心组件一旦被移除，恢复难度大、耗时长。请仔细评估后果后再操作。"
+                                        else
+                                            "建议先取消安装，在终端中执行 pkg install ${pkg.name} 仔细审阅 apt 的输出，确认无误后再操作。",
+                                        fontSize = 13.sp,
+                                        color = DangerRed,
+                                        fontWeight = FontWeight.Medium,
+                                        lineHeight = 18.sp
+                                    )
+                                }
+                                Spacer(Modifier.height(16.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    TextButton(
+                                        text = stringResource(R.string.cancel),
+                                        onClick = { showConflictConfirm = false },
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    Button(
+                                        onClick = {
+                                            showConflictConfirm = false
+                                            startOperation(isInstall = true)
+                                        },
+                                        modifier = Modifier.weight(1f),
+                                        colors = ButtonDefaults.buttonColors(
+                                            color = if (criticalHits.isNotEmpty()) Color(0xFFB71C1C) else DangerRed
+                                        )
+                                    ) {
+                                        Text("确认安装", color = Color.White, fontWeight = FontWeight.Medium)
+                                    }
+                                }
+                            }
+                        }
+                    )
+                }
+            }
         }
     }
 }
@@ -722,28 +1057,58 @@ fun PackageDetailScreen(
 @Composable
 private fun PackageInstallStatusCard(
     pkgName: String,
-    canInstall: Boolean
+    hardBlock: Boolean,
+    willRemoveConflicts: List<String>,
+    directConflictCount: Int
 ) {
     val isDark = isSystemInDarkTheme()
     val textColor = if (isDark) Color.White else Color.Black
-    val (cardColor, iconColor, icon) = if (canInstall) {
-        Triple(
-            if (isDark) Color(0xFF1A3825) else Color(0xFFDFFAE4),
-            Color(0xFF36D167),
-            Icons.Rounded.CheckCircleOutline
-        )
-    } else {
-        Triple(
+    val needsConflictWarn = willRemoveConflicts.isNotEmpty() && !hardBlock
+    val totalRemove = willRemoveConflicts.size
+    val cascadeCount = (totalRemove - directConflictCount).coerceAtLeast(0)
+    val (cardColor, iconColor, icon) = when {
+        hardBlock -> Triple(
             if (isDark) Color(0xFF3B1414) else Color(0xFFFFEBEE),
             Color(0xFFFF5252),
             Icons.Rounded.ErrorOutline
         )
+        needsConflictWarn -> Triple(
+            if (isDark) Color(0xFF3B1414) else Color(0xFFFFEBEE),
+            Color(0xFFFF9800),
+            Icons.Rounded.Warning
+        )
+        else -> Triple(
+            if (isDark) Color(0xFF1A3825) else Color(0xFFDFFAE4),
+            Color(0xFF36D167),
+            Icons.Rounded.CheckCircleOutline
+        )
     }
-    val title = if (canInstall) "已准备好安装" else "暂时无法安装"
-    val desc = if (canInstall) {
-        "点击安装按钮开始安装$pkgName，如有需要的依赖也将一并安装"
-    } else {
-        "$pkgName 有依赖或冲突项无法满足，请检查"
+    val title = when {
+        hardBlock -> "暂时无法安装"
+        needsConflictWarn -> "将卸载 $totalRemove 个包后安装"
+        else -> "已准备好安装"
+    }
+    val desc = when {
+        hardBlock -> "$pkgName 有依赖或冲突项无法满足，请检查"
+        needsConflictWarn -> buildString {
+            append(pkgName)
+            append(" 可安装，但 apt 将移除 ")
+            append(totalRemove)
+            append(" 个包")
+            if (directConflictCount > 0) {
+                append("（直接冲突 ")
+                append(directConflictCount)
+                append(" 个")
+                if (cascadeCount > 0) {
+                    append(" + 连带卸载 ")
+                    append(cascadeCount)
+                    append(" 个")
+                }
+                append("）")
+            }
+            append("，极可能影响 Termux 稳定性，点击安装按钮前请仔细审阅")
+        }
+        else -> "点击安装按钮开始安装$pkgName，如有需要的依赖也将一并安装"
     }
 
     Card(modifier = Modifier.fillMaxWidth()) {
