@@ -55,6 +55,9 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
  *   collapses — [SmallTopAppBar] pins the state — but `contentOffset` still accumulates as
  *   content scrolls under the bar, which is what turns the band and the pills on. Without one
  *   the bar stays at full strength, which is what a bar over non-scrolling content wants.
+ *   Only user gestures feed `contentOffset`: a page that scrolls itself (`animateScrollTo`,
+ *   `animateScrollToItem`) never reaches this connection, so see the [isContentScrolled]
+ *   overload instead.
  * @param bandBrush The band that dims the content passing under the bar.
  * @param bandOverhang How far the band reaches past the bottom of the bar.
  * @param style Compatibility style forwarded to the renderer. The default button body uses
@@ -129,9 +132,16 @@ fun GlassSmallTopAppBar(
 /**
  * A glass small top bar with an explicit page-overlap state.
  *
+ * Use this overload whenever the page is not scrolled by touch alone: `animateScrollTo` /
+ * `animateScrollToItem` are programmatic scrolls that never reach the behaviour's nested-scroll
+ * connection, so its `contentOffset` stays at 0, the band never turns on and the pills keep no
+ * plate (the button shadow rides the same ramp). Deriving the state from the real scroll position
+ * fixes self-scrolling pages such as log/console views.
+ *
  * @param title The compact title.
  * @param isContentScrolled Whether page content has left its resting position. For a lazy list,
- *   pass `listState.canScrollBackward`. This clears the material when the page returns to the top
+ *   pass `listState.canScrollBackward`; for a vertically scrolling column pass
+ *   `scrollState.value > 0`. This clears the material when the page returns to the top
  *   even if the bar keeps its fixed height. Other parameters behave as in the scroll-behaviour
  *   overload.
  */

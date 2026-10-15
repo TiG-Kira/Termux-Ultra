@@ -34,7 +34,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.CircularProgressIndicator
 import top.yukonga.miuix.kmp.basic.TextField
@@ -71,7 +70,6 @@ import com.termux.app.compose.rememberGlassPageBackdrop
 import com.termux.app.compose.topBarClearance
 import kotlinx.coroutines.launch
 import top.yukonga.miuix.kmp.basic.Icon
-import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
@@ -171,10 +169,11 @@ private fun PackageTaskScreen(onClose: () -> Unit) {
     val scrollState = rememberScrollState()
     val scope = rememberCoroutineScope()
     val snap = state
-    // 本页为独立 Activity，位于 MainScreen 取景层之外：自建一层供玻璃顶栏折射页面内容，
-    // scrollBehavior 驱动穿透渐隐（SmallTopAppBar 会把它 pin 住，顶栏不折叠）
+    // 本页为独立 Activity，位于 MainScreen 取景层之外：自建一层供玻璃顶栏折射页面内容
     val glassPage = rememberGlassPageBackdrop()
-    val scrollBehavior = MiuixScrollBehavior()
+    // 日志会随输出自动上顶（animateScrollTo），这类程序化滚动不走嵌套滚动链路，
+    // contentOffset 不会更新；改用显式 isContentScrolled，由真实滚动位置驱动穿透渐隐与玻璃按钮底板
+    val contentScrolled = scrollState.value > 0
 
     // 没有可恢复的任务（状态已被消费或误启动）→ 直接退出
     LaunchedEffect(snap) {
@@ -246,7 +245,7 @@ private fun PackageTaskScreen(onClose: () -> Unit) {
                 title = taskTitle(snap),
                 subtitle = taskSubtitle(snap),
                 backdrop = glassPage.backdrop,
-                scrollBehavior = scrollBehavior,
+                isContentScrolled = contentScrolled,
                 navigationIcon = {
                     GlassIconButton(onClick = onClose) {
                         Icon(
@@ -270,7 +269,6 @@ private fun PackageTaskScreen(onClose: () -> Unit) {
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(pagePaddingWithoutTop(innerPadding))
-                    .nestedScroll(scrollBehavior.nestedScrollConnection)
                     .verticalScroll(scrollState)
             ) {
                 // 顶部让位：首屏日志从顶栏下沿开始；滚动后内容钻入顶栏的穿透渐隐带
