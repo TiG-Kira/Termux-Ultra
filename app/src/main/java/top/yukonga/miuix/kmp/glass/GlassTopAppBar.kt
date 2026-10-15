@@ -6,7 +6,7 @@ package top.yukonga.miuix.kmp.glass
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.updateTransition
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -220,6 +220,9 @@ fun GlassTopAppBar(
     backdrop: Backdrop? = null,
     largeTitle: String = title,
     subtitle: String = "",
+    titleColor: Color = MiuixTheme.colorScheme.onSurface,
+    largeTitleColor: Color = MiuixTheme.colorScheme.onSurface,
+    subtitleColor: Color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
     scrollBehavior: ScrollBehavior? = null,
     bandBrush: Brush = GlassTopAppBarDefaults.bandBrush(MiuixTheme.colorScheme.surface),
     bandOverhang: Dp = GlassTopAppBarDefaults.BandOverhang,
@@ -237,6 +240,7 @@ fun GlassTopAppBar(
     navigationIcon: @Composable () -> Unit = {},
     actions: @Composable RowScope.() -> Unit = {},
     bottomContent: @Composable () -> Unit = {},
+    onBlankTap: (() -> Unit)? = null,
 ) {
     val isContentScrolled by remember(scrollBehavior) {
         derivedStateOf { scrollBehavior?.state?.let { it.contentOffset < 0f } ?: true }
@@ -248,6 +252,9 @@ fun GlassTopAppBar(
         backdrop = backdrop,
         largeTitle = largeTitle,
         subtitle = subtitle,
+        titleColor = titleColor,
+        largeTitleColor = largeTitleColor,
+        subtitleColor = subtitleColor,
         scrollBehavior = scrollBehavior,
         bandBrush = bandBrush,
         bandOverhang = bandOverhang,
@@ -266,6 +273,7 @@ fun GlassTopAppBar(
         navigationIcon = navigationIcon,
         actions = actions,
         bottomContent = bottomContent,
+        onBlankTap = onBlankTap,
     )
 }
 
@@ -287,6 +295,9 @@ fun GlassTopAppBar(
     backdrop: Backdrop? = null,
     largeTitle: String = title,
     subtitle: String = "",
+    titleColor: Color = MiuixTheme.colorScheme.onSurface,
+    largeTitleColor: Color = MiuixTheme.colorScheme.onSurface,
+    subtitleColor: Color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
     scrollBehavior: ScrollBehavior? = null,
     bandBrush: Brush = GlassTopAppBarDefaults.bandBrush(MiuixTheme.colorScheme.surface),
     bandOverhang: Dp = GlassTopAppBarDefaults.BandOverhang,
@@ -304,6 +315,7 @@ fun GlassTopAppBar(
     navigationIcon: @Composable () -> Unit = {},
     actions: @Composable RowScope.() -> Unit = {},
     bottomContent: @Composable () -> Unit = {},
+    onBlankTap: (() -> Unit)? = null,
 ) {
     // Buttons carry their own horizontal margin (see [GlassTopAppBarDefaults.ButtonPadding]), so
     // the trailing row needs no spacing of its own; the wrapper only pins them to the end.
@@ -380,9 +392,12 @@ fun GlassTopAppBar(
                 title = title,
                 modifier = contentModifier,
                 titleAlpha = titleAlpha,
+                titleColor = titleColor,
                 largeTitle = largeTitle,
+                largeTitleColor = largeTitleColor,
                 largeTitleBlurRadius = largeTitleBlurRadius,
                 subtitle = subtitle,
+                subtitleColor = subtitleColor,
                 color = Color.Transparent,
                 scrollBehavior = scrollBehavior,
                 defaultWindowInsetsPadding = defaultWindowInsetsPadding,
@@ -391,6 +406,7 @@ fun GlassTopAppBar(
                 navigationIcon = navigationIconWithPadding,
                 actions = actionsWithPadding,
                 bottomContent = bottomContent,
+                onBlankTap = onBlankTap,
             )
         }
     }
@@ -403,6 +419,8 @@ fun GlassTopAppBar(
  * [GlassTransformPopup], so the panel keeps the same blur and colour treatment as it grows.
  *
  * @param onClick Called when the button is tapped.
+ * @param onLongClick Called when the button is long-pressed. `null` (the default) keeps the plain
+ *   tap gesture; passing one upgrades the button to a combined click.
  * @param backdrop Optional [Backdrop] behind the glass. Inside [GlassTopAppBar] the button inherits
  *   the bar's backdrop and effective blur; elsewhere `null` gives the traditional [fill].
  * @param modifier The modifier applied to the button.
@@ -424,6 +442,7 @@ fun GlassIconButton(
     backdrop: Backdrop? = null,
     surfaceAlpha: Float = 1f,
     enabled: Boolean = true,
+    onLongClick: (() -> Unit)? = null,
     padding: Dp = LocalGlassTopAppBarContext.current?.buttonPadding ?: GlassTopAppBarDefaults.ButtonPadding,
     style: GlassStyle = LocalGlassTopAppBarContext.current?.style ?: GlassDefaults.Style,
     size: Dp = LocalGlassTopAppBarContext.current?.size ?: GlassTopAppBarDefaults.ButtonSize,
@@ -457,10 +476,11 @@ fun GlassIconButton(
         sharedKeepMaterial = topBarContext?.keepMaterial,
         pressed = pressed,
         modifier = modifier
-            .clickable(
+            .combinedClickable(
                 interactionSource = interactionSource,
                 indication = null,
                 onClick = onClick,
+                onLongClick = onLongClick,
                 enabled = enabled,
             ),
         content = content,
