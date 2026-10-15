@@ -3396,8 +3396,11 @@ private fun AiChatScreen(vm: AiTermuxViewModel, conversationId: String, onBack: 
                                     contentAlignment = Alignment.Center
                                 ) {
                                     if (vm.isLoading && !vm.isStreaming) {
+                                        // miuix 版转圈的绘制几何取 size 参数（默认 30dp），Modifier.size 只管
+                                        // Canvas 大小；不传 size 参数，圆弧按 30dp 画会溢出按钮圆罩
                                         top.yukonga.miuix.kmp.basic.CircularProgressIndicator(
-                                            modifier = Modifier.size(16.dp)
+                                            size = 16.dp,
+                                            strokeWidth = 2.dp
                                         )
                                     } else if (vm.isStreaming) {
                                         Icon(
