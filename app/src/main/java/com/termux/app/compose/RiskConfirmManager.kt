@@ -1779,7 +1779,8 @@ fun RiskConfirmDialogHost(
                         horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally
                     ) {
                         top.yukonga.miuix.kmp.basic.CircularProgressIndicator(
-                            modifier = androidx.compose.ui.Modifier.size(36.dp)
+                            size = 36.dp,
+                            strokeWidth = 3.dp
                         )
                         Spacer(Modifier.height(16.dp))
                         top.yukonga.miuix.kmp.basic.Button(

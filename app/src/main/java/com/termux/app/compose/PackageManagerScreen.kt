@@ -1363,7 +1363,8 @@ fun PackageManagerScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         CircularProgressIndicator(
-                            modifier = Modifier.size(24.dp)
+                            size = 24.dp,
+                            strokeWidth = 3.dp
                         )
                         Spacer(Modifier.width(12.dp))
                         Text(

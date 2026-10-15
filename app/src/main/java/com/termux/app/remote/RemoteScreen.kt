@@ -242,7 +242,7 @@ fun RemoteScreen(
                                     enabled = !isScanning.value
                                 ) {
                                     if (isScanning.value) {
-                                        CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                                        CircularProgressIndicator(size = 24.dp, strokeWidth = 2.dp)
                                     } else {
                                         Icon(
                                             imageVector = MiuixGlassIcons.Refresh,

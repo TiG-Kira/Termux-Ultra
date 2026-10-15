@@ -2655,7 +2655,7 @@ private fun AiSetupScreen(vm: AiTermuxViewModel, onBack: () -> Unit) {
                             color = if (isDark) Color(0xFF424242) else Color(0xFFE0E0E0)
                         )
                     ) {
-                        if (testing) top.yukonga.miuix.kmp.basic.CircularProgressIndicator(modifier = Modifier.size(18.dp))
+                        if (testing) top.yukonga.miuix.kmp.basic.CircularProgressIndicator(size = 18.dp, strokeWidth = 2.dp)
                         else Text("测试连接", color = MiuixTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
                     }
                     Button(
