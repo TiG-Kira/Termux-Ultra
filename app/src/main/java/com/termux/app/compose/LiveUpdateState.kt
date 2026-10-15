@@ -3,6 +3,7 @@ package com.termux.app.compose
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -41,6 +42,12 @@ object LiveUpdateState {
     /** 实时 log（流式追加，max ~ 20000 字符） */
     private val _pkgLog = MutableStateFlow("")
     val pkgLog: StateFlow<String> = _pkgLog.asStateFlow()
+
+    /**
+     * 包操作交互式输入通道：页面检测到需要用户输入（如 keep/replace 之类的 apt/dpkg 提示）时，
+     * 把用户的答案写到这里；AppShell.execStreaming 会把它转交给底层进程的标准输入，命令得以继续。
+     */
+    val pkgStdin = Channel<String>(Channel.UNLIMITED)
 
     /** 全局包操作协程 — 独立于 Activity/Composable 生命周期 */
     val pkgScope: CoroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob())

@@ -65,6 +65,7 @@ import com.termux.shared.termux.shell.TermuxShellUtils
 import com.termux.shared.termux.TermuxConstants
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import top.yukonga.miuix.kmp.glass.GlassIconButton
@@ -137,7 +138,8 @@ object AppShell {
         context: Context,
         command: String,
         timeout: Int = 60,
-        onOutput: (String) -> Unit
+        onOutput: (String) -> Unit,
+        stdin: Channel<String>? = null
     ): Pair<Int, String> = withContext(Dispatchers.IO) {
         val shell = resolveShell()
         if (shell == null) return@withContext Pair(-1, "找不到 shell")
@@ -175,6 +177,21 @@ object AppShell {
                 if (delta.isNotBlank()) onOutput(delta)
                 lastStdoutLen = outLen
                 lastStderrLen = errLen
+            }
+            // 交互式输入：把页面经 stdin 通道提交的答案转交给进程标准输入，让 apt/dpkg 的提示得以继续
+            if (stdin != null) {
+                var received = stdin.tryReceive().getOrNull()
+                while (received != null) {
+                    try {
+                        task?.getProcess()?.outputStream?.let { os ->
+                            os.write((received + "\n").toByteArray())
+                            os.flush()
+                        }
+                    } catch (_: Throwable) {
+                        // 进程可能已退出，忽略写入失败
+                    }
+                    received = stdin.tryReceive().getOrNull()
+                }
             }
             if (ec.hasExecuted() || rd.exitCode != null) break
         }
@@ -458,9 +475,9 @@ object PkgRepo {
         )
     }
 
-    suspend fun install(context: Context, name: String, onOutput: ((String) -> Unit)? = null): Pair<Boolean, String> {
+    suspend fun install(context: Context, name: String, onOutput: ((String) -> Unit)? = null, stdin: Channel<String>? = null): Pair<Boolean, String> {
         val cmd = "export DEBIAN_FRONTEND=noninteractive && pkg install -y ${shq(name)} 2>&1"
-        val (code, output) = if (onOutput != null) AppShell.execStreaming(context, cmd, timeout = 180, onOutput = onOutput)
+        val (code, output) = if (onOutput != null) AppShell.execStreaming(context, cmd, timeout = 180, onOutput = onOutput, stdin = stdin)
                              else AppShell.exec(context, cmd, timeout = 180)
         return (code == 0) to output
     }
@@ -541,23 +558,23 @@ object PkgRepo {
         return AptSimResult(feasible = feasible, willRemovePackages = willRemove)
     }
 
-    suspend fun uninstall(context: Context, name: String, onOutput: ((String) -> Unit)? = null): Pair<Boolean, String> {
+    suspend fun uninstall(context: Context, name: String, onOutput: ((String) -> Unit)? = null, stdin: Channel<String>? = null): Pair<Boolean, String> {
         val cmd = "export DEBIAN_FRONTEND=noninteractive && pkg uninstall -y ${shq(name)} 2>&1"
-        val (code, output) = if (onOutput != null) AppShell.execStreaming(context, cmd, timeout = 60, onOutput = onOutput)
+        val (code, output) = if (onOutput != null) AppShell.execStreaming(context, cmd, timeout = 60, onOutput = onOutput, stdin = stdin)
                              else AppShell.exec(context, cmd, timeout = 60)
         return (code == 0) to output
     }
 
-    suspend fun update(context: Context, onOutput: ((String) -> Unit)? = null): Pair<Boolean, String> {
+    suspend fun update(context: Context, onOutput: ((String) -> Unit)? = null, stdin: Channel<String>? = null): Pair<Boolean, String> {
         val cmd = "export DEBIAN_FRONTEND=noninteractive && pkg update 2>&1"
-        val (code, output) = if (onOutput != null) AppShell.execStreaming(context, cmd, timeout = 180, onOutput = onOutput)
+        val (code, output) = if (onOutput != null) AppShell.execStreaming(context, cmd, timeout = 180, onOutput = onOutput, stdin = stdin)
                              else AppShell.exec(context, cmd, timeout = 180)
         return (code == 0) to output
     }
 
-    suspend fun upgradeAll(context: Context, onOutput: ((String) -> Unit)? = null): Pair<Boolean, String> {
+    suspend fun upgradeAll(context: Context, onOutput: ((String) -> Unit)? = null, stdin: Channel<String>? = null): Pair<Boolean, String> {
         val cmd = "export DEBIAN_FRONTEND=noninteractive && pkg upgrade -y 2>&1"
-        val (code, output) = if (onOutput != null) AppShell.execStreaming(context, cmd, timeout = 300, onOutput = onOutput)
+        val (code, output) = if (onOutput != null) AppShell.execStreaming(context, cmd, timeout = 300, onOutput = onOutput, stdin = stdin)
                              else AppShell.exec(context, cmd, timeout = 300)
         return (code == 0) to output
     }
