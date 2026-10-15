@@ -439,8 +439,13 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
                 activeConversationTitle = DEFAULT_CONVERSATION_TITLE
                 synchronized(messages) { messages.clear() }
             } else {
-                selectConversation(ctx, fallback.id)
-                return
+                // 不能走 selectConversation：它开头的 persistConversations 会发现
+                // activeConversationId（刚删掉的这个）已不在列表中，转而把当前消息
+                // 快照作为一个新对话重新 add 回列表并写盘——删除被"复活"，
+                // 表现为要删两次才生效。这里先内联切状态，删完只落盘一次。
+                activeConversationId = fallback.id
+                activeConversationTitle = fallback.title
+                synchronized(messages) { messages.clear(); messages.addAll(fallback.messages) }
             }
         }
         persistConversations(ctx)
@@ -3485,10 +3490,41 @@ private fun AiChatScreen(vm: AiTermuxViewModel, conversationId: String, onBack: 
                 ) {
                     TaskBar(tasks, showTaskBar, onClose = { showTaskBar = false }, onClear = { SkillExecutor.clearTasks() })
                 }
+                // 两个弹窗必须在 Scaffold 内部：OverlayDialog 的 DialogState 只有注册进
+                // Scaffold 提供的 LocalDialogStates，才会被内置 MiuixPopupHost 渲染；
+                // 挂在根 Box（Scaffold 外）时点击只改状态、弹窗不显示。
+                OverlayDialog(
+                    show = showClearConfirm,
+                    onDismissRequest = { showClearConfirm = false },
+                    title = "清空对话历史",
+                    summary = "将删除当前所有对话内容，此操作不可撤销。",
+                    content = {
+                        Row(horizontalArrangement = Arrangement.SpaceBetween) {
+                            TextButton(text = "取消", onClick = { showClearConfirm = false }, modifier = Modifier.weight(1f))
+                            Spacer(Modifier.width(16.dp))
+                            TextButton(
+                                text = "清空",
+                                onClick = {
+                                    vm.clearHistory()
+                                    showClearConfirm = false
+                                    SnackbarHelper.show(ctx, "对话历史已清空", Snackbar.LENGTH_SHORT)
+                                },
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.textButtonColors(color = StatusError)
+                            )
+                        }
+                    }
+                )
+                AgentFullHistoryDialog(
+                    show = showFullHistoryDialog,
+                    onDismiss = { showFullHistoryDialog = false },
+                    context = ctx,
+                    initialConversationId = conversationId
+                )
             }
         }
 
-        // 玻璃「更多」菜单 + 清空确认弹窗：挂在根 Box，避免被顶栏裁剪 / 坐标错位
+        // 玻璃「更多」菜单：挂在根 Box，避免被顶栏裁剪 / 坐标错位
         GlassTransformPopup(
             show = showMoreMenu,
             onDismissRequest = { showMoreMenu = false },
@@ -3508,34 +3544,6 @@ private fun AiChatScreen(vm: AiTermuxViewModel, conversationId: String, onBack: 
             GlassPopupItem(text = "导出对话（分享）", onClick = { showMoreMenu = false; vm.exportConversation(ctx) })
             GlassPopupItem(text = "清空对话历史", onClick = { showMoreMenu = false; showClearConfirm = true })
         }
-        OverlayDialog(
-            show = showClearConfirm,
-            onDismissRequest = { showClearConfirm = false },
-            title = "清空对话历史",
-            summary = "将删除当前所有对话内容，此操作不可撤销。",
-            content = {
-                Row(horizontalArrangement = Arrangement.SpaceBetween) {
-                    TextButton(text = "取消", onClick = { showClearConfirm = false }, modifier = Modifier.weight(1f))
-                    Spacer(Modifier.width(16.dp))
-                    TextButton(
-                        text = "清空",
-                        onClick = {
-                            vm.clearHistory()
-                            showClearConfirm = false
-                            SnackbarHelper.show(ctx, "对话历史已清空", Snackbar.LENGTH_SHORT)
-                        },
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.textButtonColors(color = StatusError)
-                    )
-                }
-            }
-        )
-        AgentFullHistoryDialog(
-            show = showFullHistoryDialog,
-            onDismiss = { showFullHistoryDialog = false },
-            context = ctx,
-            initialConversationId = conversationId
-        )
     }
 
     // 风险命令确认弹窗
