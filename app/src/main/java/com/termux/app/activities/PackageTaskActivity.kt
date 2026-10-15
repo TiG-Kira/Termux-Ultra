@@ -8,6 +8,14 @@ import android.view.WindowManager
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -23,8 +31,12 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.CircularProgressIndicator
+import top.yukonga.miuix.kmp.basic.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -36,9 +48,13 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -129,13 +145,13 @@ object PkgTaskRunner {
         LiveUpdateState.pkgScope.launch {
             val result = when (operation) {
                 LiveUpdateState.PkgOperation.INSTALL ->
-                    PkgRepo.install(context, packageName, onOutput = { LiveUpdateState.appendPkgLog(it) })
+                    PkgRepo.install(context, packageName, onOutput = { LiveUpdateState.appendPkgLog(it) }, stdin = LiveUpdateState.pkgStdin)
                 LiveUpdateState.PkgOperation.UNINSTALL ->
-                    PkgRepo.uninstall(context, packageName, onOutput = { LiveUpdateState.appendPkgLog(it) })
+                    PkgRepo.uninstall(context, packageName, onOutput = { LiveUpdateState.appendPkgLog(it) }, stdin = LiveUpdateState.pkgStdin)
                 LiveUpdateState.PkgOperation.UPDATE ->
-                    PkgRepo.update(context, onOutput = { LiveUpdateState.appendPkgLog(it) })
+                    PkgRepo.update(context, onOutput = { LiveUpdateState.appendPkgLog(it) }, stdin = LiveUpdateState.pkgStdin)
                 LiveUpdateState.PkgOperation.UPGRADE ->
-                    PkgRepo.upgradeAll(context, onOutput = { LiveUpdateState.appendPkgLog(it) })
+                    PkgRepo.upgradeAll(context, onOutput = { LiveUpdateState.appendPkgLog(it) }, stdin = LiveUpdateState.pkgStdin)
             }
             LiveUpdateState.finishPkg(result.first)
         }
@@ -174,6 +190,45 @@ private fun PackageTaskScreen(onClose: () -> Unit) {
     var lockDialogDismissed by remember { mutableStateOf(false) }
     LaunchedEffect(snap?.finished == false) {
         if (snap != null && !snap.finished) lockDialogDismissed = false
+    }
+
+    // ===== 交互式输入（apt/dpkg 提示需要用户输入时）=====
+    var inputPrompt by remember { mutableStateOf<String?>(null) }
+    var userInput by remember { mutableStateOf("") }
+    var inputOpen by remember { mutableStateOf(false) }
+    var lastConsumedLogLen by remember { mutableStateOf(0) }
+    val focusRequester = remember { FocusRequester() }
+    val navBarPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+
+    // 监听流式日志：检测到需要用户输入的提示（keep/replace、conffile、[Y/n]、*** 等）才弹出输入卡
+    LaunchedEffect(log) {
+        val newLen = log.length
+        if (newLen > lastConsumedLogLen) {
+            val chunk = log.substring(lastConsumedLogLen)
+            val prompt = detectPkgPrompt(chunk)
+            if (prompt != null) {
+                inputPrompt = prompt
+                userInput = ""
+                inputOpen = true
+            }
+        }
+        lastConsumedLogLen = newLen
+    }
+
+    // 任务结束后强制收起输入卡
+    LaunchedEffect(snap?.finished) {
+        if (snap != null && snap.finished) inputOpen = false
+    }
+
+    // 输入卡出现时自动聚焦输入框，弹出软键盘
+    LaunchedEffect(inputOpen) {
+        if (inputOpen) focusRequester.requestFocus()
+    }
+
+    fun submitPkgInput() {
+        LiveUpdateState.pkgStdin.trySend(userInput)
+        userInput = ""
+        inputOpen = false
     }
 
     Scaffold(
@@ -248,8 +303,73 @@ private fun PackageTaskScreen(onClose: () -> Unit) {
                     )
                 } else {
                     CircularProgressIndicator(
-                        modifier = Modifier.size(22.dp)
+                        modifier = Modifier.size(22.dp),
+                        size = 22.dp,
+                        strokeWidth = 2.5.dp
                     )
+                }
+            }
+            // 交互式输入卡：仅当检测到 apt/dpkg 需要用户输入（保留/替换、conffile、[Y/n] 等）时弹出；
+            // 不需要时（无提示或任务结束）保持隐藏，显示/隐藏均使用优雅的非线性弹簧+淡入淡出动画
+            AnimatedVisibility(
+                visible = inputOpen,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(start = 16.dp, end = 16.dp, bottom = 92.dp + navBarPadding),
+                enter = slideInVertically(
+                    initialOffsetY = { it },
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioMediumBouncy,
+                        stiffness = Spring.StiffnessMedium
+                    )
+                ) + fadeIn(animationSpec = tween(200)),
+                exit = slideOutVertically(
+                    targetOffsetY = { it },
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioNoBouncy,
+                        stiffness = Spring.StiffnessMedium
+                    )
+                ) + fadeOut(animationSpec = tween(160))
+            ) {
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(
+                            text = "需要你的输入才能继续：",
+                            fontSize = 13.sp,
+                            color = MiuixTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            text = inputPrompt ?: "",
+                            fontSize = 12.sp,
+                            fontFamily = FontFamily.Monospace,
+                            color = MiuixTheme.colorScheme.onSurface,
+                            lineHeight = 16.sp
+                        )
+                        Spacer(Modifier.height(10.dp))
+                        TextField(
+                            value = userInput,
+                            onValueChange = { userInput = it },
+                            label = "输入应答后回车发送（如 Y / N / 回车）",
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                            keyboardActions = KeyboardActions(onSend = { submitPkgInput() }),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .focusRequester(focusRequester)
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End
+                        ) {
+                            TextButton(
+                                text = "发送",
+                                onClick = { submitPkgInput() }
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -327,4 +447,25 @@ private fun isLockError(log: String): Boolean {
         lower.contains("/var/lib/dpkg/lock") ||
         lower.contains("/var/cache/apt/archives/lock") ||
         lower.contains("cache/apt/archives/lock")
+}
+
+/**
+ * apt/dpkg 交互式提示识别：在新增日志片段里找「阻塞式等待用户输入」的提示行。
+ * 这类提示总是出现在流式输出的末尾，因此只检查片段末尾若干行即可，避免历史日志误命中。
+ * 覆盖：apt 的 [Y/n] 确认、dpkg conffile 的 保留/替换 提示、apt-listbugs/listchanges 的 `*** ` 提示等。
+ */
+private val PKG_PROMPT_RE = Regex(
+    """(\[[Yy]/[Nn]\]|\[[Yy]/[nN]\]|\[y/N\]|\[YES/no\]|\[yes/no\]|do you want to continue\?|would you like to do about it|install the package maintainer|keep the current version|keep your currently|modified.*conffile|conffile .* modified|configuration file .* has been|press \[enter\]|^\*\*\* )""",
+    RegexOption.IGNORE_CASE
+)
+
+private fun detectPkgPrompt(chunk: String): String? {
+    val lines = chunk.lines()
+    val start = (lines.size - 8).coerceAtLeast(0)
+    for (i in (lines.size - 1) downTo start) {
+        val line = lines[i].trim()
+        if (line.isEmpty()) continue
+        if (PKG_PROMPT_RE.containsMatchIn(line)) return line
+    }
+    return null
 }
