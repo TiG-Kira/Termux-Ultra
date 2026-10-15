@@ -1468,9 +1468,6 @@ internal object TerminalKeyboardLayoutCalculator {
     }
 }
 
-/** 单个按键的最小宽度：低于此值等分出来的键点不中，改用横向滚动。 */
-private val MIN_KEY_WIDTH = TerminalKeyboardLayoutCalculator.MIN_KEY_WIDTH
-
 /**
  * 小键盘按键标签的字号策略：优先 11.sp，放不下就自动缩小字号，而不是截断成省略号。
  *
