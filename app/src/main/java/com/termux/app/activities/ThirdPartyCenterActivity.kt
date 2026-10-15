@@ -281,7 +281,7 @@ class ThirdPartyCenterActivity : ComponentActivity() {
                                         style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Bold, color = MiuixTheme.colorScheme.onSurface)
                                     )
                                     Text(
-                                        text = "以下资源由第三方开发者提供，Termux Ultra 不对其内容及安全性负责。请自行评估风险后使用。",
+                                        text = "以下资源由第三方开发者提供，您可以自主编辑此资源列表。Termux Ultra 不对其内容及安全性负责。请自行评估风险后使用。",
                                         style = TextStyle(fontSize = 13.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary),
                                         modifier = Modifier.padding(top = 4.dp)
                                     )
@@ -536,7 +536,7 @@ class ThirdPartyCenterActivity : ComponentActivity() {
                     id = "preset_moe",
                     name = "TMOE Linux Manager",
                     description = "TMOE Linux 管理器，一键配置 chroot/PRoot 容器、安装各种 Linux 发行版",
-                    script = "awk -f <(curl -L gitee.com/mo2/linux/raw/2/2.awk)",
+                    script = "awk -f <(curl -L gitee.com/mo2/linux/raw/2/2.awk)>",
                     url = "https://github.trss.me/Install/TMOE.html",
                     type = "moe_awk"
                 ),
