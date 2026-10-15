@@ -71,17 +71,19 @@ class TextEditorHomeActivity : ComponentActivity() {
                         onNewFile = { openEditor(null) },
                         onPickFile = { showInternalPicker = true },
                         onOpenRecent = { path -> openEditor(path) },
-                        onImportSystemFile = { filePickerLauncher.launch("*/*") }
-                    )
-
-                    TermuxInternalFilePicker(
-                        show = showInternalPicker,
-                        title = "选择文件",
-                        allowFolders = false,
-                        onDismiss = { showInternalPicker = false },
-                        onFileSelected = { path ->
-                            showInternalPicker = false
-                            openEditor(path)
+                        onImportSystemFile = { filePickerLauncher.launch("*/*") },
+                        // 文件选择器必须挂在页面 Scaffold 内，挂在外层只改状态不显示
+                        overlayContent = {
+                            TermuxInternalFilePicker(
+                                show = showInternalPicker,
+                                title = "选择文件",
+                                allowFolders = false,
+                                onDismiss = { showInternalPicker = false },
+                                onFileSelected = { path ->
+                                    showInternalPicker = false
+                                    openEditor(path)
+                                }
+                            )
                         }
                     )
                 }
