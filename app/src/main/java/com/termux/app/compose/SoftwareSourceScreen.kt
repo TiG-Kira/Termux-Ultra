@@ -535,7 +535,7 @@ private fun SourceCard(
                     // Ping
                     GlassIconButton(onClick = onPing) {
                         if (isPinging) {
-                            CircularProgressIndicator(modifier = Modifier.size(20.dp))
+                            CircularProgressIndicator(size = 20.dp, strokeWidth = 2.dp)
                         } else {
                             val color = when {
                                 pingResult == null -> MiuixTheme.colorScheme.onSurfaceVariantSummary

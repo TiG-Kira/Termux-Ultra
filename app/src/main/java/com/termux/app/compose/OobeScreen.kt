@@ -1132,7 +1132,7 @@ private fun OobePermissionPage(
             when {
                 isPermissionLoading -> {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        CircularProgressIndicator(modifier = Modifier.size(40.dp))
+                        CircularProgressIndicator(size = 40.dp)
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
                             text = "正在读取权限状态...",
@@ -1495,7 +1495,7 @@ private fun OobeInstallPage(
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
-                        CircularProgressIndicator(modifier = Modifier.size(56.dp))
+                        CircularProgressIndicator(size = 56.dp)
                         Spacer(modifier = Modifier.height(24.dp))
                         Text(
                             text = "正在下载终端运行环境...",
@@ -1512,7 +1512,7 @@ private fun OobeInstallPage(
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
-                        CircularProgressIndicator(modifier = Modifier.size(56.dp))
+                        CircularProgressIndicator(size = 56.dp)
                         Spacer(modifier = Modifier.height(24.dp))
                         Text(
                             text = "正在安装终端运行环境...",
@@ -1529,7 +1529,7 @@ private fun OobeInstallPage(
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
-                        CircularProgressIndicator(modifier = Modifier.size(56.dp))
+                        CircularProgressIndicator(size = 56.dp)
                         Spacer(modifier = Modifier.height(24.dp))
                         Text(
                             text = "正在配置终端环境...",
@@ -1567,7 +1567,7 @@ private fun OobeInstallPage(
                             modifier = Modifier.size(72.dp).clip(androidx.compose.foundation.shape.CircleShape).background(MiuixTheme.colorScheme.surfaceVariant),
                             contentAlignment = Alignment.Center
                         ) {
-                            CircularProgressIndicator(modifier = Modifier.size(36.dp))
+                            CircularProgressIndicator(size = 36.dp)
                         }
                         Spacer(modifier = Modifier.height(24.dp))
                         Text(

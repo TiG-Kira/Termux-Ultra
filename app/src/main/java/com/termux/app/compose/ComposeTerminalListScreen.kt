@@ -222,7 +222,7 @@ fun ComposeTerminalListScreen(
                 contentAlignment = Alignment.Center
             ) {
                 CircularProgressIndicator(
-                    modifier = Modifier.size(36.dp),
+                    size = 36.dp,
                     strokeWidth = 3.dp
                 )
             }
