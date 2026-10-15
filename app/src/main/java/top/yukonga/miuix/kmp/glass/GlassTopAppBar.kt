@@ -99,6 +99,23 @@ object GlassTopAppBarDefaults {
         }
     }
 
+    /**
+     * Like [collapseRamp] but driven by the caller's own overlap flag instead of scroll distance.
+     *
+     * Self-scrolling pages (`animateScrollTo` / `animateScrollToItem`) never feed `contentOffset`,
+     * so their [collapseRamp] sits at 0 and the pills keep no shadow even though the band and the
+     * button material have already turned on. Those pages carry the scroll state themselves as
+     * `isContentScrolled`; this rides that same flag on the same timed transition.
+     */
+    @Composable
+    fun overlayRamp(isContentScrolled: Boolean): State<Float> {
+        val transition = updateTransition(isContentScrolled, label = "glassTopBarOverlayRamp")
+        return transition.animateFloat(
+            transitionSpec = { GlassMotion.topBarButtonFloat() },
+            label = "glassTopBarOverlayRampValue",
+        ) { if (it) 1f else 0f }
+    }
+
     /** The traditional fill used when backdrop material is unavailable. */
     @Composable
     fun buttonFill(): Color = if (isDarkTheme()) Color(0xFF2C2C2C) else Color.White
@@ -285,6 +302,12 @@ fun GlassTopAppBar(
  *   pass `listState.canScrollBackward`. This clears the material when the page returns to the top
  *   even if the large title stays collapsed. Other parameters behave as in the scroll-behaviour
  *   overload.
+ * @param rampFromOverlay Drive the button shadow from [isContentScrolled] instead of the scroll
+ *   distance. Enable it for pages that scroll themselves (`animateScrollTo` /
+ *   `animateScrollToItem`) yet still pass a `scrollBehavior` for the collapse: those never feed
+ *   `contentOffset`, so the default ramp sits at 0 and the pills keep no shadow even though their
+ *   band and material turned on. Gesture-driven pages should leave it off, keeping the shadow's
+ *   gradual ramp over `RampDistance`.
  */
 @Composable
 fun GlassTopAppBar(
@@ -316,6 +339,7 @@ fun GlassTopAppBar(
     actions: @Composable RowScope.() -> Unit = {},
     bottomContent: @Composable () -> Unit = {},
     onBlankTap: (() -> Unit)? = null,
+    rampFromOverlay: Boolean = false,
 ) {
     // Buttons carry their own horizontal margin (see [GlassTopAppBarDefaults.ButtonPadding]), so
     // the trailing row needs no spacing of its own; the wrapper only pins them to the end.
@@ -331,7 +355,12 @@ fun GlassTopAppBar(
     val navigationIconWithPadding: @Composable () -> Unit = {
         Box(modifier = Modifier.padding(horizontal = buttonPadding)) { navigationIcon() }
     }
-    val ramp = GlassTopAppBarDefaults.collapseRamp(scrollBehavior)
+    val contentOffsetRamp = GlassTopAppBarDefaults.collapseRamp(scrollBehavior)
+    // 自滚动页面（animateScrollTo / animateScrollToItem）拿不到 contentOffset，上一行会一直停在 0，
+    // 连带把玻璃按钮的阴影吃掉；这类页面已用 isContentScrolled 自行接管滚动判定，
+    // 开启 rampFromOverlay 后阴影改由同一枚标记驱动，与 band / 按钮材质同步。
+    val overlayRampState = GlassTopAppBarDefaults.overlayRamp(isContentScrolled)
+    val ramp = if (rampFromOverlay) overlayRampState else contentOffsetRamp
     val floating = isContentScrolled
     val transition = updateTransition(floating, label = "glassTopBarFloat")
     val maskProgress = transition.animateFloat(
