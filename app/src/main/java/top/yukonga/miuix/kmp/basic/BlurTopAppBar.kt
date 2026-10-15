@@ -42,6 +42,7 @@ import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
@@ -94,6 +95,10 @@ import kotlin.math.abs
  * @param actionIconPadding The end padding of the action icons.
  * @param titleAlpha Draw-phase opacity applied to both title containers.
  * @param bottomContent Content displayed below the title bar area.
+ * @param onBlankTap Tap callback for the blank area of the bar. The bar swallows every tap it
+ *   receives so nothing leaks to the content underneath; children (navigation icon, actions) are
+ *   hit first and keep their own gestures, so this only fires on the empty stretch between them.
+ *   `null` keeps the original swallow-only behaviour.
  */
 @Composable
 fun BlurTopAppBar(
@@ -115,6 +120,7 @@ fun BlurTopAppBar(
     actionIconPadding: Dp = TopAppBarDefaults.ActionIconPadding,
     titleAlpha: () -> Float = { 1f },
     bottomContent: @Composable () -> Unit = {},
+    onBlankTap: (() -> Unit)? = null,
 ) {
     // Wrap the given actions in a Row.
     val actionsRow =
@@ -149,6 +155,7 @@ fun BlurTopAppBar(
         modifier = modifier,
         defaultWindowInsetsPadding = defaultWindowInsetsPadding,
         bottomContent = bottomContent,
+        onBlankTap = onBlankTap,
     )
 }
 @Composable
@@ -171,11 +178,13 @@ private fun TopAppBarLayout(
     defaultWindowInsetsPadding: Boolean = true,
     titleAlpha: () -> Float = { 1f },
     bottomContent: @Composable () -> Unit = {},
+    onBlankTap: (() -> Unit)? = null,
 ) {
     // Producer lambdas — reads stay in layout/draw phases so scroll never recomposes this subtree.
     val scrolledOffset = remember(scrollBehavior) {
         { scrollBehavior?.state?.heightOffset ?: 0f }
     }
+    val currentOnBlankTap = rememberUpdatedState(onBlankTap)
     // The title does not merely fade out — it goes out of focus on the way, the way the source
     // system dissolves it. `progress` is shared by both so the blur peaks exactly as the last of
     // the title goes, instead of stopping short of it or outliving it.
@@ -330,6 +339,9 @@ private fun TopAppBarLayout(
                         text = subtitle,
                         color = animatedSubtitleColor,
                         style = MiuixTheme.textStyles.body2,
+                        maxLines = 1,
+                        softWrap = false,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
             }
@@ -350,8 +362,10 @@ private fun TopAppBarLayout(
             )
             .clipToBounds()
             .windowInsetsPadding(WindowInsets.systemBars.only(WindowInsetsSides.Top))
+            // 手势块以 Unit 为 key 只起一次，必须经 remembered state 读回调，
+            // 否则捕获的是首帧的 onBlankTap——调用方后续换命令（如展开/收缩切换）不会生效。
             .pointerInput(Unit) {
-                detectTapGestures { /* Consume click */ }
+                detectTapGestures(onTap = { currentOnBlankTap.value?.invoke() })
             },
     ) { measurables, constraints ->
         val navigationIconPlaceable =
@@ -393,9 +407,12 @@ private fun TopAppBarLayout(
                     ),
                 )
 
+        // 收缩态副标题只占一行：宽度被两侧控件挤到极限（窄于 SmallSubtitleMinWidth）时
+        // 直接不显示——与其留一个纯省略号，不如让位给标题（与收缩态标题的让位逻辑一致）。
         val smallSubtitlePlaceable =
             measurables
                 .firstOrNull { it.layoutId == "smallSubtitle" }
+                ?.takeIf { titleMaxWidth >= SmallSubtitleMinWidth.roundToPx() }
                 ?.measure(constraints.copy(minWidth = 0, maxWidth = titleMaxWidth, minHeight = 0))
 
         val bottomContentPlaceable =
@@ -483,3 +500,6 @@ private fun TopAppBarLayout(
 
 // 上游私有常量，原与 TopAppBarLayout 同处 TopAppBar.kt，vendor 拆文件后需一并带走。
 private const val TITLE_WIDTH_FRACTION = 0.9
+
+// 收缩态副标题的可见下限：安全区窄于此宽度直接不显示（只留一个省略号没有意义）。
+private val SmallSubtitleMinWidth: Dp = 96.dp
