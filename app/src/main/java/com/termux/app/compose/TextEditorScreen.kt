@@ -14,6 +14,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.flow.collectLatest
 import androidx.compose.ui.Alignment
@@ -68,11 +69,11 @@ fun TextEditorScreen(
     // 本页在 MainScreen 取景层之外，自建一层供玻璃顶栏折射页面内容
     val glassPage = rememberGlassPageBackdrop()
     val scrollBehavior = MiuixScrollBehavior()
-    var currentFilePath by remember { mutableStateOf(filePath) }
+    var currentFilePath by rememberSaveable { mutableStateOf(filePath) }
     val file = remember(currentFilePath) { currentFilePath?.let { File(it) } }
     val lang = remember(file) { SyntaxHighlighter.detectLanguage(file) }
     var content by remember { mutableStateOf(initialContent) }
-    var modified by remember { mutableStateOf(false) }
+    var modified by rememberSaveable { mutableStateOf(false) }
     var showPermissionDialog by remember { mutableStateOf(false) }
     var showConfirmExit by remember { mutableStateOf(false) }
 
@@ -82,7 +83,7 @@ fun TextEditorScreen(
     var pickedDir by remember { mutableStateOf<String?>(null) }
     var fileNameInput by remember { mutableStateOf("") }
     var pendingExitAfterSave by remember { mutableStateOf(false) }
-    var wordWrap by remember { mutableStateOf(false) }
+    var wordWrap by rememberSaveable { mutableStateOf(false) }
 
     // 拦截系统返回键/侧滑手势：在有未保存修改时弹出确认对话框，防止数据意外丢失
     BackHandler(enabled = modified && !readOnly) {

@@ -11,6 +11,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.core.view.WindowCompat
 import androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner
@@ -37,7 +38,7 @@ class TextEditorHomeActivity : ComponentActivity() {
 
             // 文件选择器：从系统选择文件后，拿到路径再打开编辑器
             var pendingOpenPath by remember { mutableStateOf<String?>(null) }
-            var showInternalPicker by remember { mutableStateOf(false) }
+            var showInternalPicker by rememberSaveable { mutableStateOf(false) }
 
             val filePickerLauncher = rememberLauncherForActivityResult(
                 contract = ActivityResultContracts.GetContent()
