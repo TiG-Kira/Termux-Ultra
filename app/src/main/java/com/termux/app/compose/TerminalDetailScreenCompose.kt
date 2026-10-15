@@ -101,6 +101,7 @@ import kotlin.math.roundToInt
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.HorizontalDivider
+import top.yukonga.miuix.kmp.basic.DropdownDefaults
 import top.yukonga.miuix.kmp.basic.DropdownEntry
 import top.yukonga.miuix.kmp.basic.DropdownItem
 import top.yukonga.miuix.kmp.basic.Icon
@@ -117,7 +118,7 @@ import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.glass.ChevronBackward
 import top.yukonga.miuix.kmp.icon.glass.MiuixGlassIcons
-import top.yukonga.miuix.kmp.menu.OverlayIconDropdownMenu
+import top.yukonga.miuix.kmp.popup.OverlayDropdownPopup
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
@@ -559,6 +560,9 @@ fun TerminalDetailScreenCompose(
         // 极简模式（isTopBarCollapsed）收起动作区时，按钮只是被裁到 0 宽——命中区还在，
         // 点上去照样触发。所以整组按钮统一按该状态关闭手势，收起即彻底不可点。
         val actionsEnabled = !isTopBarCollapsed
+        var showAddSessionMenu by remember { mutableStateOf(false) }
+        // 收起动作区时若菜单还开着，直接关掉，避免按钮隐了菜单还浮着。
+        LaunchedEffect(actionsEnabled) { if (!actionsEnabled) showAddSessionMenu = false }
         GlassTerminalBarActionsPanel {
             GlassTerminalBarPanelButton(
                 onClick = { updateInteractionTime(); showSessionList = true },
@@ -591,18 +595,30 @@ fun TerminalDetailScreenCompose(
                     tint = effectiveTopBarContentColor
                 )
             }
-            OverlayIconDropdownMenu(
-                entry = addSessionEntry,
-                enabled = actionsEnabled,
-                backgroundColor = Color.Transparent,
-                minWidth = 40.dp,
-                minHeight = 40.dp
-            ) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_add),
-                    contentDescription = null,
-                    modifier = Modifier.size(24.dp),
-                    tint = effectiveTopBarContentColor
+            // 「+」原先走 OverlayIconDropdownMenu（内部是 miuix IconButton），按压反馈与其它按钮
+            // 不是一套，看着不像一组。这里改成和其余四键同款的 GlassTerminalBarPanelButton，
+            // 菜单弹层外挂到同一个 Box 里——弹层按自身布局坐标定位，位置与原先一致。
+            Box {
+                GlassTerminalBarPanelButton(
+                    onClick = { updateInteractionTime(); showAddSessionMenu = true },
+                    enabled = actionsEnabled,
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_add),
+                        contentDescription = null,
+                        modifier = Modifier.size(24.dp),
+                        tint = effectiveTopBarContentColor
+                    )
+                }
+                OverlayDropdownPopup(
+                    entry = addSessionEntry,
+                    show = showAddSessionMenu,
+                    onDismiss = { showAddSessionMenu = false },
+                    onDismissFinished = { showAddSessionMenu = false },
+                    maxHeight = null,
+                    dropdownColors = DropdownDefaults.dropdownColors(),
+                    renderInRootScaffold = true,
+                    collapseOnSelection = true,
                 )
             }
             GlassTerminalBarPanelButton(
