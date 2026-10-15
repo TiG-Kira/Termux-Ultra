@@ -536,7 +536,7 @@ class ThirdPartyCenterActivity : ComponentActivity() {
                     id = "preset_moe",
                     name = "TMOE Linux Manager",
                     description = "TMOE Linux 管理器，一键配置 chroot/PRoot 容器、安装各种 Linux 发行版",
-                    script = "awk -f <(curl -L gitee.com/mo2/linux/raw/2/2.awk)>",
+                    script = "curl -L --fail https://gitee.com/mo2/linux/raw/2/2.awk -o 2.awk | awk -f 2.awk",
                     url = "https://github.trss.me/Install/TMOE.html",
                     type = "moe_awk"
                 ),
