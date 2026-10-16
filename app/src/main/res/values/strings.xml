@@ -773,6 +773,21 @@
     <string name="font_download_failed">Failed to download font %1$s, check your network and retry</string>
     <string name="font_missing_fallback">Font %1$s is unavailable, reverted to default font</string>
 
+    <!-- Styling theme source (libterminal 4.1.0 / custom theme) -->
+    <string name="theme_source_styling">Termux:Styling Theme</string>
+    <string name="theme_source_styling_desc">Use Termux:Styling color presets</string>
+    <string name="theme_source_libterminal">LibTerminal Theme</string>
+    <string name="theme_source_libterminal_desc">Use built-in LibTerminal color themes</string>
+    <string name="theme_source_custom">Custom Theme</string>
+    <string name="theme_source_custom_desc">Pick your own background and font colors</string>
+    <string name="preset_theme">Preset Theme</string>
+    <string name="custom_bg_color">Background Color</string>
+    <string name="custom_fg_color">Font Color</string>
+    <string name="font_not_installed">Not installed</string>
+    <string name="color_red">Red</string>
+    <string name="color_green">Green</string>
+    <string name="color_blue">Blue</string>
+
     <!-- Tasker -->
     <string name="title_tasker_settings">Tasker Settings</string>
     <string name="tasker_executable_header">Executable</string>
