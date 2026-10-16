@@ -3148,32 +3148,7 @@ private fun AiChatScreen(vm: AiTermuxViewModel, conversationId: String, onBack: 
             showFirstTrainHint = true
         }
     }
-    top.yukonga.miuix.kmp.overlay.OverlayDialog(
-        title = "让本地模型越用越懂 Termux 操作",
-        summary = "检测到您现在使用的是本地模型。可前往设置页 → Termux Agent → 「训练本地模型」进行 System Prompt 蒸馏训练：\n\n• 如果配置了备用在线大模型，将由在线老师全自动出题、批改、评分，并自动把每轮的教训追加到 System Prompt 末尾。\n• 如果没有备用在线大模型，您可以手动打分并给出改进建议，系统还会提供启发式参考评分。",
-        show = showFirstTrainHint,
-        onDismissRequest = { showFirstTrainHint = false; AiTermuxPrefs.markTrainHintShown(ctx) },
-        content = {
-            androidx.compose.foundation.layout.Column {
-                top.yukonga.miuix.kmp.basic.TextButton(
-                    text = "现在去训练（推荐）",
-                    onClick = {
-                        showFirstTrainHint = false
-                        AiTermuxPrefs.markTrainHintShown(ctx)
-                        val it = android.content.Intent(ctx, com.termux.app.activities.AiLocalTrainerActivity::class.java)
-                        ctx.startActivity(it)
-                    },
-                    modifier = androidx.compose.ui.Modifier.fillMaxWidth()
-                )
-                androidx.compose.foundation.layout.Spacer(androidx.compose.ui.Modifier.height(6.dp))
-                top.yukonga.miuix.kmp.basic.TextButton(
-                    text = "稍后再说",
-                    onClick = { showFirstTrainHint = false; AiTermuxPrefs.markTrainHintShown(ctx) },
-                    modifier = androidx.compose.ui.Modifier.fillMaxWidth()
-                )
-            }
-        }
-    )
+
     LaunchedEffect(vm.messages.size, vm.isLoading) {
         if (vm.messages.isNotEmpty()) listState.animateScrollToItem(vm.messages.size - 1)
     }
@@ -3520,6 +3495,35 @@ private fun AiChatScreen(vm: AiTermuxViewModel, conversationId: String, onBack: 
                     onDismiss = { showFullHistoryDialog = false },
                     context = ctx,
                     initialConversationId = conversationId
+                )
+
+                // 首次进入对话页：提示训练本地模型
+                // 必须挂在 Scaffold 内才会被 MiuixPopupHost 渲染，挂外层只改状态不显示
+                OverlayDialog(
+                    title = "让本地模型越用越懂 Termux 操作",
+                    summary = "检测到您现在使用的是本地模型。可前往设置页 → Termux Agent → 「训练本地模型」进行 System Prompt 蒸馏训练：\n\n• 如果配置了备用在线大模型，将由在线老师全自动出题、批改、评分，并自动把每轮的教训追加到 System Prompt 末尾。\n• 如果没有备用在线大模型，您可以手动打分并给出改进建议，系统还会提供启发式参考评分。",
+                    show = showFirstTrainHint,
+                    onDismissRequest = { showFirstTrainHint = false; AiTermuxPrefs.markTrainHintShown(ctx) },
+                    content = {
+                        Column {
+                            TextButton(
+                                text = "现在去训练（推荐）",
+                                onClick = {
+                                    showFirstTrainHint = false
+                                    AiTermuxPrefs.markTrainHintShown(ctx)
+                                    val it = android.content.Intent(ctx, com.termux.app.activities.AiLocalTrainerActivity::class.java)
+                                    ctx.startActivity(it)
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            Spacer(Modifier.height(6.dp))
+                            TextButton(
+                                text = "稍后再说",
+                                onClick = { showFirstTrainHint = false; AiTermuxPrefs.markTrainHintShown(ctx) },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                    }
                 )
             }
         }
