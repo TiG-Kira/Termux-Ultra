@@ -158,8 +158,9 @@ fun PackageDetailScreen(
 
     LaunchedEffect(pkg.name) {
         isLoading = true
+        // getDetail 的 version 是仓库候选版本，需保留调用方注入的 upgradeToVersion 与已安装版本语义
         val d = PkgRepo.getDetail(context, pkg.name) ?: pkg
-        detail = d
+        detail = d.copy(upgradeToVersion = pkg.upgradeToVersion)
 
         // 并行加载已安装包名和依赖/冲突详情
         val installed = PkgRepo.getInstalled(context)
@@ -194,11 +195,18 @@ fun PackageDetailScreen(
         taskLauncher.launch(PackageTaskActivity.newTaskIntent(context, op, pkg.name))
     }
 
+    // 升级已安装包：UPGRADE 携带包名即单包升级（PkgTaskRunner 内部分流），与批量升级共用任务页
+    fun startUpgrade() {
+        taskLauncher.launch(
+            PackageTaskActivity.newTaskIntent(context, LiveUpdateState.PkgOperation.UPGRADE, pkg.name)
+        )
+    }
+
     // 用户按返回离开任务页后任务在后台完成：静默刷新详情与已安装状态
     LaunchedEffect(pkgStateSnap) {
         val s = pkgStateSnap ?: return@LaunchedEffect
         if (s.finished && s.packageName == pkg.name) {
-            detail = PkgRepo.getDetail(context, pkg.name) ?: detail
+            detail = PkgRepo.getDetail(context, pkg.name)?.copy(upgradeToVersion = pkg.upgradeToVersion) ?: detail
             val installed = PkgRepo.getInstalled(context)
             installedNames = installed.map { it.name }.toSet()
             installedVersions = installed.associate { it.name to it.version }
@@ -314,6 +322,13 @@ fun PackageDetailScreen(
         return !computeHardBlock(target)
     }
 
+    // —— 升级态派生 ——
+    // upgradeToVersion 由调用方（已安装列表 / 升级页）探测到可用升级时注入；
+    // getDetail 的 version 是仓库候选版本，已安装版本以 installedVersions 为准。
+    val currentVer = installedVersions[pkg.name]?.takeIf { it.isNotBlank() } ?: pkg.version
+    val upgradeToVer = pkg.upgradeToVersion?.takeIf { it.isNotBlank() }
+    val isUpgradable = (detail?.isInstalled ?: pkg.isInstalled) && upgradeToVer != null
+
     Scaffold(
         topBar = {
             GlassTopAppBar(
@@ -322,7 +337,14 @@ fun PackageDetailScreen(
                 subtitle = run {
                     val d = detail ?: pkg
                     val statusText = if (d.isInstalled) "已安装" else "未安装"
-                    val versionText = if (d.version.isNotBlank()) "v${d.version}" else ""
+                    // 可升级时展示版本跃迁（getDetail 的 version 是候选版本，不能直接当已装版本用）
+                    val versionText = if (isUpgradable && currentVer.isNotBlank() && upgradeToVer != currentVer) {
+                        "v$currentVer → v$upgradeToVer"
+                    } else if (d.version.isNotBlank()) {
+                        "v${d.version}"
+                    } else {
+                        ""
+                    }
                     if (versionText.isNotBlank()) "$versionText | $statusText" else statusText
                 },
                 scrollBehavior = scrollBehavior,
@@ -386,8 +408,8 @@ fun PackageDetailScreen(
                     ),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    // 安装状态卡 — 仅未安装的软件包显示，置于 TopAppBar 下方、描述上方
-                    if (!d.isInstalled) {
+                    // 安装/升级状态卡 — 未安装或存在可用升级时显示，置于 TopAppBar 下方、描述上方
+                    if (!d.isInstalled || isUpgradable) {
                         item {
                             val hardBlock = computeHardBlock(d)
                             val willRemoveAll = computeAllWillRemove(d)
@@ -396,7 +418,8 @@ fun PackageDetailScreen(
                                 pkgName = d.name,
                                 hardBlock = hardBlock,
                                 willRemoveConflicts = willRemoveAll,
-                                directConflictCount = directConflicts.size
+                                directConflictCount = directConflicts.size,
+                                upgradeMode = d.isInstalled
                             )
                         }
                     }
@@ -632,7 +655,7 @@ fun PackageDetailScreen(
                 }
             }
 
-            // Bottom install/uninstall button
+            // Bottom install/uninstall/upgrade button(s)
             if (!isLoading) {
                 val d = detail ?: pkg
                 val canInstall = computeCanInstall(d)
@@ -651,30 +674,62 @@ fun PackageDetailScreen(
                             bottom = 12.dp + navBarBottomPadding
                         )
                 ) {
-                    if (d.isInstalled) {
-                        Button(
-                            onClick = { showUninstallConfirm = true },
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = ButtonDefaults.buttonColors(
-                                color = DangerRed
-                            )
-                        ) {
-                            Text("卸载", fontSize = 15.sp, fontWeight = FontWeight.Medium, color = Color.White)
+                    when {
+                        // 未安装 — 安装
+                        !d.isInstalled -> {
+                            val installColor = if (needsConflictConfirm) DangerRed else AccentBlue
+                            Button(
+                                onClick = {
+                                    if (needsConflictConfirm) showConflictConfirm = true
+                                    else startOperation(isInstall = true)
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                enabled = canInstall,
+                                colors = ButtonDefaults.buttonColors(
+                                    color = installColor
+                                )
+                            ) {
+                                Text(stringResource(R.string.action_styling_install), fontSize = 15.sp, fontWeight = FontWeight.Medium, color = Color.White)
+                            }
                         }
-                    } else {
-                        val installColor = if (needsConflictConfirm) DangerRed else AccentBlue
-                        Button(
-                            onClick = {
-                                if (needsConflictConfirm) showConflictConfirm = true
-                                else startOperation(isInstall = true)
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                            enabled = canInstall,
-                            colors = ButtonDefaults.buttonColors(
-                                color = installColor
-                            )
-                        ) {
-                            Text(stringResource(R.string.action_styling_install), fontSize = 15.sp, fontWeight = FontWeight.Medium, color = Color.White)
+                        // 已安装且可升级 — 卸载与升级同行，升级为主操作
+                        isUpgradable -> {
+                            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Button(
+                                    onClick = { showUninstallConfirm = true },
+                                    modifier = Modifier.weight(1f),
+                                    colors = ButtonDefaults.buttonColors(
+                                        color = DangerRed
+                                    )
+                                ) {
+                                    Text("卸载", fontSize = 15.sp, fontWeight = FontWeight.Medium, color = Color.White)
+                                }
+                                Button(
+                                    onClick = {
+                                        if (needsConflictConfirm) showConflictConfirm = true
+                                        else startUpgrade()
+                                    },
+                                    modifier = Modifier.weight(1f),
+                                    enabled = !hardBlock,
+                                    colors = ButtonDefaults.buttonColors(
+                                        color = if (needsConflictConfirm) DangerRed else AccentBlue
+                                    )
+                                ) {
+                                    Text("升级", fontSize = 15.sp, fontWeight = FontWeight.Medium, color = Color.White)
+                                }
+                            }
+                        }
+                        // 已安装 — 仅卸载
+                        else -> {
+                            Button(
+                                onClick = { showUninstallConfirm = true },
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = ButtonDefaults.buttonColors(
+                                    color = DangerRed
+                                )
+                            ) {
+                                Text("卸载", fontSize = 15.sp, fontWeight = FontWeight.Medium, color = Color.White)
+                            }
                         }
                     }
                 }
@@ -823,6 +878,8 @@ fun PackageDetailScreen(
                 val cascadePkgs = allRemovePkgs.filter { it !in directConflictPkgs }
                 // 命中 apt 关键包 → 严重警告（和卸载弹窗一致）
                 val criticalHits = allRemovePkgs.filter { it in PkgRepo.CRITICAL_APT_PACKAGES }
+                // 弹窗由安装/升级两个入口触发：已安装包的冲突确认来自升级按钮，文案随之切换
+                val upgradeMode = (detail ?: pkg).isInstalled
 
                 if (allRemovePkgs.isNotEmpty()) {
                     OverlayDialog(
@@ -836,9 +893,9 @@ fun PackageDetailScreen(
                                 // 顶部简短警示语
                                 Text(
                                     text = if (criticalHits.isNotEmpty()) {
-                                        "安装 ${pkg.name} 将强制卸载软件包管理的核心组件！此操作不可撤销，卸载后软件包管理功能将无法使用，直到 apt 链路被手动恢复。"
+                                        "${if (upgradeMode) "升级" else "安装"} ${pkg.name} 将强制卸载软件包管理的核心组件！此操作不可撤销，卸载后软件包管理功能将无法使用，直到 apt 链路被手动恢复。"
                                     } else {
-                                        "安装 ${pkg.name} 将强制卸载以下已安装的软件包，此操作不可撤销且极可能破坏 Termux 环境的稳定性！"
+                                        "${if (upgradeMode) "升级" else "安装"} ${pkg.name} 将强制卸载以下已安装的软件包，此操作不可撤销且极可能破坏 Termux 环境的稳定性！"
                                     },
                                     fontSize = 14.sp,
                                     color = colorScheme.onSurface,
@@ -968,7 +1025,7 @@ fun PackageDetailScreen(
                                             )
                                             Spacer(Modifier.height(6.dp))
                                             Text(
-                                                text = "此次安装将连带移除以下关键包，软件包管理功能依赖它们才能正常运行：",
+                                                text = "此次${if (upgradeMode) "升级" else "安装"}将连带移除以下关键包，软件包管理功能依赖它们才能正常运行：",
                                                 fontSize = 12.sp,
                                                 color = colorScheme.onSurface.copy(alpha = 0.85f),
                                                 lineHeight = 18.sp
@@ -984,7 +1041,7 @@ fun PackageDetailScreen(
                                             }
                                             Spacer(Modifier.height(6.dp))
                                             Text(
-                                                text = "安装完成后，软件包管理功能将无法使用，直到 apt 链路被手动恢复（重新安装上述包或重装 Termux）。请务必确认！",
+                                                text = "${if (upgradeMode) "升级" else "安装"}完成后，软件包管理功能将无法使用，直到 apt 链路被手动恢复（重新安装上述包或重装 Termux）。请务必确认！",
                                                 fontSize = 12.sp,
                                                 color = DangerRed,
                                                 lineHeight = 18.sp
@@ -1007,9 +1064,9 @@ fun PackageDetailScreen(
                                 ) {
                                     Text(
                                         text = if (criticalHits.isNotEmpty())
-                                            "强烈建议取消安装！软件包管理核心组件一旦被移除，恢复难度大、耗时长。请仔细评估后果后再操作。"
+                                            "强烈建议取消${if (upgradeMode) "升级" else "安装"}！软件包管理核心组件一旦被移除，恢复难度大、耗时长。请仔细评估后果后再操作。"
                                         else
-                                            "建议先取消安装，在终端中执行 pkg install ${pkg.name} 仔细审阅 apt 的输出，确认无误后再操作。",
+                                            "建议先取消${if (upgradeMode) "升级" else "安装"}，在终端中执行 pkg install ${pkg.name} 仔细审阅 apt 的输出，确认无误后再操作。",
                                         fontSize = 13.sp,
                                         color = DangerRed,
                                         fontWeight = FontWeight.Medium,
@@ -1029,14 +1086,14 @@ fun PackageDetailScreen(
                                     Button(
                                         onClick = {
                                             showConflictConfirm = false
-                                            startOperation(isInstall = true)
+                                            if (upgradeMode) startUpgrade() else startOperation(isInstall = true)
                                         },
                                         modifier = Modifier.weight(1f),
                                         colors = ButtonDefaults.buttonColors(
                                             color = if (criticalHits.isNotEmpty()) Color(0xFFB71C1C) else DangerRed
                                         )
                                     ) {
-                                        Text("确认安装", color = Color.White, fontWeight = FontWeight.Medium)
+                                        Text(if (upgradeMode) "确认升级" else "确认安装", color = Color.White, fontWeight = FontWeight.Medium)
                                     }
                                 }
                             }
@@ -1049,17 +1106,19 @@ fun PackageDetailScreen(
 }
 
 /**
- * 软件包详情页安装状态卡（对齐 TerminalListScreen.ServiceStatusCard 竖向模式，但不提供收缩按钮）。
- * 仅未安装的软件包显示，置于 TopAppBar 下方、描述上方。
- * - 可安装：绿底 + 右下角对号，标题“已准备好安装”
- * - 不可安装：红底 + 右下角感叹号，标题“暂时无法安装”
+ * 软件包详情页安装/升级状态卡（对齐 TerminalListScreen.ServiceStatusCard 竖向模式，但不提供收缩按钮）。
+ * 未安装的软件包走安装态；已安装且可升级的软件包走升级态（upgradeMode，文案整体替换为"升级"）。
+ * 置于 TopAppBar 下方、描述上方。
+ * - 可安装/可升级：绿底 + 右下角对号，标题"已准备好安装"/"已准备好升级"
+ * - 不可安装/不可升级：红底 + 右下角感叹号，标题"暂时无法安装"/"暂时无法升级"
  */
 @Composable
 private fun PackageInstallStatusCard(
     pkgName: String,
     hardBlock: Boolean,
     willRemoveConflicts: List<String>,
-    directConflictCount: Int
+    directConflictCount: Int,
+    upgradeMode: Boolean = false
 ) {
     val isDark = isSystemInDarkTheme()
     val textColor = if (isDark) Color.White else Color.Black
@@ -1084,15 +1143,16 @@ private fun PackageInstallStatusCard(
         )
     }
     val title = when {
-        hardBlock -> "暂时无法安装"
-        needsConflictWarn -> "将卸载 $totalRemove 个包后安装"
-        else -> "已准备好安装"
+        hardBlock -> if (upgradeMode) "暂时无法升级" else "暂时无法安装"
+        needsConflictWarn -> "将卸载 $totalRemove 个包后${if (upgradeMode) "升级" else "安装"}"
+        else -> if (upgradeMode) "已准备好升级" else "已准备好安装"
     }
     val desc = when {
-        hardBlock -> "$pkgName 有依赖或冲突项无法满足，请检查"
+        hardBlock -> if (upgradeMode) "$pkgName 有依赖或冲突项无法满足，暂无法升级，请检查"
+                     else "$pkgName 有依赖或冲突项无法满足，请检查"
         needsConflictWarn -> buildString {
             append(pkgName)
-            append(" 可安装，但 apt 将移除 ")
+            append(if (upgradeMode) " 可升级，但 apt 将移除 " else " 可安装，但 apt 将移除 ")
             append(totalRemove)
             append(" 个包")
             if (directConflictCount > 0) {
@@ -1106,9 +1166,10 @@ private fun PackageInstallStatusCard(
                 }
                 append("）")
             }
-            append("，极可能影响 Termux 稳定性，点击安装按钮前请仔细审阅")
+            append("，极可能影响 Termux 稳定性，点击${if (upgradeMode) "升级" else "安装"}按钮前请仔细审阅")
         }
-        else -> "点击安装按钮开始安装$pkgName，如有需要的依赖也将一并安装"
+        else -> if (upgradeMode) "点击升级按钮开始升级$pkgName，如有需要的依赖也将一并升级"
+                else "点击安装按钮开始安装$pkgName，如有需要的依赖也将一并安装"
     }
 
     Card(modifier = Modifier.fillMaxWidth()) {
