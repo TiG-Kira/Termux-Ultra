@@ -24,7 +24,7 @@ dependencies {
     // androidx.biometric.internal.*，主 app 的 DeviceAuthPrompt 仍按旧包名引用它，
     // 升级会在 VncActivity.onCreate 抛 NoClassDefFoundError（VNC 页面白屏）。
     // 详见 .github/dependabot.yml 的 ignore 规则。
-    implementation 'androidx.biometric:biometric:1.2.0-alpha05'
+    implementation 'androidx.biometric:biometric:1.4.0-alpha07'
     implementation 'androidx.media:media:1.7.0'
 
     implementation project(':termux-shared')
