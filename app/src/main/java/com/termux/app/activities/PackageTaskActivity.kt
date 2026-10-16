@@ -95,6 +95,9 @@ class PackageTaskActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         window.clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_NAVIGATION)
         WindowCompat.setDecorFitsSystemWindows(window, false)
+        // 玻璃按钮的阴影是越界绘制的（向上溢出约 64px），会画进状态栏区域；
+        // 该区域若留着不透明栏色就会把阴影上沿切掉，故两栏都显式透明。
+        window.statusBarColor = android.graphics.Color.TRANSPARENT
         window.navigationBarColor = android.graphics.Color.TRANSPARENT
 
         // 新任务模式：Intent 携带操作类型与包名，进页面即启动；否则为恢复模式，只观察现有任务

@@ -183,7 +183,16 @@ fun GlassSmallTopAppBar(
     val navigationIconWithPadding: @Composable () -> Unit = {
         Box(modifier = Modifier.padding(horizontal = buttonPadding)) { navigationIcon() }
     }
-    val ramp = GlassTopAppBarDefaults.collapseRamp(scrollBehavior)
+    // 按钮阴影的 ramp。有 scrollBehavior 时按滚动距离连续渐入，保留手势页面的原设计；
+    // 自滚动页面（animateScrollTo / animateScrollToItem）拿不到 contentOffset，本重载通常不传
+    // scrollBehavior，此时 collapseRamp 恒为 1f——顶部静止也会带阴影。改由调用方的重叠标记
+    // 驱动，与 band / 按钮材质同步。注意：这只换阴影的取值源，floating / keepButtonMaterial
+    // 仍由 isContentScrolled 原样驱动，自动上顶时底板照常弹出。
+    val ramp = if (scrollBehavior != null) {
+        GlassTopAppBarDefaults.collapseRamp(scrollBehavior)
+    } else {
+        GlassTopAppBarDefaults.overlayRamp(isContentScrolled)
+    }
     val floating = isContentScrolled
     val transition = updateTransition(floating, label = "glassSmallTopBarFloat")
     val maskProgress = transition.animateFloat(
