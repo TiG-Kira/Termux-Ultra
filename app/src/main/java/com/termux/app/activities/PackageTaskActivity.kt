@@ -156,7 +156,10 @@ object PkgTaskRunner {
                 LiveUpdateState.PkgOperation.UPDATE ->
                     PkgRepo.update(context, onOutput = { LiveUpdateState.appendPkgLog(it) }, stdin = LiveUpdateState.pkgStdin)
                 LiveUpdateState.PkgOperation.UPGRADE ->
-                    PkgRepo.upgradeAll(context, onOutput = { LiveUpdateState.appendPkgLog(it) }, stdin = LiveUpdateState.pkgStdin)
+                    if (packageName.isNotBlank())
+                        PkgRepo.upgradeSingle(context, packageName, onOutput = { LiveUpdateState.appendPkgLog(it) }, stdin = LiveUpdateState.pkgStdin)
+                    else
+                        PkgRepo.upgradeAll(context, onOutput = { LiveUpdateState.appendPkgLog(it) }, stdin = LiveUpdateState.pkgStdin)
             }
             LiveUpdateState.finishPkg(result.first)
         }
@@ -434,7 +437,8 @@ private fun taskTitle(snap: LiveUpdateState.PkgState?): String {
             LiveUpdateState.PkgOperation.INSTALL -> "正在安装 ${snap.packageName}"
             LiveUpdateState.PkgOperation.UNINSTALL -> "正在卸载 ${snap.packageName}"
             LiveUpdateState.PkgOperation.UPDATE -> "正在刷新软件源"
-            LiveUpdateState.PkgOperation.UPGRADE -> "正在升级所有包"
+            LiveUpdateState.PkgOperation.UPGRADE ->
+                if (snap.packageName.isNotBlank()) "正在升级 ${snap.packageName}" else "正在升级所有包"
         }
         else -> when (snap.operation) {
             LiveUpdateState.PkgOperation.INSTALL -> if (snap.success) "安装成功" else "安装失败"

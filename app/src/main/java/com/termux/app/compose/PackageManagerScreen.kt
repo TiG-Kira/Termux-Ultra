@@ -95,6 +95,17 @@ import com.termux.app.compose.pagePaddingWithoutTop
 
 private val AccentBlue = Color(0xFF2563EB)
 private val GrayColor = Color(0xFF6B7280)
+private val UpgradeOrange = Color(0xFFEA580C)
+
+/**
+ * 软件包管理页路由：列表 / 详情 / 升级页。
+ * 详情态携带目标包（含探测到的升级信息），作为 AnimatedContent 目标态驱动转场动画。
+ */
+private sealed interface PkgRoute {
+    data object List : PkgRoute
+    data class Detail(val pkg: PackageInfo) : PkgRoute
+    data object Upgrade : PkgRoute
+}
 
 object AppShell {
 
@@ -233,9 +244,15 @@ data class PackageInfo(
     val conflicts: List<String> = emptyList(),
     val license: String = "",
     val size: String = "",
-    val section: String = ""
+    val section: String = "",
+    /** 可用升级的候选版本号；仅探测到升级时由调用方赋值，null 表示未探测到升级 */
+    val upgradeToVersion: String? = null
 ) {
     fun resolveSection(): String = section.ifBlank { SectionClassifier.classify(name) }
+
+    /** 已安装且探测到候选新版本 = 可升级 */
+    val isUpgradable: Boolean
+        get() = isInstalled && !upgradeToVersion.isNullOrBlank()
 }
 
 /**
@@ -577,6 +594,92 @@ object PkgRepo {
         val (code, output) = if (onOutput != null) AppShell.execStreaming(context, cmd, timeout = 300, onOutput = onOutput, stdin = stdin)
                              else AppShell.exec(context, cmd, timeout = 300)
         return (code == 0) to output
+    }
+
+    /**
+     * 升级单个已安装包。apt 对已安装包执行 install 即升级到候选版本（缺失依赖会一并装上），
+     * 与安装路径共用同一命令，区别仅在操作语义；交互式提示同样走 stdin 通道。
+     */
+    suspend fun upgradeSingle(context: Context, name: String, onOutput: ((String) -> Unit)? = null, stdin: Channel<String>? = null): Pair<Boolean, String> {
+        val cmd = "export DEBIAN_FRONTEND=noninteractive && pkg install -y ${shq(name)} 2>&1"
+        val (code, output) = if (onOutput != null) AppShell.execStreaming(context, cmd, timeout = 180, onOutput = onOutput, stdin = stdin)
+                             else AppShell.exec(context, cmd, timeout = 180)
+        return (code == 0) to output
+    }
+
+    /** 可升级包：已安装版本 → 仓库候选版本 */
+    data class UpgradableInfo(
+        val name: String,
+        val currentVersion: String,
+        val newVersion: String
+    )
+
+    /**
+     * 列出所有存在可用升级的已安装包。
+     *
+     * 主路径 `apt list --upgradable`（行格式 `<name>/<suite> <new> <arch> [upgradable from: <old>]`）；
+     * 主路径失败（旧版 apt 不支持）或输出异常时，兜底解析 `apt-get -s upgrade` 的 Inst 行。
+     * 只保留确实已安装、且新旧版本号不同的包。
+     */
+    suspend fun getUpgradable(context: Context): List<UpgradableInfo> {
+        val installedVersions = getInstalled(context).associate { it.name to it.version }
+        val result = mutableListOf<UpgradableInfo>()
+        val fromRegex = Regex("upgradable from:\\s*([^\\]\\s]+)")
+
+        val (code, output) = AppShell.exec(context, "apt list --upgradable 2>/dev/null", timeout = 60)
+        if (code == 0) {
+            for (line in output.lines()) {
+                val trimmed = line.trim()
+                if (trimmed.isEmpty() || trimmed.startsWith("Listing")) continue
+                val slashIdx = trimmed.indexOf('/')
+                if (slashIdx <= 0) continue
+                val name = trimmed.substring(0, slashIdx).trim()
+                if (name.isEmpty() || name !in installedVersions) continue
+                val tokens = trimmed.substring(slashIdx + 1).trim().split(Regex("\\s+"))
+                if (tokens.size < 2) continue
+                val newVersion = tokens[1]
+                val oldVersion = fromRegex.find(trimmed)?.groupValues?.get(1)
+                    ?: installedVersions[name].orEmpty()
+                if (newVersion.isNotBlank() && newVersion != oldVersion) {
+                    result.add(UpgradableInfo(name, oldVersion, newVersion))
+                }
+            }
+        }
+
+        // 主路径失败（旧版 apt 不支持 list --upgradable）或输出异常（成功但空白）时才兜底，
+        // 避免"已全部最新"的常见情况下白跑一次 apt-get -s upgrade
+        if (result.isEmpty() && (code != 0 || output.isBlank())) {
+            val (code2, output2) = AppShell.exec(context, "apt-get -s upgrade 2>/dev/null", timeout = 60)
+            if (code2 == 0) {
+                for (line in output2.lines()) {
+                    val l = line.trim()
+                    if (!l.startsWith("Inst ")) continue
+                    val tokens = l.removePrefix("Inst ").split(Regex("\\s+"))
+                    if (tokens.isEmpty()) continue
+                    val name = tokens[0]
+                    if (name.isEmpty() || name !in installedVersions) continue
+                    var oldVersion = ""
+                    var newVersion = ""
+                    for (t in tokens.drop(1)) {
+                        when {
+                            t.startsWith("[") && t.endsWith("]") -> oldVersion = t.removeSurrounding("[", "]")
+                            t.startsWith("(") -> newVersion = t.removePrefix("(").substringBefore(')')
+                        }
+                    }
+                    if (newVersion.isNotBlank() && newVersion != oldVersion) {
+                        result.add(
+                            UpgradableInfo(
+                                name,
+                                oldVersion.ifBlank { installedVersions[name].orEmpty() },
+                                newVersion
+                            )
+                        )
+                    }
+                }
+            }
+        }
+
+        return result.distinctBy { it.name }.sortedBy { it.name.lowercase() }
     }
 
     suspend fun hasLocks(context: Context): Boolean {
@@ -952,7 +1055,12 @@ fun PackageManagerScreen(
     var searchExpanded by remember { mutableStateOf(false) }
     var isLoading by remember { mutableStateOf(true) }
     var loadingAvailable by remember { mutableStateOf(false) }
-    var showDetail by remember { mutableStateOf<PackageInfo?>(null) }
+    // 页面路由：列表 / 软件包详情 / 软件包升级页（AnimatedContent 目标态）
+    var route by remember { mutableStateOf<PkgRoute>(PkgRoute.List) }
+    // 详情页返回落点：从升级页进详情时回到升级页，否则回列表
+    var detailReturnRoute by remember { mutableStateOf<PkgRoute>(PkgRoute.List) }
+    // 可升级包（已安装且 apt 探测到候选新版本）：置顶入口、列表标签与升级页的数据源
+    var upgradableList by remember { mutableStateOf<List<PkgRepo.UpgradableInfo>>(emptyList()) }
 
     // 包任务页返回结果：刷新列表并给出结果反馈
     val taskLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -964,6 +1072,7 @@ fun PackageManagerScreen(
         }
         scope.launch {
             installedList = PkgRepo.getInstalled(context)
+            upgradableList = PkgRepo.getUpgradable(context)
             if (ok && op == LiveUpdateState.PkgOperation.UPDATE && searchQuery.isBlank()) {
                 availableList = PkgRepo.getAvailableAll(context)
             }
@@ -997,14 +1106,21 @@ fun PackageManagerScreen(
     // 都要对全量包跑一遍 section 分类（section 为空时走正则启发式，未安装 tab 数千条），
     // 主线程被占满就掉帧。提到 remember 后只在输入变化时算一次。
     val rawList: List<PackageInfo> = remember(
-        searchQuery, selectedTab, installedList, availableList
+        searchQuery, selectedTab, installedList, availableList, upgradableList
     ) {
+        // 已安装条目按 apt 探测结果注入候选版本，供列表"可升级"标签与详情页升级态使用
+        val upgradeMap = upgradableList.associate { it.name to it.newVersion }
+        fun withUpgrade(p: PackageInfo): PackageInfo =
+            if (p.isInstalled && upgradeMap.containsKey(p.name)) p.copy(upgradeToVersion = upgradeMap[p.name])
+            else p
         if (searchQuery.isNotBlank()) {
             val q = searchQuery.lowercase()
             val installedMatch = installedList.filter { it.name.lowercase().contains(q) }
             val availableMatch = availableList.filter { it.name.lowercase().contains(q) }
-            (installedMatch + availableMatch).distinctBy { it.name }
-        } else if (selectedTab == 0) installedList.distinctBy { it.name } else availableList
+            (installedMatch + availableMatch).distinctBy { it.name }.map { withUpgrade(it) }
+        } else if (selectedTab == 0) {
+            installedList.distinctBy { it.name }.map { withUpgrade(it) }
+        } else availableList
     }
 
     val showCategory = pkgViewMode == 0 && searchQuery.isBlank()
@@ -1057,6 +1173,15 @@ fun PackageManagerScreen(
     // 观察 LiveUpdateState — 顶栏后台任务按钮 + 任务状态恢复
     val pkgStateSnap by LiveUpdateState.pkgState.collectAsState()
 
+    // 后台任务完成（用户提前离开任务页，结果不会经 taskLauncher 回来）→ 静默刷新列表与可升级状态
+    LaunchedEffect(pkgStateSnap) {
+        val s = pkgStateSnap
+        if (s != null && s.finished) {
+            installedList = PkgRepo.getInstalled(context)
+            upgradableList = PkgRepo.getUpgradable(context)
+        }
+    }
+
     LaunchedEffect(Unit) {
         isLoading = true
         // —— 入口 apt 可用性检测 + 兜底恢复 ——
@@ -1078,6 +1203,7 @@ fun PackageManagerScreen(
             Toast.makeText(context, "apt 已恢复，正在加载软件包列表 ...", Toast.LENGTH_SHORT).show()
         }
         installedList = PkgRepo.getInstalled(context)
+        upgradableList = PkgRepo.getUpgradable(context)
         isLoading = false
     }
 
@@ -1099,11 +1225,16 @@ fun PackageManagerScreen(
     }
 
 
-    BackHandler(enabled = showDetail == null) {
-        when {
-            searchQuery.isNotBlank() -> searchQuery = ""
-            navStack.size > 1 -> navStack = navStack.dropLast(1)
-            else -> onBackPressed()
+    // 统一返回栈：详情回到来源页（列表/升级页），升级页回到列表，列表层先退搜索再退分类
+    BackHandler {
+        when (route) {
+            is PkgRoute.Detail -> route = detailReturnRoute
+            is PkgRoute.Upgrade -> route = PkgRoute.List
+            PkgRoute.List -> when {
+                searchQuery.isNotBlank() -> searchQuery = ""
+                navStack.size > 1 -> navStack = navStack.dropLast(1)
+                else -> onBackPressed()
+            }
         }
     }
 
@@ -1119,28 +1250,36 @@ fun PackageManagerScreen(
             .background(MiuixTheme.colorScheme.surface)
     ) {
     AnimatedContent(
-        targetState = showDetail,
+        targetState = route,
         transitionSpec = {
-            if (targetState != null) {
-                (slideInHorizontally { it } + fadeIn()) togetherWith
-                (slideOutHorizontally { -it / 3 } + fadeOut())
-            } else {
+            if (targetState is PkgRoute.List) {
                 (slideInHorizontally { -it / 3 } + fadeIn()) togetherWith
                 (slideOutHorizontally { it } + fadeOut())
+            } else {
+                (slideInHorizontally { it } + fadeIn()) togetherWith
+                (slideOutHorizontally { -it / 3 } + fadeOut())
             }
         },
-        label = "pkg-detail-anim"
-    ) { detail ->
-        if (detail != null) {
-            BackHandler { showDetail = null }
-            PackageDetailScreen(
-                pkg = detail,
+        label = "pkg-route-anim"
+    ) { current ->
+        when (current) {
+            is PkgRoute.Detail -> PackageDetailScreen(
+                pkg = current.pkg,
                 navBarBottomPadding = navBarBottomPadding,
-                onBack = { showDetail = null },
-                onOpenPackageDetail = { showDetail = it },
+                onBack = { route = detailReturnRoute },
+                onOpenPackageDetail = { dep ->
+                    // 依赖/冲突包也可能有可用升级：按当前探测结果注入，保持升级态一致
+                    route = PkgRoute.Detail(
+                        dep.copy(
+                            upgradeToVersion = upgradableList.firstOrNull { it.name == dep.name }?.newVersion
+                                ?: dep.upgradeToVersion
+                        )
+                    )
+                },
                 onChanged = { success ->
                     scope.launch {
                         installedList = PkgRepo.getInstalled(context)
+                        upgradableList = PkgRepo.getUpgradable(context)
                         if (searchQuery.isNotBlank()) {
                             availableList = PkgRepo.searchAvailable(context, searchQuery)
                         }
@@ -1150,10 +1289,21 @@ fun PackageManagerScreen(
                     } else {
                         Toast.makeText(context, "操作失败，请检查日志", Toast.LENGTH_SHORT).show()
                     }
-                    showDetail = null
+                    route = detailReturnRoute
                 }
             )
-        } else {
+            is PkgRoute.Upgrade -> PackageUpgradeScreen(
+                upgradableList = upgradableList,
+                navBarBottomPadding = navBarBottomPadding,
+                taskLauncher = taskLauncher,
+                onBack = { route = PkgRoute.List },
+                onOpenDetail = { pkg ->
+                    detailReturnRoute = PkgRoute.Upgrade
+                    route = PkgRoute.Detail(pkg)
+                },
+                onUpgradableListChanged = { upgradableList = it }
+            )
+            PkgRoute.List -> {
             Scaffold(
                 contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0),
                 topBar = {
@@ -1213,20 +1363,6 @@ fun PackageManagerScreen(
                                     modifier = Modifier.size(24.dp)
                                 )
                             }
-                            GlassIconButton(
-                                onClick = {
-                                    taskLauncher.launch(
-                                        PackageTaskActivity.newTaskIntent(context, LiveUpdateState.PkgOperation.UPGRADE, "")
-                                    )
-                                }
-                            ) {
-                                Icon(
-                                    imageVector = MiuixGlassIcons.Download,
-                                    contentDescription = stringResource(R.string.upgrade_all_packages),
-                                    tint = MiuixTheme.colorScheme.onSurface,
-                                    modifier = Modifier.size(24.dp)
-                                )
-                            }
                         }
                     )
                 }
@@ -1281,6 +1417,17 @@ fun PackageManagerScreen(
                                     top = 4.dp, bottom = 16.dp
                                 )
                             ) {
+                                // 已安装 tab 根级（分类/列表视图）置顶「可升级」入口，无可用升级包时自动隐藏
+                                val showUpgradableEntry = selectedTab == 0 && searchQuery.isBlank() &&
+                                    navStack.size == 1 && upgradableList.isNotEmpty()
+                                if (showUpgradableEntry) {
+                                    item(key = "pkg-upgradable-entry") {
+                                        UpgradableEntry(
+                                            count = upgradableList.size,
+                                            onClick = { route = PkgRoute.Upgrade }
+                                        )
+                                    }
+                                }
                                 // === 分类根级: 显示分类网格 ===
                                 if (isCategoryRoot) {
                                     if (categories.isEmpty()) {
@@ -1324,7 +1471,10 @@ fun PackageManagerScreen(
                                     items(displayList, key = { it.name }) { pkg ->
                                         PackageCard(
                                             pkg = pkg,
-                                            onClick = { showDetail = pkg }
+                                            onClick = {
+                                                detailReturnRoute = PkgRoute.List
+                                                route = PkgRoute.Detail(pkg)
+                                            }
                                         )
                                     }
                                 }
@@ -1332,6 +1482,7 @@ fun PackageManagerScreen(
                         }
                     }
                 }
+            }
             }
         }
     }
@@ -1434,6 +1585,24 @@ private fun PackageCard(
             summary = pkg.version.ifBlank { "未知版本" },
             onClick = onClick,
             endActions = {
+                // 已安装且有可用升级：在「已安装」标签前追加「可升级」标签
+                if (pkg.isUpgradable) {
+                    Box(
+                        modifier = Modifier
+                            .background(
+                                color = UpgradeOrange.copy(alpha = 0.12f),
+                                shape = RoundedCornerShape(12.dp)
+                            )
+                            .padding(horizontal = 10.dp, vertical = 4.dp)
+                    ) {
+                        Text(
+                            text = "可升级",
+                            fontSize = 12.sp,
+                            color = UpgradeOrange
+                        )
+                    }
+                    Spacer(Modifier.width(6.dp))
+                }
                 Box(
                     modifier = Modifier
                         .background(
@@ -1454,8 +1623,35 @@ private fun PackageCard(
     }
 }
 
+/**
+ * 已安装 tab 根级置顶的「可升级」入口：点击进入软件包升级页。
+ */
 @Composable
-private fun EmptyStateView(message: String) {
+private fun UpgradableEntry(
+    count: Int,
+    onClick: () -> Unit
+) {
+    MiuixCard(
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        ArrowPreference(
+            title = "可升级",
+            summary = "$count 个软件包可升级",
+            onClick = onClick,
+            startAction = {
+                Icon(
+                    imageVector = MiuixGlassIcons.Download,
+                    contentDescription = null,
+                    tint = UpgradeOrange,
+                    modifier = Modifier.size(22.dp)
+                )
+            }
+        )
+    }
+}
+
+@Composable
+internal fun EmptyStateView(message: String) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
