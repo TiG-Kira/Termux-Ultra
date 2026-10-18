@@ -6,6 +6,7 @@ import android.util.Log
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import com.google.gson.Gson
+import com.termux.shared.termux.TermuxConstants
 
 /** AI 提供商配置 */
 data class AiProviderConfig(
@@ -750,6 +751,95 @@ object AiTermuxPrefs {
             putString("custom_system_prompt", cfg.customSystemPrompt)
             apply()
         }
+        // 配置可能刚被写入或清空，立刻对齐 allow-external-apps（弹性：状态消失即回写 false）
+        runCatching { syncAllowExternalApps(context) }
+            .onFailure { Log.w(TAG, "allow-external-apps sync after saveConfig failed", it) }
+    }
+
+    // ---------- allow-external-apps ↔ Agent 配置态同步 ----------
+
+    /**
+     * 把 `~/.termux/termux.properties` 的 `allow-external-apps` 与 Termux Agent 配置态双向对齐：
+     * - Agent 已配置 → `true`，RUN_COMMAND / termux-open 等外部接口立即可用；
+     * - 配置态消失（清空 Key、删除本地模型、重置配置等）→ 立刻回写 `false`。
+     *
+     * 判据与 [getConfig] 的 `isConfigured` 一致（在线看 apiKey、本地看模型是否就绪），
+     * 但直接读原始 prefs，不触发 getConfig 消费 `needsReconfig` 的副作用，可安全用于启动同步。
+     * 幂等：目标值与文件当前值一致时不写盘。
+     */
+    fun syncAllowExternalApps(context: Context) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val provider = prefs.getString("provider", "custom") ?: "custom"
+        val configured = if (provider == "local") {
+            try {
+                AiLocalModel.isLocalModelReady()
+            } catch (_: Throwable) {
+                false
+            }
+        } else {
+            (securePrefs(context).getString("api_key", "") ?: "").isNotBlank()
+        }
+        writeAllowExternalAppsProperty(configured)
+    }
+
+    private const val ALLOW_EXTERNAL_APPS_KEY = "allow-external-apps"
+    private const val ALLOW_EXTERNAL_APPS_MARKER =
+        "# Auto-synced with the Termux Agent configuration (configured -> true, removed -> false)."
+
+    /** 写入 allow-external-apps 属性；与当前值一致则不落盘。 */
+    private fun writeAllowExternalAppsProperty(enabled: Boolean) {
+        val desired = if (enabled) "true" else "false"
+        val file = java.io.File(TermuxConstants.TERMUX_PROPERTIES_PRIMARY_FILE_PATH)
+
+        val src = runCatching {
+            if (!file.exists()) emptyList() else file.readText(Charsets.UTF_8)
+                .lineSequence()
+                .filter { it.trim() != ALLOW_EXTERNAL_APPS_MARKER }
+                .toList()
+        }.getOrElse {
+            Log.w(TAG, "read termux.properties failed, skipping allow-external-apps sync", it)
+            return
+        }
+
+        fun keyValue(line: String): String? {
+            val t = line.trim()
+            if (t.isEmpty() || t.startsWith("#") || t.startsWith("!")) return null
+            if (!t.startsWith(ALLOW_EXTERNAL_APPS_KEY)) return null
+            val rest = t.substring(ALLOW_EXTERNAL_APPS_KEY.length)
+            if (rest.isNotEmpty() && rest[0] != '=' && rest[0] != ':' && !rest[0].isWhitespace()) return null
+            val sep = t.indexOfFirst { it == '=' || it == ':' }
+            return if (sep >= 0) t.substring(sep + 1).trim().lowercase() else ""
+        }
+
+        val current = src.firstOrNull { keyValue(it) != null }?.let { keyValue(it) } ?: "false"
+        if (current == desired) return
+
+        val out = ArrayList<String>(src.size + 2)
+        var replaced = false
+        for (line in src) {
+            if (keyValue(line) != null) {
+                if (!replaced) {
+                    out += ALLOW_EXTERNAL_APPS_MARKER
+                    out += "$ALLOW_EXTERNAL_APPS_KEY=$desired"
+                    replaced = true
+                }
+            } else {
+                out += line
+            }
+        }
+        if (!replaced) {
+            if (out.isNotEmpty() && out.last().isNotBlank()) out += ""
+            out += ALLOW_EXTERNAL_APPS_MARKER
+            out += "$ALLOW_EXTERNAL_APPS_KEY=$desired"
+        }
+
+        runCatching {
+            file.parentFile?.mkdirs()
+            file.writeText(out.joinToString(separator = "\n", postfix = "\n"), Charsets.UTF_8)
+            Log.i(TAG, "allow-external-apps synced to $desired in ${file.absolutePath}")
+        }.onFailure {
+            Log.w(TAG, "write allow-external-apps failed", it)
+        }
     }
 
 
@@ -870,6 +960,9 @@ object AiTermuxPrefs {
         // 都从加密存储读取，写入必须落在同一处；写进明文 prefs 的值在本进程内读不到，
         // 要等下次启动 migrateSecretsIfNeeded 搬运后才生效，且可能覆盖加密存储中的新值
         securePrefs(context).edit().putString(KEY_ACTIVE_PROFILE_ID, profile.id).apply()
+        // Profile 覆盖了生效的 apiKey/provider，弹性同步 allow-external-apps
+        runCatching { syncAllowExternalApps(context) }
+            .onFailure { Log.w(TAG, "allow-external-apps sync after applyLlmProfile failed", it) }
     }
 
         // ---------- Chat History ----------
@@ -1666,5 +1759,8 @@ object AiTermuxPrefs {
         }
         // 多会话历史：删除除默认对话外的全部对话，再清空默认对话内部内容
         clearAllConversationsExceptDefault(context)
+        // 配置已清空 → allow-external-apps 立刻回写 false
+        runCatching { syncAllowExternalApps(context) }
+            .onFailure { Log.w(TAG, "allow-external-apps sync after resetAllAiState failed", it) }
     }
 }
