@@ -30,7 +30,7 @@ import com.termux.shared.logger.Logger;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP;
 import com.termux.shared.models.ReportInfo;
-import com.termux.shared.termux.settings.properties.TermuxAppSharedProperties;
+import com.termux.shared.settings.properties.SharedProperties;
 import com.termux.shared.shell.command.ExecutionCommand;
 import com.termux.shared.data.DataUtils;
 import com.termux.shared.markdown.MarkdownUtils;
@@ -455,8 +455,16 @@ public class TermuxPluginUtils {
     public static String checkIfAllowExternalAppsPolicyIsViolated(final Context context, String apiName) {
         String errmsg = null;
 
-        TermuxAppSharedProperties mProperties = TermuxAppSharedProperties.getProperties();
-        if (mProperties == null || !mProperties.shouldAllowExternalApps()) {
+        // Read the property directly from the properties file instead of the
+        // TermuxAppSharedProperties singleton. The singleton had no init() caller in this
+        // repo, so getProperties() was always null and this check rejected every
+        // RUN_COMMAND/termux-open call even with allow-external-apps=true set in
+        // termux.properties. A direct read also picks up property edits immediately,
+        // without needing a process restart. The app side
+        // PluginUtils.checkIfAllowExternalAppsPolicyIsViolated() does the same.
+        if (!SharedProperties.isPropertyValueTrue(context,
+            SharedProperties.getPropertiesFileFromList(TermuxConstants.TERMUX_PROPERTIES_FILE_PATHS_LIST, LOG_TAG),
+            TermuxConstants.PROP_ALLOW_EXTERNAL_APPS, true)) {
             errmsg = context.getString(R.string.error_allow_external_apps_ungranted, apiName,
                 TermuxFileUtils.getUnExpandedTermuxPath(TermuxConstants.TERMUX_PROPERTIES_PRIMARY_FILE_PATH));
         }
