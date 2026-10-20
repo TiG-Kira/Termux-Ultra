@@ -6,7 +6,7 @@ package top.yukonga.miuix.kmp.glass
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.updateTransition
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -97,6 +97,23 @@ object GlassTopAppBarDefaults {
                 }
             }
         }
+    }
+
+    /**
+     * Like [collapseRamp] but driven by the caller's own overlap flag instead of scroll distance.
+     *
+     * Self-scrolling pages (`animateScrollTo` / `animateScrollToItem`) never feed `contentOffset`,
+     * so their [collapseRamp] sits at 0 and the pills keep no shadow even though the band and the
+     * button material have already turned on. Those pages carry the scroll state themselves as
+     * `isContentScrolled`; this rides that same flag on the same timed transition.
+     */
+    @Composable
+    fun overlayRamp(isContentScrolled: Boolean): State<Float> {
+        val transition = updateTransition(isContentScrolled, label = "glassTopBarOverlayRamp")
+        return transition.animateFloat(
+            transitionSpec = { GlassMotion.topBarButtonFloat() },
+            label = "glassTopBarOverlayRampValue",
+        ) { if (it) 1f else 0f }
     }
 
     /** The traditional fill used when backdrop material is unavailable. */
@@ -220,6 +237,9 @@ fun GlassTopAppBar(
     backdrop: Backdrop? = null,
     largeTitle: String = title,
     subtitle: String = "",
+    titleColor: Color = MiuixTheme.colorScheme.onSurface,
+    largeTitleColor: Color = MiuixTheme.colorScheme.onSurface,
+    subtitleColor: Color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
     scrollBehavior: ScrollBehavior? = null,
     bandBrush: Brush = GlassTopAppBarDefaults.bandBrush(MiuixTheme.colorScheme.surface),
     bandOverhang: Dp = GlassTopAppBarDefaults.BandOverhang,
@@ -237,6 +257,7 @@ fun GlassTopAppBar(
     navigationIcon: @Composable () -> Unit = {},
     actions: @Composable RowScope.() -> Unit = {},
     bottomContent: @Composable () -> Unit = {},
+    onBlankTap: (() -> Unit)? = null,
 ) {
     val isContentScrolled by remember(scrollBehavior) {
         derivedStateOf { scrollBehavior?.state?.let { it.contentOffset < 0f } ?: true }
@@ -248,6 +269,9 @@ fun GlassTopAppBar(
         backdrop = backdrop,
         largeTitle = largeTitle,
         subtitle = subtitle,
+        titleColor = titleColor,
+        largeTitleColor = largeTitleColor,
+        subtitleColor = subtitleColor,
         scrollBehavior = scrollBehavior,
         bandBrush = bandBrush,
         bandOverhang = bandOverhang,
@@ -266,6 +290,7 @@ fun GlassTopAppBar(
         navigationIcon = navigationIcon,
         actions = actions,
         bottomContent = bottomContent,
+        onBlankTap = onBlankTap,
     )
 }
 
@@ -277,6 +302,12 @@ fun GlassTopAppBar(
  *   pass `listState.canScrollBackward`. This clears the material when the page returns to the top
  *   even if the large title stays collapsed. Other parameters behave as in the scroll-behaviour
  *   overload.
+ * @param rampFromOverlay Drive the button shadow from [isContentScrolled] instead of the scroll
+ *   distance. Enable it for pages that scroll themselves (`animateScrollTo` /
+ *   `animateScrollToItem`) yet still pass a `scrollBehavior` for the collapse: those never feed
+ *   `contentOffset`, so the default ramp sits at 0 and the pills keep no shadow even though their
+ *   band and material turned on. Gesture-driven pages should leave it off, keeping the shadow's
+ *   gradual ramp over `RampDistance`.
  */
 @Composable
 fun GlassTopAppBar(
@@ -287,6 +318,9 @@ fun GlassTopAppBar(
     backdrop: Backdrop? = null,
     largeTitle: String = title,
     subtitle: String = "",
+    titleColor: Color = MiuixTheme.colorScheme.onSurface,
+    largeTitleColor: Color = MiuixTheme.colorScheme.onSurface,
+    subtitleColor: Color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
     scrollBehavior: ScrollBehavior? = null,
     bandBrush: Brush = GlassTopAppBarDefaults.bandBrush(MiuixTheme.colorScheme.surface),
     bandOverhang: Dp = GlassTopAppBarDefaults.BandOverhang,
@@ -304,6 +338,8 @@ fun GlassTopAppBar(
     navigationIcon: @Composable () -> Unit = {},
     actions: @Composable RowScope.() -> Unit = {},
     bottomContent: @Composable () -> Unit = {},
+    onBlankTap: (() -> Unit)? = null,
+    rampFromOverlay: Boolean = false,
 ) {
     // Buttons carry their own horizontal margin (see [GlassTopAppBarDefaults.ButtonPadding]), so
     // the trailing row needs no spacing of its own; the wrapper only pins them to the end.
@@ -319,7 +355,12 @@ fun GlassTopAppBar(
     val navigationIconWithPadding: @Composable () -> Unit = {
         Box(modifier = Modifier.padding(horizontal = buttonPadding)) { navigationIcon() }
     }
-    val ramp = GlassTopAppBarDefaults.collapseRamp(scrollBehavior)
+    val contentOffsetRamp = GlassTopAppBarDefaults.collapseRamp(scrollBehavior)
+    // 自滚动页面（animateScrollTo / animateScrollToItem）拿不到 contentOffset，上一行会一直停在 0，
+    // 连带把玻璃按钮的阴影吃掉；这类页面已用 isContentScrolled 自行接管滚动判定，
+    // 开启 rampFromOverlay 后阴影改由同一枚标记驱动，与 band / 按钮材质同步。
+    val overlayRampState = GlassTopAppBarDefaults.overlayRamp(isContentScrolled)
+    val ramp = if (rampFromOverlay) overlayRampState else contentOffsetRamp
     val floating = isContentScrolled
     val transition = updateTransition(floating, label = "glassTopBarFloat")
     val maskProgress = transition.animateFloat(
@@ -380,9 +421,12 @@ fun GlassTopAppBar(
                 title = title,
                 modifier = contentModifier,
                 titleAlpha = titleAlpha,
+                titleColor = titleColor,
                 largeTitle = largeTitle,
+                largeTitleColor = largeTitleColor,
                 largeTitleBlurRadius = largeTitleBlurRadius,
                 subtitle = subtitle,
+                subtitleColor = subtitleColor,
                 color = Color.Transparent,
                 scrollBehavior = scrollBehavior,
                 defaultWindowInsetsPadding = defaultWindowInsetsPadding,
@@ -391,6 +435,7 @@ fun GlassTopAppBar(
                 navigationIcon = navigationIconWithPadding,
                 actions = actionsWithPadding,
                 bottomContent = bottomContent,
+                onBlankTap = onBlankTap,
             )
         }
     }
@@ -403,6 +448,8 @@ fun GlassTopAppBar(
  * [GlassTransformPopup], so the panel keeps the same blur and colour treatment as it grows.
  *
  * @param onClick Called when the button is tapped.
+ * @param onLongClick Called when the button is long-pressed. `null` (the default) keeps the plain
+ *   tap gesture; passing one upgrades the button to a combined click.
  * @param backdrop Optional [Backdrop] behind the glass. Inside [GlassTopAppBar] the button inherits
  *   the bar's backdrop and effective blur; elsewhere `null` gives the traditional [fill].
  * @param modifier The modifier applied to the button.
@@ -424,6 +471,7 @@ fun GlassIconButton(
     backdrop: Backdrop? = null,
     surfaceAlpha: Float = 1f,
     enabled: Boolean = true,
+    onLongClick: (() -> Unit)? = null,
     padding: Dp = LocalGlassTopAppBarContext.current?.buttonPadding ?: GlassTopAppBarDefaults.ButtonPadding,
     style: GlassStyle = LocalGlassTopAppBarContext.current?.style ?: GlassDefaults.Style,
     size: Dp = LocalGlassTopAppBarContext.current?.size ?: GlassTopAppBarDefaults.ButtonSize,
@@ -457,10 +505,11 @@ fun GlassIconButton(
         sharedKeepMaterial = topBarContext?.keepMaterial,
         pressed = pressed,
         modifier = modifier
-            .clickable(
+            .combinedClickable(
                 interactionSource = interactionSource,
                 indication = null,
                 onClick = onClick,
+                onLongClick = onLongClick,
                 enabled = enabled,
             ),
         content = content,

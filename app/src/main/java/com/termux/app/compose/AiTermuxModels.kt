@@ -6,6 +6,7 @@ import android.util.Log
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import com.google.gson.Gson
+import com.termux.shared.termux.TermuxConstants
 
 /** AI 提供商配置 */
 data class AiProviderConfig(
@@ -162,6 +163,14 @@ enum class SkillType {
     TASK_UPDATE,          // 更新任务状态（done / in_progress / pending / cancelled）
     TASK_DELETE,          // 删除任务（通过 taskId 或 title 匹配删除）
     TASK_LIST             // 查看当前任务列表
+    ,
+    /**
+     * 在 VorteX 沙箱中执行命令。
+     *
+     * 用于危险脚本的**预演**：Agent 判断某条命令风险较高时，先在沙箱里跑一遍看实际效果，
+     * 再把结果告诉用户，由用户决定是否在真实环境执行。沙箱内所有改动仅限内部、会话结束即消失。
+     */
+    RUN_COMMAND_SANDBOX
 }
 
 /** 需用户点击才能执行的技能（仅生成卡片，未真正执行）
@@ -218,6 +227,13 @@ data class SkillCardData(
     val filePath: String? = null,             // 文件路径
     val command: String? = null,              // 执行的命令
     val output: String? = null,               // 输出/结果
+    /**
+     * 沙箱预演场景下用户的选择：
+     * - "promote"：用户看完沙箱实际效果后，确认在真实环境执行同一命令
+     * - "discard"：用户放弃，不在真实环境执行
+     * 预演本身（RUN_COMMAND_SANDBOX）不设此值。
+     */
+    val sandboxDecision: String? = null,
     // 询问用户相关
     val askQuestion: String? = null,          // 问题文本
     val askType: String? = null,              // "text" / "single" / "multi"
@@ -404,6 +420,40 @@ val DEFAULT_SYSTEM_PROMPT = """
 - Shell：bash；包管理器：pkg install / apt install
 - 支持 proot 容器、QEMU 虚拟机、VNC、SSH；Ubuntu 容器：~/debian-container/run.sh
 
+# 六点五、危险命令：先在 VorteX 沙箱预演（重要）
+
+用户可能开启并授权了 VorteX 沙箱（技能 `RUN_COMMAND_SANDBOX`）。
+它是**虚拟 ROOT 的隔离测试环境**：真实环境完全不受影响，会话结束所有改动即消失。
+
+**何时使用**：你判断一条命令风险较高时——尤其是删除、覆盖安装、批量改名、
+格式化、跑来路不明的脚本、或会改动系统状态的操作——**先在沙箱预演**，
+拿到真实输出后再让用户决定是否在真实环境执行。例如：
+
+    {"skill": "RUN_COMMAND_SANDBOX", "command": "rm -rf ~/testdir && echo done"}
+
+**硬性要求**：
+1. 预演结果必须**如实转述**实际输出，禁止脑补或美化；命令失败就说失败。
+2. 预演后**必须明确询问用户**：「是否在真实环境执行这条命令？」
+   把决定权交给用户，不要自己替他做主，也**不要**未经确认就自动改用 RUN_COMMAND 真实执行。
+3. 沙箱预演**不能替代**风险确认——它只是让用户看清后果。
+4. 若技能返回「未开启或未授权」，说明用户没开这个功能，
+   此时应直接说明风险并询问是否继续，**不要**反复重试该技能。
+
+**沙箱内禁止访问 Android 内存储**：沙箱不挂载 `/sdcard`、`/storage/emulated/0`，
+用户素材无法直接读取。若你处理的文件位于内存储（如 `/sdcard/Download/a.bin`、
+`/storage/emulated/0/DCIM/...`），必须用 `storage_files` 参数把样本交给系统导入，
+系统会自动复制到沙箱可写层并把命令中的路径改写为副本路径：
+
+    {"skill": "RUN_COMMAND_SANDBOX", "command": "file ~/vortex_imports/sdcard_Download_a.bin",
+     "storage_files": ["/sdcard/Download/a.bin"]}
+
+注意：
+- 导入副本位于 `${'$'}HOME/vortex_imports/`，**导入的路径才是沙箱内可见的路径**；
+  不要在 `command` 里直接引用原始内存储路径。
+- 只导入**确实需要处理**的文件，不要把整个内存储拖进来。
+- 不要用 RUN_COMMAND 绕过这一限制去真实环境读写内存储——
+  用户让你「在沙箱里处理」时，素材也应在沙箱内处理。
+
 # 七、长期记忆（MEMORY.md）
 
 路径 /data/data/com.termux/files/home/.ai_memory/MEMORY.md，系统自动注入每轮上下文。
@@ -443,6 +493,9 @@ val DEFAULT_SYSTEM_PROMPT = """
 
 ## 命令与软件包
 - **RUN_COMMAND [A]** 参数 command、sessionId?、sessionName? → 卡片，**你看不到输出**
+- **RUN_COMMAND_SANDBOX** 参数 command、storage_files?（内存储样本路径数组）。
+  仅在用户开启并授权沙箱时可用；沙箱内**不能访问 Android 内存储**，
+  素材需经 `storage_files` 导入到 `${'$'}HOME/vortex_imports/` 后再处理。
 - **CAPTURE_OUTPUT [A/⚡]** 参数 command、timeout?、description? → 白名单中则返回真实输出，否则生成卡片。
   **能用它就别用 RUN_COMMAND**
 - **COMPILE_CODE [⚡]** 参数 command、description?、timeout? → 自动执行并返回状态、退出码、错误、完整输出
@@ -684,8 +737,10 @@ object AiTermuxPrefs {
 
     fun saveConfig(context: Context, cfg: AiTermuxConfig) {
         // api_key 属于凭据，走加密存储；其余非敏感字段留在普通 prefs
+        // 注意：这里的 apply { } 是 Kotlin 作用域函数，块内必须再调用 Editor.apply() 才会真正落盘
         securePrefs(context).edit().apply {
             putString("api_key", cfg.providerConfig.apiKey)
+            apply()
         }
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().apply {
             putString("provider", cfg.providerConfig.provider)
@@ -695,6 +750,95 @@ object AiTermuxPrefs {
             putString("local_model_id", cfg.providerConfig.localModelId)
             putString("custom_system_prompt", cfg.customSystemPrompt)
             apply()
+        }
+        // 配置可能刚被写入或清空，立刻对齐 allow-external-apps（弹性：状态消失即回写 false）
+        runCatching { syncAllowExternalApps(context) }
+            .onFailure { Log.w(TAG, "allow-external-apps sync after saveConfig failed", it) }
+    }
+
+    // ---------- allow-external-apps ↔ Agent 配置态同步 ----------
+
+    /**
+     * 把 `~/.termux/termux.properties` 的 `allow-external-apps` 与 Termux Agent 配置态双向对齐：
+     * - Agent 已配置 → `true`，RUN_COMMAND / termux-open 等外部接口立即可用；
+     * - 配置态消失（清空 Key、删除本地模型、重置配置等）→ 立刻回写 `false`。
+     *
+     * 判据与 [getConfig] 的 `isConfigured` 一致（在线看 apiKey、本地看模型是否就绪），
+     * 但直接读原始 prefs，不触发 getConfig 消费 `needsReconfig` 的副作用，可安全用于启动同步。
+     * 幂等：目标值与文件当前值一致时不写盘。
+     */
+    fun syncAllowExternalApps(context: Context) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val provider = prefs.getString("provider", "custom") ?: "custom"
+        val configured = if (provider == "local") {
+            try {
+                AiLocalModel.isLocalModelReady()
+            } catch (_: Throwable) {
+                false
+            }
+        } else {
+            (securePrefs(context).getString("api_key", "") ?: "").isNotBlank()
+        }
+        writeAllowExternalAppsProperty(configured)
+    }
+
+    private const val ALLOW_EXTERNAL_APPS_KEY = "allow-external-apps"
+    private const val ALLOW_EXTERNAL_APPS_MARKER =
+        "# Auto-synced with the Termux Agent configuration (configured -> true, removed -> false)."
+
+    /** 写入 allow-external-apps 属性；与当前值一致则不落盘。 */
+    private fun writeAllowExternalAppsProperty(enabled: Boolean) {
+        val desired = if (enabled) "true" else "false"
+        val file = java.io.File(TermuxConstants.TERMUX_PROPERTIES_PRIMARY_FILE_PATH)
+
+        val src = runCatching {
+            if (!file.exists()) emptyList() else file.readText(Charsets.UTF_8)
+                .lineSequence()
+                .filter { it.trim() != ALLOW_EXTERNAL_APPS_MARKER }
+                .toList()
+        }.getOrElse {
+            Log.w(TAG, "read termux.properties failed, skipping allow-external-apps sync", it)
+            return
+        }
+
+        fun keyValue(line: String): String? {
+            val t = line.trim()
+            if (t.isEmpty() || t.startsWith("#") || t.startsWith("!")) return null
+            if (!t.startsWith(ALLOW_EXTERNAL_APPS_KEY)) return null
+            val rest = t.substring(ALLOW_EXTERNAL_APPS_KEY.length)
+            if (rest.isNotEmpty() && rest[0] != '=' && rest[0] != ':' && !rest[0].isWhitespace()) return null
+            val sep = t.indexOfFirst { it == '=' || it == ':' }
+            return if (sep >= 0) t.substring(sep + 1).trim().lowercase() else ""
+        }
+
+        val current = src.firstOrNull { keyValue(it) != null }?.let { keyValue(it) } ?: "false"
+        if (current == desired) return
+
+        val out = ArrayList<String>(src.size + 2)
+        var replaced = false
+        for (line in src) {
+            if (keyValue(line) != null) {
+                if (!replaced) {
+                    out += ALLOW_EXTERNAL_APPS_MARKER
+                    out += "$ALLOW_EXTERNAL_APPS_KEY=$desired"
+                    replaced = true
+                }
+            } else {
+                out += line
+            }
+        }
+        if (!replaced) {
+            if (out.isNotEmpty() && out.last().isNotBlank()) out += ""
+            out += ALLOW_EXTERNAL_APPS_MARKER
+            out += "$ALLOW_EXTERNAL_APPS_KEY=$desired"
+        }
+
+        runCatching {
+            file.parentFile?.mkdirs()
+            file.writeText(out.joinToString(separator = "\n", postfix = "\n"), Charsets.UTF_8)
+            Log.i(TAG, "allow-external-apps synced to $desired in ${file.absolutePath}")
+        }.onFailure {
+            Log.w(TAG, "write allow-external-apps failed", it)
         }
     }
 
@@ -800,17 +944,25 @@ object AiTermuxPrefs {
     /** 将某个 LlmProfile 应用为当前生效配置（写入旧字段 provider/api_key/base_url/model/temperature） */
     fun applyLlmProfile(context: Context, profile: LlmProfile) {
         // api_key 属于凭据，单独走加密存储；其余非敏感字段留在明文 prefs
+        // 注意：这里的 apply { } 是 Kotlin 作用域函数，块内必须再调用 Editor.apply() 才会真正落盘
         securePrefs(context).edit().apply {
             putString("api_key", profile.apiKey)
+            apply()
         }
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().apply {
             putString("provider", profile.provider)
             putString("base_url", profile.apiBaseUrl)
             putString("model", profile.model)
             putFloat("temperature", profile.temperature)
-            putString(KEY_ACTIVE_PROFILE_ID, profile.id)
             apply()
         }
+        // 激活 Profile id 的读取方（getActiveLlmProfileId / saveLlmProfiles / deleteLlmProfile）
+        // 都从加密存储读取，写入必须落在同一处；写进明文 prefs 的值在本进程内读不到，
+        // 要等下次启动 migrateSecretsIfNeeded 搬运后才生效，且可能覆盖加密存储中的新值
+        securePrefs(context).edit().putString(KEY_ACTIVE_PROFILE_ID, profile.id).apply()
+        // Profile 覆盖了生效的 apiKey/provider，弹性同步 allow-external-apps
+        runCatching { syncAllowExternalApps(context) }
+            .onFailure { Log.w(TAG, "allow-external-apps sync after applyLlmProfile failed", it) }
     }
 
         // ---------- Chat History ----------
@@ -1120,8 +1272,10 @@ object AiTermuxPrefs {
 
     fun saveFallbackOnlineConfig(context: Context, cfg: FallbackOnlineConfig) {
         // api_key 属于凭据，单独走加密存储；其余非敏感字段留在明文 prefs
+        // 注意：这里的 apply { } 是 Kotlin 作用域函数，块内必须再调用 Editor.apply() 才会真正落盘
         securePrefs(context).edit().apply {
             putString(KEY_FALLBACK_ONLINE_API_KEY, cfg.apiKey)
+            apply()
         }
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().apply {
             putBoolean(KEY_FALLBACK_ONLINE_ENABLED, cfg.enabled)
@@ -1605,5 +1759,8 @@ object AiTermuxPrefs {
         }
         // 多会话历史：删除除默认对话外的全部对话，再清空默认对话内部内容
         clearAllConversationsExceptDefault(context)
+        // 配置已清空 → allow-external-apps 立刻回写 false
+        runCatching { syncAllowExternalApps(context) }
+            .onFailure { Log.w(TAG, "allow-external-apps sync after resetAllAiState failed", it) }
     }
 }

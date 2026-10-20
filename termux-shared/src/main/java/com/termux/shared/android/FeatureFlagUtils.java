@@ -37,9 +37,6 @@ import java.util.Map;
  * 2. settings global list with adb or root. Will be unset by default. This takes precedence over
  * sysprop value since `FeatureFlagUtils.isEnabled()`
  * checks its value first. Override precedence: Settings.Global -> sys.fflag.override.* -> static list.
- * Set value: `adb shell settings put global settings_enable_monitor_phantom_procs false`
- * Get value: adb shell settings get global settings_enable_monitor_phantom_procs`
- * Unset value: `adb shell settings delete global settings_enable_monitor_phantom_procs`
  *
  * https://cs.android.com/android/_/android/platform/frameworks/base/+/refs/tags/android-12.0.0_r31:core/java/android/util/FeatureFlagUtils.java;l=113
  *

@@ -53,7 +53,6 @@ import top.yukonga.miuix.kmp.basic.SearchBar
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.ui.res.stringResource
-import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.preference.SwitchPreference
 import top.yukonga.miuix.kmp.preference.CheckboxPreference
 import top.yukonga.miuix.kmp.preference.OverlayDropdownPreference
@@ -66,8 +65,9 @@ import com.termux.R
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Launch
 import androidx.compose.material.icons.rounded.*
-import androidx.compose.material3.CircularProgressIndicator
+import top.yukonga.miuix.kmp.basic.CircularProgressIndicator
 import com.termux.app.RuntimeEnvironmentResetter
+import com.termux.app.vortex.VorteXSandbox
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.graphics.painter.Painter
@@ -138,7 +138,7 @@ fun SettingsScreen(
     // ---------- Reset Runtime Env state ----------
     var showResetEnvConfirm by remember { mutableStateOf(false) }
     var showResetEnvProgress by remember { mutableStateOf(false) }
-    var resetEnvStep by remember { mutableStateOf(RuntimeEnvironmentResetter.Step.DOWNLOADING) }
+    var resetEnvStep by remember { mutableStateOf(RuntimeEnvironmentResetter.Step.PREPARING) }
     var resetEnvMessage by remember { mutableStateOf("") }
     var resetEnvFailMode by remember { mutableStateOf<Int?>(null) }
     var resetEnvErrorMsg by remember { mutableStateOf("") }
@@ -961,6 +961,70 @@ fun SettingsScreen(
                 )
             }),
 
+        // ===== VorteX Sandbox =====
+        SearchableSetting(sec_security, context.getString(R.string.vortex_sandbox_title),
+            context.getString(R.string.vortex_sandbox_summary),
+            keywords = listOf("沙箱", "sandbox", "vortex", "隔离", "虚拟root", "测试环境", "演练"),
+            render = {
+                var sandboxEnabled by remember { mutableStateOf(VorteXSandbox.isEnabled(context)) }
+                // null=空闲；true=正在开启（准备环境）；false=正在关闭
+                var sandboxBusy by remember { mutableStateOf<Boolean?>(null) }
+                SwitchPreference(
+                    title = context.getString(R.string.vortex_sandbox_title),
+                    summary = context.getString(R.string.vortex_sandbox_summary),
+                    checked = sandboxEnabled,
+                    enabled = sandboxBusy == null,
+                    onCheckedChange = {
+                        if (sandboxBusy == null) {
+                            sandboxEnabled = it
+                            sandboxBusy = it
+                            VorteXSandbox.setEnabledAsync(context, it) {
+                                Handler(Looper.getMainLooper()).post {
+                                    sandboxBusy = null
+                                }
+                            }
+                        }
+                    },
+                    startAction = { SettingIcon(painterResource(R.drawable.ic_sandbox), contentDescription = context.getString(R.string.vortex_sandbox_title)) }
+                )
+                OverlayDialog(
+                    title = context.getString(R.string.vortex_sandbox_title),
+                    show = sandboxBusy != null,
+                    onDismissRequest = {},
+                    content = {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.padding(end = 16.dp)
+                            )
+                            Text(
+                                text = if (sandboxBusy == true) "正在准备环境" else "正在关闭沙盒"
+                            )
+                        }
+                    }
+                )
+            }),
+        SearchableSetting(sec_security, context.getString(R.string.vortex_sandbox_agent_title),
+            context.getString(R.string.vortex_sandbox_agent_summary),
+            keywords = listOf("沙箱", "agent", "授权", "authorize", "vortex", "termux agent"),
+            render = {
+                val sandboxOn = VorteXSandbox.isEnabled(context)
+                var agentAuth by remember { mutableStateOf(VorteXSandbox.isAgentAuthorized(context)) }
+                SwitchPreference(
+                    title = context.getString(R.string.vortex_sandbox_agent_title),
+                    summary = context.getString(R.string.vortex_sandbox_agent_summary),
+                    checked = agentAuth,
+                    enabled = sandboxOn,
+                    onCheckedChange = {
+                        agentAuth = it
+                        VorteXSandbox.setAgentAuthorized(context, it)
+                    },
+                    startAction = { SettingIcon(Icons.Rounded.Memory, contentDescription = context.getString(R.string.vortex_sandbox_agent_title)) }
+                )
+            }),
+
         // SettingsGroupCard 里的条目（动态展开）
     ) + buildList {
         addAll(dataSettings.map { it.toSearchable(sec_backup) })
@@ -1509,6 +1573,79 @@ fun SettingsScreen(
                                 SettingIcon(Icons.Rounded.SmartToy, contentDescription = "Agent 脚本判定")
                             }
                         )
+                        // ---------- VorteX 沙箱 ----------
+                        var sandboxEnabled by remember {
+                            mutableStateOf(VorteXSandbox.isEnabled(context))
+                        }
+                        // null=空闲；true=正在开启（准备环境）；false=正在关闭
+                        var sandboxBusy by remember { mutableStateOf<Boolean?>(null) }
+                        SwitchPreference(
+                            title = context.getString(R.string.vortex_sandbox_title),
+                            summary = if (sandboxEnabled)
+                                context.getString(R.string.vortex_sandbox_summary) + "\n" +
+                                    VorteXSandbox.isolationSummary(context)
+                            else
+                                context.getString(R.string.vortex_sandbox_summary),
+                            checked = sandboxEnabled,
+                            enabled = sandboxBusy == null,
+                            onCheckedChange = {
+                                if (sandboxBusy == null) {
+                                    sandboxEnabled = it
+                                    sandboxBusy = it
+                                    VorteXSandbox.setEnabledAsync(context, it) {
+                                        Handler(Looper.getMainLooper()).post {
+                                            sandboxBusy = null
+                                        }
+                                    }
+                                }
+                            },
+                            startAction = {
+                                SettingIcon(
+                                    painterResource(R.drawable.ic_sandbox),
+                                    contentDescription = context.getString(R.string.vortex_sandbox_title)
+                                )
+                            }
+                        )
+                        OverlayDialog(
+                            title = context.getString(R.string.vortex_sandbox_title),
+                            show = sandboxBusy != null,
+                            onDismissRequest = {},
+                            content = {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.padding(end = 16.dp)
+                                    )
+                                    Text(
+                                        text = if (sandboxBusy == true) "正在准备环境" else "正在关闭沙盒"
+                                    )
+                                }
+                            }
+                        )
+                        var sandboxAgentAuth by remember {
+                            mutableStateOf(VorteXSandbox.isAgentAuthorized(context))
+                        }
+                        SwitchPreference(
+                            title = context.getString(R.string.vortex_sandbox_agent_title),
+                            summary = if (sandboxEnabled)
+                                context.getString(R.string.vortex_sandbox_agent_summary)
+                            else
+                                "需开启 VorteX 沙箱后可用",
+                            checked = sandboxAgentAuth && sandboxEnabled,
+                            enabled = sandboxEnabled,
+                            onCheckedChange = {
+                                sandboxAgentAuth = it
+                                VorteXSandbox.setAgentAuthorized(context, it)
+                            },
+                            startAction = {
+                                SettingIcon(
+                                    Icons.Rounded.SmartToy,
+                                    contentDescription = context.getString(R.string.vortex_sandbox_agent_title)
+                                )
+                            }
+                        )
                         // ---------- Agent 判定历史 ----------
                         var agentHistory by remember {
                             mutableStateOf(com.termux.app.compose.AgentScriptJudge.getHistory(context))
@@ -1624,7 +1761,7 @@ fun SettingsScreen(
                                                     override fun onFailBeforePurge(msg: String) {
                                                         resetEnvFailMode = 0; resetEnvErrorMsg = msg; showResetEnvProgress = true
                                                     }
-                                                    override fun onFailAfterPurge(msg: String) {
+                                                    override fun onFallbackToSettings(msg: String) {
                                                         resetEnvFailMode = 1; resetEnvErrorMsg = msg; showResetEnvProgress = true
                                                     }
                                                 }
@@ -1643,16 +1780,16 @@ fun SettingsScreen(
                                 null -> if (resetEnvStep == RuntimeEnvironmentResetter.Step.DONE)
                                     context.getString(R.string.reset_runtime_env_success_title)
                                     else context.getString(R.string.reset_runtime_env_title)
-                                0 -> context.getString(R.string.reset_runtime_env_title) + " — 下载/校验失败"
-                                1 -> context.getString(R.string.reset_runtime_env_title) + " — 环境已受损"
+                                0 -> context.getString(R.string.reset_runtime_env_title) + " — 清除未开始"
+                                1 -> context.getString(R.string.reset_runtime_env_title) + " — 需手动清除"
                                 else -> context.getString(R.string.reset_runtime_env_title)
                             },
                             summary = when (resetEnvFailMode) {
                                 null -> if (resetEnvStep == RuntimeEnvironmentResetter.Step.DONE)
-                                    "prefix 与 home 已恢复到全新安装状态"
+                                    context.getString(R.string.reset_runtime_env_success_summary)
                                     else resetEnvMessage
                                 0 -> context.getString(R.string.reset_runtime_env_fail_before_purge, resetEnvErrorMsg)
-                                1 -> context.getString(R.string.reset_runtime_env_fail_after_purge, resetEnvErrorMsg)
+                                1 -> context.getString(R.string.reset_runtime_env_fail_fallback, resetEnvErrorMsg)
                                 else -> resetEnvMessage
                             },
                             show = showResetEnvProgress,
@@ -1693,7 +1830,7 @@ fun SettingsScreen(
                                                             override fun onFailBeforePurge(msg: String) {
                                                                 resetEnvFailMode = 0; resetEnvErrorMsg = msg; showResetEnvProgress = true
                                                             }
-                                                            override fun onFailAfterPurge(msg: String) {
+                                                            override fun onFallbackToSettings(msg: String) {
                                                                 resetEnvFailMode = 1; resetEnvErrorMsg = msg; showResetEnvProgress = true
                                                             }
                                                         }
@@ -1717,8 +1854,7 @@ fun SettingsScreen(
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
                                             CircularProgressIndicator(
-                                                modifier = Modifier.padding(end = 16.dp),
-                                                strokeWidth = 2.dp
+                                                modifier = Modifier.padding(end = 16.dp)
                                             )
                                             Text(text = resetEnvMessage)
                                         }

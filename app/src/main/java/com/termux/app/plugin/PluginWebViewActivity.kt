@@ -190,12 +190,23 @@ class PluginWebViewActivity : ComponentActivity() {
                             settings.apply {
                                 javaScriptEnabled = true
                                 domStorageEnabled = true
+                                // 安全收敛（GHSA-3prx-h372-cjrq）：插件页以 file:// 从插件目录加载，
+                                // 且挂有 TermuxUltra bridge（含 exec / readFile 等敏感能力）。
+                                // 原先 allowFileAccessFromFileURLs / allowUniversalAccessFromFileURLs 均为
+                                // true、mixedContentMode 为 ALWAYS_ALLOW，使插件页可越权读取宿主私有文件
+                                // （如加密凭据、token）并经 file:// 或明文 http 外泄。此处收紧为同源最小权限：
+                                // - allowFileAccess 必须保持 true，否则 file:// 页面本身无法加载；
+                                // - 关闭从 file:// 页面访问其它本地文件的能力；
+                                // - 关闭 file:// 页面对任意源（含其它 file://、http）的通用访问，外网请求一律
+                                //   走 host 侧 PluginManager.openUrl 并受 INTERNET_ACCESS 约束；
+                                // - 禁止混合内容（明文 http 子资源）加载，防中间人注入；
+                                // - 关闭 content:// 访问与无手势媒体自动播放。
                                 allowFileAccess = true
-                                allowContentAccess = true
-                                allowFileAccessFromFileURLs = true
-                                allowUniversalAccessFromFileURLs = true
-                                mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
-                                mediaPlaybackRequiresUserGesture = false
+                                allowContentAccess = false
+                                allowFileAccessFromFileURLs = false
+                                allowUniversalAccessFromFileURLs = false
+                                mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
+                                mediaPlaybackRequiresUserGesture = true
                                 builtInZoomControls = false
                                 displayZoomControls = false
                                 setSupportZoom(false)

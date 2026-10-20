@@ -66,15 +66,19 @@ import com.termux.app.compose.pagePaddingWithoutTop
  *
  * @param onClose 返回上一页
  * @param onNewFile 点击「新建文本」
- * @param onOpenFile 点击「打开文件」（返回选中的文件路径）
- * @param onPickFile 点击「打开文件」按钮（由外部处理文件选择器）
+ * @param onPickFile 点击「打开文件」
+ * @param onOpenRecent 点击最近文件条目，参数是文件路径
+ * @param onImportSystemFile 顶栏「从系统存储导入」，为 null 时不显示该入口
+ * @param overlayContent 弹窗槽。miuix 弹窗必须挂在 Scaffold 内才会被 MiuixPopupHost 渲染
  */
 @Composable
 fun TextEditorHomeScreen(
     onClose: () -> Unit,
     onNewFile: () -> Unit,
     onPickFile: () -> Unit,
-    onOpenRecent: (String) -> Unit
+    onOpenRecent: (String) -> Unit,
+    onImportSystemFile: (() -> Unit)? = null,
+    overlayContent: @Composable () -> Unit = {}
 ) {
     val context = LocalContext.current
     val isDark = isSystemInDarkTheme()
@@ -107,6 +111,18 @@ fun TextEditorHomeScreen(
                             tint = MiuixTheme.colorScheme.onSurface,
                             modifier = Modifier.size(24.dp)
                         )
+                    }
+                },
+                actions = {
+                    if (onImportSystemFile != null) {
+                        GlassIconButton(onClick = onImportSystemFile) {
+                            Icon(
+                                painter = androidx.compose.ui.res.painterResource(R.drawable.ic_folder),
+                                contentDescription = "从系统存储导入",
+                                tint = MiuixTheme.colorScheme.onSurface,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
                     }
                 }
             )
@@ -143,7 +159,7 @@ fun TextEditorHomeScreen(
                         iconColor = Color(0xFF2563EB),
                         iconBgColor = Color(0xFF2563EB).copy(alpha = 0.12f),
                         title = stringResource(R.string.text_editor_open_file),
-                        subtitle = "从本地选择文件",
+                        subtitle = "浏览 Termux 文件",
                         onClick = onPickFile
                     )
                 }
@@ -223,6 +239,8 @@ fun TextEditorHomeScreen(
                 }
             }
         }
+        // 弹窗必须留在 Scaffold 内部，否则注册不到 MiuixPopupHost 上、点击无反应
+        overlayContent()
     }
 }
 

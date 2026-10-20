@@ -9,14 +9,9 @@ import android.view.KeyEvent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.FastOutLinearInEasing
 import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.animate
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandHorizontally
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkHorizontally
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -43,14 +38,11 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.foundation.verticalScroll
@@ -71,7 +63,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -81,16 +72,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
-import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
@@ -108,19 +97,22 @@ import com.awkoo.libterminal.view.TerminalView as LibTerminalView
 import com.termux.app.terminal.shell.pid
 import com.termux.app.terminal.shell.sessionExited
 import com.termux.shared.view.KeyboardUtils
+import com.termux.app.vortex.VorteXSandbox
+import android.widget.Toast
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.CardDefaults
 import top.yukonga.miuix.kmp.basic.HorizontalDivider
+import top.yukonga.miuix.kmp.basic.DropdownDefaults
 import top.yukonga.miuix.kmp.basic.DropdownEntry
 import top.yukonga.miuix.kmp.basic.DropdownItem
 import top.yukonga.miuix.kmp.basic.Icon
-import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.glass.GlassIconButton
+import top.yukonga.miuix.kmp.glass.GlassTopAppBarDefaults
+import top.yukonga.miuix.kmp.glass.GlassShape
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.SnackbarHost
 import top.yukonga.miuix.kmp.basic.SnackbarHostState
@@ -131,7 +123,7 @@ import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.glass.ChevronBackward
 import top.yukonga.miuix.kmp.icon.glass.MiuixGlassIcons
-import top.yukonga.miuix.kmp.menu.OverlayIconDropdownMenu
+import top.yukonga.miuix.kmp.popup.OverlayDropdownPopup
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
@@ -177,13 +169,13 @@ fun TerminalDetailScreenCompose(
     // 修饰键状态提升到这里，供工具栏写入、终端视图读取（extraKeysModifierReader）。
     val extraKeysModifiers = remember { ExtraKeysModifierState() }
 
-    var isCompact by remember { mutableStateOf(false) }
-    var isTopBarTransitioning by remember { mutableStateOf(false) }
+    // GlassTerminalBar 的收缩/展开命令——栏状态的唯一来源。
+    // 栏自身不监听任何信号，只有这里下命令（false=展开 / true=收缩）时才执行动画，
+    // 命令之间栏持续保持当前状态。展开/收缩的策略（3 秒无操作收起、会话结束强制展开、
+    // 焦点在栏上保持展开、新会话临时展开）全部由本文件的计时与事件逻辑决定。
+    var barCollapsed by remember { mutableStateOf(false) }
+    // 极简模式：进一步收起动作区与（收缩态下的）紧凑标题，由把手图标切换
     var isTopBarCollapsed by remember { mutableStateOf(false) }
-    var showLargeContent by remember { mutableStateOf(true) }
-    var topBarSlideProgress by remember { mutableFloatStateOf(0f) }
-    var smallTitleAlpha by remember { mutableFloatStateOf(0f) }
-    var useLargeButtons by remember { mutableStateOf(false) }
     var lastInteractionTime by remember { mutableStateOf(System.currentTimeMillis()) }
     var lastInteractionFromTopBar by remember { mutableStateOf(false) }
     var sessionKey by remember { mutableIntStateOf(0) }
@@ -202,10 +194,9 @@ fun TerminalDetailScreenCompose(
     val isLandscape = isLandscapeOrientation()
     // 双分屏仅在横屏或平板布局下生效
     val isWideLayout = isWideScreenLayout()
-    // 横屏时进入沉浸式全屏（隐藏系统栏，滑动边缘临时呼出）；竖屏不受影响
-    LandscapeImmersiveEffect(enabled = isLandscape)
-
-    // 横屏时按刘海/挖孔的 boundingRect 水平避让（竖屏返回全 0）
+    // 横屏时按刘海/挖孔的 boundingRect 水平避让（竖屏返回全 0）。
+    // 系统栏（状态栏/导航栏）横屏保持可见、不隐藏；窗口的 SHORT_EDGES 模式
+    // 仍让画面延伸进刘海/挖孔区域，仅内容做智能避让。
     val cutoutInsets = rememberLandscapeCutoutInsets()
     val cutoutStart = if (isLandscape) cutoutInsets.calculateStartPadding(LayoutDirection.Ltr) else 0.dp
     val cutoutEnd = if (isLandscape) cutoutInsets.calculateEndPadding(LayoutDirection.Ltr) else 0.dp
@@ -261,6 +252,15 @@ fun TerminalDetailScreenCompose(
     val currentSessionIsDead = currentSession.pid == -1 || sessionExited
     val sessionExitCode = currentSession.exitStatus
 
+    // 沙箱会话自然结束（用户在沙箱里敲 exit）时也要回收影子空间。
+    // killSession 覆盖的是「手动关闭」，这条覆盖「进程自己退出」——
+    // 两者都会走 onSessionEnded，这里做幂等保护（purgeAll 重复调用无副作用）。
+    LaunchedEffect(sessionExited, currentSessionIsDead) {
+        if (currentSessionIsDead) {
+            VorteXSandbox.onSessionEnded(context, currentSessionName)
+        }
+    }
+
     // 死会话内按 Enter → 移除该会话；若无剩余会话则返回，否则已切换到其余会话
     LaunchedEffect(removeRequested) {
         if (removeRequested) {
@@ -272,11 +272,12 @@ fun TerminalDetailScreenCompose(
     }
 
     // 当前会话切换后（会话列表点击 / 主页卡片点击 / 第三方句柄切换），未初始化的会话
-    // 在真正进入终端控制台的那一刻才初始化（拉起进程），效仿 Java 版策略
+    // 在真正进入终端控制台的那一刻才初始化（拉起进程）并注入「新会话自动执行」命令，
+    // 效仿 Java 版策略
     LaunchedEffect(currentSessionId) {
         val cs = allSessions.firstOrNull { it.session.id == currentSessionId }?.session
-        if (cs != null && cs.pid == 0) {
-            cs.execute()
+        if (cs != null) {
+            sessionManager.initializeSessionIfNeeded(cs)
         }
     }
 
@@ -306,13 +307,46 @@ fun TerminalDetailScreenCompose(
     val topBarTerminalContent = if (isTerminalDark) Color.White else Color.Black
     val topBarTerminalContentSecondary = if (isTerminalDark) Color.White.copy(alpha = 0.7f) else Color.Black.copy(alpha = 0.7f)
 
-    // 5. 关键！effective 根据 isCompact 切换来源：
-    //    - 大 TopAppBar 模式 (!isCompact) → opaque 颜色（系统主题）
-    //    - SmallTopAppBar 模式 (isCompact) → terminal 颜色（终端实际背景）
-    val effectiveTopBarContentColor = if (!isCompact) topBarOpaqueContent else topBarTerminalContent
-    val effectiveTopBarContentColorSecondary = if (!isCompact) topBarOpaqueContentSecondary else topBarTerminalContentSecondary
+    // 5. 关键！effective 根据 barCollapsed 切换来源：
+    //    - 展开态 (!barCollapsed) → opaque 颜色（系统亮暗 / Monet surface）
+    //    - 收缩态 (barCollapsed) → terminal 颜色（终端实际背景亮度）
+    val effectiveTopBarContentColor = if (!barCollapsed) topBarOpaqueContent else topBarTerminalContent
+    val effectiveTopBarContentColorSecondary = if (!barCollapsed) topBarOpaqueContentSecondary else topBarTerminalContentSecondary
 
-    val topBarIndication = LocalIndication.current
+    // GlassTerminalBar 取色口径：
+    //    - 展开态跟随系统亮暗（Monet 开启时背景板换 surface，chrome 仍跟系统）
+    //    - 收缩态追终端背景亮度（深终端 → 暗色玻璃，亮终端 → 亮色玻璃）
+    val barColorStyle = if (!barCollapsed) {
+        GlassTerminalBarColorStyle.System
+    } else {
+        if (isTerminalDark) GlassTerminalBarColorStyle.Dark else GlassTerminalBarColorStyle.Light
+    }
+    // 渐隐背景板颜色：展开态 = opaque 板（系统/Monet），收缩态 = 终端背景色
+    val barBandColor = if (!barCollapsed) topBarOpaqueBg else terminalBgColor
+
+    // GlassTerminalBar 的标题 / 副标题 / 副标题颜色
+    // 标题显隐仅收缩态生效（展开态始终显示大标题，逻辑不动）：
+    //   - 收缩态 + 工具栏展开（isTopBarCollapsed=false）→ 不显示标题
+    //   - 收缩态 + 工具栏收缩（isTopBarCollapsed=true，极简模式）→ 显示紧凑标题
+    val barTitle = if (barCollapsed && !isTopBarCollapsed) {
+        ""
+    } else {
+        currentSessionName.ifEmpty { context.getString(R.string.terminal) }
+    }
+    // 副标题文案：会话已结束（红色）优先于新会话提示；展开态才可见，其余情况传空串即取消显示
+    val barSubtitle = when {
+        currentSessionIsDead -> if (sessionExitCode >= 0)
+            context.getString(R.string.session_exit_code_label, sessionExitCode)
+        else context.getString(R.string.session_ended)
+        showNewSessionLabel -> context.getString(R.string.new_session_handle, sessionDisplayNumber.toString())
+        else -> ""
+    }
+    val barSubtitleColor = when {
+        currentSessionIsDead -> Color(0xFFFF5252)
+        showNewSessionLabel -> effectiveTopBarContentColorSecondary
+        else -> Color.Unspecified
+    }
+
 
     fun updateInteractionTime(fromTopBar: Boolean = true) {
         lastInteractionTime = System.currentTimeMillis()
@@ -436,78 +470,20 @@ fun TerminalDetailScreenCompose(
         showContextMenu = false
     }
 
+    /** 展开命令：重置新会话标签与无操作计时，把展开命令下给 GlassTerminalBar。 */
     fun showTopBarTemporarily() {
-        if (isTopBarTransitioning) return
-        if (isCompact) {
-            isTopBarTransitioning = true
-            useLargeButtons = false
-            showLargeContent = false
-            showNewSessionLabel = false
-            sessionKey++
-            lastInteractionTime = System.currentTimeMillis()
-            lastInteractionFromTopBar = true
-            coroutineScope.launch {
-                try {
-                    animate(initialValue = smallTitleAlpha, targetValue = 0f, animationSpec = tween(100, easing = FastOutLinearInEasing)) { value, _ ->
-                        smallTitleAlpha = value
-                    }
-                    topBarSlideProgress = 1f
-                    isCompact = false
-                    isTopBarCollapsed = false
-                    delay(200)
-                    animate(initialValue = 1f, targetValue = 0f, animationSpec = tween(220, easing = FastOutSlowInEasing)) { value, _ ->
-                        topBarSlideProgress = value
-                    }
-                    showLargeContent = true
-                    delay(150)
-                } finally {
-                    // 协程被取消时落到完整展开态，避免停在「已收起颜色 + 未收起底色」的白条中间态
-                    isCompact = false
-                    showLargeContent = true
-                    topBarSlideProgress = 0f
-                    isTopBarCollapsed = false
-                    smallTitleAlpha = 0f
-                    useLargeButtons = true
-                    isTopBarTransitioning = false
-                }
-            }
-        } else {
-            showLargeContent = true
-            showNewSessionLabel = false
-            sessionKey++
-            lastInteractionTime = System.currentTimeMillis()
-            lastInteractionFromTopBar = true
-        }
+        showNewSessionLabel = false
+        sessionKey++
+        lastInteractionTime = System.currentTimeMillis()
+        lastInteractionFromTopBar = true
+        barCollapsed = false
     }
 
+    /** 收缩命令：把收缩命令下给 GlassTerminalBar（栏内部驱动滑行/渐隐动画）。 */
     fun collapseTopBarAnimated() {
-        if (!isCompact && !isTopBarTransitioning) {
-            isTopBarTransitioning = true
-            useLargeButtons = true
+        if (!barCollapsed) {
             showNewSessionLabel = false
-            coroutineScope.launch {
-                try {
-                    showLargeContent = false
-                    delay(100)
-                    animate(initialValue = topBarSlideProgress, targetValue = 1f, animationSpec = tween(220, easing = FastOutSlowInEasing)) { value, _ ->
-                        topBarSlideProgress = value
-                    }
-                    isCompact = true
-                    delay(200)
-                    if (isTopBarCollapsed) {
-                        animate(initialValue = smallTitleAlpha, targetValue = 1f, animationSpec = tween(120)) { value, _ ->
-                            smallTitleAlpha = value
-                        }
-                    }
-                } finally {
-                    // 协程被取消时落到完整收缩态，避免顶栏停在实体白底 + 白图标的中间态
-                    isCompact = true
-                    showLargeContent = false
-                    topBarSlideProgress = 1f
-                    useLargeButtons = false
-                    isTopBarTransitioning = false
-                }
-            }
+            barCollapsed = true
         }
     }
 
@@ -516,11 +492,9 @@ fun TerminalDetailScreenCompose(
         val newSession = sessionManager.createDefaultSession(startImmediately = true, isFailsafe = isFailSafe)
         sessionManager.switchTo(newSession.id)
         // TopAppBar 自动触发逻辑看齐 Java 版：
-        // 展开大 TopAppBar + 显示context.getString(R.string.new_session)副标题 + 重启 3 秒自动收起计时
-        if (isCompact) {
+        // 展开大 TopAppBar + 显示新会话副标题 + 重启 3 秒自动收起计时
+        if (barCollapsed) {
             showTopBarTemporarily()
-        } else {
-            showLargeContent = true
         }
         showNewSessionLabel = true
         sessionKey++
@@ -533,19 +507,21 @@ fun TerminalDetailScreenCompose(
     val keyboardSurfaceIsLight = MiuixTheme.colorScheme.surface.luminance() > 0.5f
 
     // 状态栏颜色适配（照搬 Java 版 L286-301）
-    LaunchedEffect(isCompact, topBarOpaqueBg, isTerminalDark, showToolbar, keyboardSurfaceIsLight) {
+    // 展开态：状态栏透明，图标明暗跟 opaque 背景板（系统亮暗 / Monet surface）走；
+    // 收缩态：状态栏透明，图标明暗跟终端背景亮度走
+    LaunchedEffect(barCollapsed, topBarOpaqueBg, isTerminalDark, showToolbar, keyboardSurfaceIsLight) {
         val act = context as? android.app.Activity
         if (act != null) {
             val window = act.window
             val controller = androidx.core.view.WindowCompat.getInsetsController(window, window.decorView)
-            if (!isCompact) {
-                // TopAppBar 模式：状态栏同样透明，底色由顶栏 Column 背景绘制。
+            if (!barCollapsed) {
+                // 展开态：状态栏同样透明，底色由顶栏 Column 背景绘制。
                 // 若锁成 opaque 窗口色，对话框暗色遮罩只会压暗应用内容，
                 // 状态栏一条纯白漏在外面（浅色主题下尤其明显）。
                 window.statusBarColor = android.graphics.Color.TRANSPARENT
                 controller.isAppearanceLightStatusBars = topBarOpaqueBg.luminance() > 0.5f
             } else {
-                // SmallTopAppBar mode: status bar transparent
+                // 收缩态：状态栏透明，图标明暗追终端背景
                 window.statusBarColor = android.graphics.Color.TRANSPARENT
                 controller.isAppearanceLightStatusBars = !isTerminalDark
             }
@@ -556,11 +532,15 @@ fun TerminalDetailScreenCompose(
         }
     }
 
+    // 3 秒无操作自动收起 + 死会话强制保持展开的策略本体。
+    // 焦点来自 TopBar（lastInteractionFromTopBar）或会话列表/菜单/重命名对话框打开时，
+    // 持续保持展开、不跑收起计时——对应旧版「焦点在 TopBar 就保持扩展」的逻辑，
+    // 现在它只负责向 GlassTerminalBar 下命令，栏自身不做任何自动状态变更。
     LaunchedEffect(sessionKey, currentSessionIsDead) {
         lastInteractionTime = System.currentTimeMillis()
         while (true) {
             if (currentSessionIsDead) {
-                if (isCompact) showTopBarTemporarily()
+                if (barCollapsed) showTopBarTemporarily()
                 delay(500)
                 continue
             }
@@ -588,6 +568,10 @@ fun TerminalDetailScreenCompose(
             else window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         }
     }
+
+    // 玻璃页背景层：终端内容整屏捕获为一层，供 GlassTerminalBar 的玻璃按钮实时采样模糊。
+    // 捕获只挂在内容上，栏身在层外——包进栏会让按钮采样到含自身的纹理。
+    val glassPage = rememberGlassPageBackdrop()
 
     val addSessionEntry = DropdownEntry(
         items = listOf(
@@ -655,208 +639,119 @@ fun TerminalDetailScreenCompose(
         )
     }
 
+    /**
+     * 玻璃版顶栏动作区：一整块玻璃面板（GlassTerminalBarActionsPanel）里排 5 个裸图标按钮，
+     * 按钮各自不再带底板 / 描边 / 阴影，成组观感对齐旧版 TopBarActionCard，材质升级为玻璃。
+     * 终端 / 键盘两键保留长按交互（重命名会话 / 快捷命令面板）。
+     */
     @Composable
-    fun TopBarActionCard(content: @Composable () -> Unit) {
-        val cardColor = if (!isCompact) {
-            if (topBarOpaqueBg.luminance() > 0.5f) {
-                Color.Black.copy(alpha = 0.08f)
-            } else {
-                Color.White.copy(alpha = 0.12f)
-            }
-        } else {
-            if (isTerminalDark) {
-                Color.White.copy(alpha = 0.12f)
-            } else {
-                Color.Black.copy(alpha = 0.08f)
-            }
-        }
-        Card(
-            cornerRadius = 21.dp,
-            colors = CardDefaults.defaultColors(
-                color = cardColor,
-                contentColor = effectiveTopBarContentColor
-            )
-        ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 2.dp),
-                verticalAlignment = Alignment.CenterVertically
+    fun TerminalTopBarGlassActions() {
+        // 极简模式（isTopBarCollapsed）收起动作区时，按钮只是被裁到 0 宽——命中区还在，
+        // 点上去照样触发。所以整组按钮统一按该状态关闭手势，收起即彻底不可点。
+        val actionsEnabled = !isTopBarCollapsed
+        var showAddSessionMenu by remember { mutableStateOf(false) }
+        // 收起动作区时若菜单还开着，直接关掉，避免按钮隐了菜单还浮着。
+        LaunchedEffect(actionsEnabled) { if (!actionsEnabled) showAddSessionMenu = false }
+        GlassTerminalBarActionsPanel {
+            GlassTerminalBarPanelButton(
+                onClick = { updateInteractionTime(); showSessionList = true },
+                onLongClick = {
+                    updateInteractionTime()
+                    // 沙箱会话禁止重命名：清理逻辑以标题「沙箱会话」为锚点
+                    if (currentSessionName != context.getString(R.string.vortex_sandbox_session_title)) {
+                        renameValue = currentSessionName
+                        showRenameDialog = true
+                    }
+                },
+                enabled = actionsEnabled,
             ) {
-                content()
+                Icon(
+                    painter = painterResource(R.drawable.ic_terminal),
+                    contentDescription = null,
+                    modifier = Modifier.size(24.dp),
+                    tint = effectiveTopBarContentColor
+                )
+            }
+            GlassTerminalBarPanelButton(
+                onClick = { updateInteractionTime(); toggleKeyboardRespectingSettings() },
+                onLongClick = { updateInteractionTime(); showQuickCommandSheet = true },
+                enabled = actionsEnabled,
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_keyboard),
+                    contentDescription = null,
+                    modifier = Modifier.size(24.dp),
+                    tint = effectiveTopBarContentColor
+                )
+            }
+            // 「+」原先走 OverlayIconDropdownMenu（内部是 miuix IconButton），按压反馈与其它按钮
+            // 不是一套，看着不像一组。这里改成和其余四键同款的 GlassTerminalBarPanelButton，
+            // 菜单弹层外挂到同一个 Box 里——弹层按自身布局坐标定位，位置与原先一致。
+            Box {
+                GlassTerminalBarPanelButton(
+                    onClick = { updateInteractionTime(); showAddSessionMenu = true },
+                    enabled = actionsEnabled,
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_add),
+                        contentDescription = null,
+                        modifier = Modifier.size(24.dp),
+                        tint = effectiveTopBarContentColor
+                    )
+                }
+                OverlayDropdownPopup(
+                    entry = addSessionEntry,
+                    show = showAddSessionMenu,
+                    onDismiss = { showAddSessionMenu = false },
+                    onDismissFinished = { showAddSessionMenu = false },
+                    maxHeight = null,
+                    dropdownColors = DropdownDefaults.dropdownColors(),
+                    renderInRootScaffold = true,
+                    collapseOnSelection = true,
+                )
+            }
+            GlassTerminalBarPanelButton(
+                onClick = { updateInteractionTime(); closeCurrentSession() },
+                enabled = actionsEnabled && !currentSessionIsDead
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_close),
+                    contentDescription = null,
+                    modifier = Modifier.size(24.dp),
+                    tint = if (currentSessionIsDead)
+                        effectiveTopBarContentColor.copy(alpha = 0.3f)
+                    else effectiveTopBarContentColor
+                )
+            }
+            GlassTerminalBarPanelButton(
+                onClick = { updateInteractionTime(); showContextMenu = true },
+                enabled = actionsEnabled,
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.MoreVert,
+                    contentDescription = null,
+                    modifier = Modifier.size(24.dp),
+                    tint = effectiveTopBarContentColor
+                )
             }
         }
     }
 
+    /**
+     * 栏首返回键：48dp 圆形玻璃 pill（全栏统一正圆）。
+     * 收缩态顶栏是压在终端内容上的 56dp 细条，图标必须自带玻璃底板 + 阴影
+     * 才不会糊进终端内容（与原 TopBarLeafIcon 玻璃态一致）。
+     */
     @Composable
-    fun SmallTopActionButtons() {
-        val terminalInteractionSource = remember { MutableInteractionSource() }
-        Box(
-            modifier = Modifier
-                .size(40.dp)
-                .clip(CircleShape)
-                .combinedClickable(
-                    interactionSource = terminalInteractionSource,
-                    indication = topBarIndication,
-                    onClick = { updateInteractionTime(); showSessionList = true },
-                    onLongClick = {
-                        updateInteractionTime()
-                        renameValue = currentSessionName
-                        showRenameDialog = true
-                    }
-                ),
-            contentAlignment = Alignment.Center
+    fun TerminalTopBarNavIcon() {
+        GlassIconButton(
+            onClick = { updateInteractionTime(); onBack() },
+            size = 48.dp,
+            padding = 0.dp,
+            shape = GlassShape(24.dp),
         ) {
             Icon(
-                painter = painterResource(R.drawable.ic_terminal),
-                contentDescription = null,
-                modifier = Modifier.size(24.dp),
-                tint = effectiveTopBarContentColor
-            )
-        }
-        Box(
-            modifier = Modifier
-                .size(40.dp)
-                .clip(CircleShape)
-                .combinedClickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = topBarIndication,
-                    onClick = { updateInteractionTime(); toggleKeyboardRespectingSettings() },
-                    onLongClick = {
-                        updateInteractionTime()
-                        showQuickCommandSheet = true
-                    }
-                ),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                painter = painterResource(R.drawable.ic_keyboard),
-                contentDescription = null,
-                modifier = Modifier.size(24.dp),
-                tint = effectiveTopBarContentColor
-            )
-        }
-        OverlayIconDropdownMenu(
-            entry = addSessionEntry,
-            backgroundColor = Color.Transparent,
-            minWidth = 40.dp,
-            minHeight = 40.dp
-        ) {
-            Icon(
-                painter = painterResource(R.drawable.ic_add),
-                contentDescription = null,
-                modifier = Modifier.size(24.dp),
-                tint = effectiveTopBarContentColor
-            )
-        }
-        IconButton(
-            onClick = {
-                updateInteractionTime()
-                closeCurrentSession()
-            },
-            enabled = !currentSessionIsDead,
-            minWidth = 40.dp,
-            minHeight = 40.dp
-        ) {
-            Icon(
-                painter = painterResource(R.drawable.ic_close),
-                contentDescription = null,
-                modifier = Modifier.size(24.dp),
-                tint = if (currentSessionIsDead)
-                    effectiveTopBarContentColor.copy(alpha = 0.3f)
-                else effectiveTopBarContentColor
-            )
-        }
-        IconButton(onClick = { updateInteractionTime(); showContextMenu = true }, minWidth = 40.dp, minHeight = 40.dp) {
-            Icon(
-                imageVector = Icons.Rounded.MoreVert,
-                contentDescription = null,
-                modifier = Modifier.size(24.dp),
-                tint = effectiveTopBarContentColor
-            )
-        }
-    }
-
-    @Composable
-    fun LargeTopActionButtons() {
-        val terminalInteractionSource = remember { MutableInteractionSource() }
-        Box(
-            modifier = Modifier
-                .size(40.dp)
-                .clip(CircleShape)
-                .combinedClickable(
-                    interactionSource = terminalInteractionSource,
-                    indication = topBarIndication,
-                    onClick = { updateInteractionTime(); showSessionList = true },
-                    onLongClick = {
-                        updateInteractionTime()
-                        renameValue = currentSessionName
-                        showRenameDialog = true
-                    }
-                ),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                painter = painterResource(R.drawable.ic_terminal),
-                contentDescription = null,
-                modifier = Modifier.size(24.dp),
-                tint = effectiveTopBarContentColor
-            )
-        }
-        Box(
-            modifier = Modifier
-                .size(40.dp)
-                .clip(CircleShape)
-                .combinedClickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = topBarIndication,
-                    onClick = { updateInteractionTime(); toggleKeyboardRespectingSettings() },
-                    onLongClick = {
-                        updateInteractionTime()
-                        showQuickCommandSheet = true
-                    }
-                ),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                painter = painterResource(R.drawable.ic_keyboard),
-                contentDescription = null,
-                modifier = Modifier.size(24.dp),
-                tint = effectiveTopBarContentColor
-            )
-        }
-        OverlayIconDropdownMenu(
-            entry = addSessionEntry,
-            backgroundColor = Color.Transparent,
-            minWidth = 40.dp,
-            minHeight = 40.dp
-        ) {
-            Icon(
-                painter = painterResource(R.drawable.ic_add),
-                contentDescription = null,
-                modifier = Modifier.size(24.dp),
-                tint = effectiveTopBarContentColor
-            )
-        }
-        IconButton(
-            onClick = {
-                updateInteractionTime()
-                closeCurrentSession()
-            },
-            enabled = !currentSessionIsDead,
-            minWidth = 40.dp,
-            minHeight = 40.dp
-        ) {
-            Icon(
-                painter = painterResource(R.drawable.ic_close),
-                contentDescription = null,
-                modifier = Modifier.size(24.dp),
-                tint = if (currentSessionIsDead)
-                    effectiveTopBarContentColor.copy(alpha = 0.3f)
-                else effectiveTopBarContentColor
-            )
-        }
-        IconButton(onClick = { updateInteractionTime(); showContextMenu = true }, minWidth = 40.dp, minHeight = 40.dp) {
-            Icon(
-                imageVector = Icons.Rounded.MoreVert,
+                imageVector = MiuixGlassIcons.ChevronBackward,
                 contentDescription = null,
                 modifier = Modifier.size(24.dp),
                 tint = effectiveTopBarContentColor
@@ -865,140 +760,33 @@ fun TerminalDetailScreenCompose(
     }
 
     /**
-     * 顶栏左右两端的键（返回、收缩/展开）。收缩态顶栏只剩这条 56dp 的行压在终端背景上，
-     * 图标得自带玻璃底板 + 阴影，否则会糊进终端内容；展开态顶栏是完整 TopAppBar、自带
-     * 不透明底色，用普通 IconButton 即可。
-     *
-     * 两态必须占同样大的盒子，否则图标会随展开/收缩左右跳：IconButton 默认只给 40dp
-     * 触碰盒，玻璃底板是 48dp。所以展开态显式把 minWidth/minHeight 提到 48dp，玻璃态
-     * 保持 size = 48dp、padding = 0，两者只差画在底板上的那层外观。
+     * 栏尾把手：切换极简模式（isTopBarCollapsed）——进一步收起动作区。
+     * 标题显隐仅收缩态生效：工具栏收缩（极简）时显示紧凑标题，展开时隐藏。
+     * 展开 / 收缩命令本身仍只由计时与事件逻辑下发。同为 48dp 圆形玻璃 pill。
      */
     @Composable
-    fun TopBarLeafIcon(
-        collapsed: Boolean,
-        onClick: () -> Unit,
-        glyph: @Composable () -> Unit
-    ) {
-        if (collapsed) {
-            GlassIconButton(onClick = onClick, size = 48.dp, padding = 0.dp) {
-                glyph()
-            }
-        } else {
-            // 展开态也要占 48dp，和玻璃态一致；IconButton 默认只有 40dp，图标会跟着态切换左右跳 4dp。
-            IconButton(onClick = onClick, minWidth = 48.dp, minHeight = 48.dp) { glyph() }
-        }
-    }
-
-    @Composable
-    fun TopBarButtonRow() {
-        val showLargeButtons = if (isTopBarTransitioning) useLargeButtons else !isCompact
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .statusBarsPadding()
-                // 横屏沉浸式下系统栏隐藏、状态栏 inset 归零，刘海/挖孔在屏幕左右两侧：
-                // 用 cutout insets 让顶栏按钮避开侧边刘海（竖屏时此项为 0，布局不变）
-                .padding(start = cutoutStart, end = cutoutEnd)
-                .height(56.dp)
-                .then(
-                    if (isCompact) {
-                        Modifier.clickable(
-                            indication = null,
-                            interactionSource = remember { MutableInteractionSource() }
-                        ) { showTopBarTemporarily() }
-                    } else {
-                        Modifier
-                    }
-                ),
-            verticalAlignment = Alignment.CenterVertically
+    fun TerminalTopBarTrailingIcon() {
+        GlassIconButton(
+            onClick = {
+                updateInteractionTime()
+                isTopBarCollapsed = !isTopBarCollapsed
+            },
+            size = 48.dp,
+            // 与动作区面板之间留出标准按钮间距（与其他相邻玻璃 pill 一致），
+            // 0 会让面板和把手贴死。
+            padding = GlassTopAppBarDefaults.ButtonPadding,
+            shape = GlassShape(24.dp),
         ) {
-            Row(modifier = Modifier.padding(start = 16.dp)) {
-                TopBarLeafIcon(
-                    collapsed = isCompact,
-                    onClick = { updateInteractionTime(); onBack() }
-                ) {
-                    Icon(
-                        imageVector = MiuixGlassIcons.ChevronBackward,
-                        contentDescription = null,
-                        modifier = Modifier.size(24.dp),
-                        tint = if (isCompact)
-                            MiuixTheme.colorScheme.onSurface
-                        else effectiveTopBarContentColor
-                    )
-                }
-            }
-
-            Box(
-                modifier = Modifier.weight(1f),
-                contentAlignment = Alignment.CenterEnd
-            ) {
-                if (!showLargeButtons) {
-                    Text(
-                        text = currentSessionName.ifEmpty { context.getString(R.string.terminal) },
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Normal,
-                        color = effectiveTopBarContentColor,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 4.dp)
-                            .alpha(smallTitleAlpha)
-                    )
-                }
-                androidx.compose.animation.AnimatedVisibility(
-                    visible = !isTopBarCollapsed,
-                    enter = expandHorizontally(
-                        expandFrom = Alignment.End,
-                        animationSpec = tween(220, easing = FastOutSlowInEasing)
-                    ) + fadeIn(tween(150)),
-                    exit = shrinkHorizontally(
-                        shrinkTowards = Alignment.End,
-                        animationSpec = tween(220, easing = FastOutSlowInEasing)
-                    ) + fadeOut(tween(150))
-                ) {
-                    TopBarActionCard {
-                        if (showLargeButtons) LargeTopActionButtons() else SmallTopActionButtons()
-                    }
-                }
-            }
-
-            Row(modifier = Modifier.padding(start = 8.dp, end = 16.dp)) {
-                TopBarLeafIcon(
-                    collapsed = isCompact,
-                    onClick = {
-                        updateInteractionTime()
-                        val newCollapsed = !isTopBarCollapsed
-                        isTopBarCollapsed = newCollapsed
-                        if (isCompact) {
-                            coroutineScope.launch {
-                                animate(
-                                    initialValue = smallTitleAlpha,
-                                    targetValue = if (newCollapsed) 1f else 0f,
-                                    animationSpec = tween(200, easing = FastOutSlowInEasing)
-                                ) { value, _ ->
-                                    smallTitleAlpha = value
-                                }
-                            }
-                        }
-                    }
-                ) {
-                    Icon(
-                        // 左侧返回键是 chevron（描边 V 形），折叠把手必须换成实心三角才不撞形。
-                        // 注意 KeyboardArrow 家族连 Filled 变体也是 chevron，真正的实心楔形是
-                        // ArrowLeft/ArrowRight（M10 17l5-5-5-5v10z）。楔形 @24dp 墨迹仅 25dp²，
-                        // 取 32dp 后约 44dp²，与返回 chevron 的 ~46dp² 视觉重量相当。
-                        imageVector = if (isTopBarCollapsed) Icons.AutoMirrored.Filled.ArrowRight else Icons.AutoMirrored.Filled.ArrowLeft,
-                        contentDescription = null,
-                        modifier = Modifier.size(32.dp),
-                        tint = if (isCompact)
-                            MiuixTheme.colorScheme.onSurface
-                        else effectiveTopBarContentColor
-                    )
-                }
-            }
+            Icon(
+                // 左侧返回键是 chevron（描边 V 形），折叠把手必须换成实心三角才不撞形。
+                // 注意 KeyboardArrow 家族连 Filled 变体也是 chevron，真正的实心楔形是
+                // ArrowLeft/ArrowRight（M10 17l5-5-5-5v10z）。楔形 @24dp 墨迹仅 25dp²，
+                // 取 32dp 后约 44dp²，与返回 chevron 的 ~46dp² 视觉重量相当。
+                imageVector = if (isTopBarCollapsed) Icons.AutoMirrored.Filled.ArrowRight else Icons.AutoMirrored.Filled.ArrowLeft,
+                contentDescription = null,
+                modifier = Modifier.size(32.dp),
+                tint = effectiveTopBarContentColor
+            )
         }
     }
 
@@ -1019,81 +807,60 @@ fun TerminalDetailScreenCompose(
                 )
             },
             topBar = {
-                // 收缩态用终端实际背景色：顶栏透明到底会让窗口默认底色（浅色主题为白）
-                // 从透明处漏出，白色图标又叠在白底上导致整条顶栏看不见
-                val topBarColor by animateColorAsState(
-                    targetValue = if (isCompact) terminalBgColor else topBarOpaqueBg,
-                    animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
-                    label = "topBarBg"
-                )
-                val titleAlpha by animateFloatAsState(
-                    targetValue = if (showLargeContent) 1f else 0f,
-                    animationSpec = tween(
-                        durationMillis = if (showLargeContent) 150 else 100,
-                        easing = FastOutLinearInEasing
-                    ),
-                    label = "titleAlpha"
-                )
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(topBarColor)
-                ) {
-                    TopBarButtonRow()
-                    if (!isCompact || isTopBarTransitioning) {
+                // 终端控制台专属玻璃栏 GlassTerminalBar：
+                // - 收缩/展开只认 barCollapsed 命令，栏自身不自动改状态
+                // - 展开态：System 取色 + opaque 背景板（ Monet / 系统亮暗 ），文字图标追 opaque 亮度
+                // - 收缩态：追终端背景亮度取色 + 渐隐背景板用终端背景色，图标智能亮/暗
+                // - 副标题承载「新会话 / 会话已结束」提示（颜色随场景适配）
+                GlassTerminalBar(
+                    collapsed = barCollapsed,
+                    // 横屏时刘海/挖孔位于屏幕左右两侧：给整条顶栏加 cutout 水平避让
+                    // （竖屏时 cutoutStart/cutoutEnd 为 0，布局不变）
+                    modifier = Modifier.padding(start = cutoutStart, end = cutoutEnd),
+                    title = barTitle,
+                    // 展开态大标题始终显示会话名，不受收缩态标题显隐逻辑影响
+                    largeTitle = currentSessionName.ifEmpty { context.getString(R.string.terminal) },
+                    subtitle = barSubtitle,
+                    subtitleColor = barSubtitleColor,
+                    bandColor = barBandColor,
+                    colorStyle = barColorStyle,
+                    contentColor = effectiveTopBarContentColor,
+                    backdrop = glassPage.backdrop,
+                    // 收缩态点击栏体空白处 = 展开命令（与旧版「点一下收缩态顶栏临时展开」一致）。
+                    // 走栏内部的 onBlankTap：原版 BlurTopAppBar 根节点会吞掉整栏点击，
+                    // 挂在外层 modifier 上永远收不到；栏内空白命中才回调，按钮手势不受影响。
+                    onBlankTap = if (barCollapsed) {
+                        { showTopBarTemporarily() }
+                    } else {
+                        null
+                    },
+                    navigationIcon = { TerminalTopBarNavIcon() },
+                    actions = {
+                        // 极简模式切换时动作区整体横向收起（对齐旧版 AnimatedVisibility 的
+                        // expandHorizontally(End) + fade 语义）。不用 AV 直做 Row 子级——
+                        // RowScope.AnimatedVisibility 首帧测量为 0 宽且不恢复，动作区会消失；
+                        // 这里自绘宽度裁切：内容右对齐，宽度随进度从末端收起，同步渐隐。
+                        val actionsWidth by animateFloatAsState(
+                            targetValue = if (!isTopBarCollapsed) 1f else 0f,
+                            animationSpec = tween(AppMotion.NORMAL, easing = FastOutSlowInEasing),
+                            label = "topBarActionsWidth"
+                        )
                         Box(
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .background(Color.Transparent)
-                                .clipToBounds()
+                                .graphicsLayer { alpha = actionsWidth }
                                 .layout { measurable, constraints ->
                                     val placeable = measurable.measure(constraints)
-                                    val visibleHeight =
-                                        (placeable.height * (1f - topBarSlideProgress)).roundToInt()
-                                    layout(placeable.width, visibleHeight) {
-                                        placeable.placeRelative(
-                                            0,
-                                            -(placeable.height * topBarSlideProgress).roundToInt()
-                                        )
+                                    val visibleWidth = (placeable.width * actionsWidth).roundToInt()
+                                    layout(visibleWidth, placeable.height) {
+                                        placeable.placeRelative(visibleWidth - placeable.width, 0)
                                     }
                                 }
-                                .padding(horizontal = 16.dp, vertical = 4.dp)
-                                .alpha(titleAlpha)
                         ) {
-                            Column {
-                                when {
-                                    currentSessionIsDead -> {
-                                        Text(
-                                            text = if (sessionExitCode >= 0)
-                                                context.getString(R.string.session_exit_code_label, sessionExitCode)
-                                            else context.getString(R.string.session_ended),
-                                            fontSize = 13.sp,
-                                            color = Color(0xFFFF5252),
-                                            modifier = Modifier.padding(bottom = 1.dp)
-                                        )
-                                    }
-                                    showNewSessionLabel -> {
-                                        val handleText = sessionDisplayNumber.toString()
-                                        Text(
-                                            text = context.getString(R.string.new_session_handle, handleText),
-                                            fontSize = 13.sp,
-                                            color = effectiveTopBarContentColorSecondary,
-                                            modifier = Modifier.padding(bottom = 1.dp)
-                                        )
-                                    }
-                                }
-                                Text(
-                                    text = currentSessionName.ifEmpty { context.getString(R.string.terminal) },
-                                    fontSize = 28.sp,
-                                    fontWeight = FontWeight.Normal,
-                                    color = effectiveTopBarContentColor,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
+                            TerminalTopBarGlassActions()
                         }
-                    }
-                }
+                    },
+                    trailingIcon = { TerminalTopBarTrailingIcon() },
+                )
             },
             bottomBar = {
                 if (showToolbar) {
@@ -1116,9 +883,17 @@ fun TerminalDetailScreenCompose(
                 }
             }
         ) { padding ->
+            // 终端内容整屏捕获为一层（GlassTerminalBar 的玻璃按钮采样它做实时模糊），
+            // 层内先铺终端背景色，再让终端视图避让头部：
+            // - 栏身避让区（状态栏 + 玻璃栏当前高度）采样到的就是终端背景色，
+            //   band 渐隐到它、玻璃 pill 也落在它上面，与终端内容连成一片；
+            // - Scaffold 的 topPadding 即 GlassTerminalBar 的实测高度，展开/折叠逐帧
+            //   跟随，终端前几行始终留在栏下方可见，不会被玻璃栏盖住。
             Box(
                 modifier = Modifier
                     .fillMaxSize()
+                    .then(glassPage.contentModifier)
+                    .background(terminalBgColor)
                     .padding(padding)
                     .pointerInput(Unit) {
                         awaitEachGesture {
@@ -1443,6 +1218,12 @@ fun TerminalDetailScreenCompose(
             // 挂载风险确认宿主：收集VorteX Guard Engine Snackbar 事件（仅提示/完全拦截），与 Java 版控制台行为一致
             RiskConfirmDialogHost(snackbarHostState)
 
+            // VorteX 沙箱告警宿主：沙箱内访问 Android 内存储等事件以 Snackbar 提示
+            com.termux.app.vortex.VorteXSandboxNoticeHost(
+                enabled = currentSessionName == context.getString(R.string.vortex_sandbox_session_title),
+                snackbarHostState = snackbarHostState,
+            )
+
             // 快捷指令 BottomSheet：长按 TopBar 键盘按钮触发
             QuickCommandSheet(
                 show = showQuickCommandSheet,
@@ -1537,8 +1318,47 @@ private val REPETITIVE_KEY_NAMES = setOf(
     "UP", "DOWN", "LEFT", "RIGHT", "BKSP", "DEL", "PGUP", "PGDN"
 )
 
-/** 单个按键的最小宽度：低于此值等分出来的键点不中，改用横向滚动。 */
-private val MIN_KEY_WIDTH = 28.dp
+/**
+ * 终端小键盘工具栏的按键尺寸与滚动需求计算器。
+ * 键宽按最宽的一行等分，铺满可用宽度。当等分宽度小于 [MIN_KEY_WIDTH] 时退回横向滚动，
+ * 避免小键盘按键在窄屏设备上被物理截断且不可滑动触达。
+ */
+internal object TerminalKeyboardLayoutCalculator {
+    val MIN_KEY_WIDTH = 28.dp
+    val HORIZONTAL_PADDING = 6.dp
+    val GAP = 3.dp
+
+    data class LayoutResult(
+        val keyWidth: Dp,
+        val needsScroll: Boolean,
+        val contentWidth: Dp
+    )
+
+    fun calculate(toolbarWidth: Dp, maxColumns: Int): LayoutResult {
+        if (maxColumns <= 0) {
+            return LayoutResult(
+                keyWidth = MIN_KEY_WIDTH,
+                needsScroll = false,
+                contentWidth = toolbarWidth
+            )
+        }
+        val available = toolbarWidth - HORIZONTAL_PADDING * 2
+        val totalGap = GAP * (maxColumns - 1)
+        val fitWidth = (available - totalGap) / maxColumns
+        val needsScroll = fitWidth < MIN_KEY_WIDTH
+        val keyWidth = fitWidth.coerceAtLeast(MIN_KEY_WIDTH)
+        val contentWidth = if (needsScroll) {
+            keyWidth * maxColumns + totalGap + HORIZONTAL_PADDING * 2
+        } else {
+            toolbarWidth
+        }
+        return LayoutResult(
+            keyWidth = keyWidth,
+            needsScroll = needsScroll,
+            contentWidth = contentWidth
+        )
+    }
+}
 
 /**
  * 小键盘按键标签的字号策略：优先 11.sp，放不下就自动缩小字号，而不是截断成省略号。
@@ -1846,17 +1666,10 @@ private fun TerminalKeyboardToolbar(
         // 先取出工具栏可用宽度：下方嵌套的 Box 也有 fillMaxWidth，直接写 maxWidth
         // 会被内层作用域的同名属性遮蔽。
         val toolbarWidth = maxWidth
-        val horizontalPadding = 6.dp
-        val gap = 3.dp
         val maxColumns = rows.maxOfOrNull { it.size } ?: 0
-        val available = toolbarWidth - horizontalPadding * 2
-        val fitWidth = if (maxColumns > 0) {
-            (available - gap * (maxColumns - 1)) / maxColumns
-        } else {
-            available
-        }
-        val keyWidth = fitWidth.coerceAtLeast(MIN_KEY_WIDTH)
-        val needsScroll = keyWidth < fitWidth
+        val layout = TerminalKeyboardLayoutCalculator.calculate(toolbarWidth, maxColumns)
+        val keyWidth = layout.keyWidth
+        val needsScroll = layout.needsScroll
 
         Box(
             modifier = Modifier
@@ -1867,14 +1680,14 @@ private fun TerminalKeyboardToolbar(
         ) {
             Column(
                 modifier = Modifier
-                    .width(if (needsScroll) keyWidth * maxColumns + gap * (maxColumns - 1) + horizontalPadding * 2 else toolbarWidth)
+                    .width(layout.contentWidth)
                     .padding(vertical = 4.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 for (row in rows) {
                     Row(
-                        modifier = Modifier.padding(horizontal = horizontalPadding),
-                        horizontalArrangement = Arrangement.spacedBy(gap)
+                        modifier = Modifier.padding(horizontal = TerminalKeyboardLayoutCalculator.HORIZONTAL_PADDING),
+                        horizontalArrangement = Arrangement.spacedBy(TerminalKeyboardLayoutCalculator.GAP)
                     ) {
                         for (key in row) {
                             when (key) {

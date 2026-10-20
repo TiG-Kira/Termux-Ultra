@@ -141,6 +141,22 @@ public class TermuxApplication extends Application {
             }
             setLogLevel();
 
+            // 初始化共享属性单例：仓库内此前没有任何 TermuxAppSharedProperties.init() 调用，
+            // getProperties() 恒为 null，读取点（如 TermuxShellUtils.clearTermuxTMPDIR）会空指针。
+            try {
+                com.termux.shared.termux.settings.properties.TermuxAppSharedProperties.init(TermuxApplication.this);
+            } catch (Throwable t) {
+                android.util.Log.w("TermuxApplication", "TermuxAppSharedProperties init failed", t);
+            }
+
+            // 启动时把 ~/.termux/termux.properties 的 allow-external-apps 与 Agent 配置态对齐，
+            // 覆盖「进程外改过配置文件」或「升级前已配置 Agent」的情况（配置了→true，移除→false）。
+            try {
+                com.termux.app.compose.AiTermuxPrefs.INSTANCE.syncAllowExternalApps(TermuxApplication.this);
+            } catch (Throwable t) {
+                android.util.Log.w("TermuxApplication", "allow-external-apps sync failed", t);
+            }
+
             // 注册插件宿主能力（轻量操作，纯内存注册）
             try {
                 com.termux.app.plugin.HostActionRegistry.INSTANCE.registerDefaults(TermuxApplication.this);

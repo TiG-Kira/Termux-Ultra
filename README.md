@@ -3,7 +3,7 @@
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](./LICENSE)
 [![Platform: Android](https://img.shields.io/badge/Platform-Android%209.0%2B-green.svg)]()
 [![Based on Termux v0.119.0](https://img.shields.io/badge/Base-Termux%20v0.119.0-orange.svg)](https://github.com/termux/termux-app/releases/tag/v0.119.0-beta.3)
-[![v3.3.3.R7](https://img.shields.io/badge/v3.3.3.R7-stable-brightgreen.svg)](https://github.com/TiG-Kira/Termux-Ultra/releases)
+[![v3.x.x.R8](https://img.shields.io/badge/v3.x.x.R8-stable-brightgreen.svg)](https://github.com/TiG-Kira/Termux-Ultra/releases)
 
 [![Build status](https://github.com/TiG-Kira/Termux-Ultra/actions/workflows/ci.yml/badge.svg)](https://github.com/TiG-Kira/Termux-Ultra/actions)
 [![Docs](https://img.shields.io/badge/Docs-GitHub%20Pages-blue.svg)](https://tig-kira.github.io/Termux-Ultra/)
@@ -16,14 +16,17 @@
 
 | 分支 | 基底 | 版本 | 状态 |
 |------|------|------|------|
-| **`main`** 🎯 | 上游 Termux `v0.119.0-beta.3` | 3.x.x.R7 | **正式版主线**，承接功能开发、Bug 修复、架构优化 |
-| `release/r1-r4` | 上游 Termux `v0.118.3` | 1.8.0.R4 | 📦 v1.8.x 历史快照，**停止功能更新**，仅做紧急阻断 Bug 修复 |
-| `archived/corebump/2.x` | 上游 Termux `v0.119.0-beta.3` | 2.0.0.R5 | 📂 归档快照，保留 2.x 内部开发步骤 |
+| **`main`** 🎯 | 上游 Termux `v0.119.0-beta.3` | 3.x.x.R9 | **正式版主线**，承接功能开发、Bug 修复、架构优化 |
+| `archived/corebump/2.x` | 上游 Termux `v0.119.0-beta.3` | 2.0.0.R5 | 📂 归档快照，保留 2.x 内部开发步骤（R5-R9 均基于此版本开发） |
 
-> ✅ **当前主线为 `3.3.3.R7`**，基于上游 Termux v0.119.0，包含 libterminal 引擎、玻璃顶栏、插件系统、Termux Agent、AgentPaw 手机操控引擎等核心功能。
+> ✅ **当前主线为 `3.8.2.R9`**，基于上游 Termux v0.119.0，包含 libterminal 引擎、玻璃顶栏、插件系统、Termux Agent、AgentPaw 手机操控引擎等核心功能。
 > 由于上游长期未更新 Release，内部测试上游 Beta 稳定，将直接作为 0.119.0 基底。
 
+> 注意: 原 1.x 分支开发时间较久，已删除分支且内部归档，不再放置在仓库内。
 
+***
+
+## 简介
 
 **Termux Ultra** 是一款基于 [Termux](https://github.com/termux/termux-app) 二次开发的 Android 终端模拟器与 Linux 环境应用。它在保留 Termux 原生终端能力的基础上，集成了 VNC 远程桌面、SSH 连接管理、文件管理器、Linux 容器（proot）、QEMU 虚拟机、一键资源部署、AI 助手、插件系统等增强功能，并将 5 款 Termux 插件（API、Boot、Styling、Tasker、Widget）内置为可开关的集成工具，无需额外安装。UI 采用 Jetpack Compose + Miuix 设计语言打造。
 
@@ -71,7 +74,7 @@
 
 > 📅 **2026-09-25 ~ 2026-09-29**
 
-- **关闭 R8 代码收缩**（默认）：Gson `TypeToken` 泛型签名、`Class.forName`、JNI 回调等动态引用点难以穷举 -keep 且仍偶发崩溃，维护成本高于体积收益；需要时可用 `-Ptermux.enableR8=true` 显式开启
+- **R8 代码收缩暂时默认关闭**（3.0.x 期间）：Gson `TypeToken` 泛型签名、`Class.forName`、JNI 回调等动态引用点难以穷举 -keep 且仍偶发崩溃，维护成本高于体积收益；**后续已补齐反向调用 keep 规则并重新默认启用**（见文末[技术栈](#技术栈)表），本条仅记录当时状态，现已不适用
 - **APK 体积路线调整**：ReDex / strip_so 重打包方案实测收益有限（整体仍 ~103MB）且可靠性风险更高，已从发布流程移除；减重改由 bootstrap 在线下载承担
 - **集成工具默认关闭**：新安装用户不再默认启用 5 款 Termux 插件，需在设置中手动开启
 - **恢复经典引擎终端设置项**并接入 libterminal；重写存储管理占用统计，分类之和精确等于系统值
@@ -462,7 +465,7 @@ Release 签名使用 `ki-terminal-release.jks`（alias: `ki-terminal`）。该 k
 | 构建 | Gradle（AGP 9.1.0）、CMake 3.22.1、NDK 28.2.13676358、JDK 21 |
 | 集成插件 | termux-api、termux-boot、termux-styling、termux-tasker、termux-widget |
 | 包名 | `com.termux`（sharedUserId） |
-| 混淆 | R8 默认关闭（`-Ptermux.enableR8=true` 可显式开启） |
+| 混淆 | R8 默认**启用**（`termux.enableR8` 默认 `true`）：只收缩不重命名（`-dontobfuscate`），keep 规则见 `app/proguard-rules.pro`；回退用 `-Ptermux.enableR8=false` 或 `TERMUX_ENABLE_R8=false` |
 
 ## 插件开发指南
 

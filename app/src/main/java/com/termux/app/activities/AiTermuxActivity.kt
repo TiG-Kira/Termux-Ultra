@@ -439,8 +439,13 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
                 activeConversationTitle = DEFAULT_CONVERSATION_TITLE
                 synchronized(messages) { messages.clear() }
             } else {
-                selectConversation(ctx, fallback.id)
-                return
+                // 不能走 selectConversation：它开头的 persistConversations 会发现
+                // activeConversationId（刚删掉的这个）已不在列表中，转而把当前消息
+                // 快照作为一个新对话重新 add 回列表并写盘——删除被"复活"，
+                // 表现为要删两次才生效。这里先内联切状态，删完只落盘一次。
+                activeConversationId = fallback.id
+                activeConversationTitle = fallback.title
+                synchronized(messages) { messages.clear(); messages.addAll(fallback.messages) }
             }
         }
         persistConversations(ctx)
@@ -1798,6 +1803,7 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
             SkillType.RUN_COMMAND -> "执行命令：$command"
             SkillType.CUSTOM_COMMAND -> "执行自定义命令：$command"
             SkillType.CAPTURE_OUTPUT -> "执行并捕获输出：$command"
+            SkillType.RUN_COMMAND_SANDBOX -> "沙箱预演：$command"
             SkillType.COMPILE_CODE -> "执行编译命令：$command"
             SkillType.SUB_AGENT -> "子 Agent 执行：$command"
             SkillType.FILE_DELETE -> "删除：${if (params.has("path")) params.get("path").asString else ""}"
@@ -2654,7 +2660,7 @@ private fun AiSetupScreen(vm: AiTermuxViewModel, onBack: () -> Unit) {
                             color = if (isDark) Color(0xFF424242) else Color(0xFFE0E0E0)
                         )
                     ) {
-                        if (testing) androidx.compose.material3.CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                        if (testing) top.yukonga.miuix.kmp.basic.CircularProgressIndicator(size = 18.dp, strokeWidth = 2.dp)
                         else Text("测试连接", color = MiuixTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
                     }
                     Button(
@@ -3142,32 +3148,7 @@ private fun AiChatScreen(vm: AiTermuxViewModel, conversationId: String, onBack: 
             showFirstTrainHint = true
         }
     }
-    top.yukonga.miuix.kmp.overlay.OverlayDialog(
-        title = "让本地模型越用越懂 Termux 操作",
-        summary = "检测到您现在使用的是本地模型。可前往设置页 → Termux Agent → 「训练本地模型」进行 System Prompt 蒸馏训练：\n\n• 如果配置了备用在线大模型，将由在线老师全自动出题、批改、评分，并自动把每轮的教训追加到 System Prompt 末尾。\n• 如果没有备用在线大模型，您可以手动打分并给出改进建议，系统还会提供启发式参考评分。",
-        show = showFirstTrainHint,
-        onDismissRequest = { showFirstTrainHint = false; AiTermuxPrefs.markTrainHintShown(ctx) },
-        content = {
-            androidx.compose.foundation.layout.Column {
-                top.yukonga.miuix.kmp.basic.TextButton(
-                    text = "现在去训练（推荐）",
-                    onClick = {
-                        showFirstTrainHint = false
-                        AiTermuxPrefs.markTrainHintShown(ctx)
-                        val it = android.content.Intent(ctx, com.termux.app.activities.AiLocalTrainerActivity::class.java)
-                        ctx.startActivity(it)
-                    },
-                    modifier = androidx.compose.ui.Modifier.fillMaxWidth()
-                )
-                androidx.compose.foundation.layout.Spacer(androidx.compose.ui.Modifier.height(6.dp))
-                top.yukonga.miuix.kmp.basic.TextButton(
-                    text = "稍后再说",
-                    onClick = { showFirstTrainHint = false; AiTermuxPrefs.markTrainHintShown(ctx) },
-                    modifier = androidx.compose.ui.Modifier.fillMaxWidth()
-                )
-            }
-        }
-    )
+
     LaunchedEffect(vm.messages.size, vm.isLoading) {
         if (vm.messages.isNotEmpty()) listState.animateScrollToItem(vm.messages.size - 1)
     }
@@ -3395,10 +3376,11 @@ private fun AiChatScreen(vm: AiTermuxViewModel, conversationId: String, onBack: 
                                     contentAlignment = Alignment.Center
                                 ) {
                                     if (vm.isLoading && !vm.isStreaming) {
-                                        androidx.compose.material3.CircularProgressIndicator(
-                                            modifier = Modifier.size(16.dp),
-                                            strokeWidth = 2.dp,
-                                            color = MiuixTheme.colorScheme.primary
+                                        // miuix 版转圈的绘制几何取 size 参数（默认 30dp），Modifier.size 只管
+                                        // Canvas 大小；不传 size 参数，圆弧按 30dp 画会溢出按钮圆罩
+                                        top.yukonga.miuix.kmp.basic.CircularProgressIndicator(
+                                            size = 16.dp,
+                                            strokeWidth = 2.dp
                                         )
                                     } else if (vm.isStreaming) {
                                         Icon(
@@ -3483,10 +3465,70 @@ private fun AiChatScreen(vm: AiTermuxViewModel, conversationId: String, onBack: 
                 ) {
                     TaskBar(tasks, showTaskBar, onClose = { showTaskBar = false }, onClear = { SkillExecutor.clearTasks() })
                 }
+                // 两个弹窗必须在 Scaffold 内部：OverlayDialog 的 DialogState 只有注册进
+                // Scaffold 提供的 LocalDialogStates，才会被内置 MiuixPopupHost 渲染；
+                // 挂在根 Box（Scaffold 外）时点击只改状态、弹窗不显示。
+                OverlayDialog(
+                    show = showClearConfirm,
+                    onDismissRequest = { showClearConfirm = false },
+                    title = "清空对话历史",
+                    summary = "将删除当前所有对话内容，此操作不可撤销。",
+                    content = {
+                        Row(horizontalArrangement = Arrangement.SpaceBetween) {
+                            TextButton(text = "取消", onClick = { showClearConfirm = false }, modifier = Modifier.weight(1f))
+                            Spacer(Modifier.width(16.dp))
+                            TextButton(
+                                text = "清空",
+                                onClick = {
+                                    vm.clearHistory()
+                                    showClearConfirm = false
+                                    SnackbarHelper.show(ctx, "对话历史已清空", Snackbar.LENGTH_SHORT)
+                                },
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.textButtonColors(color = StatusError)
+                            )
+                        }
+                    }
+                )
+                AgentFullHistoryDialog(
+                    show = showFullHistoryDialog,
+                    onDismiss = { showFullHistoryDialog = false },
+                    context = ctx,
+                    initialConversationId = conversationId
+                )
+
+                // 首次进入对话页：提示训练本地模型
+                // 必须挂在 Scaffold 内才会被 MiuixPopupHost 渲染，挂外层只改状态不显示
+                OverlayDialog(
+                    title = "让本地模型越用越懂 Termux 操作",
+                    summary = "检测到您现在使用的是本地模型。可前往设置页 → Termux Agent → 「训练本地模型」进行 System Prompt 蒸馏训练：\n\n• 如果配置了备用在线大模型，将由在线老师全自动出题、批改、评分，并自动把每轮的教训追加到 System Prompt 末尾。\n• 如果没有备用在线大模型，您可以手动打分并给出改进建议，系统还会提供启发式参考评分。",
+                    show = showFirstTrainHint,
+                    onDismissRequest = { showFirstTrainHint = false; AiTermuxPrefs.markTrainHintShown(ctx) },
+                    content = {
+                        Column {
+                            TextButton(
+                                text = "现在去训练（推荐）",
+                                onClick = {
+                                    showFirstTrainHint = false
+                                    AiTermuxPrefs.markTrainHintShown(ctx)
+                                    val it = android.content.Intent(ctx, com.termux.app.activities.AiLocalTrainerActivity::class.java)
+                                    ctx.startActivity(it)
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            Spacer(Modifier.height(6.dp))
+                            TextButton(
+                                text = "稍后再说",
+                                onClick = { showFirstTrainHint = false; AiTermuxPrefs.markTrainHintShown(ctx) },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                    }
+                )
             }
         }
 
-        // 玻璃「更多」菜单 + 清空确认弹窗：挂在根 Box，避免被顶栏裁剪 / 坐标错位
+        // 玻璃「更多」菜单：挂在根 Box，避免被顶栏裁剪 / 坐标错位
         GlassTransformPopup(
             show = showMoreMenu,
             onDismissRequest = { showMoreMenu = false },
@@ -3506,34 +3548,6 @@ private fun AiChatScreen(vm: AiTermuxViewModel, conversationId: String, onBack: 
             GlassPopupItem(text = "导出对话（分享）", onClick = { showMoreMenu = false; vm.exportConversation(ctx) })
             GlassPopupItem(text = "清空对话历史", onClick = { showMoreMenu = false; showClearConfirm = true })
         }
-        OverlayDialog(
-            show = showClearConfirm,
-            onDismissRequest = { showClearConfirm = false },
-            title = "清空对话历史",
-            summary = "将删除当前所有对话内容，此操作不可撤销。",
-            content = {
-                Row(horizontalArrangement = Arrangement.SpaceBetween) {
-                    TextButton(text = "取消", onClick = { showClearConfirm = false }, modifier = Modifier.weight(1f))
-                    Spacer(Modifier.width(16.dp))
-                    TextButton(
-                        text = "清空",
-                        onClick = {
-                            vm.clearHistory()
-                            showClearConfirm = false
-                            SnackbarHelper.show(ctx, "对话历史已清空", Snackbar.LENGTH_SHORT)
-                        },
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.textButtonColors(color = StatusError)
-                    )
-                }
-            }
-        )
-        AgentFullHistoryDialog(
-            show = showFullHistoryDialog,
-            onDismiss = { showFullHistoryDialog = false },
-            context = ctx,
-            initialConversationId = conversationId
-        )
     }
 
     // 风险命令确认弹窗
@@ -3574,6 +3588,10 @@ private fun AiChatGlassTopBar(
         subtitle = subtitle,
         scrollBehavior = scrollBehavior,
         backdrop = backdrop,
+        // 对话用 animateScrollToItem 跟随最新消息，属自滚动：contentOffset 不会被喂到，
+        // 默认的 collapseRamp 停在 0 会让「更多 / 返回」等按钮拿不到阴影，
+        // 故改由 isContentScrolled 驱动阴影 ramp，与 band / 按钮材质同步
+        rampFromOverlay = true,
         navigationIcon = {
             GlassIconButton(onClick = onBack) {
                 Icon(
@@ -3752,7 +3770,7 @@ fun TaskBar(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
-            .background(MiuixTheme.colorScheme.surface)
+            .background(MiuixTheme.colorScheme.surfaceContainer)
             .border(0.5.dp, MiuixTheme.colorScheme.outline.copy(alpha = 0.55f), RoundedCornerShape(16.dp))
             .padding(horizontal = 14.dp, vertical = 12.dp)
             .clickable(enabled = false) {}
@@ -3917,7 +3935,7 @@ private fun AiChatEmptyState(vm: AiTermuxViewModel, setInput: (String) -> Unit) 
                         modifier = Modifier
                             .weight(1f)
                             .clip(RoundedCornerShape(12.dp))
-                            .background(MiuixTheme.colorScheme.surface)
+                            .background(MiuixTheme.colorScheme.surfaceContainer)
                             .border(0.5.dp, MiuixTheme.colorScheme.outline.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
                             .clickable {
                                 if (!vm.isLoading) vm.sendUserMessage(item.prompt)
@@ -3957,7 +3975,7 @@ private fun TypingIndicator() {
         verticalAlignment = Alignment.CenterVertically
     ) {
         repeat(3) { index ->
-            val alpha by infiniteTransition.animateFloat(
+            val dotAlpha by infiniteTransition.animateFloat(
                 initialValue = 0.3f,
                 targetValue = 1f,
                 animationSpec = infiniteRepeatable(
@@ -3969,7 +3987,7 @@ private fun TypingIndicator() {
             Box(
                 modifier = Modifier
                     .size(6.dp)
-                    .graphicsLayer(alpha = alpha)
+                    .graphicsLayer { alpha = dotAlpha }
                     .background(MiuixTheme.colorScheme.onSurfaceVariantSummary, CircleShape)
             )
         }
@@ -4246,7 +4264,7 @@ private fun ChatBubble(msg: ChatMessage, vm: AiTermuxViewModel, modifier: Modifi
             Row(
                 modifier = Modifier
                     .clip(RoundedCornerShape(10.dp))
-                    .background(MiuixTheme.colorScheme.surface)
+                    .background(MiuixTheme.colorScheme.surfaceContainer)
                     .border(0.5.dp, MiuixTheme.colorScheme.outline.copy(alpha = 0.5f), RoundedCornerShape(10.dp))
                     .clickable { showRawResponse = true }
                     .padding(horizontal = 9.dp, vertical = 5.dp),
@@ -4370,7 +4388,7 @@ private fun PreparingBlock(status: String, details: List<String>) {
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
-            .background(MiuixTheme.colorScheme.surface)
+            .background(MiuixTheme.colorScheme.surfaceContainer)
             .border(0.5.dp, MiuixTheme.colorScheme.outline.copy(alpha = 0.5f), RoundedCornerShape(14.dp))
             .padding(horizontal = 13.dp, vertical = 10.dp)
     ) {
@@ -4383,7 +4401,7 @@ private fun PreparingBlock(status: String, details: List<String>) {
             Box(
                 modifier = Modifier
                     .size(8.dp)
-                    .graphicsLayer(alpha = pulseAlpha)
+                    .graphicsLayer { alpha = pulseAlpha }
                     .clip(CircleShape)
                     .background(MiuixTheme.colorScheme.primary)
             )
@@ -4531,7 +4549,7 @@ private fun ReasoningBlock(reasoning: String, isDone: Boolean) {
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
-            .background(MiuixTheme.colorScheme.surface)
+            .background(MiuixTheme.colorScheme.surfaceContainer)
             .border(0.5.dp, MiuixTheme.colorScheme.outline.copy(alpha = 0.5f), RoundedCornerShape(14.dp))
     ) {
         Row(
@@ -4547,7 +4565,7 @@ private fun ReasoningBlock(reasoning: String, isDone: Boolean) {
                 contentDescription = null,
                 modifier = Modifier
                     .size(15.dp)
-                    .graphicsLayer(alpha = pulseAlpha),
+                    .graphicsLayer { alpha = pulseAlpha },
                 tint = if (!isDone) MiuixTheme.colorScheme.primary
                 else MiuixTheme.colorScheme.onSurfaceVariantSummary
             )
@@ -4624,6 +4642,7 @@ private fun SkillCard(msgId: String, card: SkillCardData, errorMsg: String?, vm:
         SkillType.GET_SESSION_INFO, SkillType.GET_CURRENT_SESSION,
         SkillType.RUN_COMMAND, SkillType.CAPTURE_OUTPUT,
         SkillType.CUSTOM_COMMAND, SkillType.COMPILE_CODE -> R.drawable.ic_terminal
+        SkillType.RUN_COMMAND_SANDBOX -> R.drawable.ic_sandbox
         SkillType.RUN_VM_QEMU, SkillType.CREATE_VM_QEMU,
         SkillType.VM_LIST -> R.drawable.ic_computer
         SkillType.CONNECT_VNC -> R.drawable.ic_vnc
@@ -4662,7 +4681,7 @@ private fun SkillCard(msgId: String, card: SkillCardData, errorMsg: String?, vm:
         modifier = Modifier
             .fillMaxWidth(0.94f)
             .clip(RoundedCornerShape(14.dp))
-            .background(MiuixTheme.colorScheme.surface)
+            .background(MiuixTheme.colorScheme.surfaceContainer)
             .border(0.5.dp, borderColor, RoundedCornerShape(14.dp))
             .then(
                 if (clickable) Modifier.clickable { SkillExecutor.onSkillCardClick(ctx, card) }
@@ -5085,7 +5104,7 @@ private fun AgentSkillCard(msgId: String, card: SkillCardData, errorMsg: String?
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
-            .background(MiuixTheme.colorScheme.surface)
+            .background(MiuixTheme.colorScheme.surfaceContainer)
             .border(0.5.dp, borderColor, RoundedCornerShape(14.dp))
     ) {
         // Header row
@@ -5237,7 +5256,7 @@ private fun AgentSkillCard(msgId: String, card: SkillCardData, errorMsg: String?
                     Box(
                         modifier = Modifier
                             .size(8.dp)
-                            .graphicsLayer(alpha = pulseAlpha)
+                            .graphicsLayer { alpha = pulseAlpha }
                             .clip(CircleShape)
                             .background(statusColor)
                     )

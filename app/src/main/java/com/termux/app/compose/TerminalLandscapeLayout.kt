@@ -1,6 +1,5 @@
 package com.termux.app.compose
 
-import android.app.Activity
 import android.content.res.Configuration
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
@@ -9,16 +8,11 @@ import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.core.view.WindowCompat
-import androidx.core.view.WindowInsetsCompat
-import androidx.core.view.WindowInsetsControllerCompat
 
 /**
  * 横屏/平板布局适配工具（终端控制台 + 主页共用）。
@@ -44,44 +38,6 @@ fun isTabletDevice(): Boolean {
 /** 双分屏/侧边导航栏等宽屏布局的启用条件：横屏或平板。 */
 @Composable
 fun isWideScreenLayout(): Boolean = isLandscapeOrientation() || isTabletDevice()
-
-/**
- * 横屏沉浸式全屏：隐藏状态栏与导航栏（从屏幕边缘滑动可临时呼出，自动回落），
- * 配合窗口的 SHORT_EDGES cutout 模式让画面延伸进刘海/挖孔区域。
- *
- * 仅在 [enabled] = true（横屏）时隐藏；竖屏时主动 show 回系统栏，
- * onDispose 兜底恢复，保证旋转回竖屏后与原有 UI 状态完全一致。
- */
-@Composable
-fun LandscapeImmersiveEffect(enabled: Boolean) {
-    val context = LocalContext.current
-    DisposableEffect(enabled) {
-        val window = (context as? Activity)?.window
-        val controller = window?.let {
-            WindowCompat.getInsetsController(it, it.decorView)
-        }
-        if (controller != null) {
-            if (enabled) {
-                // 滑动边缘临时呼出系统栏（半透明覆盖，不挤压布局），停顿后自动收回
-                controller.systemBarsBehavior =
-                    WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-                controller.hide(
-                    WindowInsetsCompat.Type.statusBars() or WindowInsetsCompat.Type.navigationBars()
-                )
-            } else {
-                controller.show(
-                    WindowInsetsCompat.Type.statusBars() or WindowInsetsCompat.Type.navigationBars()
-                )
-            }
-        }
-        onDispose {
-            // 退出横屏或离开页面时恢复系统栏（竖屏回到原有显示状态）
-            controller?.show(
-                WindowInsetsCompat.Type.statusBars() or WindowInsetsCompat.Type.navigationBars()
-            )
-        }
-    }
-}
 
 /**
  * 刘海/挖孔智能避让的 insets（横屏时主要作用于水平方向）。

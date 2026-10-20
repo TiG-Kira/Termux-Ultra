@@ -196,7 +196,7 @@ fun LiquidGlassNavigationBarItem(
 
     val labelAlpha by animateFloatAsState(
         targetValue = if (selected) 1f else 0.55f,
-        animationSpec = tween(durationMillis = 150),
+        animationSpec = tween(durationMillis = AppMotion.FAST),
         label = "labelAlpha"
     )
 
@@ -284,19 +284,19 @@ fun LiquidGlassNavigationBarWithIndicator(
     // 存储实际测量的按钮中心位置
     var measuredCenters by remember { mutableStateOf<List<Float>>(emptyList()) }
 
-    // 内部位置更新函数
+    // 内部位置更新函数：仅在测量值变化时写 state，避免每次布局回调都触发重组。
     val updatePosition: (Int, Float) -> Unit = { index, centerX ->
         // centerX 是按钮相对于父级 Row 内容区（padding 后）的位置
         // 但指示器的坐标原点是 BoxWithConstraints 的左边（包括 Row 的 padding）
         // 所以需要加上 Row 的左侧 padding (4dp)
         val adjustedCenterX = centerX + with(density) { 4.dp.toPx() }
-        measuredCenters = if (index in 0 until itemCount) {
-            val newList = measuredCenters.toMutableList()
-            while (newList.size <= index) newList.add(0f)
-            newList[index] = adjustedCenterX
-            newList
-        } else {
-            measuredCenters
+        if (index in 0 until itemCount &&
+            measuredCenters.getOrElse(index) { 0f } != adjustedCenterX
+        ) {
+            measuredCenters = measuredCenters.toMutableList().apply {
+                while (size <= index) add(0f)
+                this[index] = adjustedCenterX
+            }
         }
         // 同时调用外部回调
         onItemPositioned(index, adjustedCenterX)

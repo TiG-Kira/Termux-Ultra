@@ -8,6 +8,17 @@ import android.net.Uri
 import android.os.Process
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -91,6 +102,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.Canvas
@@ -116,9 +128,9 @@ import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.Switch
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
+import top.yukonga.miuix.kmp.glass.GlassMotion
 import top.yukonga.miuix.kmp.glass.GlassTopAppBar
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
-import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import com.termux.app.terminal.shell.pid
 
@@ -877,12 +889,18 @@ fun OverviewScreen(
                             GlassIconButton(onClick = {
                                 isEditMode = !isEditMode
                             }) {
-                                Icon(
-                                    imageVector = if (isEditMode) MiuixGlassIcons.Ok else MiuixGlassIcons.Edit,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(24.dp),
-                                    tint = MiuixTheme.colorScheme.onSurface
-                                )
+                                Crossfade(
+                                    targetState = if (isEditMode) MiuixGlassIcons.Ok else MiuixGlassIcons.Edit,
+                                    animationSpec = GlassMotion.navContentFloat(),
+                                    label = "overviewEditToggle"
+                                ) { icon ->
+                                    Icon(
+                                        imageVector = icon,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(24.dp),
+                                        tint = MiuixTheme.colorScheme.onSurface
+                                    )
+                                }
                             }
                         }
                     }
@@ -959,6 +977,20 @@ fun OverviewScreen(
 // ============================================================
 // Tips & Agent Card (Migrated from Terminal List)
 // ============================================================
+
+/**
+ * 卡片的展开 / 收起：高度走与玻璃底栏同一条弹簧，透明度走同一条 fade 曲线。
+ * 收起比展开略早在新高度稳定下来，符合"内容抽走"而不是"先变淡再塌下去"的观感。
+ */
+private val tipCardExpand: EnterTransition = expandVertically(
+    expandFrom = Alignment.Top,
+    animationSpec = GlassMotion.navShowHide<IntSize>()
+) + fadeIn(animationSpec = GlassMotion.fadeIn())
+
+private val tipCardCollapse: ExitTransition = shrinkVertically(
+    shrinkTowards = Alignment.Top,
+    animationSpec = GlassMotion.navShowHide<IntSize>()
+) + fadeOut(animationSpec = GlassMotion.fadeOut())
 
 @Composable
 private fun TipsAgentCard(
@@ -1058,27 +1090,50 @@ private fun TipsAgentCard(
                     )
                 }
 
+                // 药丸底色与内容色走玻璃导航那一套内容渐变曲线，和收起/展开同步过渡
+                val pillBackground by animateColorAsState(
+                    targetValue = pillColor.copy(alpha = 0.14f),
+                    animationSpec = GlassMotion.navContent(),
+                    label = "tipsAgentPillBackground"
+                )
+                val pillContentColor by animateColorAsState(
+                    targetValue = pillColor,
+                    animationSpec = GlassMotion.navContent(),
+                    label = "tipsAgentPillContent"
+                )
+
                 Row(
                     modifier = Modifier
                         .clip(RoundedCornerShape(50))
-                        .background(pillColor.copy(alpha = 0.14f))
+                        .background(pillBackground)
                         .clickable { toggleCollapse() }
                         .padding(horizontal = 10.dp, vertical = 5.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(5.dp)
                 ) {
-                    Icon(
-                        imageVector = pillIcon,
-                        contentDescription = null,
-                        tint = pillColor,
-                        modifier = Modifier.size(14.dp)
-                    )
-                    Text(
-                        text = pillText,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = pillColor
-                    )
+                    Crossfade(
+                        targetState = pillIcon to pillText,
+                        animationSpec = GlassMotion.navContentFloat(),
+                        label = "tipsAgentPill"
+                    ) { (icon, text) ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(5.dp)
+                        ) {
+                            Icon(
+                                imageVector = icon,
+                                contentDescription = null,
+                                tint = pillContentColor,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Text(
+                                text = text,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = pillContentColor
+                            )
+                        }
+                    }
                 }
 
                 val uptimeText = formatUptime(uptimeSeconds)
@@ -1093,67 +1148,71 @@ private fun TipsAgentCard(
             }
 
             // ===== Tips & Agent 主体（可整体收缩，但快捷入口始终保留）=====
-            if (!isCollapsed) {
-                // 标题栏
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = stringResource(R.string.overview_card_tips),
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MiuixTheme.colorScheme.onSurface,
-                        modifier = Modifier.weight(1f)
-                    )
-                    if (isEditMode) {
-                        IconButton(onClick = onEditClick) {
-                            Icon(
-                                imageVector = Icons.Rounded.Edit,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp),
-                                tint = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                            )
+            AnimatedVisibility(
+                visible = !isCollapsed,
+                enter = tipCardExpand,
+                exit = tipCardCollapse
+            ) {
+                    // 标题栏
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = stringResource(R.string.overview_card_tips),
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MiuixTheme.colorScheme.onSurface,
+                            modifier = Modifier.weight(1f)
+                        )
+                        if (isEditMode) {
+                            IconButton(onClick = onEditClick) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Edit,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp),
+                                    tint = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                                )
+                            }
                         }
                     }
-                }
 
-                // 提示卡片区域（恢复横/竖版布局切换）
-                if (useHorizontalLayout) {
-                    HorizontalTipsContent(
-                        aiTermuxEnabled = aiTermuxEnabled,
-                        showWelcomeCard = showWelcomeCard,
-                        showKeepAliveWarning = showKeepAliveWarning,
-                        showLowCard = showLowCard,
-                        serviceStatus = serviceStatus,
-                        onWelcomeClose = {
-                            showWelcomeCard = false
-                            prefs.edit().putBoolean("terminal_welcome_shown", true).apply()
-                        },
-                        onKeepAliveClose = {
-                            showKeepAliveWarning = false
-                            prefs.edit().putBoolean("keep_alive_warning_dismissed", true).apply()
-                        }
-                    )
-                } else {
-                    VerticalTipsContent(
-                        aiTermuxEnabled = aiTermuxEnabled,
-                        showWelcomeCard = showWelcomeCard,
-                        showKeepAliveWarning = showKeepAliveWarning,
-                        showLowCard = showLowCard,
-                        serviceStatus = serviceStatus,
-                        onWelcomeClose = {
-                            showWelcomeCard = false
-                            prefs.edit().putBoolean("terminal_welcome_shown", true).apply()
-                        },
-                        onKeepAliveClose = {
-                            showKeepAliveWarning = false
-                            prefs.edit().putBoolean("keep_alive_warning_dismissed", true).apply()
-                        }
-                    )
-                }
+                    // 提示卡片区域（恢复横/竖版布局切换）
+                    if (useHorizontalLayout) {
+                        HorizontalTipsContent(
+                            aiTermuxEnabled = aiTermuxEnabled,
+                            showWelcomeCard = showWelcomeCard,
+                            showKeepAliveWarning = showKeepAliveWarning,
+                            showLowCard = showLowCard,
+                            serviceStatus = serviceStatus,
+                            onWelcomeClose = {
+                                showWelcomeCard = false
+                                prefs.edit().putBoolean("terminal_welcome_shown", true).apply()
+                            },
+                            onKeepAliveClose = {
+                                showKeepAliveWarning = false
+                                prefs.edit().putBoolean("keep_alive_warning_dismissed", true).apply()
+                            }
+                        )
+                    } else {
+                        VerticalTipsContent(
+                            aiTermuxEnabled = aiTermuxEnabled,
+                            showWelcomeCard = showWelcomeCard,
+                            showKeepAliveWarning = showKeepAliveWarning,
+                            showLowCard = showLowCard,
+                            serviceStatus = serviceStatus,
+                            onWelcomeClose = {
+                                showWelcomeCard = false
+                                prefs.edit().putBoolean("terminal_welcome_shown", true).apply()
+                            },
+                            onKeepAliveClose = {
+                                showKeepAliveWarning = false
+                                prefs.edit().putBoolean("keep_alive_warning_dismissed", true).apply()
+                            }
+                        )
+                    }
             }
 
             // ===== 快捷入口（始终显示，不受收缩影响）=====
@@ -1282,7 +1341,7 @@ private fun QuickEntryButton(
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(16.dp))
-            .background(MiuixTheme.colorScheme.surface)
+            .background(MiuixTheme.colorScheme.surfaceContainer)
             .clickable(onClick = onClick)
             .height(100.dp)
             .padding(vertical = 14.dp, horizontal = 6.dp),
@@ -1349,40 +1408,52 @@ fun HorizontalTipsContent(
                     Brush.linearGradient(listOf(Color(0xFF1E40AF), Color(0xFF5B21B6)))
                 else
                     Brush.linearGradient(listOf(Color(0xFF2563EB), Color(0xFF7C3AED)))
-                OverviewHorizontalTipCard(
-                    gradient = welcomeGradient,
-                    icon = Icons.Rounded.Info,
-                    iconTint = Color.White,
-                    iconBackgroundColor = Color.Transparent,
-                    iconStyle = HeroIconStyle.FROSTED_GLASS,
-                    title = stringResource(R.string.terminal_welcome_title),
-                    description = stringResource(R.string.terminal_welcome_message),
-                    titleColor = Color.White,
-                    descriptionColor = Color.White.copy(alpha = 0.72f),
-                    onClose = onWelcomeClose
-                )
+                AnimatedVisibility(
+                    visible = showWelcomeCard,
+                    enter = tipCardExpand,
+                    exit = tipCardCollapse
+                ) {
+                    OverviewHorizontalTipCard(
+                        gradient = welcomeGradient,
+                        icon = Icons.Rounded.Info,
+                        iconTint = Color.White,
+                        iconBackgroundColor = Color.Transparent,
+                        iconStyle = HeroIconStyle.FROSTED_GLASS,
+                        title = stringResource(R.string.terminal_welcome_title),
+                        description = stringResource(R.string.terminal_welcome_message),
+                        titleColor = Color.White,
+                        descriptionColor = Color.White.copy(alpha = 0.72f),
+                        onClose = onWelcomeClose
+                    )
+                }
             }
         }
         if (showKeepAliveWarning) {
             item {
-                OverviewHorizontalTipCard(
-                    backgroundColor = if (isDark) Color(0xFF3D3514) else Color(0xFFFFF9C4),
-                    icon = Icons.Rounded.Warning,
-                    iconTint = Color.White,
-                    iconBackgroundColor = Color.Transparent,
-                    iconStyle = HeroIconStyle.GRADIENT,
-                    iconGradientColors = listOf(Color(0xFFF59E0B), Color(0xFFFDD835)),
-                    title = stringResource(R.string.keep_alive_warning_title),
-                    description = stringResource(R.string.keep_alive_warning_message),
-                    titleColor = if (isDark) Color.White else Color.Black,
-                    descriptionColor = if (isDark) Color.White.copy(alpha = 0.8f) else Color.Black.copy(alpha = 0.8f),
-                    statusBadgeText = "需注意",
-                    statusBadgeColor = if (isDark) Color(0xFFFCD34D) else Color(0xFFB45309),
-                    statusBadgeBackgroundColor = if (isDark) Color(0xFFFCD34D).copy(alpha = 0.14f) else Color(0xFFF59E0B).copy(alpha = 0.14f),
-                    onClose = onKeepAliveClose,
-                    closeButtonColor = if (isDark) Color(0xFFFCD34D).copy(alpha = 0.15f) else Color(0xFFB45309).copy(alpha = 0.15f),
-                    closeButtonIconColor = if (isDark) Color(0xFFFCD34D) else Color(0xFFB45309)
-                )
+                AnimatedVisibility(
+                    visible = showKeepAliveWarning,
+                    enter = tipCardExpand,
+                    exit = tipCardCollapse
+                ) {
+                    OverviewHorizontalTipCard(
+                        backgroundColor = if (isDark) Color(0xFF3D3514) else Color(0xFFFFF9C4),
+                        icon = Icons.Rounded.Warning,
+                        iconTint = Color.White,
+                        iconBackgroundColor = Color.Transparent,
+                        iconStyle = HeroIconStyle.GRADIENT,
+                        iconGradientColors = listOf(Color(0xFFF59E0B), Color(0xFFFDD835)),
+                        title = stringResource(R.string.keep_alive_warning_title),
+                        description = stringResource(R.string.keep_alive_warning_message),
+                        titleColor = if (isDark) Color.White else Color.Black,
+                        descriptionColor = if (isDark) Color.White.copy(alpha = 0.8f) else Color.Black.copy(alpha = 0.8f),
+                        statusBadgeText = "需注意",
+                        statusBadgeColor = if (isDark) Color(0xFFFCD34D) else Color(0xFFB45309),
+                        statusBadgeBackgroundColor = if (isDark) Color(0xFFFCD34D).copy(alpha = 0.14f) else Color(0xFFF59E0B).copy(alpha = 0.14f),
+                        onClose = onKeepAliveClose,
+                        closeButtonColor = if (isDark) Color(0xFFFCD34D).copy(alpha = 0.15f) else Color(0xFFB45309).copy(alpha = 0.15f),
+                        closeButtonIconColor = if (isDark) Color(0xFFFCD34D) else Color(0xFFB45309)
+                    )
+                }
             }
         }
         if (showLowCard) {
@@ -1416,14 +1487,22 @@ private fun VerticalTipsContent(
         if (aiTermuxEnabled) {
             AiTermuxEntryCard(horizontalMode = false)
         }
-        if (showWelcomeCard) {
+        AnimatedVisibility(
+            visible = showWelcomeCard,
+            enter = tipCardExpand,
+            exit = tipCardCollapse
+        ) {
             WelcomeCard(
                 text = stringResource(R.string.terminal_welcome_message),
                 onClose = onWelcomeClose,
                 horizontalMode = false
             )
         }
-        if (showKeepAliveWarning) {
+        AnimatedVisibility(
+            visible = showKeepAliveWarning,
+            enter = tipCardExpand,
+            exit = tipCardCollapse
+        ) {
             KeepAliveWarningCard(
                 onClose = onKeepAliveClose,
                 horizontalMode = false
@@ -1845,22 +1924,47 @@ private fun OverviewCardContainer(
             ) {
                 content()
             }
-            if (isEditMode) {
-                IconButton(
-                    onClick = onEditClick,
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(4.dp)
-                        .size(32.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.Edit,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp),
-                        tint = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                    )
-                }
-            }
+            OverviewEditHandle(
+                visible = isEditMode,
+                onClick = onEditClick,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(4.dp)
+            )
+        }
+    }
+}
+
+/**
+ * 卡片右上角的编辑把手。
+ *
+ * 单独成一个 composable：miuix Card 的内容是 ColumnScope，在这里面直接调 AnimatedVisibility
+ * 会解析到 Row/Column 那版重载、拿不到Box 的对齐，分层开了就没有那个隐式接收者。
+ */
+@Composable
+private fun OverviewEditHandle(
+    visible: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    AnimatedVisibility(
+        visible = visible,
+        modifier = modifier,
+        enter = fadeIn(animationSpec = GlassMotion.fadeIn()) +
+            scaleIn(animationSpec = GlassMotion.scaleIn<Float>()),
+        exit = fadeOut(animationSpec = GlassMotion.fadeOut()) +
+            scaleOut(animationSpec = GlassMotion.scaleOut<Float>())
+    ) {
+        IconButton(
+            onClick = onClick,
+            modifier = Modifier.size(32.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Rounded.Edit,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+                tint = MiuixTheme.colorScheme.onSurfaceVariantSummary
+            )
         }
     }
 }

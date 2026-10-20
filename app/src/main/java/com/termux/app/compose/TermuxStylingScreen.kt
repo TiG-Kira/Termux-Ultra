@@ -11,8 +11,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -29,24 +27,33 @@ import androidx.compose.ui.unit.sp
 import com.google.android.material.snackbar.Snackbar
 import com.awkoo.libterminal.color.TerminalColorScheme
 import com.termux.R
+import com.termux.app.terminal.shell.TerminalThemes
 import com.termux.app.utils.FontDownloader
 import com.termux.app.utils.SnackbarHelper
 import kotlinx.coroutines.launch
+import top.yukonga.miuix.kmp.basic.*
 import top.yukonga.miuix.kmp.glass.GlassIconButton
 import top.yukonga.miuix.kmp.glass.GlassTopAppBar
-import top.yukonga.miuix.kmp.basic.*
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.glass.ChevronBackward
 import top.yukonga.miuix.kmp.icon.glass.MiuixGlassIcons
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.preference.ArrowPreference
+import top.yukonga.miuix.kmp.preference.OverlaySpinnerPreference
+import top.yukonga.miuix.kmp.preference.RadioButtonPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import java.io.File
 import java.nio.charset.StandardCharsets
 import java.util.Properties
 import com.termux.app.compose.pagePaddingWithoutTop
+import kotlin.math.roundToInt
 
 private const val DEFAULT_FILENAME = "Default"
+
+// 主题来源：Termux:Styling 预设 / LibTerminal 内置主题 / 自定义
+private const val THEME_SOURCE_STYLING = "styling"
+private const val THEME_SOURCE_LIBTERMINAL = "libterminal"
+private const val THEME_SOURCE_CUSTOM = "custom"
 
 private val DEFAULT_TERMINAL_COLORS = run {
     val scheme = TerminalColorScheme.dark()
@@ -65,6 +72,15 @@ private data class TerminalColors(
     val colors: List<Color> // color0-color15
 )
 
+/** 由 libterminal 的 TerminalColorScheme 构造预览用的 TerminalColors。 */
+private fun terminalColorsFromScheme(scheme: TerminalColorScheme): TerminalColors =
+    TerminalColors(
+        foreground = Color(scheme.foreground),
+        background = Color(scheme.background),
+        cursor = Color(scheme.cursor),
+        colors = (0..15).map { Color(scheme.color(it)) }
+    )
+
 private fun parseHexColor(value: String): Color {
     return try {
         val clean = value.trim().removePrefix("#")
@@ -74,6 +90,27 @@ private fun parseHexColor(value: String): Color {
         Color.White
     }
 }
+
+private fun parseArgbOrNull(value: String?): Int? {
+    if (value == null) return null
+    return try {
+        val clean = value.trim().removePrefix("#")
+        when (clean.length) {
+            6 -> android.graphics.Color.parseColor("#FF$clean")
+            8 -> android.graphics.Color.parseColor("#$clean")
+            else -> null
+        }
+    } catch (_: Exception) {
+        null
+    }
+}
+
+/** 由背景色亮度推导光标色（与既有逻辑保持一致）。 */
+private fun deriveCursor(bg: Int): Int =
+    if (android.graphics.Color.luminance(bg) < 0.5f) 0xFFFFFFFF.toInt() else 0xFF000000.toInt()
+
+/** 转成 #RRGGBB（丢弃 alpha，终端颜色不透明）。 */
+private fun toHex6(argb: Int): String = String.format("#%06X", argb and 0xFFFFFF)
 
 private fun loadColorScheme(context: Context, fileName: String?): TerminalColors {
     if (fileName == null || fileName == DEFAULT_FILENAME) return DEFAULT_TERMINAL_COLORS
@@ -91,7 +128,6 @@ private fun loadColorScheme(context: Context, fileName: String?): TerminalColors
         val cursor = if (props.containsKey("cursor")) {
             parseHexColor(props.getProperty("cursor")!!)
         } else {
-            // Derive cursor from background luminance
             val lum = android.graphics.Color.luminance(backgroundArgb)
             if (lum < 0.5f) Color.White else Color.Black
         }
@@ -151,55 +187,89 @@ fun TermuxStylingScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    // 本页在 MainScreen 取景层之外，自建一层供玻璃顶栏折射页面内容
     val glassPage = rememberGlassPageBackdrop()
     val scrollBehavior = MiuixScrollBehavior()
 
     val colorItems = remember { loadStyleItems(context, "colors", ".properties") }
     val fontItems = remember { (listOf(DEFAULT_FILENAME) + TerminalFontCatalog.allFonts(context)).map(::StyleItem) }
 
-    var showColorDialog by remember { mutableStateOf(false) }
-    var showFontDialog by remember { mutableStateOf(false) }
-    var showColorLicense by remember { mutableStateOf<StyleItem?>(null) }
-    var showFontLicense by remember { mutableStateOf<StyleItem?>(null) }
-    var currentColor by remember { mutableStateOf(getCurrentStyle(context, "colors.properties", "color")) }
-    var currentFont by remember { mutableStateOf(getCurrentStyle(context, "font.ttf", "font")) }
+    val prefs = remember { context.getSharedPreferences("termux_styling", Context.MODE_PRIVATE) }
+
+    // 主题来源（默认 styling 以保证向后兼容：已配置的用户行为与旧版完全一致）
+    var themeSource by remember { mutableStateOf(prefs.getString("theme_source", THEME_SOURCE_STYLING) ?: THEME_SOURCE_STYLING) }
+    // LibTerminal 预设主题名（默认 Default Dark）
+    var libTerminalThemeName by remember { mutableStateOf(prefs.getString("libterminal_theme", "Default Dark") ?: "Default Dark") }
+    // 自定义主题颜色（默认取 LibTerminal 深色方案的背景/前景）
+    var customBg by remember { mutableStateOf(prefs.getString("custom_bg", null)?.let { parseArgbOrNull(it) } ?: TerminalColorScheme.dark().background) }
+    var customFg by remember { mutableStateOf(prefs.getString("custom_fg", null)?.let { parseArgbOrNull(it) } ?: TerminalColorScheme.dark().foreground) }
+
+    var showBgPicker by remember { mutableStateOf(false) }
+    var showFgPicker by remember { mutableStateOf(false) }
     var downloadingFont by remember { mutableStateOf<String?>(null) }
-    // 进入页面时补下载已选字体与用户主动选字体是两条独立路径，分开持有状态，
-    // 否则同时发生时后一个会把前一个的遮罩提前抹掉。
     var restoringFont by remember { mutableStateOf<String?>(null) }
     var pendingFonts by remember { mutableStateOf(pendingFontSet(context, fontItems)) }
     val scope = rememberCoroutineScope()
 
-    // Preview state: default to current saved style
-    val currentColorItem = remember {
-        val prefs = context.getSharedPreferences("termux_styling", Context.MODE_PRIVATE)
+    // Styling 预设当前项（spinner 选中态）
+    var currentColorItem by remember {
         val saved = prefs.getString("selected_color_file", null)
-        colorItems.firstOrNull { it.fileName == saved } ?: colorItems.first()
+        mutableStateOf(colorItems.firstOrNull { it.fileName == saved } ?: colorItems.first())
     }
-    val currentFontItem = remember {
-        val prefs = context.getSharedPreferences("termux_styling", Context.MODE_PRIVATE)
-        val saved = prefs.getString("selected_font_file", null)
-        fontItems.firstOrNull { it.fileName == saved } ?: fontItems.first()
+    var currentColor by remember {
+        mutableStateOf(prefs.getString("selected_color_name", null) ?: currentColorItem.displayName)
     }
 
-    // Colors and font for preview (reactive to selection)
-    var previewColors by remember { mutableStateOf(loadColorScheme(context, currentColorItem.fileName.takeIf { it != DEFAULT_FILENAME })) }
+    // 字体当前项
+    var currentFontItem by remember {
+        val saved = prefs.getString("selected_font_file", null)
+        mutableStateOf(fontItems.firstOrNull { it.fileName == saved } ?: fontItems.first())
+    }
+    var currentFont by remember { mutableStateOf(prefs.getString("selected_font_name", null) ?: currentFontItem.displayName) }
+
+    val previewColors = remember(themeSource, currentColorItem, libTerminalThemeName, customBg, customFg) {
+        when (themeSource) {
+            THEME_SOURCE_STYLING -> loadColorScheme(context, currentColorItem.fileName.takeIf { it != DEFAULT_FILENAME })
+            THEME_SOURCE_LIBTERMINAL -> terminalColorsFromScheme(
+                TerminalThemes.findByName(libTerminalThemeName)?.terminalColorScheme ?: TerminalColorScheme.dark()
+            )
+            else -> terminalColorsFromScheme(
+                TerminalColorScheme.custom(foreground = customFg, background = customBg, cursor = deriveCursor(customBg))
+            )
+        }
+    }
     var previewTypeface by remember { mutableStateOf(loadFontTypeface(context, currentFontItem.fileName.takeIf { it != DEFAULT_FILENAME })) }
 
+    // 物化一个 TerminalColorScheme 到 ~/.termux/colors.properties 并广播 reload_style，
+    // 与 Java 引擎、Compose 终端共用同一份事实来源，保持原有持久化与广播机制不变。
+    fun applyScheme(scheme: TerminalColorScheme) {
+        writeColorSchemeToTermux(context, scheme)
+    }
+
     fun selectColor(item: StyleItem) {
-        previewColors = loadColorScheme(context, item.fileName.takeIf { it != DEFAULT_FILENAME })
-        copyStyleFile(context, item, true)
-        currentColor = item.displayName
+        currentColorItem = item
+        currentColor = if (item.fileName == DEFAULT_FILENAME) "Default" else item.displayName
+        copyStyleFile(context, item, isColors = true)
+    }
+
+    fun selectLibTerminalTheme(name: String) {
+        libTerminalThemeName = name
+        prefs.edit().putString("libterminal_theme", name).apply()
+        val scheme = TerminalThemes.findByName(name)?.terminalColorScheme ?: TerminalColorScheme.dark()
+        applyScheme(scheme)
+    }
+
+    fun applyCustomTheme() {
+        val scheme = TerminalColorScheme.custom(foreground = customFg, background = customBg, cursor = deriveCursor(customBg))
+        applyScheme(scheme)
     }
 
     fun applyFont(item: StyleItem) {
+        currentFontItem = item
+        currentFont = if (item.fileName == DEFAULT_FILENAME) "Default" else item.displayName
         previewTypeface = loadFontTypeface(context, item.fileName.takeIf { it != DEFAULT_FILENAME })
-        copyStyleFile(context, item, false)
-        currentFont = item.displayName
+        copyStyleFile(context, item, isColors = false)
     }
 
-    // 未下载的字体先拉取再套用；下载失败时保留当前字体，避免终端落到没有字体文件的状态。
     fun selectFont(item: StyleItem) {
         if (item.fileName == DEFAULT_FILENAME || TerminalFontCatalog.isAvailable(context, item.fileName)) {
             applyFont(item)
@@ -222,11 +292,20 @@ fun TermuxStylingScreen(
         }
     }
 
-    // 已选中但本地没有字体文件（升级后字体被移出 APK 的情况）时自动补下载，
-    // 补不回来就回退到默认字体，保证终端始终有可用字体。
+    fun onThemeSourceChange(source: String) {
+        themeSource = source
+        prefs.edit().putString("theme_source", source).apply()
+        // 切换到某来源时立刻把该来源的方案落到 colors.properties，终端实时刷新
+        when (source) {
+            THEME_SOURCE_STYLING -> selectColor(currentColorItem)
+            THEME_SOURCE_LIBTERMINAL -> selectLibTerminalTheme(libTerminalThemeName)
+            THEME_SOURCE_CUSTOM -> applyCustomTheme()
+        }
+    }
+
+    // 已选中字体本地缺失时自动补下载（升级后字体被移出 APK 的情况），补不回则回退默认字体。
     LaunchedEffect(Unit) {
-        val savedFile = context.getSharedPreferences("termux_styling", Context.MODE_PRIVATE)
-            .getString("selected_font_file", null)
+        val savedFile = prefs.getString("selected_font_file", null)
         if (savedFile == null || TerminalFontCatalog.isAvailable(context, savedFile)) return@LaunchedEffect
 
         restoringFont = savedFile
@@ -236,15 +315,40 @@ fun TermuxStylingScreen(
             pendingFonts = pendingFontSet(context, fontItems)
             previewTypeface = loadFontTypeface(context, savedFile)
         } else {
-            copyStyleFile(context, StyleItem(DEFAULT_FILENAME), false)
+            copyStyleFile(context, StyleItem(DEFAULT_FILENAME), isColors = false)
             previewTypeface = null
             currentFont = DEFAULT_FILENAME
+            currentFontItem = StyleItem(DEFAULT_FILENAME)
             SnackbarHelper.show(
                 context,
                 context.getString(R.string.font_missing_fallback, StyleItem(savedFile).displayName),
                 Snackbar.LENGTH_LONG
             )
         }
+    }
+
+    // 构造下拉项：字体项在本地不可用时追加「未安装」副标题
+    val fontDropdownItems = remember(pendingFonts) {
+        fontItems.map { item ->
+            val unavailable = item.fileName != DEFAULT_FILENAME && !TerminalFontCatalog.isAvailable(context, item.fileName)
+            DropdownItem(
+                text = item.displayName,
+                summary = if (unavailable) context.getString(R.string.font_not_installed) else null
+            )
+        }
+    }
+    val fontSelectedIndex = remember(currentFontItem) {
+        fontItems.indexOfFirst { it.fileName == currentFontItem.fileName }.coerceAtLeast(0)
+    }
+
+    val colorDropdownItems = remember { colorItems.map { DropdownItem(text = it.displayName) } }
+    val colorSelectedIndex = remember(currentColorItem) {
+        colorItems.indexOfFirst { it.fileName == currentColorItem.fileName }.coerceAtLeast(0)
+    }
+
+    val libTerminalDropdownItems = remember { TerminalThemes.ALL.map { DropdownItem(text = it.name) } }
+    val libTerminalSelectedIndex = remember(libTerminalThemeName) {
+        TerminalThemes.ALL.indexOfFirst { it.name == libTerminalThemeName }.coerceAtLeast(0)
     }
 
     Scaffold(
@@ -281,7 +385,7 @@ fun TermuxStylingScreen(
             ) {
                 item { SmallTitle(text = stringResource(R.string.styling_header)) }
 
-                // Terminal preview card
+                // Terminal preview card（实时预览）
                 item {
                     Spacer(Modifier.height(8.dp))
                     TerminalPreviewCard(
@@ -291,27 +395,108 @@ fun TermuxStylingScreen(
                     Spacer(Modifier.height(12.dp))
                 }
 
+                // 主题来源三选一（RadioButtonPreference）
                 item {
                     SettingCard {
-                        ArrowPreference(
-                            title = stringResource(R.string.choose_color),
-                            summary = currentColor,
-                            onClick = { showColorDialog = true },
-                            startAction = {
-                                SettingIcon(R.drawable.ic_palette)
+                        Column {
+                            RadioButtonPreference(
+                                title = stringResource(R.string.theme_source_styling),
+                                summary = stringResource(R.string.theme_source_styling_desc),
+                                selected = themeSource == THEME_SOURCE_STYLING,
+                                onClick = { onThemeSourceChange(THEME_SOURCE_STYLING) }
+                            )
+                            HorizontalDivider(
+                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f),
+                                modifier = Modifier.padding(start = 72.dp, end = 16.dp)
+                            )
+                            RadioButtonPreference(
+                                title = stringResource(R.string.theme_source_libterminal),
+                                summary = stringResource(R.string.theme_source_libterminal_desc),
+                                selected = themeSource == THEME_SOURCE_LIBTERMINAL,
+                                onClick = { onThemeSourceChange(THEME_SOURCE_LIBTERMINAL) }
+                            )
+                            HorizontalDivider(
+                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f),
+                                modifier = Modifier.padding(start = 72.dp, end = 16.dp)
+                            )
+                            RadioButtonPreference(
+                                title = stringResource(R.string.theme_source_custom),
+                                summary = stringResource(R.string.theme_source_custom_desc),
+                                selected = themeSource == THEME_SOURCE_CUSTOM,
+                                onClick = { onThemeSourceChange(THEME_SOURCE_CUSTOM) }
+                            )
+                        }
+                    }
+                }
+
+                item { Spacer(Modifier.height(12.dp)) }
+
+                // 按来源显示对应的配色选择
+                item {
+                    SettingCard {
+                        Column {
+                            when (themeSource) {
+                                THEME_SOURCE_STYLING -> {
+                                    OverlaySpinnerPreference(
+                                        title = stringResource(R.string.choose_color),
+                                        summary = currentColor,
+                                        items = colorDropdownItems,
+                                        selectedIndex = colorSelectedIndex,
+                                        onSelectedIndexChange = { idx ->
+                                            selectColor(colorItems[idx])
+                                        },
+                                        startAction = { SettingIcon(R.drawable.ic_palette) }
+                                    )
+                                }
+                                THEME_SOURCE_LIBTERMINAL -> {
+                                    OverlaySpinnerPreference(
+                                        title = stringResource(R.string.preset_theme),
+                                        summary = libTerminalThemeName,
+                                        items = libTerminalDropdownItems,
+                                        selectedIndex = libTerminalSelectedIndex,
+                                        onSelectedIndexChange = { idx ->
+                                            selectLibTerminalTheme(TerminalThemes.ALL[idx].name)
+                                        },
+                                        startAction = { SettingIcon(R.drawable.ic_palette) }
+                                    )
+                                }
+                                else -> {
+                                    ArrowPreference(
+                                        title = stringResource(R.string.custom_bg_color),
+                                        summary = toHex6(customBg),
+                                        onClick = { showBgPicker = true },
+                                        startAction = { SettingIcon(R.drawable.ic_palette) }
+                                    )
+                                    HorizontalDivider(
+                                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f),
+                                        modifier = Modifier.padding(start = 72.dp, end = 16.dp)
+                                    )
+                                    ArrowPreference(
+                                        title = stringResource(R.string.custom_fg_color),
+                                        summary = toHex6(customFg),
+                                        onClick = { showFgPicker = true },
+                                        startAction = { SettingIcon(R.drawable.ic_edit) }
+                                    )
+                                }
                             }
-                        )
-                        HorizontalDivider(
-                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f),
-                            modifier = Modifier.padding(start = 72.dp, end = 16.dp)
-                        )
-                        ArrowPreference(
+                        }
+                    }
+                }
+
+                item { Spacer(Modifier.height(12.dp)) }
+
+                // 字体（始终显示，使用 OverlaySpinnerPreference；未安装字体显示「未安装」）
+                item {
+                    SettingCard {
+                        OverlaySpinnerPreference(
                             title = stringResource(R.string.choose_font),
                             summary = currentFont,
-                            onClick = { showFontDialog = true },
-                            startAction = {
-                                SettingIcon(R.drawable.ic_edit)
-                            }
+                            items = fontDropdownItems,
+                            selectedIndex = fontSelectedIndex,
+                            onSelectedIndexChange = { idx ->
+                                selectFont(fontItems[idx])
+                            },
+                            startAction = { SettingIcon(R.drawable.ic_edit) }
                         )
                     }
                 }
@@ -319,44 +504,35 @@ fun TermuxStylingScreen(
                 item { Spacer(Modifier.height(16.dp)) }
             }
 
-            OverlayDialog(
-                show = showColorDialog,
-                onDismissRequest = { showColorDialog = false },
-                content = {
-                    StyleListContent(
-                        title = stringResource(R.string.choose_color),
-                        items = colorItems,
-                        currentItem = currentColor,
-                        onSelect = { item ->
-                            selectColor(item)
-                            showColorDialog = false
-                        },
-                        onLongPress = { item ->
-                            showColorLicense = item
-                        }
-                    )
-                }
-            )
+            // 自定义背景色选择器
+            if (showBgPicker) {
+                ColorPickerDialog(
+                    title = stringResource(R.string.custom_bg_color),
+                    initialColor = customBg,
+                    onDismiss = { showBgPicker = false },
+                    onConfirm = { color ->
+                        customBg = color
+                        prefs.edit().putString("custom_bg", toHex6(color)).apply()
+                        if (themeSource == THEME_SOURCE_CUSTOM) applyCustomTheme()
+                        showBgPicker = false
+                    }
+                )
+            }
 
-            OverlayDialog(
-                show = showFontDialog,
-                onDismissRequest = { showFontDialog = false },
-                content = {
-                    StyleListContent(
-                        title = stringResource(R.string.choose_font),
-                        items = fontItems,
-                        currentItem = currentFont,
-                        pendingItems = pendingFonts,
-                        onSelect = { item ->
-                            selectFont(item)
-                            showFontDialog = false
-                        },
-                        onLongPress = { item ->
-                            showFontLicense = item
-                        }
-                    )
-                }
-            )
+            // 自定义字体色（前景色）选择器
+            if (showFgPicker) {
+                ColorPickerDialog(
+                    title = stringResource(R.string.custom_fg_color),
+                    initialColor = customFg,
+                    onDismiss = { showFgPicker = false },
+                    onConfirm = { color ->
+                        customFg = color
+                        prefs.edit().putString("custom_fg", toHex6(color)).apply()
+                        if (themeSource == THEME_SOURCE_CUSTOM) applyCustomTheme()
+                        showFgPicker = false
+                    }
+                )
+            }
 
             (restoringFont ?: downloadingFont)?.let { fileName ->
                 OverlayDialog(
@@ -365,36 +541,91 @@ fun TermuxStylingScreen(
                     content = { FontDownloadingContent(fileName) }
                 )
             }
-
-            showColorLicense?.let { item ->
-                OverlayDialog(
-                    show = showColorLicense != null,
-                    onDismissRequest = { showColorLicense = null },
-                    content = {
-                        LicenseContent(
-                            context = context,
-                            item = item,
-                            isColors = true
-                        )
-                    }
-                )
-            }
-
-            showFontLicense?.let { item ->
-                OverlayDialog(
-                    show = showFontLicense != null,
-                    onDismissRequest = { showFontLicense = null },
-                    content = {
-                        LicenseContent(
-                            context = context,
-                            item = item,
-                            isColors = false
-                        )
-                    }
-                )
-            }
         }
     }
+}
+
+/** 自定义颜色选择器：R/G/B 三个滑块（0-255）+ 实时预览。 */
+@Composable
+private fun ColorPickerDialog(
+    title: String,
+    initialColor: Int,
+    onDismiss: () -> Unit,
+    onConfirm: (Int) -> Unit
+) {
+    val init = Color(initialColor)
+    var r by remember { mutableIntStateOf((init.red * 255f).roundToInt().coerceIn(0, 255)) }
+    var g by remember { mutableIntStateOf((init.green * 255f).roundToInt().coerceIn(0, 255)) }
+    var b by remember { mutableIntStateOf((init.blue * 255f).roundToInt().coerceIn(0, 255)) }
+    val current = Color(r, g, b)
+
+    OverlayDialog(
+        show = true,
+        onDismissRequest = onDismiss,
+        content = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(24.dp)
+            ) {
+                Text(
+                    text = title,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MiuixTheme.colorScheme.onSurface
+                )
+                Spacer(Modifier.height(16.dp))
+
+                // 实时预览
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(current)
+                )
+                Spacer(Modifier.height(16.dp))
+
+                Text(stringResource(R.string.color_red), fontSize = 13.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+                Slider(
+                    value = r.toFloat(),
+                    onValueChange = { r = it.roundToInt().coerceIn(0, 255) },
+                    valueRange = 0f..255f,
+                    steps = 254
+                )
+                Text(stringResource(R.string.color_green), fontSize = 13.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+                Slider(
+                    value = g.toFloat(),
+                    onValueChange = { g = it.roundToInt().coerceIn(0, 255) },
+                    valueRange = 0f..255f,
+                    steps = 254
+                )
+                Text(stringResource(R.string.color_blue), fontSize = 13.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+                Slider(
+                    value = b.toFloat(),
+                    onValueChange = { b = it.roundToInt().coerceIn(0, 255) },
+                    valueRange = 0f..255f,
+                    steps = 254
+                )
+
+                Spacer(Modifier.height(16.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(
+                        text = stringResource(android.R.string.cancel),
+                        onClick = onDismiss
+                    )
+                    Spacer(Modifier.width(12.dp))
+                    TextButton(
+                        text = stringResource(android.R.string.ok),
+                        onClick = { onConfirm(android.graphics.Color.rgb(r, g, b)) }
+                    )
+                }
+            }
+        }
+    )
 }
 
 @Composable
@@ -405,14 +636,13 @@ private fun TerminalPreviewCard(
     val fontFamily = typeface?.let { FontFamily(it) }
 
     Card(
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = colors.background),
+        cornerRadius = 16.dp,
+        colors = CardDefaults.defaultColors(colors.background),
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            // Title bar dots (macOS-style window)
             Row(
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
@@ -438,55 +668,27 @@ private fun TerminalPreviewCard(
 
             Spacer(Modifier.height(12.dp))
 
-            // Sample terminal text
             val baseTextStyle = TextStyle(
                 fontFamily = fontFamily,
                 fontSize = 13.sp,
                 lineHeight = 17.sp
             )
 
-            // Line 1: prompt + path (normal text)
             Text(
                 text = "~ \$ ",
-                color = colors.colors[4], // blue prompt
+                color = colors.colors[4],
                 style = baseTextStyle
             )
 
-            // Line 2: echo with ANSI-like colored words
             Row {
-                Text(
-                    text = "echo ",
-                    color = colors.colors[2], // green command
-                    style = baseTextStyle
-                )
-                Text(
-                    text = "\"",
-                    color = colors.foreground,
-                    style = baseTextStyle
-                )
-                Text(
-                    text = "Hello",
-                    color = colors.colors[1], // red for word
-                    style = baseTextStyle
-                )
-                Text(
-                    text = ", ",
-                    color = colors.colors[6], // cyan
-                    style = baseTextStyle
-                )
-                Text(
-                    text = "Termux",
-                    color = colors.colors[3], // yellow
-                    style = baseTextStyle
-                )
-                Text(
-                    text = "\"",
-                    color = colors.foreground,
-                    style = baseTextStyle
-                )
+                Text(text = "echo ", color = colors.colors[2], style = baseTextStyle)
+                Text(text = "\"", color = colors.foreground, style = baseTextStyle)
+                Text(text = "Hello", color = colors.colors[1], style = baseTextStyle)
+                Text(text = ", ", color = colors.colors[6], style = baseTextStyle)
+                Text(text = "Termux", color = colors.colors[3], style = baseTextStyle)
+                Text(text = "\"", color = colors.foreground, style = baseTextStyle)
             }
 
-            // Line 3: command output
             Text(
                 text = "Hello, Termux",
                 color = colors.foreground,
@@ -495,21 +697,11 @@ private fun TerminalPreviewCard(
 
             Spacer(Modifier.height(4.dp))
 
-            // Line 4: secondary command
             Row {
-                Text(
-                    text = "~ \$ ",
-                    color = colors.colors[4],
-                    style = baseTextStyle
-                )
-                Text(
-                    text = "ls -la",
-                    color = colors.colors[2],
-                    style = baseTextStyle
-                )
+                Text(text = "~ \$ ", color = colors.colors[4], style = baseTextStyle)
+                Text(text = "ls -la", color = colors.colors[2], style = baseTextStyle)
             }
 
-            // Line 5: ls output
             Text(
                 text = "drwxr-xr-x 2 u0_a155 u0_a155 4096 .termux",
                 color = colors.foreground.copy(alpha = 0.85f),
@@ -518,7 +710,6 @@ private fun TerminalPreviewCard(
 
             Spacer(Modifier.height(14.dp))
 
-            // Color swatches row: 16 colors in 2 rows of 8
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
@@ -568,28 +759,56 @@ private fun pendingFontSet(context: Context, fontItems: List<StyleItem>): Set<St
         .map { it.fileName }
         .toSet()
 
-private fun getCurrentStyle(context: Context, fileName: String, styleType: String): String {
-    val prefs = context.getSharedPreferences("termux_styling", Context.MODE_PRIVATE)
-    val savedName = prefs.getString("selected_${styleType}_name", null)
-    if (savedName != null) return savedName
-    return try {
-        val termuxDir = getTermuxDir(context)
-        val file = File(termuxDir, fileName)
-        if (file.exists()) {
-            val content = file.readText().trim()
-            if (content.startsWith("# Using default")) "Default" else "Custom"
-        } else "Default"
-    } catch (_: Exception) {
-        "Default"
-    }
-}
-
 private fun getTermuxDir(context: Context): File {
     val termuxContext = context.createPackageContext("com.termux", Context.CONTEXT_IGNORE_SECURITY)
     val homeDir = File(termuxContext.filesDir, "home")
     val termuxDir = File(homeDir, ".termux")
     if (!termuxDir.isDirectory) termuxDir.mkdirs()
     return termuxDir
+}
+
+/**
+ * 将选中的颜色方案物化到 ~/.termux/colors.properties，并广播 reload_style。
+ * 与既有 Styling 机制共用同一份事实来源，Java 引擎与 Compose 终端均据此刷新。
+ */
+private fun writeColorSchemeToTermux(context: Context, scheme: TerminalColorScheme) {
+    try {
+        val termuxDir = getTermuxDir(context)
+        val destinationFile = File(termuxDir, "colors.properties").canonicalFile
+        destinationFile.setWritable(true)
+        destinationFile.parentFile?.setWritable(true)
+        destinationFile.parentFile?.setExecutable(true)
+
+        val sb = StringBuilder()
+        sb.append("# Generated by KiTerminal Styling\n")
+        sb.append("foreground=${toHex6(scheme.foreground)}\n")
+        sb.append("background=${toHex6(scheme.background)}\n")
+        sb.append("cursor=${toHex6(scheme.cursor)}\n")
+        for (i in 0..15) {
+            sb.append("color$i=${toHex6(scheme.color(i))}\n")
+        }
+
+        val atomicFile = AtomicFile(destinationFile)
+        val out = atomicFile.startWrite()
+        out.write(sb.toString().toByteArray(StandardCharsets.UTF_8))
+        atomicFile.finishWrite(out)
+
+        // 让读取 selected_color_file 的代码（如有）保持一致的「非默认」状态
+        context.getSharedPreferences("termux_styling", Context.MODE_PRIVATE)
+            .edit()
+            .putString("selected_color_name", "Custom/LibTerminal")
+            .putString("selected_color_file", null)
+            .apply()
+
+        val actionReload = "com.termux.app.reload_style"
+        val executeIntent = Intent(actionReload)
+        executeIntent.putExtra(actionReload, "colors")
+        context.sendBroadcast(executeIntent)
+    } catch (e: Exception) {
+        Log.w("TermuxStyling", "Failed to write color scheme", e)
+        val message = context.getString(R.string.writing_failed) + e.message
+        SnackbarHelper.show(context, message, Snackbar.LENGTH_LONG)
+    }
 }
 
 private fun copyStyleFile(context: Context, item: StyleItem, isColors: Boolean) {
@@ -635,127 +854,6 @@ private fun copyStyleFile(context: Context, item: StyleItem, isColors: Boolean) 
         Log.w("TermuxStyling", "Failed to write style file", e)
         val message = context.getString(R.string.writing_failed) + e.message
         SnackbarHelper.show(context, message, Snackbar.LENGTH_LONG)
-    }
-}
-
-@Composable
-private fun StyleListContent(
-    title: String,
-    items: List<StyleItem>,
-    currentItem: String,
-    pendingItems: Set<String> = emptySet(),
-    onSelect: (StyleItem) -> Unit,
-    onLongPress: (StyleItem) -> Unit
-) {
-    LazyColumn(
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        item {
-            Text(
-                text = title,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold,
-                color = MiuixTheme.colorScheme.onSurface,
-                modifier = Modifier.padding(24.dp)
-            )
-        }
-        items(items.size) { index ->
-            val item = items[index]
-            val isSelected = item.displayName == currentItem
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { onSelect(item) }
-                    .padding(horizontal = 24.dp, vertical = 16.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = item.displayName,
-                    fontSize = 16.sp,
-                    color = if (isSelected) MiuixTheme.colorScheme.primary else MiuixTheme.colorScheme.onSurface,
-                    modifier = Modifier.weight(1f)
-                )
-                if (item.fileName in pendingItems) {
-                    Text(
-                        text = stringResource(R.string.font_need_download),
-                        fontSize = 12.sp,
-                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                    )
-                    Spacer(Modifier.width(8.dp))
-                }
-                if (isSelected) {
-                    Icon(
-                        imageVector = MiuixGlassIcons.ChevronBackward,
-                        contentDescription = null,
-                        tint = MiuixTheme.colorScheme.primary,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-            }
-            if (index < items.size - 1) {
-                HorizontalDivider(
-                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.15f),
-                    modifier = Modifier.padding(horizontal = 24.dp)
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun LicenseContent(
-    context: Context,
-    item: StyleItem,
-    isColors: Boolean
-) {
-    val licenseText = remember(item) {
-        try {
-            val assetFolder = if (isColors) "colors" else "fonts"
-            var fileName = item.fileName
-            val dotIndex = fileName.lastIndexOf('.')
-            if (dotIndex != -1) fileName = fileName.substring(0, dotIndex)
-            fileName += ".txt"
-            context.assets.open("$assetFolder/$fileName").bufferedReader().use { it.readText() }
-        } catch (_: Exception) {
-            context.getString(R.string.no_license_available)
-        }
-    }
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(24.dp)
-    ) {
-        Text(
-            text = item.displayName,
-            fontSize = 18.sp,
-            fontWeight = FontWeight.Bold,
-            color = MiuixTheme.colorScheme.onSurface
-        )
-        Spacer(Modifier.height(16.dp))
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(max = 300.dp)
-        ) {
-            item {
-                Text(
-                    text = licenseText,
-                    fontSize = 14.sp,
-                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                )
-            }
-        }
-        Spacer(Modifier.height(16.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.End
-        ) {
-            TextButton(
-                text = context.getString(android.R.string.ok),
-                onClick = { }
-            )
-        }
     }
 }
 

@@ -62,6 +62,7 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -87,14 +88,17 @@ import kotlinx.coroutines.launch
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.CardDefaults
 import top.yukonga.miuix.kmp.basic.CircularProgressIndicator
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.glass.ChevronBackward
 import top.yukonga.miuix.kmp.icon.glass.MiuixGlassIcons
 import top.yukonga.miuix.kmp.preference.CheckboxPreference
+import top.yukonga.miuix.kmp.window.WindowDialog
 
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
@@ -145,6 +149,17 @@ fun OobeScreen(
     bootstrapError: String?,
     releaseNotes: String?,
     currentVersionName: String,
+    installMode: String,
+    localZipName: String?,
+    localZipState: String?,
+    downloadPageUrl: String,
+    untrustedSourcePromptActive: Boolean,
+    onInstallModeChange: (String) -> Unit,
+    onPickLocalBootstrap: () -> Unit,
+    onStartLocalBootstrap: () -> Unit,
+    onConfirmUntrustedSource: () -> Unit,
+    onDismissUntrustedSource: () -> Unit,
+    onOpenBootstrapDownloadPage: () -> Unit,
     onGrantAllPermissions: () -> Unit,
     onStartBootstrap: () -> Unit,
     onRetryBootstrap: () -> Unit,
@@ -378,30 +393,30 @@ fun OobeScreen(
                             if (isForward) {
                                 // 前进：新页从右滑入 + fadeIn，旧页向左滑出小距离 + fadeOut
                                 androidx.compose.animation.slideInHorizontally(
-                                    animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing)
+                                    animationSpec = tween(durationMillis = AppMotion.NORMAL, easing = FastOutSlowInEasing)
                                 ) { fullWidth -> fullWidth } +
                                 androidx.compose.animation.fadeIn(
-                                    animationSpec = tween(durationMillis = 200, delayMillis = 60, easing = LinearOutSlowInEasing)
+                                    animationSpec = tween(durationMillis = AppMotion.NORMAL, delayMillis = 60, easing = LinearOutSlowInEasing)
                                 ) togetherWith
                                 androidx.compose.animation.slideOutHorizontally(
-                                    animationSpec = tween(durationMillis = 200, easing = FastOutLinearInEasing)
+                                    animationSpec = tween(durationMillis = AppMotion.NORMAL, easing = FastOutLinearInEasing)
                                 ) { fullWidth -> -fullWidth / 5 } +
                                 androidx.compose.animation.fadeOut(
-                                    animationSpec = tween(durationMillis = 120, easing = FastOutLinearInEasing)
+                                    animationSpec = tween(durationMillis = AppMotion.FAST, easing = FastOutLinearInEasing)
                                 )
                             } else {
                                 // 后退：新页从左滑入小距离 + fadeIn，旧页向右滑出 + fadeOut
                                 androidx.compose.animation.slideInHorizontally(
-                                    animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing)
+                                    animationSpec = tween(durationMillis = AppMotion.NORMAL, easing = FastOutSlowInEasing)
                                 ) { fullWidth -> -fullWidth / 5 } +
                                 androidx.compose.animation.fadeIn(
-                                    animationSpec = tween(durationMillis = 200, delayMillis = 60, easing = LinearOutSlowInEasing)
+                                    animationSpec = tween(durationMillis = AppMotion.NORMAL, delayMillis = 60, easing = LinearOutSlowInEasing)
                                 ) togetherWith
                                 androidx.compose.animation.slideOutHorizontally(
-                                    animationSpec = tween(durationMillis = 200, easing = FastOutLinearInEasing)
+                                    animationSpec = tween(durationMillis = AppMotion.NORMAL, easing = FastOutLinearInEasing)
                                 ) { fullWidth -> fullWidth } +
                                 androidx.compose.animation.fadeOut(
-                                    animationSpec = tween(durationMillis = 120, easing = FastOutLinearInEasing)
+                                    animationSpec = tween(durationMillis = AppMotion.FAST, easing = FastOutLinearInEasing)
                                 )
                             }
                         }
@@ -431,6 +446,17 @@ fun OobeScreen(
                                 isInstalling = isInstalling,
                                 bootstrapComplete = bootstrapComplete,
                                 bootstrapError = bootstrapError,
+                                installMode = installMode,
+                                localZipName = localZipName,
+                                localZipState = localZipState,
+                                downloadPageUrl = downloadPageUrl,
+                                untrustedSourcePromptActive = untrustedSourcePromptActive,
+                                onInstallModeChange = onInstallModeChange,
+                                onPickLocalBootstrap = onPickLocalBootstrap,
+                                onStartLocalBootstrap = onStartLocalBootstrap,
+                                onConfirmUntrustedSource = onConfirmUntrustedSource,
+                                onDismissUntrustedSource = onDismissUntrustedSource,
+                                onOpenBootstrapDownloadPage = onOpenBootstrapDownloadPage,
                                 onStartBootstrap = onStartBootstrap,
                                 onRetryBootstrap = onRetryBootstrap,
                                 onExitApp = onExitApp,
@@ -1106,7 +1132,7 @@ private fun OobePermissionPage(
             when {
                 isPermissionLoading -> {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        CircularProgressIndicator(modifier = Modifier.size(40.dp))
+                        CircularProgressIndicator(size = 40.dp)
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
                             text = "正在读取权限状态...",
@@ -1301,6 +1327,17 @@ private fun OobeInstallPage(
     isInstalling: Boolean,
     bootstrapComplete: Boolean,
     bootstrapError: String?,
+    installMode: String,
+    localZipName: String?,
+    localZipState: String?,
+    downloadPageUrl: String,
+    untrustedSourcePromptActive: Boolean,
+    onInstallModeChange: (String) -> Unit,
+    onPickLocalBootstrap: () -> Unit,
+    onStartLocalBootstrap: () -> Unit,
+    onConfirmUntrustedSource: () -> Unit,
+    onDismissUntrustedSource: () -> Unit,
+    onOpenBootstrapDownloadPage: () -> Unit,
     onStartBootstrap: () -> Unit,
     onRetryBootstrap: () -> Unit,
     onExitApp: () -> Unit,
@@ -1308,6 +1345,16 @@ private fun OobeInstallPage(
     onBack: () -> Unit,
     transparentBackground: Boolean = false
 ) {
+    val context = LocalContext.current
+    val isOnline = installMode != "local"
+    // 安装进行中禁止切换方式/重新选包，避免两套状态互相污染。
+    val installRunning = isBootstrapping || isDownloading || isInstalling
+    // 非官方来源包的二次确认弹窗（由 Activity 的 untrustedSourcePrompt 状态驱动）。
+    var showUntrustedDialog by remember { mutableStateOf(false) }
+    LaunchedEffect(untrustedSourcePromptActive) {
+        if (untrustedSourcePromptActive) showUntrustedDialog = true
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -1362,7 +1409,7 @@ private fun OobeInstallPage(
         )
         Spacer(modifier = Modifier.height(6.dp))
         Text(
-            text = "首次安装需要下载并配置终端环境，通常需要几分钟",
+            text = "首次安装需要配置终端环境，可选择在线下载或使用本地 bootstrap 包",
             style = TextStyle(
                 fontSize = 14.sp,
                 color = MiuixTheme.colorScheme.onSurfaceVariantSummary
@@ -1370,13 +1417,36 @@ private fun OobeInstallPage(
             modifier = Modifier.fillMaxWidth(),
             textAlign = TextAlign.Center
         )
+        Spacer(modifier = Modifier.height(20.dp))
 
+        // 方式选择器：运行中锁定，避免安装中途切换导致状态错乱。
+        InstallModeSelector(
+            isOnline = isOnline,
+            enabled = !installRunning,
+            onSelectOnline = { onInstallModeChange("online") },
+            onSelectLocal = { onInstallModeChange("local") }
+        )
+
+        // 下载页链接常驻可见：在线安装超时的用户可据此手动取包，再走「从本地安装」。
+        Spacer(modifier = Modifier.height(12.dp))
+        DownloadPageHint(
+            url = downloadPageUrl,
+            onOpen = onOpenBootstrapDownloadPage
+        )
+
+        // 主体可滚动：方式选择器、下载页提示、本地包选择器在小屏或大字体下会超出
+        // 剩余高度，此前这里没有任何滚动能力，「从本地安装」的入口会被裁掉且无从访问。
+        // 滚动挂在 Box 上而非内层：Box 会以无限高度约束测量，contentAlignment 的居中
+        // 因此不会产生偏移，短内容观感与原先完全一致，超长时本容器接管滚动。
+        // 底部主按钮留在滚动区外，始终常驻可见。
         Box(
             modifier = Modifier
                 .weight(1f)
-                .fillMaxWidth(),
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState()),
             contentAlignment = Alignment.Center
         ) {
+            Spacer(modifier = Modifier.height(8.dp))
             when {
                 // 失败态排在最前：bootstrapError 是唯一可信的终态信号，
                 // 任何残留的进行中/完成标记都不该盖掉失败原因与重试入口。
@@ -1400,6 +1470,23 @@ private fun OobeInstallPage(
                                     maxLines = 6, overflow = TextOverflow.Ellipsis)
                                 Spacer(modifier = Modifier.height(8.dp))
                                 Text(text = "可能原因：网络连接不稳定 / 存储空间不足 / 设备不支持", style = TextStyle(fontSize = 12.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary))
+                                // 在线安装失败（尤其超时）的引导：给出下载页，改用本地安装绕过网络。
+                                if (isOnline) {
+                                    Spacer(modifier = Modifier.height(12.dp))
+                                    Row(verticalAlignment = Alignment.Top) {
+                                        MaterialIcon(
+                                            imageVector = Icons.Default.Info,
+                                            contentDescription = null,
+                                            tint = MiuixTheme.colorScheme.primary,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            text = "若多次超时，可在浏览器打开下方下载页手动下载对应架构的 bootstrap，再选择「从本地安装」。",
+                                            style = TextStyle(fontSize = 12.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
@@ -1408,7 +1495,7 @@ private fun OobeInstallPage(
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
-                        CircularProgressIndicator(modifier = Modifier.size(56.dp))
+                        CircularProgressIndicator(size = 56.dp)
                         Spacer(modifier = Modifier.height(24.dp))
                         Text(
                             text = "正在下载终端运行环境...",
@@ -1425,7 +1512,7 @@ private fun OobeInstallPage(
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
-                        CircularProgressIndicator(modifier = Modifier.size(56.dp))
+                        CircularProgressIndicator(size = 56.dp)
                         Spacer(modifier = Modifier.height(24.dp))
                         Text(
                             text = "正在安装终端运行环境...",
@@ -1442,7 +1529,7 @@ private fun OobeInstallPage(
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
-                        CircularProgressIndicator(modifier = Modifier.size(56.dp))
+                        CircularProgressIndicator(size = 56.dp)
                         Spacer(modifier = Modifier.height(24.dp))
                         Text(
                             text = "正在配置终端环境...",
@@ -1474,20 +1561,39 @@ private fun OobeInstallPage(
                 else -> {
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.fillMaxWidth()
                     ) {
                         Box(
                             modifier = Modifier.size(72.dp).clip(androidx.compose.foundation.shape.CircleShape).background(MiuixTheme.colorScheme.surfaceVariant),
                             contentAlignment = Alignment.Center
                         ) {
-                            CircularProgressIndicator(modifier = Modifier.size(36.dp))
+                            CircularProgressIndicator(size = 36.dp)
                         }
                         Spacer(modifier = Modifier.height(24.dp))
-                        Text(text = "准备安装", style = TextStyle(fontSize = 22.sp, fontWeight = FontWeight.Bold, color = MiuixTheme.colorScheme.onSurface))
+                        Text(
+                            text = if (isOnline) "准备安装" else "选择本地 Bootstrap",
+                            style = TextStyle(fontSize = 22.sp, fontWeight = FontWeight.Bold, color = MiuixTheme.colorScheme.onSurface)
+                        )
                         Spacer(modifier = Modifier.height(8.dp))
-                        Text(text = "点击下方按钮开始配置终端环境", style = TextStyle(fontSize = 14.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary))
+                        Text(
+                            text = if (isOnline) "点击下方按钮开始下载并配置终端环境"
+                                   else "选择设备上已下载的 bootstrap zip 文件进行安装",
+                            style = TextStyle(fontSize = 14.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary),
+                            textAlign = TextAlign.Center
+                        )
+                        if (!isOnline) {
+                            Spacer(modifier = Modifier.height(20.dp))
+                            LocalBootstrapPicker(
+                                fileName = localZipName,
+                                stateText = localZipState,
+                                enabled = !installRunning,
+                                onPick = onPickLocalBootstrap
+                            )
+                        }
                     }
                 }
             }
+            Spacer(modifier = Modifier.height(16.dp))
         }
 
         when {
@@ -1520,12 +1626,236 @@ private fun OobeInstallPage(
             }
             else -> {
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Button(onClick = { onStartBootstrap() }, modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(color = MiuixTheme.colorScheme.primary)) {
-                        Text(text = "开始安装", fontWeight = FontWeight.Bold, color = Color.White)
+                    // 本地方式：文件未就绪时禁用，避免用户点了没有字节可装的空路径。
+                    val canStart = if (isOnline) true else (localZipName != null && localZipState?.startsWith("读取失败") != true)
+                    Button(
+                        onClick = { if (isOnline) onStartBootstrap() else onStartLocalBootstrap() },
+                        enabled = canStart,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(color = MiuixTheme.colorScheme.primary)
+                    ) {
+                        Text(
+                            text = if (isOnline) "开始在线安装" else "开始本地安装",
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
                     }
                 }
             }
+        }
+    }
+
+    // 非官方来源 bootstrap 的二次确认：只有用户明确认可来源可信，才继续安装。
+    WindowDialog(
+        show = showUntrustedDialog,
+        onDismissRequest = {
+            showUntrustedDialog = false
+            onDismissUntrustedSource()
+        },
+        title = "确认 Bootstrap 来源",
+        summary = "所选 bootstrap 与官方发布包的 SHA-256 校验不一致。\n\n如果这是你自行修改或第三方提供的包，请先确认其来源可信 —— 安装来自未知来源的运行环境存在安全风险。\n\n是否确认来源可信并继续安装？",
+        content = {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(20.dp)
+            ) {
+                TextButton(
+                    text = "取消",
+                    onClick = {
+                        showUntrustedDialog = false
+                        onDismissUntrustedSource()
+                    },
+                    modifier = Modifier.weight(1f)
+                )
+                TextButton(
+                    text = "继续安装",
+                    onClick = {
+                        showUntrustedDialog = false
+                        onConfirmUntrustedSource()
+                    },
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.textButtonColorsPrimary()
+                )
+            }
+        }
+    )
+}
+
+/** 安装方式选择器：在线安装 / 从本地安装。 */
+@Composable
+private fun InstallModeSelector(
+    isOnline: Boolean,
+    enabled: Boolean,
+    onSelectOnline: () -> Unit,
+    onSelectLocal: () -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        InstallModeOption(
+            title = "在线安装",
+            desc = "自动下载并配置",
+            selected = isOnline,
+            enabled = enabled,
+            onClick = onSelectOnline,
+            modifier = Modifier.weight(1f)
+        )
+        InstallModeOption(
+            title = "从本地安装",
+            desc = "选择本地 bootstrap",
+            selected = !isOnline,
+            enabled = enabled,
+            onClick = onSelectLocal,
+            modifier = Modifier.weight(1f)
+        )
+    }
+}
+
+/**
+ * 单个方式卡片。Miuix 的 Card 不支持描边参数，选中态改用「左侧图标 + 主色文字 +
+ * 底部状态点」三重标记，配合浅色底强调，保证浅色主题下仍可清晰区分。
+ */
+@Composable
+private fun InstallModeOption(
+    title: String,
+    desc: String,
+    selected: Boolean,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val accent = MiuixTheme.colorScheme.primary
+    Card(
+        modifier = modifier
+            .alpha(if (enabled) 1f else 0.5f)
+            .clickable(enabled = enabled) { onClick() },
+        colors = CardDefaults.defaultColors(
+            color = if (selected) accent.copy(alpha = 0.10f)
+                    else MiuixTheme.colorScheme.surfaceContainer
+        )
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(14.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            MaterialIcon(
+                imageVector = if (selected) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
+                contentDescription = null,
+                tint = if (selected) accent else MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                modifier = Modifier.size(22.dp)
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = title,
+                style = TextStyle(
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = if (selected) accent else MiuixTheme.colorScheme.onSurface
+                )
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = desc,
+                style = TextStyle(fontSize = 12.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary),
+                textAlign = TextAlign.Center
+            )
+        }
+    }
+}
+
+/** bootstrap 下载页常驻提示：展示完整 URL 并提供「打开下载页」按钮。 */
+@Composable
+private fun DownloadPageHint(url: String, onOpen: () -> Unit) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.fillMaxWidth().padding(14.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                MaterialIcon(
+                    imageVector = Icons.Default.Info,
+                    contentDescription = null,
+                    tint = MiuixTheme.colorScheme.primary,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "Bootstrap 下载页",
+                    style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Bold, color = MiuixTheme.colorScheme.onSurface)
+                )
+            }
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = "在线安装超时？可在此手动下载对应架构的 bootstrap，再用「从本地安装」。",
+                style = TextStyle(fontSize = 12.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = url,
+                style = TextStyle(fontSize = 11.sp, color = MiuixTheme.colorScheme.primary),
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(modifier = Modifier.height(10.dp))
+            Button(
+                onClick = { onOpen() },
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(color = MiuixTheme.colorScheme.surfaceVariant)
+            ) {
+                Text(text = "打开下载页", color = MiuixTheme.colorScheme.onSurface)
+            }
+        }
+    }
+}
+
+/** 本地 bootstrap 选择器：展示已选文件名与校验/读取状态，并提供选择按钮。 */
+@Composable
+private fun LocalBootstrapPicker(
+    fileName: String?,
+    stateText: String?,
+    enabled: Boolean,
+    onPick: () -> Unit
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(14.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                MaterialIcon(
+                    imageVector = Icons.Default.Info,
+                    contentDescription = null,
+                    tint = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = fileName ?: "未选择文件",
+                        style = TextStyle(
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = if (fileName != null) MiuixTheme.colorScheme.onSurface
+                                    else MiuixTheme.colorScheme.onSurfaceVariantSummary
+                        ),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    if (!stateText.isNullOrBlank()) {
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = stateText,
+                            style = TextStyle(fontSize = 12.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+                        )
+                    }
+                }
+            }
+        }
+        Spacer(modifier = Modifier.height(12.dp))
+        Button(
+            onClick = { onPick() },
+            enabled = enabled,
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.buttonColors(color = MiuixTheme.colorScheme.surfaceVariant)
+        ) {
+            Text(text = if (fileName == null) "选择本地文件" else "重新选择", color = MiuixTheme.colorScheme.onSurface)
         }
     }
 }
