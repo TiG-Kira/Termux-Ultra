@@ -7,7 +7,6 @@ import androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner
 import com.termux.app.TermuxActivity
 import com.termux.app.terminal.shell.ComposeSessionManager
 import com.termux.app.terminal.shell.ComposeTerminalSettings
-import com.termux.app.terminal.shell.pid
 
 /**
 * Bridge helpers used by [TermuxActivity] (Java) to invoke the Compose-based
@@ -49,10 +48,8 @@ object TermuxActivityBridge {
         val targetSession = resolveSessionFromIntent(activity, sessionManager)
 
         // 效仿 Java 版策略：未初始化的会话（新建后未进入过，pid=0）在用户手动点击进入
-        // 终端控制台的那一刻才真正初始化（拉起进程）
-        if (targetSession.pid == 0) {
-            targetSession.execute()
-        }
+        // 终端控制台的那一刻才真正初始化（拉起进程），并注入「新会话自动执行」命令
+        sessionManager.initializeSessionIfNeeded(targetSession)
 
         sessionManager.switchTo(targetSession.id)
 

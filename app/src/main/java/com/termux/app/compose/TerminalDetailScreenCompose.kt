@@ -237,11 +237,12 @@ fun TerminalDetailScreenCompose(
     }
 
     // 当前会话切换后（会话列表点击 / 主页卡片点击 / 第三方句柄切换），未初始化的会话
-    // 在真正进入终端控制台的那一刻才初始化（拉起进程），效仿 Java 版策略
+    // 在真正进入终端控制台的那一刻才初始化（拉起进程）并注入「新会话自动执行」命令，
+    // 效仿 Java 版策略
     LaunchedEffect(currentSessionId) {
         val cs = allSessions.firstOrNull { it.session.id == currentSessionId }?.session
-        if (cs != null && cs.pid == 0) {
-            cs.execute()
+        if (cs != null) {
+            sessionManager.initializeSessionIfNeeded(cs)
         }
     }
 
