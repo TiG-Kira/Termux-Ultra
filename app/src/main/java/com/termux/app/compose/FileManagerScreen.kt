@@ -486,6 +486,8 @@ fun FileManagerScreen(
     ) { padding ->
         LazyColumn(
             modifier = Modifier
+                // 横屏：列表居中收窄到可读行宽（竖屏原样）
+                .landscapeCenteredMaxWidth()
                 .fillMaxSize()
                 .padding(padding)
                 .padding(horizontal = 16.dp)

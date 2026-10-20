@@ -1110,6 +1110,8 @@
     <string name="share_session">分享会话</string>
     <string name="new_session">新建会话</string>
     <string name="session_list">会话列表</string>
+    <string name="show_in_right_pane">固定到右半屏</string>
+    <string name="remove_from_right_pane">取消右半屏固定</string>
     <string name="uninitialized">未初始化</string>
     <string name="reset_terminal">重置终端</string>
     <string name="app_settings_entry">应用设置</string>

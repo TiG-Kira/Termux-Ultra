@@ -22,8 +22,10 @@ import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.offset
@@ -193,6 +195,13 @@ fun MainScreen(
         else -> systemNavBarsHeight + navContainerHeight + 12.dp
     }
 
+    // 横屏：底部导航栏切换为侧边竖排导航栏（MainScreenNavRail，锁边停靠不占底部空间）。
+    // 页面底部只需保留系统导航栏 inset；侧边 rail 以 Row sibling 布局存在，
+    // 内容区宽度由 Row 约束天然让位，无需各页面自己避让。
+    val isMainLandscape = isLandscapeOrientation()
+    val pageNavBarBottomPadding = if (isMainLandscape) systemNavBarsHeight + 16.dp else totalNavHeight
+    val pageSnackbarBottomPadding = if (isMainLandscape) systemNavBarsHeight + 16.dp else snackbarBottomPadding
+
     LaunchedEffect(navStyle) {
         if (navStyle == 2) {
             // Mark that glass nav rendering is in progress
@@ -288,7 +297,9 @@ fun MainScreen(
             }
         },
         bottomBar = {
-            when (navStyle) {
+            if (isMainLandscape) {
+                // 横屏：底部不渲染导航栏，由内容区 Row 末端的 MainScreenNavRail 接管
+            } else when (navStyle) {
                 2 -> {
                     val glassDims = computeNavDimensions(availableTabs.size, NavStyle.GLASS)
                     LiquidGlassNavigationBarWithIndicator(
@@ -451,9 +462,13 @@ fun MainScreen(
         // it: they run full height and pass under the bar, each holding its first item clear by
         // [LocalTopBarClearance] worth of scrollable content padding.
         val topBarClearance = padding.calculateTopPadding()
+        // 横屏：页面内容与侧边竖排导航栏并排（rail 不再悬浮在内容上，
+        // 而是占据独立列宽，页面自动获得剩余宽度）；竖屏仍是单 Box 全屏。
+        Row(modifier = Modifier.fillMaxSize()) {
         Box(
             modifier = Modifier
-                .fillMaxSize()
+                .weight(1f)
+                .fillMaxHeight()
                 .then(
                     when {
                         useLiquidGlassNav -> Modifier.layerBackdrop(liquidGlassBackdrop)
@@ -646,7 +661,7 @@ fun MainScreen(
                         previousTab = swipeTargetTab!!
                         onTabChange(4)
                     },
-                    navBarBottomPadding = totalNavHeight,
+                    navBarBottomPadding = pageNavBarBottomPadding,
                     topBarClearance = topBarClearance,
                     onTopBarContent = { topBarContent.value = it },
                     active = swipeTargetTab == selectedTab
@@ -703,7 +718,7 @@ fun MainScreen(
                         previousTab = tab
                         onTabChange(4)
                     },
-                    navBarBottomPadding = totalNavHeight,
+                    navBarBottomPadding = pageNavBarBottomPadding,
                     topBarClearance = topBarClearance,
                     onTopBarContent = { topBarContent.value = it },
                     active = tab == selectedTab
@@ -711,10 +726,24 @@ fun MainScreen(
             }
         }
 
+        // 横屏侧边竖排导航栏：锁边停靠，图标纵向排列，不占用底部空间
+        if (isMainLandscape) {
+            MainScreenNavRail(
+                selectedTab = selectedTab,
+                availableTabs = availableTabs,
+                onTabChange = { tab ->
+                    previousTab = selectedTab
+                    onTabChange(tab)
+                },
+                bottomInset = systemNavBarsHeight
+            )
+        }
+        }
+
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(bottom = snackbarBottomPadding),
+                .padding(bottom = pageSnackbarBottomPadding),
             contentAlignment = Alignment.BottomCenter
         ) {
             SnackbarHost(state = snackbarHostState)

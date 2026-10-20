@@ -99,6 +99,14 @@ public final class TermuxActivity extends ComponentActivity implements ServiceCo
         // 容器级 imePadding 协同提供完整的 insets 语义（对齐上游 765af91）
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
 
+        // 允许画面延伸进刘海/挖孔区域（沉浸式全屏的前置条件）。
+        // 窗口延伸后内容如何避让由 Compose 层智能处理：刘海屏避开整条刘海带，
+        // 挖孔屏只避开孔位；竖屏的显示效果不变（cutout 仍被状态栏区域覆盖）。
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            getWindow().getAttributes().layoutInDisplayCutoutMode =
+                WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
+        }
+
         // 本页继承 application 主题 Theme.Termux.AppBase，该主题只设了 statusBarColor，
         // 导航栏色会落回 AppCompat 的不透明值，把 Compose 键盘底整个盖成一条黑带
         // （状态栏正常、导航栏发黑即源于此）。补齐透明并关掉 Android 10+ 的对比度自动补色，

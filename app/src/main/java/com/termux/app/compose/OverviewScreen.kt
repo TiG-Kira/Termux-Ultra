@@ -901,7 +901,8 @@ fun OverviewScreen(
         
         LazyVerticalGrid(
             state = lazyGridState,
-            columns = GridCells.Fixed(2),
+            // 横屏/平板：加宽的屏幕改用 4 列瀑布，卡片密度与竖屏 2 列视觉相当
+            columns = if (isWideScreenLayout()) GridCells.Fixed(4) else GridCells.Fixed(2),
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
@@ -910,11 +911,12 @@ fun OverviewScreen(
             verticalArrangement = Arrangement.spacedBy(8.dp),
             contentPadding = PaddingValues(top = LocalTopBarClearance.current + 8.dp, bottom = navBarBottomPadding + 16.dp, start = 16.dp, end = 16.dp)
         ) {
-            
+
             items(
                 items = orderedCards,
+                // WIDE 卡片整行铺满（竖屏 2 列=跨 2 列，横屏 4 列=跨 4 列，语义一致）
                 span = { card ->
-                    if (card.size == CardSize.WIDE) GridItemSpan(2) else GridItemSpan(1)
+                    if (card.size == CardSize.WIDE) GridItemSpan(maxLineSpan) else GridItemSpan(1)
                 }
             ) { card ->
                 CardItem(

@@ -305,7 +305,8 @@ fun ComposeTerminalListScreen(
                 ) {
                     // 默认垂直网格布局
                     LazyVerticalGrid(
-                        columns = GridCells.Fixed(2),
+                        // 横屏/平板：更宽的屏幕排 4 列会话卡片；竖屏维持 2 列
+                        columns = if (isWideScreenLayout()) GridCells.Fixed(4) else GridCells.Fixed(2),
                         modifier = Modifier
                             .fillMaxSize()
                             .padding(horizontal = 16.dp)
@@ -316,7 +317,7 @@ fun ComposeTerminalListScreen(
                         contentPadding = androidx.compose.foundation.layout.PaddingValues(top = 8.dp, bottom = navBarBottomPadding + 16.dp)
                     ) {
                         if (allSessions.isEmpty()) {
-                            item(span = { GridItemSpan(2) }) {
+                            item(span = { GridItemSpan(maxLineSpan) }) {
                                 Column(
                                     modifier = Modifier
                                         .fillMaxWidth()

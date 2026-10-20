@@ -1284,6 +1284,8 @@
     <string name="share_session">Share session</string>
     <string name="new_session">New session</string>
     <string name="session_list">Session list</string>
+    <string name="show_in_right_pane">Pin to right pane</string>
+    <string name="remove_from_right_pane">Unpin right pane</string>
     <string name="uninitialized">Uninitialized</string>
     <string name="reset_terminal">Reset terminal</string>
     <string name="app_settings_entry">App settings</string>
