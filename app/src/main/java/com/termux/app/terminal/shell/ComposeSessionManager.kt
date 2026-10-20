@@ -45,6 +45,18 @@ class ComposeSessionManager private constructor(private val context: Context) {
     val currentSession: TerminalSession?
         get() = _sessions.value.firstOrNull { it.session.id == _currentSessionId.value }?.session
 
+    /**
+     * 双分屏模式下被用户固定到右半屏的会话 id（-1 = 未固定，UI 层自动挑选）。
+     * 仅在横屏/平板布局下生效；被固定会话被结束时自动复位。
+     */
+    private val _rightPaneSessionId = MutableStateFlow(-1)
+    val rightPaneSessionId: StateFlow<Int> = _rightPaneSessionId.asStateFlow()
+
+    /** 指定某个会话显示在右半屏；传 -1 取消固定（回退自动挑选）。 */
+    fun setRightPaneSession(sessionId: Int) {
+        _rightPaneSessionId.value = sessionId
+    }
+
     /** 会话 id 分配器（原子，避免 binder 线程与主线并发创建时产生重复 id）。 */
     private val nextId = AtomicInteger(1)
 
@@ -350,6 +362,11 @@ class ComposeSessionManager private constructor(private val context: Context) {
             val remaining = _sessions.value.filter { it.session.id != sessionId }
             _sessions.value = remaining
 
+            // 右半屏固定的会话被结束时取消固定，UI 层自动回退到其余会话
+            if (_rightPaneSessionId.value == sessionId) {
+                _rightPaneSessionId.value = -1
+            }
+
             if (_currentSessionId.value == sessionId) {
                 // 优先接管原索引处会话，越界取末尾
                 val index = if (removedIndex >= remaining.size) remaining.size - 1 else removedIndex
@@ -371,6 +388,7 @@ class ComposeSessionManager private constructor(private val context: Context) {
             }
             _sessions.value = emptyList()
             _currentSessionId.value = -1
+            _rightPaneSessionId.value = -1
         }
         // 注意：不重置 nextId，保持会话 handle 全局单调递增，
         // 避免切换核心后旧的 sessionHandle intent extra 解析到已不存在的会话。

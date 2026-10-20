@@ -31,6 +31,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBars
@@ -38,6 +39,8 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.calculateStartPadding
+import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -57,6 +60,7 @@ import androidx.compose.material.icons.rounded.TextFields
 import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -78,6 +82,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.termux.R
@@ -184,6 +189,36 @@ fun TerminalDetailScreenCompose(
     var showQuickCommandSheet by remember { mutableStateOf(false) }
 
     val terminalViewRef = remember { mutableStateOf<LibTerminalView?>(null) }
+
+    // ===== 横屏/平板布局适配（竖屏 UI 逻辑完全不变）=====
+    val isLandscape = isLandscapeOrientation()
+    // 双分屏仅在横屏或平板布局下生效
+    val isWideLayout = isWideScreenLayout()
+    // 横屏时按刘海/挖孔的 boundingRect 水平避让（竖屏返回全 0）。
+    // 系统栏（状态栏/导航栏）横屏保持可见、不隐藏；窗口的 SHORT_EDGES 模式
+    // 仍让画面延伸进刘海/挖孔区域，仅内容做智能避让。
+    val cutoutInsets = rememberLandscapeCutoutInsets()
+    val cutoutStart = if (isLandscape) cutoutInsets.calculateStartPadding(LayoutDirection.Ltr) else 0.dp
+    val cutoutEnd = if (isLandscape) cutoutInsets.calculateEndPadding(LayoutDirection.Ltr) else 0.dp
+
+    // 右半屏会话：用户固定 > 自动挑选第一个非当前会话。
+    // 只有 >=2 个会话时才存在右半屏；单会话占满整个屏幕。
+    val rightPaneSessionId by sessionManager.rightPaneSessionId.collectAsState()
+    val rightPaneSession = if (isWideLayout && allSessions.size >= 2) {
+        allSessions.firstOrNull {
+            it.session.id == rightPaneSessionId && it.session.id != currentSession.id
+        }?.session
+            ?: allSessions.firstOrNull { it.session.id != currentSession.id }?.session
+    } else null
+
+    // 右半屏会话未初始化时（pid=0）在进入分屏的那一刻拉起进程（与主会话同策略）
+    LaunchedEffect(rightPaneSession?.id) {
+        val s = rightPaneSession
+        if (s != null && s.pid == 0) s.execute()
+    }
+
+    // 右半屏自己的终端视图引用（聚焦/按键派发用，与主 pane 互不干扰）
+    val rightTerminalViewRef = remember { mutableStateOf<LibTerminalView?>(null) }
 
     val terminalActive = !(showSessionList || showContextMenu || showRenameDialog)
     LaunchedEffect(terminalActive) {
@@ -552,6 +587,59 @@ fun TerminalDetailScreenCompose(
     )
 
     /**
+     * 终端面板：单屏与双分屏共用同一份渲染参数。
+     * 左（主）面板始终显示当前活跃会话；右面板显示被固定/自动挑选的会话。
+     */
+    @Composable
+    fun MainTerminalPane(
+        session: LibTerminalSession,
+        viewRef: MutableState<LibTerminalView?>
+    ) {
+        ComposeTerminalScreen(
+            session = session,
+            modifier = Modifier.fillMaxSize(),
+            terminalViewRef = viewRef,
+            useLightTheme = false,
+            textSize = textSize,
+            cursorBlink = cursorBlink,
+            cursorStyle = cursorStyle,
+            textBlinking = textBlinking,
+            colorScheme = effectiveColorScheme,
+            typeface = stylingTypeface,
+            extraKeysModifierReader = {
+                // libterminal 为输入法/虚拟键盘来源的输入读取该快照（走 inputCodePoint）。
+                // 读一次即消费粘滞态，于是粘滞的 CTRL/ALT 只作用于紧随其后的那一次输入；
+                // 代价是若这一次输入最终没产出字节（如只按了 BACK），粘滞态会白丢一次，可接受。
+                val snapshot = ExtraKeysModifierSnapshot(
+                    extraKeysModifiers.ctrl,
+                    extraKeysModifiers.alt,
+                    false,
+                    extraKeysModifiers.fn
+                )
+                extraKeysModifiers.clearSticky()
+                snapshot
+            }
+        )
+    }
+
+    /** 右半屏会话名标签：分屏时帮助用户区分左右两个会话。 */
+    @Composable
+    fun RightPaneLabel(session: LibTerminalSession) {
+        val name by session.sessionName.collectAsState(initial = "")
+        Text(
+            text = name.ifEmpty { context.getString(R.string.terminal) },
+            fontSize = 11.sp,
+            color = Color.White,
+            maxLines = 1,
+            modifier = Modifier
+                .padding(top = 6.dp, start = 10.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(Color.Black.copy(alpha = 0.45f))
+                .padding(horizontal = 8.dp, vertical = 3.dp)
+        )
+    }
+
+    /**
      * 玻璃版顶栏动作区：一整块玻璃面板（GlassTerminalBarActionsPanel）里排 5 个裸图标按钮，
      * 按钮各自不再带底板 / 描边 / 阴影，成组观感对齐旧版 TopBarActionCard，材质升级为玻璃。
      * 终端 / 键盘两键保留长按交互（重命名会话 / 快捷命令面板）。
@@ -726,6 +814,9 @@ fun TerminalDetailScreenCompose(
                 // - 副标题承载「新会话 / 会话已结束」提示（颜色随场景适配）
                 GlassTerminalBar(
                     collapsed = barCollapsed,
+                    // 横屏时刘海/挖孔位于屏幕左右两侧：给整条顶栏加 cutout 水平避让
+                    // （竖屏时 cutoutStart/cutoutEnd 为 0，布局不变）
+                    modifier = Modifier.padding(start = cutoutStart, end = cutoutEnd),
                     title = barTitle,
                     // 展开态大标题始终显示会话名，不受收缩态标题显隐逻辑影响
                     largeTitle = currentSessionName.ifEmpty { context.getString(R.string.terminal) },
@@ -774,7 +865,10 @@ fun TerminalDetailScreenCompose(
             bottomBar = {
                 if (showToolbar) {
                     Box(
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            // 横屏时底部工具栏同样避开侧边刘海/挖孔（竖屏为 0，布局不变）
+                            .padding(start = cutoutStart, end = cutoutEnd)
                     ) {
                         TerminalKeyboardToolbar(
                             onSendKey = { bytes -> currentSession.write(bytes) },
@@ -808,31 +902,50 @@ fun TerminalDetailScreenCompose(
                         }
                     }
             ) {
-                ComposeTerminalScreen(
-                    session = currentSession,
-                    modifier = Modifier.fillMaxSize(),
-                    terminalViewRef = terminalViewRef,
-                    useLightTheme = false,
-                    textSize = textSize,
-                    cursorBlink = cursorBlink,
-                    cursorStyle = cursorStyle,
-                    textBlinking = textBlinking,
-                    colorScheme = effectiveColorScheme,
-                    typeface = stylingTypeface,
-                    extraKeysModifierReader = {
-                        // libterminal 为输入法/虚拟键盘来源的输入读取该快照（走 inputCodePoint）。
-                        // 读一次即消费粘滞态，于是粘滞的 CTRL/ALT 只作用于紧随其后的那一次输入；
-                        // 代价是若这一次输入最终没产出字节（如只按了 BACK），粘滞态会白丢一次，可接受。
-                        val snapshot = ExtraKeysModifierSnapshot(
-                            extraKeysModifiers.ctrl,
-                            extraKeysModifiers.alt,
-                            false,
-                            extraKeysModifiers.fn
-                        )
-                        extraKeysModifiers.clearSticky()
-                        snapshot
+                if (rightPaneSession != null) {
+                    // ===== 横屏/平板双分屏：左右各占一半，同时显示两个会话 =====
+                    // 背景色铺满整屏（画面延伸进刘海/挖孔区域），内容经 cutout insets
+                    // 智能避让：刘海屏整条避开刘海带，挖孔屏仅让出孔位。
+                    Box(modifier = Modifier.fillMaxSize().background(terminalBgColor)) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(start = cutoutStart, end = cutoutEnd)
+                        ) {
+                            Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
+                                MainTerminalPane(session = currentSession, viewRef = terminalViewRef)
+                            }
+                            // 分隔线：跟随终端底色明暗取反，深底白线/浅底黑线
+                            Box(
+                                modifier = Modifier
+                                    .width(1.dp)
+                                    .fillMaxHeight()
+                                    .background(
+                                        if (isTerminalDark) Color.White.copy(alpha = 0.15f)
+                                        else Color.Black.copy(alpha = 0.15f)
+                                    )
+                            )
+                            Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
+                                MainTerminalPane(session = rightPaneSession, viewRef = rightTerminalViewRef)
+                                RightPaneLabel(rightPaneSession)
+                            }
+                        }
                     }
-                )
+                } else if (isLandscape) {
+                    // ===== 横屏单会话：单个会话占满整个屏幕，同样背景延伸 + 内容避让 =====
+                    Box(modifier = Modifier.fillMaxSize().background(terminalBgColor)) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(start = cutoutStart, end = cutoutEnd)
+                        ) {
+                            MainTerminalPane(session = currentSession, viewRef = terminalViewRef)
+                        }
+                    }
+                } else {
+                    // ===== 竖屏：保持原有单屏逻辑，不做任何改动 =====
+                    MainTerminalPane(session = currentSession, viewRef = terminalViewRef)
+                }
             }
 
             if (showSessionList) {
@@ -926,6 +1039,26 @@ fun TerminalDetailScreenCompose(
                                                 text = context.getString(R.string.active),
                                                 fontSize = 11.sp,
                                                 color = MiuixTheme.colorScheme.primary
+                                            )
+                                        }
+                                        // 横屏/平板双分屏可用时，允许把任意会话固定到右半屏
+                                        if (isWideLayout && allSessions.size >= 2) {
+                                            val isPinnedRight = s.id == rightPaneSessionId
+                                            Text(
+                                                text = context.getString(
+                                                    if (isPinnedRight) R.string.remove_from_right_pane
+                                                    else R.string.show_in_right_pane
+                                                ),
+                                                fontSize = 11.sp,
+                                                color = if (isPinnedRight) MiuixTheme.colorScheme.primary
+                                                else MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                                modifier = Modifier
+                                                    .clip(RoundedCornerShape(8.dp))
+                                                    .clickable {
+                                                        if (isPinnedRight) sessionManager.setRightPaneSession(-1)
+                                                        else sessionManager.setRightPaneSession(s.id)
+                                                    }
+                                                    .padding(horizontal = 8.dp, vertical = 4.dp)
                                             )
                                         }
                                     }

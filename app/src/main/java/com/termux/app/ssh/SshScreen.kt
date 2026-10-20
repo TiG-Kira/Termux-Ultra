@@ -18,6 +18,7 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import com.termux.app.compose.landscapeCenteredMaxWidth
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -68,6 +69,8 @@ fun SshScreen(
         contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = navBarBottomPadding + 16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
         modifier = Modifier
+            // 横屏：连接卡片列表居中收窄到可读行宽（竖屏原样）
+            .landscapeCenteredMaxWidth()
             .fillMaxSize()
             .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
             .let {
