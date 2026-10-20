@@ -65,7 +65,7 @@ class ComposeSessionManager private constructor(private val context: Context) {
      *
      * @param startImmediately 为 false 时创建"未初始化"会话（效仿 Java 版策略：
      * 只登记会话条目，不启动进程、不切换当前会话；待用户手动点击进入时再调用
-     * [TerminalSession.execute] 初始化）。
+     * [initializeSessionIfNeeded] 初始化）。
      */
     fun createSession(
         shellPath: String,
@@ -107,20 +107,48 @@ class ComposeSessionManager private constructor(private val context: Context) {
         }
 
         if (startImmediately) {
-            session.execute()
+            // 走统一初始化入口：execute + 注入自动执行命令（与延迟初始化路径同一套逻辑）
+            initializeSessionIfNeeded(session)
             _currentSessionId.value = session.id
-            // 进程启动后注入自动执行命令
-            try {
-                val prefs = context.getSharedPreferences("termux_preferences", android.content.Context.MODE_PRIVATE)
-                val cmd = prefs.getString("auto_start_command", "") ?: ""
-                if (cmd.isNotBlank()) {
-                    val withNewline = if (cmd.endsWith('\n')) cmd else cmd + '\n'
-                    session.write(withNewline.toByteArray())
-                }
-            } catch (_: Throwable) {}
         }
         notifySessionsChanged()
         return session
+    }
+
+    /**
+     * 按需初始化会话：未启动（pid == 0）时才拉起进程，并在首次启动后注入
+     * 「新会话自动执行」命令（termux_preferences 的 auto_start_command）。
+     *
+     * 所有延迟初始化入口（TermuxActivityBridge / TerminalDetailScreenCompose 等）
+     * 必须走此方法，不能直接调用 [TerminalSession.execute]——后者会漏掉自动执行
+     * 注入，导致只有 startImmediately=true 的会话（沙箱会话 / 脚本执行入口）生效，
+     * 而用户手动「+」新建的普通会话不触发。
+     *
+     * 已初始化（pid > 0）或已结束（pid == -1）的会话不会重复执行/重复注入，
+     * 因此反复进入同一会话不会重复运行自动执行命令。
+     */
+    @Synchronized
+    fun initializeSessionIfNeeded(session: TerminalSession) {
+        if (session.pid != 0) return
+        session.execute()
+        injectAutoStartCommand(session)
+    }
+
+    /**
+     * 把「新会话自动执行」命令写入会话 stdin。
+     *
+     * 调用方必须确保会话已 [TerminalSession.execute]（isRunning 已置 true）：
+     * libterminal 的 write() 在 isRunning=false 时会静默丢弃非换行数据。
+     */
+    private fun injectAutoStartCommand(session: TerminalSession) {
+        try {
+            val prefs = context.getSharedPreferences("termux_preferences", Context.MODE_PRIVATE)
+            val cmd = prefs.getString("auto_start_command", "") ?: ""
+            if (cmd.isNotBlank()) {
+                val withNewline = if (cmd.endsWith('\n')) cmd else cmd + '\n'
+                session.write(withNewline.toByteArray())
+            }
+        } catch (_: Throwable) {}
     }
 
     /**
