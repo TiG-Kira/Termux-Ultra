@@ -627,6 +627,28 @@
     <string name="termux_x11_fullscreen_summary">Show the X11 display in fullscreen</string>
     <string name="termux_gui_config">GUI Settings</string>
     <string name="termux_gui_config_summary">Service timeout, background mode and log level</string>
+
+    <!-- Termux:GUI settings page (miuix) -->
+    <string name="gui_settings">GUI Settings</string>
+    <string name="gui_settings_service">Service</string>
+    <string name="gui_settings_log">Logs &amp; Notifications</string>
+    <string name="gui_settings_webview">WebView</string>
+    <string name="gui_service_timeout">Service timeout</string>
+    <string name="gui_service_timeout_desc">Seconds the service stays active when no connections are open. A negative value means the service is never shut down automatically.</string>
+    <string name="gui_service_timeout_value">%1$d s</string>
+    <string name="gui_service_timeout_never">Never shut down automatically</string>
+    <string name="gui_service_background">Background mode</string>
+    <string name="gui_service_background_desc">Go into the background and hide the notification when there are no active connections. Use with a negative timeout to keep the service always ready.</string>
+    <string name="gui_loglevel">Log level</string>
+    <string name="gui_loglevel_desc">Amount of information written to logcat. 0 keeps the Termux logcat clean but gives no information; higher levels enable progressively more.</string>
+    <string name="gui_delete_channels">Delete all notification channels</string>
+    <string name="gui_delete_channels_desc">Remove all notification channels created by the GUI plugin from the system notification settings.</string>
+    <string name="gui_channels_deleted">GUI plugin notification channels deleted</string>
+    <string name="gui_dump_logcat">Dump logcat to file</string>
+    <string name="gui_dump_logcat_desc">Save the current logcat contents to a file, then clear the log buffer.</string>
+    <string name="gui_logcat_written">Logcat written</string>
+    <string name="gui_javascript">Allow JavaScript without dialog</string>
+    <string name="gui_javascript_desc">Let programs enable JavaScript in WebViews directly, without a confirmation dialog. Running untrusted JavaScript may leak data from other programs using the plugin. Enable at your own risk.</string>
     <string name="termux_gui_help">GUI Usage Guide</string>
     <string name="termux_gui_help_summary">Learn how to use Termux:GUI from scripts</string>
     <string name="termux_gui_help_content">Termux:GUI lets terminal scripts create native Android interfaces (dialogs, buttons, layouts) rendered by the Termux:GUI companion app.\n\nInstall the client package first:\npkg install termux-gui\n\nThen run your GUI script from the terminal; windows open through the companion app automatically.</string>

@@ -504,6 +504,12 @@
             android:windowSoftInputMode="adjustResize" />
 
         <activity
+            android:name=".app.activities.GuiSettingsActivity"
+            android:exported="false"
+            android:label="@string/gui_settings"
+            android:windowSoftInputMode="adjustResize" />
+
+        <activity
             android:name=".app.activities.KeySettingsActivity"
             android:exported="false"
             android:label="@string/key_settings"

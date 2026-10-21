@@ -218,6 +218,7 @@ class HandleRemote {
                     val impmap = mapOf(0 to NotificationManagerCompat.IMPORTANCE_MIN, 1 to NotificationManagerCompat.IMPORTANCE_LOW, 2 to NotificationManagerCompat.IMPORTANCE_DEFAULT, 3 to NotificationManagerCompat.IMPORTANCE_HIGH, 4 to NotificationManagerCompat.IMPORTANCE_MAX)
                     NotificationManagerCompat.from(app).createNotificationChannel(
                         NotificationChannelCompat.Builder(id, impmap[importance] ?: NotificationManagerCompat.IMPORTANCE_MIN).setName(name).build())
+                    Settings.instance.recordChannel(app, id)
                 }
                 return true
             }

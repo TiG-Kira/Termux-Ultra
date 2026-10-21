@@ -556,6 +556,28 @@
     <string name="termux_x11_fullscreen_summary">以全屏模式显示 X11 画面</string>
     <string name="termux_gui_config">GUI 设置</string>
     <string name="termux_gui_config_summary">服务超时、后台模式与日志级别</string>
+
+    <!-- Termux:GUI 设置页（miuix 化） -->
+    <string name="gui_settings">GUI 设置</string>
+    <string name="gui_settings_service">服务</string>
+    <string name="gui_settings_log">日志与通知</string>
+    <string name="gui_settings_webview">WebView</string>
+    <string name="gui_service_timeout">服务超时</string>
+    <string name="gui_service_timeout_desc">无连接时服务保持存活的秒数。负值表示服务永不自动停止。</string>
+    <string name="gui_service_timeout_value">%1$d 秒</string>
+    <string name="gui_service_timeout_never">永不自动停止</string>
+    <string name="gui_service_background">后台模式</string>
+    <string name="gui_service_background_desc">无活动连接时服务转入后台并隐藏通知。配合负值的服务超时，可让服务常驻后台随时可用。</string>
+    <string name="gui_loglevel">日志级别</string>
+    <string name="gui_loglevel_desc">写入 logcat 的信息量。0 不污染 Termux 日志但没有任何信息；级别越高信息越详细，最高 5 级。</string>
+    <string name="gui_delete_channels">删除所有通知渠道</string>
+    <string name="gui_delete_channels_desc">从系统通知设置中移除 GUI 插件创建的所有通知渠道。</string>
+    <string name="gui_channels_deleted">已删除 GUI 插件的通知渠道</string>
+    <string name="gui_dump_logcat">导出 logcat 到文件</string>
+    <string name="gui_dump_logcat_desc">将当前 logcat 内容保存到文件，导出后清空日志缓冲区。</string>
+    <string name="gui_logcat_written">logcat 已写入</string>
+    <string name="gui_javascript">允许 JavaScript 免对话框</string>
+    <string name="gui_javascript_desc">允许程序在 WebView 中直接启用 JavaScript，不再弹出确认对话框。运行不受信任的脚本可能泄露其他使用本插件的程序数据，请谨慎开启。</string>
     <string name="termux_gui_help">GUI 使用说明</string>
     <string name="termux_gui_help_summary">了解如何在脚本中使用 Termux:GUI</string>
     <string name="termux_gui_help_content">Termux:GUI 可让终端脚本创建原生 Android 界面（对话框、按钮、布局），由 Termux:GUI 伴生应用负责渲染。\n\n先安装客户端包：\npkg install termux-gui\n\n然后在终端运行 GUI 脚本，窗口会自动通过伴生应用打开。</string>
