@@ -23,6 +23,8 @@ class GUIService : Service() {
     companion object {
         private val TAG: String? = GUIService::class.java.canonicalName
         const val NOTIFICATION_ID = 100
+        /** 前台服务通知渠道；销毁动作按此 ID 精确清理，不碰宿主渠道 */
+        const val CHANNEL_ID = "service"
         val requests = ConcurrentLinkedQueue<ConnectionRequest>()
     }
 
@@ -48,8 +50,9 @@ class GUIService : Service() {
     private val notification: Notification
         get() {
             NotificationManagerCompat.from(this).createNotificationChannel(
-                    NotificationChannelCompat.Builder("service", NotificationManagerCompat.IMPORTANCE_LOW)
+                    NotificationChannelCompat.Builder(CHANNEL_ID, NotificationManagerCompat.IMPORTANCE_LOW)
                             .setName("Service").setLightsEnabled(false).setVibrationEnabled(false).build())
+            Settings.instance.recordChannel(this, CHANNEL_ID)
             val b = NotificationCompat.Builder(this, "service")
             b.setSmallIcon(R.drawable.ic_service_notification)
             b.setContentTitle("Termux:GUI")

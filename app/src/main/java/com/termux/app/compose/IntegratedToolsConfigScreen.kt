@@ -232,7 +232,7 @@ fun IntegratedToolsConfigScreen(onBack: () -> Unit) {
                                     title = stringResource(R.string.termux_gui_config),
                                     summary = stringResource(R.string.termux_gui_config_summary),
                                     icon = Icons.Rounded.Dashboard,
-                                    onClick = { openToolConfigActivity(context, "com.termux.gui.GUIConfigActivity") }
+                                    onClick = { openGuiSettings(context) }
                                 )
                                 ToolConfigArrow(
                                     title = stringResource(R.string.termux_gui_help),

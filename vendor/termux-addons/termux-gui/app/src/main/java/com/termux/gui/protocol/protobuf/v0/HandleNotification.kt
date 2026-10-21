@@ -37,6 +37,7 @@ class HandleNotification(val main: OutputStream, val remoteviews: MutableMap<Int
                 Importance.MAX to NotificationManagerCompat.IMPORTANCE_MAX)
             NotificationManagerCompat.from(app).createNotificationChannel(
                 NotificationChannelCompat.Builder(m.id, impmap[m.importance] ?: NotificationManagerCompat.IMPORTANCE_MIN).setName(m.name).build())
+            Settings.instance.recordChannel(app, m.id)
             ret.success = true
         } catch (e: java.lang.Exception) {
             Log.d(this.javaClass.name, "Exception: ", e)

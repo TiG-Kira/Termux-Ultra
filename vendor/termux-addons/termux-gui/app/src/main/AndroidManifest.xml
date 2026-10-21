@@ -23,11 +23,6 @@
       由「集成工具 - Termux:GUI」开关在运行时启停。
     -->
     <application>
-        <activity
-            android:name=".GUIConfigActivity"
-            android:enabled="false"
-            android:exported="false" />
-
         <receiver
             android:name=".PendingIntentReceiver"
             android:enabled="false"

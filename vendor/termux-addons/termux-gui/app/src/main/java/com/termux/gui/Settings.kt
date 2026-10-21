@@ -17,6 +17,7 @@ class Settings private constructor() {
         private const val LOGLEVEL_DEFAULT = 0
         private const val JAVASCRIPT_KEY = "javascript"
         private const val JAVASCRIPT_DEFAULT = false
+        private const val CHANNELS_KEY = "channels"
         val instance = Settings()
     }
 
@@ -41,6 +42,15 @@ class Settings private constructor() {
      */
     var javascript: Boolean = JAVASCRIPT_DEFAULT
 
+    /**
+     * 本插件创建过的通知渠道 ID（GUIService 的 "service" 渠道 + 脚本经协议创建的渠道）。
+     *
+     * 内置化后与应用同包，宿主自己也建通知渠道（termux_notification_channel 等）——那些不在
+     * 此列。「删除所有通知渠道」设置项只清理这里的 ID：误删宿主渠道会抛 SecurityException
+     * （前台服务占用中的渠道不允许删除），曾导致设置页闪退。
+     */
+    val channels: MutableSet<String> = HashSet()
+
 
     /**
      * Get the shared preferences for the settings.
@@ -60,6 +70,8 @@ class Settings private constructor() {
         background = prefs.getBoolean(BACKGROUND_KEY, BACKGROUND_DEFAULT)
         loglevel = prefs.getInt(LOGLEVEL_KEY, LOGLEVEL_DEFAULT)
         javascript = prefs.getBoolean(JAVASCRIPT_KEY, JAVASCRIPT_DEFAULT)
+        channels.clear()
+        prefs.getStringSet(CHANNELS_KEY, emptySet())?.let { channels.addAll(it) }
     }
 
     /**
@@ -73,7 +85,15 @@ class Settings private constructor() {
         e.putBoolean(BACKGROUND_KEY, background)
         e.putInt(LOGLEVEL_KEY, loglevel)
         e.putBoolean(JAVASCRIPT_KEY, javascript)
+        e.putStringSet(CHANNELS_KEY, channels)
         e.commit()
+    }
+
+    /**
+     * 记录一个本插件创建的通知渠道 ID，供「删除所有通知渠道」精确清理。重复记录不会重复落盘。
+     */
+    fun recordChannel(c: Context, id: String) {
+        if (channels.add(id)) save(c)
     }
     
     

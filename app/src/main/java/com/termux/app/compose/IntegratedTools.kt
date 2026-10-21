@@ -115,7 +115,6 @@ object IntegratedTools {
             "com.termux.boot.BootActivity"
         )
         Tool.TERMUX_GUI -> listOf(
-            "com.termux.gui.GUIConfigActivity",
             "com.termux.gui.PendingIntentReceiver",
             "com.termux.gui.GUIWidget",
             "com.termux.gui.ServiceShutdownReceiver",
