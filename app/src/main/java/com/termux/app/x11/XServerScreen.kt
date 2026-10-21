@@ -1,9 +1,12 @@
 package com.termux.app.x11
 
+import android.app.ActivityOptions
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
+import android.graphics.Rect
+import android.os.Build
 import android.os.IBinder
 import android.widget.Toast
 import androidx.compose.foundation.background
@@ -368,17 +371,64 @@ fun connectToXServer(context: Context, termuxService: com.termux.app.TermuxServi
         "X11 ${connection.displayValue}"
     )
     if (session != null) {
-        if (connection.isFromTermux) {
-            // 拉起渲染 Activity（组件随集成开关启停；X Server 未就绪时它会等待广播）
-            runCatching {
-                context.startActivity(
-                    Intent().setClassName(context, "com.termux.x11.MainActivity")
-                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                )
-            }
-        }
+        // 先把 X Server 日志所在的 TermuxActivity 起好作为基底窗口
         val intent = Intent(context, com.termux.app.TermuxActivity::class.java)
         intent.putExtra("sessionHandle", session.getTerminalSession().mHandle)
         context.startActivity(intent)
+        // 再按「小窗→分屏→兜底直切」渐进激活 X11 渲染页
+        if (connection.isFromTermux) {
+            launchX11Activity(context)
+        }
     }
+}
+
+/**
+ * 渐进式激活 X11 渲染页：先尝试系统小窗（freeform），失败则分屏，再失败兜底直切 + float 提示。
+ *
+ * 各 OEM 的「小窗」机制不一（MIUI/OriginOS 等私有方案无法在通用 API 层可靠触发），
+ * 这里以 AOSP freeform 为小窗通用方案，分屏用 LAUNCH_ADJACENT，二者均要求渲染 Activity
+ * 可缩放（lorie AAR 的 MainActivity 已声明 resizeableActivity="true"）。
+ */
+private fun launchX11Activity(context: Context) {
+    val intent = Intent().setClassName(context, "com.termux.x11.MainActivity")
+        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    if (tryFreeform(context, intent)) return
+    if (trySplitScreen(context, intent)) return
+    // 兜底：直接切到前台
+    runCatching { context.startActivity(intent) }
+    Toast.makeText(context, "X11已启动，已切换到X11为前台", Toast.LENGTH_LONG).show()
+}
+
+private fun tryFreeform(context: Context, intent: Intent): Boolean {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return false
+    return runCatching {
+        val dm = context.resources.displayMetrics
+        val w = (dm.widthPixels * 0.7f).toInt().coerceAtLeast(480)
+        val h = (dm.heightPixels * 0.82f).toInt().coerceAtLeast(480)
+        val x = ((dm.widthPixels - w) / 2f).toInt().coerceAtLeast(0)
+        val y = (dm.heightPixels * 0.09f).toInt().coerceAtLeast(0)
+        // setLaunchWindowingMode / WINDOWING_MODE_FREEFORM 是 hidden API，运行时反射调用；
+        // 设备不支持 freeform（或方法不存在）时反射失败，回落到分屏/兜底。
+        val opts = ActivityOptions.makeBasic()
+        val wmClass = Class.forName("android.app.WindowConfiguration")
+        val freeform = wmClass.getField("WINDOWING_MODE_FREEFORM").getInt(null)
+        val setMode = ActivityOptions::class.java.getMethod("setLaunchWindowingMode", Int::class.javaPrimitiveType)
+        setMode.invoke(opts, freeform)
+        val setBounds = ActivityOptions::class.java.getMethod("setLaunchBounds", Rect::class.java)
+        setBounds.invoke(opts, Rect(x, y, x + w, y + h))
+        context.startActivity(intent, opts.toBundle())
+        true
+    }.getOrDefault(false)
+}
+
+private fun trySplitScreen(context: Context, intent: Intent): Boolean {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return false
+    return runCatching {
+        val dm = context.resources.displayMetrics
+        val opts = ActivityOptions.makeBasic()
+            .setLaunchBounds(Rect(0, 0, dm.widthPixels / 2, dm.heightPixels))
+        intent.addFlags(Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT)
+        context.startActivity(intent, opts.toBundle())
+        true
+    }.getOrDefault(false)
 }

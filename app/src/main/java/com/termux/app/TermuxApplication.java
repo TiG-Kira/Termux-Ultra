@@ -222,6 +222,13 @@ public class TermuxApplication extends com.termux.x11.LorieApp {
             } catch (Throwable t) {
                 android.util.Log.w(LOG_TAG, "Failed to load Termux:GUI settings", t);
             }
+
+            // 确保终端里的 termux-x11 命令认得到内置 X11（覆盖 apt 安装的损坏版）
+            try {
+                com.termux.app.x11.TermuxX11CommandInstaller.ensureX11Command(getApplicationContext());
+            } catch (Throwable t) {
+                android.util.Log.w(LOG_TAG, "ensureX11Command failed", t);
+            }
         }, "Termux-BgInit").start();
     }
 
