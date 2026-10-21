@@ -1,5 +1,10 @@
 package com.termux.app.remote
 
+import android.content.ComponentName
+import android.content.Context
+import android.content.Intent
+import android.content.ServiceConnection
+import android.os.IBinder
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.core.animate
@@ -67,6 +72,7 @@ private const val SWIPE_THRESHOLD = 100f
 @Composable
 fun RemoteScreen(
     showVnc: Boolean,
+    showX11: Boolean = false,
     initialTab: Int = 0,
     onTabChange: (Int) -> Unit = {},
     onGoToFiles: () -> Unit = {},
@@ -85,14 +91,41 @@ fun RemoteScreen(
     val vncAddRequested = remember { mutableStateOf(false) }
     val vncScanRequested = remember { mutableStateOf(false) }
     val sshAddRequested = remember { mutableStateOf(false) }
+    val xserverAddRequested = remember { mutableStateOf(false) }
     val darkTheme = isSystemInDarkTheme()
     val topBarIconColor = if (darkTheme) androidx.compose.ui.graphics.Color.White else androidx.compose.ui.graphics.Color.Black
 
     val vncConnections = remember { mutableStateListOf<VncConnection>() }
     val sshConnections = remember { mutableStateListOf<SshConnection>() }
+    val xserverConnections = remember { mutableStateListOf<com.termux.app.x11.XServerConnection>() }
     var searchExpanded by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
     var dragOffset by remember { mutableFloatStateOf(0f) }
+
+    // XServer 连接动作要建终端会话，绑一份 TermuxService（与 MainActivity 同进程绑定）
+    var termuxService by remember { mutableStateOf<com.termux.app.TermuxService?>(null) }
+    DisposableEffect(Unit) {
+        val conn = object : ServiceConnection {
+            override fun onServiceConnected(className: ComponentName, binder: IBinder) {
+                termuxService = (binder as com.termux.app.TermuxService.LocalBinder).service
+            }
+
+            override fun onServiceDisconnected(className: ComponentName) {
+                termuxService = null
+            }
+        }
+        runCatching {
+            context.bindService(
+                Intent(context, com.termux.app.TermuxService::class.java),
+                conn,
+                Context.BIND_AUTO_CREATE
+            )
+        }
+        onDispose {
+            termuxService = null
+            runCatching { context.unbindService(conn) }
+        }
+    }
 
     LaunchedEffect(Unit) {
         scope.launch(Dispatchers.IO) {
@@ -101,11 +134,34 @@ fun RemoteScreen(
 
             val sshManager = SshConnectionManager(context)
             sshConnections.addAll(sshManager.getConnections())
+
+            val xserverManager = com.termux.app.x11.XServerConnectionManager(context)
+            xserverConnections.addAll(xserverManager.getConnections())
         }
     }
 
     LaunchedEffect(initialTab) {
         selectedTabIndex = initialTab
+    }
+
+    // Tab 列表按开关动态生成：VNC / XServer（仅 x11 集成开关打开时）/ SSH 恒在最后
+    val remoteTabs = remember(showVnc, showX11) {
+        buildList {
+            if (showVnc) add("VNC")
+            if (showX11) add("XServer")
+            add("SSH")
+        }
+    }
+    val tabVncIndex = if (showVnc) 0 else -1
+    val tabX11Index = when {
+        showVnc && showX11 -> 1
+        showX11 -> 0
+        else -> -1
+    }
+    val tabSshIndex = remoteTabs.lastIndex
+    // 保存过的子 Tab 下标可能因开关变化越界，钳回有效范围
+    LaunchedEffect(remoteTabs) {
+        if (selectedTabIndex > remoteTabs.lastIndex) selectedTabIndex = remoteTabs.lastIndex
     }
 
     val topAppBarTitle = if (showVnc) {
@@ -114,12 +170,16 @@ fun RemoteScreen(
         context.getString(R.string.ssh)
     }
 
-    val activeConnections = if (!showVnc || selectedTabIndex == 1) {
-        sshConnections
-    } else {
-        vncConnections
+    val activeConnections: List<Any> = when (selectedTabIndex) {
+        tabVncIndex -> vncConnections
+        tabX11Index -> xserverConnections
+        else -> sshConnections
     }
-    val activeLabel = if (!showVnc || selectedTabIndex == 1) "SSH" else "VNC"
+    val activeLabel = when (selectedTabIndex) {
+        tabVncIndex -> "VNC"
+        tabX11Index -> "XServer"
+        else -> "SSH"
+    }
 
     val topBarSwipeThresholdPx = with(LocalDensity.current) { 120.dp.toPx() }
     val screenWidthPx = with(LocalDensity.current) {
@@ -221,7 +281,7 @@ fun RemoteScreen(
                     scrollBehavior = scrollBehavior,
                     actions = {
                         Row {
-                            if (showVnc && selectedTabIndex == 0) {
+                            if (selectedTabIndex == tabVncIndex) {
                                 GlassIconButton(
                                     onClick = {
                                         vncAddRequested.value = true
@@ -250,6 +310,18 @@ fun RemoteScreen(
                                             tint = topBarIconColor
                                         )
                                     }
+                                }
+                            } else if (selectedTabIndex == tabX11Index) {
+                                GlassIconButton(
+                                    onClick = {
+                                        xserverAddRequested.value = true
+                                    }
+                                ) {
+                                    Icon(
+                                        imageVector = MiuixGlassIcons.Add,
+                                        contentDescription = "添加",
+                                        tint = topBarIconColor
+                                    )
                                 }
                             } else {
                                 GlassIconButton(
@@ -283,7 +355,7 @@ fun RemoteScreen(
                     alpha = contentAlphaState
                 }
         ) {
-            if (showVnc) {
+            if (showVnc || showX11) {
                 Column(
                     Modifier
                         .fillMaxSize()
@@ -291,7 +363,7 @@ fun RemoteScreen(
                         .padding(top = LocalTopBarClearance.current, bottom = navBarBottomPadding)
                 ) {
                     TabRowWithContour(
-                        tabs = listOf("VNC", "SSH"),
+                        tabs = remoteTabs,
                         selectedTabIndex = selectedTabIndex,
                         onTabSelected = {
                             selectedTabIndex = it
@@ -303,6 +375,8 @@ fun RemoteScreen(
                     val filtered = activeConnections.filter { conn ->
                         when (conn) {
                             is VncConnection -> conn.name.contains(searchQuery, ignoreCase = true) ||
+                                conn.host.contains(searchQuery, ignoreCase = true)
+                            is com.termux.app.x11.XServerConnection -> conn.name.contains(searchQuery, ignoreCase = true) ||
                                 conn.host.contains(searchQuery, ignoreCase = true)
                             is SshConnection -> conn.name.contains(searchQuery, ignoreCase = true) ||
                                 conn.host.contains(searchQuery, ignoreCase = true) ||
@@ -380,6 +454,8 @@ fun RemoteScreen(
                                         filtered.forEach { conn ->
                                             val (cName, cDetail) = when (conn) {
                                                 is VncConnection -> conn.name to "${conn.host}:${conn.port}"
+                                                is com.termux.app.x11.XServerConnection ->
+                                                    conn.name to "DISPLAY ${conn.displayValue}"
                                                 is SshConnection -> {
                                                     val tag = when (conn.connectionType) {
                                                         "openpilot" -> "[OpenPilot] "
@@ -406,6 +482,8 @@ fun RemoteScreen(
                                                     .clickable {
                                                         when (conn) {
                                                             is VncConnection -> connectToVnc(context, conn)
+                                                            is com.termux.app.x11.XServerConnection ->
+                                                                com.termux.app.x11.connectToXServer(context, termuxService, conn)
                                                             is SshConnection -> connectToSsh(context, conn)
                                                             else -> {}
                                                         }
@@ -460,14 +538,14 @@ fun RemoteScreen(
                                     onDragEnd = {
                                         if (kotlin.math.abs(dragOffset) >= SWIPE_THRESHOLD) {
                                             if (dragOffset < 0) {
-                                                if (selectedTabIndex == 0) {
-                                                    selectedTabIndex = 1
-                                                    onTabChange(1)
+                                                if (selectedTabIndex < remoteTabs.lastIndex) {
+                                                    selectedTabIndex += 1
+                                                    onTabChange(selectedTabIndex)
                                                 }
                                             } else {
-                                                if (selectedTabIndex == 1) {
-                                                    selectedTabIndex = 0
-                                                    onTabChange(0)
+                                                if (selectedTabIndex > 0) {
+                                                    selectedTabIndex -= 1
+                                                    onTabChange(selectedTabIndex)
                                                 }
                                             }
                                         }
@@ -503,7 +581,7 @@ fun RemoteScreen(
                                 }
                         ) { tabIndex ->
                             when (tabIndex) {
-                                0 -> com.termux.app.vnc.VncScreen(
+                                tabVncIndex -> com.termux.app.vnc.VncScreen(
                                     connections = vncConnections,
                                     addRequested = vncAddRequested.value,
                                     onAddRequestedConsumed = { vncAddRequested.value = false },
@@ -514,7 +592,15 @@ fun RemoteScreen(
                                     nestedScrollConnection = scrollBehavior.nestedScrollConnection,
                                     navBarBottomPadding = navBarBottomPadding
                                 )
-                                1 -> com.termux.app.ssh.SshScreen(
+                                tabX11Index -> com.termux.app.x11.XServerScreen(
+                                    connections = xserverConnections,
+                                    termuxService = termuxService,
+                                    addRequested = xserverAddRequested.value,
+                                    onAddRequestedConsumed = { xserverAddRequested.value = false },
+                                    nestedScrollConnection = scrollBehavior.nestedScrollConnection,
+                                    navBarBottomPadding = navBarBottomPadding
+                                )
+                                tabSshIndex -> com.termux.app.ssh.SshScreen(
                                     connections = sshConnections,
                                     addRequested = sshAddRequested.value,
                                     onAddRequestedConsumed = { sshAddRequested.value = false },

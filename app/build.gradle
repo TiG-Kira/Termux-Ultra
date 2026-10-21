@@ -289,6 +289,8 @@ implementation "io.coil-kt:coil:2.7.0"
     implementation project(':termux-styling')
     implementation project(':termux-tasker')
     implementation project(':termux-widget')
+    implementation project(':termux-gui')
+    implementation project(':termux-x11')
 
     implementation "com.google.guava:guava:24.1-jre"
     implementation "com.google.code.gson:gson:2.10.1"

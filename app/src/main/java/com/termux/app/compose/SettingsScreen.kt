@@ -225,6 +225,8 @@ fun SettingsScreen(
     var termuxStylingEnabled by remember { mutableStateOf(IntegratedTools.isEnabled(context, IntegratedTools.Tool.TERMUX_STYLING)) }
     var termuxTaskerEnabled by remember { mutableStateOf(IntegratedTools.isEnabled(context, IntegratedTools.Tool.TERMUX_TASKER)) }
     var termuxWidgetEnabled by remember { mutableStateOf(IntegratedTools.isEnabled(context, IntegratedTools.Tool.TERMUX_WIDGET)) }
+    var termuxX11Enabled by remember { mutableStateOf(IntegratedTools.isEnabled(context, IntegratedTools.Tool.TERMUX_X11)) }
+    var termuxGuiEnabled by remember { mutableStateOf(IntegratedTools.isEnabled(context, IntegratedTools.Tool.TERMUX_GUI)) }
 
 
 
@@ -251,6 +253,8 @@ fun SettingsScreen(
     val stylingStandaloneInstalled = IntegratedTools.isStandaloneInstalled(context, IntegratedTools.Tool.TERMUX_STYLING)
     val taskerStandaloneInstalled = IntegratedTools.isStandaloneInstalled(context, IntegratedTools.Tool.TERMUX_TASKER)
     val widgetStandaloneInstalled = IntegratedTools.isStandaloneInstalled(context, IntegratedTools.Tool.TERMUX_WIDGET)
+    val x11StandaloneInstalled = IntegratedTools.isStandaloneInstalled(context, IntegratedTools.Tool.TERMUX_X11)
+    val guiStandaloneInstalled = IntegratedTools.isStandaloneInstalled(context, IntegratedTools.Tool.TERMUX_GUI)
 
     val replacedSummary = context.getString(R.string.standalone_plugin_installed_summary)
 
@@ -509,11 +513,11 @@ fun SettingsScreen(
         }
     }
 
-    // 「配置集成工具」入口可见性：五个开关任一为开即显示，全关即隐藏。
+    // 「配置集成工具」入口可见性：任一工具开关为开即显示，全关即隐藏。
     // 判断放在渲染处而不是缓存成 val，开关 onCheckedChange 改的是 termuxXxxEnabled，
     // 重组时重新求值才能做到即时显隐。
     val anyIntegratedToolEnabled = termuxApiEnabled || termuxBootEnabled || termuxStylingEnabled ||
-        termuxTaskerEnabled || termuxWidgetEnabled
+        termuxTaskerEnabled || termuxWidgetEnabled || termuxX11Enabled || termuxGuiEnabled
     // 与「统一顶栏之前」一致：本页自持吸顶状态
     val scrollBehavior = MiuixScrollBehavior()
     // 统一全局顶栏：仅当前激活页把本页的 TopAppBar 内容写入 onTopBarContent 槽
@@ -823,6 +827,40 @@ fun SettingsScreen(
                     },
                     enabled = !widgetStandaloneInstalled,
                     onDisabledClick = { IntegratedTools.showStandaloneConflictPrompt(context, IntegratedTools.Tool.TERMUX_WIDGET) }
+                )
+            }),
+        SearchableSetting(sec_tools, context.getString(R.string.termux_x11_tool), context.getString(R.string.termux_x11_tool_summary),
+            keywords = listOf("termux-x11", "x11", "x11 图形", "图形"),
+            render = {
+                IntegratedToolSwitch(
+                    title = context.getString(R.string.termux_x11_tool),
+                    summary = if (x11StandaloneInstalled) replacedSummary else context.getString(R.string.termux_x11_tool_summary),
+                    icon = Icons.Rounded.DesktopWindows,
+                    checked = termuxX11Enabled,
+                    onCheckedChange = {
+                        termuxX11Enabled = it
+                        IntegratedTools.setEnabled(context, IntegratedTools.Tool.TERMUX_X11, it)
+                        IntegratedTools.applyComponentState(context, IntegratedTools.Tool.TERMUX_X11, it)
+                    },
+                    enabled = !x11StandaloneInstalled,
+                    onDisabledClick = { IntegratedTools.showStandaloneConflictPrompt(context, IntegratedTools.Tool.TERMUX_X11) }
+                )
+            }),
+        SearchableSetting(sec_tools, context.getString(R.string.termux_gui_tool), context.getString(R.string.termux_gui_tool_summary),
+            keywords = listOf("termux-gui", "gui", "图形界面"),
+            render = {
+                IntegratedToolSwitch(
+                    title = context.getString(R.string.termux_gui_tool),
+                    summary = if (guiStandaloneInstalled) replacedSummary else context.getString(R.string.termux_gui_tool_summary),
+                    icon = Icons.Rounded.Dashboard,
+                    checked = termuxGuiEnabled,
+                    onCheckedChange = {
+                        termuxGuiEnabled = it
+                        IntegratedTools.setEnabled(context, IntegratedTools.Tool.TERMUX_GUI, it)
+                        IntegratedTools.applyComponentState(context, IntegratedTools.Tool.TERMUX_GUI, it)
+                    },
+                    enabled = !guiStandaloneInstalled,
+                    onDisabledClick = { IntegratedTools.showStandaloneConflictPrompt(context, IntegratedTools.Tool.TERMUX_GUI) }
                 )
             }),
 
@@ -1426,7 +1464,41 @@ fun SettingsScreen(
                             }
                         )
 
-                        // 五个开关任一为开才出现；全关时整行消失，配置页进不去
+                        IntegratedToolSwitch(
+                            title = context.getString(R.string.termux_x11_tool),
+                            summary = if (x11StandaloneInstalled) replacedSummary
+                                      else context.getString(R.string.termux_x11_tool_summary),
+                            icon = Icons.Rounded.DesktopWindows,
+                            checked = termuxX11Enabled,
+                            onCheckedChange = {
+                                termuxX11Enabled = it
+                                IntegratedTools.setEnabled(context, IntegratedTools.Tool.TERMUX_X11, it)
+                                IntegratedTools.applyComponentState(context, IntegratedTools.Tool.TERMUX_X11, it)
+                            },
+                            enabled = !x11StandaloneInstalled,
+                            onDisabledClick = {
+                                IntegratedTools.showStandaloneConflictPrompt(context, IntegratedTools.Tool.TERMUX_X11)
+                            }
+                        )
+
+                        IntegratedToolSwitch(
+                            title = context.getString(R.string.termux_gui_tool),
+                            summary = if (guiStandaloneInstalled) replacedSummary
+                                      else context.getString(R.string.termux_gui_tool_summary),
+                            icon = Icons.Rounded.Dashboard,
+                            checked = termuxGuiEnabled,
+                            onCheckedChange = {
+                                termuxGuiEnabled = it
+                                IntegratedTools.setEnabled(context, IntegratedTools.Tool.TERMUX_GUI, it)
+                                IntegratedTools.applyComponentState(context, IntegratedTools.Tool.TERMUX_GUI, it)
+                            },
+                            enabled = !guiStandaloneInstalled,
+                            onDisabledClick = {
+                                IntegratedTools.showStandaloneConflictPrompt(context, IntegratedTools.Tool.TERMUX_GUI)
+                            }
+                        )
+
+                        // 任一工具开关为开才出现；全关时整行消失，配置页进不去
                         if (anyIntegratedToolEnabled) {
                             ArrowPreference(
                                 title = context.getString(R.string.integrated_tools_config_entry),

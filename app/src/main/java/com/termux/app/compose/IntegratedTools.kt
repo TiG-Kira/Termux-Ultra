@@ -9,7 +9,8 @@ import com.termux.R
 
 /**
  * Manages the enable/disable state of the integrated Termux add-on tools
- * (Termux:API, Termux:Boot, Termux:Styling, Termux:Tasker, Termux:Widget).
+ * (Termux:API, Termux:Boot, Termux:Styling, Termux:Tasker, Termux:Widget,
+ * Termux:X11, Termux:GUI).
  *
  * All tools default to OFF. When a feature that depends on one of these tools is used but the
  * corresponding toggle is off, callers should call [requireEnabled] (or [showEnablePrompt]) to
@@ -24,7 +25,9 @@ object IntegratedTools {
         TERMUX_BOOT("tool_termux_boot", R.string.termux_boot_tool, "com.termux.boot"),
         TERMUX_STYLING("tool_termux_styling", R.string.termux_styling_tool, "com.termux.styling"),
         TERMUX_TASKER("tool_termux_tasker", R.string.termux_tasker_tool, "com.termux.tasker"),
-        TERMUX_WIDGET("tool_termux_widget", R.string.termux_widget_tool, "com.termux.widget")
+        TERMUX_WIDGET("tool_termux_widget", R.string.termux_widget_tool, "com.termux.widget"),
+        TERMUX_X11("tool_termux_x11", R.string.termux_x11_tool, "com.termux.x11"),
+        TERMUX_GUI("tool_termux_gui", R.string.termux_gui_tool, "com.termux.gui")
     }
 
     private fun prefs(context: Context) =
@@ -38,6 +41,34 @@ object IntegratedTools {
     /** Set the enabled state of [tool]. */
     fun setEnabled(context: Context, tool: Tool, enabled: Boolean) {
         prefs(context).edit().putBoolean(tool.key, enabled).apply()
+    }
+
+    // -------------------------------------------------------------------------
+    // Per-tool config items (「配置集成工具」页管理；与开关同文件存储)
+    // -------------------------------------------------------------------------
+
+    /** Termux:X11 启动参数（原样传给伴生应用，如 `:0 -ac`）。 */
+    const val KEY_X11_LAUNCH_ARGS = "config_termux_x11_launch_args"
+
+    /** Termux:X11 显示模式：true = 全屏，false = 窗口。 */
+    const val KEY_X11_FULLSCREEN = "config_termux_x11_fullscreen"
+
+    /** Read a string config item. */
+    fun getConfigString(context: Context, key: String, defValue: String): String =
+        prefs(context).getString(key, defValue) ?: defValue
+
+    /** Write a string config item. */
+    fun setConfigString(context: Context, key: String, value: String) {
+        prefs(context).edit().putString(key, value).apply()
+    }
+
+    /** Read a boolean config item. */
+    fun getConfigBoolean(context: Context, key: String, defValue: Boolean): Boolean =
+        prefs(context).getBoolean(key, defValue)
+
+    /** Write a boolean config item. */
+    fun setConfigBoolean(context: Context, key: String, value: Boolean) {
+        prefs(context).edit().putBoolean(key, value).apply()
     }
 
     /**
@@ -82,6 +113,28 @@ object IntegratedTools {
         Tool.TERMUX_BOOT -> listOf(
             "com.termux.app.BootReceiver",
             "com.termux.boot.BootActivity"
+        )
+        Tool.TERMUX_GUI -> listOf(
+            "com.termux.gui.GUIConfigActivity",
+            "com.termux.gui.PendingIntentReceiver",
+            "com.termux.gui.GUIWidget",
+            "com.termux.gui.ServiceShutdownReceiver",
+            "com.termux.gui.GUIWidgetConfigurationActivity",
+            "com.termux.gui.GUIActivity",
+            "com.termux.gui.GUIActivityLockscreen",
+            "com.termux.gui.GUIActivityDialog",
+            "com.termux.gui.GUIWebViewJavascriptDialog",
+            "com.termux.gui.GUIService",
+            "com.termux.gui.GUIReceiver"
+        )
+        // Termux:X11 内嵌 AAR（:lorie）的组件清单，随开关启停
+        Tool.TERMUX_X11 -> listOf(
+            "com.termux.x11.MainActivity",
+            "com.termux.x11.MainActivity\$MainActivityTagged",
+            "com.termux.x11.LoriePreferences",
+            "com.termux.x11.LoriePreferences\$Receiver",
+            "com.termux.x11.LorieApp\$Receiver",
+            "com.termux.x11.utils.KeyInterceptor"
         )
     }
 

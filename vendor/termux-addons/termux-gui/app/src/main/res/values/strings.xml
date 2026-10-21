@@ -1,0 +1,26 @@
+<resources>
+    <string name="app_name">Termux:GUI</string>
+    <string name="widget_description">A widget that can be freely resized and whose contents can be controlled by programs in Termux.</string>
+    <string name="widget_id">Widget id</string>
+    <string name="widget_id_copied">Widget id copied to clipboard</string>
+    <string name="show_widget_id">Widget id: %1$s</string>
+    <string name="copy_clipboard">Copy to clipboard</string>
+    <string name="close">Close</string>
+    <string name="widget_default_text">Use a program to fill this widget</string>
+    <string name="overlay_settings">Please enable overlays in the app permissions.</string>
+    <string name="app_settings">Termux:GUI Settings</string>
+    <string name="settings_service">These settings are for the foreground service with the notification and only apply once it restarts.\nIf you want to apply these settings now, click the button to kill the service. That will also disconnect all programs using the plugin at the moment.</string>
+    <string name="service_restart">Restart service</string>
+    <string name="setting_service_timeout">How many seconds the service stays active when there are no connections. If a program wants to connect and the service is still active, the startup time is shorter. A negative value means the service is never shut down automatically.</string>
+    <string name="service_background">If enabled, this makes the service go into the background and hide the notification if there are no active connections. Use this with a negative value above to let the service always be ready in the background.</string>
+    <string name="loglevel_description">This sets the amount of information available in logcat. 0 is good to not pollute the Termux logcat, but doesn\'t give any information. Currently values up to 5 enable progressively more information.</string>
+    <string name="channel_delete_desc">This deletes all notification channels from the notification settings screen. Use this if there are too many unused notification channels in the options.</string>
+    <string name="channel_delete">delete all notification channels</string>
+    <string name="javascript_dialog_title">Javascript execution requested</string>
+    <string name="javascript_dialog_content">The program wants to enable Javascript execution in a WebView. If the program allows untrusted Javascript to run, data from other programs using the plugin can be leaked. Activate at your own risk. You can disable this prompt in the settings.</string>
+    <string name="javascript_button_allow">allow Javascript</string>
+    <string name="javascript_button_deny">don\'t allow Javascript</string>
+    <string name="javascript_option">Allow Javascript without dialog</string>
+    <string name="dump_logcat">Dump logcat to file</string>
+    <string name="logcat_written">logcat written</string>
+</resources>

@@ -1,0 +1,6 @@
+// termux-x11 预编译 AAR 包装模块（同 libterminal「仓库只收产物」模式）。
+// lorie-release.aar 由上游 termux/termux-x11 的 :lorie 模块构建产出
+// （含全 ABI 原生 X Server），清单已做内嵌改造：无 LAUNCHER/无 Application 类、
+// 六个组件默认 disabled，由 IntegratedTools 随 TERMUX_X11 开关运行时启停。
+configurations.maybeCreate("default")
+artifacts.add("default", file('lorie-release.aar'))

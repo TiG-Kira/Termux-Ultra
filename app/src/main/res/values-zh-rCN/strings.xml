@@ -528,6 +528,10 @@
     <string name="termux_tasker_tool_summary">从 Tasker 调用 Termux 命令</string>
     <string name="termux_widget_tool">Termux:Widget</string>
     <string name="termux_widget_tool_summary">添加快捷方式小部件，从主屏幕运行脚本</string>
+    <string name="termux_x11_tool">Termux:X11</string>
+    <string name="termux_x11_tool_summary">通过 Termux:X11 伴生应用运行 X11 图形应用</string>
+    <string name="termux_gui_tool">Termux:GUI</string>
+    <string name="termux_gui_tool_summary">通过 Termux:GUI 伴生应用在终端脚本中创建原生界面</string>
 
     <!-- 工具配置入口（对应工具启用后显示） -->
     <string name="integrated_tools_config_entry">配置集成工具</string>
@@ -545,6 +549,16 @@
     <string name="termux_boot_help_summary">了解如何添加开机自启脚本</string>
     <string name="termux_api_help_content">Termux:API 提供在终端中访问 Android 功能的命令。常用命令：\n\n• termux-battery-status — 电池信息\n• termux-camera-photo — 拍照\n• termux-clipboard-get / termux-clipboard-set — 剪贴板\n• termux-notification — 发送通知\n• termux-toast — 显示提示\n• termux-vibrate — 震动\n• termux-location — 获取定位\n• termux-sms-list / termux-sms-send — 短信\n• termux-tts-speak — 语音朗读\n• termux-wifi-connectioninfo — WiFi 信息\n\n需先安装 termux-api 包：\npkg install termux-api</string>
     <string name="termux_boot_help_content">Termux:Boot 可在设备开机时自动运行脚本。\n\n添加开机脚本方法：\n\n1. 创建目录：\n   mkdir -p ~/.termux/boot\n2. 将可执行脚本放入 ~/.termux/boot/\n3. 脚本将按排序顺序在开机时执行。\n\n示例（~/.termux/boot/start-ssh）：\n   #!/data/data/com.termux/files/usr/bin/sh\n   termux-wake-lock\n   sshd</string>
+    <string name="termux_x11_config">X11 显示设置</string>
+    <string name="termux_x11_config_summary">配置启动参数与显示模式</string>
+    <string name="termux_x11_launch_args">启动参数</string>
+    <string name="termux_x11_fullscreen">全屏显示</string>
+    <string name="termux_x11_fullscreen_summary">以全屏模式显示 X11 画面</string>
+    <string name="termux_gui_config">GUI 设置</string>
+    <string name="termux_gui_config_summary">服务超时、后台模式与日志级别</string>
+    <string name="termux_gui_help">GUI 使用说明</string>
+    <string name="termux_gui_help_summary">了解如何在脚本中使用 Termux:GUI</string>
+    <string name="termux_gui_help_content">Termux:GUI 可让终端脚本创建原生 Android 界面（对话框、按钮、布局），由 Termux:GUI 伴生应用负责渲染。\n\n先安装客户端包：\npkg install termux-gui\n\n然后在终端运行 GUI 脚本，窗口会自动通过伴生应用打开。</string>
     <string name="feature_not_enabled_title">功能未开启</string>
     <string name="feature_not_enabled_message">「%1$s」未开启，是否前往设置开启？</string>
     <string name="go_to_settings">前往设置</string>
