@@ -66,8 +66,14 @@ enum class GlassTerminalBarColorStyle {
 /** [GlassTerminalBar] 的默认 token。布局规格全部动态委托给原版 GlassTopAppBar，这里只留终端专属项。 */
 object GlassTerminalBarDefaults {
 
-    /** 渐隐背景板越过栏下沿的延伸距离，与 GlassTopAppBarDefaults.BandOverhang 一致。 */
-    val BandOverhang: Dp = 28.dp
+    /**
+     * 渐隐背景板越过栏下沿的延伸距离。
+     *
+     * 原值 28.dp 与 GlassTopAppBarDefaults.BandOverhang 一致，但终端内容首行紧贴栏底，
+     * 28dp 的渐隐尾段正好整条压在首行上，把它洗得看不清（Issue #327）。收窄到 8dp 后
+     * 尾段只轻扫首行顶部一点点，渐隐观感保留、文字恢复可读。
+     */
+    val BandOverhang: Dp = 8.dp
 
     /** 收缩/展开过渡时长（对齐 AppMotion.NORMAL）。 */
     val CollapseDuration: Int = 220
@@ -118,13 +124,16 @@ object GlassTerminalBarDefaults {
      * 输出），文字必须全程可读，因此整条栏保持实色，仅靠越过栏下沿的 [BandOverhang]
      * 完成「实 → 渐隐 → 0」的过渡，把渐隐效果完整保留在栏外。
      *
+     * Issue #327：渐隐段整体前移并压陡（0.86 起坡、栏下沿处 alpha 已降到 ~0.25 以下），
+     * 配合 8dp 的越界尾段，让压在终端首行上的那部分尽量薄——只轻扫一点点，不再整条
+     * 盖住首行。
+     *
      * @param color 背景板颜色（终端背景色 / 系统 opaque 色 / Monet surface，随时可改）。
      */
     fun bandBrush(color: Color): Brush = Brush.verticalGradient(
         0.00f to color,
-        0.74f to color,
-        0.86f to color.copy(alpha = 0.66f),
-        0.95f to color.copy(alpha = 0.28f),
+        0.86f to color,
+        0.93f to color.copy(alpha = 0.25f),
         1.00f to color.copy(alpha = 0f),
     )
 }
