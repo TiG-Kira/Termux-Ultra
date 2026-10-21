@@ -26,7 +26,13 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 
-public class TermuxApplication extends Application {
+/**
+ * 继承 {@link com.termux.x11.LorieApp}：lorie（Termux:X11 AAR）的 MainActivity 与
+ * LorieApp$Receiver 对 getApplication() 做 checkcast com.termux.x11.LorieApp，
+ * 内嵌集成后宿主 Application 必须是 LorieApp 子类，否则两处 ClassCastException
+ * 会直接崩掉所在进程。
+ */
+public class TermuxApplication extends com.termux.x11.LorieApp {
 
     /**
      * Mirrored from the standalone termux-api APK's {@code com.termux.api.App} Application
@@ -51,12 +57,41 @@ public class TermuxApplication extends Application {
         super.attachBaseContext(LocaleHelper.attachBaseContext(base));
     }
 
+    /**
+     * 当前进程名。读 /proc/self/cmdline（minSdk 24 无 Application.getProcessName()）。
+     * app_process 裸启的进程（如 termux-x11 X Server）cmdline 为 --nice-name 值。
+     */
+    private static String currentProcessName() {
+        try (java.io.FileInputStream in = new java.io.FileInputStream("/proc/self/cmdline")) {
+            byte[] buf = new byte[64];
+            int n = in.read(buf);
+            if (n <= 0) return null;
+            int end = 0;
+            while (end < n && buf[end] != 0) end++;
+            return new String(buf, 0, end, StandardCharsets.UTF_8);
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    /** 是否主进程（包名进程）。X11 渲染进程（com.termux:x11）等均为非主进程；读不到进程名时按主进程处理，保持原行为。 */
+    private boolean isMainProcess() {
+        String name = currentProcessName();
+        return name == null || name.equals(getPackageName());
+    }
+
     // 防止重复弹窗的标记：一旦某个 Activity 已经弹出过崩溃提示，后续 Activity 不再弹
     private static volatile boolean sCrashDialogShown = false;
 
     @Override
     public void onCreate() {
+        // LorieApp.onCreate：X11 prefs/通知渠道/连接表初始化，主进程与 :x11 进程均安全
         super.onCreate();
+
+        // :x11 进程（Termux:X11 渲染 Activity）只需要 LorieApp 的初始化；
+        // 主进程重活全部跳过，避免 crash handler/AI 模块/termux-api listener
+        // 在 X11 进程重复注册、LocalServerSocket 与主进程抢同一地址。
+        if (!isMainProcess()) return;
 
         // 注册 ActivityLifecycleCallbacks：每个 Activity 进入前台时检测是否有待处理的崩溃
         registerActivityLifecycleCallbacks(new ActivityLifecycleCallbacks() {
