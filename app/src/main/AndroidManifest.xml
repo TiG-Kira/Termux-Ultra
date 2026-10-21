@@ -547,6 +547,32 @@
                 android:resource="@string/app_name" />
         </service>
 
+        <!-- Termux:X11（lorie AAR）全部组件挪 :x11 独立进程：
+             lorie 的 MainActivity/LorieApp$Receiver 对 getApplication() 做
+             checkcast com.termux.x11.LorieApp，与主进程共用 Application 类；
+             独立进程后 X11 侧崩溃、LMK、多任务清理 task 均只回收 :x11 进程，
+             不再拖死 Termux Ultra 主进程。IPC 不受影响：渲染走 native socket，
+             控制走 ACTION_START 广播传 Binder，均跨进程透明；
+             LorieApp$Receiver 与 MainActivity 同进程，静态 instances 表匹配。 -->
+        <activity
+            android:name="com.termux.x11.MainActivity"
+            android:process=":x11" />
+        <activity
+            android:name="com.termux.x11.MainActivity$MainActivityTagged"
+            android:process=":x11" />
+        <activity
+            android:name="com.termux.x11.LoriePreferences"
+            android:process=":x11" />
+        <receiver
+            android:name="com.termux.x11.LoriePreferences$Receiver"
+            android:process=":x11" />
+        <receiver
+            android:name="com.termux.x11.LorieApp$Receiver"
+            android:process=":x11" />
+        <service
+            android:name="com.termux.x11.utils.KeyInterceptor"
+            android:process=":x11" />
+
     </application>
 
 </manifest>
