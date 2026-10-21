@@ -3,3 +3,5 @@
 *.gradle    text eol=lf
 *.mk        text eol=lf
 *.sh        text eol=lf
+# 内置 X11 启动器（无扩展名 shell 脚本），必须 LF，否则 Android 上 shebang 因 CR 失效
+app/src/main/assets/termux-x11 text eol=lf

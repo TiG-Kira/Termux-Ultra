@@ -1,0 +1,55 @@
+#!/system/bin/sh
+# Termux Ultra 内置 X11 启动器（兼容上游 termux-x11 命令语义）
+#
+# 上游 termux-x11 命令写死包名 com.termux.x11 去检测独立 Termux:X11 App，而 Termux Ultra
+# 已把 X11 内置进宿主包 com.termux，因此直接用上游脚本会报 "application is not found"。
+# 本 wrapper 优先以 com.termux 为宿主包，缺失时回退到独立 com.termux.x11，从而让装进
+# Termux Ultra 的 termux-x11 软件包认得到并使用内置 X11。
+# TERMUX_ULTRA_X11_WRAPPER
+
+export TERMUX_X11_TMPDIR="${TERMUX_X11_TMPDIR:-$TMPDIR}"
+export TMPDIR="$TERMUX_X11_TMPDIR"
+export XKB_CONFIG_ROOT="${XKB_CONFIG_ROOT:-$PREFIX/share/X11/xkb}"
+
+# 主机包名：优先内置 com.termux，回退独立 com.termux.x11
+X11_PKG="com.termux"
+APK_PATH="$(/system/bin/pm path "$X11_PKG" 2>/dev/null | head -n1 | cut -d: -f2)"
+if [ -z "$APK_PATH" ]; then
+    X11_PKG="com.termux.x11"
+    APK_PATH="$(/system/bin/pm path "$X11_PKG" 2>/dev/null | head -n1 | cut -d: -f2)"
+fi
+if [ -z "$APK_PATH" ]; then
+    echo "Termux:X11 application is not found. Termux Ultra already bundles X11; if you installed the standalone Termux:X11 app, please install it first." 1>&2
+    exit 1
+fi
+
+export CLASSPATH="$APK_PATH"
+
+# 解析 DISPLAY 与 -tag（tag 用于多窗口标签，传给渲染 Activity 的 -d）
+DISPLAY_ARG=":0"
+TAG=""
+prev=""
+for a in "$@"; do
+    if [ "$prev" = "-tag" ]; then
+        TAG="$a"
+    fi
+    case "$a" in
+        :*) DISPLAY_ARG="$a" ;;
+    esac
+    prev="$a"
+done
+export DISPLAY="$DISPLAY_ARG"
+mkdir -p "$TERMUX_X11_TMPDIR/.X11-unix" 2>/dev/null
+
+# 确保渲染组件已启用（X11 在宿主里默认随集成开关启停）
+/system/bin/pm enable "$X11_PKG/com.termux.x11.MainActivity" >/dev/null 2>&1 || true
+
+# 启动 X Server（后台）：参数整体透传给 CmdEntryPoint（:N / -xstartup / -legacy-drawing / -force-bgra / -tag 等）
+/system/bin/app_process / --nice-name=termux-x11 com.termux.x11.CmdEntryPoint "$@" &
+
+# 拉起渲染 Activity（X Server 就绪前会等待 ACTION_START 广播）
+if [ -n "$TAG" ]; then
+    /system/bin/am start --user 0 -n "$X11_PKG/com.termux.x11.MainActivity" -d "$TAG"
+else
+    /system/bin/am start --user 0 -n "$X11_PKG/com.termux.x11.MainActivity"
+fi
