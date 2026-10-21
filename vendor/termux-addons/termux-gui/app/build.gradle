@@ -1,0 +1,47 @@
+// Vendored from https://github.com/termux/termux-gui (app module), converted from
+// `com.android.application` to `com.android.library` for in-app integration.
+// 本地改动：
+//  - protobuf-gradle-plugin 与宿主 AGP 9 不兼容 → GUIProt0 的 Java lite 代码已用
+//    protoc 4.29.3 预生成进 src/main/java，配套 runtime 用 protobuf-javalite 4.29.3
+//  - hbuffers 单文件子项目内联为普通源码目录
+//  - 移除 applicationId/签名/release 构建、SDK sources 生成钩子与 dev_keystore
+apply plugin: 'com.android.library'
+
+android {
+    namespace "com.termux.gui"
+    compileSdk project.properties.compileSdkVersion.toInteger()
+
+    defaultConfig {
+        minSdk 24
+        // 库模块的 BuildConfig（V0Json/HandleGlobal 引用 VERSION_CODE）需显式开启
+        versionCode 8
+        versionName "1.0.0"
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_21
+        targetCompatibility JavaVersion.VERSION_21
+    }
+
+    buildFeatures {
+        viewBinding true
+        buildConfig true
+    }
+
+    externalNativeBuild {
+        cmake {
+            path file('src/main/cpp/CMakeLists.txt')
+        }
+    }
+}
+
+dependencies {
+    implementation 'com.google.code.gson:gson:2.9.1'
+    implementation 'androidx.appcompat:appcompat:1.4.2'
+    implementation 'androidx.activity:activity-ktx:1.5.1'
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.6.4'
+    implementation 'com.google.protobuf:protobuf-javalite:4.29.3'
+    implementation 'androidx.legacy:legacy-support-v4:1.0.0'
+    implementation 'com.google.android.material:material:1.6.1'
+    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
+}

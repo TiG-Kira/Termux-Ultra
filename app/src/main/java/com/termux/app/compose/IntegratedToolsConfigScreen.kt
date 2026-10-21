@@ -25,6 +25,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Launch
+import androidx.compose.material.icons.rounded.Dashboard
+import androidx.compose.material.icons.rounded.DesktopWindows
+import androidx.compose.material.icons.rounded.Extension
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material.icons.rounded.Terminal
@@ -59,12 +62,15 @@ import top.yukonga.miuix.kmp.basic.SnackbarHost
 import top.yukonga.miuix.kmp.basic.SnackbarHostState
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
+import top.yukonga.miuix.kmp.basic.ButtonDefaults
+import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.glass.GlassIconButton
 import top.yukonga.miuix.kmp.glass.GlassTopAppBar
 import top.yukonga.miuix.kmp.icon.glass.ChevronBackward
 import top.yukonga.miuix.kmp.icon.glass.MiuixGlassIcons
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.preference.ArrowPreference
+import top.yukonga.miuix.kmp.preference.SwitchPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 /**
@@ -89,6 +95,8 @@ fun IntegratedToolsConfigScreen(onBack: () -> Unit) {
     var stylingEnabled by remember { mutableStateOf(IntegratedTools.isEnabled(context, IntegratedTools.Tool.TERMUX_STYLING)) }
     var taskerEnabled by remember { mutableStateOf(IntegratedTools.isEnabled(context, IntegratedTools.Tool.TERMUX_TASKER)) }
     var widgetEnabled by remember { mutableStateOf(IntegratedTools.isEnabled(context, IntegratedTools.Tool.TERMUX_WIDGET)) }
+    var x11Enabled by remember { mutableStateOf(IntegratedTools.isEnabled(context, IntegratedTools.Tool.TERMUX_X11)) }
+    var guiEnabled by remember { mutableStateOf(IntegratedTools.isEnabled(context, IntegratedTools.Tool.TERMUX_GUI)) }
 
     fun refresh() {
         apiEnabled = IntegratedTools.isEnabled(context, IntegratedTools.Tool.TERMUX_API)
@@ -96,6 +104,8 @@ fun IntegratedToolsConfigScreen(onBack: () -> Unit) {
         stylingEnabled = IntegratedTools.isEnabled(context, IntegratedTools.Tool.TERMUX_STYLING)
         taskerEnabled = IntegratedTools.isEnabled(context, IntegratedTools.Tool.TERMUX_TASKER)
         widgetEnabled = IntegratedTools.isEnabled(context, IntegratedTools.Tool.TERMUX_WIDGET)
+        x11Enabled = IntegratedTools.isEnabled(context, IntegratedTools.Tool.TERMUX_X11)
+        guiEnabled = IntegratedTools.isEnabled(context, IntegratedTools.Tool.TERMUX_GUI)
     }
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
@@ -109,8 +119,19 @@ fun IntegratedToolsConfigScreen(onBack: () -> Unit) {
     // Termux:API / Termux:Boot 没有各自的配置 Activity，只提供使用说明弹窗
     var showApiHelpDialog by remember { mutableStateOf(false) }
     var showBootHelpDialog by remember { mutableStateOf(false) }
+    // Termux:X11 配置弹窗（启动参数 + 显示模式）；Termux:GUI 只有使用说明
+    var showX11ConfigDialog by remember { mutableStateOf(false) }
+    var showGuiHelpDialog by remember { mutableStateOf(false) }
+    // 弹窗打开那一刻才从偏好读初始值：key 变化时 remember 重新求值
+    var x11Args by remember(showX11ConfigDialog) {
+        mutableStateOf(IntegratedTools.getConfigString(context, IntegratedTools.KEY_X11_LAUNCH_ARGS, ""))
+    }
+    var x11Fullscreen by remember(showX11ConfigDialog) {
+        mutableStateOf(IntegratedTools.getConfigBoolean(context, IntegratedTools.KEY_X11_FULLSCREEN, false))
+    }
 
-    val hasAnyEnabled = apiEnabled || bootEnabled || stylingEnabled || taskerEnabled || widgetEnabled
+    val hasAnyEnabled = apiEnabled || bootEnabled || stylingEnabled || taskerEnabled || widgetEnabled ||
+        x11Enabled || guiEnabled
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
@@ -198,6 +219,28 @@ fun IntegratedToolsConfigScreen(onBack: () -> Unit) {
                                     onClick = { openToolConfigActivity(context, "com.termux.app.activities.TermuxWidgetActivity") }
                                 )
                             }
+                            if (x11Enabled) {
+                                ToolConfigArrow(
+                                    title = stringResource(R.string.termux_x11_config),
+                                    summary = stringResource(R.string.termux_x11_config_summary),
+                                    icon = Icons.Rounded.DesktopWindows,
+                                    onClick = { showX11ConfigDialog = true }
+                                )
+                            }
+                            if (guiEnabled) {
+                                ToolConfigArrow(
+                                    title = stringResource(R.string.termux_gui_config),
+                                    summary = stringResource(R.string.termux_gui_config_summary),
+                                    icon = Icons.Rounded.Dashboard,
+                                    onClick = { openToolConfigActivity(context, "com.termux.gui.GUIConfigActivity") }
+                                )
+                                ToolConfigArrow(
+                                    title = stringResource(R.string.termux_gui_help),
+                                    summary = stringResource(R.string.termux_gui_help_summary),
+                                    icon = Icons.Rounded.Extension,
+                                    onClick = { showGuiHelpDialog = true }
+                                )
+                            }
                         }
                     }
                 }
@@ -247,6 +290,71 @@ fun IntegratedToolsConfigScreen(onBack: () -> Unit) {
                 )
             }
         )
+
+        // ---------- Termux:X11 display settings ----------
+        OverlayDialog(
+            title = stringResource(R.string.termux_x11_config),
+            show = showX11ConfigDialog,
+            onDismissRequest = { showX11ConfigDialog = false },
+            content = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    TextField(
+                        value = x11Args,
+                        onValueChange = { x11Args = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = stringResource(R.string.termux_x11_launch_args),
+                        useLabelAsPlaceholder = true
+                    )
+                    SwitchPreference(
+                        title = stringResource(R.string.termux_x11_fullscreen),
+                        summary = stringResource(R.string.termux_x11_fullscreen_summary),
+                        checked = x11Fullscreen,
+                        onCheckedChange = { x11Fullscreen = it }
+                    )
+                    Row(horizontalArrangement = Arrangement.SpaceBetween) {
+                        TextButton(
+                            text = stringResource(R.string.cancel),
+                            onClick = { showX11ConfigDialog = false },
+                            modifier = Modifier.weight(1f)
+                        )
+                        Spacer(Modifier.width(16.dp))
+                        TextButton(
+                            text = stringResource(R.string.save),
+                            onClick = {
+                                // 与开关同源：写进 integrated_tools_prefs，点保存一次性提交
+                                IntegratedTools.setConfigString(context, IntegratedTools.KEY_X11_LAUNCH_ARGS, x11Args.trim())
+                                IntegratedTools.setConfigBoolean(context, IntegratedTools.KEY_X11_FULLSCREEN, x11Fullscreen)
+                                showX11ConfigDialog = false
+                            },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.textButtonColorsPrimary()
+                        )
+                    }
+                }
+            }
+        )
+
+        // ---------- Termux:GUI usage guide ----------
+        OverlayDialog(
+            title = stringResource(R.string.termux_gui_help),
+            show = showGuiHelpDialog,
+            onDismissRequest = { showGuiHelpDialog = false },
+            content = {
+                Box(modifier = Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
+                    HelpContentWithCopyableCommands(
+                        content = stringResource(R.string.termux_gui_help_content),
+                        context = context,
+                        snackbarHostState = snackbarHostState
+                    )
+                }
+                Spacer(Modifier.height(12.dp))
+                TextButton(
+                    text = stringResource(R.string.ok),
+                    onClick = { showGuiHelpDialog = false },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        )
     }
 }
 
@@ -280,7 +388,7 @@ private fun ToolConfigArrow(
     )
 }
 
-/** 五个开关全关时的占位：设置页入口此时已隐藏，这里只防 Activity 被直接拉起。 */
+/** 全部工具开关都关闭时的占位：设置页入口此时已隐藏，这里只防 Activity 被直接拉起。 */
 @Composable
 private fun IntegratedToolsEmptyState() {
     Box(

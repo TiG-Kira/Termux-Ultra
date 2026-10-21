@@ -889,6 +889,9 @@ private fun PageContentForTab(
         )
         3 -> com.termux.app.remote.RemoteScreen(
             showVnc = showVnc,
+            // XServer 标签只在「集成工具 - Termux:X11」开关打开时出现；开关写 SharedPreferences，
+            // 切回本页时随重组重新读取，无需额外状态流
+            showX11 = IntegratedTools.isEnabled(context, IntegratedTools.Tool.TERMUX_X11),
             initialTab = 0,
             onTabChange = onRemoteSubTabChange,
             onGoToFiles = onGoToFiles,

@@ -177,6 +177,16 @@ public class TermuxApplication extends Application {
             } catch (Throwable t) {
                 android.util.Log.e(LOG_TAG, "Failed to sync Termux:API am wrapper", t);
             }
+
+            // Termux:GUI：内置化后没有独立 Application 入口，Settings 单例（EncryptedSharedPreferences）
+            // 需要在开关打开时由宿主代为加载，否则 GUIService/GUIConfigActivity 拿到的是默认值
+            try {
+                if (com.termux.app.compose.IntegratedTools.INSTANCE.isEnabled(getApplicationContext(), com.termux.app.compose.IntegratedTools.Tool.TERMUX_GUI)) {
+                    com.termux.gui.Settings.Companion.getInstance().load(getApplicationContext());
+                }
+            } catch (Throwable t) {
+                android.util.Log.w(LOG_TAG, "Failed to load Termux:GUI settings", t);
+            }
         }, "Termux-BgInit").start();
     }
 

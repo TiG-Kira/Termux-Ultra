@@ -599,6 +599,10 @@
     <string name="termux_tasker_tool_summary">Run Termux commands from Tasker</string>
     <string name="termux_widget_tool">Termux:Widget</string>
     <string name="termux_widget_tool_summary">Add shortcut widgets to run scripts from the home screen</string>
+    <string name="termux_x11_tool">Termux:X11</string>
+    <string name="termux_x11_tool_summary">Run X11 graphical apps through the Termux:X11 companion app</string>
+    <string name="termux_gui_tool">Termux:GUI</string>
+    <string name="termux_gui_tool_summary">Create native Android interfaces from terminal scripts via the Termux:GUI companion app</string>
 
     <!-- Tool configuration entries (shown when the corresponding tool is enabled) -->
     <string name="integrated_tools_config_entry">Configure Integrated Tools</string>
@@ -616,6 +620,16 @@
     <string name="termux_boot_help_summary">Learn how to add boot scripts</string>
     <string name="termux_api_help_content">Termux:API provides commands to access Android features from the terminal. Common commands:\n\n•termux-battery-status •battery info\n•termux-camera-photo •take a photo\n•termux-clipboard-get / termux-clipboard-set •clipboard\n•termux-notification •post a notification\n•termux-toast •show a toast\n•termux-vibrate •vibrate device\n•termux-location •get GPS location\n•termux-sms-list / termux-sms-send •SMS\n•termux-tts-speak •text to speech\n•termux-wifi-connectioninfo •WiFi info\n\nInstall the termux-api package first:\npkg install termux-api</string>
     <string name="termux_boot_help_content">Termux:Boot runs scripts automatically when the device starts.\n\nTo add a boot script:\n\n1. Create the directory:\n   mkdir -p ~/.termux/boot\n2. Place executable scripts in ~/.termux/boot/\n3. Scripts run in sorted order on boot.\n\nExample (~/.termux/boot/start-ssh):\n   #!/data/data/com.termux/files/usr/bin/sh\n   termux-wake-lock\n   sshd</string>
+    <string name="termux_x11_config">X11 Display Settings</string>
+    <string name="termux_x11_config_summary">Configure launch arguments and display mode</string>
+    <string name="termux_x11_launch_args">Launch arguments</string>
+    <string name="termux_x11_fullscreen">Fullscreen display</string>
+    <string name="termux_x11_fullscreen_summary">Show the X11 display in fullscreen</string>
+    <string name="termux_gui_config">GUI Settings</string>
+    <string name="termux_gui_config_summary">Service timeout, background mode and log level</string>
+    <string name="termux_gui_help">GUI Usage Guide</string>
+    <string name="termux_gui_help_summary">Learn how to use Termux:GUI from scripts</string>
+    <string name="termux_gui_help_content">Termux:GUI lets terminal scripts create native Android interfaces (dialogs, buttons, layouts) rendered by the Termux:GUI companion app.\n\nInstall the client package first:\npkg install termux-gui\n\nThen run your GUI script from the terminal; windows open through the companion app automatically.</string>
     <string name="feature_not_enabled_title">Feature not enabled</string>
     <string name="feature_not_enabled_message">\"%1$s\" is not enabled. Go to Settings to enable it?</string>
     <string name="go_to_settings">Go to Settings</string>

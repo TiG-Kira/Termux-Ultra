@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- According to google surveys EGL2.0 should be available on all devices anyways, but you should declare it in the manifest. -->
+    <uses-feature
+        android:glEsVersion="0x00020000"
+        android:required="false" />
+
+    <!-- Used to keep the app from getting killed even when no clients how Activities in the foreground. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <!-- Used for overlay Activities. -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <!-- Used to turn on the display. -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- Used on Android 13 for the foreground service notification. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!--
+      Vendored from termux-gui: sharedUserId / application 属性 / LAUNCHER intent-filter
+      已剥离（跟随 termux-api 的 vendor 改法）；所有组件 enabled=false 默认禁用，
+      由「集成工具 - Termux:GUI」开关在运行时启停。
+    -->
+    <application>
+        <activity
+            android:name=".GUIConfigActivity"
+            android:enabled="false"
+            android:exported="false" />
+
+        <receiver
+            android:name=".PendingIntentReceiver"
+            android:enabled="false"
+            android:exported="false" />
+        <receiver
+            android:name=".GUIWidget"
+            android:enabled="false"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget" />
+        </receiver>
+        <receiver
+            android:name=".ServiceShutdownReceiver"
+            android:enabled="false"
+            android:exported="false" />
+
+        <activity
+            android:name=".GUIWidgetConfigurationActivity"
+            android:enabled="false"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:launchMode="singleInstance">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
+            </intent-filter>
+        </activity>
+        <activity
+            android:name=".GUIActivity"
+            android:enabled="false"
+            android:configChanges="uiMode|locale|screenSize|smallestScreenSize|screenLayout|orientation"
+            android:exported="false"
+            android:supportsPictureInPicture="true"
+            android:alwaysRetainTaskState="true"
+            android:persistableMode="persistNever"/>
+        <activity
+            android:name=".GUIActivityLockscreen"
+            android:enabled="false"
+            android:configChanges="uiMode|locale|screenSize|smallestScreenSize|screenLayout|orientation"
+            android:exported="false"
+            android:showOnLockScreen="true"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:supportsPictureInPicture="true"
+            android:alwaysRetainTaskState="true"
+            android:persistableMode="persistNever"
+            tools:targetApi="o_mr1" />
+        <activity
+            android:name=".GUIActivityDialog"
+            android:enabled="false"
+            android:configChanges="uiMode|locale|screenSize|smallestScreenSize|screenLayout|orientation"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:theme="@style/TermuxAlertDialogStyle" />
+        <activity
+            android:name=".GUIWebViewJavascriptDialog"
+            android:enabled="false"
+            android:exported="false"
+            android:theme="@style/TermuxAlertDialogStyle" />
+
+        <service
+            android:name=".GUIService"
+            android:foregroundServiceType="specialUse"
+            android:enabled="false"
+            android:exported="false" />
+
+        <receiver
+            android:name=".GUIReceiver"
+            android:enabled="false"
+            android:exported="false" />
+        <meta-data
+            android:name="android.webkit.WebView.MetricsOptOut"
+            android:value="true" />
+    </application>
+
+</manifest>

@@ -11,4 +11,14 @@ include ':termux-tasker'
 project(':termux-tasker').projectDir = new File(rootDir, 'vendor/termux-addons/termux-tasker/app')
 include ':termux-widget'
 project(':termux-widget').projectDir = new File(rootDir, 'vendor/termux-addons/termux-widget/app')
+include ':termux-x11'
+project(':termux-x11').projectDir = new File(rootDir, 'vendor/termux-addons/termux-x11')
+
+// Termux:GUI plugin (vendored from termux/termux-gui, application → library conversion)
+include ':termux-gui'
+project(':termux-gui').projectDir = new File(rootDir, 'vendor/termux-addons/termux-gui/app')
+
+// Termux:GUI plugin (vendored from termux/termux-gui, application → library conversion)
+include ':termux-gui'
+project(':termux-gui').projectDir = new File(rootDir, 'vendor/termux-addons/termux-gui/app')
 
