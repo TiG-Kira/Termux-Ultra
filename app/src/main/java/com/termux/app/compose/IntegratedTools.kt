@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import com.termux.R
+import com.termux.app.x11.TermuxX11CommandInstaller
 
 /**
  * Manages the enable/disable state of the integrated Termux add-on tools
@@ -154,6 +155,16 @@ object IntegratedTools {
                     PackageManager.DONT_KILL_APP
                 )
             }
+        }
+        // X11 开关打开时，把自带 termux-x11 命令落地并屏蔽 apt 冲突包（后台执行，避免阻塞 UI）
+        if (tool == Tool.TERMUX_X11 && enabled) {
+            Thread {
+                try {
+                    TermuxX11CommandInstaller.ensureBundledX11(context.applicationContext)
+                } catch (t: Throwable) {
+                    android.util.Log.w("IntegratedTools", "ensureBundledX11 failed", t)
+                }
+            }.start()
         }
     }
 
