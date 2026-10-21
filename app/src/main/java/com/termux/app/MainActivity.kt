@@ -141,6 +141,14 @@ class MainActivity : FragmentActivity() {
             window.statusBarColor = android.graphics.Color.TRANSPARENT
             window.navigationBarColor = android.graphics.Color.TRANSPARENT
 
+            // 允许窗口延伸进刘海/挖孔区域：横屏时主页画面覆盖整个屏幕，
+            // 不再出现刘海一侧的黑条。内容避让由 Compose 层处理
+            // （侧边 NavigationRail 与顶栏各自按 cutout insets 让位）。
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+                window.attributes.layoutInDisplayCutoutMode =
+                    android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+            }
+
             val prefs = getSharedPreferences("app_settings", Context.MODE_PRIVATE)
             val initialShowVnc = prefs.getBoolean("vnc_enabled", false)
 

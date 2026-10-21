@@ -23,12 +23,16 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -64,6 +68,9 @@ import top.yukonga.miuix.kmp.basic.SnackbarHost
 import top.yukonga.miuix.kmp.basic.SnackbarHostState
 import top.yukonga.miuix.kmp.basic.SnackbarDuration
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
+import top.yukonga.miuix.kmp.basic.NavigationRail
+import top.yukonga.miuix.kmp.basic.NavigationRailDefaults
+import top.yukonga.miuix.kmp.basic.NavigationRailItem
 import top.yukonga.miuix.kmp.basic.ScrollBehavior
 import top.yukonga.miuix.kmp.basic.TopAppBarState
 import top.yukonga.miuix.kmp.blur.layerBackdrop as miuixLayerBackdrop
@@ -199,12 +206,12 @@ fun MainScreen(
         else -> systemNavBarsHeight + navContainerHeight + 12.dp
     }
 
-    // 横屏：底部导航栏切换为侧边竖排导航栏（MainScreenNavRail，锁边停靠不占底部空间）。
-    // 页面底部只需保留系统导航栏 inset；侧边 rail 以 Row sibling 布局存在，
+    // 宽屏（横屏或平板）：底部导航栏锁定切换为侧边 miuix NavigationRail，
+    // 只有手机竖屏才使用现有底栏主题。侧边 rail 以 Row sibling 布局存在，
     // 内容区宽度由 Row 约束天然让位，无需各页面自己避让。
-    val isMainLandscape = isLandscapeOrientation()
-    val pageNavBarBottomPadding = if (isMainLandscape) systemNavBarsHeight + 16.dp else totalNavHeight
-    val pageSnackbarBottomPadding = if (isMainLandscape) systemNavBarsHeight + 16.dp else snackbarBottomPadding
+    val isMainWide = isWideScreenLayout()
+    val pageNavBarBottomPadding = if (isMainWide) systemNavBarsHeight + 16.dp else totalNavHeight
+    val pageSnackbarBottomPadding = if (isMainWide) systemNavBarsHeight + 16.dp else snackbarBottomPadding
 
     // 输入法或弹层抬起时底栏下沉出屏，两者都落下后才上浮回位。行程取自身的总高加一点余量，
     // 保证收到底的主体也完全越过屏幕下边缘。
@@ -295,12 +302,31 @@ fun MainScreen(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             CompositionLocalProvider(LocalGlassTopAppBarBackdrop provides glassNavBackdrop) {
-                topBarContent.value()
+                // 宽屏：顶栏为左侧 NavigationRail 让位。rail 总占宽 = MinWidth +
+                // 其自身避让的 Start 侧 insets（cutout/导航栏），顶栏镜像同一组合，
+                // 才能与内容区左缘对齐；End 侧按刘海/挖孔 cutout 让位
+                // （竖屏不进入该分支，布局与改动前完全一致）。
+                Box(
+                    modifier = Modifier
+                        .then(
+                            if (isMainWide) Modifier
+                                .windowInsetsPadding(WindowInsets.displayCutout.only(WindowInsetsSides.Start))
+                                .windowInsetsPadding(WindowInsets.navigationBars.only(WindowInsetsSides.Start))
+                                .padding(start = NavigationRailDefaults.MinWidth)
+                            else Modifier
+                        )
+                        .then(
+                            if (isMainWide) Modifier.windowInsetsPadding(WindowInsets.displayCutout.only(WindowInsetsSides.End))
+                            else Modifier
+                        )
+                ) {
+                    topBarContent.value()
+                }
             }
         },
         bottomBar = {
-            if (isMainLandscape) {
-                // 横屏：底部不渲染导航栏，由内容区 Row 末端的 MainScreenNavRail 接管
+            if (isMainWide) {
+                // 宽屏：底部不渲染导航栏，由内容区 Row 起始端的 NavigationRail 接管
             } else when (navStyle) {
                 2 -> {
                     val glassDims = computeNavDimensions(availableTabs.size, NavStyle.GLASS)
@@ -471,9 +497,41 @@ fun MainScreen(
         // it: they run full height and pass under the bar, each holding its first item clear by
         // [LocalTopBarClearance] worth of scrollable content padding.
         val topBarClearance = padding.calculateTopPadding()
-        // 横屏：页面内容与侧边竖排导航栏并排（rail 不再悬浮在内容上，
-        // 而是占据独立列宽，页面自动获得剩余宽度）；竖屏仍是单 Box 全屏。
+        // 宽屏：页面内容与侧边 NavigationRail 并排（rail 占独立列宽，
+        // 页面自动获得剩余宽度）；手机竖屏仍是单 Box 全屏。
         Row(modifier = Modifier.fillMaxSize()) {
+        // 宽屏侧边导航栏：miuix NavigationRail（固定收起布局，锁定不切换），
+        // 组件自带 Start 侧 cutout / 状态栏 / 系统导航栏 insets 处理与分隔线，
+        // 背景延伸进 insets 区域，横屏下刘海侧整屏覆盖无黑条。
+        if (isMainWide) {
+            NavigationRail {
+                availableTabs.forEach { tab ->
+                    val icon: ImageVector = when (tab) {
+                        0 -> Icons.Rounded.Dashboard
+                        1 -> ImageVector.vectorResource(R.drawable.ic_nav_terminal)
+                        2 -> Icons.Rounded.Folder
+                        3 -> Icons.Rounded.DesktopWindows
+                        else -> Icons.Rounded.Settings
+                    }
+                    val label = when (tab) {
+                        0 -> stringResource(R.string.overview)
+                        1 -> stringResource(R.string.terminal)
+                        2 -> stringResource(R.string.files)
+                        3 -> stringResource(R.string.remote)
+                        else -> stringResource(R.string.settings)
+                    }
+                    NavigationRailItem(
+                        selected = selectedTab == tab,
+                        onClick = {
+                            previousTab = selectedTab
+                            onTabChange(tab)
+                        },
+                        icon = icon,
+                        label = label
+                    )
+                }
+            }
+        }
         Box(
             modifier = Modifier
                 .weight(1f)
@@ -733,19 +791,6 @@ fun MainScreen(
                     active = tab == selectedTab
                 )
             }
-        }
-
-        // 横屏侧边竖排导航栏：锁边停靠，图标纵向排列，不占用底部空间
-        if (isMainLandscape) {
-            MainScreenNavRail(
-                selectedTab = selectedTab,
-                availableTabs = availableTabs,
-                onTabChange = { tab ->
-                    previousTab = selectedTab
-                    onTabChange(tab)
-                },
-                bottomInset = systemNavBarsHeight
-            )
         }
         }
 
