@@ -457,6 +457,10 @@ public final class TermuxService extends Service implements TermuxTaskCompat.Ter
         mWantsToStop = false;
         killAllTermuxExecutionCommands();
 
+        // 同步清空 Compose 侧终端列表：通知「结束会话」与主页「更多」菜单的
+        // 「关闭所有会话」都汇到本入口，不清会让已结束的会话残留在主页终端页。
+        ComposeSessionManager.getInstance(this).killAllSessions();
+
         int remainingSessions = getTermuxSessionsSize();
         int remainingTasks = mTermuxTasks.size();
         if (remainingSessions == 0 && remainingTasks == 0) {

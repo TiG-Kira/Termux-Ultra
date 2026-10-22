@@ -853,6 +853,17 @@
     <string name="notice_board_hint">更多请点击</string>
     <string name="notice_board_loading">加载中…</string>
     <string name="notice_board_empty">暂无公告</string>
+
+    <!-- Terminal top bar more menu -->
+    <string name="menu_more">更多</string>
+    <string name="menu_open_sandbox_session">打开沙盒会话</string>
+    <string name="menu_close_all_sessions">关闭所有会话</string>
+    <string name="menu_cleanup_uninitialized">清理未初始化会话</string>
+    <string name="menu_sort_sessions">排序会话</string>
+    <string name="sort_by_open_order">按历史打开顺序</string>
+    <string name="sort_by_name">按字母</string>
+    <string name="sort_by_initialized">按是否初始化</string>
+    <string name="cleanup_uninitialized_toast" formatted="true">已清理 %1$d 个未初始化会话</string>
     <string name="overview_memory_used">已用：%1$s</string>
     <string name="overview_cpu_cores">核心：%1$d</string>
     <string name="overview_ai_termux_desc">与 Agent 沟通并帮您处理终端事务</string>

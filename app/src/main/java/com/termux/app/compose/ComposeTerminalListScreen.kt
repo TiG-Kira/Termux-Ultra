@@ -24,6 +24,8 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -34,17 +36,26 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.termux.R
 import com.termux.app.TermuxActivity
+import com.termux.app.TermuxService
 import com.termux.app.terminal.shell.ComposeSessionManager
+import com.termux.app.terminal.shell.pid
 import com.termux.app.terminal.shell.pidState
 import com.termux.app.terminal.shell.lastCommandState
+import com.termux.shared.termux.TermuxConstants
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 import top.yukonga.miuix.kmp.glass.GlassMotion
 import top.yukonga.miuix.kmp.glass.GlassIconButton
+import top.yukonga.miuix.kmp.glass.GlassPopupItem
 import top.yukonga.miuix.kmp.glass.GlassTopAppBar
 import top.yukonga.miuix.kmp.glass.GlassTopAppBarDefaults
+import top.yukonga.miuix.kmp.glass.GlassTransformPopup
+import top.yukonga.miuix.kmp.glass.glassPopupAnchor
+import top.yukonga.miuix.kmp.glass.rememberGlassPopupAnchor
 import top.yukonga.miuix.kmp.icon.glass.Add
 import top.yukonga.miuix.kmp.icon.glass.Lock
+import top.yukonga.miuix.kmp.icon.glass.More
 import top.yukonga.miuix.kmp.icon.glass.MiuixGlassIcons
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
@@ -64,6 +75,7 @@ import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.CircularProgressIndicator
+import top.yukonga.miuix.kmp.basic.HorizontalDivider
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import com.termux.app.vortex.VorteXSandbox
 
@@ -71,6 +83,12 @@ import com.termux.app.vortex.VorteXSandbox
  * 终端会话列表页。
  * 100% 复刻 Java 版 TerminalListScreen 的 UI 结构。
  */
+
+// 会话列表排序模式（app_settings: terminal_session_sort_mode）
+private const val SESSION_SORT_OPEN_ORDER = 0
+private const val SESSION_SORT_BY_NAME = 1
+private const val SESSION_SORT_INITIALIZED_FIRST = 2
+
 @Composable
 fun ComposeTerminalListScreen(
     context: Context,
@@ -95,6 +113,86 @@ fun ComposeTerminalListScreen(
     var searchExpanded by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
     var isRefreshing by remember { mutableStateOf(false) }
+
+    // 「更多」玻璃菜单（对齐 Termux Agent 对话页的 GlassTransformPopup 三件套）
+    val moreAnchor = rememberGlassPopupAnchor()
+    var showMoreMenu by remember { mutableStateOf(false) }
+    var showSortDialog by remember { mutableStateOf(false) }
+    var sessionSortMode by remember {
+        mutableStateOf(
+            context.getSharedPreferences("app_settings", Context.MODE_PRIVATE)
+                .getInt("terminal_session_sort_mode", SESSION_SORT_OPEN_ORDER)
+        )
+    }
+    // 名字经 collectAsState 聚合成快照：排序模式下重命名后顺序立即跟随，
+    // 也避免直接读 Flow.value（非快照读不会触发重组）。必须在组合上下文里构建。
+    val nameSnapshot = allSessions.map { info ->
+        info to info.session.sessionName.collectAsState(initial = "").value
+    }
+
+    /** 打开沙盒会话（原顶栏沙盒按钮逻辑，收进「更多」菜单） */
+    fun openSandboxSession() {
+        if (!VorteXSandbox.isEnabled(context)) {
+            Toast.makeText(
+                context,
+                context.getString(R.string.vortex_sandbox_disabled_toast),
+                Toast.LENGTH_SHORT
+            ).show()
+            return
+        }
+        // 限制同时仅一个手动沙箱会话：已存在则切换过去
+        val title = context.getString(R.string.vortex_sandbox_session_title)
+        val existing = sessionManager.sessions.value.firstOrNull { it.name == title }
+        if (existing != null) {
+            sessionManager.switchTo(existing.session.id)
+            return
+        }
+        // 首次进入需复制约 95MB 的 $PREFIX 到影子层，
+        // 属磁盘 IO，必须放后台并给出「准备中」提示，不能卡住 UI。
+        sandboxPreparing = true
+        VorteXSandbox.prepareAsync(context) {
+            // 先在后台等待在途回收完成，保证 tmp/ 是干净 slate。
+            VorteXSandbox.awaitPendingPurge()
+            // 回调在后台线程，需切回主线程操作会话与状态
+            scope.launch {
+                sandboxPreparing = false
+                runCatching {
+                    val created = sessionManager.createSandboxSession(startImmediately = true)
+                    sessionManager.switchTo(created.id)
+                    VorteXSandbox.setActiveManualSessionId(created.id)
+                }
+            }
+        }
+    }
+
+    /** 关闭所有会话：走通知「结束会话」按钮的同一链路，交给 TermuxService 处理
+     *  （含 QEMU/proot 危险进程检测与数据丢失确认）；Compose 侧列表由
+     *  TermuxService.actionStopServiceForce() 收尾统一清空。 */
+    fun closeAllSessions() {
+        context.startService(
+            Intent(context, TermuxService::class.java)
+                .setAction(TermuxConstants.TERMUX_APP.TERMUX_SERVICE.ACTION_STOP_SERVICE)
+        )
+    }
+
+    /** 清理未初始化会话：移除所有尚未拉起进程（pid == 0）的会话条目。 */
+    fun cleanupUninitializedSessions() {
+        val targets = sessionManager.sessions.value.filter { it.session.pid == 0 }
+        targets.forEach { sessionManager.killSession(it.session.id) }
+        if (targets.isNotEmpty()) {
+            Toast.makeText(
+                context,
+                context.getString(R.string.cleanup_uninitialized_toast, targets.size),
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
+
+    /** 新建安全模式会话：与终端控制台 addNewSession(isFailSafe) 一致，立即启动并切换进入。 */
+    fun newFailsafeSession() {
+        val created = sessionManager.createDefaultSession(startImmediately = true, isFailsafe = true)
+        sessionManager.switchTo(created.id)
+    }
 
     /** 刷新会话列表（StateFlow 会自动 propagate，但手动触发 PullToRefresh 动画） */
     fun refreshNow() {
@@ -136,52 +234,6 @@ fun ComposeTerminalListScreen(
                         }
                     },
                     actions = {
-                        // VorteX 沙箱入口：位于「+」按钮左侧。
-                        // 总开关关闭时图标置灰，点击给出提示（不静默无响应）。
-                        val vortexSandboxEnabled = VorteXSandbox.isEnabled(context)
-                        GlassIconButton(
-                            onClick = {
-                                if (!vortexSandboxEnabled) {
-                                    Toast.makeText(
-                                        context,
-                                        context.getString(R.string.vortex_sandbox_disabled_toast),
-                                        Toast.LENGTH_SHORT
-                                    ).show()
-                                    return@GlassIconButton
-                                }
-                                // 限制同时仅一个手动沙箱会话：已存在则切换过去
-                                val title = context.getString(R.string.vortex_sandbox_session_title)
-                                val existing = sessionManager.sessions.value.firstOrNull { it.name == title }
-                                if (existing != null) {
-                                    sessionManager.switchTo(existing.session.id)
-                                    return@GlassIconButton
-                                }
-                                // 首次进入需复制约 95MB 的 $PREFIX 到影子层，
-                                // 属磁盘 IO，必须放后台并给出「准备中」提示，不能卡住 UI。
-                                sandboxPreparing = true
-                                VorteXSandbox.prepareAsync(context) {
-                                    // 先在后台等待在途回收完成，保证 tmp/ 是干净 slate。
-                                    VorteXSandbox.awaitPendingPurge()
-                                    // 回调在后台线程，需切回主线程操作会话与状态
-                                    scope.launch {
-                                        sandboxPreparing = false
-                                        runCatching {
-                                            val created = sessionManager.createSandboxSession(startImmediately = true)
-                                            sessionManager.switchTo(created.id)
-                                            VorteXSandbox.setActiveManualSessionId(created.id)
-                                        }
-                                    }
-                                }
-                            }
-                        ) {
-                            Icon(
-                                painter = painterResource(R.drawable.ic_sandbox),
-                                contentDescription = stringResource(R.string.vortex_sandbox_title),
-                                modifier = Modifier.size(24.dp),
-                                tint = if (vortexSandboxEnabled) MiuixTheme.colorScheme.onSurface
-                                else MiuixTheme.colorScheme.onSurface.copy(alpha = 0.35f)
-                            )
-                        }
                         GlassIconButton(onClick = {
                             // 直接用 ComposeSessionManager 创建会话，不依赖 Java 版 onNewTerminal。
                             // 效仿 Java 版策略：只创建未初始化的终端条目（不拉起进程、不跳转），
@@ -198,6 +250,22 @@ fun ComposeTerminalListScreen(
                                 imageVector = MiuixGlassIcons.Add,
                                 contentDescription = stringResource(R.string.new_terminal),
                                 modifier = Modifier.size(24.dp),
+                                tint = MiuixTheme.colorScheme.onSurface
+                            )
+                        }
+                        // 「更多」菜单：位于「+」按钮右侧，下拉面板由根级
+                        // GlassTransformPopup 承载（对齐 Agent 对话页的写法）。
+                        GlassIconButton(
+                            onClick = { showMoreMenu = true },
+                            modifier = Modifier.glassPopupAnchor(
+                                moreAnchor,
+                                cornerRadius = GlassTopAppBarDefaults.ButtonSize / 2
+                            )
+                        ) {
+                            Icon(
+                                imageVector = MiuixGlassIcons.More,
+                                contentDescription = stringResource(R.string.menu_more),
+                                modifier = Modifier.size(22.dp),
                                 tint = MiuixTheme.colorScheme.onSurface
                             )
                         }
@@ -225,6 +293,48 @@ fun ComposeTerminalListScreen(
                     size = 36.dp,
                     strokeWidth = 3.dp
                 )
+            }
+        }
+    )
+
+    // 排序选择弹窗
+    OverlayDialog(
+        show = showSortDialog,
+        onDismissRequest = { showSortDialog = false },
+        title = stringResource(R.string.menu_sort_sessions),
+        content = {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                val sortOptions = listOf(
+                    SESSION_SORT_OPEN_ORDER to R.string.sort_by_open_order,
+                    SESSION_SORT_BY_NAME to R.string.sort_by_name,
+                    SESSION_SORT_INITIALIZED_FIRST to R.string.sort_by_initialized
+                )
+                sortOptions.forEachIndexed { index, (mode, labelRes) ->
+                    val selected = sessionSortMode == mode
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                sessionSortMode = mode
+                                context.getSharedPreferences("app_settings", Context.MODE_PRIVATE)
+                                    .edit().putInt("terminal_session_sort_mode", mode).apply()
+                                showSortDialog = false
+                            }
+                            .padding(vertical = 14.dp, horizontal = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = stringResource(labelRes),
+                            fontSize = 15.sp,
+                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                            color = if (selected) MiuixTheme.colorScheme.primary
+                            else MiuixTheme.colorScheme.onSurface
+                        )
+                    }
+                    if (index != sortOptions.lastIndex) {
+                        HorizontalDivider()
+                    }
+                }
             }
         }
     )
@@ -430,7 +540,17 @@ fun ComposeTerminalListScreen(
                                 }
                             }
                         } else {
-                            itemsIndexed(allSessions) { index, info ->
+                            // 展示顺序按用户选定的排序模式（历史打开顺序 / 按字母 / 按是否初始化）
+                            val displaySessions = when (sessionSortMode) {
+                                SESSION_SORT_BY_NAME -> nameSnapshot
+                                    .sortedBy { (info, name) -> name.ifEmpty { info.name }.lowercase() }
+                                    .map { it.first }
+                                SESSION_SORT_INITIALIZED_FIRST -> allSessions.sortedBy { info ->
+                                    if (info.session.pid == 0) 1 else 0
+                                }
+                                else -> allSessions
+                            }
+                            itemsIndexed(displaySessions) { index, info ->
                                 val isCurrent = info.session.id == currentSessionId
                                 val sessionName by info.session.sessionName.collectAsState(initial = "")
                                 ComposeTerminalCard(
@@ -502,6 +622,62 @@ fun ComposeTerminalListScreen(
                         }
                     }
                 }
+            )
+        }
+    }
+
+    // 玻璃「更多」菜单：GlassTransformPopup 是 BoxScope 扩展且自带全屏点击关闭层，
+    // 必须挂在铺满全屏的 Box 里、置于 Scaffold 之后（同层后声明者在上），
+    // 与 Agent 对话页「挂在根 Box」的写法对齐。
+    // 宽屏/平板下页面 Box 相对组合根有 NavigationRail 偏移，而 anchor 的
+    // containerBounds 是 boundsInRoot()（组合根坐标）；先把零尺寸测量点钉在页面
+    // 原点，再把宿主 Box 平移回组合根原点，两个坐标系才能对齐（竖屏偏移为 0，是 no-op）。
+    var popupHostOrigin by remember { mutableStateOf(IntOffset.Zero) }
+    Box(
+        modifier = Modifier.onGloballyPositioned {
+            popupHostOrigin = IntOffset(
+                it.positionInRoot().x.roundToInt(),
+                it.positionInRoot().y.roundToInt()
+            )
+        }
+    )
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .offset { IntOffset(-popupHostOrigin.x, -popupHostOrigin.y) }
+    ) {
+        // backdrop 显式传 null：anchor 是 GlassIconButton，会经 GlassButtonSurface
+        // 发布自己的 surface（含折射材质），弹层直接用 anchor 的 surface，
+        // 读 LocalGlassTopAppBarBackdrop 在页面层恒为 null，传它只会埋錆弹。
+        GlassTransformPopup(
+            show = showMoreMenu,
+            onDismissRequest = { showMoreMenu = false },
+            anchor = moreAnchor,
+            backdrop = null,
+            anchorContent = {
+                Icon(MiuixGlassIcons.More, null, Modifier.size(22.dp), tint = MiuixTheme.colorScheme.onSurface)
+            },
+            simplified = true,
+        ) {
+            GlassPopupItem(
+                text = stringResource(R.string.menu_open_sandbox_session),
+                onClick = { showMoreMenu = false; openSandboxSession() }
+            )
+            GlassPopupItem(
+                text = stringResource(R.string.menu_close_all_sessions),
+                onClick = { showMoreMenu = false; closeAllSessions() }
+            )
+            GlassPopupItem(
+                text = stringResource(R.string.menu_cleanup_uninitialized),
+                onClick = { showMoreMenu = false; cleanupUninitializedSessions() }
+            )
+            GlassPopupItem(
+                text = stringResource(R.string.new_failsafe_session),
+                onClick = { showMoreMenu = false; newFailsafeSession() }
+            )
+            GlassPopupItem(
+                text = stringResource(R.string.menu_sort_sessions),
+                onClick = { showMoreMenu = false; showSortDialog = true }
             )
         }
     }
