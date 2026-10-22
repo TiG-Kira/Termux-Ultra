@@ -30,7 +30,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.termux.R
-import com.termux.app.activities.X11SettingsActivity
 import com.termux.app.compose.IntegratedTools
 import com.termux.shared.termux.TermuxConstants
 import top.yukonga.miuix.kmp.basic.Card
@@ -60,7 +59,10 @@ fun XServerScreen(
     addRequested: Boolean,
     onAddRequestedConsumed: () -> Unit,
     nestedScrollConnection: NestedScrollConnection? = null,
-    navBarBottomPadding: Dp = 0.dp
+    navBarBottomPadding: Dp = 0.dp,
+    refreshRequested: Boolean = false,
+    onRefreshRequestedConsumed: () -> Unit = {},
+    isRefreshing: MutableState<Boolean>? = null
 ) {
     val context = LocalContext.current
     val showAddDialog = remember { mutableStateOf(false) }
@@ -74,6 +76,15 @@ fun XServerScreen(
         while (true) {
             displays.value = detectActiveX11Displays()
             delay(3000)
+        }
+    }
+    // 手动刷新：父容器（RemoteScreen 顶栏刷新按钮）置位后立刻重探测一次当前端口
+    LaunchedEffect(refreshRequested) {
+        if (refreshRequested) {
+            isRefreshing?.value = true
+            displays.value = detectActiveX11Displays()
+            isRefreshing?.value = false
+            onRefreshRequestedConsumed()
         }
     }
 
@@ -128,7 +139,6 @@ fun XServerScreen(
                             onConnect = { launchX11Activity(context) }
                         )
                     }
-                    X11SettingsEntryCard()
                 }
             }
         }
@@ -520,56 +530,3 @@ private fun X11StateCard(
     }
 }
 
-@Composable
-private fun X11SettingsEntryCard() {
-    val context = LocalContext.current
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .clickable {
-                context.startActivity(Intent(context, X11SettingsActivity::class.java))
-            }
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(44.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(MiuixTheme.colorScheme.primary.copy(alpha = 0.12f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_settings),
-                    contentDescription = null,
-                    modifier = Modifier.size(24.dp),
-                    tint = MiuixTheme.colorScheme.primary
-                )
-            }
-
-            Spacer(Modifier.width(14.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = stringResource(R.string.x11_settings_title),
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MiuixTheme.colorScheme.onSurface,
-                    lineHeight = 22.sp
-                )
-            }
-
-            Icon(
-                painter = painterResource(R.drawable.ic_arrow_right),
-                contentDescription = null,
-                modifier = Modifier.size(20.dp),
-                tint = MiuixTheme.colorScheme.onSurfaceVariantSummary
-            )
-        }
-    }
-}

@@ -31,6 +31,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -168,11 +169,12 @@ fun X11SettingsScreen(onBack: () -> Unit) {
                 .then(glassPage.contentModifier)
                 .padding(pagePaddingWithoutTop(padding))
         ) {
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize(),
-                contentPadding = standaloneContentPadding(padding, bottom = 16.dp)
-            ) {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .nestedScroll(scrollBehavior.nestedScrollConnection),
+                    contentPadding = standaloneContentPadding(padding, bottom = 16.dp)
+                ) {
                 item(key = "section_output") { SmallTitle(text = stringResource(R.string.x11_section_output)) }
                 item(key = "card_output") {
                     SettingCard {
