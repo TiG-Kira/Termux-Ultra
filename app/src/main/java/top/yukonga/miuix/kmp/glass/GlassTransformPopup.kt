@@ -22,6 +22,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
@@ -420,6 +421,11 @@ fun BoxScope.GlassTransformPopup(
     }
     if (renderAnchorContent) {
         Box(
+            // 拷贝按 iconRect（未挂 glassPopupAnchorContent 时 = 整个控件 bounds）测量，
+            // 而调用方常只传图标本身（如「更多」按钮的 22dp 图标）；Box 默认顶左摆放会让
+            // 图标在回归终点偏到控件左上象限、溢出圆形玻璃底板外。居中摆放才能让拷贝
+            // 精确落回真实图标上（内容铺满拷贝区时居中是 no-op，不影响整控件拷贝）。
+            contentAlignment = Alignment.Center,
             modifier = Modifier
                 .layout { measurable, constraints ->
                     val placeable = measurable.measure(
