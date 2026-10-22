@@ -856,7 +856,7 @@
 
     <!-- Terminal top bar more menu -->
     <string name="menu_more">更多</string>
-    <string name="menu_open_sandbox_session">打开沙盒会话</string>
+    <string name="menu_open_sandbox_session">打开沙箱会话</string>
     <string name="menu_close_all_sessions">关闭所有会话</string>
     <string name="menu_cleanup_uninitialized">清理未初始化会话</string>
     <string name="menu_sort_sessions">排序会话</string>
