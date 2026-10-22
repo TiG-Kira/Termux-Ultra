@@ -958,6 +958,17 @@
     <string name="notice_board_hint">Tap for more</string>
     <string name="notice_board_loading">Loading…</string>
     <string name="notice_board_empty">No announcements</string>
+
+    <!-- Terminal top bar more menu -->
+    <string name="menu_more">More</string>
+    <string name="menu_open_sandbox_session">Open sandbox session</string>
+    <string name="menu_close_all_sessions">Close all sessions</string>
+    <string name="menu_cleanup_uninitialized">Clean up uninitialized sessions</string>
+    <string name="menu_sort_sessions">Sort sessions</string>
+    <string name="sort_by_open_order">By open order</string>
+    <string name="sort_by_name">By name</string>
+    <string name="sort_by_initialized">By initialization state</string>
+    <string name="cleanup_uninitialized_toast" formatted="true">Cleaned %1$d uninitialized sessions</string>
     <string name="overview_no_gpu_data">GPU data unavailable</string>
     <string name="overview_gpu_peak">Historical peak</string>
     <string name="overview_cpu_temp">Temperature: %1$.0f°C</string>
