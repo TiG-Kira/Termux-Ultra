@@ -55,6 +55,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.List
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.Campaign
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material.icons.rounded.Close
@@ -146,7 +147,8 @@ enum class OverviewCardType {
     MEMORY_MONITOR,
     PROCESS_LIST,
     STOP_ALL,
-    RESOURCE_ACTION
+    RESOURCE_ACTION,
+    NOTICE_BOARD
 }
 
 enum class CardSize {
@@ -339,8 +341,23 @@ class OverviewCardManager(context: Context) {
                     position = index,
                     resourceActionId = prefs.getString("${id}_resource_action_id", null)
                 )
-            }.mapIndexed { index, card -> card.copy(position = index) }
-            saveCards(cards)
+            }.mapIndexed { index, card -> card.copy(position = index) }.toMutableList()
+            // 老用户迁移：公告板组件默认补进总览页（只补一次，之后撤下/删除不再自动回来）；
+            // 先落卡片再落标志，中途被杀最坏也只是下次重复补卡（有 none 守卫兼底），不会丢卡
+            if (!prefs.getBoolean("notice_board_migrated", false) &&
+                cards.none { it.type == OverviewCardType.NOTICE_BOARD }
+            ) {
+                cards.add(
+                    OverviewCardConfig(
+                        "notice_board", OverviewCardType.NOTICE_BOARD,
+                        isVisible = true, size = CardSize.WIDE, position = cards.size
+                    )
+                )
+                saveCards(cards)
+                prefs.edit().putBoolean("notice_board_migrated", true).apply()
+            } else {
+                saveCards(cards)
+            }
             return migrateCardSizes(cards)
         }
         return getDefaultCards()
@@ -353,12 +370,13 @@ class OverviewCardManager(context: Context) {
     fun getDefaultCards(): List<OverviewCardConfig> {
         return listOf(
             OverviewCardConfig("tips_agent", OverviewCardType.TIPS_AGENT, isVisible = true, size = CardSize.WIDE, position = 0),
-            OverviewCardConfig("sessions", OverviewCardType.SESSIONS, isVisible = true, size = CardSize.WIDE, position = 1),
-            OverviewCardConfig("cpu", OverviewCardType.CPU_MONITOR, isVisible = true, size = CardSize.SMALL, position = 2),
-            OverviewCardConfig("gpu", OverviewCardType.GPU_MONITOR, isVisible = true, size = CardSize.SMALL, position = 3),
-            OverviewCardConfig("memory", OverviewCardType.MEMORY_MONITOR, isVisible = true, size = CardSize.SMALL, position = 4),
-            OverviewCardConfig("processes", OverviewCardType.PROCESS_LIST, isVisible = true, size = CardSize.WIDE, position = 5),
-            OverviewCardConfig("stop_all", OverviewCardType.STOP_ALL, isVisible = true, size = CardSize.SMALL, position = 6),
+            OverviewCardConfig("notice_board", OverviewCardType.NOTICE_BOARD, isVisible = true, size = CardSize.WIDE, position = 1),
+            OverviewCardConfig("sessions", OverviewCardType.SESSIONS, isVisible = true, size = CardSize.WIDE, position = 2),
+            OverviewCardConfig("cpu", OverviewCardType.CPU_MONITOR, isVisible = true, size = CardSize.SMALL, position = 3),
+            OverviewCardConfig("gpu", OverviewCardType.GPU_MONITOR, isVisible = true, size = CardSize.SMALL, position = 4),
+            OverviewCardConfig("memory", OverviewCardType.MEMORY_MONITOR, isVisible = true, size = CardSize.SMALL, position = 5),
+            OverviewCardConfig("processes", OverviewCardType.PROCESS_LIST, isVisible = true, size = CardSize.WIDE, position = 6),
+            OverviewCardConfig("stop_all", OverviewCardType.STOP_ALL, isVisible = true, size = CardSize.SMALL, position = 7),
         )
     }
     
@@ -794,7 +812,8 @@ fun OverviewScreen(
                                             isVisible = true,
                                             size = if (type == OverviewCardType.SESSIONS ||
                                                      type == OverviewCardType.PROCESS_LIST ||
-                                                     type == OverviewCardType.TIPS_AGENT) CardSize.WIDE
+                                                     type == OverviewCardType.TIPS_AGENT ||
+                                                     type == OverviewCardType.NOTICE_BOARD) CardSize.WIDE
                                                    else CardSize.SMALL,
                                             position = maxPosition + 1
                                         )
@@ -3104,6 +3123,116 @@ fun getCpuMaxCapacity(): Float {
     return Runtime.getRuntime().availableProcessors() * 100f
 }
 
+/**
+ * 公告板卡片：显示仓库 NOTICE.md 的简略内容，点击进入公告页。
+ */
+@Composable
+private fun NoticeBoardCard(
+    card: OverviewCardConfig,
+    isEditMode: Boolean,
+    onEditClick: () -> Unit
+) {
+    val context = LocalContext.current
+    val noticeState by NoticeBoardRepository.state.collectAsState()
+    LaunchedEffect(Unit) { NoticeBoardRepository.refreshIfNeeded() }
+    val accentColor = MiuixTheme.colorScheme.primary
+    val isWide = card.size == CardSize.WIDE
+
+    OverviewCardContainer(
+        card = card,
+        onEditClick = onEditClick,
+        isEditMode = isEditMode,
+        onClick = {
+            context.startActivity(
+                Intent(context, com.termux.app.activities.NoticeBoardActivity::class.java)
+            )
+        }
+    ) {
+        val cachedBrief = remember(noticeState) {
+            (noticeState as? NoticeBoardState.Ready)?.let { NoticeBoardRepository.brief(it.content, 60) }
+        }
+        val briefText = cachedBrief ?: when (noticeState) {
+            NoticeBoardState.Loading -> stringResource(R.string.notice_board_loading)
+            else -> stringResource(R.string.notice_board_empty)
+        }
+        if (isWide) {
+            Row(
+                modifier = Modifier.fillMaxSize(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                CardIconBox(
+                    icon = Icons.Rounded.Campaign,
+                    tint = accentColor,
+                    modifier = Modifier.size(48.dp),
+                    iconSize = 26.dp
+                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(R.string.notice_board_title),
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MiuixTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = briefText,
+                        fontSize = 13.sp,
+                        lineHeight = 17.sp,
+                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    CardStatusBadge(
+                        text = stringResource(R.string.notice_board_hint),
+                        color = accentColor
+                    )
+                }
+            }
+        } else {
+            Column(
+                modifier = Modifier.fillMaxSize(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                CardIconBox(
+                    icon = Icons.Rounded.Campaign,
+                    tint = accentColor,
+                    modifier = Modifier.size(52.dp),
+                    iconSize = 28.dp
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+                Text(
+                    text = stringResource(R.string.notice_board_title),
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MiuixTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = briefText,
+                    fontSize = 12.sp,
+                    lineHeight = 16.sp,
+                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.Center
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                CardStatusBadge(
+                    text = stringResource(R.string.notice_board_hint),
+                    color = accentColor
+                )
+            }
+        }
+    }
+}
+
 fun getCardTypeName(type: OverviewCardType): String {
     return when (type) {
         OverviewCardType.TIPS_AGENT -> "Tips & Agent"
@@ -3114,6 +3243,7 @@ fun getCardTypeName(type: OverviewCardType): String {
         OverviewCardType.PROCESS_LIST -> "Process List"
         OverviewCardType.STOP_ALL -> "Stop All"
         OverviewCardType.RESOURCE_ACTION -> "Resource Action"
+        OverviewCardType.NOTICE_BOARD -> "Notice Board"
     }
 }
 
@@ -3127,6 +3257,7 @@ fun getCardIcon(type: OverviewCardType): ImageVector {
         OverviewCardType.PROCESS_LIST -> Icons.AutoMirrored.Rounded.List
         OverviewCardType.STOP_ALL -> Icons.Rounded.Stop
         OverviewCardType.RESOURCE_ACTION -> Icons.Rounded.PlayArrow
+        OverviewCardType.NOTICE_BOARD -> Icons.Rounded.Campaign
     }
 }
 
@@ -4382,6 +4513,16 @@ private fun CardItem(
                 onLaunchAction = { action: ResourceAction ->
                     launchResourceAction(context, action, onExecuteScript)
                 },
+                onEditClick = {
+                    onCardSelected(card.id)
+                    onShowCardSettings()
+                }
+            )
+        }
+        OverviewCardType.NOTICE_BOARD -> {
+            NoticeBoardCard(
+                card = card,
+                isEditMode = isEditMode,
                 onEditClick = {
                     onCardSelected(card.id)
                     onShowCardSettings()

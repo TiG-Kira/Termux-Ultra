@@ -847,6 +847,12 @@
     <string name="overview_no_gpu_data">GPU 数据不可用</string>
     <string name="overview_gpu_peak">历史占用</string>
     <string name="overview_cpu_temp">温度：%1$.0f°C</string>
+
+    <!-- Notice Board -->
+    <string name="notice_board_title">公告板</string>
+    <string name="notice_board_hint">更多请点击</string>
+    <string name="notice_board_loading">加载中…</string>
+    <string name="notice_board_empty">暂无公告</string>
     <string name="overview_memory_used">已用：%1$s</string>
     <string name="overview_cpu_cores">核心：%1$d</string>
     <string name="overview_ai_termux_desc">与 Agent 沟通并帮您处理终端事务</string>
