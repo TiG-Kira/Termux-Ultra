@@ -24,11 +24,14 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.termux.R
+import com.termux.app.activities.X11SettingsActivity
+import com.termux.app.compose.IntegratedTools
 import com.termux.shared.termux.TermuxConstants
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Icon
@@ -39,10 +42,16 @@ import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.TextField
 import com.termux.app.compose.OverlayDialog
 import top.yukonga.miuix.kmp.theme.MiuixTheme
+import kotlinx.coroutines.delay
+import java.io.File
 
 /**
- * 远程页「XServer」标签：连接本机 Termux 的 X Server（经伴生应用渲染），
- * 或保存并连接远程主机的 X Server。连接动作 = 新建一个导出了 DISPLAY 的终端会话。
+ * 远程页「XServer」标签。
+ *
+ * 本机：像 VNC 一样动态探测正在使用的 X display（扫 $PREFIX/tmp/.X11-unix/X<n> 套接字），
+ * X11 集成开关开启且探测到显示器时，点卡片直接进入对应显示器的 X11 渲染页（不拉终端）；
+ * 未探测到显示器时显示常驻提示，引导用户在终端用 termux-x11 :N 指定显示器。
+ * 远程：保存主机条目，连接动作 = 新建一个导出了 DISPLAY（host:N → TCP 6000+N）的终端会话。
  */
 @Composable
 fun XServerScreen(
@@ -57,6 +66,16 @@ fun XServerScreen(
     val showAddDialog = remember { mutableStateOf(false) }
     val showEditDialog = remember { mutableStateOf(false) }
     val editingConnection = remember { mutableStateOf<XServerConnection?>(null) }
+    val x11Enabled = remember { IntegratedTools.isEnabled(context, IntegratedTools.Tool.TERMUX_X11) }
+
+    // 动态探测本机正在使用的 X display（3s 轮询一次，文件枚举开销可忽略）
+    val displays = remember { mutableStateOf<List<Int>>(emptyList()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            displays.value = detectActiveX11Displays()
+            delay(3000)
+        }
+    }
 
     if (addRequested && !showAddDialog.value) {
         showAddDialog.value = true
@@ -77,11 +96,41 @@ fun XServerScreen(
                 }
             }
     ) {
-        item {
-            XServerConnectionCard(
-                connection = XServerConnection.localTermux(),
-                onConnect = { connectToXServer(context, termuxService, XServerConnection.localTermux()) }
-            )
+        if (!x11Enabled) {
+            item(key = "local-disabled") {
+                X11StateCard(
+                    title = "X11 未启用",
+                    summary = "在 设置 → 集成工具 中开启 Termux:X11 后，即可在此直接进入显示器。",
+                    onClick = { IntegratedTools.showEnablePrompt(context, IntegratedTools.Tool.TERMUX_X11) }
+                )
+            }
+        } else if (displays.value.isEmpty()) {
+            // 常驻提示：未检测到正在使用的 display
+            item(key = "local-empty") {
+                X11StateCard(
+                    title = "本机 Termux 未启用显示器",
+                    summary = stringResource(R.string.x11_local_display_hint),
+                    onClick = null
+                )
+            }
+        } else {
+            item(key = "local-displays") {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    displays.value.forEach { n ->
+                        XServerConnectionCard(
+                            connection = XServerConnection(
+                                id = "local-x11-$n",
+                                name = "本机 Termux :$n",
+                                host = "127.0.0.1",
+                                displayNumber = n,
+                                isFromTermux = true
+                            ),
+                            onConnect = { launchX11Activity(context) }
+                        )
+                    }
+                    X11SettingsEntryCard()
+                }
+            }
         }
         if (connections.isEmpty()) {
             item {
@@ -325,43 +374,20 @@ private fun XServerEditDialog(
 }
 
 /**
- * 连接 XServer：新建一个导出了 DISPLAY 的终端会话并进入控制台。
+ * 连接远程 XServer：新建一个导出了 DISPLAY 的终端会话并进入控制台。
  *
- * 本机条目在终端进程空间里用 app_process 直启内嵌 X Server（CmdEntryPoint，同上游
- * `termux-x11 :N` 客户端命令），X Server 就绪后会向本应用广播 ACTION_START 并拉起
- * 渲染 Activity；APK 里没有内嵌 X Server 时回退到官方伴生应用。
+ * 本机 X Server 不走这里：XServer 页对本机条目直接拉起渲染 Activity
+ * （launchX11Activity），终端侧由 wrapper 脚本负责启动内嵌 X Server。
+ * 远程：仅导出 DISPLAY 后 exec 登录 shell，环境变量随 exec 链透传。
  */
 fun connectToXServer(context: Context, termuxService: com.termux.app.TermuxService?, connection: XServerConnection) {
-    if (connection.isFromTermux && runCatching { Class.forName("com.termux.x11.CmdEntryPoint") }.isFailure) {
-        // 内嵌 X Server 不在（AAR 未接线/被裁剪），退回伴生应用
-        val launched = runCatching {
-            val intent = context.packageManager.getLaunchIntentForPackage("com.termux.x11")
-            if (intent != null) {
-                context.startActivity(intent)
-                true
-            } else {
-                false
-            }
-        }.getOrDefault(false)
-        if (!launched) {
-            Toast.makeText(context, "未检测到 Termux:X11 伴生应用，无法启动本机 X Server", Toast.LENGTH_LONG).show()
-        }
-    }
-
     if (termuxService == null) {
         Toast.makeText(context, "核心服务未就绪，请稍后重试", Toast.LENGTH_SHORT).show()
         return
     }
 
-    // 本机：app_process 直启内嵌 X Server（上游同款命令行），失败信息留在会话里可见
     val prefix = TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH
-    val script = if (connection.isFromTermux) {
-        "export CLASSPATH=\"$(/system/bin/pm path com.termux | head -n1 | cut -d: -f2)\"; " +
-            "exec /system/bin/app_process / --nice-name=termux-x11 com.termux.x11.CmdEntryPoint :${connection.displayNumber}"
-    } else {
-        // 远程：仅导出 DISPLAY 后 exec 登录 shell，环境变量随 exec 链透传
-        "export DISPLAY=${connection.displayValue}; exec $prefix/login"
-    }
+    val script = "export DISPLAY=${connection.displayValue}; exec $prefix/login"
     val session = termuxService.createTermuxSession(
         null,
         arrayOf("-c", script),
@@ -371,14 +397,9 @@ fun connectToXServer(context: Context, termuxService: com.termux.app.TermuxServi
         "X11 ${connection.displayValue}"
     )
     if (session != null) {
-        // 先把 X Server 日志所在的 TermuxActivity 起好作为基底窗口
         val intent = Intent(context, com.termux.app.TermuxActivity::class.java)
         intent.putExtra("sessionHandle", session.getTerminalSession().mHandle)
         context.startActivity(intent)
-        // 再按「小窗→分屏→兜底直切」渐进激活 X11 渲染页
-        if (connection.isFromTermux) {
-            launchX11Activity(context)
-        }
     }
 }
 
@@ -431,4 +452,124 @@ private fun trySplitScreen(context: Context, intent: Intent): Boolean {
         context.startActivity(intent, opts.toBundle())
         true
     }.getOrDefault(false)
+}
+
+/** 扫描本机正在使用的 X display（$PREFIX/tmp/.X11-unix/X<n> 套接字），升序返回。 */
+private fun detectActiveX11Displays(): List<Int> {
+    val dir = File(TermuxConstants.TERMUX_TMP_PREFIX_DIR_PATH, ".X11-unix")
+    val re = Regex("^X(\\d+)$")
+    return runCatching {
+        dir.listFiles { f -> re.matches(f.name) }
+            ?.mapNotNull { re.find(it.name)?.groupValues?.get(1)?.toIntOrNull() }
+            ?.distinct()?.sorted().orEmpty()
+    }.getOrDefault(emptyList())
+}
+
+@Composable
+private fun X11StateCard(
+    title: String,
+    summary: String,
+    onClick: (() -> Unit)? = null
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .let { if (onClick != null) it.clickable { onClick() } else it }
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(MiuixTheme.colorScheme.primary.copy(alpha = 0.12f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_extension),
+                    contentDescription = null,
+                    modifier = Modifier.size(24.dp),
+                    tint = MiuixTheme.colorScheme.primary
+                )
+            }
+
+            Spacer(Modifier.width(14.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MiuixTheme.colorScheme.onSurface,
+                    lineHeight = 22.sp
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = summary,
+                    fontSize = 13.sp,
+                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                    lineHeight = 18.sp
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun X11SettingsEntryCard() {
+    val context = LocalContext.current
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .clickable {
+                context.startActivity(Intent(context, X11SettingsActivity::class.java))
+            }
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(MiuixTheme.colorScheme.primary.copy(alpha = 0.12f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_settings),
+                    contentDescription = null,
+                    modifier = Modifier.size(24.dp),
+                    tint = MiuixTheme.colorScheme.primary
+                )
+            }
+
+            Spacer(Modifier.width(14.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(R.string.x11_settings_title),
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MiuixTheme.colorScheme.onSurface,
+                    lineHeight = 22.sp
+                )
+            }
+
+            Icon(
+                painter = painterResource(R.drawable.ic_arrow_right),
+                contentDescription = null,
+                modifier = Modifier.size(20.dp),
+                tint = MiuixTheme.colorScheme.onSurfaceVariantSummary
+            )
+        }
+    }
 }
