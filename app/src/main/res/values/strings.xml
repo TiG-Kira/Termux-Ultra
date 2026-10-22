@@ -1416,7 +1416,7 @@
     <string name="termux_ultra_eula">Termux Ultra End User License Agreement</string>
     <string name="i_agree_license">I have read and agree to the license terms</string>
     <string name="auto_execute_new_session">Auto-execute in New Session</string>
-    <string name="edit_welcome_motd">Edit Welcome Text (motd)</string>
+    <string name="edit_welcome_motd">Edit Welcome Text (motd.sh)</string>
     <string name="editor_tools">Editor Tools</string>
     <string name="notification_permission">Notification Permission</string>
     <string name="storage_breakdown">Storage Breakdown</string>

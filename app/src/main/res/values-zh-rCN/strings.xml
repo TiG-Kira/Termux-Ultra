@@ -1393,7 +1393,7 @@
     <string name="termux_ultra_eula">Termux Ultra 最终用户许可协议</string>
     <string name="i_agree_license">我已阅读并同意上述许可条款</string>
     <string name="auto_execute_new_session">新会话自动执行</string>
-    <string name="edit_welcome_motd">编辑欢迎文本 (motd)</string>
+    <string name="edit_welcome_motd">编辑欢迎文本 (motd.sh)</string>
     <string name="editor_tools">编辑器工具</string>
     <string name="notification_permission">通知权限</string>
     <string name="storage_breakdown">分类占用</string>

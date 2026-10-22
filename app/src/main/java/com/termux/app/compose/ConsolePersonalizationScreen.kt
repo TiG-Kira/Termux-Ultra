@@ -38,6 +38,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.termux.R
 import com.termux.app.activities.TextEditorActivity
+import com.termux.shared.termux.TermuxConstants
+import java.io.File
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.Scaffold
@@ -53,11 +55,15 @@ import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.preference.OverlayDropdownPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
+/** 欢迎文本脚本路径：login（bootstrap bin/login）在新会话时若存在则执行它，优先于 /usr/etc/motd。 */
+private val MOTD_SCRIPT_PATH = TermuxConstants.TERMUX_DATA_HOME_DIR_PATH + "/motd.sh"
+
 /**
  * 控制台个性化页（独立 Activity）：自动启动终端控制台、编辑器工具、新会话自动执行、编辑欢迎文本。
  *
  * 与控制台设置页同套 UI 范式（玻璃顶栏 + SettingCard + 即时生效）。自动启动走 [LaunchPrefs] 的
- * StateFlow；编辑器工具与新会话命令走 termux_preferences；欢迎文本通过内置编辑器或 vim 打开 motd 文件。
+ * StateFlow；编辑器工具与新会话命令走 termux_preferences；欢迎文本脚本 ~/.termux/motd.sh 通过
+ * 内置编辑器或 vim 打开（首次自动落地模板），见 #336。
  */
 @Composable
 fun ConsolePersonalizationScreen(onBack: () -> Unit) {
@@ -139,20 +145,21 @@ fun ConsolePersonalizationScreen(onBack: () -> Unit) {
                             )
                             ArrowPreference(
                                 title = stringResource(R.string.edit_welcome_motd),
-                                summary = "直接编辑 /data/data/com.termux/files/usr/etc/motd",
+                                summary = "编辑 ~/.termux/motd.sh，每次新会话执行，优先于 /usr/etc/motd",
                                 onClick = {
+                                    ensureMotdScript()
                                     val tool = prefs.getString("editor_tool", "internal") ?: "internal"
                                     if (tool == "vim") {
                                         // 在终端中用 vim 打开
                                         val intent = Intent(Intent.ACTION_SEND)
                                         intent.setPackage(context.packageName)
-                                        intent.putExtra("command_path", "/data/data/com.termux/files/usr/etc/motd")
-                                        intent.putExtra("command", "vim /data/data/com.termux/files/usr/etc/motd")
+                                        intent.putExtra("command_path", MOTD_SCRIPT_PATH)
+                                        intent.putExtra("command", "vim $MOTD_SCRIPT_PATH")
                                         intent.putExtra("session_name", "motd")
                                         context.startActivity(intent)
                                     } else {
                                         val intent = Intent(context, TextEditorActivity::class.java)
-                                        intent.putExtra("file_path", "/data/data/com.termux/files/usr/etc/motd")
+                                        intent.putExtra("file_path", MOTD_SCRIPT_PATH)
                                         context.startActivity(intent)
                                     }
                                 },
@@ -204,6 +211,26 @@ fun ConsolePersonalizationScreen(onBack: () -> Unit) {
 /** 打开控制台个性化页。返回键由 Activity 栈自然回到设置页，无需手动回传结果。 */
 fun openConsolePersonalization(context: Context) {
     context.startActivity(Intent(context, com.termux.app.activities.ConsolePersonalizationActivity::class.java))
+}
+
+/**
+ * 首次编辑时落地 motd.sh 模板。motd.sh 是被 login 直接执行的脚本（缺执行位时 login 会自动
+ * chmod u+x），纯文本须包在 heredoc 内才原样输出，模板默认给出该结构，用户改文本行即可。
+ */
+private fun ensureMotdScript() {
+    try {
+        val file = File(MOTD_SCRIPT_PATH)
+        if (file.exists()) return
+        file.parentFile?.mkdirs()
+        file.writeText(
+            "#!/data/data/com.termux/files/usr/bin/sh\n" +
+                "# 欢迎文本脚本：每次打开新终端会话时执行，输出内容即欢迎文本（优先于 /usr/etc/motd）。\n" +
+                "# 在下面两个 MOTD_EOF 之间编辑多行文本即可；也可替换为任意 shell 命令。\n" +
+                "cat <<'MOTD_EOF'\n" +
+                "Welcome to Termux!\n" +
+                "MOTD_EOF\n"
+        )
+    } catch (_: Throwable) {}
 }
 
 /** 设置项左侧图标：圆角方块底 + 24dp 矢量图标。与 SettingsScreen / IntegratedToolsConfig 同款视觉。 */
