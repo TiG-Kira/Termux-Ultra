@@ -12,6 +12,7 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -74,6 +75,24 @@ object GlassTerminalBarDefaults {
      * 尾段只轻扫首行顶部一点点，渐隐观感保留、文字恢复可读。
      */
     val BandOverhang: Dp = 8.dp
+
+    /**
+     * 栏身内部的底部留白：副标题之下、栏下沿之上额外让出的空隙。
+     *
+     * 渐隐带的色标是比例（0.86 起坡），栏身加长后实色段随之向下延伸约 0.86 × 留白，
+     * 副标题与终端首行之间才留得出空隙。它只负责把渐隐带压低，首行不再被尾段压住
+     * 靠的是调用方应用的 [ContentTopInset]。
+     */
+    val BottomGap: Dp = 8.dp
+
+    /**
+     * 终端内容顶部额外避让的距离。调用方需自行 `padding(top = ContentTopInset)`。
+     *
+     * 渐隐尾段会越过栏下沿 [BandOverhang] 压在首行上，内容必须再往下让出相同的距离，
+     * 首行才能完全脱离尾段、不再被洗白；多出的 4dp 是尾段与首行之间的最小净空（勿再压缩，
+     * Scaffold 的内容 padding 比顶栏测量晚一帧到位）。
+     */
+    val ContentTopInset: Dp = BandOverhang + 4.dp
 
     /** 收缩/展开过渡时长（对齐 AppMotion.NORMAL）。 */
     val CollapseDuration: Int = 220
@@ -143,7 +162,7 @@ object GlassTerminalBarDefaults {
  *
  * **动态委托**：标题与副标题的位置、大小、排布，玻璃按钮的底盘/材质/阴影机制，展开↔收缩的
  * 高度过渡，全部委托给原版 [GlassTopAppBar]（其内部 [top.yukonga.miuix.kmp.basic.BlurTopAppBar]
- * 的布局规格即「原版」口径），本栏只包两层终端专属外挂：
+ * 的布局规格即「原版」口径），本栏只包三层终端专属外挂：
  *
  * 1. **常驻渐隐背景板**：原版 band 的显隐跟随滚动向的 mask 动画（展开态不显示），终端要求
  *    两种状态下都压在内容之上、且 [bandColor] 随时可改——所以自己画一层常驻板（颜色走
@@ -152,6 +171,9 @@ object GlassTerminalBarDefaults {
  *    由 [collapsed] 命令动画其 `heightOffset` 驱动大标题折叠；同一个命令经 `isContentScrolled`
  *    驱动按钮材质浮起——展开态按钮是裸图标（无底盘/玻璃/阴影，同原版页顶行为），收缩态
  *    pill 完整浮起。栏自身没有任何自动触发源，命令之间持续保持当前状态。
+ * 3. **栏底留白**：经原版 `bottomContent` 槽在栏下沿补 [GlassTerminalBarDefaults.BottomGap]，
+ *    标题（含副标题）与终端首行之间因此有空隙；调用方还需自行应用
+ *    [GlassTerminalBarDefaults.ContentTopInset] 让首行避开渐隐尾段。
  *
  * 颜色三轨，均可随时切换：
  * - [colorStyle]：亮色 / 暗色 / 跟随系统，驱动收缩态默认文字色与玻璃 chrome（按钮底板、描边）；
@@ -285,6 +307,11 @@ fun GlassTerminalBar(
             actions = {
                 actions()
                 trailingIcon()
+            },
+            bottomContent = {
+                // 栏底补白：栏身因此变长，渐隐带（按栏高绘制）的实色段随之向下延伸，
+                // 副标题与终端首行之间留出空隙。
+                Spacer(Modifier.height(GlassTerminalBarDefaults.BottomGap))
             },
             onBlankTap = onBlankTap,
         )
