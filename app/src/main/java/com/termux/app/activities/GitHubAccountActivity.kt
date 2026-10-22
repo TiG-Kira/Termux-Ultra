@@ -164,6 +164,9 @@ class GitHubAccountActivity : ComponentActivity() {
                                 }
                             }
 
+                            // 公告板：显示仓库 NOTICE.md 简略内容，点击进入公告页
+                            item { NoticeBoardPreviewCard() }
+
                             // 反馈问题
                             item {
                                 Card(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp))) {

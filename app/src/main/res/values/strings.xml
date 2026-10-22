@@ -952,6 +952,12 @@
     <string name="overview_card_visible">Visible</string>
     <string name="overview_card_hidden">Hidden</string>
     <string name="overview_no_cpu_data">CPU data unavailable</string>
+
+    <!-- Notice Board -->
+    <string name="notice_board_title">Notice Board</string>
+    <string name="notice_board_hint">Tap for more</string>
+    <string name="notice_board_loading">Loading…</string>
+    <string name="notice_board_empty">No announcements</string>
     <string name="overview_no_gpu_data">GPU data unavailable</string>
     <string name="overview_gpu_peak">Historical peak</string>
     <string name="overview_cpu_temp">Temperature: %1$.0f°C</string>
