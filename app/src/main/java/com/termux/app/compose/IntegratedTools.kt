@@ -168,6 +168,23 @@ object IntegratedTools {
                 }
             }.start()
         }
+        // API/GUI 开关切换时同步 am broadcast wrapper：两个插件的客户端绑定都硬编码
+        // 独立插件组件名（com.termux.api/.TermuxApiReceiver、com.termux.gui/.GUIReceiver），
+        // 需要 wrapper 改写为宿主组件才能连到内置插件；二者共用一个 wrapper，
+        // 任一开关开启即需就位，全部关闭才移除
+        if (tool == Tool.TERMUX_API || tool == Tool.TERMUX_GUI) {
+            Thread {
+                try {
+                    if (isEnabled(context, Tool.TERMUX_API) || isEnabled(context, Tool.TERMUX_GUI)) {
+                        TermuxApiBroadcastFix.applyAmWrapper(context.applicationContext)
+                    } else {
+                        TermuxApiBroadcastFix.removeAmWrapper()
+                    }
+                } catch (t: Throwable) {
+                    android.util.Log.w("IntegratedTools", "am wrapper sync failed", t)
+                }
+            }.start()
+        }
     }
 
     /**

@@ -6,20 +6,24 @@ import com.termux.shared.termux.TermuxConstants
 import java.io.File
 
 /**
- * Fixes the "termux-api commands hang" problem on Android 14+ (API 34+).
+ * Fixes the "termux-api commands hang" and "termux-gui can't find plugin" problems.
  *
  * Root cause (confirmed from termux-api-package/termux-api.c line 251):
  *   execv(PREFIX "/bin/am", child_argv);
  * The C client binary calls $PREFIX/bin/am via ABSOLUTE PATH (not PATH lookup),
  * with a hard-coded component "com.termux.api/.TermuxApiReceiver" (line 236).
  *
- * In integrated mode our package is "com.termux", so the real receiver is
- * "com.termux/com.termux.api.TermuxApiReceiver".  The broadcast silently fails,
- * ResultReturner never runs, and the termux-* command hangs forever.
+ * The termux-gui python/bash bindings have the same issue: they hard-code the
+ * broadcast component "com.termux.gui/.GUIReceiver" (termuxgui/connection.py,
+ * tgui-bash.sh), which cannot resolve in integrated mode either.
+ *
+ * In integrated mode our package is "com.termux", so the real receivers are
+ * "com.termux/com.termux.api.TermuxApiReceiver" and
+ * "com.termux/com.termux.gui.GUIReceiver".  The broadcasts silently fail.
  *
  * Fix: replace $PREFIX/bin/am itself with a wrapper script that rewrites the
- * component name for termux-api broadcasts.  The original am is backed up as
- * am.real and all non-termux-api calls are passed through unchanged.
+ * component names for termux-api / termux-gui broadcasts.  The original am is
+ * backed up as am.real and all other calls are passed through unchanged.
  *
  * Why PATH hook didn't work: the C client uses execv() with an absolute path,
  * so it never searches PATH.  Replacing $PREFIX/bin/am directly is the only
@@ -50,7 +54,7 @@ object TermuxApiBroadcastFix {
      * Marker placed on line 2 of the wrapper (line 1 is the mandatory shebang).
      * isOurWrapper() checks lines 1..4 so an exact line-number match is not needed.
      */
-    private const val HOOK_MARKER = "# TERMUX-ULTRA termux-api broadcast fix v3"
+    private const val HOOK_MARKER = "# TERMUX-ULTRA am broadcast fix v4"
 
     /** Literal dollar character (Unicode escape avoids Kotlin string-template). */
     private const val DOL = "\u0024"
@@ -68,8 +72,8 @@ object TermuxApiBroadcastFix {
         // Line 2: marker (so isOurWrapper recognises the file)
         appendLine(HOOK_MARKER)
         appendLine("# Wrapper installed by TermuxApiBroadcastFix.")
-        appendLine("# Rewrites com.termux.api/.TermuxApiReceiver -> com.termux/com.termux.api.TermuxApiReceiver")
-        appendLine("# for termux-api broadcasts in integrated mode.  All other calls pass through.")
+        appendLine("# Rewrites hard-coded plugin components to the integrated host package")
+        appendLine("# (termux-api / termux-gui broadcasts).  All other calls pass through.")
         appendLine("")
         // Build safely-quoted argument list, rewriting the component when found.
         appendLine("next_is_component=0")
@@ -80,6 +84,8 @@ object TermuxApiBroadcastFix {
         appendLine("        case " + '"' + d + "a" + '"' + " in")
         appendLine("            com.termux.api/.TermuxApiReceiver)")
         appendLine("                a=com.termux/com.termux.api.TermuxApiReceiver ;;")
+        appendLine("            com.termux.gui/.GUIReceiver)")
+        appendLine("                a=com.termux/com.termux.gui.GUIReceiver ;;")
         appendLine("        esac")
         appendLine("    fi")
         appendLine("    case " + '"' + d + "a" + '"' + " in")
@@ -123,7 +129,7 @@ object TermuxApiBroadcastFix {
                 return
             }
 
-            Logger.logInfo(LOG_TAG, "---- Installing am wrapper (v3) ----")
+            Logger.logInfo(LOG_TAG, "---- Installing am wrapper (v4) ----")
             logFileInfo("BEFORE-install", AM_BIN)
             logFileInfo("BEFORE-install", AM_REAL)
 
@@ -239,7 +245,9 @@ object TermuxApiBroadcastFix {
         sb.appendLine("fi")
         // 3) Backup original am -> am.real via `cp -p` to preserve ALL attributes
         //    (mode/uid/gid/mtime/acls/SELinux).  Only if am.real does not already exist.
-        sb.appendLine("if [ -f \"$AM_BIN\" ] && [ ! -f \"$AM_REAL\" ]; then")
+        //    Guard: never back up our own wrapper (e.g. v3 wrapper with am.real lost
+        //    would otherwise be copied into am.real and the original am lost for good).
+        sb.appendLine("if [ -f \"$AM_BIN\" ] && [ ! -f \"$AM_REAL\" ] && ! grep -qF \"TERMUX-ULTRA\" \"$AM_BIN\" 2>/dev/null; then")
         sb.appendLine("    echo '[install] copying (cp -p) am -> am.real to preserve attrs'")
         sb.appendLine("    cp -p \"$AM_BIN\" \"$AM_REAL\" || exit 1")
         sb.appendLine("    chmod 0755 \"$AM_REAL\" || true")
