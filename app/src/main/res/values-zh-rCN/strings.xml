@@ -1458,7 +1458,7 @@
     <string name="contributor_1_name">awkoo</string>
     <string name="contributor_1_username">@awkox</string>
     <string name="contributor_yhlfurry_name">椰灰狼</string>
-    <string name="contributor_yhlfurry_summary">@YHLFurry · 维护者</string>
+    <string name="contributor_yhlfurry_summary">@YHLFurry</string>
     <string name="contributor_yhlfurry_github">YHLFurry</string>
     <string name="github_login_title">使用 GitHub 登录</string>
     <string name="github_login_summary">登录到 Termux Ultra 来快速反馈问题、查看仓库焦点讨论内容</string>
