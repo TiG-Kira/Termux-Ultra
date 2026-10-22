@@ -127,11 +127,13 @@ object IntegratedTools {
             "com.termux.gui.GUIService",
             "com.termux.gui.GUIReceiver"
         )
-        // Termux:X11 内嵌 AAR（:lorie）的组件清单，随开关启停
+        // Termux:X11 内嵌 AAR（:lorie）的组件清单，随开关启停。
+        // 注意：LoriePreferences（原生 X11 设置页）已从清单置 enabled=false 并移出本列表，
+        // 由其接收器 LoriePreferences$Receiver 仍保留以处理 :x11 进程的配置广播；
+        // X11 设置统一走我们的 miuix 页 X11SettingsActivity。
         Tool.TERMUX_X11 -> listOf(
             "com.termux.x11.MainActivity",
             "com.termux.x11.MainActivity\$MainActivityTagged",
-            "com.termux.x11.LoriePreferences",
             "com.termux.x11.LoriePreferences\$Receiver",
             "com.termux.x11.LorieApp\$Receiver",
             "com.termux.x11.utils.KeyInterceptor"

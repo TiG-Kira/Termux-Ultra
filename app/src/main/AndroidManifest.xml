@@ -568,7 +568,8 @@
             android:process=":x11" />
         <activity
             android:name="com.termux.x11.LoriePreferences"
-            android:process=":x11" />
+            android:process=":x11"
+            android:enabled="false" />
         <receiver
             android:name="com.termux.x11.LoriePreferences$Receiver"
             android:process=":x11" />

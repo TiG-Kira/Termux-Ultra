@@ -92,6 +92,8 @@ fun RemoteScreen(
     val vncScanRequested = remember { mutableStateOf(false) }
     val sshAddRequested = remember { mutableStateOf(false) }
     val xserverAddRequested = remember { mutableStateOf(false) }
+    val xserverRefreshRequested = remember { mutableStateOf(false) }
+    val xserverRefreshing = remember { mutableStateOf(false) }
     val darkTheme = isSystemInDarkTheme()
     val topBarIconColor = if (darkTheme) androidx.compose.ui.graphics.Color.White else androidx.compose.ui.graphics.Color.Black
 
@@ -322,6 +324,24 @@ fun RemoteScreen(
                                         contentDescription = "添加",
                                         tint = topBarIconColor
                                     )
+                                }
+                                GlassIconButton(
+                                    onClick = {
+                                        if (!xserverRefreshing.value) {
+                                            xserverRefreshRequested.value = true
+                                        }
+                                    },
+                                    enabled = !xserverRefreshing.value
+                                ) {
+                                    if (xserverRefreshing.value) {
+                                        CircularProgressIndicator(size = 24.dp, strokeWidth = 2.dp)
+                                    } else {
+                                        Icon(
+                                            imageVector = MiuixGlassIcons.Refresh,
+                                            contentDescription = "刷新显示器",
+                                            tint = topBarIconColor
+                                        )
+                                    }
                                 }
                             } else {
                                 GlassIconButton(
@@ -598,7 +618,10 @@ fun RemoteScreen(
                                     addRequested = xserverAddRequested.value,
                                     onAddRequestedConsumed = { xserverAddRequested.value = false },
                                     nestedScrollConnection = scrollBehavior.nestedScrollConnection,
-                                    navBarBottomPadding = navBarBottomPadding
+                                    navBarBottomPadding = navBarBottomPadding,
+                                    refreshRequested = xserverRefreshRequested.value,
+                                    onRefreshRequestedConsumed = { xserverRefreshRequested.value = false },
+                                    isRefreshing = xserverRefreshing
                                 )
                                 tabSshIndex -> com.termux.app.ssh.SshScreen(
                                     connections = sshConnections,

@@ -119,16 +119,8 @@ fun IntegratedToolsConfigScreen(onBack: () -> Unit) {
     // Termux:API / Termux:Boot 没有各自的配置 Activity，只提供使用说明弹窗
     var showApiHelpDialog by remember { mutableStateOf(false) }
     var showBootHelpDialog by remember { mutableStateOf(false) }
-    // Termux:X11 配置弹窗（启动参数 + 显示模式）；Termux:GUI 只有使用说明
-    var showX11ConfigDialog by remember { mutableStateOf(false) }
+    // Termux:GUI 只有使用说明
     var showGuiHelpDialog by remember { mutableStateOf(false) }
-    // 弹窗打开那一刻才从偏好读初始值：key 变化时 remember 重新求值
-    var x11Args by remember(showX11ConfigDialog) {
-        mutableStateOf(IntegratedTools.getConfigString(context, IntegratedTools.KEY_X11_LAUNCH_ARGS, ""))
-    }
-    var x11Fullscreen by remember(showX11ConfigDialog) {
-        mutableStateOf(IntegratedTools.getConfigBoolean(context, IntegratedTools.KEY_X11_FULLSCREEN, false))
-    }
 
     val hasAnyEnabled = apiEnabled || bootEnabled || stylingEnabled || taskerEnabled || widgetEnabled ||
         x11Enabled || guiEnabled
@@ -221,10 +213,10 @@ fun IntegratedToolsConfigScreen(onBack: () -> Unit) {
                             }
                             if (x11Enabled) {
                                 ToolConfigArrow(
-                                    title = stringResource(R.string.termux_x11_config),
+                                    title = stringResource(R.string.x11_settings_title),
                                     summary = stringResource(R.string.termux_x11_config_summary),
                                     icon = Icons.Rounded.DesktopWindows,
-                                    onClick = { showX11ConfigDialog = true }
+                                    onClick = { openX11Settings(context) }
                                 )
                             }
                             if (guiEnabled) {
@@ -291,49 +283,6 @@ fun IntegratedToolsConfigScreen(onBack: () -> Unit) {
             }
         )
 
-        // ---------- Termux:X11 display settings ----------
-        OverlayDialog(
-            title = stringResource(R.string.termux_x11_config),
-            show = showX11ConfigDialog,
-            onDismissRequest = { showX11ConfigDialog = false },
-            content = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    TextField(
-                        value = x11Args,
-                        onValueChange = { x11Args = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        label = stringResource(R.string.termux_x11_launch_args),
-                        useLabelAsPlaceholder = true
-                    )
-                    SwitchPreference(
-                        title = stringResource(R.string.termux_x11_fullscreen),
-                        summary = stringResource(R.string.termux_x11_fullscreen_summary),
-                        checked = x11Fullscreen,
-                        onCheckedChange = { x11Fullscreen = it }
-                    )
-                    Row(horizontalArrangement = Arrangement.SpaceBetween) {
-                        TextButton(
-                            text = stringResource(R.string.cancel),
-                            onClick = { showX11ConfigDialog = false },
-                            modifier = Modifier.weight(1f)
-                        )
-                        Spacer(Modifier.width(16.dp))
-                        TextButton(
-                            text = stringResource(R.string.save),
-                            onClick = {
-                                // 与开关同源：写进 integrated_tools_prefs，点保存一次性提交
-                                IntegratedTools.setConfigString(context, IntegratedTools.KEY_X11_LAUNCH_ARGS, x11Args.trim())
-                                IntegratedTools.setConfigBoolean(context, IntegratedTools.KEY_X11_FULLSCREEN, x11Fullscreen)
-                                showX11ConfigDialog = false
-                            },
-                            modifier = Modifier.weight(1f),
-                            colors = ButtonDefaults.textButtonColorsPrimary()
-                        )
-                    }
-                }
-            }
-        )
-
         // ---------- Termux:GUI usage guide ----------
         OverlayDialog(
             title = stringResource(R.string.termux_gui_help),
@@ -363,6 +312,11 @@ fun IntegratedToolsConfigScreen(onBack: () -> Unit) {
  */
 fun openIntegratedToolsConfig(context: Context) {
     context.startActivity(Intent(context, com.termux.app.activities.IntegratedToolsConfigActivity::class.java))
+}
+
+/** 打开 X11 设置页（miuix 化设置，取代原生 LoriePreferences）。 */
+fun openX11Settings(context: Context) {
+    context.startActivity(Intent(context, com.termux.app.activities.X11SettingsActivity::class.java))
 }
 
 /** 工具自带配置页的入口。这些 Activity 随工具开关被整体禁用，缺失时静默失败而非崩溃。 */
