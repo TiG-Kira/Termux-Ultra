@@ -29,6 +29,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.onSizeChanged
@@ -77,6 +78,16 @@ object GlassTerminalBarDefaults {
     val BandOverhang: Dp = 8.dp
 
     /**
+     * 渐隐带在 [BandOverhang] 之外再向下压的距离。
+     *
+     * 栏底补白（[BottomGap]）与内容让位（[ContentTopInset]）拉开后，副标题与终端首行之间
+     * 已有整行空隙，渐隐段却停在空隙上沿、显得悬在半空。这里只把渐隐带往下多铺 4dp，
+     * 吃掉一部分空隙——栏高与内容位置都不动；尾段末端 alpha 已归零（见 [bandBrush]），
+     * 首行起点正好落在全透明处，不会被洗白。上限是 [ContentTopInset] 里预留的净空。
+     */
+    val BandDrop: Dp = 4.dp
+
+    /**
      * 栏身内部的底部留白：副标题之下、栏下沿之上额外让出的空隙。
      *
      * 渐隐带的色标是比例（0.86 起坡），栏身加长后实色段随之向下延伸约 0.86 × 留白，
@@ -89,8 +100,9 @@ object GlassTerminalBarDefaults {
      * 终端内容顶部额外避让的距离。调用方需自行 `padding(top = ContentTopInset)`。
      *
      * 渐隐尾段会越过栏下沿 [BandOverhang] 压在首行上，内容必须再往下让出相同的距离，
-     * 首行才能完全脱离尾段、不再被洗白；多出的 4dp 是尾段与首行之间的最小净空（勿再压缩，
-     * Scaffold 的内容 padding 比顶栏测量晚一帧到位）。
+     * 首行才能完全脱离尾段、不再被洗白。多出的 4dp 正好被 [BandDrop] 用满：尾段末端落在
+     * 首行行框顶端、alpha 已归零，字形本身还留有余量；再往下压就会碰到文字。这段让位
+     * 不能再压缩，Scaffold 的内容 padding 比顶栏测量晚一帧到位。
      */
     val ContentTopInset: Dp = BandOverhang + 4.dp
 
@@ -137,15 +149,33 @@ object GlassTerminalBarDefaults {
     )
 
     /**
+     * 由终端背景色派生的栏底色：浅底压暗、深底提亮一点。
+     *
+     * 收缩态原本直接铺终端背景色，栏与内容完全同色，栏杆只靠玻璃 chrome 硬撑边界。这里
+     * 按原底色的明暗叠一层极淡的黑/白（浅底 7%、深底 10%），栏与内容之间才有层次感，幅度
+     * 刻意压得很小，不取系统 opaque 色那种强反差；[steps] 用于在同方向上再加一档（如功能
+     * 键栏的按键比容器更深/更浅）。
+     *
+     * 用 sRGB 叠加而不是 [lerp]：Compose 的 lerp 走 Oklab，近黑端几乎提不动（#000000 混 10%
+     * 白只到 #030303），纯黑主题下仍然看不出层次。方向只由原底色的明暗决定，加档不会反转。
+     */
+    fun bandTint(background: Color, steps: Int = 1): Color {
+        val dark = background.luminance() < 0.5f
+        val overlay = (if (dark) Color.White else Color.Black)
+            .copy(alpha = (if (dark) 0.10f else 0.07f) * steps)
+        return overlay.compositeOver(background)
+    }
+
+    /**
      * 渐隐背景板的笔刷：终端控制台专属曲线。
      *
      * 与 GlassTopAppBarDefaults.bandBrush（页面色）不同——终端内容不可预测（可能是高亮彩色
      * 输出），文字必须全程可读，因此整条栏保持实色，仅靠越过栏下沿的 [BandOverhang]
      * 完成「实 → 渐隐 → 0」的过渡，把渐隐效果完整保留在栏外。
      *
-     * Issue #327：渐隐段整体前移并压陡（0.86 起坡、栏下沿处 alpha 已降到 ~0.25 以下），
-     * 配合 8dp 的越界尾段，让压在终端首行上的那部分尽量薄——只轻扫一点点，不再整条
-     * 盖住首行。
+     * Issue #327：渐隐段整体前移并压陡（0.86 起坡；色标吃的是比例，展开态栏高下栏下沿
+     * 处 alpha 已降到 ~0.25 以下，收缩态栏矮、栏下沿仍偏实），配合越过栏下沿的尾段
+     * （[BandOverhang] + [BandDrop]），让压在终端首行上的那部分尽量薄——只轻扫一点点。
      *
      * @param color 背景板颜色（终端背景色 / 系统 opaque 色 / Monet surface，随时可改）。
      */
@@ -173,7 +203,9 @@ object GlassTerminalBarDefaults {
  *    pill 完整浮起。栏自身没有任何自动触发源，命令之间持续保持当前状态。
  * 3. **栏底留白**：经原版 `bottomContent` 槽在栏下沿补 [GlassTerminalBarDefaults.BottomGap]，
  *    标题（含副标题）与终端首行之间因此有空隙；调用方还需自行应用
- *    [GlassTerminalBarDefaults.ContentTopInset] 让首行避开渐隐尾段。
+ *    [GlassTerminalBarDefaults.ContentTopInset] 让首行避开渐隐尾段。渐隐带本身再经
+ *    [GlassTerminalBarDefaults.BandDrop] 往下多铺一点，填住空隙上沿、不悬在半空
+ *    （只动绘制，栏高与内容位置都不变）。
  *
  * 颜色三轨，均可随时切换：
  * - [colorStyle]：亮色 / 暗色 / 跟随系统，驱动收缩态默认文字色与玻璃 chrome（按钮底板、描边）；
@@ -273,16 +305,18 @@ fun GlassTerminalBar(
     }
 
     Box(modifier = modifier) {
-        // 自绘常驻渐隐背景板：颜色随命令平滑切换。笔刷 0→1 映射到「栏高 + 越界」，
+        // 自绘常驻渐隐背景板：颜色随命令平滑切换。笔刷 0→1 映射到「栏高 + 越界 + 下压」，
         // transformOrigin 钉在顶沿，scaleY 把渐隐段拉到栏外（与原版 band 同机制）。
-        val overhangPx = with(LocalDensity.current) { GlassTerminalBarDefaults.BandOverhang.toPx() }
+        val bandTailPx = with(LocalDensity.current) {
+            (GlassTerminalBarDefaults.BandOverhang + GlassTerminalBarDefaults.BandDrop).toPx()
+        }
         Box(
             modifier = Modifier
                 .matchParentSize()
                 .graphicsLayer {
                     this.alpha = 1f
                     transformOrigin = TransformOrigin(0.5f, 0f)
-                    scaleY = if (size.height > 0f) (size.height + overhangPx) / size.height else 1f
+                    scaleY = if (size.height > 0f) (size.height + bandTailPx) / size.height else 1f
                 }
                 .background(bandBrush),
         )

@@ -321,8 +321,22 @@ fun TerminalDetailScreenCompose(
     } else {
         if (isTerminalDark) GlassTerminalBarColorStyle.Dark else GlassTerminalBarColorStyle.Light
     }
-    // 渐隐背景板颜色：展开态 = opaque 板（系统/Monet），收缩态 = 终端背景色
-    val barBandColor = if (!barCollapsed) topBarOpaqueBg else terminalBgColor
+    // 渐隐背景板颜色：展开态 = opaque 板（系统/Monet），收缩态 = 终端背景的轻微色差版
+    // （浅底压暗、深底提亮），栏不再与内容完全同色。
+    val terminalBandColor = GlassTerminalBarDefaults.bandTint(terminalBgColor)
+    val barBandColor = if (!barCollapsed) topBarOpaqueBg else terminalBandColor
+
+    // 底部功能键栏：展开态沿用系统 surface / surfaceVariant 那套明暗；收缩态整块切到终端
+    // 色系——容器用与顶栏完全相同的微调色，按键再深/浅一档拉开层次，文字色跟终端亮暗。
+    val keyboardSurfaceBg =
+        if (barCollapsed) terminalBandColor else MiuixTheme.colorScheme.surface.copy(alpha = 0.95f)
+    val keyboardKeyBg =
+        if (barCollapsed) {
+            GlassTerminalBarDefaults.bandTint(terminalBgColor, steps = 2)
+        } else {
+            MiuixTheme.colorScheme.surfaceVariant
+        }
+    val keyboardContentColor = if (barCollapsed) topBarTerminalContent else MiuixTheme.colorScheme.onSurface
 
     // GlassTerminalBar 的标题 / 副标题 / 副标题颜色
     // 标题显隐仅收缩态生效（展开态始终显示大标题，逻辑不动）：
@@ -504,7 +518,8 @@ fun TerminalDetailScreenCompose(
 
     // 键盘底色深浅。导航栏透明后，桌布透出来的是键盘底（工具栏展开时），
     // 图标明暗得跟着键盘走，跟状态栏看 topBarOpaqueBg 是同一个道理。
-    val keyboardSurfaceIsLight = MiuixTheme.colorScheme.surface.luminance() > 0.5f
+    // 基准必须取实际涂的 keyboardSurfaceBg：收缩态它已换成终端色系，不能再拿 Miuix surface。
+    val keyboardSurfaceIsLight = keyboardSurfaceBg.luminance() > 0.5f
 
     // 状态栏颜色适配（照搬 Java 版 L286-301）
     // 展开态：状态栏透明，图标明暗跟 opaque 背景板（系统亮暗 / Monet surface）走；
@@ -872,7 +887,9 @@ fun TerminalDetailScreenCompose(
                     ) {
                         TerminalKeyboardToolbar(
                             onSendKey = { bytes -> currentSession.write(bytes) },
-                            effectiveContentColor = MiuixTheme.colorScheme.onSurface,
+                            effectiveContentColor = keyboardContentColor,
+                            surfaceBg = keyboardSurfaceBg,
+                            keyBg = keyboardKeyBg,
                             modifiers = extraKeysModifiers,
                             onSendNamedKey = { keyCode, ctrl, alt ->
                                 terminalViewRef.value?.sendKeyEvent(keyCode, ctrl, alt)
@@ -1449,6 +1466,8 @@ private val EXTRA_KEY_TO_KEY_CODE: Map<String, Int> = mapOf(
 private fun TerminalKeyboardToolbar(
     onSendKey: (ByteArray) -> Unit,
     effectiveContentColor: Color,
+    surfaceBg: Color,
+    keyBg: Color,
     modifiers: ExtraKeysModifierState,
     onSendNamedKey: (keyCode: Int, ctrl: Boolean, alt: Boolean) -> Unit = { _, _, _ -> },
     onToggleKeyboard: () -> Unit = {}
@@ -1459,7 +1478,6 @@ private fun TerminalKeyboardToolbar(
     val currentSendNamedKey by rememberUpdatedState(onSendNamedKey)
     val currentToggleKeyboard by rememberUpdatedState(onToggleKeyboard)
 
-    val surfaceBg = MiuixTheme.colorScheme.surface.copy(alpha = 0.95f)
     val context = LocalContext.current
 
     // 点按修饰键 = 粘滞：仅作用于下一个按键，发送后自动复位；
@@ -1699,6 +1717,7 @@ private fun TerminalKeyboardToolbar(
                                     onClick = key.onSend,
                                     repeats = key.repeats,
                                     keyWidth = keyWidth,
+                                    keyBg = keyBg,
                                     effectiveContentColor = effectiveContentColor
                                 )
                                 is ToolbarKey.ModifierKey -> SpecialKeyButton(
@@ -1708,6 +1727,7 @@ private fun TerminalKeyboardToolbar(
                                     onTap = key.onTap,
                                     onLongPress = key.onLongPress,
                                     keyWidth = keyWidth,
+                                    keyBg = keyBg,
                                     effectiveContentColor = effectiveContentColor
                                 )
                             }
@@ -1725,6 +1745,7 @@ private fun KeyButton(
     onClick: () -> Unit,
     repeats: Boolean,
     keyWidth: Dp,
+    keyBg: Color,
     effectiveContentColor: Color
 ) {
     // repeats 的键长按连发（对齐原版 PRIMARY_REPETITIVE_KEYS 的方向键/退格/翻页）。
@@ -1737,7 +1758,7 @@ private fun KeyButton(
     val background = if (pressed) {
         MiuixTheme.colorScheme.primary.copy(alpha = 0.35f)
     } else {
-        MiuixTheme.colorScheme.surfaceVariant
+        keyBg
     }
 
     Box(
@@ -1802,13 +1823,14 @@ private fun SpecialKeyButton(
     onTap: () -> Unit,
     onLongPress: () -> Unit,
     keyWidth: Dp,
+    keyBg: Color,
     effectiveContentColor: Color = Color.White
 ) {
     // 三态：未激活 / 粘滞（半透明，只作用于下一个按键）/ 锁定（实心 + 描边，持续生效到再次长按）。
     val background = when {
         locked -> MiuixTheme.colorScheme.primary
         sticky -> MiuixTheme.colorScheme.primary.copy(alpha = 0.4f)
-        else -> MiuixTheme.colorScheme.surfaceVariant
+        else -> keyBg
     }
     Box(
         modifier = Modifier
@@ -1816,7 +1838,8 @@ private fun SpecialKeyButton(
             .clip(RoundedCornerShape(8.dp))
             .background(background)
             .then(
-                if (locked) Modifier.border(2.dp, MiuixTheme.colorScheme.onSurface, RoundedCornerShape(8.dp))
+                // 锁定态底是实心 primary，描边只有取 onPrimary 才在深浅两种终端底色上都可见。
+                if (locked) Modifier.border(2.dp, MiuixTheme.colorScheme.onPrimary, RoundedCornerShape(8.dp))
                 else Modifier
             )
             .combinedClickable(onClick = onTap, onLongClick = onLongPress),
