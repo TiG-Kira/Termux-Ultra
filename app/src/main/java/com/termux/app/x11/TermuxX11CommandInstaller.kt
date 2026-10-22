@@ -15,7 +15,10 @@ import java.io.File
  * 二者在 X11 集成开关打开时（以及应用启动且开关已开时）自动执行，幂等、可重复调用。
  */
 object TermuxX11CommandInstaller {
-    private const val MARKER = "TERMUX_ULTRA_X11_WRAPPER"
+    // wrapper 内嵌版本标记（TERMUX_ULTRA_X11_WRAPPER_V<n>），已安装版本号 < 资产版本号才覆盖，
+    // 修复升级 APK 后旧 wrapper 不随版本刷新的问题
+    private const val MARKER_PREFIX = "TERMUX_ULTRA_X11_WRAPPER_V"
+    private const val WRAPPER_VERSION = 2
     private const val ASSET_NAME = "termux-x11"
     private const val TARGET_NAME = "termux-x11"
     private const val APT_PREF_FILENAME = "termux-x11-block"
@@ -44,8 +47,12 @@ object TermuxX11CommandInstaller {
         if (!binDir.isDirectory) return
 
         val target = File(binDir, TARGET_NAME)
-        // 已是自带版本 → 跳过
-        if (target.exists() && runCatching { target.readText() }.getOrDefault("").contains(MARKER)) return
+        // 已是同版本或更新的自带版本 → 跳过
+        if (target.exists()) {
+            val installedVersion = runCatching { target.readText() }.getOrDefault("")
+                .let { Regex("$MARKER_PREFIX(\\d+)").find(it)?.groupValues?.get(1)?.toIntOrNull() ?: 0 }
+            if (installedVersion >= WRAPPER_VERSION) return
+        }
 
         runCatching {
             context.assets.open(ASSET_NAME).use { input ->
