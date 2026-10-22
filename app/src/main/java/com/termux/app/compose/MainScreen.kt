@@ -20,6 +20,7 @@ import androidx.compose.material.icons.rounded.DesktopWindows
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
@@ -125,6 +126,11 @@ fun MainScreen(
     val currentShowVnc by rememberUpdatedState(showVnc)
     val topBarContent = remember {
         mutableStateOf<@Composable () -> Unit>({ MainTopBar(currentSelectedTab, currentShowVnc, scrollBehavior, glassNavBackdrop) })
+    }
+    // 页面弹层槽：需要盖过全局顶栏的玻璃弹层（终端页「更多」菜单）经此槽提升到根层级。
+    // 顶栏在 Scaffold 的 topBar 槽中、绘制于页面内容之上，挂在页面里的弹层会被顶栏压住。
+    val pagePopupContent = remember {
+        mutableStateOf<@Composable BoxScope.() -> Unit>({})
     }
     val snackbarHostState = remember { SnackbarHostState() }
     var remoteSubTab by remember { mutableStateOf(0) }
@@ -297,6 +303,9 @@ fun MainScreen(
         }
     }
 
+    // 根 Box：除 Scaffold 外还要挂「页面弹层」宿主。宿主必须与 Scaffold 同级且声明在
+    // 其后（同层后声明者在上），弹层才能绘制在 topBar 槽的全局顶栏之上。
+    Box(modifier = Modifier.fillMaxSize()) {
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
@@ -731,6 +740,7 @@ fun MainScreen(
                     navBarBottomPadding = pageNavBarBottomPadding,
                     topBarClearance = topBarClearance,
                     onTopBarContent = { topBarContent.value = it },
+                    onPopupContent = { pagePopupContent.value = it },
                     active = swipeTargetTab == selectedTab
                 )
             }
@@ -788,6 +798,7 @@ fun MainScreen(
                     navBarBottomPadding = pageNavBarBottomPadding,
                     topBarClearance = topBarClearance,
                     onTopBarContent = { topBarContent.value = it },
+                    onPopupContent = { pagePopupContent.value = it },
                     active = tab == selectedTab
                 )
             }
@@ -822,6 +833,12 @@ fun MainScreen(
         RiskConfirmDialogHost(snackbarHostState, collectSnackbar = false)
 
     }
+
+    // 页面弹层宿主：渲染经 pagePopupContent 槽提升上来的玻璃弹层（如终端页「更多」菜单）
+    Box(modifier = Modifier.fillMaxSize()) {
+        pagePopupContent.value(this)
+    }
+    }
 }
 
 @Composable
@@ -847,6 +864,7 @@ private fun PageContentForTab(
     navBarBottomPadding: Dp,
     topBarClearance: Dp,
     onTopBarContent: (@Composable () -> Unit) -> Unit,
+    onPopupContent: (@Composable BoxScope.() -> Unit) -> Unit,
     active: Boolean = true
 ) {
     CompositionLocalProvider(LocalTopBarClearance provides topBarClearance) {
@@ -879,6 +897,7 @@ private fun PageContentForTab(
             onToggleWakeLock = onToggleWakeLock,
             navBarBottomPadding = navBarBottomPadding,
             onTopBarContent = onTopBarContent,
+            onPopupContent = onPopupContent,
             active = active
         )
         2 -> FileManagerScreen(
