@@ -54,9 +54,13 @@ import top.yukonga.miuix.kmp.glass.GlassTransformPopup
 import top.yukonga.miuix.kmp.glass.glassPopupAnchor
 import top.yukonga.miuix.kmp.glass.rememberGlassPopupAnchor
 import top.yukonga.miuix.kmp.icon.glass.Add
+import top.yukonga.miuix.kmp.icon.glass.Close
+import top.yukonga.miuix.kmp.icon.glass.Clear
 import top.yukonga.miuix.kmp.icon.glass.Lock
 import top.yukonga.miuix.kmp.icon.glass.More
 import top.yukonga.miuix.kmp.icon.glass.MiuixGlassIcons
+import top.yukonga.miuix.kmp.icon.glass.Rocket
+import top.yukonga.miuix.kmp.icon.glass.Sort
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Icon
@@ -97,6 +101,7 @@ fun ComposeTerminalListScreen(
     onToggleWakeLock: () -> Unit = {},
     navBarBottomPadding: Dp = 92.dp,
     onTopBarContent: (@Composable () -> Unit) -> Unit,
+    onPopupContent: (@Composable androidx.compose.foundation.layout.BoxScope.() -> Unit) -> Unit,
     active: Boolean = true
 ) {
     val sessionManager = remember { ComposeSessionManager.getInstance(context) }
@@ -626,59 +631,76 @@ fun ComposeTerminalListScreen(
         }
     }
 
-    // 玻璃「更多」菜单：GlassTransformPopup 是 BoxScope 扩展且自带全屏点击关闭层，
-    // 必须挂在铺满全屏的 Box 里、置于 Scaffold 之后（同层后声明者在上），
-    // 与 Agent 对话页「挂在根 Box」的写法对齐。
+    // 页面失活（切页、滑动离开）时收起「更多」菜单：弹层经 onPopupContent 槽提升到
+    // MainScreen 根层级渲染，若带着打开状态离开，会残留盖在切换后的页面上。
+    LaunchedEffect(active) {
+        if (!active) showMoreMenu = false
+    }
+
+    // 玻璃「更多」菜单：页面内容绘制在全局顶栏（MainScreen Scaffold 的 topBar 槽）之下，
+    // 弹层直接挂在页面会被顶栏压住（首项被标题行和「+」盖住），故经 onPopupContent 槽
+    // 提升到 MainScreen 根层级渲染，与 Agent 对话页「弹层挂根 Box」同效。
     // 宽屏/平板下页面 Box 相对组合根有 NavigationRail 偏移，而 anchor 的
     // containerBounds 是 boundsInRoot()（组合根坐标）；先把零尺寸测量点钉在页面
     // 原点，再把宿主 Box 平移回组合根原点，两个坐标系才能对齐（竖屏偏移为 0，是 no-op）。
-    var popupHostOrigin by remember { mutableStateOf(IntOffset.Zero) }
-    Box(
-        modifier = Modifier.onGloballyPositioned {
-            popupHostOrigin = IntOffset(
-                it.positionInRoot().x.roundToInt(),
-                it.positionInRoot().y.roundToInt()
-            )
-        }
-    )
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .offset { IntOffset(-popupHostOrigin.x, -popupHostOrigin.y) }
-    ) {
-        // backdrop 显式传 null：anchor 是 GlassIconButton，会经 GlassButtonSurface
-        // 发布自己的 surface（含折射材质），弹层直接用 anchor 的 surface，
-        // 读 LocalGlassTopAppBarBackdrop 在页面层恒为 null，传它只会埋錆弹。
-        GlassTransformPopup(
-            show = showMoreMenu,
-            onDismissRequest = { showMoreMenu = false },
-            anchor = moreAnchor,
-            backdrop = null,
-            anchorContent = {
-                Icon(MiuixGlassIcons.More, null, Modifier.size(22.dp), tint = MiuixTheme.colorScheme.onSurface)
-            },
-            simplified = true,
-        ) {
-            GlassPopupItem(
-                text = stringResource(R.string.menu_open_sandbox_session),
-                onClick = { showMoreMenu = false; openSandboxSession() }
-            )
-            GlassPopupItem(
-                text = stringResource(R.string.menu_close_all_sessions),
-                onClick = { showMoreMenu = false; closeAllSessions() }
-            )
-            GlassPopupItem(
-                text = stringResource(R.string.menu_cleanup_uninitialized),
-                onClick = { showMoreMenu = false; cleanupUninitializedSessions() }
-            )
-            GlassPopupItem(
-                text = stringResource(R.string.new_failsafe_session),
-                onClick = { showMoreMenu = false; newFailsafeSession() }
-            )
-            GlassPopupItem(
-                text = stringResource(R.string.menu_sort_sessions),
-                onClick = { showMoreMenu = false; showSortDialog = true }
-            )
+    SideEffect {
+        if (active) {
+            onPopupContent {
+                var popupHostOrigin by remember { mutableStateOf(IntOffset.Zero) }
+                Box(
+                    modifier = Modifier.onGloballyPositioned {
+                        popupHostOrigin = IntOffset(
+                            it.positionInRoot().x.roundToInt(),
+                            it.positionInRoot().y.roundToInt()
+                        )
+                    }
+                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .offset { IntOffset(-popupHostOrigin.x, -popupHostOrigin.y) }
+                ) {
+                    // backdrop 显式传 null：anchor 是 GlassIconButton，会经 GlassButtonSurface
+                    // 发布自己的 surface（含折射材质），弹层直接用 anchor 的 surface，
+                    // 读 LocalGlassTopAppBarBackdrop 在页面层恒为 null，传它只会埋錆弹。
+                    GlassTransformPopup(
+                        show = showMoreMenu,
+                        onDismissRequest = { showMoreMenu = false },
+                        anchor = moreAnchor,
+                        backdrop = null,
+                        anchorContent = {
+                            Icon(MiuixGlassIcons.More, null, Modifier.size(22.dp), tint = MiuixTheme.colorScheme.onSurface)
+                        },
+                        simplified = true,
+                    ) {
+                        GlassPopupItem(
+                            text = stringResource(R.string.menu_open_sandbox_session),
+                            icon = MiuixGlassIcons.Rocket,
+                            onClick = { showMoreMenu = false; openSandboxSession() }
+                        )
+                        GlassPopupItem(
+                            text = stringResource(R.string.menu_close_all_sessions),
+                            icon = MiuixGlassIcons.Close,
+                            onClick = { showMoreMenu = false; closeAllSessions() }
+                        )
+                        GlassPopupItem(
+                            text = stringResource(R.string.menu_cleanup_uninitialized),
+                            icon = MiuixGlassIcons.Clear,
+                            onClick = { showMoreMenu = false; cleanupUninitializedSessions() }
+                        )
+                        GlassPopupItem(
+                            text = stringResource(R.string.new_failsafe_session),
+                            icon = MiuixGlassIcons.Add,
+                            onClick = { showMoreMenu = false; newFailsafeSession() }
+                        )
+                        GlassPopupItem(
+                            text = stringResource(R.string.menu_sort_sessions),
+                            icon = MiuixGlassIcons.Sort,
+                            onClick = { showMoreMenu = false; showSortDialog = true }
+                        )
+                    }
+                }
+            }
         }
     }
 }
