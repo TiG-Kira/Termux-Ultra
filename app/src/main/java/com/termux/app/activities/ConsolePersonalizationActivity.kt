@@ -17,7 +17,7 @@ import com.termux.app.compose.NavigationHelper
  *
  * 承载自动启动终端控制台、编辑器工具、新会话自动执行、编辑欢迎文本四项。返回键由系统 Activity
  * 栈处理（finish 回到设置页）。自动启动走 LaunchPrefs 的 StateFlow；编辑器工具与新会话命令
- * 走 termux_preferences；欢迎文本通过内置编辑器或 vim 打开 motd 文件。
+ * 走 termux_preferences；欢迎文本脚本 ~/.termux/motd.sh 通过内置编辑器或 vim 打开（首次自动落地模板）。
  */
 class ConsolePersonalizationActivity : ComponentActivity() {
 
