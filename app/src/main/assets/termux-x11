@@ -5,7 +5,7 @@
 # 已把 X11 内置进宿主包 com.termux，因此直接用上游脚本会报 "application is not found"。
 # 本 wrapper 优先以 com.termux 为宿主包，缺失时回退到独立 com.termux.x11，从而让装进
 # Termux Ultra 的 termux-x11 软件包认得到并使用内置 X11。
-# TERMUX_ULTRA_X11_WRAPPER
+# TERMUX_ULTRA_X11_WRAPPER_V2
 
 export TERMUX_X11_TMPDIR="${TERMUX_X11_TMPDIR:-$TMPDIR}"
 export TMPDIR="$TERMUX_X11_TMPDIR"
@@ -25,18 +25,12 @@ fi
 
 export CLASSPATH="$APK_PATH"
 
-# 解析 DISPLAY 与 -tag（tag 用于多窗口标签，传给渲染 Activity 的 -d）
+# 解析 DISPLAY（透传给本进程与客户端 X 应用）
 DISPLAY_ARG=":0"
-TAG=""
-prev=""
 for a in "$@"; do
-    if [ "$prev" = "-tag" ]; then
-        TAG="$a"
-    fi
     case "$a" in
         :*) DISPLAY_ARG="$a" ;;
     esac
-    prev="$a"
 done
 export DISPLAY="$DISPLAY_ARG"
 mkdir -p "$TERMUX_X11_TMPDIR/.X11-unix" 2>/dev/null
@@ -44,12 +38,9 @@ mkdir -p "$TERMUX_X11_TMPDIR/.X11-unix" 2>/dev/null
 # 确保渲染组件已启用（X11 在宿主里默认随集成开关启停）
 /system/bin/pm enable "$X11_PKG/com.termux.x11.MainActivity" >/dev/null 2>&1 || true
 
-# 启动 X Server（后台）：参数整体透传给 CmdEntryPoint（:N / -xstartup / -legacy-drawing / -force-bgra / -tag 等）
+# 启动 X Server（后台）：参数整体透传给 CmdEntryPoint（:N / -xstartup / -legacy-drawing / -force-bgra / -tag 等）。
+# 渲染页无需也不能用 `am start` 拉起：CmdEntryPoint 启动后自带 ACTION_START 广播（setPackage 为宿主包、
+# 携带 binder 与 -tag 对应的 document_tag），每秒重发直到 X client 接入，LorieApp$Receiver 收到后
+# 自行拉起 MainActivity。而 `am` 以应用 uid 运行时 calling package 默认为 com.android.shell，
+# Android 12+ 的 assertPackageMatchesCallingUid 校验不通过，会报 SecurityException: Permission Denial。
 /system/bin/app_process / --nice-name=termux-x11 com.termux.x11.CmdEntryPoint "$@" &
-
-# 拉起渲染 Activity（X Server 就绪前会等待 ACTION_START 广播）
-if [ -n "$TAG" ]; then
-    /system/bin/am start --user 0 -n "$X11_PKG/com.termux.x11.MainActivity" -d "$TAG"
-else
-    /system/bin/am start --user 0 -n "$X11_PKG/com.termux.x11.MainActivity"
-fi
