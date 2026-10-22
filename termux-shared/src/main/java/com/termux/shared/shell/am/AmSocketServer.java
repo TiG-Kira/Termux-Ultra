@@ -214,6 +214,15 @@ public class AmSocketServer {
                                      String[] amCommandArray,
                                      @NonNull StringBuilder stdout, @NonNull StringBuilder stderr,
                                      boolean checkDisplayOverAppsPermission) {
+        // Termux Ultra: termux-gui 的 python/bash 客户端绑定硬编码广播组件
+        // "com.termux.gui/.GUIReceiver"（termuxgui/connection.py、tgui-bash.sh），而本应用已把
+        // Termux:GUI 内置进宿主包 com.termux，该组件名在集成模式下解析不到，广播静默丢弃。
+        // 此处把字面量改写为宿主组件，使 termux-am（socket 链路）可直接连通内置 GUI。
+        // $PREFIX/bin/am 被独立包装的场景由 TermuxApiBroadcastFix 的 wrapper 覆盖（含同款改写）。
+        for (int i = 0; i < amCommandArray.length; i++) {
+            if ("com.termux.gui/.GUIReceiver".equals(amCommandArray[i]))
+                amCommandArray[i] = "com.termux/com.termux.gui.GUIReceiver";
+        }
         try (ByteArrayOutputStream stdoutByteStream = new ByteArrayOutputStream();
              PrintStream stdoutPrintStream = new PrintStream(stdoutByteStream);
              ByteArrayOutputStream stderrByteStream = new ByteArrayOutputStream();

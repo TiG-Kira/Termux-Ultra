@@ -202,15 +202,17 @@ public class TermuxApplication extends com.termux.x11.LorieApp {
 
             startTermuxApiListener(getApplicationContext());
 
-            // am-wrapper 同步（可能跑 shell 命令）
+            // am-wrapper 同步（可能跑 shell 命令）；termux-api 与 termux-gui 的客户端
+            // 都硬编码独立插件组件名，wrapper 一并改写（v4），任一开关开启即需就位
             try {
-                if (com.termux.app.compose.IntegratedTools.INSTANCE.isEnabled(getApplicationContext(), com.termux.app.compose.IntegratedTools.Tool.TERMUX_API)) {
+                if (com.termux.app.compose.IntegratedTools.INSTANCE.isEnabled(getApplicationContext(), com.termux.app.compose.IntegratedTools.Tool.TERMUX_API)
+                        || com.termux.app.compose.IntegratedTools.INSTANCE.isEnabled(getApplicationContext(), com.termux.app.compose.IntegratedTools.Tool.TERMUX_GUI)) {
                     com.termux.app.compose.TermuxApiBroadcastFix.applyAmWrapper(getApplicationContext());
                 } else {
                     com.termux.app.compose.TermuxApiBroadcastFix.removeAmWrapper();
                 }
             } catch (Throwable t) {
-                android.util.Log.e(LOG_TAG, "Failed to sync Termux:API am wrapper", t);
+                android.util.Log.e(LOG_TAG, "Failed to sync broadcast am wrapper", t);
             }
 
             // Termux:GUI：内置化后没有独立 Application 入口，Settings 单例（普通 SharedPreferences）
