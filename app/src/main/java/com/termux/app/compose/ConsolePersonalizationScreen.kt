@@ -150,13 +150,36 @@ fun ConsolePersonalizationScreen(onBack: () -> Unit) {
                                     ensureMotdScript()
                                     val tool = prefs.getString("editor_tool", "internal") ?: "internal"
                                     if (tool == "vim") {
-                                        // 在终端中用 vim 打开
-                                        val intent = Intent(Intent.ACTION_SEND)
-                                        intent.setPackage(context.packageName)
-                                        intent.putExtra("command_path", MOTD_SCRIPT_PATH)
-                                        intent.putExtra("command", "vim $MOTD_SCRIPT_PATH")
-                                        intent.putExtra("session_name", "motd")
-                                        context.startActivity(intent)
+                                        // 在终端会话中用 vim 打开。本页是独立 Activity，无终端服务
+                                        // 上下文，复用主页 autoStartConsole 同款机制：ComposeSessionManager
+                                        // 建会话 + stdin 注入命令（与「新会话自动执行」同一通道，pty
+                                        // 缓冲可靠），再切到终端页。旧 ACTION_SEND intent（command_path/
+                                        // command/session_name extras）无任何消费端，startActivity 必崩。
+                                        try {
+                                            val composeSessionManager =
+                                                com.termux.app.terminal.shell.ComposeSessionManager.getInstance(context)
+                                            // 幂等：已有存活的 motd 会话直接切过去，避免连点堆出一串 vim 会话
+                                            val session = composeSessionManager.sessions.value
+                                                .firstOrNull {
+                                                    it.session.sessionName.value == "motd" && it.session.isRunning.value
+                                                }?.session
+                                                ?: composeSessionManager
+                                                    .createDefaultSession(startImmediately = true)
+                                                    .also { newSession ->
+                                                        newSession.sessionName.value = "motd"
+                                                        newSession.write("vim \"$MOTD_SCRIPT_PATH\"\n".toByteArray())
+                                                    }
+                                            composeSessionManager.switchTo(session.id)
+                                            context.startActivity(Intent(context, com.termux.app.TermuxActivity::class.java))
+                                        } catch (e: Throwable) {
+                                            // 建会话失败兜底：退回内置编辑器，不让设置页崩掉
+                                            android.widget.Toast.makeText(
+                                                context, "无法打开终端会话，已改用内置编辑器", android.widget.Toast.LENGTH_SHORT
+                                            ).show()
+                                            context.startActivity(Intent(context, TextEditorActivity::class.java).apply {
+                                                putExtra("file_path", MOTD_SCRIPT_PATH)
+                                            })
+                                        }
                                     } else {
                                         val intent = Intent(context, TextEditorActivity::class.java)
                                         intent.putExtra("file_path", MOTD_SCRIPT_PATH)
