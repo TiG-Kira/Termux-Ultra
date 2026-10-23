@@ -211,14 +211,28 @@ abstract class V0Shared(protected val app: Context) : GUIActivity.Listener {
             }
             task.startActivity(app, i, null)
         }
-        while (true) {
+        // 等生命周期回调把 Activity 实例回填进 ActivityState.a。
+        // 必须有超时：Activity 启动被系统拦下（后台启动限制）或回调压根没注册时，
+        // 这个等待会永久自旋，客户端随之永远卡在等响应上（只能 Ctrl+C）。
+        // 超时返回 null，协议层给客户端回 "-1"，程序得以报错退出而不是假死。
+        val deadline = System.currentTimeMillis() + ACTIVITY_START_TIMEOUT_MS
+        while (System.currentTimeMillis() < deadline) {
             if (activities[aid]?.a != null) {
                 break
             }
             Thread.sleep(1)
         }
+        if (activities[aid]?.a == null) {
+            android.util.Log.e(TAG, "activity $aid did not start within ${ACTIVITY_START_TIMEOUT_MS}ms; " +
+                    "lifecycle callbacks registered=" + (App.APP != null))
+            activities.remove(aid)
+            return null
+        }
         return activities[aid]?.a
     }
+
+    /** newActivity 等待 Activity 实例回填的最长时间。 */
+    private val ACTIVITY_START_TIMEOUT_MS = 10_000L
     
     
     companion object {

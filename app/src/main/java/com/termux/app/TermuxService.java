@@ -810,6 +810,11 @@ public final class TermuxService extends Service implements TermuxTaskCompat.Ter
 
         Logger.logDebug(LOG_TAG, "Creating \"" + executionCommand.getCommandIdAndLabelLogString() + "\" TermuxSession");
 
+        // am wrapper 自检：`apt` 升级 termux-am 会覆盖 $PREFIX/bin/am，使 termux-api /
+        // termux-gui 客户端硬编码的插件组件名不再被改写，广播被系统静默丢弃，客户端会一直
+        // 卡在等待插件回连。这里在每次会话创建时幂等补一次（内部有 30s 节流）。
+        com.termux.app.compose.TermuxApiBroadcastFix.syncIfNeeded(getApplicationContext());
+
         if (executionCommand.inBackground) {
             Logger.logDebug(LOG_TAG, "Ignoring a background execution command passed to createTermuxSession()");
             return null;

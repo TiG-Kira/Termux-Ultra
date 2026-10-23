@@ -158,6 +158,14 @@ object IntegratedTools {
                 )
             }
         }
+        // GUI 开关打开时立即把宿主 Application 注入 com.termux.gui.App：协议层靠它注册
+        // Activity 生命周期回调，缺失时 newActivity() 会永久自旋等待（客户端卡死、不出现界面）。
+        // 这里同步注入，用户打开开关后无需重启应用即可生效。
+        if (tool == Tool.TERMUX_GUI && enabled) {
+            runCatching {
+                (context.applicationContext as? android.app.Application)?.let { com.termux.gui.App.attach(it) }
+            }.onFailure { android.util.Log.w("IntegratedTools", "attach Termux:GUI application failed", it) }
+        }
         // X11 开关打开时，把自带 termux-x11 命令落地并屏蔽 apt 冲突包（后台执行，避免阻塞 UI）
         if (tool == Tool.TERMUX_X11 && enabled) {
             Thread {

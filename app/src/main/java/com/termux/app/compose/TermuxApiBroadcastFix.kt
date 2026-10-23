@@ -150,6 +150,40 @@ object TermuxApiBroadcastFix {
         }
     }
 
+    /**
+     * 轻量幂等自检：仅在 wrapper 缺失时重新安装。
+     *
+     * 为什么需要：wrapper 只在开关切换 / 应用冷启动时同步，而 `apt upgrade` 升级
+     * termux-am 会直接用新文件覆盖 `$PREFIX/bin/am`，wrapper 随之消失；此后
+     * termux-api / termux-gui 客户端发出的广播仍指向不存在的独立插件组件，
+     * 系统静默丢弃，客户端就一直卡在等待插件回连上（表现为程序不退出、界面不出来）。
+     *
+     * 调用点：终端会话创建（覆盖 widget / RUN_COMMAND / 界面新建等所有入口）。
+     * 开销：命中节流时为零；未命中时最多读一次文件头。
+     */
+    @JvmStatic
+    fun syncIfNeeded(context: Context) {
+        try {
+            if (!IntegratedTools.isEnabled(context, IntegratedTools.Tool.TERMUX_API) &&
+                !IntegratedTools.isEnabled(context, IntegratedTools.Tool.TERMUX_GUI)) return
+            val now = android.os.SystemClock.elapsedRealtime()
+            if (now - lastSyncElapsed < SYNC_MIN_INTERVAL_MS) return
+            lastSyncElapsed = now
+            if (!isOurWrapper(File(AM_BIN))) {
+                Logger.logInfo(LOG_TAG, "am wrapper missing at $AM_BIN; re-installing")
+                applyAmWrapper(context.applicationContext)
+            }
+        } catch (t: Throwable) {
+            Logger.logWarn(LOG_TAG, "am wrapper sync check failed: " + t.message)
+        }
+    }
+
+    /** syncIfNeeded 的最小间隔，避免频繁新建会话时重复读文件/起 shell。 */
+    private const val SYNC_MIN_INTERVAL_MS = 30_000L
+
+    @Volatile
+    private var lastSyncElapsed = -SYNC_MIN_INTERVAL_MS
+
     @JvmStatic
     fun removeAmWrapper() {
         try {
