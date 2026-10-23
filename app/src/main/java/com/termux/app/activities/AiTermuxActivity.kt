@@ -899,7 +899,8 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
     private val pawEngineParts by lazy {
         val appCtx = getApplication<android.app.Application>()
         AgentPawEngine.Parts(
-            llmClient = com.paw.agent.core.llm.OpenAiCompatibleClient(),
+            // 0.3.1 起客户端默认拒绝明文 HTTP，必须按用户设置下发传输策略
+            llmClient = AgentPawEngine.buildLlmClient(appCtx),
             toolRegistry = AgentPawEngine.buildToolRegistry(appCtx),
         )
     }
@@ -969,6 +970,8 @@ class AiTermuxViewModel(app: android.app.Application) : AndroidViewModel(app) {
             AgentAccessibilityService.instance?.clearUserStop()
             AgentStopFloatingButton.show(getApplication()) { cancelGeneration() }
 
+            // 传输安全开关可能在两次对话之间被改动，每回合开始前刷新一次
+            AgentPawEngine.syncNetworkPolicy(pawEngineParts.llmClient, ctx)
             val agent = AgentPawEngine.buildAgent(pawEngineParts.llmClient, pawEngineParts.toolRegistry)
             agent.run(
                 config = llmConfig,

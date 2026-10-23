@@ -1771,9 +1771,11 @@
     <string name="agentpaw_control_nav_summary">Execution, vision and system permissions</string>
     <string name="agentpaw_exec_category">Execution</string>
     <string name="agentpaw_max_tool_rounds_label">Max execution steps (tool call rounds)</string>
-    <string name="agentpaw_max_tool_rounds_desc">How many rounds of UI actions / tool calls one task may run. Range 1–50, default 15: the agent wraps up and reports once the limit is reached, which prevents endless loops.</string>
-    <string name="agentpaw_unlimited_tool_rounds_title">Unlimited execution steps</string>
-    <string name="agentpaw_unlimited_tool_rounds_desc">When on, the 0.1.3 step-unlimited mechanism is enabled: the agent runs without a step cap and keeps working until it finishes on its own. When off, the max execution steps limit above applies.</string>
+    <string name="agentpaw_max_tool_rounds_desc">How many rounds of UI actions / tool calls one task may run. Range 1–100, default 15: the agent wraps up and reports once the limit is reached, which prevents endless loops.</string>
+    <string name="agentpaw_timeout_label">Request timeout (seconds)</string>
+    <string name="agentpaw_timeout_desc">Connect / read / write timeout for a single model request. Range 10–300, default 60: raise it for slow local models or long replies, lower it to fail fast on a dead endpoint.</string>
+    <string name="agentpaw_relaxed_tool_rounds_title">Relax to the safety cap</string>
+    <string name="agentpaw_relaxed_tool_rounds_desc">Since 0.3.1 the engine no longer accepts a truly unlimited budget (it caps runaway loops at 100 steps). Turning this on pins the budget to that safety cap; when off, the max execution steps above applies.</string>
     <string name="agentpaw_vision_mode_title">Screenshot resolution mode</string>
     <string name="agentpaw_vision_mode_desc">Clarity of the screenshots taken while driving the phone: higher clarity means more accurate recognition, but slower capture and more tokens per step.</string>
     <string name="agentpaw_vision_mode_auto">AUTO</string>
@@ -1805,6 +1807,30 @@
     <string name="agentpaw_adaptive_pacing_desc">After each tap / swipe / launch, insert a brief AI-tailored delay based on the tool type, so animations, keyboard and network have time to settle before the next action — avoids missed clicks on slow devices or heavy apps.</string>
 
     <!-- v0.2.0: ROOT permission status -->
+    <!-- v0.3.1: advanced / high-risk page -->
+    <string name="agentpaw_advanced_page_title">Advanced</string>
+    <string name="agentpaw_advanced_nav_summary">Transport security and high-risk skill toggles</string>
+    <string name="agentpaw_go_open">Open</string>
+    <string name="agentpaw_transport_category">Transport security</string>
+    <string name="agentpaw_allow_http_title">Allow plaintext HTTP</string>
+    <string name="agentpaw_allow_http_desc">Since 0.3.1 every http:// endpoint is blocked, including localhost and LAN. Turn this on to reach a local model served over plain HTTP (API key and prompts travel unencrypted).</string>
+    <string name="agentpaw_allow_public_http_title">Allow plaintext HTTP to the public internet</string>
+    <string name="agentpaw_allow_public_http_desc">Extends the toggle above to public addresses. Your API key and conversation can be intercepted by anyone on the path — only enable it if you accept that risk.</string>
+    <string name="agentpaw_skill_risk_category">High-risk skill toggles</string>
+    <string name="agentpaw_allow_shell_skills_title">Let skills run ROOT shell commands</string>
+    <string name="agentpaw_allow_shell_skills_desc">Allows a skill to execute su shell steps. Only takes effect when the execution channel is AUTO or ROOT. Skills still stop and ask before risky steps.</string>
+    <string name="agentpaw_allow_sensitive_screen_title">Keep running on sensitive screens</string>
+    <string name="agentpaw_allow_sensitive_screen_desc">By default skills pause on payment or password screens. Turn this on to let them continue and take screenshots there — never do this while a payment flow is open.</string>
+
+    <!-- v0.3.1: Xiaomi HyperOS / MIUI troubleshooting -->
+    <string name="agentpaw_xiaomi_category">Xiaomi HyperOS compatibility</string>
+    <string name="agentpaw_xiaomi_app_details_title">Allow restricted settings</string>
+    <string name="agentpaw_xiaomi_app_details_desc">On Android 13+ HyperOS the accessibility toggle is greyed out for sideloaded apps. Open app details and pick "Allow restricted settings" from the top-right menu.</string>
+    <string name="agentpaw_xiaomi_perm_title">Background launch and overlay</string>
+    <string name="agentpaw_xiaomi_perm_desc">HyperOS blocks launching activities from the background. Enable "Display pop-up windows while running in the background" so AgentPaw can open apps on its own.</string>
+    <string name="agentpaw_developer_options_title">USB debugging (security settings)</string>
+    <string name="agentpaw_developer_options_desc">Required when driving the phone through Shizuku: without it, input injection is rejected and taps never land.</string>
+
     <string name="agentpaw_root_title">ROOT (superuser)</string>
     <string name="agentpaw_root_desc">Privileged channel for high-speed screenshots, monkey-level input and system control. Not required, but highly recommended.</string>
     <string name="agentpaw_root_granted">Available</string>

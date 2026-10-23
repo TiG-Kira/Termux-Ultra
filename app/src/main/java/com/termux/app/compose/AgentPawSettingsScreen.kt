@@ -69,10 +69,11 @@ private const val AUTOSAVE_DELAY_MS = 400L
 /**
  * AgentPaw 设置页（独立 Activity）。
  *
- * 结构改为「首页 + 两个子页」，分类对齐 AgentPaw 本体 APP：
- *  - 首页保留「自动切换到 AgentPaw」与「流式输出」两个总开关，并给出「生成参数」「手机控制与权限」两个入口；
- *  - 生成参数子页：采样参数（Temperature / Top-P / MaxTokens）+ 系统提示词；
- *  - 手机控制与权限子页：执行策略（步数上限 / 无上限开关）+ 视觉策略（截屏分辨率模式）+ 系统权限（无障碍 / Shizuku / 悬浮窗）。
+ * 结构改为「首页 + 三个子页」，分类对齐 AgentPaw 本体 APP：
+ *  - 首页保留「自动切换到 AgentPaw」与「流式输出」两个总开关，并给出「生成参数」「手机控制与权限」「高级设置」三个入口；
+ *  - 生成参数子页：采样参数（Temperature / Top-P / MaxTokens）+ 请求超时 + 系统提示词；
+ *  - 手机控制与权限子页：执行策略（步数上限 / 放宽开关）+ 视觉策略（截屏分辨率模式）+ 系统权限（无障碍 / Shizuku / ROOT / 悬浮窗）+ 小米澎湃OS 排障；
+ *  - 高级设置子页：传输安全（明文 HTTP / 公网明文 HTTP）+ 技能高危开关（ROOT 命令 / 敏感页面）。
  * LLM 连接类选项（Provider / Base URL / API Key / 模型 / 测试连接）不在此展示——按集成约定直接沿用 Termux Agent 已配置的 LLM。
  *
  * 全部设置项即时生效：开关与单选项点击即落盘，数值/文本字段走「草稿 + 防抖自动保存」，
@@ -91,18 +92,23 @@ fun AgentPawSettingsScreen(onBack: () -> Unit) {
     var autoSwitch by remember { mutableStateOf(AgentPawPrefs.isAutoSwitchEnabled(context)) }
     var stream by remember { mutableStateOf(AgentPawPrefs.isStreamEnabled(context)) }
     var visionMode by remember { mutableStateOf(AgentPawPrefs.getVisionMode(context)) }
-    var unlimitedToolRounds by remember { mutableStateOf(AgentPawPrefs.isUnlimitedToolRounds(context)) }
+    var relaxedToolRounds by remember { mutableStateOf(AgentPawPrefs.isToolRoundsRelaxed(context)) }
     var controlMode by remember { mutableStateOf(AgentPawPrefs.getControlMode(context)) }
     var adaptivePacingEnabled by remember { mutableStateOf(AgentPawPrefs.isAdaptivePacingEnabled(context)) }
+    var allowHttp by remember { mutableStateOf(AgentPawPrefs.isHttpTransportAllowed(context)) }
+    var allowPublicHttp by remember { mutableStateOf(AgentPawPrefs.isPublicHttpAllowed(context)) }
+    var allowShellSkills by remember { mutableStateOf(AgentPawPrefs.isShellSkillsAllowed(context)) }
+    var allowSensitiveScreen by remember { mutableStateOf(AgentPawPrefs.isSensitiveScreenAllowed(context)) }
 
     // 数值/文本草稿：rememberSaveable 保证旋转重建后仍是用户刚输入的值，而不是磁盘旧值
     var temperature by rememberSaveable { mutableStateOf(AgentPawPrefs.getTemperature(context).toString()) }
     var topP by rememberSaveable { mutableStateOf(AgentPawPrefs.getTopP(context).toString()) }
     var maxTokens by rememberSaveable { mutableStateOf(AgentPawPrefs.getMaxTokens(context).toString()) }
     var maxToolRounds by rememberSaveable { mutableStateOf(AgentPawPrefs.getMaxToolRounds(context).toString()) }
+    var timeoutSeconds by rememberSaveable { mutableStateOf(AgentPawPrefs.getTimeoutSeconds(context).toString()) }
     var systemPrompt by rememberSaveable { mutableStateOf(AgentPawPrefs.getSystemPrompt(context)) }
 
-    val draft = AgentPawDraft(temperature, topP, maxTokens, maxToolRounds, systemPrompt)
+    val draft = AgentPawDraft(temperature, topP, maxTokens, maxToolRounds, timeoutSeconds, systemPrompt)
     // 进入页面时的磁盘值：草稿与它相等说明没有真正改动，不必把同一份数据反复写回
     val initialDraft = remember { draft }
     // 始终指向最新草稿，供暂停/退出时的兜底落盘读取，避免闭包捕获到旧值
@@ -162,6 +168,8 @@ fun AgentPawSettingsScreen(onBack: () -> Unit) {
     }
     // Shizuku 状态走 0.1.1 的 StateFlow：binder 到达/授权结果实时刷新（如授权弹窗返回后立即更新）
     val shizukuStatus by remember { DevicePermissionManager.observeShizukuState() }.collectAsState()
+    // v0.3.1：小米/澎湃OS 有额外的后台与受限设置门槛，只在对应设备上给出排障入口
+    val isXiaomiDevice by remember { mutableStateOf(DevicePermissionManager.isXiaomiOrHyperOs()) }
 
     val visionOptions = listOf(
         "AUTO" to (R.string.agentpaw_vision_mode_auto to R.string.agentpaw_vision_mode_auto_desc),
@@ -173,6 +181,7 @@ fun AgentPawSettingsScreen(onBack: () -> Unit) {
         AgentPawPage.HOME -> R.string.agentpaw_settings_title
         AgentPawPage.GENERATION -> R.string.agentpaw_generation_page_title
         AgentPawPage.CONTROL -> R.string.agentpaw_control_page_title
+        AgentPawPage.ADVANCED -> R.string.agentpaw_advanced_page_title
     }
 
     // 系统返回键：在子页时先回首页，只有首页才交回 Activity 栈（否则会直接退出设置页）
@@ -247,16 +256,18 @@ fun AgentPawSettingsScreen(onBack: () -> Unit) {
                         onTopPChange = { topP = it },
                         maxTokens = maxTokens,
                         onMaxTokensChange = { maxTokens = it },
+                        timeoutSeconds = timeoutSeconds,
+                        onTimeoutSecondsChange = { timeoutSeconds = it },
                         systemPrompt = systemPrompt,
                         onSystemPromptChange = { systemPrompt = it }
                     )
 
                     AgentPawPage.CONTROL -> controlContent(
                         context = context,
-                        unlimitedToolRounds = unlimitedToolRounds,
-                        onUnlimitedToolRoundsChange = {
-                            unlimitedToolRounds = it
-                            AgentPawPrefs.setUnlimitedToolRounds(context, it)
+                        relaxedToolRounds = relaxedToolRounds,
+                        onRelaxedToolRoundsChange = {
+                            relaxedToolRounds = it
+                            AgentPawPrefs.setToolRoundsRelaxed(context, it)
                         },
                         maxToolRounds = maxToolRounds,
                         onMaxToolRoundsChange = { maxToolRounds = it },
@@ -280,7 +291,36 @@ fun AgentPawSettingsScreen(onBack: () -> Unit) {
                         overlayGranted = overlayGranted,
                         rootAvailable = rootAvailable,
                         onRefreshRoot = { rootAvailable = DevicePermissionManager.isRootAvailable() },
-                        shizukuStatus = shizukuStatus
+                        shizukuStatus = shizukuStatus,
+                        isXiaomiDevice = isXiaomiDevice
+                    )
+
+                    AgentPawPage.ADVANCED -> advancedContent(
+                        allowHttp = allowHttp,
+                        onAllowHttpChange = {
+                            allowHttp = it
+                            AgentPawPrefs.setHttpTransportAllowed(context, it)
+                            // 关闭总开关时公网明文一并失效，避免留下一个悄悄生效的高危开关
+                            if (!it && allowPublicHttp) {
+                                allowPublicHttp = false
+                                AgentPawPrefs.setPublicHttpAllowed(context, false)
+                            }
+                        },
+                        allowPublicHttp = allowPublicHttp,
+                        onAllowPublicHttpChange = {
+                            allowPublicHttp = it
+                            AgentPawPrefs.setPublicHttpAllowed(context, it)
+                        },
+                        allowShellSkills = allowShellSkills,
+                        onAllowShellSkillsChange = {
+                            allowShellSkills = it
+                            AgentPawPrefs.setShellSkillsAllowed(context, it)
+                        },
+                        allowSensitiveScreen = allowSensitiveScreen,
+                        onAllowSensitiveScreenChange = {
+                            allowSensitiveScreen = it
+                            AgentPawPrefs.setSensitiveScreenAllowed(context, it)
+                        }
                     )
                 }
             }
@@ -288,7 +328,7 @@ fun AgentPawSettingsScreen(onBack: () -> Unit) {
     }
 }
 
-/** 首页：两个总开关 + 两个子页入口。 */
+/** 首页：两个总开关 + 三个子页入口。 */
 private fun LazyListScope.homeContent(
     autoSwitch: Boolean,
     onAutoSwitchChange: (Boolean) -> Unit,
@@ -340,9 +380,20 @@ private fun LazyListScope.homeContent(
         }
     }
 
+    item(key = "nav_advanced") {
+        SettingCard {
+            ArrowPreference(
+                title = stringResource(R.string.agentpaw_advanced_page_title),
+                summary = stringResource(R.string.agentpaw_advanced_nav_summary),
+                onClick = { onOpenPage(AgentPawPage.ADVANCED) },
+                startAction = { SettingIcon(R.drawable.ic_warning) }
+            )
+        }
+    }
+
     item(key = "home_spacer") { Spacer(Modifier.height(16.dp)) }
 }
-/** 生成参数子页：采样参数 + 系统提示词。 */
+/** 生成参数子页：采样参数 + 请求超时 + 系统提示词。 */
 private fun LazyListScope.generationContent(
     temperature: String,
     onTemperatureChange: (String) -> Unit,
@@ -350,6 +401,8 @@ private fun LazyListScope.generationContent(
     onTopPChange: (String) -> Unit,
     maxTokens: String,
     onMaxTokensChange: (String) -> Unit,
+    timeoutSeconds: String,
+    onTimeoutSecondsChange: (String) -> Unit,
     systemPrompt: String,
     onSystemPromptChange: (String) -> Unit
 ) {
@@ -399,6 +452,19 @@ private fun LazyListScope.generationContent(
                     text = stringResource(R.string.agentpaw_max_tokens_desc),
                     isError = parseMaxTokens(maxTokens) == null
                 )
+                Spacer(Modifier.height(10.dp))
+                // v0.3.1：LlmConfig 新增请求超时，客户端按它设置连接/读/写超时
+                TextField(
+                    value = timeoutSeconds,
+                    onValueChange = onTimeoutSecondsChange,
+                    modifier = Modifier.fillMaxWidth(),
+                    label = stringResource(R.string.agentpaw_timeout_label),
+                    useLabelAsPlaceholder = true
+                )
+                FieldHint(
+                    text = stringResource(R.string.agentpaw_timeout_desc),
+                    isError = parseTimeoutSeconds(timeoutSeconds) == null
+                )
             }
         }
     }
@@ -433,8 +499,8 @@ private fun LazyListScope.generationContent(
  */
 private fun LazyListScope.controlContent(
     context: Context,
-    unlimitedToolRounds: Boolean,
-    onUnlimitedToolRoundsChange: (Boolean) -> Unit,
+    relaxedToolRounds: Boolean,
+    onRelaxedToolRoundsChange: (Boolean) -> Unit,
     maxToolRounds: String,
     onMaxToolRoundsChange: (String) -> Unit,
     visionMode: String,
@@ -448,7 +514,8 @@ private fun LazyListScope.controlContent(
     overlayGranted: Boolean,
     rootAvailable: Boolean,
     onRefreshRoot: () -> Unit,
-    shizukuStatus: ShizukuStatus
+    shizukuStatus: ShizukuStatus,
+    isXiaomiDevice: Boolean
 ) {
     item(key = "section_exec") {
         SmallTitle(text = stringResource(R.string.agentpaw_exec_category))
@@ -457,14 +524,13 @@ private fun LazyListScope.controlContent(
         SettingCard {
             Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
                 SwitchPreference(
-                    title = stringResource(R.string.agentpaw_unlimited_tool_rounds_title),
-                    summary = stringResource(R.string.agentpaw_unlimited_tool_rounds_desc),
-                    checked = unlimitedToolRounds,
-                    onCheckedChange = onUnlimitedToolRoundsChange
+                    title = stringResource(R.string.agentpaw_relaxed_tool_rounds_title),
+                    summary = stringResource(R.string.agentpaw_relaxed_tool_rounds_desc),
+                    checked = relaxedToolRounds,
+                    onCheckedChange = onRelaxedToolRoundsChange
                 )
-                // 开关开启时启用 0.1.3 步数无上限机制，隐藏执行步数输入框；
-                // 关闭时恢复输入框并沿用原有的步数上限。
-                if (!unlimitedToolRounds) {
+                // 开启时步数顶到库的安全上限，隐藏执行步数输入框；关闭时恢复输入框并沿用自定义上限。
+                if (!relaxedToolRounds) {
                     Spacer(Modifier.height(10.dp))
                     TextField(
                         value = maxToolRounds,
@@ -625,7 +691,101 @@ private fun LazyListScope.controlContent(
         }
     }
 
+    // v0.3.1：小米澎湃OS / MIUI 专属排障入口（受限设置、后台弹出界面、USB 调试安全设置）
+    if (isXiaomiDevice) {
+        item(key = "section_xiaomi") {
+            SmallTitle(text = stringResource(R.string.agentpaw_xiaomi_category))
+        }
+        item(key = "card_xiaomi") {
+            SettingCard {
+                Column {
+                    ActionPreference(
+                        title = stringResource(R.string.agentpaw_xiaomi_app_details_title),
+                        summary = stringResource(R.string.agentpaw_xiaomi_app_details_desc),
+                        actionText = stringResource(R.string.agentpaw_go_open),
+                        onAction = { DevicePermissionManager.openAppDetailsSettings(context) }
+                    )
+                    ActionPreference(
+                        title = stringResource(R.string.agentpaw_xiaomi_perm_title),
+                        summary = stringResource(R.string.agentpaw_xiaomi_perm_desc),
+                        actionText = stringResource(R.string.agentpaw_go_open),
+                        onAction = { DevicePermissionManager.openXiaomiPermissionsSettings(context) }
+                    )
+                    ActionPreference(
+                        title = stringResource(R.string.agentpaw_developer_options_title),
+                        summary = stringResource(R.string.agentpaw_developer_options_desc),
+                        actionText = stringResource(R.string.agentpaw_go_open),
+                        onAction = { DevicePermissionManager.openDeveloperOptions(context) }
+                    )
+                }
+            }
+        }
+    }
+
     item(key = "control_spacer") { Spacer(Modifier.height(16.dp)) }
+}
+
+/**
+ * 高级（高危）子页：传输安全 + 技能执行期高危开关。
+ *
+ * 这几项都会削弱默认安全边界，因此单独收在一页里，避免与普通设置混在一起被随手打开。
+ */
+private fun LazyListScope.advancedContent(
+    allowHttp: Boolean,
+    onAllowHttpChange: (Boolean) -> Unit,
+    allowPublicHttp: Boolean,
+    onAllowPublicHttpChange: (Boolean) -> Unit,
+    allowShellSkills: Boolean,
+    onAllowShellSkillsChange: (Boolean) -> Unit,
+    allowSensitiveScreen: Boolean,
+    onAllowSensitiveScreenChange: (Boolean) -> Unit,
+) {
+    item(key = "section_transport") {
+        SmallTitle(text = stringResource(R.string.agentpaw_transport_category))
+    }
+    item(key = "card_transport") {
+        SettingCard {
+            Column {
+                SwitchPreference(
+                    title = stringResource(R.string.agentpaw_allow_http_title),
+                    summary = stringResource(R.string.agentpaw_allow_http_desc),
+                    checked = allowHttp,
+                    onCheckedChange = onAllowHttpChange
+                )
+                SwitchPreference(
+                    title = stringResource(R.string.agentpaw_allow_public_http_title),
+                    summary = stringResource(R.string.agentpaw_allow_public_http_desc),
+                    checked = allowPublicHttp,
+                    enabled = allowHttp,
+                    onCheckedChange = onAllowPublicHttpChange
+                )
+            }
+        }
+    }
+
+    item(key = "section_skill_risk") {
+        SmallTitle(text = stringResource(R.string.agentpaw_skill_risk_category))
+    }
+    item(key = "card_skill_risk") {
+        SettingCard {
+            Column {
+                SwitchPreference(
+                    title = stringResource(R.string.agentpaw_allow_shell_skills_title),
+                    summary = stringResource(R.string.agentpaw_allow_shell_skills_desc),
+                    checked = allowShellSkills,
+                    onCheckedChange = onAllowShellSkillsChange
+                )
+                SwitchPreference(
+                    title = stringResource(R.string.agentpaw_allow_sensitive_screen_title),
+                    summary = stringResource(R.string.agentpaw_allow_sensitive_screen_desc),
+                    checked = allowSensitiveScreen,
+                    onCheckedChange = onAllowSensitiveScreenChange
+                )
+            }
+        }
+    }
+
+    item(key = "advanced_spacer") { Spacer(Modifier.height(16.dp)) }
 }
 
 /** PhoneControlMode 各自的标题与描述，集中在这里方便 strings.xml 管理。 */
@@ -643,9 +803,9 @@ private fun controlModeDesc(mode: PhoneControlMode): Int = when (mode) {
     PhoneControlMode.ACCESSIBILITY -> R.string.agentpaw_control_mode_accessibility_desc
 }
 
-/** 三个页面的导航状态。 */
+/** 页面的导航状态。 */
 private enum class AgentPawPage {
-    HOME, GENERATION, CONTROL
+    HOME, GENERATION, CONTROL, ADVANCED
 }
 
 /**
@@ -661,20 +821,28 @@ private data class AgentPawDraft(
     val topP: String,
     val maxTokens: String,
     val maxToolRounds: String,
+    val timeoutSeconds: String,
     val systemPrompt: String,
 ) {
-    /** 四项数值是否都可解析；越界会被裁剪进范围，不算无效。 */
+    /** 五项数值是否都可解析；越界会被裁剪进范围，不算无效。 */
     val valid: Boolean
         get() = parseTemperature(temperature) != null &&
             parseTopP(topP) != null &&
             parseMaxTokens(maxTokens) != null &&
-            parseMaxToolRounds(maxToolRounds) != null
+            parseMaxToolRounds(maxToolRounds) != null &&
+            parseTimeoutSeconds(timeoutSeconds) != null
 }
 
 private fun parseTemperature(raw: String): Float? = raw.trim().toFloatOrNull()?.coerceIn(0f, 2f)
 private fun parseTopP(raw: String): Float? = raw.trim().toFloatOrNull()?.coerceIn(0f, 1f)
 private fun parseMaxTokens(raw: String): Int? = raw.trim().toIntOrNull()?.coerceIn(256, 32768)
-private fun parseMaxToolRounds(raw: String): Int? = raw.trim().toIntOrNull()?.coerceIn(1, 50)
+// v0.3.1 起步数上限放宽到库的安全上限 100（原 50）
+private fun parseMaxToolRounds(raw: String): Int? =
+    raw.trim().toIntOrNull()?.coerceIn(1, AgentPawPrefs.MAX_TOOL_ROUNDS_LIMIT)
+
+private fun parseTimeoutSeconds(raw: String): Int? =
+    raw.trim().toIntOrNull()
+        ?.coerceIn(AgentPawPrefs.TIMEOUT_SECONDS_MIN, AgentPawPrefs.TIMEOUT_SECONDS_MAX)
 
 /**
  * 落盘数值/文本字段，返回是否写入成功（无效字段被跳过，不计入失败）。
@@ -693,6 +861,7 @@ private fun writeDraft(context: Context, draft: AgentPawDraft, sync: Boolean): B
             topP = parseTopP(draft.topP),
             maxTokens = parseMaxTokens(draft.maxTokens),
             maxToolRounds = parseMaxToolRounds(draft.maxToolRounds),
+            timeoutSeconds = parseTimeoutSeconds(draft.timeoutSeconds),
             systemPrompt = draft.systemPrompt.trim(),
             sync = sync
         )
@@ -743,6 +912,30 @@ private fun StatusPreference(
         if (actionText != null) {
             TextButton(text = actionText, onClick = onAction)
         }
+    }
+}
+
+/** 动作行：右侧给一个跳转系统设置页的按钮（小米澎湃OS 排障入口）。 */
+@Composable
+private fun ActionPreference(
+    title: String,
+    summary: String,
+    actionText: String,
+    onAction: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(title, fontSize = 14.sp, color = MiuixTheme.colorScheme.onSurface)
+            Text(
+                summary,
+                fontSize = 12.sp,
+                color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+            )
+        }
+        TextButton(text = actionText, onClick = onAction)
     }
 }
 

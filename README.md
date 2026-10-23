@@ -42,6 +42,7 @@
 
 - **AgentPaw 手机操控引擎**：Termux Agent 接入 `com.paw.agent:agentpaw-core`，可在自动 / 手动两种模式下调度 Shell、联网搜索与手机操控工具链；LLM 配置沿用 Termux 侧在线模型，本地模型模式安全回退
 - **Shizuku 授权与停止悬浮按钮**：AgentPaw 0.1.1 起支持 Shizuku 授权（三态实时显示）与全局停止悬浮按钮，长任务可随时中断；0.1.2 替换设置图标
+- **AgentPaw 0.3.1 集成**：技能子系统改为数据驱动（内置预设 + 引擎执行）、新增 `click_element` 像素级点击工具；步数不再支持真·无上限（硬顶 100 步防死循环）；新增请求超时、明文 HTTP 传输策略与技能高危开关；小米澎湃OS 提供专属排障入口
 - **Agent 对话后台执行**：对话回合脱离页面生命周期（进程级 `AgentChatSession` 持有执行域），离开对话页后继续跑完；配套 `AgentChatBubble` 悬浮气泡显示「思考中 / 回答完成」并拉起页面
 - **Agent 聊天页 Eta 设计语言重构**：全新玻璃顶栏、Eta 语义色（成功 / 警告 / 错误）、用户气泡 20/20/6/20 不对称圆角、助手消息平铺 + 30dp 操作行、推理折叠块与呼吸式打字指示器
 - **miuix-glass OS4 符号图标**：vendor 176 个 OS4 symbol 图标（5 字重）并本地桥接，顶栏图标全量替换、返回箭头统一，视觉尺寸按墨迹面积对齐
@@ -460,7 +461,7 @@ Release 签名使用 `ki-terminal-release.jks`（alias: `ki-terminal`）。该 k
 | 生物识别 | AndroidX Biometric 1.2.0-alpha05 |
 | 序列化 | Gson 2.10.1、kotlinx-serialization 1.9.0 |
 | AI 助手 | OpenAI 兼容 API、自定义端点、技能系统 |
-| 手机操控 | AgentPaw `agentpaw-core` 0.1.4（GitHub Packages）、Shizuku |
+| 手机操控 | AgentPaw `agentpaw-core` 0.3.1（GitHub Packages）、Shizuku |
 | 插件系统 | ZIP 打包、JSON 配置、WebView Bridge、Broadcast 桥接 |
 | 构建 | Gradle（AGP 9.1.0）、CMake 3.22.1、NDK 28.2.13676358、JDK 21 |
 | 集成插件 | termux-api、termux-boot、termux-styling、termux-tasker、termux-widget |

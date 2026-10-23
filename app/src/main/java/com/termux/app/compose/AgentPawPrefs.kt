@@ -1,6 +1,8 @@
 package com.termux.app.compose
 
 import android.content.Context
+import com.paw.agent.core.llm.NetworkPolicy
+import com.paw.agent.core.skill.SkillRunOptions
 import com.paw.agent.device.PhoneControlMode
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -22,12 +24,18 @@ object AgentPawPrefs {
     private const val KEY_TOP_P = "top_p"
     private const val KEY_MAX_TOKENS = "max_tokens"
     private const val KEY_MAX_TOOL_ROUNDS = "max_tool_rounds"
-    private const val KEY_UNLIMITED_TOOL_ROUNDS = "unlimited_tool_rounds"
     private const val KEY_STREAM = "stream"
     private const val KEY_VISION_MODE = "vision_mode"
     private const val KEY_SYSTEM_PROMPT = "system_prompt"
     private const val KEY_CONTROL_MODE = "control_mode"
     private const val KEY_ADAPTIVE_PACING = "adaptive_pacing"
+    // 沿用「步数无上限」的旧存储键：语义变更后老用户的开关位置得以保留
+    private const val KEY_RELAXED_TOOL_ROUNDS = "unlimited_tool_rounds"
+    private const val KEY_TIMEOUT_SECONDS = "timeout_seconds"
+    private const val KEY_ALLOW_HTTP = "allow_http"
+    private const val KEY_ALLOW_PUBLIC_HTTP = "allow_public_http"
+    private const val KEY_ALLOW_SHELL_SKILLS = "allow_shell_skills"
+    private const val KEY_ALLOW_SENSITIVE_SCREEN = "allow_sensitive_screen"
 
     /** 与 AgentPaw 上游 LlmConfig 默认值保持一致 */
     const val DEFAULT_TEMPERATURE = 0.7f
@@ -35,6 +43,17 @@ object AgentPawPrefs {
     const val DEFAULT_MAX_TOKENS = 2048
     const val DEFAULT_MAX_TOOL_ROUNDS = 15
     const val DEFAULT_VISION_MODE = "AUTO"
+    const val DEFAULT_TIMEOUT_SECONDS = 60
+
+    /** 单次请求的超时范围，与上游设置页一致；超出该范围库会忽略并走默认超时。 */
+    const val TIMEOUT_SECONDS_MIN = 10
+    const val TIMEOUT_SECONDS_MAX = 300
+
+    /**
+     * 步数上限的硬顶。0.3.1 起库用 [com.paw.agent.core.agent.Agent.MAX_SAFETY_TOOL_ROUNDS]
+     * 兜底防死循环，不再接受「无上限」，放宽开关只能顶到这里。
+     */
+    const val MAX_TOOL_ROUNDS_LIMIT = 100
 
     /** 截屏分辨率模式的可选值，与 AgentPaw 截屏工具的取图策略一一对应。 */
     val VISION_MODES = listOf(DEFAULT_VISION_MODE, "FAST", "HIGH")
@@ -88,15 +107,22 @@ object AgentPawPrefs {
         prefs(context).getInt(KEY_MAX_TOOL_ROUNDS, DEFAULT_MAX_TOOL_ROUNDS)
 
     /**
-     * 无限执行步数：开启后步数不再受限（交给 0.1.3 的步数无上限机制，见 [AgentPawEngine.buildLlmConfig]），
-     * 关闭时沿用 [getMaxToolRounds] 的原有上限。默认关闭。
+     * 放宽步数上限。0.3.1 之前这是「无上限」（给库传 0），但库为了防死循环已不再接受
+     * 无上限：`maxToolRounds <= 0` 会被回落到内置默认步数。因此该开关改为「顶到
+     * [MAX_TOOL_ROUNDS_LIMIT]」，关闭时沿用 [getMaxToolRounds] 的自定义上限。默认关闭。
      */
-    fun isUnlimitedToolRounds(context: Context): Boolean =
-        prefs(context).getBoolean(KEY_UNLIMITED_TOOL_ROUNDS, false)
+    fun isToolRoundsRelaxed(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_RELAXED_TOOL_ROUNDS, false)
 
-    fun setUnlimitedToolRounds(context: Context, enabled: Boolean) {
-        prefs(context).edit().putBoolean(KEY_UNLIMITED_TOOL_ROUNDS, enabled).apply()
+    fun setToolRoundsRelaxed(context: Context, enabled: Boolean) {
+        prefs(context).edit().putBoolean(KEY_RELAXED_TOOL_ROUNDS, enabled).apply()
     }
+
+    /** 单次请求的读超时（秒）；库只认 5–600，这里按上游设置页收窄到 10–300。 */
+    fun getTimeoutSeconds(context: Context): Int =
+        prefs(context).getInt(KEY_TIMEOUT_SECONDS, DEFAULT_TIMEOUT_SECONDS)
+            .coerceIn(TIMEOUT_SECONDS_MIN, TIMEOUT_SECONDS_MAX)
+
 
     fun isStreamEnabled(context: Context): Boolean =
         prefs(context).getBoolean(KEY_STREAM, true)
@@ -145,6 +171,66 @@ object AgentPawPrefs {
         prefs(context).edit().putBoolean(KEY_ADAPTIVE_PACING, enabled).apply()
     }
 
+    // ---- v0.3.1 新增：传输安全（高危）----
+
+    /**
+     * 允许明文 HTTP（0.3.1 新增策略）。关闭时客户端拒绝一切 http:// 端点，
+     * 包括本机与局域网——沿用默认值会让本地模型端点直接被拦下。默认关闭。
+     */
+    fun isHttpTransportAllowed(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_ALLOW_HTTP, false)
+
+    fun setHttpTransportAllowed(context: Context, enabled: Boolean) {
+        prefs(context).edit().putBoolean(KEY_ALLOW_HTTP, enabled).apply()
+    }
+
+    /** 允许公网明文 HTTP。依赖 [isHttpTransportAllowed]，单独开启无效。默认关闭。 */
+    fun isPublicHttpAllowed(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_ALLOW_PUBLIC_HTTP, false)
+
+    fun setPublicHttpAllowed(context: Context, enabled: Boolean) {
+        prefs(context).edit().putBoolean(KEY_ALLOW_PUBLIC_HTTP, enabled).apply()
+    }
+
+    /** 下发给 LLM 客户端的传输策略快照。 */
+    fun buildNetworkPolicy(context: Context): NetworkPolicy = NetworkPolicy(
+        allowHttp = isHttpTransportAllowed(context),
+        allowPublicHttp = isPublicHttpAllowed(context),
+    )
+
+    // ---- v0.3.1 新增：技能执行期高危开关 ----
+
+    /** 允许技能执行 Root shell 命令。仅在 ROOT 通道可用时才真正生效。默认关闭。 */
+    fun isShellSkillsAllowed(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_ALLOW_SHELL_SKILLS, false)
+
+    fun setShellSkillsAllowed(context: Context, enabled: Boolean) {
+        prefs(context).edit().putBoolean(KEY_ALLOW_SHELL_SKILLS, enabled).apply()
+    }
+
+    /** 允许在敏感（支付/密码）页面继续执行技能与截图。默认关闭。 */
+    fun isSensitiveScreenAllowed(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_ALLOW_SENSITIVE_SCREEN, false)
+
+    fun setSensitiveScreenAllowed(context: Context, enabled: Boolean) {
+        prefs(context).edit().putBoolean(KEY_ALLOW_SENSITIVE_SCREEN, enabled).apply()
+    }
+
+    /**
+     * 下发给技能引擎的执行期策略快照。
+     *
+     * Root shell 步骤要求「开关已开」且「当前执行通道走 ROOT」，与上游一致；
+     * 风险确认豁免是有时间窗的临时能力，本集成不提供，恒为 false。
+     */
+    fun buildSkillRunOptions(context: Context): SkillRunOptions {
+        val mode = getControlMode(context)
+        val rootUsable = mode == PhoneControlMode.ROOT || mode == PhoneControlMode.AUTO
+        return SkillRunOptions(
+            allowShellSteps = isShellSkillsAllowed(context) && rootUsable,
+            allowSensitiveScreen = isSensitiveScreenAllowed(context),
+        )
+    }
+
     /** 自定义系统提示词；为空时使用 AgentPaw 内置默认提示词 */
     fun getSystemPrompt(context: Context): String =
         prefs(context).getString(KEY_SYSTEM_PROMPT, "").orEmpty()
@@ -162,6 +248,7 @@ object AgentPawPrefs {
         topP: Float?,
         maxTokens: Int?,
         maxToolRounds: Int?,
+        timeoutSeconds: Int?,
         systemPrompt: String,
         sync: Boolean = false,
     ) {
@@ -170,6 +257,7 @@ object AgentPawPrefs {
         topP?.let { editor.putFloat(KEY_TOP_P, it) }
         maxTokens?.let { editor.putInt(KEY_MAX_TOKENS, it) }
         maxToolRounds?.let { editor.putInt(KEY_MAX_TOOL_ROUNDS, it) }
+        timeoutSeconds?.let { editor.putInt(KEY_TIMEOUT_SECONDS, it) }
         editor.putString(KEY_SYSTEM_PROMPT, systemPrompt)
         if (sync) editor.commit() else editor.apply()
     }
