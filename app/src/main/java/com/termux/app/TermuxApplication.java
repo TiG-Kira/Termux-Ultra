@@ -215,14 +215,16 @@ public class TermuxApplication extends com.termux.x11.LorieApp {
                 android.util.Log.e(LOG_TAG, "Failed to sync broadcast am wrapper", t);
             }
 
-            // Termux:GUI：内置化后没有独立 Application 入口，Settings 单例（普通 SharedPreferences）
-            // 需要在开关打开时由宿主代为加载，否则 GUIService/GUI 设置页拿到的是默认值
+            // Termux:GUI：内置化后没有独立 Application 入口，必须把宿主 Application 注入
+            // com.termux.gui.App——协议层靠它注册 Activity 生命周期回调，缺失时
+            // newActivity() 会永久自旋等待 Activity 实例回填（客户端卡死、GUI 页面不出现）。
+            // 注入同时完成 Settings 单例加载（普通 SharedPreferences）。
             try {
                 if (com.termux.app.compose.IntegratedTools.INSTANCE.isEnabled(getApplicationContext(), com.termux.app.compose.IntegratedTools.Tool.TERMUX_GUI)) {
-                    com.termux.gui.Settings.Companion.getInstance().load(getApplicationContext());
+                    com.termux.gui.App.attach(TermuxApplication.this);
                 }
             } catch (Throwable t) {
-                android.util.Log.w(LOG_TAG, "Failed to load Termux:GUI settings", t);
+                android.util.Log.w(LOG_TAG, "Failed to attach Termux:GUI application", t);
             }
 
             // X11 集成开关已开时，确保自带 termux-x11 命令就位并屏蔽 apt 冲突包（幂等、后台）
