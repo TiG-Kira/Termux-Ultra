@@ -6,13 +6,13 @@ import com.paw.agent.core.agent.ToolRegistry
 import com.paw.agent.core.llm.LlmClient
 import com.paw.agent.core.llm.LlmConfig
 import com.paw.agent.core.llm.LlmProvider
+import com.paw.agent.core.llm.OpenAiCompatibleClient
 import com.paw.agent.core.search.DuckDuckGoSearchBackend
-import com.paw.agent.core.skill.OpenAndSearchSkill
-import com.paw.agent.core.skill.ReturnHomeAndResetSkill
-import com.paw.agent.core.skill.ScrollAndFindSkill
+import com.paw.agent.core.skill.SkillEngine
 import com.paw.agent.core.skill.SkillRegistry
 import com.paw.agent.core.tool.ShellTool
 import com.paw.agent.core.tool.WebSearchTool
+import com.paw.agent.core.tool.android.ClickElementTool
 import com.paw.agent.core.tool.android.DeepLinkTool
 import com.paw.agent.core.tool.android.DoubleTapTool
 import com.paw.agent.core.tool.android.GetScreenStateTool
@@ -53,9 +53,9 @@ object AgentPawEngine {
         if (providerConfig.apiBaseUrl.isBlank() || providerConfig.model.isBlank()) return null
 
         val provider = if (providerConfig.provider == "openai") LlmProvider.OPENAI else LlmProvider.CUSTOM
-        // 步数无上限开关开启时，给库传 0 触发 0.1.3 的步数无上限机制（run 循环对 maxToolRounds <= 0 视为不限轮数）；
-        // 关闭时沿用用户在设置里配置的上限。
-        val maxToolRounds = if (AgentPawPrefs.isUnlimitedToolRounds(context)) 0
+        // 0.3.1 起库不再支持「真·无上限」：maxToolRounds <= 0 会被回落到内置默认步数，
+        // 因此放宽开关改为显式顶到库的安全上限，关闭时沿用用户在设置里配置的上限。
+        val maxToolRounds = if (AgentPawPrefs.isToolRoundsRelaxed(context)) AgentPawPrefs.MAX_TOOL_ROUNDS_LIMIT
         else AgentPawPrefs.getMaxToolRounds(context)
         return LlmConfig(
             provider = provider,
@@ -66,6 +66,7 @@ object AgentPawEngine {
             topP = AgentPawPrefs.getTopP(context),
             maxTokens = AgentPawPrefs.getMaxTokens(context),
             maxToolRounds = maxToolRounds,
+            timeoutSeconds = AgentPawPrefs.getTimeoutSeconds(context),
             visionResolutionMode = AgentPawPrefs.getVisionMode(context),
             stream = AgentPawPrefs.isStreamEnabled(context),
             systemPrompt = AgentPawPrefs.getSystemPrompt(context)
@@ -78,7 +79,12 @@ object AgentPawEngine {
 
     /**
      * 装配 AgentPaw 工具集，构成与 AgentPaw 上游 App 一致的能力面：
-     * 沙盒脚本、Web 搜索、手机控制（截屏/点击/滑动/输入/启动应用）与组合技能。
+     * 沙盒脚本、Web 搜索、手机控制（截屏/点击/滑动/输入/启动应用）与技能。
+     *
+     * 0.3.1 起技能子系统重写：内置技能不再是硬编码的 Kotlin 类（旧
+     * ReturnHomeAndResetSkill / OpenAndSearchSkill / ScrollAndFindSkill 已移除），
+     * 而是统一的 SkillDefinition 数据，由 [SkillRegistry] 持有、[SkillEngine] 执行。
+     * tools(engine) 每次都用当前 options 重新适配，所以资深设置改动即时生效。
      */
     fun buildToolRegistry(context: Context): ToolRegistry {
         val appContext = context.applicationContext
@@ -93,13 +99,13 @@ object AgentPawEngine {
         // 让它蹭沙箱目录属于越权。AgentPaw 的沙箱预演请走 Termux Agent 的
         // RUN_COMMAND_SANDBOX 技能（AITermuxEngine.execRunCommandInSandbox）。
         val sandboxRoot = File(appContext.filesDir, "agentpaw_sandbox").apply { mkdirs() }
-        val skills = SkillRegistry(
-            listOf(
-                ReturnHomeAndResetSkill(),
-                OpenAndSearchSkill(),
-                ScrollAndFindSkill(),
-            ),
+        val skillEngine = SkillEngine(
+            controller = phoneController,
+            // 技能执行策略每次执行前重新读取，资深设置改完不用重建引擎
+            options = { AgentPawPrefs.buildSkillRunOptions(appContext) },
         )
+        // 不传 presets 即用内置预设（返回主屏 / 打开应用并搜索 / 滚动查找并点击）
+        val skills = SkillRegistry()
         return ToolRegistry(
             listOf(
                 ShellTool(sandboxRoot),
@@ -114,17 +120,33 @@ object AgentPawEngine {
                 LaunchAppTool(phoneController),
                 DeepLinkTool(phoneController),
                 GetScreenStateTool(phoneController),
+                // 0.3.1 新增：按无障碍树的 bounds / index / text 精确点击，内置提示词优先推荐它
+                ClickElementTool(phoneController),
                 WaitTool(),
-            ) + skills.toTools(phoneController),
+            ) + skills.tools(skillEngine),
         )
     }
 
     fun buildAgent(llmClient: LlmClient, toolRegistry: ToolRegistry): Agent =
         Agent(llmClient = llmClient, toolRegistry = toolRegistry)
 
+    /**
+     * 构造 LLM 客户端并按当前传输安全策略下发 NetworkPolicy。
+     *
+     * 0.3.1 起客户端默认拒绝一切明文 HTTP（含本机/局域网），沿用默认值会让
+     * http:// 的本地模型端点直接报「已阻止明文 HTTP」，所以必须显式下发策略。
+     */
+    fun buildLlmClient(context: Context): OpenAiCompatibleClient =
+        OpenAiCompatibleClient().apply { networkPolicy = AgentPawPrefs.buildNetworkPolicy(context) }
+
+    /** 设置可能在两次对话之间被改动，每回合开始前刷新一次传输策略。 */
+    fun syncNetworkPolicy(client: OpenAiCompatibleClient, context: Context) {
+        client.networkPolicy = AgentPawPrefs.buildNetworkPolicy(context)
+    }
+
     /** 引擎装配结果（较重，调用方应缓存复用） */
     data class Parts(
-        val llmClient: LlmClient,
+        val llmClient: OpenAiCompatibleClient,
         val toolRegistry: ToolRegistry,
     )
 
