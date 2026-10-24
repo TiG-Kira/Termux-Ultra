@@ -4,8 +4,6 @@ import android.content.Context
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import java.io.File
-import java.io.FileOutputStream
-import java.util.zip.ZipFile
 
 object PluginLoader {
 
@@ -22,11 +20,13 @@ object PluginLoader {
     }
 
     fun getPluginDir(context: Context, pluginId: String): File {
-        val dir = File(getPluginsDir(context), pluginId)
+        require(pluginId.matches(Regex("^[a-zA-Z][a-zA-Z0-9_.]*$"))) { "无效的插件 ID" }
+        val dir = PluginArchive.child(getPluginsDir(context), pluginId)
         if (!dir.exists()) dir.mkdirs()
         return dir
     }
 
+    @Synchronized
     fun installPlugin(context: Context, sourceFile: File): Result<PluginManifest> {
         return try {
             val ext = sourceFile.extension.lowercase()
@@ -41,15 +41,18 @@ object PluginLoader {
                 return Result.failure(IllegalArgumentException("不支持的文件格式，仅支持 .tup 和 .zip"))
             }
 
-            val tempDir = File(context.cacheDir, "plugin_install_${System.currentTimeMillis()}")
-            tempDir.mkdirs()
+            // Stage on the same filesystem as the installed plugins so promotion uses rename.
+            val tempDir = java.nio.file.Files.createTempDirectory(getPluginsDir(context).toPath(), ".install-").toFile()
 
             try {
-                extractZip(sourceFile, tempDir)
+                PluginArchive.extract(sourceFile, tempDir)
 
                 val manifestFile = File(tempDir, MANIFEST_FILE)
                 if (!manifestFile.exists()) {
                     return Result.failure(IllegalArgumentException("插件包中缺少 manifest.json"))
+                }
+                require(manifestFile.isFile && manifestFile.length() <= 1024 * 1024) {
+                    "插件 manifest.json 无效或超过 1 MiB 限制"
                 }
 
                 val manifestJson = manifestFile.readText()
@@ -62,17 +65,16 @@ object PluginLoader {
                 val manifest = manifestResult.getOrThrow()
 
                 checkHostVersion(context, manifest.minHostVersion)
+                validatePluginContents(tempDir, manifest)
 
                 val targetDir = getPluginDir(context, manifest.id)
-
-                if (targetDir.exists()) {
-                    targetDir.deleteRecursively()
+                val previous = File(tempDir.parentFile, tempDir.name + ".previous")
+                check(targetDir.renameTo(previous)) { "无法保留旧插件，安装已取消" }
+                if (!tempDir.renameTo(targetDir)) {
+                    check(previous.renameTo(targetDir)) { "安装失败，旧插件保留在 ${previous.name}" }
+                    error("无法写入插件，已恢复旧版本")
                 }
-                targetDir.mkdirs()
-
-                copyDirectoryContents(tempDir, targetDir)
-
-                validatePluginContents(targetDir, manifest)
+                previous.deleteRecursively()
 
                 saveInstallRecord(context, manifest)
 
@@ -85,48 +87,11 @@ object PluginLoader {
         }
     }
 
-    private fun extractZip(sourceFile: File, targetDir: File) {
-        val root = targetDir.canonicalFile
-        ZipFile(sourceFile).use { zip ->
-            zip.entries().asSequence().forEach { entry ->
-                // Zip Slip 防护：entry.name 可能带 ../ 或绝对路径，必须确认解压后仍在插件目录内
-                val destFile = File(targetDir, entry.name)
-                val canonical = destFile.canonicalFile
-                if (canonical != root && !canonical.path.startsWith(root.path + File.separator)) {
-                    throw SecurityException("插件包含非法路径条目: ${entry.name}")
-                }
-                if (entry.isDirectory) {
-                    destFile.mkdirs()
-                } else {
-                    destFile.parentFile?.mkdirs()
-                    zip.getInputStream(entry).use { input ->
-                        FileOutputStream(destFile).use { output ->
-                            input.copyTo(output)
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    private fun copyDirectoryContents(sourceDir: File, targetDir: File) {
-        sourceDir.walkTopDown().forEach { file ->
-            val relativePath = file.relativeTo(sourceDir)
-            val destFile = File(targetDir, relativePath.path)
-            if (file.isDirectory) {
-                destFile.mkdirs()
-            } else {
-                destFile.parentFile?.mkdirs()
-                file.copyTo(destFile, overwrite = true)
-            }
-        }
-    }
-
     private fun validatePluginContents(pluginDir: File, manifest: PluginManifest) {
         manifest.getAllH5Entries().forEach { (title, entry) ->
             if (entry.isNotBlank()) {
-                val entryFile = File(pluginDir, entry)
-                if (!entryFile.exists()) {
+                val entryFile = PluginArchive.child(pluginDir, entry)
+                if (!entryFile.isFile) {
                     throw IllegalStateException(
                         "插件 H5 入口文件不存在: $entry (页面: $title)，" +
                         "请确保插件包中包含完整的文件结构"
@@ -139,8 +104,8 @@ object PluginLoader {
         manifest.entryPoints?.pages?.forEach { page ->
             val entry = page.effectiveEntry
             if (page.type == "compose" && !entry.isNullOrBlank()) {
-                val entryFile = File(pluginDir, entry)
-                if (!entryFile.exists()) {
+                val entryFile = PluginArchive.child(pluginDir, entry)
+                if (!entryFile.isFile) {
                     throw IllegalStateException("插件 Compose 页面配置不存在: $entry")
                 }
             }
@@ -149,8 +114,8 @@ object PluginLoader {
         if (home?.enabled == true && home.type == "compose") {
             val entry = home.effectiveEntry
             if (entry.isNotBlank()) {
-                val homeFile = File(pluginDir, entry)
-                if (!homeFile.exists()) {
+                val homeFile = PluginArchive.child(pluginDir, entry)
+                if (!homeFile.isFile) {
                     throw IllegalStateException("插件 Compose 主页配置不存在: $entry")
                 }
             }
@@ -311,8 +276,7 @@ object PluginLoader {
 
     fun getPluginFile(context: Context, pluginId: String, relativePath: String): File? {
         val pluginDir = getPluginDir(context, pluginId)
-        val file = File(pluginDir, relativePath)
-        return if (file.exists() && file.canonicalPath.startsWith(pluginDir.canonicalPath)) file else null
+        return runCatching { PluginArchive.child(pluginDir, relativePath) }.getOrNull()?.takeIf { it.exists() }
     }
 
     private data class InstallRecord(

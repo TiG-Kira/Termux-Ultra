@@ -18,7 +18,3 @@ project(':termux-x11').projectDir = new File(rootDir, 'vendor/termux-addons/term
 include ':termux-gui'
 project(':termux-gui').projectDir = new File(rootDir, 'vendor/termux-addons/termux-gui/app')
 
-// Termux:GUI plugin (vendored from termux/termux-gui, application → library conversion)
-include ':termux-gui'
-project(':termux-gui').projectDir = new File(rootDir, 'vendor/termux-addons/termux-gui/app')
-

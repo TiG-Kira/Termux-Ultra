@@ -12,6 +12,11 @@ import androidx.core.content.FileProvider
 import com.termux.R
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlin.coroutines.CoroutineContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
@@ -23,6 +28,8 @@ import java.util.concurrent.TimeUnit
 object ApkDownloader {
     private const val TAG = "ApkDownloader"
     private const val UPDATE_DIR = "updates"
+    private const val MAX_APK_BYTES = 512L * 1024 * 1024
+    private val downloadMutex = Mutex()
 
     // 更新包只能来自 GitHub Release，避免被重定向到任意镜像或 CDN。
     // 注意：GitHub Release 资产会经 302 跳转到官方 CDN release-assets.githubusercontent.com，
@@ -66,7 +73,7 @@ object ApkDownloader {
         versionName: String,
         onProgress: ((Int, Long, Long) -> Unit)? = null
     ): Result<Unit> {
-        return withContext(Dispatchers.IO) {
+        return downloadMutex.withLock { withContext(Dispatchers.IO) {
             try {
                 if (!isAllowedDownloadUrl(url)) {
                     Log.w(TAG, "Rejected update download from untrusted source")
@@ -81,7 +88,7 @@ object ApkDownloader {
                 }
 
                 try {
-                    downloadToFile(context, url, apkFile, onProgress)
+                    downloadToFile(context, url, apkFile, onProgress, coroutineContext)
                 } catch (e: Exception) {
                     apkFile.delete()
                     throw e
@@ -101,11 +108,13 @@ object ApkDownloader {
                     }
                 }
                 Result.success(Unit)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Log.e(TAG, context.getString(R.string.download_failed), e)
                 Result.failure(e)
             }
-        }
+        } }
     }
 
     fun installApk(context: Context, apkFile: File) {
@@ -204,7 +213,8 @@ object ApkDownloader {
         context: Context,
         url: String,
         apkFile: File,
-        onProgress: ((Int, Long, Long) -> Unit)?
+        onProgress: ((Int, Long, Long) -> Unit)?,
+        coroutineContext: CoroutineContext
     ) {
         val request = Request.Builder()
             .url(url)
@@ -221,20 +231,31 @@ object ApkDownloader {
 
             val body = response.body ?: throw Exception(context.getString(R.string.response_body_empty))
             val contentLength = body.contentLength()
+            require(contentLength <= MAX_APK_BYTES) { "更新包超过大小限制" }
 
             body.byteStream().use { input ->
                 apkFile.outputStream().use { output ->
                     val buffer = ByteArray(8192)
                     var bytesDownloaded: Long = 0
                     var bytesRead: Int
+                    var lastProgress = -1
+                    var lastReport = 0L
                     while (input.read(buffer).also { bytesRead = it } != -1) {
+                        coroutineContext.ensureActive()
+                        require(bytesDownloaded + bytesRead <= MAX_APK_BYTES) { "更新包超过大小限制" }
                         output.write(buffer, 0, bytesRead)
                         bytesDownloaded += bytesRead
-                        if (contentLength > 0 && onProgress != null) {
-                            val progress = ((bytesDownloaded * 100) / contentLength).toInt()
-                            onProgress(progress, bytesDownloaded, contentLength)
+                        val progress = if (contentLength > 0) ((bytesDownloaded * 100) / contentLength).toInt().coerceIn(0, 100) else 0
+                        val now = android.os.SystemClock.elapsedRealtime()
+                        if (progress != lastProgress || now - lastReport >= 200) {
+                            onProgress?.invoke(progress, bytesDownloaded, contentLength)
+                            lastProgress = progress
+                            lastReport = now
                         }
                     }
+                    coroutineContext.ensureActive()
+                    check(contentLength < 0 || bytesDownloaded == contentLength) { "更新包下载不完整，请重试" }
+                    onProgress?.invoke(100, bytesDownloaded, contentLength)
                     output.flush()
                 }
             }
@@ -325,7 +346,8 @@ object ApkDownloader {
 
     private fun getApkFileName(context: Context, versionName: String): String {
         val suffix = if (getBuildType(context) == "release") "release" else "debug"
-        return "Termux-Ultra_${getDeviceAbi()}-${suffix}_$versionName.apk"
+        val safeVersion = versionName.replace(Regex("[^a-zA-Z0-9._-]"), "_").take(100)
+        return "Termux-Ultra_${getDeviceAbi()}-${suffix}_$safeVersion.apk"
     }
 
     private fun getBuildType(context: Context): String {

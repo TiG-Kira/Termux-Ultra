@@ -55,7 +55,6 @@ object FtpServiceManager {
         return try {
             ftpServer = FtpServer(currentPort, currentUsername, currentPassword, currentRootDir, currentBindAddress)
             ftpServer?.start()
-            Thread.sleep(300)
             val running = isRunning()
             if (running) {
                 val appPrefs = context.getSharedPreferences("app_settings", Context.MODE_PRIVATE)
@@ -106,7 +105,6 @@ object FtpServiceManager {
         val wasRunning = isRunning()
         if (wasRunning) {
             stop(context)
-            Thread.sleep(300)
         }
         reloadCredentials(context)
         return if (wasRunning) {
