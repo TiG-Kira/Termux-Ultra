@@ -226,7 +226,17 @@ class PluginWebViewActivity : ComponentActivity() {
                                         PluginManager.openUrl(view.context, pluginId, url)
                                         true
                                     } else {
-                                        false
+                                        // Keep the privileged bridge on this plugin's local pages only.
+                                        if (request.url.scheme == "file") {
+                                            val path = request.url.path ?: return true
+                                            val root = PluginLoader.getPluginDir(view.context, pluginId)
+                                            runCatching {
+                                                val file = java.io.File(path).canonicalFile
+                                                !file.path.startsWith(root.canonicalPath + java.io.File.separator)
+                                            }.getOrDefault(true)
+                                        } else {
+                                            true
+                                        }
                                     }
                                 }
 
@@ -240,22 +250,21 @@ class PluginWebViewActivity : ComponentActivity() {
 
                             val entryPath = intent.getStringExtra(EXTRA_ENTRY_PATH) ?: "web/index.html"
                             val pluginDir = PluginLoader.getPluginDir(ctx, pluginId)
-                            val file = java.io.File(pluginDir, entryPath)
+                            val file = PluginLoader.getPluginFile(ctx, pluginId, entryPath)
 
-                            if (file.exists()) {
-                                val baseUrl = "file://${pluginDir.absolutePath}/"
-                                loadUrl("$baseUrl$entryPath")
+                            if (file?.isFile == true) {
+                                loadUrl(android.net.Uri.fromFile(file).toString())
                             } else {
                                 val pluginFiles = pluginDir.listFiles()?.joinToString(", ") { it.name } ?: "empty"
                                 loadDataWithBaseURL(
                                     "file://${pluginDir.absolutePath}/",
                                     "<html><body style='color:#333;font-family:sans-serif;padding:20px;text-align:center;'>" +
                                         "<h3>插件页面未找到</h3>" +
-                                        "<p>缺少文件: $entryPath</p>" +
+                                        "<p>缺少文件: ${android.text.TextUtils.htmlEncode(entryPath)}</p>" +
                                         "<p style='color:#888;font-size:12px;margin-top:16px;'>" +
                                         "插件目录: ${pluginDir.absolutePath}</p>" +
                                         "<p style='color:#888;font-size:12px;'>" +
-                                        "目录内容: $pluginFiles</p>" +
+                                        "目录内容: ${android.text.TextUtils.htmlEncode(pluginFiles)}</p>" +
                                         "<p style='color:#aaa;font-size:11px;margin-top:20px;'>" +
                                         "请重新安装插件或检查插件包是否完整</p>" +
                                         "</body></html>",

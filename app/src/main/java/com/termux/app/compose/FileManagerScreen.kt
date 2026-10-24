@@ -124,8 +124,12 @@ fun FileManagerScreen(
     var scriptDetectionFilePath by remember { mutableStateOf("") }
     var scriptDetectionCommand by remember { mutableStateOf("") }
 
-    LaunchedEffect(currentPath) {
-        files = currentPath.listFiles()?.sortedWith(compareBy({ !it.isDirectory }, { it.name })) ?: emptyList()
+    var fileRefreshGeneration by remember { mutableIntStateOf(0) }
+    LaunchedEffect(currentPath, fileRefreshGeneration) {
+        val directory = currentPath
+        files = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            directory.listFiles()?.sortedWith(compareBy({ !it.isDirectory }, { it.name })) ?: emptyList()
+        }
         selectedFiles = emptySet()
         isInSelectionMode = false
     }
@@ -157,7 +161,9 @@ fun FileManagerScreen(
         val ftpRunning = com.termux.app.ftp.FtpServiceManager.isRunning()
 
         if (ftpEnabled && !ftpRunning) {
-            com.termux.app.ftp.FtpServiceManager.start(context)
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                com.termux.app.ftp.FtpServiceManager.start(context)
+            }
         }
 
         isSftpEnabled = com.termux.app.ftp.FtpServiceManager.isRunning()
@@ -174,7 +180,7 @@ fun FileManagerScreen(
     }
 
     fun refreshFiles() {
-        files = currentPath.listFiles()?.sortedWith(compareBy({ !it.isDirectory }, { it.name })) ?: emptyList()
+        fileRefreshGeneration++
     }
 
     /**
@@ -431,21 +437,29 @@ fun FileManagerScreen(
                                 val modeAtStart = clipboardMode
                                 val targetPath = currentPath
                                 coroutineScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                                    val failures = linkedMapOf<String, String>()
                                     filesToProcess.forEachIndexed { index, srcPath ->
                                         val srcFile = File(srcPath)
                                         val destFile = File(targetPath, srcFile.name)
-                                        if (modeAtStart == ClipboardMode.CUT) {
-                                            moveFile(srcFile, destFile)
-                                        } else {
-                                            copyFile(srcFile, destFile)
+                                        try {
+                                            SafeFileOperations.transfer(srcFile, destFile, modeAtStart == ClipboardMode.CUT)
+                                        } catch (e: Exception) {
+                                            failures[srcPath] = e.message ?: "操作失败"
                                         }
-                                        operationProgress = (index + 1).toFloat() / filesToProcess.size
+                                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                            operationProgress = (index + 1).toFloat() / filesToProcess.size
+                                        }
                                     }
                                     kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                                        clipboardMode = ClipboardMode.NONE
-                                        clipboardFiles = emptySet()
+                                        clipboardMode = if (failures.isEmpty()) ClipboardMode.NONE else modeAtStart
+                                        clipboardFiles = failures.keys.toSet()
                                         refreshFiles()
                                         showOperationProgress = false
+                                        if (failures.isNotEmpty()) {
+                                            android.widget.Toast.makeText(context,
+                                                "${failures.size} 项失败，已保留以便重试：${failures.values.first()}",
+                                                android.widget.Toast.LENGTH_LONG).show()
+                                        }
                                     }
                                 }
                             }) {
@@ -1669,40 +1683,6 @@ private fun pathToBreadcrumbItems(currentPath: File): List<BreadcrumbItem> {
         items.add(BreadcrumbItem(path = builtPath, text = segment))
     }
     return items
-}
-
-private fun copyFile(src: File, dest: File) {
-    if (src.isDirectory) {
-        dest.mkdirs()
-        src.listFiles()?.forEach { child ->
-            copyFile(child, File(dest, child.name))
-        }
-    } else {
-        src.copyTo(dest, overwrite = true)
-    }
-}
-
-/**
- * 可靠的文件移动：先尝试 renameTo（同文件系统），失败则复制后删除（跨文件系统）。
- */
-private fun moveFile(src: File, dest: File): Boolean {
-    return try {
-        // 同文件系统直接重命名
-        if (src.renameTo(dest)) {
-            return true
-        }
-        // 跨文件系统：复制后删除
-        if (src.isDirectory) {
-            copyFile(src, dest)
-            src.deleteRecursively()
-        } else {
-            src.copyTo(dest, overwrite = true)
-            src.delete()
-        }
-        true
-    } catch (e: Exception) {
-        false
-    }
 }
 
 // ============== 上千种文件扩展名映射表 ==============

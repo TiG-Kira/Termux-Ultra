@@ -9,6 +9,7 @@ import java.io.BufferedReader
 import java.io.File
 import java.io.InputStreamReader
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Backup & restore manager backed by Termux's own `termux-backup` / `termux-restore` commands.
@@ -38,6 +39,7 @@ object BackupManager {
     private var restoreProcess: Process? = null
 
     private val envClient = ShellEnvironmentCompat(TermuxShellEnvironment())
+    private val operationActive = AtomicBoolean(false)
 
     /** Build the Termux shell environment array for [Runtime.exec]. */
     private fun buildEnv(context: Context): Array<String> {
@@ -50,19 +52,21 @@ object BackupManager {
      * @return the absolute path of the created backup file on success, or `null` on failure/cancel.
      */
     fun createBackup(context: Context, onProgress: ((Int, Int, String) -> Unit)? = null): String? {
+        if (!operationActive.compareAndSet(false, true)) return null
         isBackupCancelled = false
+        var incompleteFile: File? = null
         return try {
             val backupDir = File(Environment.getExternalStorageDirectory(), "Termux/Backup")
-            backupDir.mkdirs()
+            check(backupDir.isDirectory || backupDir.mkdirs()) { "无法创建备份目录" }
 
             val timestamp = System.currentTimeMillis()
             val backupFile = File(backupDir, "termuxbackup_$timestamp.tar.xz")
+            incompleteFile = backupFile
             val backupPath = backupFile.absolutePath
 
             val env = buildEnv(context)
             // Escape the path for the inner shell.
-            val command = "termux-backup \"$backupPath\""
-            val process = Runtime.getRuntime().exec(arrayOf(TERMUX_SHELL, "-c", command), env, File(TERMUX_HOME))
+            val process = startCommand("termux-backup", backupPath, env)
             backupProcess = process
 
             val currentSizeMB = AtomicInteger(0)
@@ -72,13 +76,8 @@ object BackupManager {
             val readerThread = Thread {
                 try {
                     val stdout = BufferedReader(InputStreamReader(process.inputStream, Charsets.UTF_8))
-                    val stderr = BufferedReader(InputStreamReader(process.errorStream, Charsets.UTF_8))
                     var line: String?
                     while (stdout.readLine().also { line = it } != null) {
-                        if (isBackupCancelled) return@Thread
-                        line?.takeIf { it.isNotBlank() }?.let { onProgress?.invoke(currentSizeMB.get(), -1, it) }
-                    }
-                    while (stderr.readLine().also { line = it } != null) {
                         if (isBackupCancelled) return@Thread
                         line?.takeIf { it.isNotBlank() }?.let { onProgress?.invoke(currentSizeMB.get(), -1, it) }
                     }
@@ -115,13 +114,19 @@ object BackupManager {
                 return null
             }
             if (exitCode != 0) {
+                backupFile.delete()
                 return null
             }
+            incompleteFile = null
             backupPath
         } catch (e: Exception) {
             e.printStackTrace()
-            backupProcess = null
             null
+        } finally {
+            backupProcess?.destroy()
+            backupProcess = null
+            incompleteFile?.delete()
+            operationActive.set(false)
         }
     }
 
@@ -132,7 +137,7 @@ object BackupManager {
     }
 
     fun isBackupRunning(): Boolean {
-        return !isBackupCancelled
+        return backupProcess?.isAlive == true && !isBackupCancelled
     }
 
     /**
@@ -141,17 +146,17 @@ object BackupManager {
      * @return `true` on success, `false` on failure/cancel.
      */
     fun restoreBackup(context: Context, backupPath: String, onProgress: ((Int, Int, String) -> Unit)? = null): Boolean {
+        if (!operationActive.compareAndSet(false, true)) return false
         isRestoreCancelled = false
         return try {
             val zipFile = File(backupPath)
-            if (!zipFile.exists()) {
+            if (!zipFile.isFile || !zipFile.canRead() || zipFile.length() == 0L) {
                 onProgress?.invoke(0, 1, "")
                 return false
             }
 
             val env = buildEnv(context)
-            val command = "termux-restore \"$backupPath\""
-            val process = Runtime.getRuntime().exec(arrayOf(TERMUX_SHELL, "-c", command), env, File(TERMUX_HOME))
+            val process = startCommand("termux-restore", zipFile.absolutePath, env)
             restoreProcess = process
 
             val totalMB = AtomicInteger((zipFile.length() / (1024L * 1024L)).toInt())
@@ -161,13 +166,8 @@ object BackupManager {
             val readerThread = Thread {
                 try {
                     val stdout = BufferedReader(InputStreamReader(process.inputStream, Charsets.UTF_8))
-                    val stderr = BufferedReader(InputStreamReader(process.errorStream, Charsets.UTF_8))
                     var line: String?
                     while (stdout.readLine().also { line = it } != null) {
-                        if (isRestoreCancelled) return@Thread
-                        line?.takeIf { it.isNotBlank() }?.let { onProgress?.invoke(totalMB.get(), -1, it) }
-                    }
-                    while (stderr.readLine().also { line = it } != null) {
                         if (isRestoreCancelled) return@Thread
                         line?.takeIf { it.isNotBlank() }?.let { onProgress?.invoke(totalMB.get(), -1, it) }
                     }
@@ -203,8 +203,11 @@ object BackupManager {
             exitCode == 0
         } catch (e: Exception) {
             e.printStackTrace()
-            restoreProcess = null
             false
+        } finally {
+            restoreProcess?.destroy()
+            restoreProcess = null
+            operationActive.set(false)
         }
     }
 
@@ -215,13 +218,28 @@ object BackupManager {
     }
 
     fun isRestoreRunning(): Boolean {
-        return !isRestoreCancelled
+        return restoreProcess?.isAlive == true && !isRestoreCancelled
+    }
+
+    // Pass user-selected paths as positional arguments; never interpolate them into shell code.
+    private fun startCommand(command: String, path: String, env: Array<String>): Process {
+        val builder = ProcessBuilder(TERMUX_SHELL, "-c", "exec $command \"\$1\"", command, path)
+            .directory(File(TERMUX_HOME))
+            .redirectErrorStream(true)
+        builder.environment().apply {
+            clear()
+            env.forEach { entry ->
+                val separator = entry.indexOf('=')
+                if (separator > 0) put(entry.substring(0, separator), entry.substring(separator + 1))
+            }
+        }
+        return builder.start()
     }
 
     fun getBackupFiles(context: Context): List<File> {
         val backupDir = File(Environment.getExternalStorageDirectory(), "Termux/Backup")
         return backupDir.listFiles { _, name ->
             name.startsWith("termuxbackup_") && (name.endsWith(".zip") || name.endsWith(".tar.xz") || name.endsWith(".tar.gz") || name.endsWith(".tar"))
-        }?.toList() ?: emptyList()
+        }?.filter { it.isFile && it.length() > 0L }?.sortedByDescending { it.lastModified() } ?: emptyList()
     }
 }

@@ -27,17 +27,19 @@ class FtpServer(
     private val running = AtomicBoolean(false)
     private var serverThread: Thread? = null
 
+    @Synchronized
     fun start() {
         if (running.get()) return
+        // Bind before reporting success; port conflicts must reach the caller.
+        val socket = ServerSocket(port, 50, resolveBindAddress(bindAddress))
+        serverSocket = socket
         running.set(true)
         serverThread = thread {
             try {
-                val addr = resolveBindAddress(bindAddress)
-                serverSocket = ServerSocket(port, 50, addr)
-                serverSocket?.reuseAddress = true
-                while (running.get()) {
+                while (running.get() && !socket.isClosed) {
                     try {
-                        val clientSocket = serverSocket?.accept() ?: break
+                        val clientSocket = socket.accept()
+                        clientSocket.soTimeout = 60000
                         thread {
                             FtpClientHandler(clientSocket, username, password, rootDir, bindAddress).handle()
                         }
@@ -51,6 +53,7 @@ class FtpServer(
         }
     }
 
+    @Synchronized
     fun stop() {
         running.set(false)
         try {
@@ -91,10 +94,11 @@ class FtpClientHandler(
 
             var line: String? = reader.readLine()
             while (line != null) {
-                val command = line ?: break
+                val command = line
                 val cmd = command.uppercase().substringBefore(" ")
                 val args = command.substringAfter(" ", "").trim()
                 handleCommand(writer, cmd, args)
+                if (clientSocket.isClosed) break
                 line = reader.readLine()
             }
         } catch (e: Exception) {
@@ -146,6 +150,7 @@ class FtpClientHandler(
     }
 
     private fun handleUser(writer: PrintWriter, args: String) {
+        authenticated = false
         userOk = args == username
         if (userOk) {
             sendResponse(writer, 331, "User name okay, need password")
@@ -155,6 +160,7 @@ class FtpClientHandler(
     }
 
     private fun handlePass(writer: PrintWriter, args: String) {
+        authenticated = false
         if (!userOk) {
             sendResponse(writer, 503, "Login with USER first")
             return
@@ -189,7 +195,7 @@ class FtpClientHandler(
         }
         val target = if (args.isEmpty()) "/" else args
         val newDir = if (target.startsWith("/")) normalizePath(target) else normalizePath("$currentDir/$target")
-        val file = File(rootDir + newDir)
+        val file = resolveRootPath(writer, newDir) ?: return
         if (file.exists() && file.isDirectory) {
             currentDir = newDir
             sendResponse(writer, 250, "Directory successfully changed")
@@ -208,7 +214,7 @@ class FtpClientHandler(
             return
         }
         val parent = normalizePath(currentDir).let { if (it == "/") "/" else File(it).parent?.let { p -> if (p.isEmpty() || p == "\\") "/" else p.replace("\\", "/") } ?: "/" }
-        val file = File(rootDir + parent)
+        val file = resolveRootPath(writer, parent) ?: return
         if (file.exists() && file.isDirectory) {
             currentDir = if (parent == "") "/" else parent
             sendResponse(writer, 250, "Directory successfully changed")
@@ -334,7 +340,7 @@ class FtpClientHandler(
         try {
             if (dataConn != null) {
                 val dirPath = getRealPath(parseListArgs(args))
-                val dir = File(rootDir + dirPath)
+                val dir = resolveRootPath(writer, dirPath) ?: return
                 val files = if (dir.exists() && dir.isDirectory) {
                     dir.listFiles() ?: emptyArray()
                 } else {
@@ -377,7 +383,7 @@ class FtpClientHandler(
         try {
             if (dataConn != null) {
                 val dirPath = getRealPath(parseListArgs(args))
-                val dir = File(rootDir + dirPath)
+                val dir = resolveRootPath(writer, dirPath) ?: return
                 val files = if (dir.exists() && dir.isDirectory) {
                     dir.listFiles() ?: emptyArray()
                 } else {
@@ -411,7 +417,7 @@ class FtpClientHandler(
             return
         }
         val filePath = getRealPath(args)
-        val file = File(rootDir + filePath)
+        val file = resolveRootPath(writer, filePath) ?: return
         if (!file.exists() || !file.isFile) {
             sendResponse(writer, 550, "Failed to open file")
             return
@@ -449,7 +455,7 @@ class FtpClientHandler(
             return
         }
         val filePath = getRealPath(args)
-        val file = File(rootDir + filePath)
+        val file = resolveRootPath(writer, filePath) ?: return
         file.parentFile?.mkdirs()
         sendResponse(writer, 150, "Ok to send data")
         val dataConn = openDataConnection(writer)
@@ -485,7 +491,7 @@ class FtpClientHandler(
             return
         }
         val filePath = getRealPath(args)
-        val file = File(rootDir + filePath)
+        val file = resolveRootPath(writer, filePath) ?: return
         if (file.exists() && file.isFile && file.delete()) {
             sendResponse(writer, 250, "Delete operation successful")
         } else {
@@ -499,7 +505,7 @@ class FtpClientHandler(
             return
         }
         val dirPath = getRealPath(args)
-        val dir = File(rootDir + dirPath)
+        val dir = resolveRootPath(writer, dirPath) ?: return
         if (dir.mkdirs()) {
             sendResponse(writer, 257, "\"$dirPath\" directory created")
         } else {
@@ -513,8 +519,8 @@ class FtpClientHandler(
             return
         }
         val dirPath = getRealPath(args)
-        val dir = File(rootDir + dirPath)
-        if (dir.exists() && dir.isDirectory && dir.deleteRecursively()) {
+        val dir = resolveRootPath(writer, dirPath) ?: return
+        if (dir.canonicalFile != File(rootDir).canonicalFile && dir.isDirectory && dir.delete()) {
             sendResponse(writer, 250, "Remove directory operation successful")
         } else {
             sendResponse(writer, 550, "Remove directory operation failed")
@@ -527,11 +533,20 @@ class FtpClientHandler(
             return
         }
         val filePath = getRealPath(args)
-        val file = File(rootDir + filePath)
+        val file = resolveRootPath(writer, filePath) ?: return
         if (file.exists() && file.isFile) {
             sendResponse(writer, 213, file.length().toString())
         } else {
             sendResponse(writer, 550, "Could not get file size")
+        }
+    }
+
+    private fun resolveRootPath(writer: PrintWriter, path: String): File? {
+        return try {
+            FtpPathPolicy.resolve(File(rootDir), path)
+        } catch (_: Exception) {
+            sendResponse(writer, 550, "Path is outside the FTP root or unavailable")
+            null
         }
     }
 
