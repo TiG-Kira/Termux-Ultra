@@ -7,8 +7,8 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -17,7 +17,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -34,8 +37,14 @@ import top.yukonga.miuix.kmp.blur.Backdrop
 /** Default values for [GlassDialog]. */
 object GlassOverlayDefaults {
 
-    /** Corner radius of a dialog. */
-    val DialogCornerRadius: Dp = 28.dp
+    /** Corner radius of a dialog. 与 miuix 对话框规范一致（32dp）。 */
+    val DialogCornerRadius: Dp = 32.dp
+
+    /** 对话框内容宽度上限，与 miuix 对话框规范一致。 */
+    val DialogMaxWidth: Dp = 420.dp
+
+    /** 对话框距屏幕左右/底部的外边距，与 miuix 对话框规范一致。 */
+    val DialogOutsideMargin: Dp = 12.dp
 
     /** Opacity of the scrim behind a dialog in a light theme. */
     val ScrimAlphaLight: Float = 0.3f
@@ -55,6 +64,7 @@ object GlassOverlayDefaults {
  * @param scrimAlpha Opacity of the scrim once the dialog has settled.
  * @param style The glass material.
  * @param shape The dialog's silhouette.
+ * @param maxWidth 内容宽度上限，防止在平板/桌面窗口被拉成长条。
  * @param alpha Opacity multiplier for the material.
  * @param shadow The shadow under the dialog. `null` removes it.
  * @param stroke Optional bloom stroke along the rim.
@@ -70,6 +80,7 @@ fun GlassDialog(
     scrimAlpha: Float = GlassOverlayDefaults.ScrimAlphaLight,
     style: GlassStyle = GlassDefaults.Style,
     shape: GlassShape = GlassShape(GlassOverlayDefaults.DialogCornerRadius),
+    maxWidth: Dp = GlassOverlayDefaults.DialogMaxWidth,
     alpha: Float = 1f,
     stroke: GlassStroke? = null,
     shadow: GlassShadow? = GlassShadows.ExtraHigh,
@@ -107,14 +118,29 @@ fun GlassDialog(
         )
         AnimatedVisibility(
             visible = visible,
-            modifier = Modifier.align(Alignment.Center).padding(horizontal = 24.dp),
-            enter = scaleIn(animationSpec = GlassMotion.dialogEnter(), initialScale = 0.86f) +
-                fadeIn(animationSpec = GlassMotion.fadeIn()),
-            exit = scaleOut(animationSpec = GlassMotion.dialogExit(), targetScale = 0.9f) +
-                fadeOut(animationSpec = GlassMotion.fadeOut()),
+            // 与 miuix 对话框落位一致：底部居中 + 12dp 外边距（不是居中浮块）。
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .navigationBarsPadding()
+                .padding(
+                    start = GlassOverlayDefaults.DialogOutsideMargin,
+                    end = GlassOverlayDefaults.DialogOutsideMargin,
+                    bottom = GlassOverlayDefaults.DialogOutsideMargin,
+                ),
+            // 底部弹出：自下而上滑入 + 淡入；退场反向。
+            enter = slideInVertically(
+                animationSpec = GlassMotion.dialogEnter(),
+                initialOffsetY = { it / 4 },
+            ) + fadeIn(animationSpec = GlassMotion.fadeIn()),
+            exit = slideOutVertically(
+                animationSpec = GlassMotion.dialogExit(),
+                targetOffsetY = { it / 4 },
+            ) + fadeOut(animationSpec = GlassMotion.fadeOut()),
         ) {
             Column(
                 modifier = Modifier
+                    .widthIn(max = maxWidth)
+                    .fillMaxWidth()
                     .glassPanel(
                         backdrop = backdrop,
                         shape = shape,

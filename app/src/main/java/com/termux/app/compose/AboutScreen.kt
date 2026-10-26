@@ -199,6 +199,9 @@ fun AboutScreen(onBack: () -> Unit) {
             topBar = {
                 GlassTopAppBar(
                     title = context.getString(R.string.about_preference_title),
+                    // 本页动态 shader 背景画在 Scaffold 之外，不在取景层内；
+                    // 开带区模糊会采到透明(=黑)形成墨团，所以这页保留渐变底板不模糊。
+                    bandBlurRadius = 0.dp,
                     backdrop = glassPage.backdrop,
                     scrollBehavior = scrollBehavior,
                     navigationIcon = {
@@ -214,6 +217,8 @@ fun AboutScreen(onBack: () -> Unit) {
                 )
             }
         ) { padding ->
+            // 取景层里必须有不透明底色：Scaffold 是 Transparent + 渐变画在外面，
+            // 否则模糊采样到"透明=黑"，顶栏会出现墨团。
             LazyColumn(
                 state = listState,
                 modifier = Modifier

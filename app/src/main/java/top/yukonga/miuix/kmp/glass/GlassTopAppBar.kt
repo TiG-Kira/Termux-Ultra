@@ -11,10 +11,17 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.requiredHeight
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
@@ -31,19 +38,27 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import top.yukonga.miuix.kmp.basic.BlurTopAppBar
 import top.yukonga.miuix.kmp.basic.ScrollBehavior
 import top.yukonga.miuix.kmp.blur.Backdrop
+import top.yukonga.miuix.kmp.blur.ProgressiveBlur
+import top.yukonga.miuix.kmp.blur.blur
+import top.yukonga.miuix.kmp.blur.drawBackdrop
 import top.yukonga.miuix.kmp.blur.isRuntimeShaderSupported
 import top.yukonga.miuix.kmp.glass.internal.drawGlassMask
 import top.yukonga.miuix.kmp.glass.internal.drawGlassRim
@@ -67,6 +82,25 @@ object GlassTopAppBarDefaults {
 
     /** How far the large title blurs out as it collapses. */
     val LargeTitleBlurRadius: Dp = 12.dp
+
+    /**
+     * 标题带自身的**渐进模糊**半径；0 = 关闭，只保留原有的 scrim 渐变。
+     *
+     * 开启后，滑到顶栏下方的内容会被真实模糊（越靠近顶栏越糊），而不是仅仅被渐变压淡。
+     * 由 UI 外观样式在启动时写入，读取发生在组合期 —— 切换样式后需重建界面才生效。
+     */
+    var BandBlurRadius: Dp = 0.dp
+
+
+
+    /**
+     * 底板整体上移量：把白色渐变的高光压到状态栏一带，避免它盖在标题高度上变成白雾。
+     * 0 = 原位（默认样式必须保持 0）。
+     */
+    var BandScrimOffset: Dp = 0.dp
+
+
+
 
     /** Diameter of the glass pill behind a bar button. */
     val ButtonSize: Dp = 44.dp
@@ -258,6 +292,7 @@ fun GlassTopAppBar(
     actions: @Composable RowScope.() -> Unit = {},
     bottomContent: @Composable () -> Unit = {},
     onBlankTap: (() -> Unit)? = null,
+    bandBlurRadius: Dp = GlassTopAppBarDefaults.BandBlurRadius,
 ) {
     val isContentScrolled by remember(scrollBehavior) {
         derivedStateOf { scrollBehavior?.state?.let { it.contentOffset < 0f } ?: true }
@@ -291,6 +326,7 @@ fun GlassTopAppBar(
         actions = actions,
         bottomContent = bottomContent,
         onBlankTap = onBlankTap,
+        bandBlurRadius = bandBlurRadius,
     )
 }
 
@@ -340,6 +376,7 @@ fun GlassTopAppBar(
     bottomContent: @Composable () -> Unit = {},
     onBlankTap: (() -> Unit)? = null,
     rampFromOverlay: Boolean = false,
+    bandBlurRadius: Dp = GlassTopAppBarDefaults.BandBlurRadius,
 ) {
     // Buttons carry their own horizontal margin (see [GlassTopAppBarDefaults.ButtonPadding]), so
     // the trailing row needs no spacing of its own; the wrapper only pins them to the end.
@@ -388,6 +425,12 @@ fun GlassTopAppBar(
 
     Box(modifier = modifier) {
         val overhangPx = with(LocalDensity.current) { bandOverhang.toPx() }
+        val bandBlurPx = with(LocalDensity.current) { bandBlurRadius.toPx() }
+        val scrimOffsetPx = with(LocalDensity.current) { GlassTopAppBarDefaults.BandScrimOffset.toPx() }
+        // 渐进模糊需要真实取景层；没有 backdrop 时退回原来的 scrim 渐变。
+        val bandBlurBackdrop = backdrop?.takeIf { bandBlurPx > 0f && isRuntimeShaderSupported() }
+
+        // 底层：渐变底板（可淡 / 可关）。默认样式就是它自己，柔光样式给它留一点透视。
         Box(
             modifier = Modifier
                 .matchParentSize()
@@ -395,9 +438,43 @@ fun GlassTopAppBar(
                     this.alpha = maskProgress.value
                     transformOrigin = TransformOrigin(0.5f, 0f)
                     scaleY = if (size.height > 0f) (size.height + overhangPx) / size.height else 1f
+                    // 柔光样式把整块白色渐变向上推，让它落在状态栏一带；默认样式为 0，位置不变。
+                    translationY = -scrimOffsetPx
                 }
                 .background(bandBrush),
         )
+
+        // 上层：真实模糊，盖在底板之上；竖向遮罩让下沿归零（无硬边）。
+        if (bandBlurBackdrop != null) {
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+                    .drawBackdrop(
+                        backdrop = bandBlurBackdrop,
+                        shape = { RectangleShape },
+                        effects = { blur(bandBlurPx) },
+                    )
+                    .drawWithContent {
+                        drawContent()
+                        // 竖向遮罩：与底板同一组分段，下沿恰好为 0，所以不会有硬分界线。
+                        drawRect(
+                            brush = Brush.verticalGradient(
+                                colorStops = arrayOf(
+                                    0.00f to Color.White,
+                                    0.55f to Color.White,
+                                    0.70f to Color.White.copy(alpha = 0.92f),
+                                    0.82f to Color.White.copy(alpha = 0.74f),
+                                    0.92f to Color.White.copy(alpha = 0.45f),
+                                    1.00f to Color.Transparent,
+                                ),
+                            ),
+                            blendMode = BlendMode.DstIn,
+                        )
+                    },
+            )
+        }
+
         CompositionLocalProvider(
             LocalGlassTopAppBarContext provides GlassTopAppBarContext(
                 backdrop = buttonBackdrop,

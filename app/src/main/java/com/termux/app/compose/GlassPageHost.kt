@@ -130,7 +130,11 @@ fun GlassPageBackdropHost(
     content: @Composable BoxScope.() -> Unit,
 ) {
     val page = rememberGlassPageBackdrop()
-    CompositionLocalProvider(LocalGlassTopAppBarBackdrop provides page.backdrop) {
+    CompositionLocalProvider(
+        LocalGlassTopAppBarBackdrop provides page.backdrop,
+        // 同一份取景层也喂给弹层：柔光样式下页面内的弹窗直接玻璃化。
+        LocalHyperGlassBackdrop provides page.backdrop,
+    ) {
         Box(
             modifier = modifier.fillMaxSize().then(page.contentModifier),
             content = content,

@@ -93,6 +93,9 @@ public class TermuxApplication extends com.termux.x11.LorieApp {
         // 在 X11 进程重复注册、LocalServerSocket 与主进程抢同一地址。
         if (!isMainProcess()) return;
 
+        // UI 外观样式：在界面建立前把样式同步到只能在组合期读取的静态 token（顶栏渐进模糊）。
+        com.termux.app.compose.HyperGlassKt.applyUiStyleTokens(this);
+
         // 注册 ActivityLifecycleCallbacks：每个 Activity 进入前台时检测是否有待处理的崩溃
         registerActivityLifecycleCallbacks(new ActivityLifecycleCallbacks() {
             @Override public void onActivityCreated(Activity activity, android.os.Bundle savedInstanceState) {}
