@@ -236,6 +236,9 @@ fun ProcessListScreen(
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
+                    // 挂载取景层 + 铺不透明 Miuix 底色：顶栏带区模糊才有内容可采（防墨团）
+                    .then(glassPage.contentModifier)
+                    .background(MiuixTheme.colorScheme.surface)
                     .padding(pagePaddingWithoutTop(padding))
                     .nestedScroll(scrollBehavior.nestedScrollConnection),
                 contentPadding = standaloneContentPadding(padding, bottom = navBarBottomPadding + 16.dp)

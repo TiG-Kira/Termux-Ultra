@@ -702,6 +702,8 @@ fun FileManagerScreen(
 
         OverlayBottomSheet(
             show = showOpenWithDialog,
+            // 文件详情弹窗保留原版：玻璃弹层会丢掉详情卡片和操作行的原布局作用。
+            glassEnabled = false,
             onDismissRequest = {
                 showOpenWithDialog = false
                 fileToOpen = null

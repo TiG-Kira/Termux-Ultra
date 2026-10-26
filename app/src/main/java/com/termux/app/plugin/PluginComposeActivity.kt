@@ -27,6 +27,7 @@ import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.glass.ChevronBackward
 import top.yukonga.miuix.kmp.icon.glass.MiuixGlassIcons
+import androidx.compose.foundation.background
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 class PluginComposeActivity : ComponentActivity() {
@@ -92,7 +93,7 @@ class PluginComposeActivity : ComponentActivity() {
                         }
                     )
                 }) { padding ->
-                    Box(Modifier.padding(padding).fillMaxSize()) {
+                    Box(Modifier.fillMaxSize().then(glassPage.contentModifier).background(MiuixTheme.colorScheme.surface).padding(padding)) {
                         if (rootNode != null) {
                             ComposeRenderer.RenderNode(rootNode, pluginId, context, stateStore)
                         } else {

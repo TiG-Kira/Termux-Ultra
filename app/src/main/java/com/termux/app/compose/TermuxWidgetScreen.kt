@@ -27,6 +27,7 @@ import top.yukonga.miuix.kmp.icon.glass.ChevronBackward
 import top.yukonga.miuix.kmp.icon.glass.MiuixGlassIcons
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.preference.ArrowPreference
+import androidx.compose.foundation.background
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import com.termux.app.compose.pagePaddingWithoutTop
 
@@ -65,6 +66,8 @@ fun TermuxWidgetScreen(
         Box(
             modifier = modifier
                 .then(glassPage.contentModifier)
+                // 取景层内铺不透明 Miuix 底色，带区模糊采不到透明（防墨团）
+                .background(MiuixTheme.colorScheme.surface)
                 .fillMaxSize()
                 .padding(pagePaddingWithoutTop(padding))
         ) {

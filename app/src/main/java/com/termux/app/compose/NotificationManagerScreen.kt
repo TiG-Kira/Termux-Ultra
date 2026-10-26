@@ -41,6 +41,7 @@ import top.yukonga.miuix.kmp.icon.glass.ChevronBackward
 import top.yukonga.miuix.kmp.icon.glass.MiuixGlassIcons
 import top.yukonga.miuix.kmp.preference.RadioButtonPreference
 import top.yukonga.miuix.kmp.preference.SwitchPreference
+import androidx.compose.foundation.background
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import com.termux.app.compose.pagePaddingWithoutTop
 import com.termux.app.compose.standaloneContentPadding
@@ -118,6 +119,9 @@ fun NotificationManagerScreen(
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
+                // 挂载取景层 + 铺不透明 Miuix 底色：顶栏带区模糊才有内容可采（防墨团）
+                .then(glassPage.contentModifier)
+                .background(MiuixTheme.colorScheme.surface)
                 .padding(pagePaddingWithoutTop(padding))
                 .nestedScroll(scrollBehavior.nestedScrollConnection),
             contentPadding = standaloneContentPadding(padding, bottom = navBarBottomPadding + 16.dp)

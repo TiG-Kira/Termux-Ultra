@@ -334,6 +334,10 @@ fun GlassTerminalBar(
             subtitleColor = resolvedSubtitleColor,
             backdrop = backdrop,
             bandBrush = transparentBrush,
+            // 终端栏排除柔光：bandBlurRadius 不走全局默认（柔光样式 20dp），与关于页同款
+            // 显式置 0。终端栏有自己的 bandTint 渐隐底板设计，且终端内容高频重绘，
+            // 叠一层实时模糊带区既破坏取色口径又白耗渲染线程。
+            bandBlurRadius = 0.dp,
             scrollBehavior = scrollBehavior,
             fill = GlassTerminalBarDefaults.buttonFill(isDark),
             stroke = GlassTerminalBarDefaults.buttonStroke(isDark),

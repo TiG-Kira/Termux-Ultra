@@ -1371,6 +1371,10 @@ fun PackageManagerScreen(
                     modifier = Modifier
                         .then(glassPage.contentModifier)
                         .fillMaxSize()
+                        // 取景层内必须有不透明 Miuix 底色：Scaffold 的 containerColor 在捕获
+                        // 节点之外，带区模糊采到「透明=黑」会出墨团（同关于页注释、MainScreen
+                        // 页面自绘背景的口径）。background 在 padding 之前，铺满整个捕获节点。
+                        .background(MiuixTheme.colorScheme.surface)
                         // 顶部的搜索栏与 tab 是固定条，必须停在玻璃顶栏下方；列表本身仍会滚到顶栏之下。
                         .padding(top = topBarClearance(innerPadding))
                         .padding(pagePaddingWithoutTop(innerPadding))

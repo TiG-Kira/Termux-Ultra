@@ -121,11 +121,19 @@ fun AiLocalTrainerScreen(
         ) { padding ->
             if (!hasLocal.value) {
                 // 居中提示按整屏居中，让位交给 pagePaddingWithoutTop 之外的那一份顶部空间。
-                NoLocalModelHint(Modifier.padding(top = topBarClearance(padding)))
+                NoLocalModelHint(Modifier
+                    .fillMaxSize()
+                    // 挂载取景层 + 铺不透明 Miuix 底色：顶栏带区模糊才有内容可采（防墨团）
+                    .then(glassPage.contentModifier)
+                    .background(MiuixTheme.colorScheme.surface)
+                    .padding(top = topBarClearance(padding)))
             } else {
                 TrainerBody(
                     Modifier
                         .fillMaxSize()
+                        // 挂载取景层 + 铺不透明 Miuix 底色：顶栏带区模糊才有内容可采（防墨团）
+                        .then(glassPage.contentModifier)
+                        .background(MiuixTheme.colorScheme.surface)
                         // 顶部的 TabBar 是固定条，必须停在玻璃顶栏下方；各 tab 的列表仍会滚到顶栏之下。
                         .padding(top = topBarClearance(padding))
                         .padding(pagePaddingWithoutTop(padding))

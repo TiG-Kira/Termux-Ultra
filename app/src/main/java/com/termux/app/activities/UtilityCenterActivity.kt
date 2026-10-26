@@ -45,6 +45,7 @@ import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.glass.ChevronBackward
 import top.yukonga.miuix.kmp.icon.glass.MiuixGlassIcons
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
+import androidx.compose.foundation.background
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 /**
@@ -231,6 +232,8 @@ class UtilityCenterActivity : ComponentActivity() {
                     LazyColumn(
                         modifier = Modifier
                             .then(glassPage.contentModifier)
+                            // 取景层内铺不透明 Miuix 底色，带区模糊采不到透明（防墨团）
+                            .background(MiuixTheme.colorScheme.surface)
                             .fillMaxSize()
                             .padding(pagePaddingWithoutTop(padding))
                             .nestedScroll(scrollBehavior.nestedScrollConnection),
