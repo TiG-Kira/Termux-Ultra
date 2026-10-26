@@ -73,6 +73,7 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
 @Composable
 fun GitHubAccountCard() {
     val context = LocalContext.current
+    UiStylePrefs.init(context)
     // 每次重组都从存储读一次并不划算，但登录/注销都会回到本页，
     // 因此用 Lifecycle 的 ON_RESUME 作为唯一的刷新时机，保证状态与存储一致。
     var session by remember { mutableStateOf(GitHubSessionStore.load(context)) }
@@ -133,11 +134,12 @@ fun GitHubAccountCard() {
         )
     }
 
-    Card(
+    val uiStyle by UiStylePrefs.uiStyle.collectAsState()
+    HyperGlassCard(
+        style = uiStyle,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp)
-            .clip(RoundedCornerShape(16.dp))
+            .padding(horizontal = if (uiStyle is HyperGlassStyle.Soft) 12.dp else 16.dp, vertical = 8.dp)
     ) {
         ArrowPreference(
             title = session?.user?.login ?: stringResource(R.string.github_login_title),

@@ -1,6 +1,8 @@
 package com.termux.app.compose
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
@@ -38,6 +40,31 @@ fun OverlayDialog(
     content: @Composable () -> Unit,
 ) {
     MainNavBarHideEffect(show)
+    // 超级柔光：走玻璃弹层；默认样式（或没有取景层）原样走 miuix，连参数都不动。
+    val uiStyle by UiStylePrefs.uiStyle.collectAsState()
+    // 主页取景层优先；子页面/独立 Activity 没有它，但玻璃顶栏自己有一份页面取景层（
+    // LocalGlassTopAppBarBackdrop），弹层直接复用 —— 这样 48 个子页面的弹窗无需逐个改造。
+    val glassBackdrop = LocalHyperGlassBackdrop.current ?: LocalGlassTopAppBarBackdrop.current
+    if (uiStyle is HyperGlassStyle.Soft && glassBackdrop != null) {
+        HyperGlassDialog(
+            show = show,
+            style = uiStyle,
+            backdrop = glassBackdrop,
+            modifier = modifier,
+            title = title,
+            titleColor = titleColor,
+            summary = summary,
+            summaryColor = summaryColor,
+            backgroundColor = backgroundColor,
+            enableWindowDim = enableWindowDim,
+            onDismissRequest = onDismissRequest,
+            onDismissFinished = onDismissFinished,
+            maxWidth = maxWidth,
+            cornerRadius = cornerRadius ?: DialogDefaults.CornerRadius,
+            content = content,
+        )
+        return
+    }
     top.yukonga.miuix.kmp.overlay.OverlayDialog(
         show = show,
         modifier = modifier,
@@ -125,6 +152,23 @@ fun OverlayBottomSheet(
     content: @Composable () -> Unit,
 ) {
     MainNavBarHideEffect(show)
+    // 超级柔光：底部弹层同样玻璃化；默认样式（或没有取景层）原样走 miuix。
+    val sheetStyle by UiStylePrefs.uiStyle.collectAsState()
+    val sheetBackdrop = LocalHyperGlassBackdrop.current ?: LocalGlassTopAppBarBackdrop.current
+    if (sheetStyle is HyperGlassStyle.Soft && sheetBackdrop != null) {
+        HyperGlassBottomSheet(
+            show = show,
+            style = sheetStyle,
+            backdrop = sheetBackdrop,
+            title = title,
+            cornerRadius = cornerRadius,
+            dragHandleColor = dragHandleColor,
+            onDismissRequest = onDismissRequest,
+            onDismissFinished = onDismissFinished,
+            content = content,
+        )
+        return
+    }
     top.yukonga.miuix.kmp.overlay.OverlayBottomSheet(
         show = show,
         modifier = modifier,

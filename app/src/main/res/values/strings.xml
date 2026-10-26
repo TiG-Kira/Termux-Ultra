@@ -439,8 +439,16 @@
     <string name="navigation_bar_floating">Floating</string>
     <string name="navigation_bar_liquid_glass">Glass</string>
     <string name="navigation_bar_os4">Soft Light</string>
-    <string name="navigation_bar_restart_message">Navigation bar style changes will take effect after the app is restarted.</string>
+    <string name="navigation_bar_restart_message">Navigation bar style changes will take effect after the app is restarted. Restart now?</string>
     <string name="glass_nav_bar_fallback_toast">Glass navigation bar failed to render on this device. Automatically switched to the Classic navigation bar style.</string>
+
+    <!-- UI Appearance Style -->
+    <string name="ui_appearance_style">UI Style</string>
+    <string name="ui_appearance_style_description">Grouped cards and dialogs follow the Super Soft look. Does not affect navigation bar settings.</string>
+        <string name="ui_style_soft">Super Soft</string>
+    <string name="ui_style_default">Default</string>
+    <string name="ui_style_restart_message">UI style changes will take effect after the app is restarted. Restart now?</string>
+    <string name="ui_style_requires_android13">The Super Soft style requires Android 13 or later.</string>
 
     <!-- PullToRefresh -->
     <string name="pull_down_to_refresh">Pull down to refresh</string>

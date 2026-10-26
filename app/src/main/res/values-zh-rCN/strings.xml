@@ -368,8 +368,16 @@
     <string name="navigation_bar_floating">浮动</string>
     <string name="navigation_bar_liquid_glass">玻璃</string>
     <string name="navigation_bar_os4">柔光</string>
-    <string name="navigation_bar_restart_message">导航栏样式变更将在重启应用后生效。</string>
+    <string name="navigation_bar_restart_message">导航栏样式变更将在重启应用后完全生效，是否现在重启？</string>
     <string name="glass_nav_bar_fallback_toast">玻璃导航栏在当前设备渲染失败，已自动切换为经典导航栏。</string>
+
+    <!-- UI 外观样式 -->
+    <string name="ui_appearance_style">UI 外观样式</string>
+    <string name="ui_appearance_style_description">分组卡片与弹窗切换为超级柔光外观；不影响导航栏样式设置</string>
+        <string name="ui_style_soft">超级柔光</string>
+    <string name="ui_style_default">默认</string>
+    <string name="ui_style_restart_message">UI 外观样式变更将在重启应用后完全生效，是否现在重启？</string>
+    <string name="ui_style_requires_android13">超级柔光样式需要 Android 13 及以上版本。</string>
 
     <!-- PullToRefresh -->
     <string name="pull_down_to_refresh">下拉刷新</string>

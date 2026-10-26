@@ -36,7 +36,7 @@ import top.yukonga.miuix.kmp.basic.LinearProgressIndicator
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.glass.GlassTopAppBar
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
-import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.ScrollBehavior
 import top.yukonga.miuix.kmp.basic.SmallTitle
@@ -284,6 +284,23 @@ fun SettingsScreen(
     var showNavRestartPrompt by remember { mutableStateOf(false) }
     var showCriticalNavDialog by remember { mutableStateOf(false) }
     var pendingNavStyleIndex by remember { mutableStateOf(-1) }
+
+    // UI 外观样式（液态/柔光(优化)/默认）：与导航栏样式相互独立
+    UiStylePrefs.init(context)
+    val uiStyle by UiStylePrefs.uiStyle.collectAsState()
+    val uiStyleOptions = listOf(
+        context.getString(R.string.ui_style_soft),
+        context.getString(R.string.ui_style_default)
+    )
+    fun uiStyleIndexOf(style: HyperGlassStyle) = when (style) {
+        is HyperGlassStyle.Soft -> 0
+        HyperGlassStyle.Default -> 1
+    }
+    var uiStyleIndex by remember { mutableStateOf(uiStyleIndexOf(uiStyle)) }
+    LaunchedEffect(uiStyle) { uiStyleIndex = uiStyleIndexOf(uiStyle) }
+    var showUiStyleRestartPrompt by remember { mutableStateOf(false) }
+    var showHyperGlassCriticalDialog by remember { mutableStateOf(false) }
+    var pendingUiStyleIndex by remember { mutableStateOf(-1) }
 
     // 卡片布局模式
     var cardLayoutMode by remember {
@@ -646,6 +663,31 @@ fun SettingsScreen(
                         showNavRestartPrompt = true
                     },
                     startAction = { SettingIcon(Icons.Rounded.Navigation, contentDescription = context.getString(R.string.navigation_bar_style)) }
+                )
+            }),
+        SearchableSetting(sec_appearance, context.getString(R.string.ui_appearance_style), context.getString(R.string.ui_appearance_style_description),
+            keywords = listOf("UI", "外观", "样式", "液态", "柔光", "liquid", "soft", "material", "glass"),
+            render = {
+                OverlayDropdownPreference(
+                    title = context.getString(R.string.ui_appearance_style),
+                    summary = context.getString(R.string.ui_appearance_style_description),
+                    items = uiStyleOptions,
+                    selectedIndex = uiStyleIndex,
+                    onSelectedIndexChange = { idx ->
+                        if (idx == 0 && !ApiCompat.isFeatureUsable(context, ApiCompat.Feature.HYPER_GLASS)) {
+                            pendingUiStyleIndex = idx
+                            showHyperGlassCriticalDialog = true
+                            return@OverlayDropdownPreference
+                        }
+                        val newStyle = when (idx) {
+                            0 -> HyperGlassStyle.Soft()
+                            else -> HyperGlassStyle.Default
+                        }
+                        UiStylePrefs.setUiStyle(context, newStyle)
+                        uiStyleIndex = idx
+                        showUiStyleRestartPrompt = true
+                    },
+                    startAction = { SettingIcon(Icons.Rounded.Palette, contentDescription = context.getString(R.string.ui_appearance_style)) }
                 )
             }),
         SearchableSetting(sec_appearance, context.getString(R.string.horizontal_tip_layout), context.getString(R.string.overview_horizontal_cards_desc),
@@ -1155,17 +1197,40 @@ fun SettingsScreen(
             // ---------- Appearance ----------
             item(key = "section_appearance") { SmallTitle(text = context.getString(R.string.appearance)) }
             item(key = "card_appearance") {
-                                Card(
+                                HyperGlassCard(
+                    style = uiStyle,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
-                        .clip(RoundedCornerShape(16.dp))
+                        .padding(horizontal = if (uiStyle is HyperGlassStyle.Soft) 12.dp else 16.dp, vertical = 8.dp)
                 ) {
                     Column {
                         MaterialYouSwitch(
                             context = context,
                             checked = materialYouEnabled,
                             onCheckedChange = { AppThemePrefs.setMaterialYouEnabled(context, it) }
+                        )
+                                OverlayDropdownPreference(
+                            title = context.getString(R.string.ui_appearance_style),
+                            summary = context.getString(R.string.ui_appearance_style_description),
+                            items = uiStyleOptions,
+                            selectedIndex = uiStyleIndex,
+                            onSelectedIndexChange = { idx ->
+                                if (idx == 0 && !ApiCompat.isFeatureUsable(context, ApiCompat.Feature.HYPER_GLASS)) {
+                                    pendingUiStyleIndex = idx
+                                    showHyperGlassCriticalDialog = true
+                                    return@OverlayDropdownPreference
+                                }
+                                val newStyle = when (idx) {
+                                    0 -> HyperGlassStyle.Soft()
+                                    else -> HyperGlassStyle.Default
+                                }
+                                UiStylePrefs.setUiStyle(context, newStyle)
+                                uiStyleIndex = idx
+                                showUiStyleRestartPrompt = true
+                            },
+                            startAction = {
+                                SettingIcon(Icons.Rounded.Palette, contentDescription = context.getString(R.string.ui_appearance_style))
+                            }
                         )
                                 OverlayDropdownPreference(
                             title = context.getString(R.string.pref_launch_page_title),
@@ -1253,11 +1318,11 @@ fun SettingsScreen(
             // ---------- Package Manager ----------
             item(key = "section_pkg_mgmt") { SmallTitle(text = context.getString(R.string.pkg_mgmt_category)) }
             item(key = "card_pkg_mgmt") {
-                                Card(
+                                HyperGlassCard(
+                                    style = uiStyle,
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
-                        .clip(RoundedCornerShape(16.dp))
+                .fillMaxWidth()
+                .padding(horizontal = if (uiStyle is HyperGlassStyle.Soft) 12.dp else 16.dp, vertical = 8.dp)
                 ) {
                     Column {
                         OverlayDropdownPreference(
@@ -1291,11 +1356,11 @@ fun SettingsScreen(
             // ---------- Remote ----------
             item(key = "section_remote") { SmallTitle(text = context.getString(R.string.remote)) }
             item(key = "card_remote") {
-                                Card(
+                                HyperGlassCard(
+                                    style = uiStyle,
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
-                        .clip(RoundedCornerShape(16.dp))
+                .fillMaxWidth()
+                .padding(horizontal = if (uiStyle is HyperGlassStyle.Soft) 12.dp else 16.dp, vertical = 8.dp)
                 ) {
                     Column {
                                 SwitchPreference(
@@ -1333,11 +1398,11 @@ fun SettingsScreen(
             // ---------- 终端 ----------
             item(key = "section_terminal") { SmallTitle(text = context.getString(R.string.terminal)) }
             item(key = "card_terminal_modules") {
-                Card(
+                HyperGlassCard(
+                    style = uiStyle,
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
-                        .clip(RoundedCornerShape(16.dp))
+                .fillMaxWidth()
+                .padding(horizontal = if (uiStyle is HyperGlassStyle.Soft) 12.dp else 16.dp, vertical = 8.dp)
                 ) {
                     Column {
                         ArrowPreference(
@@ -1374,11 +1439,11 @@ fun SettingsScreen(
 // ---------- Integrated Tools ----------
             item(key = "section_tools") { SmallTitle(text = context.getString(R.string.integrated_tools_category)) }
             item(key = "card_integrated_tools") {
-                Card(
+                HyperGlassCard(
+                    style = uiStyle,
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
-                        .clip(RoundedCornerShape(16.dp))
+                .fillMaxWidth()
+                .padding(horizontal = if (uiStyle is HyperGlassStyle.Soft) 12.dp else 16.dp, vertical = 8.dp)
                 ) {
                     Column {
                                 IntegratedToolSwitch(
@@ -1516,11 +1581,11 @@ fun SettingsScreen(
 // ---------- AI Termux ----------
             item(key = "section_ai") { SmallTitle(text = "Termux Agent") }
             item(key = "card_ai") {
-                                Card(
+                                HyperGlassCard(
+                                    style = uiStyle,
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
-                        .clip(RoundedCornerShape(16.dp))
+                .fillMaxWidth()
+                .padding(horizontal = if (uiStyle is HyperGlassStyle.Soft) 12.dp else 16.dp, vertical = 8.dp)
                 ) {
                     Column {
                                 SwitchPreference(
@@ -1576,11 +1641,11 @@ fun SettingsScreen(
             // ---------- Security Settings ----------
             item(key = "section_security") { SmallTitle(text = context.getString(R.string.security_settings)) }
             item(key = "card_security") {
-                                Card(
+                                HyperGlassCard(
+                                    style = uiStyle,
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
-                        .clip(RoundedCornerShape(16.dp))
+                .fillMaxWidth()
+                .padding(horizontal = if (uiStyle is HyperGlassStyle.Soft) 12.dp else 16.dp, vertical = 8.dp)
                 ) {
                     Column {
                         val protectionItems = RiskConfirmManager.ProtectionLevel.entries.map { level ->
@@ -1780,11 +1845,11 @@ fun SettingsScreen(
 
             // ---------- 重置运行环境 ----------
             item(key = "card_reset_runtime_env") {
-                Card(
+                HyperGlassCard(
+                    style = uiStyle,
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
-                        .clip(RoundedCornerShape(16.dp))
+                .fillMaxWidth()
+                .padding(horizontal = if (uiStyle is HyperGlassStyle.Soft) 12.dp else 16.dp, vertical = 8.dp)
                 ) {
                     Column {
                         ArrowPreference(
@@ -1970,11 +2035,11 @@ fun SettingsScreen(
                 } else {
                     items(matched, key = { "search_${it.section}_${it.title}" }) { entry ->
                         Column(modifier = Modifier.fillMaxWidth()) {
-                            Card(
+                            HyperGlassCard(
+                                style = uiStyle,
                                 modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 16.dp, vertical = 8.dp)
-                                    .clip(RoundedCornerShape(16.dp))
+                            .fillMaxWidth()
+                            .padding(horizontal = if (uiStyle is HyperGlassStyle.Soft) 12.dp else 16.dp, vertical = 8.dp)
                             ) {
                                 Column {
                                     entry.render()
@@ -2008,11 +2073,46 @@ fun SettingsScreen(
         show = showNavRestartPrompt,
         onDismissRequest = { showNavRestartPrompt = false },
         content = {
-                                TextButton(
-            text = context.getString(R.string.ok),
-            onClick = { showNavRestartPrompt = false },
-            modifier = Modifier.fillMaxWidth()
-        )
+                                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                TextButton(
+                    text = context.getString(R.string.restart_now),
+                    onClick = {
+                        showNavRestartPrompt = false
+                        restartMainActivity(context)
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                TextButton(
+                    text = context.getString(R.string.restart_later),
+                    onClick = { showNavRestartPrompt = false },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
+    )
+
+    // ---------- UI appearance style restart prompt ----------
+                        OverlayDialog(
+        title = context.getString(R.string.restart_required),
+        summary = context.getString(R.string.ui_style_restart_message),
+        show = showUiStyleRestartPrompt,
+        onDismissRequest = { showUiStyleRestartPrompt = false },
+        content = {
+                                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                TextButton(
+                    text = context.getString(R.string.restart_now),
+                    onClick = {
+                        showUiStyleRestartPrompt = false
+                        restartMainActivity(context)
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                TextButton(
+                    text = context.getString(R.string.restart_later),
+                    onClick = { showUiStyleRestartPrompt = false },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
         }
     )
 
@@ -2036,6 +2136,31 @@ fun SettingsScreen(
             onDismiss = {
                 showCriticalNavDialog = false
                 pendingNavStyleIndex = -1
+            }
+        )
+    }
+
+    // ---------- Hyper glass material requires Android 13 dialog ----------
+    if (showHyperGlassCriticalDialog) {
+                                ForceEnableCriticalDialog(
+            feature = ApiCompat.Feature.HYPER_GLASS,
+            onConfirmed = {
+                showHyperGlassCriticalDialog = false
+                val idx = pendingUiStyleIndex
+                uiStyleIndex = idx
+                UiStylePrefs.setUiStyle(
+                    context,
+                    when (idx) {
+                        0 -> HyperGlassStyle.Soft()
+                        else -> HyperGlassStyle.Default
+                    }
+                )
+                pendingUiStyleIndex = -1
+                showUiStyleRestartPrompt = true
+            },
+            onDismiss = {
+                showHyperGlassCriticalDialog = false
+                pendingUiStyleIndex = -1
             }
         )
     }
@@ -2341,11 +2466,12 @@ private fun MaterialYouSwitch(
 
 @Composable
 private fun SettingsGroupCard(items: List<SettingItem>) {
-                                Card(
+    val uiStyle by UiStylePrefs.uiStyle.collectAsState()
+                                HyperGlassCard(
+        style = uiStyle,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp)
-            .clip(RoundedCornerShape(16.dp))
+            .padding(horizontal = if (uiStyle is HyperGlassStyle.Soft) 12.dp else 16.dp, vertical = 8.dp)
     ) {
         Column {
             items.forEachIndexed { index, item ->
@@ -2784,4 +2910,22 @@ internal fun AgentMemoryDialog(show: Boolean, onDismiss: () -> Unit) {
             }
         }
     )
+}
+
+/** 重启 MainActivity（TermuxService 与主进程同生，不能整应用退出，只走 Activity 级重建）。 */
+private fun restartMainActivity(context: android.content.Context) {
+    try {
+        val intent = Intent(context, com.termux.app.MainActivity::class.java)
+        intent.addFlags(
+            Intent.FLAG_ACTIVITY_NEW_TASK
+                or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                or Intent.FLAG_ACTIVITY_CLEAR_TASK
+        )
+        context.startActivity(intent)
+        (context as? android.app.Activity)?.let {
+            it.finish()
+            it.overridePendingTransition(0, 0)
+        }
+    } catch (_: Throwable) {
+    }
 }

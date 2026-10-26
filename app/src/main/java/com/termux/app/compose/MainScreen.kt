@@ -48,6 +48,8 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
@@ -152,6 +154,12 @@ fun MainScreen(
 
     val context = LocalContext.current
     val navPrefs = remember { context.getSharedPreferences("app_settings", Context.MODE_PRIVATE) }
+    // UI 外观样式（超级柔光）：与导航栏样式相互独立；非默认时内容根挂取景层，供玻璃弹层取景。
+    UiStylePrefs.init(context)
+    val uiStyle by UiStylePrefs.uiStyle.collectAsState()
+    // 组合期同步顶栏 token：切换样式只重启 Activity，进程不重启，只靠 Application 会失效。
+    applyUiStyleTokens(uiStyle)
+    val hyperGlassActive = uiStyle is HyperGlassStyle.Soft
     // 导航栏样式：glass=浮动玻璃（新版默认）、classic=经典（旧默认）、liquid_glass=玻璃。
     // 历史值迁移：旧 "default" / "floating" / "soft_light"（柔光，已移除）统一迁到新的浮动玻璃底栏。
     val navBarStyle = remember {
@@ -305,6 +313,10 @@ fun MainScreen(
 
     // 根 Box：除 Scaffold 外还要挂「页面弹层」宿主。宿主必须与 Scaffold 同级且声明在
     // 其后（同层后声明者在上），弹层才能绘制在 topBar 槽的全局顶栏之上。
+    // 取景层只在超级柔光下暴露给弹层，默认样式不提供 → 所有弹层原样回落 miuix。
+    CompositionLocalProvider(
+        LocalHyperGlassBackdrop provides if (hyperGlassActive) glassNavBackdrop else null
+    ) {
     Box(modifier = Modifier.fillMaxSize()) {
     Scaffold(
         modifier = Modifier.fillMaxSize(),
@@ -546,11 +558,12 @@ fun MainScreen(
                 .weight(1f)
                 .fillMaxHeight()
                 .then(
-                    when {
-                        useLiquidGlassNav -> Modifier.layerBackdrop(liquidGlassBackdrop)
-                        useGlassNav -> Modifier.miuixLayerBackdrop(glassNavBackdrop)
-                        else -> Modifier
-                    }
+                    // 弹层取景层（miuix-blur）与导航栏取景层（kyant）是两套，
+                    // 各自只在需要时挂；同时开启时两个都挂（两次捕获，代价可接受）。
+                    if (hyperGlassActive || useGlassNav) Modifier.miuixLayerBackdrop(glassNavBackdrop) else Modifier
+                )
+                .then(
+                    if (useLiquidGlassNav) Modifier.layerBackdrop(liquidGlassBackdrop) else Modifier
                 )
                 // No bottom inset either: the glass bottom bar floats over the content, and a gap
                 // here is what made it look like a bar of its own. Pages add their own clearance.
@@ -837,6 +850,7 @@ fun MainScreen(
     // 页面弹层宿主：渲染经 pagePopupContent 槽提升上来的玻璃弹层（如终端页「更多」菜单）
     Box(modifier = Modifier.fillMaxSize()) {
         pagePopupContent.value(this)
+    }
     }
     }
 }

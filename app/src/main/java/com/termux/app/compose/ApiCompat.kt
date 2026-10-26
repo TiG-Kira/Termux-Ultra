@@ -73,7 +73,8 @@ object ApiCompat {
         MANAGE_ALL_FILES(30, Page.SETTINGS, "Android 11", "所有文件访问"),
         INTEGRATED_TOOLS(31, Page.SETTINGS, "Android 12", "集成工具（API/Boot/Styling/Tasker/Widget）"),
         MIUIX_DYNAMIC_COLOR(31, Page.SETTINGS, "Android 12", "动态取色主题"),
-        GLASS_NAVIGATION_BAR(30, Page.SETTINGS, "Android 11", "玻璃导航栏")
+        GLASS_NAVIGATION_BAR(30, Page.SETTINGS, "Android 11", "玻璃导航栏"),
+        HYPER_GLASS(33, Page.SETTINGS, "Android 13", "高级玻璃材质（液态/柔光）")
     }
 
     /** 功能在当前设备是否可用（静态：基于 minApi） */
