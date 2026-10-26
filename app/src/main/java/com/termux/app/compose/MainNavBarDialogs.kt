@@ -149,13 +149,14 @@ fun OverlayBottomSheet(
     allowDismiss: Boolean = true,
     enableNestedScroll: Boolean = true,
     renderInRootScaffold: Boolean = true,
+    glassEnabled: Boolean = true,
     content: @Composable () -> Unit,
 ) {
     MainNavBarHideEffect(show)
     // 超级柔光：底部弹层同样玻璃化；默认样式（或没有取景层）原样走 miuix。
     val sheetStyle by UiStylePrefs.uiStyle.collectAsState()
     val sheetBackdrop = LocalHyperGlassBackdrop.current ?: LocalGlassTopAppBarBackdrop.current
-    if (sheetStyle is HyperGlassStyle.Soft && sheetBackdrop != null) {
+    if (glassEnabled && sheetStyle is HyperGlassStyle.Soft && sheetBackdrop != null) {
         HyperGlassBottomSheet(
             show = show,
             style = sheetStyle,

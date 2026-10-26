@@ -2022,6 +2022,8 @@ private fun AiSetupScreen(vm: AiTermuxViewModel, onBack: () -> Unit) {
             modifier = Modifier
                 .fillMaxSize()
                 .then(glassPage.contentModifier)
+                // 取景层内铺不透明 Miuix 底色，带区模糊采不到透明（防墨团）
+                .background(MiuixTheme.colorScheme.surface)
                 .padding(pagePaddingWithoutTop(padding))
                 .nestedScroll(scrollBehavior.nestedScrollConnection),
             contentPadding = standaloneContentPadding(padding, top = 16.dp, bottom = 16.dp, start = 16.dp, end = 16.dp),
@@ -2957,6 +2959,8 @@ private fun AiConversationManagementScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .then(glassPage.contentModifier)
+                    // 取景层内铺不透明 Miuix 底色，带区模糊采不到透明（防墨团）
+                    .background(MiuixTheme.colorScheme.surface)
                     .padding(pagePaddingWithoutTop(padding))
                     .nestedScroll(scrollBehavior.nestedScrollConnection),
                 contentPadding = standaloneContentPadding(padding, top = 16.dp, bottom = 16.dp, start = 16.dp, end = 16.dp),
@@ -3407,7 +3411,7 @@ private fun AiChatScreen(vm: AiTermuxViewModel, conversationId: String, onBack: 
                 }
             }
         ) { padding ->
-            Box(modifier = Modifier.fillMaxSize().then(glassPage.contentModifier)) {
+            Box(modifier = Modifier.fillMaxSize().then(glassPage.contentModifier).background(MiuixTheme.colorScheme.surface)) {
                 LazyColumn(
                     state = listState,
                     modifier = Modifier

@@ -57,6 +57,7 @@ import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.preference.OverlayDropdownPreference
 import top.yukonga.miuix.kmp.preference.SwitchPreference
+import androidx.compose.foundation.background
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import kotlin.math.roundToInt
 
@@ -167,6 +168,8 @@ fun X11SettingsScreen(onBack: () -> Unit) {
             modifier = Modifier
                 .fillMaxSize()
                 .then(glassPage.contentModifier)
+                // 取景层内铺不透明 Miuix 底色，带区模糊采不到透明（防墨团）
+                .background(MiuixTheme.colorScheme.surface)
                 .padding(pagePaddingWithoutTop(padding))
         ) {
                 LazyColumn(

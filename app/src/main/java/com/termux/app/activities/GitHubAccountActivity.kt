@@ -47,6 +47,7 @@ import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.glass.Back
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.preference.ArrowPreference
+import androidx.compose.foundation.background
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 /**
@@ -85,7 +86,7 @@ class GitHubAccountActivity : ComponentActivity() {
                             }
                         ) { padding ->
                             Box(
-                                Modifier.fillMaxSize().then(glassPage.contentModifier).padding(top = topBarClearance(padding)).padding(pagePaddingWithoutTop(padding)),
+                                Modifier.fillMaxSize().then(glassPage.contentModifier).background(MiuixTheme.colorScheme.surface).padding(top = topBarClearance(padding)).padding(pagePaddingWithoutTop(padding)),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
@@ -144,6 +145,8 @@ class GitHubAccountActivity : ComponentActivity() {
                             modifier = Modifier
                                 .fillMaxSize()
                                 .then(glassPage.contentModifier)
+                                // 取景层内铺不透明 Miuix 底色，带区模糊采不到透明（防墨团）
+                                .background(MiuixTheme.colorScheme.surface)
                                 .padding(pagePaddingWithoutTop(padding))
                                 .nestedScroll(scrollBehavior.nestedScrollConnection),
                             contentPadding = standaloneContentPadding(

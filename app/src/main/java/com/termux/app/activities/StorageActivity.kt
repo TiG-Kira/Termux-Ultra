@@ -242,6 +242,8 @@ val glassPage = rememberGlassPageBackdrop()
         LazyColumn(
             modifier = Modifier
                 .then(glassPage.contentModifier)
+                // 取景层内铺不透明 Miuix 底色，带区模糊采不到透明（防墨团）
+                .background(MiuixTheme.colorScheme.surface)
                 .fillMaxSize()
                 .padding(pagePaddingWithoutTop(padding))
                 .nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -623,6 +625,8 @@ Modifier.fillMaxSize(),
             modifier = Modifier
                 .fillMaxSize()
                 .then(glassPage.contentModifier)
+                // 取景层内铺不透明 Miuix 底色，带区模糊采不到透明（防墨团）
+                .background(MiuixTheme.colorScheme.surface)
                 .padding(pagePaddingWithoutTop(padding))
         ) {
             // 这页内容固定不滚动，让位只能落在首个 item 上；滚动页才把它折进 contentPadding。

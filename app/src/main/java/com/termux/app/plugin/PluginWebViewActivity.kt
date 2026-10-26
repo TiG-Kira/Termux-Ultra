@@ -41,6 +41,7 @@ import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.glass.ChevronBackward
 import top.yukonga.miuix.kmp.icon.glass.MiuixGlassIcons
+import androidx.compose.foundation.background
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 class PluginWebViewActivity : ComponentActivity() {
@@ -177,6 +178,8 @@ class PluginWebViewActivity : ComponentActivity() {
             Box(
                 modifier = Modifier
                     .then(glassPage.contentModifier)
+                    // 取景层内铺不透明 Miuix 底色，带区模糊采不到透明（防墨团）
+                    .background(MiuixTheme.colorScheme.surface)
                     .padding(top = topBarClearance(padding))
                     .fillMaxSize()
                     .padding(pagePaddingWithoutTop(padding))

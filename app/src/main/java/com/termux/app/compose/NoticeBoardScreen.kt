@@ -32,6 +32,7 @@ import top.yukonga.miuix.kmp.glass.GlassIconButton
 import top.yukonga.miuix.kmp.glass.GlassTopAppBar
 import top.yukonga.miuix.kmp.icon.glass.ChevronBackward
 import top.yukonga.miuix.kmp.icon.glass.MiuixGlassIcons
+import androidx.compose.foundation.background
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -79,6 +80,8 @@ fun NoticeBoardScreen(onBack: () -> Unit) {
             modifier = Modifier
                 .fillMaxSize()
                 .then(glassPage.contentModifier)
+                // 取景层内铺不透明 Miuix 底色，带区模糊采不到透明（防墨团）
+                .background(MiuixTheme.colorScheme.surface)
                 .padding(pagePaddingWithoutTop(padding))
                 .nestedScroll(scrollBehavior.nestedScrollConnection),
             contentPadding = standaloneContentPadding(

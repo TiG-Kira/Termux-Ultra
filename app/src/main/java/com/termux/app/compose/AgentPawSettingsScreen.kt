@@ -6,6 +6,7 @@ import android.net.Uri
 import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -223,6 +224,9 @@ fun AgentPawSettingsScreen(onBack: () -> Unit) {
             modifier = Modifier
                 .fillMaxSize()
                 .then(glassPage.contentModifier)
+                // 取景层内必须有不透明 Miuix 底色：Scaffold 的 containerColor 在捕获节点之外，
+                // 带区模糊采到「透明=黑」会出墨团（同 MainScreen 页面自绘背景的口径）。
+                .background(MiuixTheme.colorScheme.surface)
                 .padding(pagePaddingWithoutTop(padding))
         ) {
             LazyColumn(

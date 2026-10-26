@@ -258,6 +258,8 @@ class ThirdPartyCenterActivity : ComponentActivity() {
                     LazyColumn(
                         modifier = Modifier
                             .then(glassPage.contentModifier)
+                            // 取景层内铺不透明 Miuix 底色，带区模糊采不到透明（防墨团）
+                            .background(MiuixTheme.colorScheme.surface)
                             .fillMaxSize()
                             .padding(pagePaddingWithoutTop(padding))
                             .nestedScroll(scrollBehavior.nestedScrollConnection),
