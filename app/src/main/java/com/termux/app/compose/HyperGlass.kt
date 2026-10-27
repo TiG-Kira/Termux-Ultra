@@ -12,8 +12,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -186,20 +189,23 @@ fun HyperGlassDialog(
 
     BackHandler(enabled = show) { onDismissRequest?.invoke() }
 
-    // 与 miuix OverlayDialog 同款：先以 false 起步，避免首帧直接以终态出现。
-    val visibleState = remember { mutableStateOf(false) }
-    visibleState.value = show
+    // 宿主可见性独立于 show：show=false 先让玻璃弹层播完退场动画
+    // （onDismissFinished）再卸载 DialogLayout 容器，否则退场被直接掉。
+    var hostVisible by remember { mutableStateOf(false) }
+    LaunchedEffect(show) {
+        if (show) hostVisible = true
+    }
+    if (!show && !hostVisible) return
 
     val isDark = MiuixTheme.colorScheme.background.luminance() < 0.5f
 
     MiuixPopupUtils.DialogLayout(
-        visible = visibleState,
+        visible = remember { mutableStateOf(false) }.also { it.value = hostVisible },
         enterTransition = EnterTransition.None,
         exitTransition = ExitTransition.None,
         enableWindowDim = false,
         enableAutoLargeScreen = false,
         renderInRootScaffold = true,
-        onDismissFinished = onDismissFinished,
     ) {
         GlassDialog(
             visible = show,
@@ -215,6 +221,10 @@ fun HyperGlassDialog(
             shape = GlassShape(cornerRadius),
             stroke = if (isDark) GlassStrokes.BigDark else GlassStrokes.BigLight,
             shadow = GlassShadows.ExtraHigh,
+            onDismissFinished = {
+                onDismissFinished?.invoke()
+                hostVisible = false
+            },
         ) {
             Column(modifier = Modifier.widthIn(max = maxWidth)) {
                 if (title != null) {
@@ -277,18 +287,23 @@ fun HyperGlassBottomSheet(
 
     BackHandler(enabled = show) { onDismissRequest?.invoke() }
 
-    val visibleState = remember { mutableStateOf(false) }
-    visibleState.value = show
+    // 宿主可见性独立于 show：show=false 先让玻璃弹层播完退场动画
+    // （onDismissFinished）再卸载 DialogLayout 容器，否则退场被直接掉。
+    var hostVisible by remember { mutableStateOf(false) }
+    LaunchedEffect(show) {
+        if (show) hostVisible = true
+    }
+    if (!show && !hostVisible) return
+
     val isDark = MiuixTheme.colorScheme.background.luminance() < 0.5f
 
     MiuixPopupUtils.DialogLayout(
-        visible = visibleState,
+        visible = remember { mutableStateOf(false) }.also { it.value = hostVisible },
         enterTransition = EnterTransition.None,
         exitTransition = ExitTransition.None,
         enableWindowDim = false,
         enableAutoLargeScreen = false,
         renderInRootScaffold = true,
-        onDismissFinished = onDismissFinished,
     ) {
         GlassDialog(
             visible = show,
@@ -305,6 +320,10 @@ fun HyperGlassBottomSheet(
             shape = GlassShape(cornerRadius),
             stroke = if (isDark) GlassStrokes.BigDark else GlassStrokes.BigLight,
             shadow = GlassShadows.ExtraHigh,
+            onDismissFinished = {
+                onDismissFinished?.invoke()
+                hostVisible = false
+            },
         ) {
             Box(
                 modifier = Modifier

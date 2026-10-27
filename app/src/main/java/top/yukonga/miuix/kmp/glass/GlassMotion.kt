@@ -7,10 +7,12 @@ import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.FiniteAnimationSpec
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.SpringSpec
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Stable
 import androidx.compose.ui.graphics.Color
+import top.yukonga.miuix.kmp.anim.DecelerateEasing
 import top.yukonga.miuix.kmp.anim.folmeSpring
 
 /** The motion the glass surfaces animate with. */
@@ -129,13 +131,13 @@ object GlassMotion {
     @Stable
     fun <T> popupExit(): SpringSpec<T> = springOf(0.95f, 0.2f)
 
-    /** A dialog entering. */
+    /** A dialog entering. 对齐 miuix DialogContentLayout 底部滑入的 spring。 */
     @Stable
-    fun <T> dialogEnter(): SpringSpec<T> = springOf(0.95f, 0.35f)
+    fun <T> dialogEnter(): SpringSpec<T> = spring(dampingRatio = 0.88f, stiffness = 450f)
 
-    /** A dialog leaving. */
+    /** A dialog leaving. 对齐 miuix DialogContentLayout 的退场 tween。 */
     @Stable
-    fun <T> dialogExit(): SpringSpec<T> = springOf(0.95f, 0.15f)
+    fun <T> dialogExit(): FiniteAnimationSpec<T> = tween(durationMillis = 260, easing = DecelerateEasing(1.5f))
 
     /** A surface being pressed. */
     @Stable

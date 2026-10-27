@@ -4,6 +4,7 @@
 package top.yukonga.miuix.kmp.glass
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -22,6 +23,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -68,6 +70,7 @@ object GlassOverlayDefaults {
  * @param alpha Opacity multiplier for the material.
  * @param shadow The shadow under the dialog. `null` removes it.
  * @param stroke Optional bloom stroke along the rim.
+ * @param onDismissFinished Called once the exit animation has fully played.
  * @param content The dialog's content.
  */
 @Composable
@@ -84,15 +87,23 @@ fun GlassDialog(
     alpha: Float = 1f,
     stroke: GlassStroke? = null,
     shadow: GlassShadow? = GlassShadows.ExtraHigh,
+    onDismissFinished: (() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
+    // visible 经真实的 false→true 过渡驱动动画：MutableTransitionState 以 false 起步，
+    // 首次挂载时 visible 已为 true 也不会直接以终态出现而跳过入场。
+    val transitionVisible = remember { MutableTransitionState(false) }
+    LaunchedEffect(visible) { transitionVisible.targetState = visible }
+
     val scrim = animateFloatAsState(
-        targetValue = if (visible) scrimAlpha else 0f,
-        animationSpec = if (visible) GlassMotion.dialogEnter() else GlassMotion.dialogExit(),
+        targetValue = if (transitionVisible.targetState) scrimAlpha else 0f,
+        animationSpec = if (transitionVisible.targetState) GlassMotion.dialogEnter() else GlassMotion.dialogExit(),
         label = "glassDialogScrim",
     )
-    val active by remember(visible, scrim) {
-        derivedStateOf { visible || scrim.value > 0.001f }
+    val active by remember {
+        derivedStateOf {
+            transitionVisible.currentState || transitionVisible.targetState || scrim.value > 0.001f
+        }
     }
     rememberGlassPopupBackProgress(
         show = visible,
@@ -103,6 +114,14 @@ fun GlassDialog(
         onDismissRequest = onDismissRequest,
     )
     if (!active) return
+
+    if (onDismissFinished != null) {
+        LaunchedEffect(transitionVisible.isIdle) {
+            if (transitionVisible.isIdle && !transitionVisible.targetState) {
+                onDismissFinished()
+            }
+        }
+    }
 
     val interactionSource = remember { MutableInteractionSource() }
     Box(modifier = modifier.fillMaxSize()) {
@@ -117,7 +136,7 @@ fun GlassDialog(
                 ),
         )
         AnimatedVisibility(
-            visible = visible,
+            visibleState = transitionVisible,
             // 与 miuix 对话框落位一致：底部居中 + 12dp 外边距（不是居中浮块）。
             modifier = Modifier
                 .align(Alignment.BottomCenter)
