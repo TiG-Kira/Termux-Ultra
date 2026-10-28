@@ -26,7 +26,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
@@ -95,6 +97,15 @@ fun GlassDialog(
     val transitionVisible = remember { MutableTransitionState(false) }
     LaunchedEffect(visible) { transitionVisible.targetState = visible }
 
+    // everShown 是「曾经展示过」的锁存标志：防止首帧（入场前 currentState/targetState 均为 false、
+    // isIdle 已为 true）误触发 onDismissFinished。一旦展示过任意一帧即置位，且不再复位。
+    var everShown by remember { mutableStateOf(false) }
+    LaunchedEffect(transitionVisible.currentState, transitionVisible.targetState) {
+        if (transitionVisible.currentState || transitionVisible.targetState) {
+            everShown = true
+        }
+    }
+
     val scrim = animateFloatAsState(
         targetValue = if (transitionVisible.targetState) scrimAlpha else 0f,
         animationSpec = if (transitionVisible.targetState) GlassMotion.dialogEnter() else GlassMotion.dialogExit(),
@@ -113,15 +124,20 @@ fun GlassDialog(
         resetSpec = GlassMotion.dialogExit(),
         onDismissRequest = onDismissRequest,
     )
-    if (!active) return
 
+    // onDismissFinished 必须在 if (!active) return 之前触发：退场时 scrim(tween 260ms) 与
+    // transitionVisible.isIdle 同帧 settle，会使 active 在回调本应触发的那一帧已为 false，
+    // 若放在 early-return 之后就会被跳过，导致 hostVisible 卡在 true、
+    // MiuixPopupUtils.DialogLayout（含常驻全屏 dim catcher）永不卸载，吞噬所有点击（假死）。
     if (onDismissFinished != null) {
         LaunchedEffect(transitionVisible.isIdle) {
-            if (transitionVisible.isIdle && !transitionVisible.targetState) {
+            if (transitionVisible.isIdle && !transitionVisible.targetState && everShown) {
                 onDismissFinished()
             }
         }
     }
+
+    if (!active) return
 
     val interactionSource = remember { MutableInteractionSource() }
     Box(modifier = modifier.fillMaxSize()) {
