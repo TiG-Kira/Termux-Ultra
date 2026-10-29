@@ -916,14 +916,18 @@ fun TerminalDetailScreenCompose(
             // - Scaffold 的 topPadding 即 GlassTerminalBar 的实测高度，展开/折叠逐帧
             //   跟随，终端前几行始终留在栏下方可见，不会被玻璃栏盖住。
             // - 栏下沿还有一段渐隐尾段（BandOverhang）压在内容上，内容按 ContentTopInset
-            //   再让一次，首行才落在尾段之后、不被洗白。
+            //   再让一次，首行才落在尾段之后、不被洗白。极窄栏的渐隐在其自身高度内已
+            //   结束，不需要这段净空——极窄模式下不再让，把 12dp 也还给终端首行。
             Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .then(glassPage.contentModifier)
                     .background(terminalBgColor)
                     .padding(padding)
-                    .padding(top = GlassTerminalBarDefaults.ContentTopInset)
+                    .then(
+                        if (!narrow) Modifier.padding(top = GlassTerminalBarDefaults.ContentTopInset)
+                        else Modifier
+                    )
                     .pointerInput(Unit) {
                         awaitEachGesture {
                             awaitFirstDown(requireUnconsumed = false)

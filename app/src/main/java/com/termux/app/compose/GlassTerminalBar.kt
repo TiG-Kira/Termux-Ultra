@@ -16,7 +16,7 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
-import androidx.compose.foundation.layout.calculateTopPadding
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -42,6 +42,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.rememberTopAppBarState
@@ -416,16 +417,19 @@ private fun GlassTerminalBarNarrow(
 
     // 横条整体高度 = 系统状态栏高度 + 一小条文字高度；状态栏区域透出系统状态栏，
     // 文字条落在状态栏正下方，与示例（浏览器样式）一致：状态栏在上、细文字条在下。
+    // 细条取 24dp：原折叠栏身是 CollapsedHeight(52dp) + BottomGap(8dp)，极窄栏要把
+    // 栏身占位压到它的零头（Issue #360 的核心诉求就是多还几行终端文字）。
     val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    val stripHeight = 30.dp
+    val stripHeight = 24.dp
     val totalHeight = statusBarTop + stripHeight
 
-    // 横条底色：顶部（状态栏区域）实色，底部边缘渐隐进终端内容，与收缩态 band 同款观感，
-    // 避免横条与下方终端之间出现硬边。bandColor 已是终端背景的微调色，差异本就很小。
+    // 横条底色：顶部（状态栏区域）实色，底缘最后 15% 快速渐隐进终端内容，避免横条
+    // 与下方终端之间出现硬边。渐隐段收得很短，标题所在区域保持实色不被洗淡。
+    // bandColor 已是终端背景的微调色，差异本就很小。
     val narrowBandBrush = remember(bandColor) {
         Brush.verticalGradient(
             0.0f to bandColor,
-            0.7f to bandColor,
+            0.85f to bandColor,
             1.0f to bandColor.copy(alpha = 0f),
         )
     }
