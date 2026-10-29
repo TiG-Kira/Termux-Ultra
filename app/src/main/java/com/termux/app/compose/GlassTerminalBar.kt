@@ -6,6 +6,7 @@ import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -13,6 +14,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.calculateTopPadding
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -34,9 +39,11 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
+import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.rememberTopAppBarState
 import top.yukonga.miuix.kmp.blur.Backdrop
 import top.yukonga.miuix.kmp.blur.isRuntimeShaderSupported
@@ -239,6 +246,8 @@ fun GlassTerminalBar(
     title: String,
     bandColor: Color,
     modifier: Modifier = Modifier,
+    /** 极窄栏模式：控制台由 TopBar 收缩时进一步塌缩为仅居中显示终端标题的细横条。 */
+    narrow: Boolean = false,
     backdrop: Backdrop? = null,
     largeTitle: String = title,
     subtitle: String = "",
@@ -250,6 +259,21 @@ fun GlassTerminalBar(
     trailingIcon: @Composable () -> Unit = {},
     onBlankTap: (() -> Unit)? = null,
 ) {
+    // 极窄栏：替代整条玻璃栏，仅居中显示终端标题的小横条，点击恢复 TopBar。
+    // 它只是 collapsed 态的一种更简渲染，栏状态的唯一来源仍是 collapsed 命令，
+    // 其余收缩/展开/计时/死会话强展逻辑完全不变。narrow=true 时直接走极简布局，
+    // 跳过原版 GlassTopAppBar（含大标题折叠动画）与导航/动作/把手槽。
+    if (narrow) {
+        GlassTerminalBarNarrow(
+            title = title,
+            bandColor = bandColor,
+            colorStyle = colorStyle,
+            contentColor = contentColor,
+            modifier = modifier,
+            onClick = onBlankTap,
+        )
+        return
+    }
     val isDark = GlassTerminalBarDefaults.isDark(colorStyle)
     // 展开态默认走系统 / Monet（原版口径）；收缩态默认追 colorStyle 解析的黑白。
     // 调用方显式传 contentColor 时（终端双轨：展开 opaque / 收缩终端色）优先。
@@ -353,6 +377,83 @@ fun GlassTerminalBar(
             },
             onBlankTap = onBlankTap,
         )
+    }
+}
+
+/**
+ * 极窄栏：由 [GlassTerminalBar] 在 [narrow]=true 时渲染，替代整条控制台玻璃栏。
+ *
+ * 视觉：顶栏整条塌缩为一条贴着系统状态栏下方的极细横条——系统状态栏照常绘制在最上方，
+ * 横条内只居中显示一行小号终端标题，导航键 / 动作区 / 极简把手 / 副标题一概不显示；
+ * 点击整条 = 展开命令（即调用方传入的 [onClick]，通常是 showTopBarTemporarily），直接变回完整
+ * TopBar。其余收缩 / 展开 / 计时 / 死会话强展逻辑完全不变，本栏只是 collapsed 态的一种更简渲染。
+ *
+ * 取色沿用调用方口径：[colorStyle] 解析亮暗决定默认文字色，显式 [contentColor] 优先；横条底色
+ * 铺 [bandColor]（收缩态即终端背景的微调色），与下方终端内容连成一片。
+ *
+ * @param title 居中显示的终端标题（小号）。
+ * @param bandColor 横条底色。
+ * @param colorStyle 亮/暗/跟随系统的取色口径，决定默认文字色。
+ * @param contentColor 标题文字色；`Color.Unspecified` 时按 [colorStyle] 推导。
+ * @param modifier 应用到横条根节点的 modifier（已含横向 cutout 避让）。
+ * @param onClick 点击整条横条的回调；传 null 则不响应（仅展示）。
+ */
+@Composable
+private fun GlassTerminalBarNarrow(
+    title: String,
+    bandColor: Color,
+    colorStyle: GlassTerminalBarColorStyle,
+    contentColor: Color,
+    modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null,
+) {
+    val isDark = GlassTerminalBarDefaults.isDark(colorStyle)
+    val resolvedContent = if (contentColor == Color.Unspecified) {
+        if (isDark) Color.White else Color.Black
+    } else {
+        contentColor
+    }
+
+    // 横条整体高度 = 系统状态栏高度 + 一小条文字高度；状态栏区域透出系统状态栏，
+    // 文字条落在状态栏正下方，与示例（浏览器样式）一致：状态栏在上、细文字条在下。
+    val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val stripHeight = 30.dp
+    val totalHeight = statusBarTop + stripHeight
+
+    // 横条底色：顶部（状态栏区域）实色，底部边缘渐隐进终端内容，与收缩态 band 同款观感，
+    // 避免横条与下方终端之间出现硬边。bandColor 已是终端背景的微调色，差异本就很小。
+    val narrowBandBrush = remember(bandColor) {
+        Brush.verticalGradient(
+            0.0f to bandColor,
+            0.7f to bandColor,
+            1.0f to bandColor.copy(alpha = 0f),
+        )
+    }
+
+    Box(
+        modifier = modifier
+            .height(totalHeight)
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+    ) {
+        // 整条（含状态栏区域）铺 band 色，系统状态栏图标绘制其上，与横条连成一片。
+        Box(Modifier.matchParentSize().background(narrowBandBrush))
+        // 仅状态栏下方的细条内居中显示终端标题（小号、单行、超长省略）。
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .height(stripHeight),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = title,
+                fontSize = 13.sp,
+                color = resolvedContent,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(horizontal = 24.dp),
+            )
+        }
     }
 }
 

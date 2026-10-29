@@ -19,6 +19,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.FormatSize
+import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Terminal
 import androidx.compose.runtime.Composable
@@ -75,6 +76,7 @@ fun ConsolePersonalizationScreen(onBack: () -> Unit) {
 
     LaunchPrefs.init(context)
     val autoStartConsoleEnabled by LaunchPrefs.autoStartConsole.collectAsState()
+    val furtherCollapseEnabled by LaunchPrefs.furtherCollapse.collectAsState()
 
     var editorToolIndex by remember {
         mutableStateOf(prefs.getString("editor_tool", "internal")?.let { if (it == "vim") 1 else 0 } ?: 0)
@@ -126,6 +128,13 @@ fun ConsolePersonalizationScreen(onBack: () -> Unit) {
                                 checked = autoStartConsoleEnabled,
                                 onCheckedChange = { LaunchPrefs.setAutoStartConsole(context, it) },
                                 startAction = { SettingIcon(Icons.Rounded.PlayArrow) }
+                            )
+                            SwitchPreference(
+                                title = stringResource(R.string.pref_further_collapse_title),
+                                summary = stringResource(R.string.pref_further_collapse_summary),
+                                checked = furtherCollapseEnabled,
+                                onCheckedChange = { LaunchPrefs.setFurtherCollapse(context, it) },
+                                startAction = { SettingIcon(Icons.Rounded.KeyboardArrowDown) }
                             )
                             OverlayDropdownPreference(
                                 title = stringResource(R.string.editor_tools),

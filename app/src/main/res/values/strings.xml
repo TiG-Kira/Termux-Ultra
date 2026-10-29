@@ -247,6 +247,8 @@
     <string name="pref_launch_page_locked_summary">Fixed to Overview while \u201cAuto-open terminal console\u201d is on</string>
     <string name="pref_auto_start_console_title">Auto-open terminal console</string>
     <string name="pref_auto_start_console_summary">On launch, create a terminal session and open its console directly</string>
+    <string name="pref_further_collapse_title">Further collapse control bar</string>
+    <string name="pref_further_collapse_summary">When the console starts collapsing, auto-shrink to a minimal bar showing only the centered terminal title; tap to restore</string>
     <string name="style_title">Style</string>
     <string name="style_settings_description">Terminal styling</string>
 
