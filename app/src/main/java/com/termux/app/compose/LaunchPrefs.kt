@@ -20,6 +20,7 @@ object LaunchPrefs {
     private const val PREFS_NAME = "termux_preferences"
     private const val KEY_LAUNCH_PAGE = "launch_page"
     private const val KEY_AUTO_START_CONSOLE = "auto_start_console"
+    private const val KEY_FURTHER_COLLAPSE = "further_collapse_control_bar"
 
     /** 冷启动落地页。[AUTO_START_CONSOLE] 开启时只有 [OVERVIEW] 会生效。 */
     enum class LaunchPage {
@@ -41,6 +42,13 @@ object LaunchPrefs {
     private val _autoStartConsole = MutableStateFlow(false)
     val autoStartConsole: StateFlow<Boolean> = _autoStartConsole.asStateFlow()
 
+    /**
+     * 「进一步折叠控制栏」：控制台由 TopBar 开始收缩时，是否自动塌缩为一条仅居中显示终端标题
+     * 的极窄横条（点击即恢复 TopBar）。与 [autoStartConsole] 同套持久化范式。关闭时走原折叠逻辑。
+     */
+    private val _furtherCollapse = MutableStateFlow(false)
+    val furtherCollapse: StateFlow<Boolean> = _furtherCollapse.asStateFlow()
+
     @Volatile
     private var loaded = false
 
@@ -51,6 +59,7 @@ object LaunchPrefs {
         val p = prefs(context)
         _launchPage.value = LaunchPage.fromStored(p.getInt(KEY_LAUNCH_PAGE, LaunchPage.OVERVIEW.storedValue))
         _autoStartConsole.value = p.getBoolean(KEY_AUTO_START_CONSOLE, false)
+        _furtherCollapse.value = p.getBoolean(KEY_FURTHER_COLLAPSE, false)
         loaded = true
     }
 
@@ -64,6 +73,12 @@ object LaunchPrefs {
     fun setAutoStartConsole(context: Context, enabled: Boolean) {
         _autoStartConsole.value = enabled
         prefs(context).edit().putBoolean(KEY_AUTO_START_CONSOLE, enabled).apply()
+    }
+
+    @Synchronized
+    fun setFurtherCollapse(context: Context, enabled: Boolean) {
+        _furtherCollapse.value = enabled
+        prefs(context).edit().putBoolean(KEY_FURTHER_COLLAPSE, enabled).apply()
     }
 
     /**

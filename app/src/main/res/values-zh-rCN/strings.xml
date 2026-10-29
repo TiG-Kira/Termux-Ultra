@@ -235,6 +235,8 @@
     <string name="pref_launch_page_locked_summary">已开启「自动启动终端控制台」，启动页面固定为总览页</string>
     <string name="pref_auto_start_console_title">自动启动终端控制台</string>
     <string name="pref_auto_start_console_summary">启动时自动新建一个终端会话并直接进入其控制台</string>
+    <string name="pref_further_collapse_title">进一步折叠控制栏</string>
+    <string name="pref_further_collapse_summary">控制台由 TopBar 开始收缩时，自动收为仅居中显示终端标题的极窄横条，点击恢复</string>
     <string name="style_title">样式</string>
     <string name="style_settings_description">终端样式</string>
 

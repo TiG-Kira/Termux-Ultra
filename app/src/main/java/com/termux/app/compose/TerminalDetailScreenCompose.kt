@@ -146,6 +146,7 @@ fun TerminalDetailScreenCompose(
     val currentSession = allSessions.firstOrNull { it.session.id == currentSessionId }?.session ?: session
 
     ComposeTerminalSettings.init(context)
+    LaunchPrefs.init(context)
 
     val textSize by ComposeTerminalSettings.fontSize.collectAsState()
     val cursorBlink by ComposeTerminalSettings.cursorBlink.collectAsState()
@@ -162,6 +163,8 @@ fun TerminalDetailScreenCompose(
     val softKeyboardOnlyIfNoHardware by ComposeTerminalSettings.softKeyboardOnlyIfNoHardware.collectAsState()
     val isKeepScreenOn by ComposeTerminalSettings.keepScreenOn.collectAsState()
     val showToolbar by ComposeTerminalSettings.showToolbar.collectAsState()
+    // 「进一步折叠控制栏」开关：开启后控制台由 TopBar 收缩时塌缩为仅显示标题的极窄横条。
+    val furtherCollapseEnabled by LaunchPrefs.furtherCollapse.collectAsState()
 
     // Styling 磁盘主题优先于内置 color_scheme（与 Java 模式共用 ~/.termux/colors.properties）
     val effectiveColorScheme = stylingColorScheme ?: colorScheme
@@ -342,6 +345,9 @@ fun TerminalDetailScreenCompose(
     // 标题显隐仅收缩态生效（展开态始终显示大标题，逻辑不动）：
     //   - 收缩态 + 工具栏展开（isTopBarCollapsed=false）→ 不显示标题
     //   - 收缩态 + 工具栏收缩（isTopBarCollapsed=true，极简模式）→ 显示紧凑标题
+    // 极窄栏：收缩态且开启「进一步折叠控制栏」时，整条栏塌缩为仅居中显示终端标题的细横条
+    // （忽略极简模式对标题的隐藏），点击即恢复 TopBar。
+    val narrow = barCollapsed && furtherCollapseEnabled
     val barTitle = if (barCollapsed && !isTopBarCollapsed) {
         ""
     } else {
@@ -829,10 +835,13 @@ fun TerminalDetailScreenCompose(
                 // - 副标题承载「新会话 / 会话已结束」提示（颜色随场景适配）
                 GlassTerminalBar(
                     collapsed = barCollapsed,
+                    // 极窄栏：收缩态且开启「进一步折叠控制栏」时，整条栏塌缩为仅居中显示终端标题的细横条
+                    narrow = narrow,
                     // 横屏时刘海/挖孔位于屏幕左右两侧：给整条顶栏加 cutout 水平避让
                     // （竖屏时 cutoutStart/cutoutEnd 为 0，布局不变）
                     modifier = Modifier.padding(start = cutoutStart, end = cutoutEnd),
-                    title = barTitle,
+                    // 极窄栏只居中显示终端标题（不受极简模式对标题的隐藏影响）；其余态沿用既有 barTitle
+                    title = if (narrow) currentSessionName.ifEmpty { context.getString(R.string.terminal) } else barTitle,
                     // 展开态大标题始终显示会话名，不受收缩态标题显隐逻辑影响
                     largeTitle = currentSessionName.ifEmpty { context.getString(R.string.terminal) },
                     subtitle = barSubtitle,
