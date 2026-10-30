@@ -5,6 +5,11 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -260,21 +265,74 @@ fun GlassTerminalBar(
     trailingIcon: @Composable () -> Unit = {},
     onBlankTap: (() -> Unit)? = null,
 ) {
-    // 极窄栏：替代整条玻璃栏，仅居中显示终端标题的小横条，点击恢复 TopBar。
-    // 它只是 collapsed 态的一种更简渲染，栏状态的唯一来源仍是 collapsed 命令，
-    // 其余收缩/展开/计时/死会话强展逻辑完全不变。narrow=true 时直接走极简布局，
-    // 跳过原版 GlassTopAppBar（含大标题折叠动画）与导航/动作/把手槽。
-    if (narrow) {
-        GlassTerminalBarNarrow(
-            title = title,
-            bandColor = bandColor,
-            colorStyle = colorStyle,
-            contentColor = contentColor,
-            modifier = modifier,
-            onClick = onBlankTap,
-        )
-        return
+    // 极窄栏 ↔ 完整玻璃栏：两种渲染形态经 AnimatedContent 过渡（交叉淡入淡出 +
+    // 高度插值，时长对齐 CollapseDuration），避免 narrow 命令瞬间跳变。narrow 只是
+    // collapsed 态的一种更简渲染，栏状态的唯一来源仍是 collapsed 命令，其余
+    // 收缩/展开/计时/死会话强展逻辑完全不变。
+    AnimatedContent(
+        targetState = narrow,
+        transitionSpec = {
+            val duration = GlassTerminalBarDefaults.CollapseDuration
+            (fadeIn(tween(durationMillis = duration, easing = FastOutSlowInEasing)) togetherWith
+                fadeOut(tween(durationMillis = duration, easing = FastOutSlowInEasing)))
+                .using(
+                    SizeTransform(clip = false) { _, _ ->
+                        tween(durationMillis = duration, easing = FastOutSlowInEasing)
+                    },
+                )
+        },
+        modifier = modifier,
+        label = "glassTerminalBarMode",
+    ) { isNarrow ->
+        if (isNarrow) {
+            GlassTerminalBarNarrow(
+                title = title,
+                bandColor = bandColor,
+                colorStyle = colorStyle,
+                contentColor = contentColor,
+                onClick = onBlankTap,
+            )
+        } else {
+            GlassTerminalBarExpanded(
+                collapsed = collapsed,
+                title = title,
+                largeTitle = largeTitle,
+                subtitle = subtitle,
+                subtitleColor = subtitleColor,
+                contentColor = contentColor,
+                colorStyle = colorStyle,
+                bandColor = bandColor,
+                backdrop = backdrop,
+                navigationIcon = navigationIcon,
+                actions = actions,
+                trailingIcon = trailingIcon,
+                onBlankTap = onBlankTap,
+            )
+        }
     }
+}
+
+/**
+ * [GlassTerminalBar] 的完整玻璃栏形态（narrow=false 时渲染）：常驻渐隐背景板 +
+ * 动态委托原版 [GlassTopAppBar]（大标题折叠、按钮浮起、栏底补白），分层说明见
+ * [GlassTerminalBar] 的 KDoc。
+ */
+@Composable
+private fun GlassTerminalBarExpanded(
+    collapsed: Boolean,
+    title: String,
+    largeTitle: String,
+    subtitle: String,
+    subtitleColor: Color,
+    contentColor: Color,
+    colorStyle: GlassTerminalBarColorStyle,
+    bandColor: Color,
+    backdrop: Backdrop?,
+    navigationIcon: @Composable () -> Unit,
+    actions: @Composable RowScope.() -> Unit,
+    trailingIcon: @Composable () -> Unit,
+    onBlankTap: (() -> Unit)?,
+) {
     val isDark = GlassTerminalBarDefaults.isDark(colorStyle)
     // 展开态默认走系统 / Monet（原版口径）；收缩态默认追 colorStyle 解析的黑白。
     // 调用方显式传 contentColor 时（终端双轨：展开 opaque / 收缩终端色）优先。
@@ -329,7 +387,7 @@ fun GlassTerminalBar(
         }
     }
 
-    Box(modifier = modifier) {
+    Box {
         // 自绘常驻渐隐背景板：颜色随命令平滑切换。笔刷 0→1 映射到「栏高 + 越界 + 下压」，
         // transformOrigin 钉在顶沿，scaleY 把渐隐段拉到栏外（与原版 band 同机制）。
         val bandTailPx = with(LocalDensity.current) {
