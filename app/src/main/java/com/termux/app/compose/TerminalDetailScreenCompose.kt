@@ -9,6 +9,7 @@ import android.view.KeyEvent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.FastOutLinearInEasing
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.core.animateFloatAsState
@@ -348,6 +349,15 @@ fun TerminalDetailScreenCompose(
     // 极窄栏：收缩态且开启「进一步折叠控制栏」时，整条栏塌缩为仅居中显示终端标题的细横条
     // （忽略极简模式对标题的隐藏），点击即恢复 TopBar。
     val narrow = barCollapsed && furtherCollapseEnabled
+    // 内容顶部净空随 narrow 平滑过渡（与栏体切换动画同时长），避免切换时终端首行瞬跳。
+    val contentTopInset by animateDpAsState(
+        targetValue = if (narrow) 0.dp else GlassTerminalBarDefaults.ContentTopInset,
+        animationSpec = tween(
+            durationMillis = GlassTerminalBarDefaults.CollapseDuration,
+            easing = FastOutSlowInEasing,
+        ),
+        label = "consoleContentTopInset",
+    )
     val barTitle = if (barCollapsed && !isTopBarCollapsed) {
         ""
     } else {
@@ -924,10 +934,7 @@ fun TerminalDetailScreenCompose(
                     .then(glassPage.contentModifier)
                     .background(terminalBgColor)
                     .padding(padding)
-                    .then(
-                        if (!narrow) Modifier.padding(top = GlassTerminalBarDefaults.ContentTopInset)
-                        else Modifier
-                    )
+                    .padding(top = contentTopInset)
                     .pointerInput(Unit) {
                         awaitEachGesture {
                             awaitFirstDown(requireUnconsumed = false)
