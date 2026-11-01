@@ -819,7 +819,7 @@
     <string name="font_download_failed">Failed to download font %1$s, check your network and retry</string>
     <string name="font_missing_fallback">Font %1$s is unavailable, reverted to default font</string>
 
-    <!-- Styling theme source (libterminal 4.1.0 / custom theme) -->
+    <!-- Styling theme source (libterminal 4.1.1 / custom theme) -->
     <string name="theme_source_styling">Termux:Styling Theme</string>
     <string name="theme_source_styling_desc">Use Termux:Styling color presets</string>
     <string name="theme_source_libterminal">LibTerminal Theme</string>
