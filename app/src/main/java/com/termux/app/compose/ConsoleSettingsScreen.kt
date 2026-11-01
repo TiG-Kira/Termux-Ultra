@@ -136,10 +136,10 @@ fun ConsoleSettingsScreen(onBack: () -> Unit) {
                             OverlayDropdownPreference(
                                 title = stringResource(R.string.font_size),
                                 summary = stringResource(R.string.font_size_desc),
-                                items = listOf("10sp", "12sp", "14sp", "16sp", "18sp", "20sp", "24sp"),
-                                selectedIndex = listOf(10, 12, 14, 16, 18, 20, 24).indexOf(fontSize).coerceAtLeast(0),
+                                items = listOf("6sp", "8sp", "10sp", "12sp", "14sp", "16sp", "18sp", "20sp", "24sp"),
+                                selectedIndex = listOf(6, 8, 10, 12, 14, 16, 18, 20, 24).indexOf(fontSize).coerceAtLeast(0),
                                 onSelectedIndexChange = { idx ->
-                                    ComposeTerminalSettings.setFontSize(listOf(10, 12, 14, 16, 18, 20, 24)[idx])
+                                    ComposeTerminalSettings.setFontSize(listOf(6, 8, 10, 12, 14, 16, 18, 20, 24)[idx])
                                 },
                                 startAction = { SettingIcon(Icons.Rounded.FormatSize) }
                             )
