@@ -158,7 +158,9 @@ object GlassNavigationBarDefaults {
  *
  * @param items The destinations, in order.
  * @param selectedIndex The index of the current destination.
- * @param onSelect Called with the index under the finger, on press and while dragging.
+ * @param onSelect Called with the index under the finger when a tap is released or a horizontal
+ *   drag starts, and again as the drag crosses destinations. Predominantly vertical drags are
+ *   left for the page to scroll.
  * @param backdrop The [Backdrop] supplying the content behind the glass.
  * @param modifier The modifier applied to the bar.
  * @param style The glass material.
@@ -319,19 +321,40 @@ fun GlassNavigationBar(
                             val minLeft = contentInset - overhang
                             val maxLeft = (width - chipW).coerceAtLeast(0f)
                             val downX = logicalX(down.position.x)
+                            val downY = down.position.y
                             var lastX = downX
                             var current = indexAt(downX)
+                            var selectionSent = false
                             pressedIndex = current
-                            onSelectState(current)
                             var grabOffset = Float.NaN
                             try {
                                 while (true) {
                                     val event = awaitPointerEvent()
                                     val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                                    if (!change.pressed || change.isConsumed) break
                                     val x = logicalX(change.position.x)
+                                    val dx = abs(x - downX)
+                                    val dy = abs(change.position.y - downY)
+                                    if (!change.pressed) {
+                                        // 选中在轻点抬起时才提交：按下即选会把从底栏起手的
+                                        // 纵向滚动误判成切页，顺带拉起按压与指示器弹簧。
+                                        if (!selectionSent && maxOf(dx, dy) < viewConfiguration.touchSlop) {
+                                            onSelectState(indexAt(x))
+                                            selectionSent = true
+                                        }
+                                        break
+                                    }
+                                    if (change.isConsumed) break
+                                    // 以纵向为主的手势交给页面滚动，底栏既不切页也不驱动指示器。
+                                    if (dy > viewConfiguration.touchSlop && dy > dx) {
+                                        pressedIndex = -1
+                                        break
+                                    }
+                                    if (!selectionSent && dx > viewConfiguration.touchSlop) {
+                                        onSelectState(current)
+                                        selectionSent = true
+                                    }
                                     if (grabOffset.isNaN()) {
-                                        if (abs(x - downX) < viewConfiguration.touchSlop) {
+                                        if (dx < viewConfiguration.touchSlop) {
                                             pressedIndex = indexAt(x)
                                             continue
                                         }
