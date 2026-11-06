@@ -23,6 +23,8 @@
          先声明好以免后续抬升 targetSdk 时静默失效。 -->
     <queries>
         <package android:name="com.github.android" />
+        <!-- RustDesk 会话交接给官方客户端（见 RustDeskClient）；不声明则查不到安装状态 -->
+        <package android:name="com.carriez.flutter_hbb" />
     </queries>
 
     <permission
@@ -507,6 +509,12 @@
             android:name=".app.activities.GuiSettingsActivity"
             android:exported="false"
             android:label="@string/gui_settings"
+            android:windowSoftInputMode="adjustResize" />
+
+        <activity
+            android:name=".app.activities.RustDeskSettingsActivity"
+            android:exported="false"
+            android:label="@string/rustdesk_settings"
             android:windowSoftInputMode="adjustResize" />
 
         <activity

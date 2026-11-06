@@ -73,6 +73,7 @@ private const val SWIPE_THRESHOLD = 100f
 fun RemoteScreen(
     showVnc: Boolean,
     showX11: Boolean = false,
+    showRustDesk: Boolean = false,
     initialTab: Int = 0,
     onTabChange: (Int) -> Unit = {},
     onGoToFiles: () -> Unit = {},
@@ -90,6 +91,7 @@ fun RemoteScreen(
     val isScanning = remember { mutableStateOf(false) }
     val vncAddRequested = remember { mutableStateOf(false) }
     val vncScanRequested = remember { mutableStateOf(false) }
+    val rustDeskAddRequested = remember { mutableStateOf(false) }
     val sshAddRequested = remember { mutableStateOf(false) }
     val xserverAddRequested = remember { mutableStateOf(false) }
     val xserverRefreshRequested = remember { mutableStateOf(false) }
@@ -99,6 +101,7 @@ fun RemoteScreen(
 
     val vncConnections = remember { mutableStateListOf<VncConnection>() }
     val sshConnections = remember { mutableStateListOf<SshConnection>() }
+    val rustDeskConnections = remember { mutableStateListOf<com.termux.app.rustdesk.RustDeskConnection>() }
     val xserverConnections = remember { mutableStateListOf<com.termux.app.x11.XServerConnection>() }
     var searchExpanded by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
@@ -137,6 +140,9 @@ fun RemoteScreen(
             val sshManager = SshConnectionManager(context)
             sshConnections.addAll(sshManager.getConnections())
 
+            val rustDeskManager = com.termux.app.rustdesk.RustDeskConnectionManager(context)
+            rustDeskConnections.addAll(rustDeskManager.getConnections())
+
             val xserverManager = com.termux.app.x11.XServerConnectionManager(context)
             xserverConnections.addAll(xserverManager.getConnections())
         }
@@ -146,27 +152,27 @@ fun RemoteScreen(
         selectedTabIndex = initialTab
     }
 
-    // Tab 列表按开关动态生成：VNC / XServer（仅 x11 集成开关打开时）/ SSH 恒在最后
-    val remoteTabs = remember(showVnc, showX11) {
+    // Tab 列表按开关动态生成：VNC / RustDesk（仅开关打开时）/ XServer（仅 x11 集成开关打开时）/ SSH 恒在最后。
+    // VNC 与 RustDesk 相邻，两者都是远程桌面，主页左右滑子页时正好在它们之间切换。
+    val remoteTabs = remember(showVnc, showX11, showRustDesk) {
         buildList {
             if (showVnc) add("VNC")
+            if (showRustDesk) add("RustDesk")
             if (showX11) add("XServer")
             add("SSH")
         }
     }
-    val tabVncIndex = if (showVnc) 0 else -1
-    val tabX11Index = when {
-        showVnc && showX11 -> 1
-        showX11 -> 0
-        else -> -1
-    }
-    val tabSshIndex = remoteTabs.lastIndex
+    // 下标从最终列表反查，避免开关组合多起来后手算错位
+    val tabVncIndex = remoteTabs.indexOf("VNC")
+    val tabRustDeskIndex = remoteTabs.indexOf("RustDesk")
+    val tabX11Index = remoteTabs.indexOf("XServer")
+    val tabSshIndex = remoteTabs.indexOf("SSH")
     // 保存过的子 Tab 下标可能因开关变化越界，钳回有效范围
     LaunchedEffect(remoteTabs) {
         if (selectedTabIndex > remoteTabs.lastIndex) selectedTabIndex = remoteTabs.lastIndex
     }
 
-    val topAppBarTitle = if (showVnc) {
+    val topAppBarTitle = if (showVnc || showRustDesk || showX11) {
         context.getString(R.string.remote)
     } else {
         context.getString(R.string.ssh)
@@ -174,11 +180,13 @@ fun RemoteScreen(
 
     val activeConnections: List<Any> = when (selectedTabIndex) {
         tabVncIndex -> vncConnections
+        tabRustDeskIndex -> rustDeskConnections
         tabX11Index -> xserverConnections
         else -> sshConnections
     }
     val activeLabel = when (selectedTabIndex) {
         tabVncIndex -> "VNC"
+        tabRustDeskIndex -> "RustDesk"
         tabX11Index -> "XServer"
         else -> "SSH"
     }
@@ -313,6 +321,19 @@ fun RemoteScreen(
                                         )
                                     }
                                 }
+                            } else if (selectedTabIndex == tabRustDeskIndex) {
+                                // RustDesk 没有可扫描的本地会话：ID 由对端提供，只能手工添加
+                                GlassIconButton(
+                                    onClick = {
+                                        rustDeskAddRequested.value = true
+                                    }
+                                ) {
+                                    Icon(
+                                        imageVector = MiuixGlassIcons.Add,
+                                        contentDescription = "添加",
+                                        tint = topBarIconColor
+                                    )
+                                }
                             } else if (selectedTabIndex == tabX11Index) {
                                 GlassIconButton(
                                     onClick = {
@@ -375,7 +396,7 @@ fun RemoteScreen(
                     alpha = contentAlphaState
                 }
         ) {
-            if (showVnc || showX11) {
+            if (showVnc || showX11 || showRustDesk) {
                 Column(
                     Modifier
                         .fillMaxSize()
@@ -402,6 +423,10 @@ fun RemoteScreen(
                                 conn.host.contains(searchQuery, ignoreCase = true) ||
                                 conn.username.contains(searchQuery, ignoreCase = true) ||
                                 conn.dongleId.contains(searchQuery, ignoreCase = true)
+                            is com.termux.app.rustdesk.RustDeskConnection ->
+                                conn.name.contains(searchQuery, ignoreCase = true) ||
+                                    conn.remoteId.contains(searchQuery, ignoreCase = true) ||
+                                    conn.server.contains(searchQuery, ignoreCase = true)
                             else -> false
                         } || searchQuery.isEmpty()
                     }
@@ -476,6 +501,8 @@ fun RemoteScreen(
                                                 is VncConnection -> conn.name to "${conn.host}:${conn.port}"
                                                 is com.termux.app.x11.XServerConnection ->
                                                     conn.name to "DISPLAY ${conn.displayValue}"
+                                                is com.termux.app.rustdesk.RustDeskConnection ->
+                                                    conn.name to conn.summary
                                                 is SshConnection -> {
                                                     val tag = when (conn.connectionType) {
                                                         "openpilot" -> "[OpenPilot] "
@@ -504,6 +531,11 @@ fun RemoteScreen(
                                                             is VncConnection -> connectToVnc(context, conn)
                                                             is com.termux.app.x11.XServerConnection ->
                                                                 com.termux.app.x11.connectToXServer(context, termuxService, conn)
+                                                            is com.termux.app.rustdesk.RustDeskConnection -> {
+                                                                // 密码弹窗在 RustDesk 子页里，先切过去再由用户点卡片
+                                                                selectedTabIndex = tabRustDeskIndex
+                                                                onTabChange(tabRustDeskIndex)
+                                                            }
                                                             is SshConnection -> connectToSsh(context, conn)
                                                             else -> {}
                                                         }
@@ -609,6 +641,13 @@ fun RemoteScreen(
                                     onScanRequestedConsumed = { vncScanRequested.value = false },
                                     onScanStart = { isScanning.value = true },
                                     onScanEnd = { isScanning.value = false },
+                                    nestedScrollConnection = scrollBehavior.nestedScrollConnection,
+                                    navBarBottomPadding = navBarBottomPadding
+                                )
+                                tabRustDeskIndex -> com.termux.app.rustdesk.RustDeskScreen(
+                                    connections = rustDeskConnections,
+                                    addRequested = rustDeskAddRequested.value,
+                                    onAddRequestedConsumed = { rustDeskAddRequested.value = false },
                                     nestedScrollConnection = scrollBehavior.nestedScrollConnection,
                                     navBarBottomPadding = navBarBottomPadding
                                 )

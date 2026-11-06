@@ -167,6 +167,7 @@ fun SettingsScreen(
     var systemPromptSource by remember { mutableStateOf("") }
     val prefs = remember { context.getSharedPreferences("app_settings", Context.MODE_PRIVATE) }
     var vncEnabled by remember { mutableStateOf(prefs.getBoolean("vnc_enabled", false)) }
+    var rustDeskEnabled by remember { mutableStateOf(com.termux.app.rustdesk.RustDeskSettings.isEnabled(context)) }
     var aiTermuxEnabled by remember { mutableStateOf(prefs.getBoolean("ai_termux_enabled", true)) }
     var aiDeveloperMode by remember { mutableStateOf(AiTermuxPrefs.isDeveloperMode(context)) }
 
@@ -413,6 +414,18 @@ fun SettingsScreen(
             action = {
                 val intent = Intent(context, com.gaurav.avnc.ui.prefs.PrefsActivity::class.java)
                 context.startActivity(intent)
+            }
+        ) else null,
+        if (rustDeskEnabled)
+                            SettingItem(
+            title = context.getString(R.string.rustdesk_settings),
+            description = context.getString(R.string.rustdesk_settings_desc),
+            icon = Icons.Rounded.Devices,
+            badgeIcon = Icons.Rounded.Settings,
+            action = {
+                context.startActivity(
+                    Intent(context, com.termux.app.activities.RustDeskSettingsActivity::class.java)
+                )
             }
         ) else null
     )
@@ -740,6 +753,20 @@ fun SettingsScreen(
                         context.startActivity(intent)
                     },
                     startAction = { SettingIcon(Icons.Rounded.DesktopWindows, contentDescription = context.getString(R.string.vnc)) }
+                )
+            }),
+        SearchableSetting(sec_remote, context.getString(R.string.rustdesk), context.getString(R.string.rustdesk_description),
+            keywords = listOf("rustdesk", "远程", "remote", "桌面", "id", "连接码"),
+            render = {
+                SwitchPreference(
+                    title = context.getString(R.string.rustdesk),
+                    summary = context.getString(R.string.rustdesk_description),
+                    checked = rustDeskEnabled,
+                    onCheckedChange = {
+                        rustDeskEnabled = it
+                        com.termux.app.rustdesk.RustDeskSettings.setEnabled(context, it)
+                    },
+                    startAction = { SettingIcon(Icons.Rounded.Devices, contentDescription = context.getString(R.string.rustdesk)) }
                 )
             }),
 
@@ -1109,6 +1136,31 @@ fun SettingsScreen(
     ) + buildList {
         addAll(dataSettings.map { it.toSearchable(sec_backup) })
         addAll(systemSettings.map { it.toSearchable(sec_system) })
+        // 「RustDesk 设置」随开关显隐，搜索结果与设置页保持同一条件
+        if (rustDeskEnabled) {
+            add(
+                SearchableSetting(
+                    sec_remote,
+                    context.getString(R.string.rustdesk_settings),
+                    context.getString(R.string.rustdesk_settings_desc),
+                    keywords = listOf("rustdesk", "服务器", "中继", "密码", "server", "relay", "password"),
+                    render = {
+                        ArrowPreference(
+                            title = context.getString(R.string.rustdesk_settings),
+                            summary = context.getString(R.string.rustdesk_settings_desc),
+                            onClick = {
+                                context.startActivity(
+                                    Intent(context, com.termux.app.activities.RustDeskSettingsActivity::class.java)
+                                )
+                            },
+                            startAction = {
+                                SettingIcon(Icons.Rounded.Devices, contentDescription = context.getString(R.string.rustdesk_settings), badge = Icons.Rounded.Settings)
+                            }
+                        )
+                    }
+                )
+            )
+        }
         // 「配置集成工具」入口随开关显隐，搜索结果里同步跟随，避免搜到点进去是空页
         if (anyIntegratedToolEnabled) {
             add(
@@ -1378,7 +1430,20 @@ fun SettingsScreen(
                                 SettingIcon(Icons.Rounded.DesktopWindows, contentDescription = context.getString(R.string.vnc))
                             }
                         )
-                        remoteSettings.firstOrNull()?.let { item ->                            ArrowPreference(
+                        SwitchPreference(
+                            title = context.getString(R.string.rustdesk),
+                            summary = context.getString(R.string.rustdesk_description),
+                            checked = rustDeskEnabled,
+                            onCheckedChange = {
+                                rustDeskEnabled = it
+                                com.termux.app.rustdesk.RustDeskSettings.setEnabled(context, it)
+                            },
+                            startAction = {
+                                SettingIcon(Icons.Rounded.Devices, contentDescription = context.getString(R.string.rustdesk))
+                            }
+                        )
+                        remoteSettings.forEach { item ->
+                            ArrowPreference(
                                 title = item.title,
                                 summary = item.description,
                                 onClick = item.action,
