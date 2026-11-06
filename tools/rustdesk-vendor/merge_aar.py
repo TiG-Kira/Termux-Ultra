@@ -1,30 +1,44 @@
 #!/usr/bin/env python3
-"""用上游 release APK 的内容补齐 AAR。
+"""用上游 release APK 的内容补齐 AAR（只补 RustDesk 自己的产物，不含 Flutter 引擎）。
 
-library 变体只产出 Kotlin 类与 jniLibs，Flutter 引擎（`libflutter.so`）、Dart AOT 快照
-（`libapp.so`）、`flutter_assets` 与 `io.flutter.*` 嵌入类都不会进去。这里把 APK 里已有的
-这几样搬进 AAR，让宿主只依赖一个文件：
+library 变体只产出 Kotlin 类与 jniLibs，Dart AOT 快照（`libapp.so`）与 `flutter_assets`
+都不会进去，这里从参考 APK 里搬出来：
 
-- `lib/<abi>/*.so` → `jni/<abi>/*.so`（AAR 已有的条目以 AAR 为准）
+- `lib/<abi>/libapp.so` 等 → `jni/<abi>/`（AAR 已有的条目以 AAR 为准）
 - `assets/flutter_assets/**` → 同名目录
-- Flutter SDK 缓存里的 `flutter.jar`（嵌入类）合并进 `classes.jar`
+
+**Flutter 引擎不进 AAR**：`libflutter.so` 与 `io.flutter.*` 嵌入类改由宿主 Gradle 依赖
+官方 maven 产物（`io.flutter:arm64_v8a_release` / `flutter_embedding_release`，版本号取自
+`gradle.properties` 的 `rustdesk.flutterEngine`）。这样仓库里只留 RustDesk 自己的约 20MB
+产物，不必为每个 ABI 存一份 9–12MB 的引擎副本。
+
+引擎与 `libapp.so` 必须严格同版本：CI 会在构建前比对 `gradle.properties` 与 Flutter SDK 的
+`bin/internal/engine.version`，不一致直接失败——配错的后果不是编译报错，而是运行时黑屏。
 """
 
 from __future__ import annotations
 
 import argparse
-import shutil
 import sys
 import zipfile
 from pathlib import Path
 
+# 引擎产物由宿主 Gradle 依赖提供，不写进 AAR
+ENGINE_ENTRIES = {"libflutter.so"}
 
-def copy_missing(source: zipfile.ZipFile, target: zipfile.ZipFile, mapping: list[tuple[str, str]]) -> list[str]:
+
+def copy_missing(
+    source: zipfile.ZipFile,
+    target: zipfile.ZipFile,
+    mapping: list[tuple[str, str]],
+    skip_names: set[str] | None = None,
+) -> list[str]:
     """把 source 中命中的条目按 (前缀映射) 写进 target，已存在的跳过；返回写入清单。"""
     existing = set(target.namelist())
+    skip = skip_names or set()
     written: list[str] = []
     for entry in source.namelist():
-        if entry.endswith("/"):
+        if entry.endswith("/") or Path(entry).name in skip:
             continue
         for source_prefix, target_prefix in mapping:
             if not entry.startswith(source_prefix):
@@ -39,43 +53,11 @@ def copy_missing(source: zipfile.ZipFile, target: zipfile.ZipFile, mapping: list
     return written
 
 
-def merge_embedding_jar(classes_jar: Path, engine_jars: list[Path]) -> int:
-    """把 Flutter 引擎的嵌入类并进 classes.jar，返回新增条目数。"""
-    if not engine_jars:
-        return 0
-    staging = classes_jar.parent / "_merge"
-    shutil.rmtree(staging, ignore_errors=True)
-    staging.mkdir(parents=True)
-    with zipfile.ZipFile(classes_jar) as jar:
-        jar.extractall(staging)
-    names = {str(p.relative_to(staging)) for p in staging.rglob("*") if p.is_file()}
-    added = 0
-    for engine_jar in engine_jars:
-        with zipfile.ZipFile(engine_jar) as jar:
-            for entry in jar.namelist():
-                if entry.endswith("/") or entry in names:
-                    continue
-                destination = staging / entry
-                destination.parent.mkdir(parents=True, exist_ok=True)
-                destination.write_bytes(jar.read(entry))
-                names.add(entry)
-                added += 1
-    rebuilt = classes_jar.with_suffix(".jar.new")
-    with zipfile.ZipFile(rebuilt, "w", zipfile.ZIP_DEFLATED) as jar:
-        for path in sorted(staging.rglob("*")):
-            if path.is_file():
-                jar.write(path, str(path.relative_to(staging)))
-    rebuilt.replace(classes_jar)
-    shutil.rmtree(staging, ignore_errors=True)
-    return added
-
-
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--aar", required=True)
     parser.add_argument("--apk", required=True)
     parser.add_argument("--abi", required=True)
-    parser.add_argument("--flutter-root", required=True)
     parser.add_argument("--output", required=True)
     args = parser.parse_args()
 
@@ -99,40 +81,28 @@ def main() -> None:
                     (f"lib/{args.abi}/", f"jni/{args.abi}/"),
                     ("assets/flutter_assets/", "assets/flutter_assets/"),
                 ],
+                skip_names=ENGINE_ENTRIES,
             )
 
     with zipfile.ZipFile(output) as archive:
-        names = archive.namelist()
-        if "classes.jar" not in names:
-            raise SystemExit("AAR 里没有 classes.jar")
-        staging = output.parent / "_classes"
-        staging.mkdir(parents=True, exist_ok=True)
-        (staging / "classes.jar").write_bytes(archive.read("classes.jar"))
-
-    engine_root = Path(args.flutter_root) / "bin/cache/artifacts/engine"
-    engine_jars = sorted(engine_root.glob("android-*release*/flutter.jar"))
-    merged = merge_embedding_jar(staging / "classes.jar", engine_jars)
-
-    with zipfile.ZipFile(output) as archive:
-        entries = [(e, archive.read(e.filename)) for e in archive.infolist() if e.filename != "classes.jar"]
-    with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as archive:
-        for entry, data in entries:
-            archive.writestr(entry, data)
-        archive.write(staging / "classes.jar", "classes.jar")
-    shutil.rmtree(staging, ignore_errors=True)
-
-    with zipfile.ZipFile(output) as archive:
         final = set(archive.namelist())
-    print(f"补齐 {len(written)} 个条目，嵌入类 {merged} 条，引擎 jar：{[j.name for j in engine_jars]}")
+        sizes = {name: archive.getinfo(name).file_size for name in final}
 
     required = {
         f"jni/{args.abi}/libapp.so",
-        f"jni/{args.abi}/libflutter.so",
         f"jni/{args.abi}/librustdesk.so",
+        "classes.jar",
     }
     missing = sorted(required - final)
     if missing:
         raise SystemExit(f"AAR 缺少必要条目：{missing}")
+    if f"jni/{args.abi}/libflutter.so" in final:
+        raise SystemExit("AAR 里混进了 libflutter.so：引擎应由宿主从 maven 依赖，不应打包")
+
+    print(f"补齐 {len(written)} 个条目")
+    for name in sorted(sizes):
+        if name.startswith("jni/"):
+            print(f"  {name}  {sizes[name] / 1024 / 1024:.1f} MiB")
     print(f"输出：{output} ({output.stat().st_size / 1024 / 1024:.1f} MiB)")
 
 

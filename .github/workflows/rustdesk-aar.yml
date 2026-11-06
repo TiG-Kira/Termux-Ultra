@@ -24,6 +24,7 @@ on:
         options:
           - arm64-v8a
           - armeabi-v7a
+          - x86_64
 
 permissions:
   contents: read
@@ -70,7 +71,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            clang cmake curl gcc g++ git libclang-dev llvm-dev nasm ninja-build pkg-config wget \
+            clang cmake curl gcc g++ gcc-multilib g++-multilib git libc6-dev \
+            libclang-dev llvm-dev nasm ninja-build pkg-config wget \
             openjdk-17-jdk-headless
 
       - name: Install Rust toolchain
@@ -103,6 +105,19 @@ jobs:
           channel: stable
           flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
+
+      - name: Verify Flutter engine matches host pin
+        working-directory: host
+        run: |
+          EXPECTED=$(sed -n 's/^rustdesk\.flutterEngine=//p' gradle.properties | tr -d '\r')
+          ACTUAL=$(tr -d '\r\n' < "${FLUTTER_ROOT}/bin/internal/engine.version")
+          echo "gradle.properties : ${EXPECTED}"
+          echo "flutter sdk       : ${ACTUAL}"
+          test -n "${EXPECTED}" || { echo "gradle.properties 缺少 rustdesk.flutterEngine"; exit 1; }
+          if [ "${EXPECTED}" != "${ACTUAL}" ]; then
+            echo "引擎版本不一致：libapp.so 由 ${ACTUAL} 编出，宿主按 ${EXPECTED} 取引擎，运行时必崩（黑屏）"
+            exit 1
+          fi
 
       - name: Install cargo tools
         run: |
@@ -140,8 +155,14 @@ jobs:
           case "${ABI}" in
             arm64-v8a)  TARGET=aarch64-linux-android;    SCRIPT=./flutter/ndk_arm64.sh; LIBCXX=aarch64-linux-android ;;
             armeabi-v7a) TARGET=armv7-linux-androideabi; SCRIPT=./flutter/ndk_arm.sh;  LIBCXX=arm-linux-androideabi ;;
+            x86_64)     TARGET=x86_64-linux-android;     SCRIPT=./flutter/ndk_x64.sh;  LIBCXX=x86_64-linux-android ;;
             *) echo "unsupported abi: ${ABI}"; exit 1 ;;
           esac
+          # hwcodec 的 build.rs 用 bindgen 解析 C 头文件。cargo-ndk 会把 target 传给 libclang，
+          # 但不给 sysroot，libclang 就退回宿主 /usr/include；glibc 的 stdint.h 在非本机 triple
+          # 下又找不到 multiarch 的 bits/libc-header-start.h，构建直接失败。显式给 NDK sysroot。
+          SYSROOT="${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
+          export BINDGEN_EXTRA_CLANG_ARGS="--target=${TARGET}21 --sysroot=${SYSROOT}"
           rustup target add "${TARGET}"
           "${SCRIPT}"
           mkdir -p "flutter/android/app/src/main/jniLibs/${ABI}"
@@ -174,14 +195,13 @@ jobs:
           # wrapper 由上一步的 flutter build 生成；library 变体走 assembleRelease 出 .aar
           ./gradlew :app:assembleRelease --no-daemon --stacktrace
 
-      - name: Merge engine artifacts into AAR
+      - name: Merge Dart artifacts into AAR
         working-directory: rustdesk
         run: |
           python3 ../host/tools/rustdesk-vendor/merge_aar.py \
             --aar "flutter/android/app/build/outputs/aar/app-release.aar" \
             --apk "$(find flutter/build/app/outputs/flutter-apk -name '*-release.apk' | head -1)" \
             --abi "${ABI}" \
-            --flutter-root "${FLUTTER_ROOT}" \
             --output ../rustdesk-release.aar
 
       - name: Inspect AAR
