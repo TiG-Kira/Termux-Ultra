@@ -428,11 +428,12 @@
 
     <!-- UI 外观样式 -->
     <string name="ui_appearance_style">UI 外观样式</string>
-    <string name="ui_appearance_style_description">分组卡片与弹窗切换为超级柔光外观；不影响导航栏样式设置</string>
-        <string name="ui_style_soft">超级柔光</string>
+    <string name="ui_appearance_style_description">切换分组卡片、弹窗与顶栏的玻璃外观；不影响导航栏样式设置</string>
+    <string name="ui_style_soft">超级柔光</string>
+    <string name="ui_style_liquid">液态玻璃</string>
     <string name="ui_style_default">默认</string>
     <string name="ui_style_restart_message">UI 外观样式变更将在重启应用后完全生效，是否现在重启？</string>
-    <string name="ui_style_requires_android13">超级柔光样式需要 Android 13 及以上版本。</string>
+    <string name="ui_style_requires_android13">该外观样式需要 Android 13 及以上版本。</string>
 
     <!-- PullToRefresh -->
     <string name="pull_down_to_refresh">下拉刷新</string>

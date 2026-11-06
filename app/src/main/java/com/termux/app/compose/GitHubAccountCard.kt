@@ -139,7 +139,7 @@ fun GitHubAccountCard() {
         style = uiStyle,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = if (uiStyle is HyperGlassStyle.Soft) 12.dp else 16.dp, vertical = 8.dp)
+            .padding(horizontal = if (uiStyle != HyperGlassStyle.Default) 12.dp else 16.dp, vertical = 8.dp)
     ) {
         ArrowPreference(
             title = session?.user?.login ?: stringResource(R.string.github_login_title),

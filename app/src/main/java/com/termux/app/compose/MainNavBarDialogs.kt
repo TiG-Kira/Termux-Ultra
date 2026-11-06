@@ -7,6 +7,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpSize
+import com.termux.app.compose.liquid.LocalLiquidBackdrop
 import top.yukonga.miuix.kmp.layout.BottomSheetDefaults
 import top.yukonga.miuix.kmp.layout.DialogDefaults
 
@@ -42,6 +43,25 @@ fun OverlayDialog(
     MainNavBarHideEffect(show)
     // 超级柔光：走玻璃弹层；默认样式（或没有取景层）原样走 miuix，连参数都不动。
     val uiStyle by UiStylePrefs.uiStyle.collectAsState()
+    // 液态玻璃外观：走 kyant 取景链的液态弹层，与柔光的 miuix 玻璃弹层互斥。
+    // 独立 Activity 不提供这个 Local，自动回落 miuix（与改动前一致）。
+    val liquidBackdrop = LocalLiquidBackdrop.current
+    if (uiStyle is HyperGlassStyle.Liquid && liquidBackdrop != null) {
+        HyperLiquidDialog(
+            show = show,
+            backdrop = liquidBackdrop,
+            title = title,
+            titleColor = titleColor,
+            summary = summary,
+            summaryColor = summaryColor,
+            onDismissRequest = onDismissRequest,
+            onDismissFinished = onDismissFinished,
+            maxWidth = maxWidth,
+            cornerRadius = cornerRadius ?: DialogDefaults.CornerRadius,
+            content = content,
+        )
+        return
+    }
     // 主页取景层优先；子页面/独立 Activity 没有它，但玻璃顶栏自己有一份页面取景层（
     // LocalGlassTopAppBarBackdrop），弹层直接复用 —— 这样 48 个子页面的弹窗无需逐个改造。
     val glassBackdrop = LocalHyperGlassBackdrop.current ?: LocalGlassTopAppBarBackdrop.current
@@ -155,6 +175,20 @@ fun OverlayBottomSheet(
     MainNavBarHideEffect(show)
     // 超级柔光：底部弹层同样玻璃化；默认样式（或没有取景层）原样走 miuix。
     val sheetStyle by UiStylePrefs.uiStyle.collectAsState()
+    val sheetLiquidBackdrop = LocalLiquidBackdrop.current
+    if (glassEnabled && sheetStyle is HyperGlassStyle.Liquid && sheetLiquidBackdrop != null) {
+        HyperLiquidBottomSheet(
+            show = show,
+            backdrop = sheetLiquidBackdrop,
+            title = title,
+            cornerRadius = cornerRadius,
+            dragHandleColor = dragHandleColor,
+            onDismissRequest = onDismissRequest,
+            onDismissFinished = onDismissFinished,
+            content = content,
+        )
+        return
+    }
     val sheetBackdrop = LocalHyperGlassBackdrop.current ?: LocalGlassTopAppBarBackdrop.current
     if (glassEnabled && sheetStyle is HyperGlassStyle.Soft && sheetBackdrop != null) {
         HyperGlassBottomSheet(
