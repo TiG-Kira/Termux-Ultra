@@ -436,6 +436,7 @@
     <string name="rustdesk_settings_connection">Connection</string>
     <string name="rustdesk_settings_security">Security</string>
     <string name="rustdesk_settings_client">Client</string>
+    <string name="rustdesk_unavailable_abi">RustDesk is not bundled for this device architecture</string>
     <string name="rustdesk_empty">No RustDesk connections</string>
     <string name="rustdesk_empty_hint">Sessions run in the installed RustDesk client</string>
     <string name="rustdesk_client_missing_title">RustDesk client not found</string>
@@ -477,6 +478,10 @@
     <string name="rustdesk_clear_connections_confirm">Every RustDesk connection will be deleted. This cannot be undone.</string>
     <string name="rustdesk_clear">Clear</string>
     <string name="rustdesk_client_status">RustDesk client</string>
+    <string name="rustdesk_engine_status">Embedded engine</string>
+    <string name="rustdesk_engine_ready">Bundled, connects inside the app</string>
+    <string name="rustdesk_engine_missing">Not bundled for this ABI, falls back to the external client</string>
+    <string name="rustdesk_engine_detail">Engine %1$s · device ABI %2$s</string>
     <string name="rustdesk_client_installed">Installed, v%1$s</string>
     <string name="rustdesk_client_installed_no_version">Installed</string>
     <string name="rustdesk_client_not_installed">Not installed</string>

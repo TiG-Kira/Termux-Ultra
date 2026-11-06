@@ -79,6 +79,12 @@ android {
         // libterminal 核心版本号（来自 Maven Central）
         buildConfigField "String", "LIBTERMINAL_VERSION", "\"4.1.1\""
 
+        // 内嵌 RustDesk 所用的 Flutter 引擎哈希。libapp.so 必须与引擎严格同版本，
+        // 配错的表现是会话页黑屏而不是编译失败，所以把实际使用的版本暴露到运行时，
+        // 「RustDesk 设置 - 客户端」里可以直接核对，省去解包 APK 的排查。
+        buildConfigField "String", "RUSTDESK_ENGINE",
+                "\"${project.properties['rustdesk.flutterEngine'] ?: 'unknown'}\""
+
         // Workflow CLI build flag (set by GitHub Actions)
         buildConfigField "boolean", "WORKFLOW_CLI", "${workflowCliBuild}"
 
@@ -237,6 +243,36 @@ android {
 
 dependencies {
     implementation fileTree(dir: 'libs', include: ['*.jar'])
+
+    // 内嵌 RustDesk（会话页继承上游 MainActivity）。AAR 只含 RustDesk 自己的产物——
+    // libapp.so / librustdesk.so / flutter_assets / 插件与 Activity 类；Flutter 引擎
+    // （libflutter.so 与 io.flutter.* 嵌入类）不打包，由官方 maven 制品提供。
+    //
+    // 引擎版本必须与 libapp.so 严格一致：配错不会编译失败，而是会话页黑屏。版本号统一
+    // 取自 gradle.properties 的 rustdesk.flutterEngine，CI 会拿它与 Flutter SDK 的
+    // bin/internal/engine.version 比对，不一致直接中断构建。
+    def rustdeskEngine = project.properties['rustdesk.flutterEngine']
+    if (!rustdeskEngine) {
+        throw new GradleException("gradle.properties 缺少 rustdesk.flutterEngine，无法确定 Flutter 引擎版本")
+    }
+    implementation files('libs/rustdesk-release.aar')
+    implementation "io.flutter:flutter_embedding_release:1.0.0-${rustdeskEngine}"
+    // 引擎 ABI 制品必须与「本包真正会打包的 ABI」对齐：AAR 里只有 arm64-v8a 的
+    // libapp.so / librustdesk.so，给没有 libapp.so 的架构配引擎库既跑不起来、
+    // 又会让每个 APK 白涨约 9MB。单架构构建（-Ptermux.abi）只取该架构；
+    // 多架构/未指定时按 rustdesk.abis，默认仅 AAR 自带的 arm64-v8a。
+    // 模拟器实测：-Ptermux.abi=x86_64（x86_64 原生库由 install_aar.py --stage 注入）。
+    def hostAbi = (project.findProperty("termux.abi") ?: System.getenv("TERMUX_ABI") ?: "").toString().trim()
+    def rustdeskAbis = (hostAbi && hostAbi != "universal")
+            ? [hostAbi]
+            : (project.findProperty("rustdesk.abis") ?: "arm64-v8a").toString().split(',')*.trim()
+    if (rustdeskAbis.contains("arm64-v8a")) {
+        implementation "io.flutter:arm64_v8a_release:1.0.0-${rustdeskEngine}"
+    }
+    if (rustdeskAbis.contains("x86_64")) {
+        implementation "io.flutter:x86_64_release:1.0.0-${rustdeskEngine}"
+    }
+
     coreLibraryDesugaring "com.android.tools:desugar_jdk_libs:2.1.5"
     implementation "top.yukonga.miuix.kmp:miuix-ui-android:0.9.4"
     // 玻璃导航栏（GlassNavigationBar，vendor 于 miuix PR #423 的 miuix-glass 模块）依赖 miuix-blur

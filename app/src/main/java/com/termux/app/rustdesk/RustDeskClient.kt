@@ -7,11 +7,17 @@ import android.net.Uri
 import android.util.Log
 
 /**
- * 把会话交接给官方 RustDesk Android 客户端（`com.carriez.flutter_hbb`）。
+ * 把会话交给 RustDesk。
  *
- * 为什么不内置：RustDesk 的会话核心是 Rust + Flutter，且为 AGPL-3.0，没有可作为库链接的
- * AAR，整包 vendor 进来还会把本应用整体拖成 AGPL。因此这里走官方 `rustdesk://` 深链协议
- * （RustDesk 的 `urlLinkToCmdArgs()`）把 ID / 密码 / 服务器 / 公钥 / 强制中继交给客户端：
+ * 有两条路径，优先第一条：
+ *
+ * 1. **内嵌会话**：`RustDeskSessionActivity` 继承 vendor 进来的上游 `MainActivity`，在应用内
+ *    直接跑 Flutter 会话页。链接形态与第二条完全相同——上游 `uni_links` 从启动 Intent 读
+ *    `rustdesk://`，再交给 `urlLinkToCmdArgs()` 解析，官方客户端走的也是这条；
+ * 2. **外部客户端兜底**：当前 ABI 没有原生库（见 [RustDeskRuntime]）时，把同一个链接交给
+ *    官方客户端 `com.carriez.flutter_hbb`，功能不降级，只是要装一个 App。
+ *
+ * 深链形态（由 [buildUri] 拼装）：
  *
  * - `rustdesk://<id>` 直连
  * - `rustdesk://<id>@<server>?key=<公钥>` 走自建服务器
@@ -63,9 +69,26 @@ object RustDeskClient {
         }
     }
 
-    /** 交接成功返回 true；客户端未安装或系统没有可处理的应用返回 false。 */
+    /** 拉起会话：优先内嵌，其次外部客户端；两条都不可用返回 false。 */
     fun launch(context: Context, connection: RustDeskConnection): Boolean {
         val uri = Uri.parse(buildUri(connection, RustDeskSettings.defaults(context)))
+
+        if (RustDeskRuntime.isAvailable()) {
+            val intent = Intent(context, RustDeskSessionActivity::class.java).apply {
+                action = Intent.ACTION_VIEW
+                data = uri
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            val started = runCatching { context.startActivity(intent) }.isSuccess
+            if (started) return true
+            Log.w(TAG, "内嵌会话页拉起失败，回落到外部客户端：$uri")
+        }
+
+        return launchExternal(context, uri)
+    }
+
+    /** 把链接交给官方客户端；客户端未安装或系统没有可处理的应用返回 false。 */
+    private fun launchExternal(context: Context, uri: Uri): Boolean {
         val intent = Intent(Intent.ACTION_VIEW, uri).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             if (isInstalled(context)) setPackage(PACKAGE_NAME)

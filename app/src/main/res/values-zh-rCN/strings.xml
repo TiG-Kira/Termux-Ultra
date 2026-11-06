@@ -364,6 +364,7 @@
     <string name="rustdesk_settings_connection">连接</string>
     <string name="rustdesk_settings_security">安全</string>
     <string name="rustdesk_settings_client">客户端</string>
+    <string name="rustdesk_unavailable_abi">当前设备架构未内置 RustDesk</string>
     <string name="rustdesk_empty">没有 RustDesk 连接</string>
     <string name="rustdesk_empty_hint">会话由已安装的 RustDesk 客户端接管</string>
     <string name="rustdesk_client_missing_title">未检测到 RustDesk 客户端</string>
@@ -405,6 +406,10 @@
     <string name="rustdesk_clear_connections_confirm">将删除全部 RustDesk 连接记录，此操作不可撤销。</string>
     <string name="rustdesk_clear">清空</string>
     <string name="rustdesk_client_status">RustDesk 客户端</string>
+    <string name="rustdesk_engine_status">内嵌引擎</string>
+    <string name="rustdesk_engine_ready">已内置，可在应用内直接连接</string>
+    <string name="rustdesk_engine_missing">当前架构未内置，将改用外部客户端</string>
+    <string name="rustdesk_engine_detail">引擎 %1$s · 设备 ABI %2$s</string>
     <string name="rustdesk_client_installed">已安装，v%1$s</string>
     <string name="rustdesk_client_installed_no_version">已安装</string>
     <string name="rustdesk_client_not_installed">未安装</string>

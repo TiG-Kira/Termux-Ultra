@@ -517,6 +517,18 @@
             android:label="@string/rustdesk_settings"
             android:windowSoftInputMode="adjustResize" />
 
+        <!-- 内嵌 RustDesk 会话页：继承 vendor 进来的上游 MainActivity。
+             configChanges 与上游运行要求一致（旋转/输入法不重建，否则会话被踢下线）；
+             LaunchTheme 也来自 AAR 资源，与官方客户端的启动表现保持一致。 -->
+        <activity
+            android:name=".rustdesk.RustDeskSessionActivity"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode|navigation"
+            android:exported="false"
+            android:hardwareAccelerated="true"
+            android:launchMode="singleTop"
+            android:theme="@style/LaunchTheme"
+            android:windowSoftInputMode="adjustResize" />
+
         <activity
             android:name=".app.activities.X11SettingsActivity"
             android:exported="false"

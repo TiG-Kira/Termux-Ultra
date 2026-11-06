@@ -14,6 +14,10 @@ allprojects {
         google()
         mavenCentral()
         maven { url "https://jitpack.io" }
+        // 内嵌 RustDesk 所需的 Flutter 引擎制品（flutter_embedding_release / <abi>_release）。
+        // 官方源；国内网络下官方源不可达时由下面的镜像兜底（Gradle 按声明顺序尝试）。
+        maven { url "https://storage.googleapis.com/download.flutter.io" }
+        maven { url "https://storage.flutter-io.cn/download.flutter.io" }
         maven { url "https://maven.pkg.github.com/compose-miuix-ui/miuix" }
         // AgentPaw 合作项目包源（GitHub Packages 即便公开包也强制 token 认证）。
         // token 解析顺序：环境变量 GITHUB_PACKAGES_TOKEN / GITHUB_TOKEN →

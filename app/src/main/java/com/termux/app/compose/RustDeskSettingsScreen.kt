@@ -1,6 +1,7 @@
 package com.termux.app.compose
 
 import android.content.Context
+import android.os.Build
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
@@ -24,6 +25,7 @@ import androidx.compose.material.icons.rounded.Devices
 import androidx.compose.material.icons.rounded.Dns
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.Memory
 import androidx.compose.material.icons.rounded.Password
 import androidx.compose.material.icons.rounded.SwapVert
 import androidx.compose.runtime.Composable
@@ -38,9 +40,11 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.termux.BuildConfig
 import com.termux.R
 import com.termux.app.rustdesk.RustDeskClient
 import com.termux.app.rustdesk.RustDeskConnectionManager
+import com.termux.app.rustdesk.RustDeskRuntime
 import com.termux.app.rustdesk.RustDeskSettings
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Icon
@@ -392,6 +396,11 @@ private fun RustDeskClientPage(modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val clientInstalled = remember { RustDeskClient.isInstalled(context) }
     val clientVersion = remember { RustDeskClient.versionName(context) }
+    // 引擎可用性取决于当前设备 ABI：APK 里有没有 librustdesk.so。判定会真的加载一次
+    // 原生库，所以 result 就是后续启动会话时的结论，不存在「显示可用但一进就崩」。
+    val engineReady = remember { RustDeskRuntime.isAvailable() }
+    val deviceAbi = remember { Build.SUPPORTED_ABIS.firstOrNull() ?: "unknown" }
+    var showEngineInfo by remember { mutableStateOf(false) }
     var showClearConfirm by remember { mutableStateOf(false) }
     var connectionCount by remember { mutableStateOf(RustDeskConnectionManager(context).count()) }
 
@@ -403,6 +412,15 @@ private fun RustDeskClientPage(modifier: Modifier = Modifier) {
         item {
             SettingCard {
                 Column {
+                    ArrowPreference(
+                        title = stringResource(R.string.rustdesk_engine_status),
+                        summary = stringResource(
+                            if (engineReady) R.string.rustdesk_engine_ready
+                            else R.string.rustdesk_engine_missing
+                        ),
+                        onClick = { showEngineInfo = true },
+                        startAction = { SettingIcon(Icons.Rounded.Memory) }
+                    )
                     ArrowPreference(
                         title = stringResource(R.string.rustdesk_client_status),
                         summary = if (clientInstalled) {
@@ -469,6 +487,25 @@ private fun RustDeskClientPage(modifier: Modifier = Modifier) {
                     modifier = Modifier.fillMaxWidth()
                 )
             }
+        }
+    )
+
+    OverlayDialog(
+        title = stringResource(R.string.rustdesk_engine_status),
+        summary = stringResource(
+            R.string.rustdesk_engine_detail,
+            BuildConfig.RUSTDESK_ENGINE.take(12),
+            deviceAbi
+        ),
+        show = showEngineInfo,
+        onDismissRequest = { showEngineInfo = false },
+        content = {
+            TextButton(
+                text = stringResource(R.string.ok),
+                onClick = { showEngineInfo = false },
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.textButtonColorsPrimary()
+            )
         }
     )
 }

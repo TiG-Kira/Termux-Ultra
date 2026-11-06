@@ -245,3 +245,18 @@
 # https://issuetracker.google.com/issues/189001730
 # https://android-review.googlesource.com/c/platform/frameworks/support/+/1757630
 -keep class androidx.window.** { *; }
+
+# ===========================================================================
+# 10. 内嵌 RustDesk ---------------------------------------------------------
+# ===========================================================================
+# 整个链路都是「按名字找」：Rust 侧按方法名在 Application 实例上反射调用
+# rustDocumentStorage，Flutter 侧经 JNI 调 ffi.FFI 的静态方法，插件注册表按类名查
+# plugin 类。R8 看不到这些引用，收缩阶段会把它们当死代码删掉——表现不是编译失败，
+# 而是运行时启动会话直接崩。这里整包保留（本项目 -dontobfuscate，不涉及改名）。
+-keep class ffi.** { *; }
+-keep class com.carriez.flutter_hbb.** { *; }
+
+# 宿主 Application 上的 JNI 回调入口
+-keepclassmembers class * extends android.app.Application {
+    java.lang.String rustDocumentStorage(java.lang.String);
+}

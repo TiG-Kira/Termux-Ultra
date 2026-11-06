@@ -58,6 +58,22 @@ public class TermuxApplication extends com.termux.x11.LorieApp {
     }
 
     /**
+     * 内嵌 RustDesk 的 JNI 回调入口。
+     *
+     * 上游把它放在 {@code MainApplication.rustDocumentStorage}：Rust 侧按方法名在当前
+     * Application 实例上反射找它，用于文件传输时的文档读写（也用于 {@code log_write}）。
+     * 宿主的 Application 必须继承 LorieApp（Termux:X11 的 checkcast 要求），无法同时继承
+     * MainApplication，所以在宿主的 Application 上也挂一份同名方法转交给 vendor 包内的桥接。
+     *
+     * 桥接必须留在 vendor 包内：{@code DocumentStorage} 是 Kotlin internal class，跨 Gradle
+     * 模块不可见。方法名与签名改动会直接让 Rust 侧找不到入口，改之前先看 proguard 的保留规则。
+     */
+    @androidx.annotation.Keep
+    public String rustDocumentStorage(String request) {
+        return com.carriez.flutter_hbb.RustDeskHostBridge.request(this, request);
+    }
+
+    /**
      * 当前进程名。读 /proc/self/cmdline（minSdk 24 无 Application.getProcessName()）。
      * app_process 裸启的进程（如 termux-x11 X Server）cmdline 为 --nice-name 值。
      */

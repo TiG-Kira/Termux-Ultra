@@ -56,3 +56,7 @@ _deps.txt
 .workbuddy
 CODE_REVIEW_REPORT.md
 .designkit-history-delivery.vortex_test/
+
+# 内嵌 RustDesk：x86_64 会话库按需从 CI 产物注入（install_aar.py --stage x86_64），
+# 只用于本机模拟器调试，不入库——仓库里只保留 arm64-v8a 的 AAR。
+app/src/debug/jniLibs/
