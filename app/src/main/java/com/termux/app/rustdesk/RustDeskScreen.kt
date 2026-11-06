@@ -53,10 +53,11 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
 import java.util.UUID
 
 /**
- * RustDesk 标签页：连接记录的增删改与「交接给客户端」。
+ * RustDesk 标签页：连接记录的增删改与发起会话。
  *
- * 与 [com.termux.app.vnc.VncScreen] 同构——同样的卡片列表、同样的编辑弹窗，区别只在最后一步：
- * 会话不由本应用渲染，而是把 ID + 密码交给已安装的 RustDesk 客户端（见 [RustDeskClient]）。
+ * 与 [com.termux.app.vnc.VncScreen] 同构——同样的卡片列表、同样的编辑弹窗。
+ * 会话由本应用内嵌的 Rust 核心渲染（见 [RustDeskCore]）；仅当该 ABI 没有原生库时，
+ * [RustDeskClient] 才把会话退回已安装的官方客户端。
  */
 @Composable
 fun RustDeskScreen(
@@ -71,7 +72,10 @@ fun RustDeskScreen(
     var editingConnection by remember { mutableStateOf<RustDeskConnection?>(null) }
     var passwordTarget by remember { mutableStateOf<RustDeskConnection?>(null) }
     var showClientMissing by remember { mutableStateOf(false) }
-    val clientInstalled = remember { RustDeskClient.isInstalled(context) }
+    // 内嵌核心可用时不依赖外部客户端；只有核心与官方客户端都不可用才提示安装
+    val needsExternalClient = remember {
+        !RustDeskCore.isAvailable() && !RustDeskClient.isInstalled(context)
+    }
 
     if (addRequested && !showAddDialog && editingConnection == null) {
         showAddDialog = true
@@ -79,7 +83,7 @@ fun RustDeskScreen(
     }
 
     fun launchConnection(connection: RustDeskConnection, password: String) {
-        if (!RustDeskClient.isInstalled(context)) {
+        if (needsExternalClient) {
             showClientMissing = true
             return
         }
@@ -106,7 +110,7 @@ fun RustDeskScreen(
                 if (nestedScrollConnection != null) it.nestedScroll(nestedScrollConnection) else it
             }
     ) {
-        if (!clientInstalled) {
+        if (needsExternalClient) {
             item { RustDeskClientMissingCard() }
         }
 
