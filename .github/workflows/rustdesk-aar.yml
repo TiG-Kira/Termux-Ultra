@@ -2,12 +2,13 @@ name: Build RustDesk AAR
 
 # 把上游 RustDesk 的 Android 端编成可被本应用内嵌的 AAR。
 #
-# 上游 Android 产物只有 APK（flutter/android/app 是 com.android.application），流程是：
-# 用仓库内预置的 rustdesk-library.patch 把上游模块改造成 library，直接 assembleRelease 出 AAR
-#（patch 等价于原 patch_android_library.py 的改造，但改为可审查的统一 diff，随本仓库版本化、
-# 对齐上游 tag）。library 变体的 AAR 已自带 Dart AOT（libapp.so）与 flutter_assets，
-# librustdesk.so 由「Build rust core」步骤 cp 进 jniLibs；Flutter 引擎（libflutter.so）不进
-# AAR，由宿主 maven 提供。不再编参考 APK——那一步在 runner 上做整包 dex 合并会 OOM。
+# 上游 Android 端是 com.android.application，且不提交 gradlew（仅由 flutter pub get 临时生成、
+# 不在 git 内）。流程：仓库内预置的 rustdesk-library.patch 把上游模块改造成 library，再用官方
+# flutter build aar（Flutter SDK 自带 gradle 驱动，无需仓库内 gradlew）打包成可宿主 add-to-app 内嵌
+# 的 AAR。patch 等价于原 patch_android_library.py 的改造，但改为可审查的统一 diff，随本仓库版本化、
+# 对齐上游 tag。AAR 内自带 Dart AOT（libapp.so）与 flutter_assets，librustdesk.so 由「Build rust core」
+# 步骤 cp 进 jniLibs；Flutter 引擎（libflutter.so）不进 AAR，由宿主 maven 提供。不再编参考 APK——
+# 那一步在 runner 上做整包 dex 合并会 OOM。
 #
 # 构建依赖的版本全部对齐上游 .github/workflows/flutter-build.yml 与 bridge.yml，
 # 改任何一个都要同步上游，否则桥代码与 Dart 侧的 freezed 输出对不上。
@@ -180,18 +181,30 @@ jobs:
         run: git apply --ignore-whitespace ../host/tools/rustdesk-vendor/rustdesk-library.patch
 
       - name: Build AAR
-        working-directory: rustdesk/flutter/android
+        working-directory: rustdesk/flutter
         env:
           JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
         run: |
-          # gradle wrapper 由前面「Generate flutter_rust_bridge code」里的 flutter pub get 生成；library 变体走 assembleRelease 出 .aar
-          ./gradlew :app:assembleRelease --no-daemon --stacktrace
+          case "${ABI}" in
+            arm64-v8a)   TARGET=android-arm64 ;;
+            armeabi-v7a) TARGET=android-arm ;;
+            x86_64)      TARGET=android-x64 ;;
+            *) echo "unsupported abi: ${ABI}"; exit 1 ;;
+          esac
+          # 上游 flutter/android 不提交 gradlew（gradlew 仅 flutter pub get 临时生成且不在 git 内），
+          # 故用 Flutter SDK 自带的 flutter build aar（官方 add-to-app 打包路径）：输出标准 AAR，
+          # 内含 libapp.so(Dart AOT)+flutter_assets+我们 cp 进 jniLibs 的 librustdesk.so；引擎
+          # libflutter.so 由宿主 maven 提供，不进 AAR。library 变体（由 patch 改造）走 assembleAarRelease。
+          flutter pub get
+          flutter build aar --target-platform "${TARGET}" --no-debug --no-profile
 
       - name: Verify & repackage AAR
         working-directory: rustdesk
         run: |
+          AAR=$(find flutter/build/host/outputs/repo -name '*.aar' | head -1)
+          test -n "${AAR}" || { echo "flutter build aar 未产出 AAR"; exit 1; }
           python3 ../host/tools/rustdesk-vendor/merge_aar.py \
-            --aar "flutter/android/app/build/outputs/aar/app-release.aar" \
+            --aar "${AAR}" \
             --abi "${ABI}" \
             --output ../rustdesk-release.aar
 
