@@ -190,7 +190,7 @@ jobs:
           du -h rustdesk-release.aar
 
       - name: Upload AAR
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: rustdesk-${{ inputs.abi }}-${{ inputs.tag }}
           path: rustdesk-release.aar
