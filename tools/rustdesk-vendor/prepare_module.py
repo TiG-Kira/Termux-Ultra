@@ -1,20 +1,25 @@
 #!/usr/bin/env python3
-"""把 RustDesk 的 Flutter application 重构为标准 add-to-app 模块拓扑，让 `flutter build aar` 能产出
-干净且功能完整的 AAR。
+"""把 RustDesk 的 Flutter 工程重构为 editable-module 拓扑，让 `flutter build aar` 能产出
+可被宿主（本应用）依赖的 AAR（X11 式 vendoring 的前提）。
 
-拓扑：
-  flutter/android/app   -> 重命名为 flutter/android/flutter（RustDesk Flutter 库，com.android.library）
-  flutter/android/app   <- 新建宿主 application（最小壳，由它应用 Flutter gradle 插件驱动 AAR 构建）
+拓扑（Flutter 3.24.5 的 flutter build aar 标准 editable 模式）：
+  flutter/                         <- pubspec.yaml 含 flutter.module:
+  flutter/android/app              <- 保留为 com.android.application（构建期宿主，flutter 插件
+                                    需要它来读 applicationVariants；运行时不需要它的 MainActivity）
+  flutter/.android/Flutter         <- flutter pub get 生成的 ephemeral 库，AAR 真正从这里出
+  flutter/.android/include_flutter.groovy  <- 把 :flutter 指向 .android/Flutter
 
-前提：调用前应先对 flutter/android/app 施加 rustdesk-library.patch（application->library、剥清单、
-注入 RustDeskHostBridge 等）。本脚本幂等兜底：若发现 app/build.gradle 仍是 application 则自动施加补丁。
+关键修正（与早期 thin-module 方案相反）：
+  * 不再把 app 改名成 flutter（那会让 :flutter 永不解析 -> assert moduleProject != null）
+  * 而是给 flutter/android/settings.gradle 追加 setBinding + evaluate(include_flutter.groovy)，
+    让 flutter build aar 在 editable 模式下把 :flutter 解析到 .android/Flutter
+  * flutter build aar 走 --no-pub，原生 so 在 pub get 生成 .android 之后注入 .android/Flutter/jniLibs
 
-用法：prepare_module.py <rustdesk checkout 根> [abi]
-  abi: arm64-v8a | armeabi-v7a | x86_64
+用法：prepare_module.py <rustdesk 根> <abi> <native_so_dir>
+  abi:           arm64-v8a | armeabi-v7a | x86_64
+  native_so_dir: 含 librustdesk.so 与 libc++_shared.so 的目录（cargo ndk 产物）
 """
 import os
-import re
-import shutil
 import subprocess
 import sys
 
@@ -24,189 +29,102 @@ ABI_GRADLE = {
     "x86_64": "x86_64",
 }
 
-ABI_TARGET_PLATFORM = {
-    "arm64-v8a": "android-arm64",
-    "armeabi-v7a": "android-arm",
-    "x86_64": "android-x64",
-}
-
-
-def apply_patch(root):
-    """若 flutter/android/app 仍是 application，则施加仓库内的 rustdesk-library.patch。"""
-    patch = os.path.join(os.path.dirname(os.path.abspath(__file__)), "rustdesk-library.patch")
-    if not os.path.isfile(patch):
-        return
-    bg = os.path.join(root, "flutter", "android", "app", "build.gradle")
-    if os.path.isfile(bg) and "com.android.library" in open(bg, encoding="utf-8").read():
-        return  # 已改造，跳过
-    r = subprocess.run(["git", "apply", "--ignore-whitespace", patch], cwd=root)
-    if r.returncode != 0:
-        raise SystemExit("rustdesk-library.patch 施加失败（returncode=%d）" % r.returncode)
-
-
-def read_android_int(build_gradle, key):
-    with open(build_gradle, encoding="utf-8") as f:
-        s = f.read()
-    m = re.search(r'%s(?:Version)?\s*=?\s*(\d+)' % re.escape(key), s)
-    return m.group(1) if m else None
-
-
-def write_host_app(android_dir, abi_gradle, compile_sdk, min_sdk, target_sdk):
-    app = os.path.join(android_dir, "app")
-    kotlin_dir = os.path.join(
-        app, "src", "main", "kotlin", "com", "carriez", "flutter_hbb", "host"
-    )
-    os.makedirs(kotlin_dir, exist_ok=True)
-    with open(os.path.join(app, "build.gradle"), "w", encoding="utf-8") as f:
-        f.write(
-            """plugins {
-    id "com.android.application"
-    id "kotlin-android"
-    id "dev.flutter.flutter-gradle-plugin"
-}
-
-android {
-    namespace = "com.carriez.flutter_hbb.host"
-    compileSdk = %s
-    defaultConfig {
-        applicationId "com.carriez.flutter_hbb.host"
-        minSdk = %s
-        targetSdk = %s
-        versionCode 1
-        versionName "1.0"
-        ndk { abiFilters '%s' }
-    }
-    buildTypes {
-        release {
-            minifyEnabled false
-        }
-    }
-}
-
-flutter {
-    source '../..'
-}
-
-dependencies {
-    implementation project(':flutter')
-}
-"""
-            % (compile_sdk, min_sdk, target_sdk, abi_gradle)
-        )
-    with open(
-        os.path.join(app, "src", "main", "AndroidManifest.xml"), "w", encoding="utf-8"
-    ) as f:
-        f.write(
-            """<manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <application
-        android:allowBackup="false"
-        android:name="android.app.Application">
-        <activity
-            android:name=".HostMainActivity"
-            android:exported="true"
-            android:launchMode="singleTop"
-            android:theme="@android:style/Theme.NoTitleBar"
-            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode|navigation">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity>
-    </application>
-</manifest>
-"""
-        )
-    with open(
-        os.path.join(kotlin_dir, "HostMainActivity.kt"), "w", encoding="utf-8"
-    ) as f:
-        f.write(
-            """package com.carriez.flutter_hbb.host
-
-import io.flutter.embedding.android.FlutterActivity
-
-class HostMainActivity : FlutterActivity()
-"""
-        )
-
-
-def rewrite_settings(settings_path):
-    with open(settings_path, encoding="utf-8") as f:
-        s = f.read()
-    if ":flutter" in s:
-        return
-    if re.search(r'include\s+["\']:app["\']', s):
-        s = re.sub(
-            r'(include\s+["\']:app["\'])', r'\1, ":flutter"', s, count=1
-        )
-    else:
-        s = s.rstrip() + '\ninclude ":flutter"\n'
-    with open(settings_path, "w", encoding="utf-8") as f:
-        f.write(s)
-
 
 def add_pubspec_module(pubspec_path):
+    """pubspec 必须声明 flutter.module，否则 flutter build aar 不识别为模块。
+
+    module 必须是 flutter: 下的对象；其字段需再缩进一级（4 空格），否则会被当成 flutter 的
+    直属子项导致校验 `module is null`。
+    """
     with open(pubspec_path, encoding="utf-8") as f:
         s = f.read()
     if "module:" in s:
         return
-    # module 必须是 flutter: 下的对象；其字段需再缩进一级（4 空格），否则会被当成 flutter 的直属子项。
     module_block = (
         "  module:\n"
         "    androidX: true\n"
-        "    androidPackage: com.carriez.flutter_hbb\n"
+        "    androidPackage: com.carriez.flutter_hbb.vendored\n"
         "    moduleName: flutter_hbb\n"
     )
     marker = "  uses-material-design: true\n"
     if marker in s:
-        # 标准 Flutter app：module 与 uses-material-design 同挂 flutter: 下（均为 2 空格）
         s = s.replace(marker, marker + module_block, 1)
     elif "flutter:\n" in s:
         s = s.replace("flutter:\n", "flutter:\n" + module_block, 1)
     else:
-        # 兜底：作为顶层键追加（module 子项用 2 空格）
-        s = s.rstrip() + "\nmodule:\n  androidX: true\n  androidPackage: com.carriez.flutter_hbb\n  moduleName: flutter_hbb\n"
+        s = s.rstrip() + "\nmodule:\n  androidX: true\n  androidPackage: com.carriez.flutter_hbb.vendored\n  moduleName: flutter_hbb\n"
     with open(pubspec_path, "w", encoding="utf-8") as f:
         f.write(s)
+
+
+def add_settings_evaluate(settings_path):
+    """editable-module 模式的关键：让 :flutter 解析到 .android/Flutter。
+
+    settingsDir 是 flutter/android，其 parentFile 即 flutter/，故 .android/include_flutter.groovy
+    解析为 flutter/.android/include_flutter.groovy（由 flutter pub get 生成）。
+    """
+    with open(settings_path, encoding="utf-8") as f:
+        s = f.read()
+    marker = "include_flutter.groovy"
+    if marker in s:
+        return
+    s = s.rstrip() + "\n\nsetBinding(new Binding([gradle: this]))\n"
+    s += "evaluate(new File(settingsDir.parentFile, '.android/include_flutter.groovy'))\n"
+    with open(settings_path, "w", encoding="utf-8") as f:
+        f.write(s)
+
+
+def inject_native_libs(flutter_root, abi, native_so_dir):
+    """把 Rust 核心 so 注入 ephemeral 库的 jniLibs，使其编进 AAR。
+
+    .android/Flutter 由 flutter pub get 生成，故必须在 pub get 之后注入。
+    """
+    lib_dir = os.path.join(
+        flutter_root, ".android", "Flutter", "src", "main", "jniLibs", abi
+    )
+    os.makedirs(lib_dir, exist_ok=True)
+    for so in ("librustdesk.so", "libc++_shared.so"):
+        src = os.path.join(native_so_dir, so)
+        if not os.path.isfile(src):
+            raise SystemExit("缺少原生库：%s" % src)
+        dst = os.path.join(lib_dir, so)
+        with open(src, "rb") as fsrc, open(dst, "wb") as fdst:
+            fdst.write(fsrc.read())
+    print("injected native libs -> %s" % lib_dir)
 
 
 def main():
     root = sys.argv[1]
     abi = sys.argv[2] if len(sys.argv) > 2 else "arm64-v8a"
+    native_so_dir = sys.argv[3] if len(sys.argv) > 3 else None
     abi_gradle = ABI_GRADLE.get(abi, "arm64-v8a")
-    android = os.path.join(root, "flutter", "android")
-    app = os.path.join(android, "app")
-    flut = os.path.join(android, "flutter")
-    assert os.path.isdir(app), "expected %s (RustDesk app module)" % app
+    flutter = os.path.join(root, "flutter")
+    android = os.path.join(flutter, "android")
+    settings = os.path.join(android, "settings.gradle")
+    pubspec = os.path.join(flutter, "pubspec.yaml")
+    assert os.path.isdir(android), "expected %s (RustDesk android dir)" % android
+    assert os.path.isfile(settings), "missing %s" % settings
+    assert os.path.isfile(pubspec), "missing %s" % pubspec
 
-    # 0) 兜底施加 library 补丁（CI 通常已单独施加）
-    apply_patch(root)
+    # 1) settings.gradle 追加 evaluate（editable 模式让 :flutter 解析）
+    add_settings_evaluate(settings)
+    # 2) pubspec 声明 flutter.module
+    add_pubspec_module(pubspec)
 
-    # 1) 读取库（原 app）的 SDK 版本，供宿主对齐（AGP 要求所有模块同 compileSdk）
-    app_bg = os.path.join(app, "build.gradle")
-    compile_sdk = read_android_int(app_bg, "compileSdk") or "36"
-    min_sdk = read_android_int(app_bg, "minSdk") or "22"
-    target_sdk = read_android_int(app_bg, "targetSdk") or "36"
+    # 3) flutter pub get 生成 .android/（含 Flutter 库 + include_flutter.groovy）
+    #    shell=True 跨平台最稳：Linux 走 /bin/sh，Windows 走 cmd.exe 能正确解析 flutter.bat
+    print("running flutter pub get ...")
+    r = subprocess.run("flutter pub get", cwd=flutter, shell=True)
+    if r.returncode != 0:
+        raise SystemExit("flutter pub get 失败（returncode=%d）" % r.returncode)
 
-    # 2) 库 :flutter 必须保留 Flutter gradle 插件与 `flutter { source }`：
-    #    :flutter 含 Dart 代码，Dart AOT(libapp.so) 正是靠 flutter-gradle-plugin 编出来再打进
-    #    AAR 的；aar_init_script 只负责 maven 发布，不编译 Dart。官方 add-to-app module 的库项目
-    #    同样应用该插件（宿主 :app 也应用，但只是构建上下文）。
+    # 4) 注入原生 so（必须在 pub get 之后）
+    if native_so_dir:
+        inject_native_libs(flutter, abi_gradle, native_so_dir)
+    else:
+        print("warn: 未传 native_so_dir，跳过原生 so 注入（AAR 将缺 librustdesk.so）")
 
-    # 3) application 重命名为 library
-    if os.path.exists(flut):
-        shutil.rmtree(flut)
-    shutil.move(app, flut)
-
-    # 4) 新建宿主 application（最小壳，应用 Flutter gradle 插件驱动构建）
-    write_host_app(android, abi_gradle, compile_sdk, min_sdk, target_sdk)
-
-    # 5) settings.gradle include :flutter
-    rewrite_settings(os.path.join(android, "settings.gradle"))
-
-    # 6) pubspec.yaml 声明 flutter.module（flutter build aar 依赖它识别模块）
-    add_pubspec_module(os.path.join(root, "flutter", "pubspec.yaml"))
-
-    print("module topology prepared: host :app (application) + library :flutter")
+    print("editable-module prepared: AAR 将从 %s/.android/Flutter 产出" % flutter)
 
 
 if __name__ == "__main__":

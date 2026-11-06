@@ -1,19 +1,21 @@
 name: Build RustDesk AAR
 
-# 把上游 RustDesk 的 Android 端编成可被本应用内嵌的 AAR。
+# 把上游 RustDesk 的 Android 端编成可被本应用内嵌的 AAR（X11 式 vendoring：RustDesk 作为
+# 同包内的独立 Flutter 组件，由宿主经 Intent/深链直拉会话，不经 RustDesk 主页）。
 #
-# 上游 Android 端是 com.android.application，而 flutter build aar 只接受标准 add-to-app 模块拓扑
-# （宿主 :app 为 application + Flutter 库 :flutter 为 library）；直接对 application 跑会被拒
-# （"AARs can only be built from modules"），而把 :app 翻成 library 后 gradle assembleRelease 又会
-# 在 flutter.groovy 的模块分支因宿主 :app 不再是 application 而炸 applicationVariants。
+# 采用 Flutter 3.24.5 的 editable-module 拓扑：`pubspec.yaml` 声明 `flutter.module:` 且
+# `android/` 目录存在时，`flutter build aar` 进入「可编辑宿主」模式——宿主 `:app` 必须保持
+# `com.android.application`（Flutter gradle 插件的模块分支要靠它读 applicationVariants），AAR 实际
+# 从 `flutter/.android/Flutter`（ephemeral 库，由 `flutter pub get` 生成）产出。关键是给
+# `android/settings.gradle` 补 `setBinding + evaluate('.android/include_flutter.groovy')` 让 `:flutter`
+# 解析到 `.android/Flutter`；绝不能把 `:app` 改名或翻成 library（那会让 `:flutter` 永不解析）。
 #
-# 故流程：rustdesk-library.patch 把原 :app 改造成 com.android.library（剥 LAUNCHER/icon/label、
-# 注入 RustDeskHostBridge 等）→ prepare_module.py 把该 library 重命名为 :flutter，并新建最小宿主
-# :app（application，应用 Flutter gradle 插件驱动构建）→ `flutter build aar` 出题净且功能完整的 AAR。
-# AAR 内自带 Dart AOT（libapp.so）、flutter_assets、编译后的 Kotlin 类（含 MainActivity /
-# RustDeskHostBridge）与「Build rust core」cp 进 jniLibs 的 librustdesk.so；Flutter 引擎
-# （libflutter.so）不进 AAR，由宿主 maven 提供。上游不提交 gradlew（gitignored），从 Flutter SDK
-# 自带的 gradle_wrapper 复制回来驱动 gradle。
+# 流程：Build rust core 产出 librustdesk.so / libc++_shared.so → prepare_module.py 给
+# settings.gradle 补 evaluate 行 + pubspec 加 module: + `flutter pub get` 生成 .android/ + 把原生 so
+# 注入 `.android/Flutter/src/main/jniLibs` → `flutter build aar --no-pub` 出 AAR（--no-pub 防止 pub
+# get 重建 .android 冲掉注入）。AAR 内含 Dart AOT（libapp.so）、flutter_assets、librustdesk.so 与
+# 编译后的 Kotlin 类；Flutter 引擎（libflutter.so）不进 AAR，由宿主 maven 提供。上游不提交
+# gradlew（gitignored），从 Flutter SDK 自带的 gradle_wrapper 复制回来驱动 gradle。
 #
 # 构建依赖的版本全部对齐上游 .github/workflows/flutter-build.yml 与 bridge.yml，
 # 改任何一个都要同步上游，否则桥代码与 Dart 侧的 freezed 输出对不上。
@@ -174,43 +176,44 @@ jobs:
           export BINDGEN_EXTRA_CLANG_ARGS="--target=${TARGET}21 --sysroot=${SYSROOT}"
           rustup target add "${TARGET}"
           "${SCRIPT}"
-          mkdir -p "flutter/android/app/src/main/jniLibs/${ABI}"
+          # so 落地到专用目录，稍后由 prepare_module.py 注入 .android/Flutter 的 jniLibs
+          # （editable 模式下 AAR 从 .android/Flutter 产出，宿主 android/app 的 jniLibs 不进 AAR）
+          mkdir -p "native-libs/${ABI}"
           SOURCE=$(find "target/${TARGET}/release" -maxdepth 1 -name '*librustdesk.so' | head -1)
           test -n "${SOURCE}" || { echo "no librustdesk.so produced"; exit 1; }
-          cp "${SOURCE}" "flutter/android/app/src/main/jniLibs/${ABI}/librustdesk.so"
+          cp "${SOURCE}" "native-libs/${ABI}/librustdesk.so"
           cp "${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/${LIBCXX}/libc++_shared.so" \
-             "flutter/android/app/src/main/jniLibs/${ABI}/"
+             "native-libs/${ABI}/"
 
-      - name: Apply library patch
-        working-directory: rustdesk
-        run: git apply --ignore-whitespace ../host/tools/rustdesk-vendor/rustdesk-library.patch
+      - name: Restructure into editable-module topology
+        run: python3 host/tools/rustdesk-vendor/prepare_module.py "$(pwd)/rustdesk" "${ABI}" "$(pwd)/rustdesk/native-libs/${ABI}"
 
-      - name: Restructure into add-to-app module topology
-        run: python3 host/tools/rustdesk-vendor/prepare_module.py "$(pwd)/rustdesk" "${ABI}"
-
-      - name: Build AAR (flutter build aar)
+      - name: Build AAR (flutter build aar, editable-module)
         working-directory: rustdesk/flutter
         env:
           JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
         run: |
-          # 上游 flutter/android 不提交 gradle wrapper（gitignored）。flutter build aar 底层仍驱动
-          # gradle，缺 gradle-wrapper.jar 会报 ClassNotFoundException: GradleWrapperMain。从 Flutter
-          # SDK 自带的一份补回 android/gradle/wrapper/。
           FLUTTER_ROOT="$(dirname "$(dirname "$(readlink -f "$(which flutter)")")")"
           echo "FLUTTER_ROOT=${FLUTTER_ROOT}"
           JAR="$(find "${FLUTTER_ROOT}" -name 'gradle-wrapper.jar' 2>/dev/null | head -1)"
           echo "gradle-wrapper.jar = ${JAR}"
-          mkdir -p android/gradle/wrapper
-          test -n "${JAR}" && cp "${JAR}" android/gradle/wrapper/gradle-wrapper.jar || true
+          # editable 模式下 flutter build aar 用 .android/ 工程（prepare_module 已 flutter pub get 生成，
+          # 自带 gradlew + wrapper jar）。若生成物缺 jar，从 Flutter SDK 补一份，避免
+          # ClassNotFoundException: GradleWrapperMain。
+          if [ ! -f .android/gradle/wrapper/gradle-wrapper.jar ] && [ -n "${JAR}" ]; then
+            mkdir -p .android/gradle/wrapper
+            cp "${JAR}" .android/gradle/wrapper/gradle-wrapper.jar
+          fi
           case "${ABI}" in
             arm64-v8a)   TARGET_PLATFORM=android-arm64 ;;
             armeabi-v7a) TARGET_PLATFORM=android-arm ;;
             x86_64)      TARGET_PLATFORM=android-x64 ;;
             *) echo "unsupported abi: ${ABI}"; exit 1 ;;
           esac
-          # 标准 add-to-app 拓扑（宿主 :app + 库 :flutter），flutter build aar 只产出 release AAR。
-          # 引擎 libflutter.so 不进 AAR，由宿主从 maven 依赖。
-          flutter build aar --no-debug --no-profile \
+          # editable-module：宿主 :app 保持 application，AAR 从 .android/Flutter 产出。
+          # --no-pub：prepare_module.py 已跑 pub get 并注入 librustdesk.so，跳过 pub get 以免
+          # .android 被重建冲掉注入的原生 so。引擎 libflutter.so 不进 AAR，由宿主从 maven 依赖。
+          flutter build aar --no-pub --no-debug --no-profile \
             --target-platform=${TARGET_PLATFORM} \
             --output=build/aar
 
