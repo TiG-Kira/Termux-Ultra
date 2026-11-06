@@ -20,14 +20,42 @@ from pathlib import Path
 ENGINE_ENTRIES = {"libflutter.so"}
 
 
+def find_module_aar(aar_dir: Path, prefer_release: bool = True) -> Path:
+    """在 flutter build aar 产出的 maven 仓库里找「模块」AAR（含 libapp.so 的那个，
+    插件 AAR 不含 Dart AOT）。debug/profile/release 同存时优先 release。"""
+    if not aar_dir.is_dir():
+        raise SystemExit(f"AAR 目录不存在：{aar_dir}")
+    candidates = []
+    for p in sorted(aar_dir.rglob("*.aar")):
+        with zipfile.ZipFile(p) as z:
+            names = set(z.namelist())
+        if any(n.startswith("jni/") and n.endswith("/libapp.so") for n in names):
+            candidates.append(p)
+    if not candidates:
+        raise SystemExit(f"在 {aar_dir} 下找不到含 libapp.so 的模块 AAR")
+    if prefer_release:
+        rel = [p for p in candidates if "release" in p.name]
+        if rel:
+            return rel[0]
+    return candidates[0]
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--aar", required=True)
+    parser.add_argument("--aar", help="直接指定 AAR 路径（与 --aar-dir 二选一）")
+    parser.add_argument("--aar-dir", help="flutter build aar 产物目录，自动定位含 libapp.so 的模块 AAR")
     parser.add_argument("--abi", required=True)
     parser.add_argument("--output", required=True)
     args = parser.parse_args()
 
-    aar_path = Path(args.aar)
+    if args.aar:
+        aar_path = Path(args.aar)
+    elif args.aar_dir:
+        aar_path = find_module_aar(Path(args.aar_dir))
+        print(f"自动定位模块 AAR：{aar_path}")
+    else:
+        raise SystemExit("必须提供 --aar 或 --aar-dir")
+
     output = Path(args.output)
     if not aar_path.is_file():
         raise SystemExit(f"AAR 不存在：{aar_path}")

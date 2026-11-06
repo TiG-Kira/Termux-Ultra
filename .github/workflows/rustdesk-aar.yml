@@ -2,13 +2,18 @@ name: Build RustDesk AAR
 
 # 把上游 RustDesk 的 Android 端编成可被本应用内嵌的 AAR。
 #
-# 上游 Android 端是 com.android.application，且 flutter build aar 只接受 module 项目（application
-# 会被直接拒绝：AARs can only be built from modules）。故流程：仓库内预置的 rustdesk-library.patch
-# 把上游模块改造成 com.android.library，再用 gradle :app:assembleRelease 直接出 AAR（library 变体以
-# classes.jar 而非 dex 交付，不做 mergeExtDex，正好绕开之前整包 APK 的 OOM）。上游不提交 gradlew
-# （gitignored），本工作流从 Flutter SDK 自带的 gradle_wrapper 复制回来驱动 gradle。AAR 内自带
-# Dart AOT（libapp.so）、flutter_assets 与编译后的 Kotlin 类，librustdesk.so 由「Build rust core」
-# 步骤 cp 进 jniLibs；Flutter 引擎（libflutter.so）不进 AAR，由宿主 maven 提供。
+# 上游 Android 端是 com.android.application，而 flutter build aar 只接受标准 add-to-app 模块拓扑
+# （宿主 :app 为 application + Flutter 库 :flutter 为 library）；直接对 application 跑会被拒
+# （"AARs can only be built from modules"），而把 :app 翻成 library 后 gradle assembleRelease 又会
+# 在 flutter.groovy 的模块分支因宿主 :app 不再是 application 而炸 applicationVariants。
+#
+# 故流程：rustdesk-library.patch 把原 :app 改造成 com.android.library（剥 LAUNCHER/icon/label、
+# 注入 RustDeskHostBridge 等）→ prepare_module.py 把该 library 重命名为 :flutter，并新建最小宿主
+# :app（application，应用 Flutter gradle 插件驱动构建）→ `flutter build aar` 出题净且功能完整的 AAR。
+# AAR 内自带 Dart AOT（libapp.so）、flutter_assets、编译后的 Kotlin 类（含 MainActivity /
+# RustDeskHostBridge）与「Build rust core」cp 进 jniLibs 的 librustdesk.so；Flutter 引擎
+# （libflutter.so）不进 AAR，由宿主 maven 提供。上游不提交 gradlew（gitignored），从 Flutter SDK
+# 自带的 gradle_wrapper 复制回来驱动 gradle。
 #
 # 构建依赖的版本全部对齐上游 .github/workflows/flutter-build.yml 与 bridge.yml，
 # 改任何一个都要同步上游，否则桥代码与 Dart 侧的 freezed 输出对不上。
@@ -180,55 +185,41 @@ jobs:
         working-directory: rustdesk
         run: git apply --ignore-whitespace ../host/tools/rustdesk-vendor/rustdesk-library.patch
 
-      - name: Build AAR (library assembleRelease)
+      - name: Restructure into add-to-app module topology
+        run: python3 host/tools/rustdesk-vendor/prepare_module.py "$(pwd)/rustdesk" "${ABI}"
+
+      - name: Build AAR (flutter build aar)
         working-directory: rustdesk/flutter
         env:
           JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
         run: |
-          # 上游 flutter/android 不提交 gradle wrapper（gitignored）。flutter pub get 会生成 gradlew
-          # 脚本与 gradle-wrapper.properties，但**不会**生成 gradle-wrapper.jar（它本应随源码提交）。
-          # 缺 jar 时 ./gradlew 直接报 ClassNotFoundException: GradleWrapperMain。所以必须从 Flutter
-          # SDK 自带的一份把 jar 补回 android/gradle/wrapper/。
+          # 上游 flutter/android 不提交 gradle wrapper（gitignored）。flutter build aar 底层仍驱动
+          # gradle，缺 gradle-wrapper.jar 会报 ClassNotFoundException: GradleWrapperMain。从 Flutter
+          # SDK 自带的一份补回 android/gradle/wrapper/。
           FLUTTER_ROOT="$(dirname "$(dirname "$(readlink -f "$(which flutter)")")")"
           echo "FLUTTER_ROOT=${FLUTTER_ROOT}"
           JAR="$(find "${FLUTTER_ROOT}" -name 'gradle-wrapper.jar' 2>/dev/null | head -1)"
           echo "gradle-wrapper.jar = ${JAR}"
-          test -n "${JAR}" || { echo "找不到 gradle-wrapper.jar"; exit 1; }
-          # 先把 jar 放好（pub get 前放也无害，pub get 不会删除已存在的 jar）
           mkdir -p android/gradle/wrapper
-          cp "${JAR}" android/gradle/wrapper/gradle-wrapper.jar
-          # 若 flutter pub get 仍未产出 gradlew 脚本，也从 SDK 复制
-          if [ ! -f android/gradlew ]; then
-            GW_SCRIPT="$(find "${FLUTTER_ROOT}" -name 'gradlew' 2>/dev/null | head -1)"
-            if [ -n "${GW_SCRIPT}" ]; then
-              cp "${GW_SCRIPT}" android/gradlew
-              chmod +x android/gradlew
-            fi
-          fi
-          # 已经 library patch 改造为 com.android.library，直接 assembleRelease 出 AAR：
-          # 内含 classes.jar(MainActivity/RustDeskHostBridge/ffi 等) + libapp.so(Dart AOT)
-          # + flutter_assets + 我们 cp 进 jniLibs 的 librustdesk.so/c++_shared.so。
-          # library 变体以 classes.jar 而非 dex 交付，不做 mergeExtDex，正好绕开之前整包 APK 的 OOM。
+          test -n "${JAR}" && cp "${JAR}" android/gradle/wrapper/gradle-wrapper.jar || true
+          case "${ABI}" in
+            arm64-v8a)   TARGET_PLATFORM=android-arm64 ;;
+            armeabi-v7a) TARGET_PLATFORM=android-arm ;;
+            x86_64)      TARGET_PLATFORM=android-x64 ;;
+            *) echo "unsupported abi: ${ABI}"; exit 1 ;;
+          esac
+          # 标准 add-to-app 拓扑（宿主 :app + 库 :flutter），flutter build aar 只产出 release AAR。
           # 引擎 libflutter.so 不进 AAR，由宿主从 maven 依赖。
-          flutter pub get
-          # 保险：pub get 之后再次确认 jar 就位（防止任何环节被覆盖）
-          cp "${JAR}" android/gradle/wrapper/gradle-wrapper.jar
-          test -f android/gradlew || { echo "gradlew 仍未就位"; exit 1; }
-          test -f android/gradle/wrapper/gradle-wrapper.jar || { echo "jar 仍未就位"; exit 1; }
-          cd android
-          ./gradlew :app:assembleRelease --no-daemon \
-            -Dorg.gradle.jvmargs="-Xmx4g -XX:MaxMetaspaceSize=1g" \
-            -Dorg.gradle.workers.max=2
+          flutter build aar --no-debug --no-profile \
+            --target-platform=${TARGET_PLATFORM} \
+            --output=build/aar
 
       - name: Verify & repackage AAR
-        working-directory: rustdesk
         run: |
-          AAR="flutter/android/app/build/outputs/aar/app-release.aar"
-          test -f "${AAR}" || { echo "assembleRelease 未产出 AAR：${AAR}"; exit 1; }
-          python3 ../host/tools/rustdesk-vendor/merge_aar.py \
-            --aar "${AAR}" \
+          python3 host/tools/rustdesk-vendor/merge_aar.py \
+            --aar-dir rustdesk/flutter/build/aar/outputs/repo \
             --abi "${ABI}" \
-            --output ../rustdesk-release.aar
+            --output rustdesk-release.aar
 
       - name: Inspect AAR
         run: |
