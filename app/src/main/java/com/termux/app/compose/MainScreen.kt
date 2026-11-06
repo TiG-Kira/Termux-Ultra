@@ -81,6 +81,8 @@ import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop as rememberMiuixLayerBac
 import top.yukonga.miuix.kmp.glass.GlassNavigationBar
 import top.yukonga.miuix.kmp.blur.Backdrop
 import top.yukonga.miuix.kmp.glass.GlassNavigationItem
+import com.termux.app.compose.liquid.LiquidNavHeight
+import com.termux.app.compose.liquid.LiquidNavigationBar
 import com.termux.R
 import com.termux.shared.termux.shell.command.runner.terminal.TermuxSession
 /** 顶栏玻璃材质共享 MainScreen 的取景层，各页无需各自持有 Backdrop。 */
@@ -205,19 +207,18 @@ fun MainScreen(
     // 浮动玻璃底栏：GlassNavigationBarDefaults.Height(54dp)，底部留白不再硬编码，
     // 由 Modifier.padding(bottom = systemNavBarsHeight) 动态贴系统导航栏上边缘
     val glassNavTotalHeight = 54.dp
-    val navContainerHeight = getNavContainerHeight(availableTabs.size, NavStyle.GLASS)
     val totalNavHeight = when (navStyle) {
         // 浮动玻璃：动态贴系统导航栏上边缘
         0 -> glassNavTotalHeight + systemNavBarsHeight
         // 经典：贴合系统导航栏
         1 -> classicNavHeight + systemNavBarsHeight
-        // 液态玻璃：容器高度 + 动态贴系统导航栏上边缘
-        else -> systemNavBarsHeight + navContainerHeight
+        // 液态玻璃（Kiba 移植版）：LiquidNavHeight 同为 54dp，与浮动玻璃零跳动
+        else -> glassNavTotalHeight + systemNavBarsHeight
     }
     val snackbarBottomPadding = when (navStyle) {
         0 -> glassNavTotalHeight + systemNavBarsHeight + 8.dp
         1 -> classicNavHeight + systemNavBarsHeight + 12.dp
-        else -> systemNavBarsHeight + navContainerHeight + 12.dp
+        else -> glassNavTotalHeight + systemNavBarsHeight + 8.dp
     }
 
     // 宽屏（横屏或平板）：底部导航栏锁定切换为侧边 miuix NavigationRail，
@@ -350,78 +351,47 @@ fun MainScreen(
                 // 宽屏：底部不渲染导航栏，由内容区 Row 起始端的 NavigationRail 接管
             } else when (navStyle) {
                 2 -> {
-                    val glassDims = computeNavDimensions(availableTabs.size, NavStyle.GLASS)
-                    LiquidGlassNavigationBarWithIndicator(
+                    // Kiba 液态玻璃移植版：items 由 availableTabs 直接映射，
+                    // 左右 24dp 内缩成浮动胶囊（与浮动玻璃档一致的占位）。
+                    val liquidTabIcons = mapOf(
+                        0 to Icons.Rounded.Dashboard,
+                        1 to ImageVector.vectorResource(R.drawable.ic_nav_terminal),
+                        2 to Icons.Rounded.Folder,
+                        3 to Icons.Rounded.DesktopWindows,
+                        4 to Icons.Rounded.Settings
+                    )
+                    val liquidTabLabels = mapOf(
+                        0 to stringResource(R.string.overview),
+                        1 to stringResource(R.string.terminal),
+                        2 to stringResource(R.string.files),
+                        3 to stringResource(R.string.remote),
+                        4 to stringResource(R.string.settings)
+                    )
+                    LiquidNavigationBar(
+                        items = availableTabs.map { tab ->
+                            GlassNavigationItem(
+                                icon = liquidTabIcons.getValue(tab),
+                                label = liquidTabLabels.getValue(tab)
+                            )
+                        },
                         selectedIndex = availableTabs.indexOf(selectedTab).coerceAtLeast(0),
-                        itemCount = availableTabs.size,
-                        backdrop = liquidGlassBackdrop,
-                        modifier = Modifier
-                            .padding(bottom = systemNavBarsHeight)
-                            .mainNavBarSlide(navBarVisible, navBarTravel),
-                        onIndexChange = { index ->
+                        onSelect = { index ->
                             val actualTab = availableTabs.getOrElse(index) { selectedTab }
                             if (actualTab != selectedTab) {
                                 previousTab = selectedTab
                                 onTabChange(actualTab)
                             }
-                        }
-                    ) { onPositioned ->
-                        if (0 in availableTabs) {
-                            LiquidGlassNavigationBarItem(
-                                icon = Icons.Rounded.Dashboard,
-                                label = stringResource(R.string.overview),
-                                selected = selectedTab == 0,
-                                onClick = { previousTab = selectedTab; onTabChange(0) },
-                                dims = glassDims,
-                                index = 0,
-                                onPositioned = onPositioned
+                        },
+                        backdrop = liquidGlassBackdrop,
+                        modifier = Modifier
+                            .padding(
+                                start = 24.dp,
+                                end = 24.dp,
+                                bottom = systemNavBarsHeight
                             )
-                        }
-                        if (1 in availableTabs) {
-                            LiquidGlassNavigationBarItem(
-                                icon = ImageVector.vectorResource(R.drawable.ic_nav_terminal),
-                                label = stringResource(R.string.terminal),
-                                selected = selectedTab == 1,
-                                onClick = { previousTab = selectedTab; onTabChange(1) },
-                                dims = glassDims,
-                                index = 1,
-                                onPositioned = onPositioned
-                            )
-                        }
-                        if (2 in availableTabs) {
-                            LiquidGlassNavigationBarItem(
-                                icon = Icons.Rounded.Folder,
-                                label = stringResource(R.string.files),
-                                selected = selectedTab == 2,
-                                onClick = { previousTab = selectedTab; onTabChange(2) },
-                                dims = glassDims,
-                                index = 2,
-                                onPositioned = onPositioned
-                            )
-                        }
-                        if (3 in availableTabs) {
-                            LiquidGlassNavigationBarItem(
-                                icon = Icons.Rounded.DesktopWindows,
-                                label = stringResource(R.string.remote),
-                                selected = selectedTab == 3,
-                                onClick = { previousTab = selectedTab; onTabChange(3) },
-                                dims = glassDims,
-                                index = 3,
-                                onPositioned = onPositioned
-                            )
-                        }
-                        if (4 in availableTabs) {
-                            LiquidGlassNavigationBarItem(
-                                icon = Icons.Rounded.Settings,
-                                label = stringResource(R.string.settings),
-                                selected = selectedTab == 4,
-                                onClick = { previousTab = selectedTab; onTabChange(4) },
-                                dims = glassDims,
-                                index = 4,
-                                onPositioned = onPositioned
-                            )
-                        }
-                    }
+                            .mainNavBarSlide(navBarVisible, navBarTravel),
+                        height = LiquidNavHeight,
+                    )
                 }
                 0 -> {
                     val tabIcons = mapOf(
