@@ -51,16 +51,6 @@ def read_android_int(build_gradle, key):
     return m.group(1) if m else None
 
 
-def strip_library_flutter_plugin(build_gradle):
-    """模块拓扑下，Flutter gradle 插件由宿主 :app 应用，库 :flutter 不能再用。"""
-    with open(build_gradle, encoding="utf-8") as f:
-        s = f.read()
-    s = re.sub(r'\n\s*id ["\']dev\.flutter\.flutter-gradle-plugin["\']\s*\n', '\n', s)
-    s = re.sub(r'\n\s*flutter\s*\{[^}]*\}\s*\n', '\n', s)
-    with open(build_gradle, "w", encoding="utf-8") as f:
-        f.write(s)
-
-
 def write_host_app(android_dir, abi_gradle, compile_sdk, min_sdk, target_sdk):
     app = os.path.join(android_dir, "app")
     kotlin_dir = os.path.join(
@@ -159,20 +149,22 @@ def add_pubspec_module(pubspec_path):
         s = f.read()
     if "module:" in s:
         return
-    block = (
-        "  androidX: true\n"
-        "  androidPackage: com.carriez.flutter_hbb\n"
-        "  moduleName: flutter_hbb\n"
+    # module 必须是 flutter: 下的对象；其字段需再缩进一级（4 空格），否则会被当成 flutter 的直属子项。
+    module_block = (
+        "  module:\n"
+        "    androidX: true\n"
+        "    androidPackage: com.carriez.flutter_hbb\n"
+        "    moduleName: flutter_hbb\n"
     )
     marker = "  uses-material-design: true\n"
     if marker in s:
-        # 标准 Flutter app：module 与 uses-material-design 同挂 flutter: 下
-        s = s.replace(marker, marker + "  module:\n" + block, 1)
+        # 标准 Flutter app：module 与 uses-material-design 同挂 flutter: 下（均为 2 空格）
+        s = s.replace(marker, marker + module_block, 1)
     elif "flutter:\n" in s:
-        s = s.replace("flutter:\n", "flutter:\n  module:\n" + block, 1)
+        s = s.replace("flutter:\n", "flutter:\n" + module_block, 1)
     else:
-        # 兜底：作为顶层键追加（极少数情况）
-        s = s.rstrip() + "\nmodule:\n" + block
+        # 兜底：作为顶层键追加（module 子项用 2 空格）
+        s = s.rstrip() + "\nmodule:\n  androidX: true\n  androidPackage: com.carriez.flutter_hbb\n  moduleName: flutter_hbb\n"
     with open(pubspec_path, "w", encoding="utf-8") as f:
         f.write(s)
 
@@ -195,8 +187,10 @@ def main():
     min_sdk = read_android_int(app_bg, "minSdk") or "22"
     target_sdk = read_android_int(app_bg, "targetSdk") or "36"
 
-    # 2) 库 build.gradle 移除 Flutter 插件与 flutter { source }（模块拓扑）
-    strip_library_flutter_plugin(app_bg)
+    # 2) 库 :flutter 必须保留 Flutter gradle 插件与 `flutter { source }`：
+    #    :flutter 含 Dart 代码，Dart AOT(libapp.so) 正是靠 flutter-gradle-plugin 编出来再打进
+    #    AAR 的；aar_init_script 只负责 maven 发布，不编译 Dart。官方 add-to-app module 的库项目
+    #    同样应用该插件（宿主 :app 也应用，但只是构建上下文）。
 
     # 3) application 重命名为 library
     if os.path.exists(flut):
