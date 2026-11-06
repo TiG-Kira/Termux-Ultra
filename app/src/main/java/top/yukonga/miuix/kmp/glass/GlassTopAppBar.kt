@@ -53,6 +53,10 @@ import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.termux.app.compose.liquid.LiquidIconButton
+import com.termux.app.compose.liquid.LiquidTopBarSkin
+import com.termux.app.compose.liquid.LocalLiquidBackdrop
+import com.termux.app.compose.liquid.LocalLiquidTopBarEnabled
 import top.yukonga.miuix.kmp.basic.BlurTopAppBar
 import top.yukonga.miuix.kmp.basic.ScrollBehavior
 import top.yukonga.miuix.kmp.blur.Backdrop
@@ -430,19 +434,34 @@ fun GlassTopAppBar(
         // 渐进模糊需要真实取景层；没有 backdrop 时退回原来的 scrim 渐变。
         val bandBlurBackdrop = backdrop?.takeIf { bandBlurPx > 0f && isRuntimeShaderSupported() }
 
-        // 底层：渐变底板（可淡 / 可关）。默认样式就是它自己，柔光样式给它留一点透视。
-        Box(
-            modifier = Modifier
-                .matchParentSize()
-                .graphicsLayer {
-                    this.alpha = maskProgress.value
-                    transformOrigin = TransformOrigin(0.5f, 0f)
-                    scaleY = if (size.height > 0f) (size.height + overhangPx) / size.height else 1f
-                    // 柔光样式把整块白色渐变向上推，让它落在状态栏一带；默认样式为 0，位置不变。
-                    translationY = -scrimOffsetPx
-                }
-                .background(bandBrush),
-        )
+        // 液态玻璃外观：整块 band 换成 kyant 玻璃皮肤，进度与 band / 按钮材质同源
+        // （maskProgress 由 isContentScrolled 驱动），收缩态正好落下一块液态玻璃底板。
+        // 骨架的 backdrop 此时已被 MainScreen 置 null，不会再叠一层 miuix 玻璃。
+        if (LocalLiquidTopBarEnabled.current) {
+            // lambda 身份必须恒定：drawBackdrop 的 shadow 按 lambda 引用判等，
+            // 每次重组新建会令取景缓存反复失效（底栏滚动细抖的旧坑）。
+            val liquidCollapse: () -> Float = remember(maskProgress) { { maskProgress.value } }
+            LiquidTopBarSkin(
+                backdrop = LocalLiquidBackdrop.current,
+                scrollBehavior = null,
+                collapseProgress = liquidCollapse,
+                modifier = Modifier.matchParentSize(),
+            )
+        } else {
+            // 底层：渐变底板（可淡 / 可关）。默认样式就是它自己，柔光样式给它留一点透视。
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .graphicsLayer {
+                        this.alpha = maskProgress.value
+                        transformOrigin = TransformOrigin(0.5f, 0f)
+                        scaleY = if (size.height > 0f) (size.height + overhangPx) / size.height else 1f
+                        // 柔光样式把整块白色渐变向上推，让它落在状态栏一带；默认样式为 0，位置不变。
+                        translationY = -scrimOffsetPx
+                    }
+                    .background(bandBrush),
+            )
+        }
 
         // 上层：真实模糊，盖在底板之上；竖向遮罩让下沿归零（无硬边）。
         if (bandBlurBackdrop != null) {
@@ -558,6 +577,17 @@ fun GlassIconButton(
     shadow: GlassShadow? = LocalGlassTopAppBarContext.current.let { if (it != null) it.shadow else GlassShadows.Regular },
     content: @Composable () -> Unit,
 ) {
+    // 液态玻璃外观：骨架自身玻璃已关，内容滚到顶栏下方后按钮换成液态圆钮。
+    // 展开态保留裸图标（与 Kiba 液态顶栏同款分时机）；带长按 / disabled 的按钮
+    // 继续走 miuix，避免丢掉交互语义。
+    if (
+        enabled && onLongClick == null &&
+        LocalLiquidTopBarEnabled.current &&
+        LocalGlassTopAppBarContext.current?.floating == true
+    ) {
+        LiquidIconButton(onClick = onClick, modifier = modifier, content = content)
+        return
+    }
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
     val topBarContext = LocalGlassTopAppBarContext.current

@@ -56,6 +56,8 @@ object UiStylePrefs {
 
     const val VALUE_DEFAULT = "default"
     const val VALUE_SOFT = "soft"
+    // 历史值 "liquid" 已被 styleOf 迁到柔光，新样式必须换一个 key 值，否则旧数据会被误读。
+    const val VALUE_LIQUID = "liquid_appearance"
 
     private val _uiStyle = MutableStateFlow<HyperGlassStyle>(HyperGlassStyle.Default)
     val uiStyle: StateFlow<HyperGlassStyle> = _uiStyle.asStateFlow()
@@ -85,6 +87,7 @@ object UiStylePrefs {
                 KEY_UI_STYLE,
                 when (style) {
                     is HyperGlassStyle.Soft -> VALUE_SOFT
+                    HyperGlassStyle.Liquid -> VALUE_LIQUID
                     HyperGlassStyle.Default -> VALUE_DEFAULT
                 }
             )
@@ -94,12 +97,13 @@ object UiStylePrefs {
     /** 历史值 "liquid" 一并迁到柔光，避免升级后落回默认。 */
     fun styleOf(raw: String?): HyperGlassStyle = when (raw) {
         VALUE_SOFT, "liquid" -> HyperGlassStyle.Soft()
+        VALUE_LIQUID -> HyperGlassStyle.Liquid
         else -> HyperGlassStyle.Default
     }
 }
 
 /**
- * UI 外观样式：默认（现有 UI）/ 超级柔光。
+ * UI 外观样式：默认（现有 UI）/ 超级柔光 / 液态玻璃。
  *
  * @param cornerRadius 分组卡片圆角：柔光样式用连续曲率的大圆角
  */
@@ -108,10 +112,13 @@ sealed interface HyperGlassStyle {
     /** 默认：完全沿用现有 UI。 */
     data object Default : HyperGlassStyle
 
-    /** 超级柔光：分组卡大圆角 + 弹层玻璃化。 */
+    /** 超级柔光：分组卡大圆角 + miuix 玻璃弹层。 */
     data class Soft(
         val cornerRadius: Dp = 26.dp
     ) : HyperGlassStyle
+
+    /** 液态玻璃：kyant 玻璃顶栏皮肤 + 液态圆钮 + 液态弹层。 */
+    data object Liquid : HyperGlassStyle
 }
 
 /** 内容根的取景层：玻璃弹层靠它拿到身背后的页面内容。 */
@@ -135,7 +142,8 @@ fun applyUiStyleTokens(context: android.content.Context) {
  */
 fun applyUiStyleTokens(style: HyperGlassStyle) {
     val soft = style is HyperGlassStyle.Soft
-    // 顶栏：柔光 = 真模糊 + 白板整体上移；默认 = 不模糊、底板原位
+    // 顶栏：柔光 = 真模糊 + 白板整体上移；默认 / 液态玻璃 = 不模糊、底板原位。
+    // 液态玻璃的 band 由顶栏骨架整块换成 LiquidTopBarSkin，不能叠 miuix 的渐进模糊。
     GlassTopAppBarDefaults.BandBlurRadius = if (soft) 20.dp else 0.dp
     GlassTopAppBarDefaults.BandScrimOffset = if (soft) 24.dp else 0.dp
 }
@@ -363,6 +371,7 @@ fun HyperGlassCard(
 ) {
     val cornerRadius = when (style) {
         is HyperGlassStyle.Soft -> style.cornerRadius
+        HyperGlassStyle.Liquid -> 26.dp
         HyperGlassStyle.Default -> DefaultCardCornerRadius
     }
     Card(modifier = modifier, cornerRadius = cornerRadius) { content() }

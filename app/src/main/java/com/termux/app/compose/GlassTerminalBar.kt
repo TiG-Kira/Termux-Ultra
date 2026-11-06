@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -48,6 +49,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.termux.app.compose.liquid.LocalLiquidTopBarEnabled
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.rememberTopAppBarState
@@ -407,35 +409,39 @@ private fun GlassTerminalBarExpanded(
         // - isContentScrolled = collapsed：收缩命令驱动按钮材质浮起（展开态裸图标、收缩态 pill）
         // - scrollBehavior：上面的 heightOffset 动画驱动大标题折叠
         // - 标题位置/大小、主副标题排布、按钮规格全部是原版口径
-        GlassTopAppBar(
-            title = title,
-            isContentScrolled = collapsed,
-            largeTitle = largeTitle,
-            subtitle = subtitle,
-            titleColor = resolvedContentColor,
-            largeTitleColor = resolvedContentColor,
-            subtitleColor = resolvedSubtitleColor,
-            backdrop = backdrop,
-            bandBrush = transparentBrush,
-            // 终端栏排除柔光：bandBlurRadius 不走全局默认（柔光样式 20dp），与关于页同款
-            // 显式置 0。终端栏有自己的 bandTint 渐隐底板设计，且终端内容高频重绘，
-            // 叠一层实时模糊带区既破坏取色口径又白耗渲染线程。
-            bandBlurRadius = 0.dp,
-            scrollBehavior = scrollBehavior,
-            fill = GlassTerminalBarDefaults.buttonFill(isDark),
-            stroke = GlassTerminalBarDefaults.buttonStroke(isDark),
-            navigationIcon = navigationIcon,
-            actions = {
-                actions()
-                trailingIcon()
-            },
-            bottomContent = {
-                // 栏底补白：栏身因此变长，渐隐带（按栏高绘制）的实色段随之向下延伸，
-                // 副标题与终端首行之间留出空隙。
-                Spacer(Modifier.height(GlassTerminalBarDefaults.BottomGap))
-            },
-            onBlankTap = onBlankTap,
-        )
+        // 终端栏有自己的 bandTint 取色与自绘渐隐底板（PR #350），不参与液态外观的
+        // band 替换，否则两层底板叠加会破坏终端页取色口径。
+        CompositionLocalProvider(LocalLiquidTopBarEnabled provides false) {
+            GlassTopAppBar(
+                title = title,
+                isContentScrolled = collapsed,
+                largeTitle = largeTitle,
+                subtitle = subtitle,
+                titleColor = resolvedContentColor,
+                largeTitleColor = resolvedContentColor,
+                subtitleColor = resolvedSubtitleColor,
+                backdrop = backdrop,
+                bandBrush = transparentBrush,
+                // 终端栏排除柔光：bandBlurRadius 不走全局默认（柔光样式 20dp），与关于页同款
+                // 显式置 0。终端栏有自己的 bandTint 渐隐底板设计，且终端内容高频重绘，
+                // 叠一层实时模糊带区既破坏取色口径又白耗渲染线程。
+                bandBlurRadius = 0.dp,
+                scrollBehavior = scrollBehavior,
+                fill = GlassTerminalBarDefaults.buttonFill(isDark),
+                stroke = GlassTerminalBarDefaults.buttonStroke(isDark),
+                navigationIcon = navigationIcon,
+                actions = {
+                    actions()
+                    trailingIcon()
+                },
+                bottomContent = {
+                    // 栏底补白：栏身因此变长，渐隐带（按栏高绘制）的实色段随之向下延伸，
+                    // 副标题与终端首行之间留出空隙。
+                    Spacer(Modifier.height(GlassTerminalBarDefaults.BottomGap))
+                },
+                onBlankTap = onBlankTap,
+            )
+        }
     }
 }
 

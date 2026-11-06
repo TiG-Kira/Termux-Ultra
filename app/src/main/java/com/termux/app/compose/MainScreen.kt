@@ -83,6 +83,8 @@ import top.yukonga.miuix.kmp.blur.Backdrop
 import top.yukonga.miuix.kmp.glass.GlassNavigationItem
 import com.termux.app.compose.liquid.LiquidNavHeight
 import com.termux.app.compose.liquid.LiquidNavigationBar
+import com.termux.app.compose.liquid.LocalLiquidBackdrop
+import com.termux.app.compose.liquid.LocalLiquidTopBarEnabled
 import com.termux.R
 import com.termux.shared.termux.shell.command.runner.terminal.TermuxSession
 /** 顶栏玻璃材质共享 MainScreen 的取景层，各页无需各自持有 Backdrop。 */
@@ -162,6 +164,8 @@ fun MainScreen(
     // 组合期同步顶栏 token：切换样式只重启 Activity，进程不重启，只靠 Application 会失效。
     applyUiStyleTokens(uiStyle)
     val hyperGlassActive = uiStyle is HyperGlassStyle.Soft
+    // 液态玻璃外观：与底栏样式相互独立，单独驱动顶栏皮肤 / 按钮 / 弹层。
+    val liquidUiActive = uiStyle is HyperGlassStyle.Liquid
     // 导航栏样式：glass=浮动玻璃（新版默认）、classic=经典（旧默认）、liquid_glass=玻璃。
     // 历史值迁移：旧 "default" / "floating" / "soft_light"（柔光，已移除）统一迁到新的浮动玻璃底栏。
     val navBarStyle = remember {
@@ -315,15 +319,23 @@ fun MainScreen(
     // 根 Box：除 Scaffold 外还要挂「页面弹层」宿主。宿主必须与 Scaffold 同级且声明在
     // 其后（同层后声明者在上），弹层才能绘制在 topBar 槽的全局顶栏之上。
     // 取景层只在超级柔光下暴露给弹层，默认样式不提供 → 所有弹层原样回落 miuix。
+    // 液态玻璃外观另走一条 kyant 取景链，顶栏皮肤 / 圆钮 / 弹层共用它；
+    // 两个 Local 都只在样式命中时非空，其余样式下所有新分支自动关闭。
     CompositionLocalProvider(
-        LocalHyperGlassBackdrop provides if (hyperGlassActive) glassNavBackdrop else null
+        LocalHyperGlassBackdrop provides if (hyperGlassActive) glassNavBackdrop else null,
+        LocalLiquidBackdrop provides if (liquidUiActive) liquidGlassBackdrop else null,
+        LocalLiquidTopBarEnabled provides liquidUiActive
     ) {
     Box(modifier = Modifier.fillMaxSize()) {
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
-            CompositionLocalProvider(LocalGlassTopAppBarBackdrop provides glassNavBackdrop) {
+            // 液态玻璃外观：骨架的 backdrop 置 null，关掉它自己的玻璃与按钮材质，
+            // band 位置由 LiquidTopBarSkin 接管；其余样式一行不变。
+            CompositionLocalProvider(
+                LocalGlassTopAppBarBackdrop provides if (liquidUiActive) null else glassNavBackdrop
+            ) {
                 // 宽屏：顶栏为左侧 NavigationRail 让位。rail 总占宽 = MinWidth +
                 // 其自身避让的 Start 侧 insets（cutout/导航栏），顶栏镜像同一组合，
                 // 才能与内容区左缘对齐；End 侧按刘海/挖孔 cutout 让位
@@ -533,7 +545,9 @@ fun MainScreen(
                     if (hyperGlassActive || useGlassNav) Modifier.miuixLayerBackdrop(glassNavBackdrop) else Modifier
                 )
                 .then(
-                    if (useLiquidGlassNav) Modifier.layerBackdrop(liquidGlassBackdrop) else Modifier
+                    // 底栏选「玻璃」或 UI 外观选「液态玻璃」都要挂这条 kyant 取景链：
+                    // 后者即使底栏是默认/经典，顶栏皮肤与弹层也需要取到页面内容。
+                    if (useLiquidGlassNav || liquidUiActive) Modifier.layerBackdrop(liquidGlassBackdrop) else Modifier
                 )
                 // No bottom inset either: the glass bottom bar floats over the content, and a gap
                 // here is what made it look like a bar of its own. Pages add their own clearance.

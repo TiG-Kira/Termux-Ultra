@@ -286,16 +286,18 @@ fun SettingsScreen(
     var showCriticalNavDialog by remember { mutableStateOf(false) }
     var pendingNavStyleIndex by remember { mutableStateOf(-1) }
 
-    // UI 外观样式（液态/柔光(优化)/默认）：与导航栏样式相互独立
+    // UI 外观样式（柔光/液态玻璃/默认）：与导航栏样式相互独立
     UiStylePrefs.init(context)
     val uiStyle by UiStylePrefs.uiStyle.collectAsState()
     val uiStyleOptions = listOf(
         context.getString(R.string.ui_style_soft),
+        context.getString(R.string.ui_style_liquid),
         context.getString(R.string.ui_style_default)
     )
     fun uiStyleIndexOf(style: HyperGlassStyle) = when (style) {
         is HyperGlassStyle.Soft -> 0
-        HyperGlassStyle.Default -> 1
+        HyperGlassStyle.Liquid -> 1
+        HyperGlassStyle.Default -> 2
     }
     var uiStyleIndex by remember { mutableStateOf(uiStyleIndexOf(uiStyle)) }
     LaunchedEffect(uiStyle) { uiStyleIndex = uiStyleIndexOf(uiStyle) }
@@ -687,13 +689,14 @@ fun SettingsScreen(
                     items = uiStyleOptions,
                     selectedIndex = uiStyleIndex,
                     onSelectedIndexChange = { idx ->
-                        if (idx == 0 && !ApiCompat.isFeatureUsable(context, ApiCompat.Feature.HYPER_GLASS)) {
+                        if (idx != 2 && !ApiCompat.isFeatureUsable(context, ApiCompat.Feature.HYPER_GLASS)) {
                             pendingUiStyleIndex = idx
                             showHyperGlassCriticalDialog = true
                             return@OverlayDropdownPreference
                         }
                         val newStyle = when (idx) {
                             0 -> HyperGlassStyle.Soft()
+                            1 -> HyperGlassStyle.Liquid
                             else -> HyperGlassStyle.Default
                         }
                         UiStylePrefs.setUiStyle(context, newStyle)
@@ -1253,7 +1256,7 @@ fun SettingsScreen(
                     style = uiStyle,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = if (uiStyle is HyperGlassStyle.Soft) 12.dp else 16.dp, vertical = 8.dp)
+                        .padding(horizontal = if (uiStyle != HyperGlassStyle.Default) 12.dp else 16.dp, vertical = 8.dp)
                 ) {
                     Column {
                         MaterialYouSwitch(
@@ -1267,13 +1270,14 @@ fun SettingsScreen(
                             items = uiStyleOptions,
                             selectedIndex = uiStyleIndex,
                             onSelectedIndexChange = { idx ->
-                                if (idx == 0 && !ApiCompat.isFeatureUsable(context, ApiCompat.Feature.HYPER_GLASS)) {
+                                if (idx != 2 && !ApiCompat.isFeatureUsable(context, ApiCompat.Feature.HYPER_GLASS)) {
                                     pendingUiStyleIndex = idx
                                     showHyperGlassCriticalDialog = true
                                     return@OverlayDropdownPreference
                                 }
                                 val newStyle = when (idx) {
                                     0 -> HyperGlassStyle.Soft()
+                                    1 -> HyperGlassStyle.Liquid
                                     else -> HyperGlassStyle.Default
                                 }
                                 UiStylePrefs.setUiStyle(context, newStyle)
@@ -1374,7 +1378,7 @@ fun SettingsScreen(
                                     style = uiStyle,
                     modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = if (uiStyle is HyperGlassStyle.Soft) 12.dp else 16.dp, vertical = 8.dp)
+                .padding(horizontal = if (uiStyle != HyperGlassStyle.Default) 12.dp else 16.dp, vertical = 8.dp)
                 ) {
                     Column {
                         OverlayDropdownPreference(
@@ -1412,7 +1416,7 @@ fun SettingsScreen(
                                     style = uiStyle,
                     modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = if (uiStyle is HyperGlassStyle.Soft) 12.dp else 16.dp, vertical = 8.dp)
+                .padding(horizontal = if (uiStyle != HyperGlassStyle.Default) 12.dp else 16.dp, vertical = 8.dp)
                 ) {
                     Column {
                                 SwitchPreference(
@@ -1467,7 +1471,7 @@ fun SettingsScreen(
                     style = uiStyle,
                     modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = if (uiStyle is HyperGlassStyle.Soft) 12.dp else 16.dp, vertical = 8.dp)
+                .padding(horizontal = if (uiStyle != HyperGlassStyle.Default) 12.dp else 16.dp, vertical = 8.dp)
                 ) {
                     Column {
                         ArrowPreference(
@@ -1508,7 +1512,7 @@ fun SettingsScreen(
                     style = uiStyle,
                     modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = if (uiStyle is HyperGlassStyle.Soft) 12.dp else 16.dp, vertical = 8.dp)
+                .padding(horizontal = if (uiStyle != HyperGlassStyle.Default) 12.dp else 16.dp, vertical = 8.dp)
                 ) {
                     Column {
                                 IntegratedToolSwitch(
@@ -1650,7 +1654,7 @@ fun SettingsScreen(
                                     style = uiStyle,
                     modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = if (uiStyle is HyperGlassStyle.Soft) 12.dp else 16.dp, vertical = 8.dp)
+                .padding(horizontal = if (uiStyle != HyperGlassStyle.Default) 12.dp else 16.dp, vertical = 8.dp)
                 ) {
                     Column {
                                 SwitchPreference(
@@ -1710,7 +1714,7 @@ fun SettingsScreen(
                                     style = uiStyle,
                     modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = if (uiStyle is HyperGlassStyle.Soft) 12.dp else 16.dp, vertical = 8.dp)
+                .padding(horizontal = if (uiStyle != HyperGlassStyle.Default) 12.dp else 16.dp, vertical = 8.dp)
                 ) {
                     Column {
                         val protectionItems = RiskConfirmManager.ProtectionLevel.entries.map { level ->
@@ -1914,7 +1918,7 @@ fun SettingsScreen(
                     style = uiStyle,
                     modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = if (uiStyle is HyperGlassStyle.Soft) 12.dp else 16.dp, vertical = 8.dp)
+                .padding(horizontal = if (uiStyle != HyperGlassStyle.Default) 12.dp else 16.dp, vertical = 8.dp)
                 ) {
                     Column {
                         ArrowPreference(
@@ -2104,7 +2108,7 @@ fun SettingsScreen(
                                 style = uiStyle,
                                 modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = if (uiStyle is HyperGlassStyle.Soft) 12.dp else 16.dp, vertical = 8.dp)
+                            .padding(horizontal = if (uiStyle != HyperGlassStyle.Default) 12.dp else 16.dp, vertical = 8.dp)
                             ) {
                                 Column {
                                     entry.render()
@@ -2217,6 +2221,7 @@ fun SettingsScreen(
                     context,
                     when (idx) {
                         0 -> HyperGlassStyle.Soft()
+                        1 -> HyperGlassStyle.Liquid
                         else -> HyperGlassStyle.Default
                     }
                 )
@@ -2536,7 +2541,7 @@ private fun SettingsGroupCard(items: List<SettingItem>) {
         style = uiStyle,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = if (uiStyle is HyperGlassStyle.Soft) 12.dp else 16.dp, vertical = 8.dp)
+            .padding(horizontal = if (uiStyle != HyperGlassStyle.Default) 12.dp else 16.dp, vertical = 8.dp)
     ) {
         Column {
             items.forEachIndexed { index, item ->
