@@ -2,11 +2,12 @@ name: Build RustDesk AAR
 
 # 把上游 RustDesk 的 Android 端编成可被本应用内嵌的 AAR。
 #
-# 上游 Android 产物只有 APK（flutter/android/app 是 com.android.application），所以流程是：
-# 先按上游配方编一次 release APK 拿到完整产物，再用仓库内预置的 rustdesk-library.patch
-# 把上游模块改造成 library 出 AAR（patch 等价于原 patch_android_library.py 的改造，但改为
-# 可审查的统一 diff，随本仓库版本化、对齐上游 tag），最后用 APK 里的原生库补齐 AAR
-#（library 变体不带 Flutter 引擎）。
+# 上游 Android 产物只有 APK（flutter/android/app 是 com.android.application），流程是：
+# 用仓库内预置的 rustdesk-library.patch 把上游模块改造成 library，直接 assembleRelease 出 AAR
+#（patch 等价于原 patch_android_library.py 的改造，但改为可审查的统一 diff，随本仓库版本化、
+# 对齐上游 tag）。library 变体的 AAR 已自带 Dart AOT（libapp.so）与 flutter_assets，
+# librustdesk.so 由「Build rust core」步骤 cp 进 jniLibs；Flutter 引擎（libflutter.so）不进
+# AAR，由宿主 maven 提供。不再编参考 APK——那一步在 runner 上做整包 dex 合并会 OOM。
 #
 # 构建依赖的版本全部对齐上游 .github/workflows/flutter-build.yml 与 bridge.yml，
 # 改任何一个都要同步上游，否则桥代码与 Dart 侧的 freezed 输出对不上。
@@ -174,31 +175,6 @@ jobs:
           cp "${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/${LIBCXX}/libc++_shared.so" \
              "flutter/android/app/src/main/jniLibs/${ABI}/"
 
-      - name: Build reference APK
-        working-directory: rustdesk
-        env:
-          JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
-        run: |
-          # 参考 APK 只用来取 libapp.so 与 flutter_assets，不对外发布，所以两处都为「编得过」让步：
-          # 1) 没有上游 key.properties，release 签名配置会让 AGP 直接失败，换成 debug 签名；
-          # 2) RustDesk 全量代码在 runner 上走 R8 会 OutOfMemoryError（minifyReleaseWithR8
-          #    直接 Java heap space），关掉压缩不影响 AOT 快照与资源产物。
-          sed -i "s/signingConfigs.release/signingConfigs.debug/g" ./flutter/android/app/build.gradle
-          sed -i "s|^\(\s*\)signingConfig signingConfigs.debug\s*$|\1signingConfig signingConfigs.debug\n\1minifyEnabled false\n\1shrinkResources false|" \
-            ./flutter/android/app/build.gradle
-          grep -q "minifyEnabled false" ./flutter/android/app/build.gradle || {
-            echo "failed to disable R8 for reference APK"; exit 1; }
-          # 上游若已设过 jvmargs，直接替换而非跳过，否则 4G 堆会被原样保留
-          if grep -q "^org.gradle.jvmargs" flutter/android/gradle.properties 2>/dev/null; then
-            sed -i "s|^org.gradle.jvmargs=.*|org.gradle.jvmargs=-Xmx6g -XX:MaxMetaspaceSize=1g|" \
-              flutter/android/gradle.properties
-          else
-            echo "org.gradle.jvmargs=-Xmx6g -XX:MaxMetaspaceSize=1g" >> flutter/android/gradle.properties
-          fi
-          PLATFORM=android-arm64
-          [ "${ABI}" = "armeabi-v7a" ] && PLATFORM=android-arm
-          cd flutter && flutter build apk --release --target-platform "${PLATFORM}" --split-per-abi
-
       - name: Apply library patch
         working-directory: rustdesk
         run: git apply --ignore-whitespace ../host/tools/rustdesk-vendor/rustdesk-library.patch
@@ -208,15 +184,14 @@ jobs:
         env:
           JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
         run: |
-          # wrapper 由上一步的 flutter build 生成；library 变体走 assembleRelease 出 .aar
+          # gradle wrapper 由前面「Generate flutter_rust_bridge code」里的 flutter pub get 生成；library 变体走 assembleRelease 出 .aar
           ./gradlew :app:assembleRelease --no-daemon --stacktrace
 
-      - name: Merge Dart artifacts into AAR
+      - name: Verify & repackage AAR
         working-directory: rustdesk
         run: |
           python3 ../host/tools/rustdesk-vendor/merge_aar.py \
             --aar "flutter/android/app/build/outputs/aar/app-release.aar" \
-            --apk "$(find flutter/build/app/outputs/flutter-apk -name '*-release.apk' | head -1)" \
             --abi "${ABI}" \
             --output ../rustdesk-release.aar
 
