@@ -925,6 +925,8 @@ private fun PageContentForTab(
             // XServer 标签只在「集成工具 - Termux:X11」开关打开时出现；开关写 SharedPreferences，
             // 切回本页时随重组重新读取，无需额外状态流
             showX11 = IntegratedTools.isEnabled(context, IntegratedTools.Tool.TERMUX_X11),
+            // RustDesk 同理：开关只写 SharedPreferences，进本页时读一次即可，不必重启应用
+            showRustDesk = com.termux.app.rustdesk.RustDeskSettings.isEnabled(context),
             initialTab = 0,
             onTabChange = onRemoteSubTabChange,
             onGoToFiles = onGoToFiles,
@@ -953,7 +955,11 @@ private fun MainTopBar(tab: Int, showVnc: Boolean, scrollBehavior: ScrollBehavio
         0 -> stringResource(R.string.overview)
         1 -> stringResource(R.string.terminal)
         2 -> stringResource(R.string.files)
-        3 -> if (showVnc) stringResource(R.string.remote) else stringResource(R.string.ssh)
+        3 -> if (showVnc || com.termux.app.rustdesk.RustDeskSettings.isEnabled(LocalContext.current)) {
+            stringResource(R.string.remote)
+        } else {
+            stringResource(R.string.ssh)
+        }
         else -> stringResource(R.string.settings)
     }
     GlassTopAppBar(
