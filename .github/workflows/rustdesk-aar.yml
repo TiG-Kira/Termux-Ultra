@@ -186,8 +186,13 @@ jobs:
             ./flutter/android/app/build.gradle
           grep -q "minifyEnabled false" ./flutter/android/app/build.gradle || {
             echo "failed to disable R8 for reference APK"; exit 1; }
-          grep -q "^org.gradle.jvmargs" flutter/android/gradle.properties 2>/dev/null || \
+          # 上游若已设过 jvmargs，直接替换而非跳过，否则 4G 堆会被原样保留
+          if grep -q "^org.gradle.jvmargs" flutter/android/gradle.properties 2>/dev/null; then
+            sed -i "s|^org.gradle.jvmargs=.*|org.gradle.jvmargs=-Xmx6g -XX:MaxMetaspaceSize=1g|" \
+              flutter/android/gradle.properties
+          else
             echo "org.gradle.jvmargs=-Xmx6g -XX:MaxMetaspaceSize=1g" >> flutter/android/gradle.properties
+          fi
           PLATFORM=android-arm64
           [ "${ABI}" = "armeabi-v7a" ] && PLATFORM=android-arm
           cd flutter && flutter build apk --release --target-platform "${PLATFORM}" --split-per-abi
