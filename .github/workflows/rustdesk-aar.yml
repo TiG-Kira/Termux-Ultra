@@ -1,0 +1,197 @@
+name: Build RustDesk AAR
+
+# 把上游 RustDesk 的 Android 端编成可被本应用内嵌的 AAR。
+#
+# 上游 Android 产物只有 APK（flutter/android/app 是 com.android.application），所以流程是：
+# 先按上游配方编一次 release APK 拿到完整产物，再把模块改造成 library 出 AAR，
+# 最后用 APK 里的原生库补齐 AAR（library 变体不带 Flutter 引擎）。
+#
+# 构建依赖的版本全部对齐上游 .github/workflows/flutter-build.yml 与 bridge.yml，
+# 改任何一个都要同步上游，否则桥代码与 Dart 侧的 freezed 输出对不上。
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: RustDesk 上游 tag
+        required: true
+        default: "1.5.1"
+      abi:
+        description: 目标 ABI
+        required: true
+        type: choice
+        default: arm64-v8a
+        options:
+          - arm64-v8a
+          - armeabi-v7a
+
+permissions:
+  contents: read
+
+env:
+  RUST_VERSION: "1.75"
+  FLUTTER_VERSION: "3.24.5"
+  CARGO_NDK_VERSION: "3.1.2"
+  CARGO_EXPAND_VERSION: "1.0.95"
+  FLUTTER_RUST_BRIDGE_VERSION: "1.80.1"
+  NDK_VERSION: "r28c"
+  VCPKG_COMMIT_ID: "9e593bb18ea69cc5095e012465dcd675a822ed0d"
+  VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
+  RUSTDESK_TAG: ${{ inputs.tag }}
+  ABI: ${{ inputs.abi }}
+
+jobs:
+  build-aar:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - name: Checkout host repo
+        uses: actions/checkout@v4
+        with:
+          path: host
+
+      - name: Checkout RustDesk
+        uses: actions/checkout@v4
+        with:
+          repository: rustdesk/rustdesk
+          ref: ${{ inputs.tag }}
+          path: rustdesk
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Export Actions cache env
+        uses: actions/github-script@v7
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+
+      - name: Install system packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            clang cmake curl gcc g++ git libclang-dev llvm-dev nasm ninja-build pkg-config wget \
+            openjdk-17-jdk-headless
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          components: rustfmt
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: rustdesk-aar
+          key: ${{ inputs.abi }}
+
+      - uses: nttld/setup-ndk@v1
+        id: setup-ndk
+        with:
+          ndk-version: ${{ env.NDK_VERSION }}
+          add-to-path: true
+
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgDirectory: /opt/vcpkg
+          vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
+          doNotCache: false
+
+      - name: Install Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Install cargo tools
+        run: |
+          cargo install cargo-expand --version ${{ env.CARGO_EXPAND_VERSION }} --locked
+          cargo install cargo-ndk --version ${{ env.CARGO_NDK_VERSION }} --locked
+          cargo install flutter_rust_bridge_codegen --version ${{ env.FLUTTER_RUST_BRIDGE_VERSION }} --features uuid --locked
+
+      - name: Generate flutter_rust_bridge code
+        working-directory: rustdesk
+        run: |
+          cd flutter && flutter pub get && cd ..
+          ~/.cargo/bin/flutter_rust_bridge_codegen \
+            --rust-input ./src/flutter_ffi.rs \
+            --dart-output ./flutter/lib/generated_bridge.dart \
+            --c-output ./flutter/macos/Runner/bridge_generated.h
+          cp ./flutter/macos/Runner/bridge_generated.h ./flutter/ios/Runner/bridge_generated.h
+
+      - name: Build vcpkg dependencies
+        working-directory: rustdesk
+        env:
+          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+          ANDROID_NDK_ROOT: ${{ steps.setup-ndk.outputs.ndk-path }}
+        run: |
+          if ! ./flutter/build_android_deps.sh "${ABI}"; then
+            find "${VCPKG_ROOT}" -name '*.log' -exec sh -c 'echo "===== $1"; cat "$1"' _ {} \;
+            exit 1
+          fi
+
+      - name: Build rust core
+        working-directory: rustdesk
+        env:
+          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+          ANDROID_NDK_ROOT: ${{ steps.setup-ndk.outputs.ndk-path }}
+        run: |
+          case "${ABI}" in
+            arm64-v8a)  TARGET=aarch64-linux-android;    SCRIPT=./flutter/ndk_arm64.sh; LIBCXX=aarch64-linux-android ;;
+            armeabi-v7a) TARGET=armv7-linux-androideabi; SCRIPT=./flutter/ndk_arm.sh;  LIBCXX=arm-linux-androideabi ;;
+            *) echo "unsupported abi: ${ABI}"; exit 1 ;;
+          esac
+          rustup target add "${TARGET}"
+          "${SCRIPT}"
+          mkdir -p "flutter/android/app/src/main/jniLibs/${ABI}"
+          SOURCE=$(find "target/${TARGET}/release" -maxdepth 1 -name '*librustdesk.so' | head -1)
+          test -n "${SOURCE}" || { echo "no librustdesk.so produced"; exit 1; }
+          cp "${SOURCE}" "flutter/android/app/src/main/jniLibs/${ABI}/librustdesk.so"
+          cp "${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/${LIBCXX}/libc++_shared.so" \
+             "flutter/android/app/src/main/jniLibs/${ABI}/"
+
+      - name: Build reference APK
+        working-directory: rustdesk
+        env:
+          JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
+        run: |
+          # 没有上游的 key.properties，release 签名配置会让 AGP 直接失败，临时换 debug 签名
+          sed -i "s/signingConfigs.release/signingConfigs.debug/g" ./flutter/android/app/build.gradle
+          PLATFORM=android-arm64
+          [ "${ABI}" = "armeabi-v7a" ] && PLATFORM=android-arm
+          cd flutter && flutter build apk --release --target-platform "${PLATFORM}" --split-per-abi
+
+      - name: Patch module to library
+        working-directory: rustdesk
+        run: python3 ../host/tools/rustdesk-vendor/patch_android_library.py .
+
+      - name: Build AAR
+        working-directory: rustdesk/flutter/android
+        env:
+          JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
+        run: |
+          # wrapper 由上一步的 flutter build 生成；library 变体走 assembleRelease 出 .aar
+          ./gradlew :app:assembleRelease --no-daemon --stacktrace
+
+      - name: Merge engine artifacts into AAR
+        working-directory: rustdesk
+        run: |
+          python3 ../host/tools/rustdesk-vendor/merge_aar.py \
+            --aar "flutter/android/app/build/outputs/aar/app-release.aar" \
+            --apk "$(find flutter/build/app/outputs/flutter-apk -name '*-release.apk' | head -1)" \
+            --abi "${ABI}" \
+            --flutter-root "${FLUTTER_ROOT}" \
+            --output ../rustdesk-release.aar
+
+      - name: Inspect AAR
+        run: |
+          unzip -l rustdesk-release.aar | head -40
+          du -h rustdesk-release.aar
+
+      - name: Upload AAR
+        uses: actions/upload-artifact@v4
+        with:
+          name: rustdesk-${{ inputs.abi }}-${{ inputs.tag }}
+          path: rustdesk-release.aar
+          if-no-files-found: error
