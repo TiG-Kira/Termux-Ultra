@@ -79,6 +79,9 @@ android {
         // libterminal 核心版本号（来自 Maven Central）
         buildConfigField "String", "LIBTERMINAL_VERSION", "\"4.1.1\""
 
+        // RustDesk 核心版本号（内嵌的上游 Rust 核心 tag，来源 rustdesk-core 仓库）
+        buildConfigField "String", "RUSTDESK_CORE_VERSION", "\"1.5.1\""
+
         // Workflow CLI build flag (set by GitHub Actions)
         buildConfigField "boolean", "WORKFLOW_CLI", "${workflowCliBuild}"
 

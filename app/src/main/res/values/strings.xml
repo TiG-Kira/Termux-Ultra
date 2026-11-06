@@ -1264,6 +1264,7 @@
     <string name="overview_gpu_label">GPU</string>
     <string name="unrestricted_mode_warning">When enabled:\n• All commands run without confirmation, Agent can execute directly\n• Any SSH connection to remote hosts is allowed\n• ROOT devices automatically use su for privilege escalation\n• All System security rule constraints will be bypassed\n\nThis operation is extremely risky. Make sure your device is used in a trusted environment.</string>
     <string name="about_license">Termux Ultra is licensed under GPL 3.0 and MIT.\nThe Termux team owns the copyright of the Termux Ultra terminal module. The VNC module copyright ©2020 Gaurav Ujjwal. Thanks to open source contributors.</string>
+    <string name="about_upstream_copyright">RustDesk core © RustDesk project and its contributors, licensed under AGPL-3.0. Modified and embedded as a control-side component; corresponding source: github.com/TiG-Kira/rustdesk-core.</string>
     <string name="agent_permissions_examples">GET_CURRENT_SESSION, CLIPBOARD_READ, CLIPBOARD_WRITE, FILE_READ, FILE_WRITE, FILE_DELETE, etc.</string>
     <string name="fallback_desc">When the local LLM call fails or does not respond and this switch is on, the error reason is shown first, then it automatically falls back to this online model. Parameters follow the standard OpenAI-compatible API.</string>
 
@@ -1461,6 +1462,7 @@
     <string name="card_ended_code">Ended · exit code %1$s</string>
     <string name="custom_file">custom file</string>
     <string name="libterminal_core_info">LibTerminal Core Version: %1$s</string>
+    <string name="rustdesk_core_version_info">RustDesk Core Version: %1$s</string>
     <string name="currently_using_source">Currently using: %1$s. Tap to switch back to the official default System Prompt</string>
     <string name="temperature_current">Temperature: current %1$.2f  (0 = strict, 1 = creative)</string>
     <string name="fallback_not_configured">Enabled: ⚠️ Tap \\"Configure Backup Online Params\\" below to complete API Key/URL/Model first</string>

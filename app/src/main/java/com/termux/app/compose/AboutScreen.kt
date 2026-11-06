@@ -585,7 +585,8 @@ fun AboutScreen(onBack: () -> Unit) {
                             }
                             Text(
                                 text = context.getString(R.string.based_on_termux_version) + " " + termuxCoreVersion + "\n" +
-                                    context.getString(R.string.libterminal_core_info, BuildConfig.LIBTERMINAL_VERSION),
+                                    context.getString(R.string.libterminal_core_info, BuildConfig.LIBTERMINAL_VERSION) + "\n" +
+                                    context.getString(R.string.rustdesk_core_version_info, BuildConfig.RUSTDESK_CORE_VERSION),
                                 style = TextStyle(
                                     fontSize = 12.sp,
                                     color = MiuixTheme.colorScheme.onSurfaceVariantSummary
@@ -614,6 +615,13 @@ fun AboutScreen(onBack: () -> Unit) {
                                 style = TextStyle(
                                     fontSize = 13.sp,
                                     color = MiuixTheme.colorScheme.onSurface
+                                )
+                            )
+                            Text(
+                                text = context.getString(R.string.about_upstream_copyright),
+                                style = TextStyle(
+                                    fontSize = 12.sp,
+                                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary
                                 )
                             )
                         }

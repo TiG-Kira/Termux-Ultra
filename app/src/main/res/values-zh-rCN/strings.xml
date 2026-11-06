@@ -1094,6 +1094,7 @@
     <string name="overview_gpu_label">GPU</string>
     <string name="unrestricted_mode_warning">开启后：\n• 所有命令无需二次确认，Agent 可直接执行\n• 允许任意 SSH 连接到远程主机\n• ROOT 设备自动使用 su 提权执行命令\n• 所有 System 安全规则约束将被无视\n\n此操作风险极高，请确认设备在可信环境下使用。</string>
     <string name="about_license">Termux Ultra 使用 GPL 3.0 以及 MIT 许可。\nTermux 团队拥有 Termux Ultra 终端模块的版权，VNC 功能模块的版权所属 ©2020 Gaurav Ujjwal，感谢开源贡献。</string>
+    <string name="about_upstream_copyright">RustDesk 核心 © RustDesk 项目及其贡献者，依 AGPL-3.0 许可。本应用对其做了裁剪与修改，仅内嵌控制端；对应源码：github.com/TiG-Kira/rustdesk-core。</string>
     <string name="agent_permissions_examples">GET_CURRENT_SESSION、CLIPBOARD_READ、CLIPBOARD_WRITE、FILE_READ、FILE_WRITE、FILE_DELETE 等</string>
     <string name="fallback_desc">当本地大模型调用失败或无响应时，若已开启开关，会先提示错误原因，然后自动切换到该在线模型完成问答。参数与标准 OpenAI 兼容接口一致。</string>
 
@@ -1290,6 +1291,7 @@
     <string name="card_ended_code">已结束 · 退出代码 %1$s</string>
     <string name="custom_file">自定义文件</string>
     <string name="libterminal_core_info">LibTerminal 重构核心版本号: %1$s</string>
+    <string name="rustdesk_core_version_info">RustDesk 核心版本号: %1$s</string>
     <string name="currently_using_source">当前使用: %1$s。点击切换回官方默认 System Prompt</string>
     <string name="temperature_current">Temperature：当前值 %1$.2f  (0 偏严谨，1 偏创意)</string>
     <string name="fallback_not_configured">已开启：⚠️ 请先点击下方「配置备用在线参数」补全 API Key/URL/模型</string>
