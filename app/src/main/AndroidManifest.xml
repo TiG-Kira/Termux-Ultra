@@ -517,6 +517,16 @@
             android:label="@string/rustdesk_settings"
             android:windowSoftInputMode="adjustResize" />
 
+        <!-- 内嵌 RustDesk 会话页：自研 Compose，经 JNI 驱动 Rust 核心。
+             旋转/输入法不重建，否则会话被踢下线；不导出，只能由本应用显式拉起。 -->
+        <activity
+            android:name=".rustdesk.RustDeskSessionActivity"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode|navigation"
+            android:exported="false"
+            android:hardwareAccelerated="true"
+            android:launchMode="singleTop"
+            android:windowSoftInputMode="adjustResize" />
+
         <activity
             android:name=".app.activities.X11SettingsActivity"
             android:exported="false"

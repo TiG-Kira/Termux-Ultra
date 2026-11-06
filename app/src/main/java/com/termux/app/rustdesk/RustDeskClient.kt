@@ -7,16 +7,21 @@ import android.net.Uri
 import android.util.Log
 
 /**
- * 把会话交接给官方 RustDesk Android 客户端（`com.carriez.flutter_hbb`）。
+ * RustDesk 会话入口。
  *
- * 为什么不内置：RustDesk 的会话核心是 Rust + Flutter，且为 AGPL-3.0，没有可作为库链接的
- * AAR，整包 vendor 进来还会把本应用整体拖成 AGPL。因此这里走官方 `rustdesk://` 深链协议
- * （RustDesk 的 `urlLinkToCmdArgs()`）把 ID / 密码 / 服务器 / 公钥 / 强制中继交给客户端：
+ * 首选**内嵌会话**：Rust 核心（`rustdesk-core` 产出的 librustdesk.so）经 [RustDeskCore] 的
+ * JNI 桥驱动，会话页由本应用自研 Compose 实现，不经 RustDesk 主页、不依赖外部客户端。
+ *
+ * 仅在核心不可用（该 ABI 没有原生库）时，退回官方客户端（`com.carriez.flutter_hbb`）的
+ * `rustdesk://` 深链（RustDesk 的 `urlLinkToCmdArgs()`）：
  *
  * - `rustdesk://<id>` 直连
  * - `rustdesk://<id>@<server>?key=<公钥>` 走自建服务器
  * - `rustdesk://<id>/r@<server>` 强制中继
  * - `?password=` 客户端会直接用于登录；`?request-approval=true` 时客户端会丢弃密码改为请求对方确认
+ *
+ * 身份边界：内嵌路径只透传用户填的密码，RustDesk 账号/OIDC 登录的请求身份由核心生成；
+ * 外部兜底路径由官方客户端自行完成登录。本类不代发任何登录请求。
  */
 object RustDeskClient {
 
@@ -63,12 +68,37 @@ object RustDeskClient {
         }
     }
 
-    /** 交接成功返回 true；客户端未安装或系统没有可处理的应用返回 false。 */
+    /** 核心可用时走内嵌会话页；否则退回官方客户端深链。 */
     fun launch(context: Context, connection: RustDeskConnection): Boolean {
-        val uri = Uri.parse(buildUri(connection, RustDeskSettings.defaults(context)))
+        val defaults = RustDeskSettings.defaults(context)
+        // 记录里的 server/key 优先于全局默认，内嵌路径同样需要合并后再交给核心
+        val effective = connection.copy(
+            server = connection.server.ifBlank { defaults.server },
+            key = connection.key.ifBlank { defaults.publicKey },
+            forceRelay = connection.forceRelay || defaults.forceRelay,
+            // 请求对方确认时不带密码，交给核心走审批流程
+            password = if (defaults.requestApproval) "" else connection.password,
+        )
+
+        if (RustDeskCore.isAvailable()) {
+            return try {
+                context.startActivity(RustDeskSessionActivity.intent(context, effective))
+                true
+            } catch (e: ActivityNotFoundException) {
+                Log.w(TAG, "无法启动内嵌会话页", e)
+                false
+            } catch (e: SecurityException) {
+                Log.w(TAG, "启动内嵌会话页被系统拒绝", e)
+                false
+            }
+        }
+
+        // 兜底：核心不可用（该 ABI 无 librustdesk.so）时，交给官方客户端
+        if (!isInstalled(context)) return false
+        val uri = Uri.parse(buildUri(connection, defaults))
         val intent = Intent(Intent.ACTION_VIEW, uri).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            if (isInstalled(context)) setPackage(PACKAGE_NAME)
+            setPackage(PACKAGE_NAME)
         }
         return try {
             context.startActivity(intent)
