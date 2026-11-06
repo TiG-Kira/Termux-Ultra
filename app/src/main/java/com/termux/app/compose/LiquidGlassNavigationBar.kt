@@ -7,8 +7,8 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -34,6 +34,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -67,6 +68,8 @@ import com.kyant.backdrop.highlight.Highlight
 import com.kyant.backdrop.shadow.InnerShadow
 import com.kyant.backdrop.shadow.Shadow
 import com.kyant.shapes.Capsule
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import kotlin.math.abs
@@ -273,6 +276,8 @@ fun LiquidGlassNavigationBarWithIndicator(
     val isDark = isSystemInDarkTheme()
     val isLightTheme = !isDark
     val scope = rememberCoroutineScope()
+    // 手势协程跨重组存活，用 updated state 拿最新回调，避免捕获旧 lambda
+    val onIndexChangeState by rememberUpdatedState(onIndexChange)
 
     // 官方配色
     val accentColor = if (isLightTheme) Color(0xFF0088FF) else Color(0xFF0091FF)
@@ -327,6 +332,9 @@ fun LiquidGlassNavigationBarWithIndicator(
                 innerPaddingPx + evenlySpacing * (i + 1) + itemWidthPx * i + itemWidthPx / 2
             }
         }
+        // 回退分支每次重组都会新建 List，不能拿它当 pointerInput 的 key
+        // （否则手势中途重启、拖到一半自己弹回）。用 updated state 读最新值。
+        val itemCentersState by rememberUpdatedState(itemCenters)
 
         // 指示器居中偏移
         val indicatorCenterOffset = -indicatorWidthPx / 2
@@ -492,54 +500,87 @@ fun LiquidGlassNavigationBarWithIndicator(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(dims.containerHeight)
-                .pointerInput(selectedIndex, itemCount, itemCenters, contentWidthPx) {
-                    detectTapGestures(
-                        onTap = { offset ->
-                            // 找到最近的按钮中心
-                            var closestIndex = 0
-                            var minDist = Float.MAX_VALUE
-                            for ((i, center) in itemCenters.withIndex()) {
-                                val dist = abs(offset.x - center)
-                                if (dist < minDist) {
-                                    minDist = dist
-                                    closestIndex = i
+                // 单个 awaitEachGesture 统一处理轻点 / 纵向滚动 / 横向拖动。
+                // detectTapGestures 自身就是 awaitEachGesture 无限循环，与
+                // detectDragGestures 串在同一个 pointerInput 里会让后者永远不可达。
+                .pointerInput(selectedIndex, itemCount, contentWidthPx) {
+                    val avgSpacing = contentWidthPx / itemCount
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        val downX = down.position.x
+                        val downY = down.position.y
+                        // 拖动意图用同步字段：只在手势开始读一次 indicatorAnim.value，
+                        // 之后不再读它（排队的 snapTo 会让 Animatable 滞后一帧）
+                        var dragTarget = indicatorAnim.value
+                        var lastX = downX
+                        var dragging = false
+                        var snapJob: Job? = null
+                        try {
+                            while (true) {
+                                val event = awaitPointerEvent()
+                                val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                                val x = change.position.x
+                                val dx = abs(x - downX)
+                                val dy = abs(change.position.y - downY)
+                                if (!change.pressed) {
+                                    // 轻点：按最近按钮中心切页，指示器动画交给 LaunchedEffect
+                                    if (!dragging && maxOf(dx, dy) < viewConfiguration.touchSlop) {
+                                        var closestIndex = 0
+                                        var minDist = Float.MAX_VALUE
+                                        for ((i, center) in itemCentersState.withIndex()) {
+                                            val dist = abs(x - center)
+                                            if (dist < minDist) {
+                                                minDist = dist
+                                                closestIndex = i
+                                            }
+                                        }
+                                        if (closestIndex != selectedIndex) {
+                                            onIndexChangeState(closestIndex)
+                                        }
+                                    }
+                                    // 必须消费 up：下层 item 还挂着 clickable，不消费会再切一次页
+                                    // （旧 detectTapGestures 内部会消费 up）
+                                    change.consume()
+                                    break
+                                }
+                                if (change.isConsumed) break
+                                // 以纵向为主的手势放行给页面滚动，不切页也不驱动指示器
+                                if (dy > viewConfiguration.touchSlop && dy > dx) break
+                                if (!dragging) {
+                                    if (dx < viewConfiguration.touchSlop) continue
+                                    dragging = true
+                                    isDragging = true
+                                    lastX = x
+                                }
+                                dragTarget = (dragTarget + (x - lastX) / avgSpacing)
+                                    .coerceIn(0f, (itemCount - 1).toFloat())
+                                lastX = x
+                                val frameTarget = dragTarget
+                                snapJob?.cancel()
+                                snapJob = scope.launch(start = CoroutineStart.UNDISPATCHED) {
+                                    indicatorAnim.snapTo(frameTarget)
+                                }
+                                change.consume()
+                            }
+                        } finally {
+                            isDragging = false
+                            if (dragging) {
+                                // 松手一定吸附到最近 tab：用同步 dragTarget 算目标、丢弃排队
+                                // snapTo；没换页也要弹回整数位，不能停在两 tab 中间。
+                                val target = dragTarget.fastRoundToInt().coerceIn(0, itemCount - 1)
+                                snapJob?.cancel()
+                                scope.launch {
+                                    indicatorAnim.animateTo(
+                                        target.toFloat(),
+                                        spring(stiffness = Spring.StiffnessLow),
+                                    )
+                                }
+                                if (target != selectedIndex) {
+                                    onIndexChangeState(target)
                                 }
                             }
-                            if (closestIndex != selectedIndex) {
-                                onIndexChange(closestIndex)
-                            }
                         }
-                    )
-                    detectDragGestures(
-                        onDragStart = { isDragging = true },
-                        onDrag = { change, dragAmount ->
-                            change.consume()
-                            val currentIndex = indicatorAnim.value
-                            // 使用按钮间距作为拖动比例
-                            val avgSpacing = contentWidthPx / itemCount
-                            val newIndex = (currentIndex + dragAmount.x / avgSpacing)
-                                .coerceIn(0f, (itemCount - 1).toFloat())
-                            scope.launch {
-                                indicatorAnim.snapTo(newIndex)
-                            }
-                        },
-                        onDragEnd = {
-                            isDragging = false
-                            val targetIndex = indicatorAnim.value.fastRoundToInt().coerceIn(0, itemCount - 1)
-                            scope.launch {
-                                indicatorAnim.animateTo(targetIndex.toFloat())
-                            }
-                            if (targetIndex != selectedIndex) {
-                                onIndexChange(targetIndex)
-                            }
-                        },
-                        onDragCancel = {
-                            isDragging = false
-                            scope.launch {
-                                indicatorAnim.animateTo(selectedIndex.toFloat())
-                            }
-                        }
-                    )
+                    }
                 }
         )
     }
