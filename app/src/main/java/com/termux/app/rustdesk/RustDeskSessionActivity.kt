@@ -2,15 +2,21 @@ package com.termux.app.rustdesk
 
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -20,13 +26,18 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.FilterQuality
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.termux.app.compose.KiTerminalTheme
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.CircularProgressIndicator
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
-import top.yukonga.miuix.kmp.theme.MiuixTheme
+import java.nio.ByteBuffer
 import java.util.UUID
 
 /**
@@ -38,10 +49,9 @@ import java.util.UUID
  * 身份边界：本页只把连接记录里的密码透传给核心；RustDesk 账号/OIDC 登录与会话认证的
  * 请求身份（id/uuid/deviceInfo）全部由核心生成，本页不参与、不代发 HTTP。
  *
- * 当前为会话链路骨架：建连、核心事件分发、断开已接通。
- * 画面渲染需要 JNI 侧提供「把 RGBA 缓冲拷贝进 Java 字节数组」的接口
- * （`nativeGetRgba` 返回的是 native 裸指针，Java 层无法直接解引用），补齐后再叠加
- * SurfaceView 位图绘制与手势/键盘输入。
+ * 当前进度：建连、核心事件分发、画面渲染、断开已接通。
+ * 帧链路为「核心软渲染 → 持锁拷进复用字节数组 → ARGB_8888 位图 → Canvas 绘制」，
+ * 手势/键盘输入（`nativeSendMouse` / `nativeInputKey`）尚未接入。
  */
 class RustDeskSessionActivity : ComponentActivity() {
 
@@ -128,6 +138,10 @@ class RustDeskSessionActivity : ComponentActivity() {
 private fun RustDeskSessionScreen(sessionId: String, title: String, onClose: () -> Unit) {
     val event by RustDeskCore.events.collectAsState()
     var status by remember { mutableStateOf("正在连接…") }
+    // 复用的帧字节缓冲：分辨率变化时才重新分配
+    var frameBuf by remember { mutableStateOf(ByteArray(0)) }
+    // 每帧换一个 ImageBitmap 包装（不拷贝像素），靠新实例触发重绘
+    var frame by remember { mutableStateOf<ImageBitmap?>(null) }
 
     LaunchedEffect(event) {
         val e = event ?: return@LaunchedEffect
@@ -143,28 +157,59 @@ private fun RustDeskSessionScreen(sessionId: String, title: String, onClose: () 
                 }
             }
             RustDeskCore.EventKind.RGBA -> {
-                // 新帧就绪；待 JNI 字节拷贝接口补齐后在此同步拷贝到 Bitmap 并绘制。
                 val display = e.payload.toIntOrNull() ?: 0
-                if (RustDeskCore.nativeGetRgbaSize(sessionId, display) > 0) {
-                    status = "已连接"
+                val dims = RustDeskCore.nativeGetRgbaDims(sessionId, display)
+                val width = (dims ushr 32).toInt()
+                val height = (dims and 0xFFFF_FFFFL).toInt()
+                val need = width * height * 4
+                if (need > 0) {
+                    if (frameBuf.size != need) frameBuf = ByteArray(need)
+                    // 软渲染输出紧密排列的 RGBA，与 ARGB_8888 的内存字节序一致
+                    if (RustDeskCore.nativeCopyRgba(sessionId, display, frameBuf) == need) {
+                        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+                        bitmap.copyPixelsFromBuffer(ByteBuffer.wrap(frameBuf))
+                        frame = bitmap.asImageBitmap()
+                        status = "已连接"
+                    }
                 }
+                // 交还缓冲，核心才会产出下一帧
                 RustDeskCore.nativeNextRgba(sessionId, display)
             }
         }
     }
 
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            modifier = Modifier.padding(24.dp)
-        ) {
-            Text(text = title, color = MiuixTheme.colorScheme.onSurface)
-            Text(text = status, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
-            if (status == "正在连接…") {
+    Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
+        val current = frame
+        if (current != null) {
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                drawImage(
+                    image = current,
+                    dstSize = IntSize(size.width.toInt(), size.height.toInt()),
+                    filterQuality = FilterQuality.Low,
+                )
+            }
+        } else {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.align(Alignment.Center).padding(24.dp)
+            ) {
+                Text(text = title, color = Color.White)
+                Text(text = status, color = Color.White.copy(alpha = 0.7f))
                 // miuix 的 CircularProgressIndicator 默认 30dp，尺寸必须显式走 size
                 CircularProgressIndicator(modifier = Modifier.size(30.dp))
             }
+        }
+
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .fillMaxWidth()
+                .statusBarsPadding()
+                .padding(horizontal = 12.dp, vertical = 8.dp)
+        ) {
+            Text(text = title, color = Color.White, modifier = Modifier.weight(1f))
             TextButton(
                 text = "断开",
                 onClick = onClose,

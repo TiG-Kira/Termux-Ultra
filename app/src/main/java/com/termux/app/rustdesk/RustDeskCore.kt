@@ -106,8 +106,10 @@ object RustDeskCore {
 
     // ── 帧 / 输入 ─────────────────────────────────────────────────
     @JvmStatic external fun nativeGetRgbaSize(sessionId: String, display: Int): Long
-    /** RGBA 裸指针；只能在 RGBA 事件回调内同步拷贝，不得跨线程持有。 */
-    @JvmStatic external fun nativeGetRgba(sessionId: String, display: Int): Long
+    /** 帧像素尺寸：高 32 位为宽、低 32 位为高，0 表示没有可用帧。 */
+    @JvmStatic external fun nativeGetRgbaDims(sessionId: String, display: Int): Long
+    /** 把当前帧拷进复用缓冲（长度需 ≥ 宽*高*4），返回字节数，0 表示没有有效帧。 */
+    @JvmStatic external fun nativeCopyRgba(sessionId: String, display: Int, dst: ByteArray): Int
     @JvmStatic external fun nativeNextRgba(sessionId: String, display: Int)
     @JvmStatic external fun nativeSetSize(sessionId: String, display: Int, width: Int, height: Int)
     @JvmStatic external fun nativeSendMouse(sessionId: String, msg: String)
