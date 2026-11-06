@@ -184,25 +184,37 @@ jobs:
         working-directory: rustdesk/flutter
         env:
           JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
-          FLUTTER_ROOT: /opt/hostedtoolcache/flutter/stable-3.24.5-x64/flutter
         run: |
-          # 上游 flutter/android 不提交 gradlew/gradle-wrapper.jar（gitignored），flutter 命令也不会
-          # 帮我们生成；但 Flutter SDK 自带一份 wrapper，复制回来即可驱动 gradle。
-          GW=$(find "${FLUTTER_ROOT}/bin/cache/artifacts/gradle_wrapper" -name gradlew 2>/dev/null | head -1)
-          if [ -n "${GW}" ]; then
-            GW_DIR=$(dirname "${GW}")
-            cp -r "${GW_DIR}/gradle" android/gradle 2>/dev/null || true
-            cp "${GW_DIR}/gradlew" android/gradlew 2>/dev/null || true
-            cp "${GW_DIR}/gradlew.bat" android/gradlew.bat 2>/dev/null || true
-            chmod +x android/gradlew
+          # 上游 flutter/android 不提交 gradle wrapper（gitignored）。flutter pub get 会生成 gradlew
+          # 脚本与 gradle-wrapper.properties，但**不会**生成 gradle-wrapper.jar（它本应随源码提交）。
+          # 缺 jar 时 ./gradlew 直接报 ClassNotFoundException: GradleWrapperMain。所以必须从 Flutter
+          # SDK 自带的一份把 jar 补回 android/gradle/wrapper/。
+          FLUTTER_ROOT="$(dirname "$(dirname "$(readlink -f "$(which flutter)")")")"
+          echo "FLUTTER_ROOT=${FLUTTER_ROOT}"
+          JAR="$(find "${FLUTTER_ROOT}" -name 'gradle-wrapper.jar' 2>/dev/null | head -1)"
+          echo "gradle-wrapper.jar = ${JAR}"
+          test -n "${JAR}" || { echo "找不到 gradle-wrapper.jar"; exit 1; }
+          # 先把 jar 放好（pub get 前放也无害，pub get 不会删除已存在的 jar）
+          mkdir -p android/gradle/wrapper
+          cp "${JAR}" android/gradle/wrapper/gradle-wrapper.jar
+          # 若 flutter pub get 仍未产出 gradlew 脚本，也从 SDK 复制
+          if [ ! -f android/gradlew ]; then
+            GW_SCRIPT="$(find "${FLUTTER_ROOT}" -name 'gradlew' 2>/dev/null | head -1)"
+            if [ -n "${GW_SCRIPT}" ]; then
+              cp "${GW_SCRIPT}" android/gradlew
+              chmod +x android/gradlew
+            fi
           fi
-          test -f android/gradlew || { echo "gradlew 仍未就位"; exit 1; }
           # 已经 library patch 改造为 com.android.library，直接 assembleRelease 出 AAR：
           # 内含 classes.jar(MainActivity/RustDeskHostBridge/ffi 等) + libapp.so(Dart AOT)
           # + flutter_assets + 我们 cp 进 jniLibs 的 librustdesk.so/c++_shared.so。
           # library 变体以 classes.jar 而非 dex 交付，不做 mergeExtDex，正好绕开之前整包 APK 的 OOM。
           # 引擎 libflutter.so 不进 AAR，由宿主从 maven 依赖。
           flutter pub get
+          # 保险：pub get 之后再次确认 jar 就位（防止任何环节被覆盖）
+          cp "${JAR}" android/gradle/wrapper/gradle-wrapper.jar
+          test -f android/gradlew || { echo "gradlew 仍未就位"; exit 1; }
+          test -f android/gradle/wrapper/gradle-wrapper.jar || { echo "jar 仍未就位"; exit 1; }
           cd android
           ./gradlew :app:assembleRelease --no-daemon \
             -Dorg.gradle.jvmargs="-Xmx4g -XX:MaxMetaspaceSize=1g" \
