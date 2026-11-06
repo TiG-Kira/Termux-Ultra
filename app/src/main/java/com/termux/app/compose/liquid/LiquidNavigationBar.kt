@@ -214,7 +214,8 @@ fun LiquidNavigationBar(
                     reportedIndex = index
                     onSelect(index)
                 }
-                damped.animateToValue(index.toFloat(), holdPressUntilUp)
+                // getter 而非值：hold 状态在收尾瞬间才读，松手后到位即淡出
+                damped.animateToValue(index.toFloat()) { holdPressUntilUp }
             }
     }
 
@@ -274,7 +275,8 @@ fun LiquidNavigationBar(
         {
             scaleX = damped.scaleX
             scaleY = damped.scaleY
-            val velocity = damped.velocity / 10f
+            // 只有手指拖动才拉伸：点按飞行的速度随距离变化，会拉成形状不定的色块
+            val velocity = damped.stretchVelocity / 10f
             scaleX /= 1f - (velocity * 0.75f).fastCoerceIn(-0.2f, 0.2f)
             scaleY *= 1f - (velocity * 0.25f).fastCoerceIn(-0.2f, 0.2f)
         }
@@ -286,7 +288,12 @@ fun LiquidNavigationBar(
                 if (isLightTheme) Color.Black.copy(0.1f) else Color.White.copy(0.1f),
                 alpha = 1f - progress,
             )
-            drawRect(Color.Black.copy(alpha = 0.03f * progress))
+            // 按住 / 飞行 = 白玻璃气泡：透镜在当前 tab 上正好对着图标、折射看不出来，
+            // 没有这层白底「按住已选 tag」完全没有玻璃感，白底让任何 tab 都是同一颗液滴
+            drawRect(
+                if (isLightTheme) Color.White.copy(0.38f) else Color.White.copy(0.14f),
+                alpha = progress,
+            )
         }
     }
     // Row B 录制层的图标随按压鼓起（demo 的 LocalLiquidBottomTabScale 口径）
@@ -377,6 +384,8 @@ fun LiquidNavigationBar(
                         damped.pressDown()
                         holdPressUntilUp = true
                         val hit = (downX / tabWidth).toInt().fastCoerceIn(0, items.size - 1)
+                        // 按下时所在的 tab：松手时据此判断轻点有没有触发迁移
+                        val startIndex = navSettle.index
                         // Termux Ultra 适配：命中迁移延后到确认手势方向后再提交。
                         // 从底栏起手的纵向滚动要放行给页面（PR #367 修过默认底栏的同款
                         // 误判）；Kiba 上游「按下即切页」会让纵滑被误判成选 tab。
@@ -396,7 +405,9 @@ fun LiquidNavigationBar(
                             ) {
                                 // 纵向为主：不提交命中、不驱动胶囊，事件留给页面滚动
                                 holdPressUntilUp = false
-                                damped.pressUpDelayed()
+                                // 与松手段对齐：有迁移在飞时不调，否则 280ms 后的
+                                // 延迟回落会在飞行后半段提前把玻璃淡掉
+                                if (!damped.inFlight) damped.pressUpDelayed()
                                 return@awaitEachGesture
                             }
                             val dx = change.position.x - lastX
@@ -436,24 +447,32 @@ fun LiquidNavigationBar(
                                 break
                             }
                         }
-                        // 松手：吸附最近 tab（含 down 迁移未完成的场景）；
-                        // holdPress 复位后流会以 holdPress=false 再触发，玻璃淡成选中态
+                        // 松手分流：只有拖动过才按视觉位置重发吸附。
+                        // 纯点按此刻迁移刚提交、还在飞，重发会把它取消在半程并把目标
+                        // 改成中途 tag（快速点按切错页的根因）；页面在提交时已切好，
+                        // 放行动画播完，到位后 hold 已释放、玻璃自动淡出。
                         holdPressUntilUp = false
-                        // 拖动用**当前视觉位置**吸附（value 是唯一事实，迁移动画可能未完）；
-                        // 轻点没有拖动过，value 仍停在原 tab，必须沿用 up 时提交的 hit，
-                        // 否则这里会把刚提交的切换覆盖回当前 tab（点击不切页）。
-                        val target = if (dragging) {
-                            damped.value.fastRoundToInt().fastCoerceIn(0, items.size - 1)
-                        } else {
-                            hit
-                        }
                         bridge.offsetSnapJob?.cancel()
                         bridge.offsetSnapJob = null
                         bridge.offsetAnimation?.let { a ->
                             scope.launch { a.animateTo(0f, spring(1f, 300f, 0.5f)) }
                         }
-                        navSettle = NavSettle(target, navSettle.serial + 1)
-                        damped.pressUpDelayed()
+                        if (dragging) {
+                            navSettle = NavSettle(
+                                damped.value.fastRoundToInt().fastCoerceIn(0, items.size - 1),
+                                navSettle.serial + 1,
+                            )
+                        } else if (hit == startIndex && !damped.inFlight) {
+                            // 点在当前 tab / 没有迁移在飞：兜底淡出。有迁移在飞时不调，
+                            // 280ms 后的延迟淡出会在飞行途中把玻璃淡掉，淡出交给
+                            // animateToValue 收尾（hold 释放后到位即淡）。
+                            damped.pressUpDelayed()
+                        }
+                        // 纯点按且触发了迁移的分支既不重发 navSettle、也不调
+                        // pressUpDelayed：玻璃淡出完全由该次 animateToValue 收尾负责。
+                        // 前提是本帧内没有第二次 navSettle 写入取消它——up 分支已
+                        // change.consume() 挡住下层 TabContent.clickable，且 onSelect
+                        // 回写的 selectedIndex 与 navSettle.index 相等不会再触发流。
                     }
                 },
             verticalAlignment = Alignment.CenterVertically,
