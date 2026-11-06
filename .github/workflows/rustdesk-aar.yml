@@ -3,8 +3,10 @@ name: Build RustDesk AAR
 # 把上游 RustDesk 的 Android 端编成可被本应用内嵌的 AAR。
 #
 # 上游 Android 产物只有 APK（flutter/android/app 是 com.android.application），所以流程是：
-# 先按上游配方编一次 release APK 拿到完整产物，再把模块改造成 library 出 AAR，
-# 最后用 APK 里的原生库补齐 AAR（library 变体不带 Flutter 引擎）。
+# 先按上游配方编一次 release APK 拿到完整产物，再用仓库内预置的 rustdesk-library.patch
+# 把上游模块改造成 library 出 AAR（patch 等价于原 patch_android_library.py 的改造，但改为
+# 可审查的统一 diff，随本仓库版本化、对齐上游 tag），最后用 APK 里的原生库补齐 AAR
+#（library 变体不带 Flutter 引擎）。
 #
 # 构建依赖的版本全部对齐上游 .github/workflows/flutter-build.yml 与 bridge.yml，
 # 改任何一个都要同步上游，否则桥代码与 Dart 侧的 freezed 输出对不上。
@@ -197,9 +199,9 @@ jobs:
           [ "${ABI}" = "armeabi-v7a" ] && PLATFORM=android-arm
           cd flutter && flutter build apk --release --target-platform "${PLATFORM}" --split-per-abi
 
-      - name: Patch module to library
+      - name: Apply library patch
         working-directory: rustdesk
-        run: python3 ../host/tools/rustdesk-vendor/patch_android_library.py .
+        run: git apply --ignore-whitespace ../host/tools/rustdesk-vendor/rustdesk-library.patch
 
       - name: Build AAR
         working-directory: rustdesk/flutter/android

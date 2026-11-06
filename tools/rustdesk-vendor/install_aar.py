@@ -68,7 +68,9 @@ def main() -> None:
 
     with zipfile.ZipFile(aar) as archive:
         names = set(archive.namelist())
-    for required in ("classes.jar", "R.txt"):
+    # classes.jar + AndroidManifest.xml 是 AAR 的最小充分特征；R.txt 在新版 AGP 上不一定产出，
+    # 拿它当判据会误伤
+    for required in ("classes.jar", "AndroidManifest.xml"):
         if required not in names:
             raise SystemExit(f"{aar} 不像一个 AAR（缺少 {required}）")
     if any(name.endswith("libflutter.so") for name in names):

@@ -1,0 +1,175 @@
+diff --git a/flutter/android/app/build.gradle b/flutter/android/app/build.gradle
+index 07f029c..63dc637 100644
+--- a/flutter/android/app/build.gradle
++++ b/flutter/android/app/build.gradle
+@@ -3,7 +3,7 @@ import groovy.json.JsonSlurper
+ 
+ plugins {
+     id "com.google.protobuf" version "0.9.4"
+-    id "com.android.application"
++    id "com.android.library"
+     id "kotlin-android"
+     id "dev.flutter.flutter-gradle-plugin"
+ }
+@@ -98,30 +98,8 @@ android {
+     }
+ 
+     defaultConfig {
+-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
+-        applicationId "com.carriez.flutter_hbb"
+         minSdkVersion 22
+         targetSdkVersion 36
+-        versionCode flutterVersionCode.toInteger()
+-        versionName flutterVersionName
+-    }
+-
+-    signingConfigs {
+-      release {
+-        keyAlias keystoreProperties['keyAlias']
+-        keyPassword keystoreProperties['keyPassword']
+-        storeFile keystoreProperties['storeFile'] ? file(keystoreProperties['storeFile']) : null
+-        storePassword keystoreProperties['storePassword']
+-      }
+-    }
+-
+-    buildTypes {
+-        release {
+-            // TODO: Add your own signing config for the release build.
+-            // Signing with the debug keys for now, so `flutter run --release` works.
+-            signingConfig signingConfigs.release
+-            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules'
+-        }
+     }
+ }
+ 
+diff --git a/flutter/android/app/src/main/AndroidManifest.xml b/flutter/android/app/src/main/AndroidManifest.xml
+index e078818..689ced0 100644
+--- a/flutter/android/app/src/main/AndroidManifest.xml
++++ b/flutter/android/app/src/main/AndroidManifest.xml
+@@ -27,15 +27,11 @@
+     </queries>
+ 
+     <application
+-        android:name=".MainApplication"
+-        android:icon="@mipmap/ic_launcher"
+-        android:label="RustDesk"
+-        android:roundIcon="@mipmap/ic_launcher"
+         android:supportsRtl="true">
+ 
+         <receiver
+             android:name=".BootReceiver"
+-            android:enabled="true"
++            android:enabled="false"
+             android:exported="true">
+             <intent-filter android:priority="1000">
+                 <action android:name="android.intent.action.BOOT_COMPLETED" />
+@@ -63,24 +59,11 @@
+         <activity
+             android:name=".MainActivity"
+             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode|navigation"
+-            android:exported="true"
++            android:exported="false"
+             android:hardwareAccelerated="true"
+             android:launchMode="singleTop"
+             android:theme="@style/LaunchTheme"
+             android:windowSoftInputMode="adjustResize">
+-            <intent-filter>
+-                <action android:name="android.intent.action.MAIN" />
+-
+-                <category android:name="android.intent.category.LAUNCHER" />
+-            </intent-filter>
+-
+-            <!-- Intent for deep linking-->
+-            <intent-filter>
+-                <action android:name="android.intent.action.VIEW" />
+-                <category android:name="android.intent.category.DEFAULT" />
+-                <category android:name="android.intent.category.BROWSABLE" />
+-                <data android:scheme="rustdesk" />
+-            </intent-filter>
+         </activity>
+ 
+         <activity
+diff --git a/flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/MainActivity.kt b/flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/MainActivity.kt
+index 276188f..67fbe62 100644
+--- a/flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/MainActivity.kt
++++ b/flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/MainActivity.kt
+@@ -45,7 +45,7 @@ import java.io.FileInputStream
+ import java.io.FileOutputStream
+ 
+ 
+-class MainActivity : FlutterActivity() {
++open class MainActivity : FlutterActivity() {
+     companion object {
+         var flutterMethodChannel: MethodChannel? = null
+         private var _rdClipboardManager: RdClipboardManager? = null
+@@ -228,7 +228,7 @@ class MainActivity : FlutterActivity() {
+                 }
+                 if (pending.documentLogs) {
+                     try {
+-                        exported += (application as MainApplication).documentStorage.logs.exportTo(treeUri)
++                        exported += RustDeskHostBridge.documentStorage(application).logs.exportTo(treeUri)
+                     } catch (error: Exception) {
+                         Log.e(logTag, "Failed to export document logs", error)
+                         failed++
+@@ -636,7 +636,7 @@ class MainActivity : FlutterActivity() {
+                         }
+                         val rejected = paths.size - sources.size
+                         if (sources.isEmpty() && (!documentLogs ||
+-                            !(application as MainApplication).documentStorage.logs.hasPermission())) {
++                            !RustDeskHostBridge.documentStorage(application).logs.hasPermission())) {
+                             result.success(mapOf("exported" to 0, "failed" to rejected))
+                         } else if (pendingPicker != null) {
+                             result.error("picker_in_progress", "Another document picker is already open", null)
+diff --git a/flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/RustDeskHostBridge.kt b/flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/RustDeskHostBridge.kt
+new file mode 100644
+index 0000000..ffe7d45
+--- /dev/null
++++ b/flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/RustDeskHostBridge.kt
+@@ -0,0 +1,47 @@
++package com.carriez.flutter_hbb
++
++import android.content.Context
++import android.util.Log
++import ffi.FFI
++
++/**
++ * 宿主接入点。
++ *
++ * 上游把进程级初始化放在 MainApplication.onCreate，并用 @Keep 的 rustDocumentStorage
++ * 方法接受 Rust 侧 JNI 反射调用。宿主的 Application 必须继承 LorieApp（Termux:X11 的
++ * checkcast 要求），无法同时继承 MainApplication，因此把这两件事收敛到这里：
++ *
++ * - [attach] 等价于 MainApplication.onCreate 里的 FFI.onAppStart
++ * - [documentStorage] 等价于 MainApplication.rustDocumentStorage 的实现
++ *
++ * DocumentStorage 是 internal class，宿主模块看不到，所以这段桥接必须编译在本模块内。
++ */
++object RustDeskHostBridge {
++
++    private const val TAG = "RustDeskHostBridge"
++
++    @Volatile
++    private var storage: DocumentStorage? = null
++
++    private fun storageOf(context: Context): DocumentStorage =
++        storage ?: synchronized(this) {
++            storage ?: DocumentStorage(context.applicationContext).also { storage = it }
++        }
++
++    @JvmStatic
++    fun documentStorage(context: Context): DocumentStorage = storageOf(context)
++
++    /** 幂等。native 库缺失（该 ABI 没有产物）时只记日志，不阻断宿主启动。 */
++    @JvmStatic
++    fun attach(context: Context) {
++        storageOf(context)
++        try {
++            FFI.onAppStart(context.applicationContext)
++        } catch (error: Throwable) {
++            Log.e(TAG, "RustDesk native 初始化失败，内嵌会话不可用", error)
++        }
++    }
++
++    @JvmStatic
++    fun request(context: Context, payload: String): String = storageOf(context).request(payload)
++}
