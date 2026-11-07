@@ -3,7 +3,7 @@
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](./LICENSE)
 [![Platform: Android](https://img.shields.io/badge/Platform-Android%209.0%2B-green.svg)]()
 [![Based on Termux v0.119.0](https://img.shields.io/badge/Base-Termux%20v0.119.0-orange.svg)](https://github.com/termux/termux-app/releases/tag/v0.119.0-beta.3)
-[![v4.x.x.R12](https://img.shields.io/badge/v4.x.x.R12-stable-brightgreen.svg)](https://github.com/TiG-Kira/Termux-Ultra/releases)
+[![v4.x.x.R13](https://img.shields.io/badge/v4.x.x.R13-stable-brightgreen.svg)](https://github.com/TiG-Kira/Termux-Ultra/releases)
 
 [![Build status](https://github.com/TiG-Kira/Termux-Ultra/actions/workflows/ci.yml/badge.svg)](https://github.com/TiG-Kira/Termux-Ultra/actions)
 [![Docs](https://img.shields.io/badge/Docs-GitHub%20Pages-blue.svg)](https://tig-kira.github.io/Termux-Ultra/)
