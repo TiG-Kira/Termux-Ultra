@@ -54,9 +54,9 @@ object RustDeskCore {
         const val RGBA = "rgba"        // 新帧就绪，payload 为 display 下标
     }
 
-    /** 帧与业务事件可能在同一帧内连发，StateFlow 会覆盖先到的事件，这里改用带缓冲的 SharedFlow。 */
+    /** 帧与业务事件可能在同一帧内连发，StateFlow 会覆盖先到的事件；replay 兜住订阅建立前的早期事件。 */
     private val _events = MutableSharedFlow<CoreEvent>(
-        replay = 0,
+        replay = 16,
         extraBufferCapacity = 64,
         onBufferOverflow = BufferOverflow.DROP_OLDEST,
     )

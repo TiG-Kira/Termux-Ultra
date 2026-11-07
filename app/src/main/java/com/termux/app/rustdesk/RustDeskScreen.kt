@@ -254,6 +254,7 @@ fun RustDeskScreen(
         RustDeskAuthProgressDialog(
             result = authResult,
             onCancel = {
+                authDone = true
                 scope.launch(Dispatchers.IO) { RustDeskAccount.cancel(context) }
             },
             onClose = { closeAuth() }
