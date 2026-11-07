@@ -31,6 +31,10 @@ internal object RustDeskAccount {
     @Volatile
     private var attached = false
 
+    /** 核心没有退出登录的 JNI，退出后内存里的登录态仍在，UI 侧据此抑制陈旧结果。 */
+    @Volatile
+    private var signedOut = false
+
     /** 快速登录复用上次成功的登录方式，首次默认走 RustDesk 账户授权页。 */
     fun lastOp(context: Context): String = context.applicationContext
         .getSharedPreferences("app_settings", Context.MODE_PRIVATE)
@@ -53,7 +57,7 @@ internal object RustDeskAccount {
     }
 
     fun state(context: Context): State {
-        if (!RustDeskCore.isAvailable()) return State(null, false)
+        if (signedOut || !RustDeskCore.isAvailable()) return State(null, false)
         val token = runCatching { RustDeskCore.nativeGetLocalOption("access_token") }
             .getOrNull().orEmpty()
         if (token.isBlank()) return State(null, false)
@@ -67,6 +71,7 @@ internal object RustDeskAccount {
     /** 必须在后台线程调用：核心 `account_auth` 会等待上一次轮询结束。 */
     fun signIn(context: Context, op: String, rememberMe: Boolean) {
         if (!available(context) || op.isBlank()) return
+        signedOut = false
         RustDeskCore.nativeAccountAuthCancel()
         RustDeskCore.nativeAccountAuth(op.trim(), rememberMe)
     }
@@ -79,6 +84,7 @@ internal object RustDeskAccount {
     /** 退出只清核心保存的凭据，不碰任何 Termux Ultra 自有账号数据。 */
     fun signOut(context: Context) {
         if (!available(context)) return
+        signedOut = true
         RustDeskCore.nativeAccountAuthCancel()
         RustDeskCore.nativeSetLocalOption("access_token", "")
         RustDeskCore.nativeSetLocalOption("user_info", "")

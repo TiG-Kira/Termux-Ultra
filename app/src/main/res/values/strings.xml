@@ -483,8 +483,8 @@
     <string name="rustdesk_client_not_installed">Not installed (not needed with the embedded core)</string>
     <string name="rustdesk_client_required">Sessions run on the embedded Rust core; the official app is only a fallback on unsupported devices.</string>
     <string name="rustdesk_core_status">Embedded core</string>
-    <string name="rustdesk_core_available">Available (arm64-v8a)</string>
-    <string name="rustdesk_core_unavailable">Unavailable (no native library for this ABI)</string>
+    <string name="rustdesk_core_available">arm64-v8a supported (embedded core)</string>
+    <string name="rustdesk_core_unavailable">Unsupported ABI (no native library)</string>
     <string name="rustdesk_session_help_title">Session controls</string>
     <string name="rustdesk_session_help_summary">Touch gestures, zoom and keyboard shortcuts</string>
     <string name="rustdesk_session_help_body">Single tap: left click\nLong press and drag: left-button drag\nTwo-finger tap: right click\nSingle-finger swipe: move the cursor\nPinch: zoom in or out\nTwo-finger drag: pan when zoomed, scroll otherwise\nThe toolbar provides Ctrl/Alt/Shift, the soft keyboard, function keys and 100% zoom.</string>
@@ -502,7 +502,7 @@
     <string name="rustdesk_account_custom_op">Custom sign-in method (op)</string>
     <string name="rustdesk_account_custom_op_start">Use custom</string>
     <string name="rustdesk_account_remember">Keep me signed in</string>
-    <string name="rustdesk_account_remember_desc">The core stores the access token for the next session</string>
+    <string name="rustdesk_account_remember_desc">The core keeps the sign-in for the next session</string>
     <string name="rustdesk_account_progress_title">Account sign-in</string>
     <string name="rustdesk_account_state_requesting">Requesting authorization…</string>
     <string name="rustdesk_account_state_waiting">Finish the authorization in your browser…</string>
@@ -510,6 +510,8 @@
     <string name="rustdesk_account_open_url">Open authorization page</string>
     <string name="rustdesk_account_copy_url">Copy link</string>
     <string name="rustdesk_account_done">Done</string>
+    <string name="rustdesk_session_defer">Later</string>
+    <string name="rustdesk_session_resume_credential">Enter credentials</string>
 
     <string name="rustdesk_session_connecting">Connecting…</string>
     <string name="rustdesk_session_connected">Connected</string>

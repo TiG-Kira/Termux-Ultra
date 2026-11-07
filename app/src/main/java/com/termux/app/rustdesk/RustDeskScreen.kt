@@ -103,7 +103,10 @@ fun RustDeskScreen(
         while (true) {
             val result = withContext(Dispatchers.IO) { RustDeskCore.accountAuthResult() }
             authResult = result
-            if (result?.stateMsg == "Login account auth" || !result?.userName.isNullOrEmpty()) {
+            if (result?.stateMsg == "Login account auth" ||
+                !result?.userName.isNullOrEmpty() ||
+                !result?.failedMsg.isNullOrEmpty()
+            ) {
                 authDone = true
                 accountState = withContext(Dispatchers.IO) { RustDeskAccount.state(context) }
                 break
@@ -124,9 +127,10 @@ fun RustDeskScreen(
 
     fun closeAuth() {
         showAuth = false
-        authDone = false
+        authDone = true
         authResult = null
         scope.launch(Dispatchers.IO) {
+            RustDeskAccount.cancel(context)
             accountState = RustDeskAccount.state(context)
         }
     }

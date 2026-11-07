@@ -28,6 +28,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.termux.R
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Text
@@ -42,25 +43,37 @@ internal sealed interface SessionDialog {
     data class OsLogin(val payload: RustDeskCore.EventPayload, val withPassword: Boolean) : SessionDialog
 }
 
+/** 凭据弹窗期间核心阻塞等待输入，误关会让会话卡死，因此不允许返回键或外部点击关闭。 */
+internal val SessionDialog.isCredential: Boolean get() = this !is SessionDialog.Message
+
 internal fun dialogFor(payload: RustDeskCore.EventPayload): SessionDialog? = when (payload.type) {
     "input-password", "re-input-password", "custom-os-password" -> SessionDialog.Password(payload)
     "input-2fa" -> SessionDialog.TwoFactor(payload)
     "terminal-admin-login" -> SessionDialog.OsLogin(payload, false)
     "terminal-admin-login-password" -> SessionDialog.OsLogin(payload, true)
-    "connecting", "success", "restarting", "restarting-show", "wait-uac",
+    "success", "restarting", "restarting-show", "wait-uac",
     "wait-remote-accept", "toast", "cancel_msgbox" -> null
     else -> SessionDialog.Message(payload)
 }
 
+/** [onDefer] 只收起凭据弹窗，由会话页保留重开入口；核心仍在等这次输入。 */
 @Composable
 internal fun RustDeskSessionDialogHost(
     dialog: SessionDialog?,
     sessionId: String,
     onDismiss: () -> Unit,
+    onDefer: () -> Unit,
 ) {
     if (dialog == null) return
     val context = LocalContext.current
-    Dialog(onDismissRequest = onDismiss) {
+    val credential = dialog.isCredential
+    Dialog(
+        onDismissRequest = { if (!credential) onDismiss() },
+        properties = DialogProperties(
+            dismissOnBackPress = !credential,
+            dismissOnClickOutside = !credential,
+        ),
+    ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -70,9 +83,9 @@ internal fun RustDeskSessionDialogHost(
         ) {
             when (dialog) {
                 is SessionDialog.Message -> MessageContent(dialog.payload, context, sessionId, onDismiss)
-                is SessionDialog.Password -> PasswordContent(dialog.payload, sessionId, onDismiss)
-                is SessionDialog.TwoFactor -> TwoFactorContent(sessionId, onDismiss)
-                is SessionDialog.OsLogin -> OsLoginContent(dialog.withPassword, sessionId, onDismiss)
+                is SessionDialog.Password -> PasswordContent(dialog.payload, sessionId, onDismiss, onDefer)
+                is SessionDialog.TwoFactor -> TwoFactorContent(sessionId, onDismiss, onDefer)
+                is SessionDialog.OsLogin -> OsLoginContent(dialog.withPassword, sessionId, onDismiss, onDefer)
             }
         }
     }
@@ -99,13 +112,14 @@ private fun DialogBody(text: String) {
 private fun DialogActions(
     onSubmit: () -> Unit,
     onDismiss: () -> Unit,
+    dismissLabel: String,
     extra: (@Composable () -> Unit)? = null,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         extra?.invoke()
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             TextButton(
-                text = stringResource(R.string.rustdesk_session_cancel),
+                text = dismissLabel,
                 onClick = onDismiss,
                 modifier = Modifier.weight(1f)
             )
@@ -173,6 +187,7 @@ private fun PasswordContent(
     payload: RustDeskCore.EventPayload,
     sessionId: String,
     onDismiss: () -> Unit,
+    onDefer: () -> Unit,
 ) {
     var password by remember { mutableStateOf("") }
     var rememberMe by remember { mutableStateOf(false) }
@@ -194,7 +209,8 @@ private fun PasswordContent(
                 RustDeskCore.nativeSessionLogin(sessionId, "", "", password, rememberMe)
                 onDismiss()
             },
-            onDismiss = onDismiss,
+            onDismiss = onDefer,
+            dismissLabel = stringResource(R.string.rustdesk_session_defer),
             extra = {
                 RememberToggle(rememberMe) { rememberMe = it }
             }
@@ -203,7 +219,7 @@ private fun PasswordContent(
 }
 
 @Composable
-private fun TwoFactorContent(sessionId: String, onDismiss: () -> Unit) {
+private fun TwoFactorContent(sessionId: String, onDismiss: () -> Unit, onDefer: () -> Unit) {
     var code by remember { mutableStateOf("") }
     var trust by remember { mutableStateOf(false) }
     Column(
@@ -221,14 +237,20 @@ private fun TwoFactorContent(sessionId: String, onDismiss: () -> Unit) {
                 RustDeskCore.nativeSessionSend2fa(sessionId, code, trust)
                 onDismiss()
             },
-            onDismiss = onDismiss,
+            onDismiss = onDefer,
+            dismissLabel = stringResource(R.string.rustdesk_session_defer),
             extra = { RememberToggle(trust) { trust = it } }
         )
     }
 }
 
 @Composable
-private fun OsLoginContent(withPassword: Boolean, sessionId: String, onDismiss: () -> Unit) {
+private fun OsLoginContent(
+    withPassword: Boolean,
+    sessionId: String,
+    onDismiss: () -> Unit,
+    onDefer: () -> Unit,
+) {
     var user by remember { mutableStateOf("") }
     var osPassword by remember { mutableStateOf("") }
     var rememberMe by remember { mutableStateOf(true) }
@@ -256,7 +278,8 @@ private fun OsLoginContent(withPassword: Boolean, sessionId: String, onDismiss: 
                 RustDeskCore.nativeSessionLogin(sessionId, user, osPassword, "", rememberMe)
                 onDismiss()
             },
-            onDismiss = onDismiss,
+            onDismiss = onDefer,
+            dismissLabel = stringResource(R.string.rustdesk_session_defer),
             extra = { RememberToggle(rememberMe) { rememberMe = it } }
         )
     }

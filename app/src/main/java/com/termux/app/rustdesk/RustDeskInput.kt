@@ -113,3 +113,34 @@ internal val QUICK_KEYS = listOf(
     QuickKey("F5", "VK_F5"),
     QuickKey("F11", "VK_F11"),
 )
+
+/**
+ * 双指拖动 → 滚轮格数。服务端 `input_service.rs` 会把 wheel 的 x/y 乘 WHEEL_DELTA(120)，
+ * 直接下发像素位移会被放大成暴滚；这里按上游 onPointerSignalImage 归一化为小整数并锁定主轴。
+ */
+internal class WheelAccumulator {
+    private var x = 0f
+    private var y = 0f
+
+    fun add(delta: Offset): Pair<Int, Int> {
+        x += delta.x
+        y += delta.y
+        val stepsX = (x / STEP_PX).toInt()
+        val stepsY = (y / STEP_PX).toInt()
+        if (stepsX == 0 && stepsY == 0) return 0 to 0
+        x -= stepsX * STEP_PX
+        y -= stepsY * STEP_PX
+        val ax = if (stepsX < 0) -stepsX else stepsX
+        val ay = if (stepsY < 0) -stepsY else stepsY
+        return if (ax >= ay) {
+            (-stepsX).coerceIn(-MAX_STEPS, MAX_STEPS) to 0
+        } else {
+            0 to (-stepsY).coerceIn(-MAX_STEPS, MAX_STEPS)
+        }
+    }
+
+    private companion object {
+        const val STEP_PX = 24f
+        const val MAX_STEPS = 3
+    }
+}

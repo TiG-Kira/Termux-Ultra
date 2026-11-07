@@ -8,6 +8,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -51,6 +52,7 @@ import com.termux.app.compose.KiTerminalTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.onSubscription
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
@@ -171,6 +173,7 @@ private fun RustDeskSessionScreen(
     val panState = remember { mutableStateOf(Offset.Zero) }
     val rightMode = remember { mutableStateOf(false) }
     var dialog by remember { mutableStateOf<SessionDialog?>(null) }
+    var deferredDialog by remember { mutableStateOf<SessionDialog?>(null) }
 
     var ctrlLock by remember { mutableStateOf(false) }
     var altLock by remember { mutableStateOf(false) }
@@ -182,28 +185,29 @@ private fun RustDeskSessionScreen(
     val keyboard = LocalSoftwareKeyboardController.current
     val gestureScope = rememberCoroutineScope()
 
-    // 先挂事件订阅再建连：建连期间的 msgbox/错误事件不会在订阅前丢失
+    // onSubscription 保证订阅建立后才建连，建连期间的核心事件不会再丢
     LaunchedEffect(Unit) {
-        launch {
-            val addError = withContext(Dispatchers.IO) {
-                RustDeskCore.nativeSessionAdd(sessionId, peerId, password, forceRelay, "", "")
+        RustDeskCore.events.onSubscription {
+            launch {
+                val addError = withContext(Dispatchers.IO) {
+                    RustDeskCore.nativeSessionAdd(sessionId, peerId, password, forceRelay, "", "")
+                }
+                if (!addError.isNullOrEmpty()) {
+                    dialog = SessionDialog.Message(
+                        RustDeskCore.EventPayload(type = "error", text = addError)
+                    )
+                    return@launch
+                }
+                val started = withContext(Dispatchers.IO) {
+                    RustDeskCore.nativeSessionStart(sessionId, peerId)
+                }
+                if (!started) {
+                    dialog = SessionDialog.Message(
+                        RustDeskCore.EventPayload(type = "error", text = "session_start failed")
+                    )
+                }
             }
-            if (!addError.isNullOrEmpty()) {
-                dialog = SessionDialog.Message(
-                    RustDeskCore.EventPayload(type = "error", text = addError)
-                )
-                return@launch
-            }
-            val started = withContext(Dispatchers.IO) {
-                RustDeskCore.nativeSessionStart(sessionId, peerId)
-            }
-            if (!started) {
-                dialog = SessionDialog.Message(
-                    RustDeskCore.EventPayload(type = "error", text = "session_start failed")
-                )
-            }
-        }
-        RustDeskCore.events.collect { e ->
+        }.collect { e ->
             // 全局事件 sessionId 为空；会话事件只收本会话的
             if (e.sessionId.isNotEmpty() && e.sessionId != sessionId) return@collect
             when (e.kind) {
@@ -213,10 +217,11 @@ private fun RustDeskSessionScreen(
                         "close" -> onClose()
                         "connected" -> status = connectedText
                         "msgbox" -> if (p != null) {
+                            deferredDialog = null
                             dialog = dialogFor(p)
                             status = p.title.ifBlank { p.text.ifBlank { p.type } }
                         }
-                        "cancel_msgbox" -> dialog = null
+                        "cancel_msgbox" -> if (dialog is SessionDialog.Message) dialog = null
                         "toast" -> status = p?.text.orEmpty()
                         else -> status = p?.title?.takeIf { it.isNotEmpty() }
                             ?: p?.text?.takeIf { it.isNotEmpty() }
@@ -233,9 +238,14 @@ private fun RustDeskSessionScreen(
                         if (frameBuf.size != need) frameBuf = ByteArray(need)
                         // 软渲染输出紧密排列的 RGBA，与 ARGB_8888 的内存字节序一致
                         if (RustDeskCore.nativeCopyRgba(sessionId, display, frameBuf) == need) {
-                            val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-                            bitmap.copyPixelsFromBuffer(ByteBuffer.wrap(frameBuf))
-                            frame = bitmap.asImageBitmap()
+                            // 整屏分配与拷贝移出主线程，高帧率下才不会堵塞绘制
+                            val pixels = frameBuf
+                            val image = withContext(Dispatchers.Default) {
+                                val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+                                bitmap.copyPixelsFromBuffer(ByteBuffer.wrap(pixels))
+                                bitmap.asImageBitmap()
+                            }
+                            frame = image
                             frameDims.value = IntSize(width, height)
                             status = connectedText
                         }
@@ -336,6 +346,7 @@ private fun RustDeskSessionScreen(
                             var dragDistance = 0f
                             var prevCentroid = downPos
                             var prevSpread = 0f
+                            val wheel = WheelAccumulator()
 
                             // 长按进入拖放：按下左键，随后的移动就是拖动而不是单纯移动光标
                             val longPressJob: Job = gestureScope.launch {
@@ -367,22 +378,20 @@ private fun RustDeskSessionScreen(
                                             pinchOrPan = true
                                         }
                                         val delta = centroid - prevCentroid
-                                        if (delta.getDistance() > 1f) {
+                                        if (delta.getDistance() > 3f) {
                                             pinchOrPan = true
                                             if (zoomState.value > 1.01f) {
                                                 panState.value = clampPan(
                                                     frameDims.value, viewSize.value, zoomState.value,
                                                     panState.value + delta
                                                 )
-                                            } else if (delta.x.toInt() != 0 || delta.y.toInt() != 0) {
-                                                // 未放大时双指滑动当滚轮，delta 即 wheel 的 x/y
-                                                sendMouse(
-                                                    mouseMessage(
-                                                        type = "wheel",
-                                                        x = delta.x.toInt(),
-                                                        y = delta.y.toInt()
-                                                    )
-                                                )
+                                            } else {
+                                                // 未放大时双指滑动当滚轮；服务端会乘 WHEEL_DELTA，
+                                                // 所以按格数下发，不能直接把像素位移当 x/y
+                                                val (dx, dy) = wheel.add(delta)
+                                                if (dx != 0 || dy != 0) {
+                                                    sendMouse(mouseMessage(type = "wheel", x = dx, y = dy))
+                                                }
                                             }
                                         }
                                     }
@@ -460,6 +469,7 @@ private fun RustDeskSessionScreen(
                 .align(Alignment.TopCenter)
                 .fillMaxWidth()
                 .background(Color.Black.copy(alpha = 0.55f))
+                .clickable {}
                 .statusBarsPadding()
                 .padding(horizontal = 8.dp, vertical = 4.dp)
         ) {
@@ -476,6 +486,16 @@ private fun RustDeskSessionScreen(
                     ),
                     color = Color.White.copy(alpha = 0.75f)
                 )
+                if (deferredDialog != null) {
+                    TextButton(
+                        text = stringResource(R.string.rustdesk_session_resume_credential),
+                        onClick = {
+                            dialog = deferredDialog
+                            deferredDialog = null
+                        },
+                        colors = ButtonDefaults.textButtonColorsPrimary(),
+                    )
+                }
                 TextButton(
                     text = stringResource(R.string.rustdesk_session_disconnect),
                     onClick = onClose,
@@ -586,7 +606,14 @@ private fun RustDeskSessionScreen(
         RustDeskSessionDialogHost(
             dialog = dialog,
             sessionId = sessionId,
-            onDismiss = { dialog = null }
+            onDismiss = {
+                if (dialog?.isCredential == true) deferredDialog = null
+                dialog = null
+            },
+            onDefer = {
+                deferredDialog = dialog
+                dialog = null
+            }
         )
     }
 }
