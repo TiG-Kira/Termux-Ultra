@@ -7,17 +7,14 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
@@ -26,7 +23,7 @@ import top.yukonga.miuix.kmp.basic.LinearProgressIndicator
 import top.yukonga.miuix.kmp.basic.TabRowWithContour
 import top.yukonga.miuix.kmp.preference.RadioButtonPreference
 import top.yukonga.miuix.kmp.preference.SwitchPreference
-import top.yukonga.miuix.kmp.preference.WindowDropdownPreference
+import top.yukonga.miuix.kmp.preference.OverlayDropdownPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -216,26 +213,17 @@ private fun VmWizardContent(
             .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        // 名称 Card —— 公共，始终显示
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(16.dp))
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text(
-                    text = "虚拟机名称",
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MiuixTheme.colorScheme.primary
-                )
-                Spacer(Modifier.height(8.dp))
+        // 名称 —— 公共，始终显示
+        SmallTitle(text = "虚拟机名称")
+        SettingCard {
+            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
                 TextField(
                     value = vmName,
                     onValueChange = {
                         vmName = it
                         nameAutoFilled = false
                     },
+                    modifier = Modifier.fillMaxWidth(),
                     label = "请输入虚拟机名称"
                 )
             }
@@ -246,7 +234,7 @@ private fun VmWizardContent(
             tabs = listOf("手动配置", "Agent 自动配置"),
             selectedTabIndex = selectedTab,
             onTabSelected = { selectedTab = it },
-            modifier = Modifier.padding(horizontal = 12.dp)
+            modifier = Modifier.padding(horizontal = 16.dp)
         )
 
         // ── Tab 内容区 ──
@@ -314,20 +302,9 @@ private fun VmWizardContent(
         } else {
             // ============ 手动配置 Tab ============
             // 提供方式
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(16.dp))
-            ) {
+            SmallTitle(text = "提供方式")
+            SettingCard {
                 Column {
-                    Row(modifier = Modifier.padding(16.dp, 16.dp, 16.dp, 0.dp)) {
-                        Text(
-                            text = "选择提供方式",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MiuixTheme.colorScheme.primary
-                        )
-                    }
                     RadioButtonPreference(
                         title = "提供现有磁盘",
                         summary = "使用已有的磁盘镜像文件直接启动",
@@ -337,6 +314,7 @@ private fun VmWizardContent(
                             mountIso = isoPath.isNotBlank()
                         }
                     )
+                    PreferenceDivider()
                     RadioButtonPreference(
                         title = "提供安装镜像",
                         summary = "使用 ISO 镜像安装系统，将创建新硬盘",
@@ -346,6 +324,7 @@ private fun VmWizardContent(
                             mountIso = true
                         }
                     )
+                    PreferenceDivider()
                     RadioButtonPreference(
                         title = "新建空白磁盘",
                         summary = "创建新的空白磁盘镜像，不挂载 ISO",
@@ -359,36 +338,27 @@ private fun VmWizardContent(
             }
 
             // 磁盘镜像
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(16.dp))
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        text = "磁盘镜像",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MiuixTheme.colorScheme.primary
-                    )
-                    Spacer(Modifier.height(8.dp))
-
+            SmallTitle(text = "磁盘镜像")
+            SettingCard {
+                Column {
                     if (mode == "existing_disk") {
-                        Text(
-                            text = if (diskPath.isBlank()) "未选择磁盘文件" else diskPath,
-                            fontSize = 13.sp,
-                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        TextButton(
-                            text = "选择磁盘文件",
-                            onClick = { fileSourceTarget = "disk" },
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = ButtonDefaults.textButtonColorsPrimary()
-                        )
+                        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                            Text(
+                                text = if (diskPath.isBlank()) "未选择磁盘文件" else diskPath,
+                                fontSize = 13.sp,
+                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            TextButton(
+                                text = "选择磁盘文件",
+                                onClick = { fileSourceTarget = "disk" },
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = ButtonDefaults.textButtonColorsPrimary()
+                            )
+                        }
                     } else {
                         // 新建磁盘：显示大小、格式、路径
-                        WindowDropdownPreference(
+                        OverlayDropdownPreference(
                             title = "硬盘大小",
                             items = listOf("10 GB", "20 GB", "40 GB", "60 GB", "80 GB"),
                             selectedIndex = listOf(10, 20, 40, 60, 80).indexOf(newDiskSizeGB).coerceAtLeast(0),
@@ -396,7 +366,8 @@ private fun VmWizardContent(
                                 newDiskSizeGB = listOf(10, 20, 40, 60, 80)[it]
                             }
                         )
-                        WindowDropdownPreference(
+                        PreferenceDivider()
+                        OverlayDropdownPreference(
                             title = "硬盘格式",
                             items = listOf("qcow2", "raw", "vmdk"),
                             selectedIndex = listOf("qcow2", "raw", "vmdk").indexOf(newDiskFormat).coerceAtLeast(0),
@@ -404,11 +375,11 @@ private fun VmWizardContent(
                                 newDiskFormat = listOf("qcow2", "raw", "vmdk")[it]
                             }
                         )
-                        Spacer(Modifier.height(8.dp))
                         Text(
                             text = "将创建到：${ensureCreateDiskPath()}",
                             fontSize = 12.sp,
-                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                            modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp)
                         )
                     }
                 }
@@ -416,19 +387,9 @@ private fun VmWizardContent(
 
             // ISO 镜像（install_iso 模式必填；existing_disk / create_disk 可选）
             if (mode == "install_iso" || mountIso) {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(16.dp))
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text(
-                            text = if (mode == "install_iso") "安装镜像 (ISO)" else "ISO 镜像（可选）",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MiuixTheme.colorScheme.primary
-                        )
-                        Spacer(Modifier.height(8.dp))
+                SmallTitle(text = if (mode == "install_iso") "安装镜像 (ISO)" else "ISO 镜像（可选）")
+                SettingCard {
+                    Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
                         Text(
                             text = if (isoPath.isBlank()) "未选择 ISO 文件" else isoPath,
                             fontSize = 13.sp,
@@ -456,11 +417,7 @@ private fun VmWizardContent(
 
             // existing_disk / create_disk 模式下可开关 ISO 挂载
             if (mode != "install_iso") {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(16.dp))
-                ) {
+                SettingCard {
                     SwitchPreference(
                         title = "挂载 ISO 镜像",
                         summary = if (mountIso) "启动时挂载 ISO" else "不挂载 ISO",
@@ -477,31 +434,21 @@ private fun VmWizardContent(
             }
 
             // CPU 核心数 + CPU 类型 + 内存
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(16.dp))
-            ) {
+            SmallTitle(text = "CPU 与内存")
+            SettingCard {
                 Column {
-                    Row(modifier = Modifier.padding(16.dp, 16.dp, 16.dp, 0.dp)) {
-                        Text(
-                            text = "CPU 与内存",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MiuixTheme.colorScheme.primary
-                        )
-                    }
-                    WindowDropdownPreference(
+                    OverlayDropdownPreference(
                         title = "CPU 核心数",
                         items = listOf("1 核", "2 核", "4 核", "8 核"),
                         selectedIndex = listOf(1, 2, 4, 8).indexOf(cpuCores).coerceAtLeast(0),
                         onSelectedIndexChange = { cpuCores = listOf(1, 2, 4, 8)[it] }
                     )
+                    PreferenceDivider()
                     // CPU 类型：用户可选，支持自定义（留空则用 QEMU 默认）
                     val cpuModels = listOf("不指定（QEMU 自动）", "host", "max", "qemu64", "qemu64-v2", "epyc", "epyc-v2", "epyc-v3", "x86_64-v2", "x86_64-v3", "x86_64-v4", "kvm64")
                     val cpuModelLabels = listOf("不指定（QEMU 自动）", "host (宿主机直通)", "max (最大特性)", "qemu64 (基础 x86_64)", "qemu64-v2 (基础+)", "EPYC (AMD)", "EPYC-v2 (AMD Zen2)", "EPYC-v3 (AMD Zen3)", "x86_64-v2 (Haswell)", "x86_64-v3 (Broadwell)", "x86_64-v4 (Skylake)", "kvm64 (KVM 默认)")
                     val currentCpuModelIndex = if (cpuModelOverride.isBlank()) 0 else cpuModels.indexOf(cpuModelOverride).coerceAtLeast(0)
-                    WindowDropdownPreference(
+                    OverlayDropdownPreference(
                         title = "CPU 类型",
                         items = cpuModelLabels,
                         selectedIndex = currentCpuModelIndex,
@@ -509,7 +456,8 @@ private fun VmWizardContent(
                             cpuModelOverride = if (idx == 0) "" else cpuModels[idx]
                         }
                     )
-                    WindowDropdownPreference(
+                    PreferenceDivider()
+                    OverlayDropdownPreference(
                         title = "内存大小",
                         items = listOf("512 MB", "1024 MB", "2048 MB", "4096 MB", "8192 MB"),
                         selectedIndex = listOf(512, 1024, 2048, 4096, 8192).indexOf(memoryMB).coerceAtLeast(0),
@@ -519,21 +467,10 @@ private fun VmWizardContent(
             }
 
             // 虚拟PC类型与硬盘接口
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(16.dp))
-            ) {
+            SmallTitle(text = "机型与硬盘接口")
+            SettingCard {
                 Column {
-                    Row(modifier = Modifier.padding(16.dp, 16.dp, 16.dp, 0.dp)) {
-                        Text(
-                            text = "机型与硬盘接口",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MiuixTheme.colorScheme.primary
-                        )
-                    }
-                    WindowDropdownPreference(
+                    OverlayDropdownPreference(
                         title = "虚拟PC类型",
                         items = listOf("Q35 (现代PC)", "PC (i440fx 传统PC)", "ISA PC (老式PC)"),
                         selectedIndex = listOf("q35", "pc", "isapc").indexOf(machineType).coerceAtLeast(0),
@@ -541,7 +478,8 @@ private fun VmWizardContent(
                             machineType = listOf("q35", "pc", "isapc")[it]
                         }
                     )
-                    WindowDropdownPreference(
+                    PreferenceDivider()
+                    OverlayDropdownPreference(
                         title = "硬盘连接方式",
                         items = listOf("IDE (兼容性最好)", "VirtIO (高性能)", "SATA (AHCI)", "SCSI (virtio-scsi)"),
                         selectedIndex = listOf("ide", "virtio", "sata", "scsi").indexOf(diskInterface).coerceAtLeast(0),
@@ -553,26 +491,16 @@ private fun VmWizardContent(
             }
 
             // 音频输出模式 —— 只在手动 Tab 里，Agent 不碰
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(16.dp))
-            ) {
+            SmallTitle(text = "音频输出模式")
+            SettingCard {
                 Column {
-                    Row(modifier = Modifier.padding(16.dp, 16.dp, 16.dp, 0.dp)) {
-                        Text(
-                            text = "音频输出模式",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MiuixTheme.colorScheme.primary
-                        )
-                    }
                     RadioButtonPreference(
                         title = "关闭",
                         summary = "虚拟机无声音输出",
                         selected = audioMode == AudioMode.DISABLED,
                         onClick = { audioMode = AudioMode.DISABLED }
                     )
+                    PreferenceDivider()
                     RadioButtonPreference(
                         title = "VNC RFB 扩展（推荐）",
                         summary = if (shouldUseQemuInContainer()) {
@@ -583,12 +511,14 @@ private fun VmWizardContent(
                         selected = audioMode == AudioMode.VNC_RFB,
                         onClick = { audioMode = AudioMode.VNC_RFB }
                     )
+                    PreferenceDivider()
                     RadioButtonPreference(
                         title = "PulseAudio - 跟随 VNC 页面",
                         summary = "进入 VNC 页面时开始播放声音，退出页面时停止播放；使用容器/原生 PulseAudio 服务",
                         selected = audioMode == AudioMode.PA_FOLLOW_SCREEN,
                         onClick = { audioMode = AudioMode.PA_FOLLOW_SCREEN }
                     )
+                    PreferenceDivider()
                     RadioButtonPreference(
                         title = "PulseAudio - 持续播放",
                         summary = "虚拟机声音持续播放（即使关闭 VNC 页面），可用任意 PulseAudio 客户端收听",
@@ -599,19 +529,9 @@ private fun VmWizardContent(
             }
 
             // 共享目录
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(16.dp))
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        text = "共享目录",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MiuixTheme.colorScheme.primary
-                    )
-                    Spacer(Modifier.height(4.dp))
+            SmallTitle(text = "共享目录")
+            SettingCard {
+                Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
                     Text(
                         text = "使用内部存储在 Termux 中的映射目录（shared）来访问",
                         fontSize = 12.sp,
@@ -621,28 +541,18 @@ private fun VmWizardContent(
                     TextField(
                         value = shareDir,
                         onValueChange = { shareDir = it },
+                        modifier = Modifier.fillMaxWidth(),
                         label = "共享目录路径"
                     )
                 }
             }
 
             // 引导顺序
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(16.dp))
-            ) {
+            SmallTitle(text = "引导顺序")
+            SettingCard {
                 Column {
-                    Row(modifier = Modifier.padding(16.dp, 16.dp, 16.dp, 0.dp)) {
-                        Text(
-                            text = "引导顺序",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MiuixTheme.colorScheme.primary
-                        )
-                    }
                     if (mode == "install_iso") {
-                        WindowDropdownPreference(
+                        OverlayDropdownPreference(
                             title = "第一启动设备",
                             items = listOf("CD-ROM"),
                             selectedIndex = 0,
@@ -651,13 +561,15 @@ private fun VmWizardContent(
                     } else {
                         val bootOptions = listOf("硬盘", "CD-ROM", "无")
                         val bootValues = listOf("c", "d", "")
-                        WindowDropdownPreference(
+                        OverlayDropdownPreference(
                             title = "第一启动设备",
                             items = bootOptions,
                             selectedIndex = bootValues.indexOf(bootDevice1).coerceAtLeast(0),
                             onSelectedIndexChange = { bootDevice1 = bootValues[it] }
                         )
                     }
+
+                    PreferenceDivider()
 
                     val hasIso = mode == "install_iso" || (mode != "install_iso" && mountIso && isoPath.isNotBlank())
                     val bootOptions2 = if (hasIso) {
@@ -670,7 +582,7 @@ private fun VmWizardContent(
                     } else {
                         listOf("c", "")
                     }
-                    WindowDropdownPreference(
+                    OverlayDropdownPreference(
                         title = "第二启动设备",
                         items = bootOptions2,
                         selectedIndex = bootValues2.indexOf(bootDevice2).coerceAtLeast(0),
@@ -680,19 +592,9 @@ private fun VmWizardContent(
             }
 
             // VNC 端口
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(16.dp))
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        text = "VNC 端口",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MiuixTheme.colorScheme.primary
-                    )
-                    Spacer(Modifier.height(4.dp))
+            SmallTitle(text = "VNC 端口")
+            SettingCard {
+                Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
                     Text(
                         text = "留空或填写端口号，默认 5900",
                         fontSize = 12.sp,
@@ -702,6 +604,7 @@ private fun VmWizardContent(
                     TextField(
                         value = vncPort,
                         onValueChange = { vncPort = it.filter { c -> c.isDigit() } },
+                        modifier = Modifier.fillMaxWidth(),
                         label = "VNC 端口号"
                     )
                 }
@@ -1145,25 +1048,13 @@ private fun AgentVmConfigTab(
     onGenerate: () -> Unit
 ) {
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 12.dp),
+        modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         // 一句话描述输入
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(16.dp))
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text(
-                    text = "描述你的虚拟机需求",
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MiuixTheme.colorScheme.primary
-                )
-                Spacer(Modifier.height(4.dp))
+        SmallTitle(text = "描述你的虚拟机需求")
+        SettingCard {
+            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
                 Text(
                     text = "Agent 会根据你的描述自动推荐合适的硬件配置",
                     fontSize = 12.sp,
@@ -1189,30 +1080,21 @@ private fun AgentVmConfigTab(
 
         // Agent 错误提示
         if (agentError != null) {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(16.dp))
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        text = "⚠️ $agentError",
-                        fontSize = 12.sp,
-                        color = MiuixTheme.colorScheme.error
-                    )
-                }
+            SettingCard {
+                Text(
+                    text = "⚠️ $agentError",
+                    fontSize = 12.sp,
+                    color = MiuixTheme.colorScheme.error,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
+                )
             }
         }
 
         // Agent 加载中
         if (agentLoading) {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(16.dp))
-            ) {
+            SettingCard {
                 Column(
-                    modifier = Modifier.padding(16.dp),
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
@@ -1228,19 +1110,9 @@ private fun AgentVmConfigTab(
 
         // Agent 建议结果展示
         if (agentSuggestion != null && !agentLoading) {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(16.dp))
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        text = "Agent 推荐的硬件配置",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MiuixTheme.colorScheme.primary
-                    )
-                    Spacer(Modifier.height(8.dp))
+            SmallTitle(text = "Agent 推荐的硬件配置")
+            SettingCard {
+                Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
                     // 建议详情列表
                     listOfNotNull(
                         "机器类型: ${agentSuggestion.machineType}",
@@ -1285,19 +1157,8 @@ private fun AgentVmConfigTab(
 
         // 使用说明
         if (agentSuggestion == null && agentError == null && !agentLoading) {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(16.dp))
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        text = "使用说明",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MiuixTheme.colorScheme.primary
-                    )
-                    Spacer(Modifier.height(8.dp))
+            SettingCard {
+                Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
                     listOf(
                         "• 在上方用一句话描述你的虚拟机用途",
                         "• Agent 会推荐合适的机器类型 / CPU / 内存等硬件",
@@ -1316,4 +1177,3 @@ private fun AgentVmConfigTab(
         }
     }
 }
-

@@ -567,7 +567,8 @@ private fun LazyListScope.controlContent(
                     )
                     FieldHint(text = stringResource(R.string.agentpaw_control_mode_desc))
                 }
-                PhoneControlMode.entries.forEach { mode ->
+                PhoneControlMode.entries.forEachIndexed { index, mode ->
+                    if (index > 0) PreferenceDivider()
                     RadioButtonPreference(
                         title = stringResource(controlModeTitle(mode)),
                         summary = stringResource(controlModeDesc(mode)),
@@ -607,7 +608,8 @@ private fun LazyListScope.controlContent(
                     )
                     FieldHint(text = stringResource(R.string.agentpaw_vision_mode_desc))
                 }
-                visionOptions.forEach { (mode, labels) ->
+                visionOptions.forEachIndexed { index, (mode, labels) ->
+                    if (index > 0) PreferenceDivider()
                     RadioButtonPreference(
                         title = stringResource(labels.first),
                         summary = stringResource(labels.second),

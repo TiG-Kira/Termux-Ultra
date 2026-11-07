@@ -8,8 +8,6 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.clickable
@@ -18,6 +16,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -43,10 +42,21 @@ import com.kyant.backdrop.effects.blur
 import com.kyant.backdrop.effects.lens
 import com.kyant.backdrop.effects.vibrancy
 import com.kyant.shapes.RoundedRectangle
+import top.yukonga.miuix.kmp.glass.GlassMotion
+import top.yukonga.miuix.kmp.glass.GlassOverlayDefaults
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 /** 液态玻璃弹层的圆角（与 miuix 对话框的 32dp 对齐，比 glass 默认 28dp 更硬朗）。 */
 val LiquidDialogCornerRadius: Dp = 32.dp
+
+/**
+ * 液态弹层的两种出场方式。
+ *
+ * - [Dialog]：完全对齐柔光样式里 miuix `GlassDialog` 的落位与动效（底部居中、上滑 1/4 进场），
+ *   两套主题切换时对话框的位置和节奏保持一致。
+ * - [BottomSheet]：底部贴边、整块自下而上滑入。
+ */
+enum class LiquidDialogMotion { Dialog, BottomSheet }
 
 /**
  * 液态玻璃弹层（Kyant0/AndroidLiquidGlass 独立实现）。
@@ -70,18 +80,25 @@ fun LiquidGlassDialog(
     alignment: Alignment = Alignment.BottomCenter,
     scrimColor: Color = Color.Black,
     cornerRadius: Dp = LiquidDialogCornerRadius,
+    motion: LiquidDialogMotion = LiquidDialogMotion.BottomSheet,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val isDark = MiuixTheme.colorScheme.background.luminance() < 0.5f
-    val scrimAlpha = if (isDark) 0.60f else 0.30f
+    val scrimAlpha = if (isDark) GlassOverlayDefaults.ScrimAlphaDark else GlassOverlayDefaults.ScrimAlphaLight
+    val isBottomSheet = motion == LiquidDialogMotion.BottomSheet
 
     // 延迟一帧再置可见：否则首次组合时 visible 已是 true，AnimatedVisibility 判定为首帧可见而不播进入动画
     val animVisible = remember { mutableStateOf(false) }
     LaunchedEffect(visible) { animVisible.value = visible }
 
+    // 对话框的 scrim 节奏与柔光 GlassDialog 一致（进 spring / 退 tween 260）。
     val scrim by animateFloatAsState(
         targetValue = if (animVisible.value) scrimAlpha else 0f,
-        animationSpec = tween(if (animVisible.value) 260 else 200),
+        animationSpec = if (!isBottomSheet) {
+            if (animVisible.value) GlassMotion.dialogEnter() else GlassMotion.dialogExit()
+        } else {
+            tween(if (animVisible.value) 260 else 200)
+        },
         label = "liquidDialogScrim",
     )
 
@@ -120,33 +137,35 @@ fun LiquidGlassDialog(
                     onClick = onDismissRequest,
                 ),
         )
-        val isBottomAttached = alignment == Alignment.BottomCenter
+        // 两种出场共用底部落位与 12dp 外边距（对齐 miuix GlassDialog），只有滑动距离和节奏不同。
         AnimatedVisibility(
             visible = animVisible.value,
             modifier = Modifier
                 .align(alignment)
                 .padding(
-                    start = 12.dp,
-                    end = 12.dp,
-                    bottom = if (isBottomAttached) 12.dp else 0.dp,
+                    start = GlassOverlayDefaults.DialogOutsideMargin,
+                    end = GlassOverlayDefaults.DialogOutsideMargin,
+                    bottom = GlassOverlayDefaults.DialogOutsideMargin,
                 )
-                .let { m ->
-                    val withIme = m.imePadding()
-                    if (isBottomAttached) withIme.navigationBarsPadding() else withIme
-                },
-            enter = if (isBottomAttached) {
+                .imePadding()
+                .navigationBarsPadding(),
+            enter = if (isBottomSheet) {
                 slideInVertically(animationSpec = tween(280), initialOffsetY = { it }) +
                     fadeIn(animationSpec = tween(200))
             } else {
-                scaleIn(animationSpec = tween(280), initialScale = 0.86f) +
-                    fadeIn(animationSpec = tween(200))
+                slideInVertically(
+                    animationSpec = GlassMotion.dialogEnter(),
+                    initialOffsetY = { it / 4 },
+                ) + fadeIn(animationSpec = GlassMotion.fadeIn())
             },
-            exit = if (isBottomAttached) {
+            exit = if (isBottomSheet) {
                 slideOutVertically(animationSpec = tween(220), targetOffsetY = { it }) +
                     fadeOut(animationSpec = tween(160))
             } else {
-                scaleOut(animationSpec = tween(220), targetScale = 0.9f) +
-                    fadeOut(animationSpec = tween(160))
+                slideOutVertically(
+                    animationSpec = GlassMotion.dialogExit(),
+                    targetOffsetY = { it / 4 },
+                ) + fadeOut(animationSpec = GlassMotion.fadeOut())
             },
         ) {
             Column(
@@ -162,7 +181,13 @@ fun LiquidGlassDialog(
                     .pointerInput(Unit) {
                         detectTapGestures { /* 吞掉弹层内部点击，避免穿透到 Scrim */ }
                     }
-                    .padding(24.dp),
+                    .padding(
+                        if (isBottomSheet) {
+                            PaddingValues(24.dp)
+                        } else {
+                            PaddingValues(horizontal = 22.dp, vertical = 20.dp)
+                        }
+                    ),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 content = content,
             )
