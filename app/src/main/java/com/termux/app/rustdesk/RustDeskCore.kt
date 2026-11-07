@@ -37,6 +37,13 @@ object RustDeskCore {
         }
     }
 
+    /**
+     * 本机架构是否带得动核心原生库（librustdesk.so 只出 arm64-v8a 产物）。
+     * 纯 ABI 判断，不触发 so 加载，供设置页置灰开关等无副作用场景使用。
+     */
+    fun isAbiSupported(): Boolean =
+        android.os.Build.SUPPORTED_64_BIT_ABIS.contains("arm64-v8a")
+
     /** 核心事件：sessionId 可能为空串（全局事件），kind 见 [EventKind]，payload 为 JSON 或纯值。 */
     data class CoreEvent(val sessionId: String, val kind: String, val payload: String)
 
