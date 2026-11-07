@@ -37,6 +37,13 @@ object RustDeskCore {
         }
     }
 
+    /**
+     * 本机架构是否带得动核心原生库（librustdesk.so 只出 arm64-v8a 产物）。
+     * 纯 ABI 判断，不触发 so 加载，供设置页置灰开关等无副作用场景使用。
+     */
+    fun isAbiSupported(): Boolean =
+        android.os.Build.SUPPORTED_64_BIT_ABIS.contains("arm64-v8a")
+
     /** 核心事件：sessionId 可能为空串（全局事件），kind 见 [EventKind]，payload 为 JSON 或纯值。 */
     data class CoreEvent(val sessionId: String, val kind: String, val payload: String)
 
@@ -50,10 +57,10 @@ object RustDeskCore {
     val events: StateFlow<CoreEvent?> = _events.asStateFlow()
 
     /**
-     * 由 Rust 网络线程经 JNI 回调。必须保持 public + `@JvmStatic` 的方法签名：
-     * `onEvent(String, String, String) : Unit`，改动会让 native 侧找不到入口。
+     * 由 Rust 网络线程经 JNI 回调。必须保持 public **实例方法**：
+     * Rust 侧用 GetMethodID（非 static）按签名 `(String, String, String) : Unit` 查找，
+     * 加 `@JvmStatic` 会把它变成静态方法导致 NoSuchMethodError。
      */
-    @JvmStatic
     @androidx.annotation.Keep
     fun onEvent(sessionId: String, kind: String, payload: String) {
         _events.tryEmit(CoreEvent(sessionId, kind, payload))

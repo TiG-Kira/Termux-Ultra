@@ -168,6 +168,8 @@ fun SettingsScreen(
     val prefs = remember { context.getSharedPreferences("app_settings", Context.MODE_PRIVATE) }
     var vncEnabled by remember { mutableStateOf(prefs.getBoolean("vnc_enabled", false)) }
     var rustDeskEnabled by remember { mutableStateOf(com.termux.app.rustdesk.RustDeskSettings.isEnabled(context)) }
+    // 核心原生库只出 arm64-v8a；其它架构上开关置灰不可用
+    val rustDeskAbiOk = com.termux.app.rustdesk.RustDeskCore.isAbiSupported()
     var aiTermuxEnabled by remember { mutableStateOf(prefs.getBoolean("ai_termux_enabled", true)) }
     var aiDeveloperMode by remember { mutableStateOf(AiTermuxPrefs.isDeveloperMode(context)) }
 
@@ -758,18 +760,20 @@ fun SettingsScreen(
                     startAction = { SettingIcon(Icons.Rounded.DesktopWindows, contentDescription = context.getString(R.string.vnc)) }
                 )
             }),
-        SearchableSetting(sec_remote, context.getString(R.string.rustdesk), context.getString(R.string.rustdesk_description),
+        SearchableSetting(sec_remote, context.getString(R.string.rustdesk),
+            if (rustDeskAbiOk) context.getString(R.string.rustdesk_description) else context.getString(R.string.rustdesk_abi_unsupported),
             keywords = listOf("rustdesk", "远程", "remote", "桌面", "id", "连接码"),
             render = {
                 SwitchPreference(
                     title = context.getString(R.string.rustdesk),
-                    summary = context.getString(R.string.rustdesk_description),
+                    summary = if (rustDeskAbiOk) context.getString(R.string.rustdesk_description) else context.getString(R.string.rustdesk_abi_unsupported),
                     checked = rustDeskEnabled,
                     onCheckedChange = {
                         rustDeskEnabled = it
                         com.termux.app.rustdesk.RustDeskSettings.setEnabled(context, it)
                     },
-                    startAction = { SettingIcon(Icons.Rounded.Devices, contentDescription = context.getString(R.string.rustdesk)) }
+                    startAction = { SettingIcon(Icons.Rounded.Devices, contentDescription = context.getString(R.string.rustdesk)) },
+                    enabled = rustDeskAbiOk
                 )
             }),
 
@@ -1436,7 +1440,7 @@ fun SettingsScreen(
                         )
                         SwitchPreference(
                             title = context.getString(R.string.rustdesk),
-                            summary = context.getString(R.string.rustdesk_description),
+                            summary = if (rustDeskAbiOk) context.getString(R.string.rustdesk_description) else context.getString(R.string.rustdesk_abi_unsupported),
                             checked = rustDeskEnabled,
                             onCheckedChange = {
                                 rustDeskEnabled = it
@@ -1444,7 +1448,8 @@ fun SettingsScreen(
                             },
                             startAction = {
                                 SettingIcon(Icons.Rounded.Devices, contentDescription = context.getString(R.string.rustdesk))
-                            }
+                            },
+                            enabled = rustDeskAbiOk
                         )
                         remoteSettings.forEach { item ->
                             ArrowPreference(

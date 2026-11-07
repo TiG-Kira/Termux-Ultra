@@ -359,6 +359,7 @@
 
     <string name="rustdesk">RustDesk</string>
     <string name="rustdesk_description">启用 RustDesk 远程桌面（需已安装 RustDesk 客户端）</string>
+    <string name="rustdesk_abi_unsupported">内嵌 RustDesk 核心仅提供 arm64-v8a，本机架构不可用</string>
     <string name="rustdesk_settings">RustDesk 设置</string>
     <string name="rustdesk_settings_desc">配置 RustDesk 连接参数与交接方式</string>
     <string name="rustdesk_settings_connection">连接</string>

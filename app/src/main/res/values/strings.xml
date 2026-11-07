@@ -431,6 +431,7 @@
 
     <string name="rustdesk">RustDesk</string>
     <string name="rustdesk_description">Enable RustDesk remote desktop (requires the RustDesk client)</string>
+    <string name="rustdesk_abi_unsupported">The embedded RustDesk core is only built for arm64-v8a and is unavailable on this device</string>
     <string name="rustdesk_settings">RustDesk Settings</string>
     <string name="rustdesk_settings_desc">Configure RustDesk connections and how sessions are handed over</string>
     <string name="rustdesk_settings_connection">Connection</string>
