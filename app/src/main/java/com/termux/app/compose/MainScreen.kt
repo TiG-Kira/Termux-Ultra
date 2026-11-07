@@ -388,9 +388,12 @@ fun MainScreen(
                         },
                         selectedIndex = availableTabs.indexOf(selectedTab).coerceAtLeast(0),
                         onSelect = { index ->
-                            val actualTab = availableTabs.getOrElse(index) { selectedTab }
-                            if (actualTab != selectedTab) {
-                                previousTab = selectedTab
+                            // 用 rememberUpdatedState 的当前值，而不是按值捕获的 selectedTab：
+                            // 若回调被底栏内部长生命周期协程持有，旧值会让「点回启动页」
+                            // 被误判成已在目标页而不切页，previousTab 也会写入旧值。
+                            val actualTab = availableTabs.getOrElse(index) { currentSelectedTab }
+                            if (actualTab != currentSelectedTab) {
+                                previousTab = currentSelectedTab
                                 onTabChange(actualTab)
                             }
                         },
