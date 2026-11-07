@@ -21,9 +21,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -50,6 +52,10 @@ import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.preference.SwitchPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.UUID
 
 /**
@@ -68,6 +74,7 @@ fun RustDeskScreen(
     navBarBottomPadding: Dp = 0.dp
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var showAddDialog by remember { mutableStateOf(false) }
     var editingConnection by remember { mutableStateOf<RustDeskConnection?>(null) }
     var passwordTarget by remember { mutableStateOf<RustDeskConnection?>(null) }
@@ -75,6 +82,53 @@ fun RustDeskScreen(
     // 内嵌核心可用时不依赖外部客户端；只有核心与官方客户端都不可用才提示安装
     val needsExternalClient = remember {
         !RustDeskCore.isAvailable() && !RustDeskClient.isInstalled(context)
+    }
+    // 账户登录只走核心的 OIDC 授权；无核心的架构不展示账户入口
+    val accountAvailable = remember { RustDeskAccount.available(context) }
+    var accountState by remember { mutableStateOf(RustDeskAccount.State(null, false)) }
+    var showLogin by remember { mutableStateOf(false) }
+    var showAuth by remember { mutableStateOf(false) }
+    var authDone by remember { mutableStateOf(false) }
+    var authResult by remember { mutableStateOf<RustDeskCore.AccountAuthResult?>(null) }
+
+    LaunchedEffect(Unit) {
+        if (accountAvailable) {
+            accountState = withContext(Dispatchers.IO) { RustDeskAccount.state(context) }
+        }
+    }
+
+    // 核心的登录结果只能轮询（上游 oidc_auth_status.dart 同款），不自建登录 HTTP
+    LaunchedEffect(showAuth, authDone) {
+        if (!showAuth || authDone) return@LaunchedEffect
+        while (true) {
+            val result = withContext(Dispatchers.IO) { RustDeskCore.accountAuthResult() }
+            authResult = result
+            if (result?.stateMsg == "Login account auth" || !result?.userName.isNullOrEmpty()) {
+                authDone = true
+                accountState = withContext(Dispatchers.IO) { RustDeskAccount.state(context) }
+                break
+            }
+            delay(700)
+        }
+    }
+
+    fun startAuth(op: String, rememberMe: Boolean) {
+        authResult = null
+        authDone = false
+        showAuth = true
+        scope.launch(Dispatchers.IO) {
+            RustDeskAccount.signIn(context, op, rememberMe)
+            RustDeskAccount.saveLastOp(context, op)
+        }
+    }
+
+    fun closeAuth() {
+        showAuth = false
+        authDone = false
+        authResult = null
+        scope.launch(Dispatchers.IO) {
+            accountState = RustDeskAccount.state(context)
+        }
     }
 
     if (addRequested && !showAddDialog && editingConnection == null) {
@@ -112,6 +166,24 @@ fun RustDeskScreen(
     ) {
         if (needsExternalClient) {
             item { RustDeskClientMissingCard() }
+        }
+
+        if (accountAvailable) {
+            item {
+                RustDeskAccountCard(
+                    state = accountState,
+                    onSignIn = { showLogin = true },
+                    onQuickSignIn = { startAuth(RustDeskAccount.lastOp(context), true) },
+                    onSignOut = {
+                        scope.launch(Dispatchers.IO) {
+                            RustDeskAccount.signOut(context)
+                            withContext(Dispatchers.Main) {
+                                accountState = RustDeskAccount.state(context)
+                            }
+                        }
+                    }
+                )
+            }
         }
 
         if (connections.isEmpty()) {
@@ -165,6 +237,26 @@ fun RustDeskScreen(
                 launchConnection(target, password)
             },
             onDismiss = { passwordTarget = null }
+        )
+    }
+
+    if (showLogin) {
+        RustDeskLoginDialog(
+            onStart = { op, rememberMe ->
+                showLogin = false
+                startAuth(op, rememberMe)
+            },
+            onDismiss = { showLogin = false }
+        )
+    }
+
+    if (showAuth) {
+        RustDeskAuthProgressDialog(
+            result = authResult,
+            onCancel = {
+                scope.launch(Dispatchers.IO) { RustDeskAccount.cancel(context) }
+            },
+            onClose = { closeAuth() }
         )
     }
 
