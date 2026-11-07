@@ -30,6 +30,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -150,6 +151,12 @@ fun LiquidNavigationBar(
     var holdPressUntilUp by remember { mutableStateOf(false) }
     // 只在上报目标真的变化时回调 onSelect，避免吸附回原位也上报一次
     var reportedIndex by remember { mutableIntStateOf(selectedIndex) }
+    // 下面的 LaunchedEffect 以 damped 为 key、组合存活期间只启动一次，直接捕获
+    // onSelect 会永久持有首次组合的那枚 lambda。若宿主回调按值捕获了当时的
+    // selectedTab（启动页），用户切走后再点回启动页时，旧 lambda 里
+    //「target != selectedTab」会误判为已在目标页而不上报 —— 胶囊飞过去了，
+    // 页面却不动。用 rememberUpdatedState 让协程每次调用都取最新回调。
+    val currentOnSelect by rememberUpdatedState(onSelect)
 
     // 与 Kiba 上游一致用 remember(scope)：宿主的 availableTabs 由 remember 无 key
     // 计算，组合存活期间 tab 数恒定；开关页面会重启 Activity，整棵状态树重建，
@@ -212,7 +219,7 @@ fun LiquidNavigationBar(
             .collectLatest { (index, _) ->
                 if (index != reportedIndex) {
                     reportedIndex = index
-                    onSelect(index)
+                    currentOnSelect(index)
                 }
                 // getter 而非值：hold 状态在收尾瞬间才读，松手后到位即淡出
                 damped.animateToValue(index.toFloat()) { holdPressUntilUp }
