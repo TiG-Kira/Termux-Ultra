@@ -26,7 +26,6 @@ import top.yukonga.miuix.kmp.basic.*
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.glass.ChevronBackward
 import top.yukonga.miuix.kmp.icon.glass.MiuixGlassIcons
-import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.preference.OverlayDropdownPreference
 import top.yukonga.miuix.kmp.preference.SwitchPreference
@@ -1157,10 +1156,15 @@ private fun ServerSettingsPage(
 private fun VncSettingCard(
     content: @Composable () -> Unit
 ) {
-    Card(
+    val style = LocalUiStyle.current
+    HyperGlassCard(
+        style = style,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .padding(
+                horizontal = if (style != HyperGlassStyle.Default) 12.dp else 16.dp,
+                vertical = 8.dp,
+            )
     ) {
         Column {
             content()

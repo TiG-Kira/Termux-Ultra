@@ -493,10 +493,18 @@ private fun PluginSettingsPage(
 internal fun SettingCard(
     content: @Composable () -> Unit
 ) {
-    Card(
+    // 共享卡片入口：X11 / AgentPaw / Widget / Tasker / Styling / TermuxSettings /
+    // CrashReport / Console 等设置子页都走这里，一处接入即可让外观样式铺开。
+    // 卡片本体仍不做玻璃（同屏数量多，逐卡重玻璃会撞渲染线程上限）。
+    val style = LocalUiStyle.current
+    HyperGlassCard(
+        style = style,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .padding(
+                horizontal = if (style != HyperGlassStyle.Default) 12.dp else 16.dp,
+                vertical = 8.dp,
+            )
     ) {
         Column {
             content()

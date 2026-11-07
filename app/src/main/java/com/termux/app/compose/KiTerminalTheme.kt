@@ -4,6 +4,7 @@ import android.app.Activity
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -14,6 +15,12 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
+import com.kyant.backdrop.backdrops.layerBackdrop
+import com.kyant.backdrop.backdrops.rememberLayerBackdrop
+import com.termux.app.compose.liquid.LocalLiquidBackdrop
+import com.termux.app.compose.liquid.LocalLiquidTopBarEnabled
+import top.yukonga.miuix.kmp.blur.layerBackdrop as miuixLayerBackdrop
+import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop as rememberMiuixLayerBackdrop
 import top.yukonga.miuix.kmp.theme.ColorSchemeMode
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.theme.ThemeController
@@ -30,6 +37,31 @@ fun KiTerminalTheme(
     // 必须在订阅前同步加载落盘值，否则开了动态取色会先闪一帧默认配色。
     AppThemePrefs.init(context)
     val materialYou by AppThemePrefs.materialYouEnabled.collectAsState()
+
+    // 外观样式的统一入口：所有 Activity（含 40+ 个独立页面）都从这里拿当前样式。
+    // Application.onCreate 只覆盖进程启动，切换样式仅重启 Activity，组合期需再同步一次。
+    UiStylePrefs.init(context)
+    val uiStyle by UiStylePrefs.uiStyle.collectAsState()
+    applyUiStyleTokens(uiStyle)
+    val styled = uiStyle != HyperGlassStyle.Default
+
+    // 主题级取景层只在这里创建并下发；真正挂载由 rememberGlassPageBackdrop 追加到
+    // 各页面内容 Box 的 contentModifier。挂在本函数的 Box 上会把顶栏一起录进去，
+    // 顶栏再采样它就会自采样并触发 runtime shader 崩溃。
+    val softLayer = rememberMiuixLayerBackdrop()
+    val liquidLayer = rememberLayerBackdrop()
+    // 只挂当前样式真正会采样的那一条：Soft 用 miuix、Liquid 用 kyant。
+    // 两条一起挂会让另一条每帧空录一层（终端类高频重绘页面尤其明显）。
+    val pageLayers = remember(softLayer, liquidLayer, uiStyle) {
+        if (styled) {
+            PageBackdropLayers(
+                soft = if (uiStyle is HyperGlassStyle.Soft) Modifier.miuixLayerBackdrop(softLayer) else Modifier,
+                liquid = if (uiStyle is HyperGlassStyle.Liquid) Modifier.layerBackdrop(liquidLayer) else Modifier,
+            )
+        } else {
+            null
+        }
+    }
 
     val darkTheme = isSystemInDarkTheme()
     val view = LocalView.current
@@ -55,15 +87,23 @@ fun KiTerminalTheme(
         ColorSchemeMode.System
     }
 
-    MiuixTheme(
-        // ThemeController 的 colorSchemeMode 是构造参数且只读，切换必须重建实例。
-        controller = remember(colorSchemeMode) { ThemeController(colorSchemeMode = colorSchemeMode) },
-        content = {
-            androidx.compose.foundation.layout.Box(
-                modifier = Modifier.fillMaxSize()
-            ) {
-                content()
+    CompositionLocalProvider(
+        LocalUiStyle provides uiStyle,
+        LocalPageBackdropLayers provides pageLayers,
+        LocalHyperGlassBackdrop provides if (styled) softLayer else null,
+        LocalLiquidBackdrop provides if (uiStyle is HyperGlassStyle.Liquid) liquidLayer else null,
+        LocalLiquidTopBarEnabled provides (uiStyle is HyperGlassStyle.Liquid),
+    ) {
+        MiuixTheme(
+            // ThemeController 的 colorSchemeMode 是构造参数且只读，切换必须重建实例。
+            controller = remember(colorSchemeMode) { ThemeController(colorSchemeMode = colorSchemeMode) },
+            content = {
+                androidx.compose.foundation.layout.Box(
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    content()
+                }
             }
-        }
-    )
+        )
+    }
 }

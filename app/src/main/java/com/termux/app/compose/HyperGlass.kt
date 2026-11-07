@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -26,6 +27,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.termux.app.compose.liquid.LocalLiquidBackdrop
+import com.termux.app.compose.liquid.LocalLiquidTopBarEnabled
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -123,6 +126,41 @@ sealed interface HyperGlassStyle {
 
 /** 内容根的取景层：玻璃弹层靠它拿到身背后的页面内容。 */
 val LocalHyperGlassBackdrop = staticCompositionLocalOf<Backdrop?> { null }
+
+/** 当前外观样式，由 [KiTerminalTheme] 统一 provide，共享组件无需各自 collect StateFlow。 */
+val LocalUiStyle = staticCompositionLocalOf<HyperGlassStyle> { HyperGlassStyle.Default }
+
+/**
+ * 主题级取景层：由 [KiTerminalTheme] 创建，交给各页面的 `rememberGlassPageBackdrop()`
+ * 追加到内容 Box 的 `contentModifier`。
+ *
+ * 只能挂内容、**不能挂顶栏所在的那层 Box**：顶栏采样到含自身的纹理会让 runtime shader
+ * 在折叠重录时直接 abort（见 `GlassPageHost.kt` 的说明）。把 Modifier 预先构造好再下发，
+ * 页面无需改调用点，就能让独立 Activity 的弹层与液态顶栏皮肤拿到有效取景层。
+ */
+class PageBackdropLayers(
+    val soft: Modifier,
+    val liquid: Modifier,
+)
+
+val LocalPageBackdropLayers = staticCompositionLocalOf<PageBackdropLayers?> { null }
+
+/**
+ * 页面级豁免：把外观样式强制回落 Default，并关掉所有玻璃取景层与液态顶栏。
+ * 用于「控制台 / 终端」与「关于页」两类豁免页面，包在页面内容最外层即可。
+ */
+@Composable
+fun AppearanceStyleExempt(content: @Composable () -> Unit) {
+    CompositionLocalProvider(
+        LocalUiStyle provides HyperGlassStyle.Default,
+        LocalPageBackdropLayers provides null,
+        LocalHyperGlassBackdrop provides null,
+        LocalGlassTopAppBarBackdrop provides null,
+        LocalLiquidBackdrop provides null,
+        LocalLiquidTopBarEnabled provides false,
+        content = content,
+    )
+}
 
 /**
  * 把当前 UI 样式同步到只能在组合期读取的静态 token（顶栏渐进模糊等）。

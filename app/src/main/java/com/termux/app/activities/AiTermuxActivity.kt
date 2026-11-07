@@ -116,7 +116,7 @@ import top.yukonga.miuix.kmp.icon.glass.MiuixGlassIcons
 import top.yukonga.miuix.kmp.icon.glass.Tasks
 import top.yukonga.miuix.kmp.window.WindowDialog
 import top.yukonga.miuix.kmp.theme.MiuixTheme
-import top.yukonga.miuix.kmp.overlay.OverlayDialog
+import com.termux.app.compose.OverlayDialog
 import com.paw.agent.core.agent.AgentEvent
 import com.paw.agent.core.llm.OpenAiCompatibleClient
 import com.paw.agent.core.model.Message as PawMessage

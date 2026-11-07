@@ -62,14 +62,18 @@ object TermuxActivityBridge {
                 KiTerminalTheme(
                     manageSystemBars = false,
                     content = {
-                        TerminalDetailScreenCompose(
-                            sessionManager = sessionManager,
-                            session = targetSession,
-                            onBack = {
-                                // 修复：返回 Activity 不 kill 会话！
-                                onBack.run()
-                            }
-                        )
+                        // 控制台 / 终端是外观样式豁免页：连内容层也不挂主题取景层，
+                        // 避免终端高频重绘时每帧多录两层。
+                        AppearanceStyleExempt {
+                            TerminalDetailScreenCompose(
+                                sessionManager = sessionManager,
+                                session = targetSession,
+                                onBack = {
+                                    // 修复：返回 Activity 不 kill 会话！
+                                    onBack.run()
+                                }
+                            )
+                        }
                     }
                 )
             }
