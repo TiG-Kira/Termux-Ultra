@@ -1,9 +1,10 @@
 package com.termux.app.rustdesk
 
 import android.content.Context
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import org.json.JSONObject
 
 /**
@@ -53,8 +54,13 @@ object RustDeskCore {
         const val RGBA = "rgba"        // 新帧就绪，payload 为 display 下标
     }
 
-    private val _events = MutableStateFlow<CoreEvent?>(null)
-    val events: StateFlow<CoreEvent?> = _events.asStateFlow()
+    /** 帧与业务事件可能在同一帧内连发，StateFlow 会覆盖先到的事件，这里改用带缓冲的 SharedFlow。 */
+    private val _events = MutableSharedFlow<CoreEvent>(
+        replay = 0,
+        extraBufferCapacity = 64,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+    )
+    val events: SharedFlow<CoreEvent> = _events.asSharedFlow()
 
     /**
      * 由 Rust 网络线程经 JNI 回调。必须保持 public **实例方法**：
@@ -65,6 +71,58 @@ object RustDeskCore {
     fun onEvent(sessionId: String, kind: String, payload: String) {
         _events.tryEmit(CoreEvent(sessionId, kind, payload))
     }
+
+    /** 核心事件 JSON（`flutter.rs::push_event` 会塞入 name）。非 JSON 的事件返回 null。 */
+    data class EventPayload(
+        val name: String = "",
+        val type: String = "",
+        val title: String = "",
+        val text: String = "",
+        val link: String = "",
+        val hasRetry: Boolean = false,
+        val tag: String = "",
+    )
+
+    fun parseEvent(payload: String): EventPayload? = runCatching {
+        JSONObject(payload)
+    }.getOrNull()?.let { o ->
+        EventPayload(
+            name = o.optString("name"),
+            type = o.optString("type"),
+            title = o.optString("title"),
+            text = o.optString("text"),
+            link = o.optString("link"),
+            hasRetry = o.optString("hasRetry") == "true",
+            tag = o.optString("tag"),
+        )
+    }
+
+    /** 把核心事件 JSON 里的 name 取出来，便于 UI 分发。 */
+    fun nameOf(payload: String): String = parseEvent(payload)?.name.orEmpty()
+
+    /** `main_account_auth_result()` 的 JSON：状态、失败原因、授权 URL 与登录成功后的用户信息。 */
+    data class AccountAuthResult(
+        val stateMsg: String,
+        val failedMsg: String,
+        val url: String?,
+        val userName: String?,
+        val accessToken: String?,
+    )
+
+    fun accountAuthResult(): AccountAuthResult? = runCatching {
+        val raw = nativeAccountAuthResult()
+        if (raw.isNullOrBlank()) null
+        else JSONObject(raw).let { o ->
+            val body = o.optJSONObject("auth_body")
+            AccountAuthResult(
+                stateMsg = o.optString("state_msg"),
+                failedMsg = o.optString("failed_msg"),
+                url = o.optString("url").takeIf { it.isNotEmpty() },
+                userName = body?.optJSONObject("user")?.optString("name")?.takeIf { it.isNotEmpty() },
+                accessToken = body?.optString("access_token")?.takeIf { it.isNotEmpty() },
+            )
+        }
+    }.getOrNull()
 
     /** 初始化核心并注册事件回调。appDir/homeDir 供核心读写配置与日志。 */
     @JvmStatic
@@ -128,9 +186,4 @@ object RustDeskCore {
     // ── 配置 ──────────────────────────────────────────────────────
     @JvmStatic external fun nativeGetLocalOption(key: String): String?
     @JvmStatic external fun nativeSetLocalOption(key: String, value: String)
-
-    /** 把核心事件 JSON 里的 name 取出来，便于 UI 分发。 */
-    fun nameOf(payload: String): String = runCatching {
-        JSONObject(payload).optString("name")
-    }.getOrDefault("")
 }

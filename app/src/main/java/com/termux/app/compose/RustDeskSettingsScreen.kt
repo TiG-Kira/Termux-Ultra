@@ -23,6 +23,7 @@ import androidx.compose.material.icons.rounded.DeleteSweep
 import androidx.compose.material.icons.rounded.Devices
 import androidx.compose.material.icons.rounded.Dns
 import androidx.compose.material.icons.rounded.Download
+import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Password
 import androidx.compose.material.icons.rounded.SwapVert
@@ -41,6 +42,7 @@ import androidx.compose.ui.unit.dp
 import com.termux.R
 import com.termux.app.rustdesk.RustDeskClient
 import com.termux.app.rustdesk.RustDeskConnectionManager
+import com.termux.app.rustdesk.RustDeskCore
 import com.termux.app.rustdesk.RustDeskSettings
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Icon
@@ -80,8 +82,8 @@ private fun getRustDeskPageTitle(context: Context, page: RustDeskSettingsPage): 
  * 「RustDesk 设置」页（独立 Activity）。
  *
  * 版式与 [VncSettingsScreen] 一致：玻璃顶栏 + SmallTitle + SettingCard + miuix 偏好组件，
- * 主页面下钻到「连接 / 安全 / 客户端」三个子页。所有项都在发起交接时被 [RustDeskClient] 读取，
- * 改动即时落盘、无保存按钮。
+ * 主页面下钻到「连接 / 安全 / 核心与兜底」三个子页。所有项在会话启动时由
+ * [RustDeskClient] 与 [com.termux.app.rustdesk.RustDeskCore] 读取，改动即时落盘、无保存按钮。
  */
 @Composable
 fun RustDeskSettingsScreen(onBack: () -> Unit) {
@@ -392,7 +394,9 @@ private fun RustDeskClientPage(modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val clientInstalled = remember { RustDeskClient.isInstalled(context) }
     val clientVersion = remember { RustDeskClient.versionName(context) }
+    val coreAvailable = remember { RustDeskCore.isAbiSupported() }
     var showClearConfirm by remember { mutableStateOf(false) }
+    var showGestureHelp by remember { mutableStateOf(false) }
     var connectionCount by remember { mutableStateOf(RustDeskConnectionManager(context).count()) }
 
     LazyColumn(
@@ -403,6 +407,30 @@ private fun RustDeskClientPage(modifier: Modifier = Modifier) {
         item {
             SettingCard {
                 Column {
+                    ArrowPreference(
+                        title = stringResource(R.string.rustdesk_core_status),
+                        summary = stringResource(
+                            if (coreAvailable) R.string.rustdesk_core_available
+                            else R.string.rustdesk_core_unavailable
+                        ),
+                        onClick = {
+                            Toast.makeText(
+                                context,
+                                context.getString(
+                                    if (coreAvailable) R.string.rustdesk_core_available
+                                    else R.string.rustdesk_core_unavailable
+                                ),
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        },
+                        startAction = { SettingIcon(Icons.Rounded.Devices) }
+                    )
+                    ArrowPreference(
+                        title = stringResource(R.string.rustdesk_session_help_title),
+                        summary = stringResource(R.string.rustdesk_session_help_summary),
+                        onClick = { showGestureHelp = true },
+                        startAction = { SettingIcon(Icons.Rounded.Info) }
+                    )
                     ArrowPreference(
                         title = stringResource(R.string.rustdesk_client_status),
                         summary = if (clientInstalled) {
@@ -467,6 +495,23 @@ private fun RustDeskClientPage(modifier: Modifier = Modifier) {
                     text = stringResource(R.string.cancel),
                     onClick = { showClearConfirm = false },
                     modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
+    )
+
+    OverlayDialog(
+        title = stringResource(R.string.rustdesk_session_help_title),
+        show = showGestureHelp,
+        onDismissRequest = { showGestureHelp = false },
+        content = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(text = stringResource(R.string.rustdesk_session_help_body))
+                TextButton(
+                    text = stringResource(R.string.rustdesk_session_ok),
+                    onClick = { showGestureHelp = false },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.textButtonColorsPrimary()
                 )
             }
         }
