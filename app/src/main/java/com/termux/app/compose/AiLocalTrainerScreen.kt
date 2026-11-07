@@ -89,8 +89,6 @@ fun AiLocalTrainerScreen(
     val scope = rememberCoroutineScope()
     val onlineReady = remember { mutableStateOf(false) }
     val hasLocal = remember { mutableStateOf(AiTermuxPrefs.getConfig(ctx).providerConfig.provider == "local") }
-    // 本页在 MainScreen 取景层之外，自建一层供玻璃顶栏折射页面内容
-    val glassPage = rememberGlassPageBackdrop()
     val scrollBehavior = MiuixScrollBehavior()
 
     LaunchedEffect(Unit) {
@@ -98,6 +96,9 @@ fun AiLocalTrainerScreen(
     }
 
     KiTerminalTheme {
+        // 本页自建取景层，必须在 KiTerminalTheme 内创建才能读到主题级取景层；
+        // 放在 Theme 外会让液态顶栏采样一条从未录制的 layer（黑块 / shader 异常）。
+        val glassPage = rememberGlassPageBackdrop()
         Scaffold(
             modifier = modifier.fillMaxSize(),
             contentWindowInsets = WindowInsets(0, 0, 0, 0),

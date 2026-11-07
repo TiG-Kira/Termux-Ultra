@@ -1,8 +1,6 @@
 package com.termux.app.compose
 
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
@@ -42,7 +40,8 @@ fun OverlayDialog(
 ) {
     MainNavBarHideEffect(show)
     // 超级柔光：走玻璃弹层；默认样式（或没有取景层）原样走 miuix，连参数都不动。
-    val uiStyle by UiStylePrefs.uiStyle.collectAsState()
+    // 读 Local 而不是全局 StateFlow：豁免页可用 AppearanceStyleExempt 强制回落 Default。
+    val uiStyle = LocalUiStyle.current
     // 液态玻璃外观：走 kyant 取景链的液态弹层，与柔光的 miuix 玻璃弹层互斥。
     // 独立 Activity 不提供这个 Local，自动回落 miuix（与改动前一致）。
     val liquidBackdrop = LocalLiquidBackdrop.current
@@ -174,7 +173,7 @@ fun OverlayBottomSheet(
 ) {
     MainNavBarHideEffect(show)
     // 超级柔光：底部弹层同样玻璃化；默认样式（或没有取景层）原样走 miuix。
-    val sheetStyle by UiStylePrefs.uiStyle.collectAsState()
+    val sheetStyle = LocalUiStyle.current
     val sheetLiquidBackdrop = LocalLiquidBackdrop.current
     if (glassEnabled && sheetStyle is HyperGlassStyle.Liquid && sheetLiquidBackdrop != null) {
         HyperLiquidBottomSheet(

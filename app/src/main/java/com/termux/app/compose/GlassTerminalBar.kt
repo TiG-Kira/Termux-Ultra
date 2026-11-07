@@ -27,7 +27,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -49,7 +48,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.termux.app.compose.liquid.LocalLiquidTopBarEnabled
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.rememberTopAppBarState
@@ -409,9 +407,9 @@ private fun GlassTerminalBarExpanded(
         // - isContentScrolled = collapsed：收缩命令驱动按钮材质浮起（展开态裸图标、收缩态 pill）
         // - scrollBehavior：上面的 heightOffset 动画驱动大标题折叠
         // - 标题位置/大小、主副标题排布、按钮规格全部是原版口径
-        // 终端栏有自己的 bandTint 取色与自绘渐隐底板（PR #350），不参与液态外观的
-        // band 替换，否则两层底板叠加会破坏终端页取色口径。
-        CompositionLocalProvider(LocalLiquidTopBarEnabled provides false) {
+        // 控制台 / 终端是外观样式的豁免页：bandTint 取色与自绘渐隐底板（PR #350）
+        // 不能被液态 band 覆盖，弹层与卡片也一律回落 Default。
+        AppearanceStyleExempt {
             GlassTopAppBar(
                 title = title,
                 isContentScrolled = collapsed,

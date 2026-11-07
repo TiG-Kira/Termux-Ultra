@@ -412,7 +412,10 @@ fun GlassTopAppBar(
         transitionSpec = { GlassMotion.topBarButtonFloat() },
         label = "glassTopBarMaterial",
     ) { if (it) 1f else 0f }
-    val buttonBackdrop = backdrop?.takeIf { isRuntimeShaderSupported() }
+    // 液态玻璃外观：骨架自己的 miuix 玻璃全部关掉，只留 LiquidTopBarSkin / LiquidIconButton，
+    // 与主页口径一致（主页靠把 LocalGlassTopAppBarBackdrop 置 null 达到同样效果）。
+    val liquidTopBar = LocalLiquidTopBarEnabled.current
+    val buttonBackdrop = backdrop?.takeIf { isRuntimeShaderSupported() && !liquidTopBar }
     // Nothing has scrolled under the bar yet, so there is nothing for the glass to show: the pills
     // stay bare icons until [floating] turns the material, the plate and the shadow on together.
     val keepButtonMaterial by remember(floating, materialProgress) {
@@ -432,7 +435,7 @@ fun GlassTopAppBar(
         val bandBlurPx = with(LocalDensity.current) { bandBlurRadius.toPx() }
         val scrimOffsetPx = with(LocalDensity.current) { GlassTopAppBarDefaults.BandScrimOffset.toPx() }
         // 渐进模糊需要真实取景层；没有 backdrop 时退回原来的 scrim 渐变。
-        val bandBlurBackdrop = backdrop?.takeIf { bandBlurPx > 0f && isRuntimeShaderSupported() }
+        val bandBlurBackdrop = backdrop?.takeIf { bandBlurPx > 0f && isRuntimeShaderSupported() && !liquidTopBar }
 
         // 液态玻璃外观：整块 band 换成 kyant 玻璃皮肤，进度与 band / 按钮材质同源
         // （maskProgress 由 isContentScrolled 驱动），收缩态正好落下一块液态玻璃底板。

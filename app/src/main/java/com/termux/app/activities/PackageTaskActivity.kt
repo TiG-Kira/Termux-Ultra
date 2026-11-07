@@ -78,7 +78,7 @@ import top.yukonga.miuix.kmp.glass.GlassSmallTopAppBar
 import top.yukonga.miuix.kmp.icon.glass.ChevronBackward
 import top.yukonga.miuix.kmp.icon.glass.MiuixGlassIcons
 import top.yukonga.miuix.kmp.icon.glass.Ok
-import top.yukonga.miuix.kmp.overlay.OverlayDialog
+import com.termux.app.compose.OverlayDialog
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 /**

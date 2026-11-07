@@ -70,6 +70,8 @@ fun ConsoleLogScreen(onBack: () -> Unit) {
                 title = stringResource(R.string.console_log),
                 backdrop = glassPage.backdrop,
                 scrollBehavior = scrollBehavior,
+                // 控制台豁免：不吃柔光的进程级 band 模糊 token（与关于页同款）
+                bandBlurRadius = 0.dp,
                 navigationIcon = {
                     GlassIconButton(onClick = onBack) {
                         Icon(

@@ -8,6 +8,7 @@ import androidx.activity.compose.setContent
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.core.view.WindowCompat
 import androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner
+import com.termux.app.compose.AppearanceStyleExempt
 import com.termux.app.compose.ConsoleLogScreen
 import com.termux.app.compose.KiTerminalTheme
 import com.termux.app.compose.NavigationHelper
@@ -33,7 +34,9 @@ class ConsoleLogActivity : ComponentActivity() {
                 LocalNavigationEventDispatcherOwner provides navDispatcherOwner
             ) {
                 KiTerminalTheme {
-                    ConsoleLogScreen(onBack = { finish() })
+                    AppearanceStyleExempt {
+                        ConsoleLogScreen(onBack = { finish() })
+                    }
                 }
             }
         }

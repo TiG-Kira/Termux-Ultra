@@ -104,18 +104,28 @@ fun standaloneContentPadding(
  */
 class GlassPageBackdrop internal constructor(
     val layer: LayerBackdrop,
+    /** Marks the page content as what [backdrop] and the theme-level layers capture. */
+    val contentModifier: Modifier,
 ) {
     /** What [GlassTopAppBar] samples. */
     val backdrop: Backdrop get() = layer
-
-    /** Marks the page content as what [backdrop] captures. */
-    val contentModifier: Modifier = Modifier.layerBackdrop(layer)
 }
 
 @Composable
 fun rememberGlassPageBackdrop(): GlassPageBackdrop {
     val layer = rememberLayerBackdrop()
-    return remember(layer) { GlassPageBackdrop(layer) }
+    // 主题级取景层由 KiTerminalTheme 下发，追加到内容层：独立 Activity 的玻璃弹层
+    // 与液态顶栏皮肤也能拿到取景层，且仍然只录内容、不含顶栏（见 PageBackdropLayers）。
+    val themeLayers = LocalPageBackdropLayers.current
+    return remember(layer, themeLayers) {
+        GlassPageBackdrop(
+            layer = layer,
+            contentModifier = Modifier
+                .layerBackdrop(layer)
+                .then(themeLayers?.soft ?: Modifier)
+                .then(themeLayers?.liquid ?: Modifier),
+        )
+    }
 }
 
 /**

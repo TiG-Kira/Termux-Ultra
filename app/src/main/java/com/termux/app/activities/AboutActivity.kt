@@ -9,6 +9,7 @@ import androidx.core.view.WindowCompat
 import androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner
 
 import com.termux.app.compose.AboutScreen
+import com.termux.app.compose.AppearanceStyleExempt
 import com.termux.app.compose.KiTerminalTheme
 import com.termux.app.compose.NavigationHelper
 
@@ -30,7 +31,9 @@ class AboutActivity : ComponentActivity() {
                 LocalNavigationEventDispatcherOwner provides navDispatcherOwner
             ) {
                 KiTerminalTheme {
-                    AboutScreen(onBack = { finish() })
+                    AppearanceStyleExempt {
+                        AboutScreen(onBack = { finish() })
+                    }
                 }
             }
         }
