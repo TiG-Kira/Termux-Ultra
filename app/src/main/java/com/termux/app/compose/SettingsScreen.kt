@@ -57,7 +57,7 @@ import top.yukonga.miuix.kmp.preference.SwitchPreference
 import top.yukonga.miuix.kmp.preference.CheckboxPreference
 import top.yukonga.miuix.kmp.preference.OverlayDropdownPreference
 import top.yukonga.miuix.kmp.preference.ArrowPreference
-import top.yukonga.miuix.kmp.preference.WindowSpinnerPreference
+import top.yukonga.miuix.kmp.preference.OverlaySpinnerPreference
 import top.yukonga.miuix.kmp.basic.DropdownItem
 import top.yukonga.miuix.kmp.basic.HorizontalDivider
 import top.yukonga.miuix.kmp.theme.MiuixTheme
@@ -1057,7 +1057,7 @@ fun SettingsScreen(
                 val protectionItems = RiskConfirmManager.ProtectionLevel.entries.map { level ->
                     DropdownItem(text = level.displayName, summary = level.description)
                 }
-                WindowSpinnerPreference(
+                OverlaySpinnerPreference(
                     title = context.getString(R.string.protection_level_title),
                     summary = protectionLevel.description,
                     items = protectionItems,
@@ -1728,7 +1728,7 @@ fun SettingsScreen(
                                 summary = level.description
                             )
                         }
-                            WindowSpinnerPreference(
+                            OverlaySpinnerPreference(
                             title = context.getString(R.string.protection_level_title),
                             summary = protectionLevel.description,
                             items = protectionItems,

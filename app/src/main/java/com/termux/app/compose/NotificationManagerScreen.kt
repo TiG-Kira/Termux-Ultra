@@ -174,12 +174,7 @@ fun NotificationManagerScreen(
                 SmallTitle(text = stringResource(R.string.notification_mode_category))
             }
             item(key = "card_mode") {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
-                        .clip(RoundedCornerShape(16.dp))
-                ) {
+                SettingCard {
                     Column {
                         modeOptions.forEachIndexed { index, (modeKey, modeLabel) ->
                             val isDisabled = modeKey in disabledModes
@@ -199,6 +194,9 @@ fun NotificationManagerScreen(
                                     }
                                 }
                             )
+                            if (index < modeOptions.size - 1) {
+                                PreferenceDivider()
+                            }
                         }
                     }
                 }

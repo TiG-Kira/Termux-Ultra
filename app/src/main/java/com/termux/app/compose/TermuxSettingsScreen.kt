@@ -512,6 +512,15 @@ internal fun SettingCard(
     }
 }
 
+/** miuix 默认卡片内 preference 之间的分隔线 */
+@Composable
+internal fun PreferenceDivider() {
+    HorizontalDivider(
+        color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.25f),
+        modifier = Modifier.padding(horizontal = 16.dp)
+    )
+}
+
 @Composable
 internal fun SettingIcon(iconRes: Int) {
     Box(

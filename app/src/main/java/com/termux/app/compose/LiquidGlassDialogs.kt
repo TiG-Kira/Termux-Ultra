@@ -25,6 +25,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.kyant.backdrop.Backdrop
+import com.termux.app.compose.liquid.LiquidDialogMotion
 import com.termux.app.compose.liquid.LiquidGlassDialog
 import kotlinx.coroutines.delay
 import top.yukonga.miuix.kmp.basic.Text
@@ -78,7 +79,7 @@ private fun LiquidDialogHost(
     }
 }
 
-/** 液态玻璃对话框（居中缩放弹入）。 */
+/** 液态玻璃对话框（落位与动效对齐柔光样式的 miuix GlassDialog：底部居中、上滑 1/4 进场）。 */
 @Composable
 fun HyperLiquidDialog(
     show: Boolean,
@@ -98,10 +99,15 @@ fun HyperLiquidDialog(
             visible = show,
             onDismissRequest = { onDismissRequest?.invoke() },
             backdrop = backdrop,
-            alignment = Alignment.Center,
+            alignment = Alignment.BottomCenter,
             cornerRadius = cornerRadius,
+            motion = LiquidDialogMotion.Dialog,
         ) {
-            Column(modifier = Modifier.widthIn(max = maxWidth)) {
+            Column(
+                modifier = Modifier
+                    .widthIn(max = maxWidth)
+                    .fillMaxWidth()
+            ) {
                 DialogHeading(title, titleColor, summary, summaryColor)
                 content()
             }
