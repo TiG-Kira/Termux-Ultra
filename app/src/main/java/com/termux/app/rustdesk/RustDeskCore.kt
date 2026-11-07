@@ -57,10 +57,10 @@ object RustDeskCore {
     val events: StateFlow<CoreEvent?> = _events.asStateFlow()
 
     /**
-     * 由 Rust 网络线程经 JNI 回调。必须保持 public + `@JvmStatic` 的方法签名：
-     * `onEvent(String, String, String) : Unit`，改动会让 native 侧找不到入口。
+     * 由 Rust 网络线程经 JNI 回调。必须保持 public **实例方法**：
+     * Rust 侧用 GetMethodID（非 static）按签名 `(String, String, String) : Unit` 查找，
+     * 加 `@JvmStatic` 会把它变成静态方法导致 NoSuchMethodError。
      */
-    @JvmStatic
     @androidx.annotation.Keep
     fun onEvent(sessionId: String, kind: String, payload: String) {
         _events.tryEmit(CoreEvent(sessionId, kind, payload))
