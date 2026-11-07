@@ -411,8 +411,8 @@
     <string name="rustdesk_client_not_installed">未安装（内嵌核心可用时不需要）</string>
     <string name="rustdesk_client_required">会话跑在内嵌 Rust 核心上，官方客户端仅是架构不支持时的兜底。</string>
     <string name="rustdesk_core_status">内嵌核心</string>
-    <string name="rustdesk_core_available">可用（arm64-v8a）</string>
-    <string name="rustdesk_core_unavailable">不可用（本机架构无对应原生库）</string>
+    <string name="rustdesk_core_available">架构支持（arm64-v8a）</string>
+    <string name="rustdesk_core_unavailable">当前架构不支持（无对应原生库）</string>
     <string name="rustdesk_session_help_title">会话操控说明</string>
     <string name="rustdesk_session_help_summary">查看触控手势、缩放与快捷键</string>
     <string name="rustdesk_session_help_body">单指点击：左键\n长按拖动：左键拖放\n双指点击：右键\n单指轻扫：移动光标\n双指捏合：放大缩小\n双指拖动：放大后平移画面，未放大时滚动\n顶栏提供 Ctrl/Alt/Shift、软键盘、功能键与原始比例。</string>
@@ -430,7 +430,7 @@
     <string name="rustdesk_account_custom_op">自定义登录方式（op）</string>
     <string name="rustdesk_account_custom_op_start">使用自定义</string>
     <string name="rustdesk_account_remember">保持登录状态</string>
-    <string name="rustdesk_account_remember_desc">由核心保存 access_token，下次免登录</string>
+    <string name="rustdesk_account_remember_desc">由核心保存登录状态，下次免登录</string>
     <string name="rustdesk_account_progress_title">账户登录</string>
     <string name="rustdesk_account_state_requesting">正在请求授权…</string>
     <string name="rustdesk_account_state_waiting">请在浏览器中完成授权…</string>
@@ -438,6 +438,8 @@
     <string name="rustdesk_account_open_url">打开授权页面</string>
     <string name="rustdesk_account_copy_url">复制链接</string>
     <string name="rustdesk_account_done">完成</string>
+    <string name="rustdesk_session_defer">稍后</string>
+    <string name="rustdesk_session_resume_credential">输入凭据</string>
 
     <string name="rustdesk_session_connecting">正在连接…</string>
     <string name="rustdesk_session_connected">已连接</string>
