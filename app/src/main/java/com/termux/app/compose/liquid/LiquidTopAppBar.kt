@@ -14,10 +14,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -32,6 +33,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.layout
@@ -70,14 +72,16 @@ val LiquidTopBarHorizontalInset: Dp = 12.dp
 private val LiquidTopBarGlassRadius: Dp = 28.dp
 
 /**
- * 玻璃块**顶部**上溢量：把玻璃的顶边推到屏幕之外，屏幕里只剩下一条笔直的边。
+ * 玻璃块**绘制层**顶部的外扩量（不改变布局、也不改变可见高度）。
  *
- * 形状本身已经写成 `topStart = topEnd = 0dp`，但仅靠形状压不住顶角圆弧——
- * Kyant 的 `drawBackdrop` 会先把玻璃层按 `BackdropEffectScope.padding`（透镜采样外扩）
- * 放大、再按形状裁轮廓，外扩后的轮廓在屏幕顶边这一侧依旧会露出约 28dp 的圆弧
- * （用户实证：顶栏玻璃上方左右各一个圆角，下方才是想要的收口）。
- * 与其跟库的裁剪口径较劲，直接把玻璃块整体上移、高度同步加长：
- * 顶角圆弧落到屏幕外被裁掉，底部 28dp 圆角的位置分毫不动。
+ * 形状里已经写了 `topStart = topEnd = 0dp`，但仅靠形状压不住顶角圆弧——Kyant 的
+ * `drawBackdrop` 会先按 `BackdropEffectScope.padding`（透镜采样外扩）把玻璃层放大，
+ * 再按形状裁轮廓，外扩后的轮廓在屏幕顶边这一侧仍会露出 28dp 圆弧（实机实证）。
+ *
+ * 做法：**只让绘制层**上移这么多、高度同步加长，然后由外层容器把屏幕外的部分裁掉。
+ * 布局高度仍是 `statusBars + 折叠高`（主屏被父约束夹成骨架真实高度），所以可见底边
+ * 分毫不动——之前几版（本仓 #389 requiredHeight、#390/#391 换 inset）去抬布局高度
+ * 才导致底边切进按钮。
  *
  * 多给的 8dp 是余量：外扩 padding 会让轮廓再往外偏一点，只补 28dp 会残留一线弧。
  */
@@ -194,62 +198,65 @@ fun LiquidTopBarSkin(
     val glassSurface: androidx.compose.ui.graphics.drawscope.DrawScope.() -> Unit =
         remember(glassColor) { { drawRect(glassColor) } }
 
-    // 顶部 inset 只作为「拿不到父高度时」的兜底值（详见下面的 layout 块）。
-    // 和 miuix 骨架保持一致用 `systemBars.only(Top)`：骨架（BlurTopAppBar）加的就是它，
-    // 挖孔 / 高状态栏机型上它比 `statusBars` 大 10~20dp（本机实测差 14dp），兜底值用错就会偏。
-    val statusBarTop = WindowInsets.systemBars.asPaddingValues().calculateTopPadding()
+    // 顶部 inset：这里只当「父约束不固定时」的定高值。
+    // 主屏传的是 `Modifier.matchParentSize()`，给的是固定约束（min == max == 骨架高度），
+    // 下面的 `.height()` 会被 clamp 成骨架真实高度，天然对齐；若哪天挂到 wrapContent
+    // 的父容器上，就靠 `collapsedHeight`（顶栏自己的折叠高）+ 状态栏兜底定高。
+    val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
 
     Box(
         modifier = modifier
             .fillMaxWidth()
-            // 皮肤只盖「状态栏 + 折叠态高度」：骨架有大标题区（展开态高很多）。
-            // 高度必须**含**状态栏且从屏幕顶边起画——玻璃要包住通知栏。
-            //
-            // 高度不再自己算，直接 follow 父容器的实际布局高度：主屏传进来的 modifier 是
-            // `Modifier.matchParentSize()`，父容器就是 miuix 骨架，它的高度 = 顶部 inset +
-            // 折叠态内容高（展开态则是大标题区）。玻璃跟着父高走，底边永远和骨架底边
-            // 严丝合缝，不用手拼 statusBars / systemBars / padding 那些数字——手算版本
-            // 连续两版都在不同机型上差 10~20dp（2.4.3 只包住状态栏、2.4.4/2.4.5 底边切在
-            // 按钮中间；本仓 #389 顶角去圆角、#390 换 systemBars 也都栽在这上面）。
-            //
-            // 再往上多铺 [LiquidTopBarGlassBleed] 并用同样的偏移把整块玻璃顶上去：
-            // 底边位置不变，顶边的两个圆弧落到屏幕外，可见部分只剩一条直边。
-            .offset(y = -LiquidTopBarGlassBleed)
-            .layout { measurable, constraints ->
-                val bleedPx = LiquidTopBarGlassBleed.roundToPx()
-                val width = constraints.maxWidth
-                // 有界 → 直接用父约束高度（matchParentSize 给的是 min == max == 父高）；
-                // 无界（例如被塞进可滚动容器）才退回手算值。
-                val baseHeight = if (constraints.hasBoundedHeight) {
-                    constraints.maxHeight
-                } else {
-                    (collapsedHeight + statusBarTop).roundToPx()
+            // 皮肤只盖「状态栏 + 折叠态高度」：骨架有大标题区（展开态高很多），
+            // matchParentSize 会让半透明玻璃在中途态罩住大标题（视觉 bug），固定高度杜绝。
+            // 高度必须**含**状态栏且从屏幕顶边起画——玻璃要包住通知栏
+            // （statusBarsPadding 会让玻璃从状态栏下方才开始，顶上露出一条内容，实证踩过）。
+            .height(collapsedHeight + statusBarTop)
+            // 内层玻璃为了压掉顶角圆弧会把绘制层往上多铺 [LiquidTopBarGlassBleed]，
+            // 那一段落在屏幕顶边之外，由这里裁掉——**只裁上方**：
+            // 底部 28dp 圆角的投影必须还能落到栏外，裁到底会变成一块没有厚度的硬边。
+            .drawWithContent {
+                clipRect(top = 0f, bottom = size.height + 240f) {
+                    this@drawWithContent.drawContent()
                 }
-                val totalHeight = baseHeight + bleedPx
-                val placeable = measurable.measure(Constraints.fixed(width, totalHeight))
-                // 报告比父级高 bleed 的尺寸，再靠上面的 offset 把整块拉回原位：
-                // 底边 = -bleed + (父高 + bleed) = 父高，即骨架底边。
-                layout(placeable.width, totalHeight) { placeable.place(0, 0) }
-            }
-            .graphicsLayer {
-                // 折叠到 1/3 时玻璃已经完全成形，避免半透明玻璃糊在标题后面
-                alpha = glassAlpha()
-            }
-            .then(
-                if (backdrop != null) {
-                    Modifier.drawBackdrop(
-                        backdrop = backdrop,
-                        shape = glassShape,
-                        effects = glassEffects,
-                        highlight = null,
-                        shadow = glassShadow,
-                        onDrawSurface = glassSurface,
+            },
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                // 绘制层上移 bleed、高度同步 + bleed：底边位置一分不动，
+                // 顶边的两个 28dp 圆弧被推到屏幕外，屏幕内只剩一条直边。
+                .offset(y = -LiquidTopBarGlassBleed)
+                .layout { measurable, constraints ->
+                    val bleedPx = LiquidTopBarGlassBleed.roundToPx()
+                    // 外层已把高度 clamp 好（= 可见高度），这里只负责多画一段。
+                    val baseHeight = constraints.maxHeight
+                    val totalHeight = baseHeight + bleedPx
+                    val placeable = measurable.measure(
+                        Constraints.fixed(constraints.maxWidth, totalHeight),
                     )
-                } else {
-                    Modifier.background(MiuixTheme.colorScheme.surface)
-                },
-            ),
-    )
+                    layout(placeable.width, totalHeight) { placeable.place(0, 0) }
+                }
+                .graphicsLayer {
+                    // 折叠到 1/3 时玻璃已经完全成形，避免半透明玻璃糊在标题后面
+                    alpha = glassAlpha()
+                }
+                .then(
+                    if (backdrop != null) {
+                        Modifier.drawBackdrop(
+                            backdrop = backdrop,
+                            shape = glassShape,
+                            effects = glassEffects,
+                            highlight = null,
+                            shadow = glassShadow,
+                            onDrawSurface = glassSurface,
+                        )
+                    } else {
+                        Modifier.background(MiuixTheme.colorScheme.surface)
+                    },
+                ),
+        )
+    }
 }
 
 /**
