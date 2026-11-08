@@ -2,7 +2,6 @@ package com.termux.app.rustdesk
 
 import android.content.Context
 import android.content.Intent
-import android.graphics.Bitmap
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -39,10 +38,12 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.IntSize
@@ -59,7 +60,6 @@ import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.CircularProgressIndicator
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
-import java.nio.ByteBuffer
 import java.util.UUID
 import kotlin.math.abs
 import kotlin.math.min
@@ -174,6 +174,11 @@ private fun RustDeskSessionScreen(
     val rightMode = remember { mutableStateOf(false) }
     var dialog by remember { mutableStateOf<SessionDialog?>(null) }
     var deferredDialog by remember { mutableStateOf<SessionDialog?>(null) }
+    val context = LocalContext.current
+    val prefs = remember { context.getSharedPreferences("rustdesk_session", Context.MODE_PRIVATE) }
+    // 帧解码与手势都在长生命周期协程里读，用 State 容器避免捕获旧值
+    val swapRb = remember { mutableStateOf(prefs.getBoolean("swap_rb", false)) }
+    val cursorPos = remember { mutableStateOf<Offset?>(null) }
 
     var ctrlLock by remember { mutableStateOf(false) }
     var altLock by remember { mutableStateOf(false) }
@@ -223,6 +228,16 @@ private fun RustDeskSessionScreen(
                         }
                         "cancel_msgbox" -> if (dialog is SessionDialog.Message) dialog = null
                         "toast" -> status = p?.text.orEmpty()
+                        // 核心的远端光标位置（帧坐标）；字段缺失时保留上一次落点，不打到左上角
+                        "cursor_position" -> if (p != null && !p.x.isNaN() && !p.y.isNaN()) {
+                            val fd = frameDims.value
+                            if (fd != IntSize.Zero) {
+                                cursorPos.value = Offset(
+                                    p.x.coerceIn(0f, (fd.width - 1).toFloat()),
+                                    p.y.coerceIn(0f, (fd.height - 1).toFloat()),
+                                )
+                            }
+                        }
                         else -> status = p?.title?.takeIf { it.isNotEmpty() }
                             ?: p?.text?.takeIf { it.isNotEmpty() }
                             ?: e.payload.take(100)
@@ -236,17 +251,19 @@ private fun RustDeskSessionScreen(
                     val need = width * height * 4
                     if (need > 0) {
                         if (frameBuf.size != need) frameBuf = ByteArray(need)
-                        // 软渲染输出紧密排列的 RGBA，与 ARGB_8888 的内存字节序一致
+                        // 返回 need 才说明整帧字节与当前 dims 匹配；尺寸切换或缓冲不足时跳过这一帧
                         if (RustDeskCore.nativeCopyRgba(sessionId, display, frameBuf) == need) {
-                            // 整屏分配与拷贝移出主线程，高帧率下才不会堵塞绘制
+                            // 整屏位图构建移出主线程，高帧率下才不会堵塞绘制
                             val pixels = frameBuf
+                            val swap = swapRb.value
                             val image = withContext(Dispatchers.Default) {
-                                val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-                                bitmap.copyPixelsFromBuffer(ByteBuffer.wrap(pixels))
-                                bitmap.asImageBitmap()
+                                frameToBitmap(pixels, width, height, swap)
                             }
                             frame = image
                             frameDims.value = IntSize(width, height)
+                            if (cursorPos.value == null) {
+                                cursorPos.value = Offset(width / 2f, height / 2f)
+                            }
                             status = connectedText
                         }
                     }
@@ -274,8 +291,16 @@ private fun RustDeskSessionScreen(
         if (frameDims.value != IntSize.Zero) RustDeskCore.nativeSendMouse(sessionId, msg)
     }
 
-    fun remoteAt(x: Float, y: Float): Pair<Int, Int> =
-        layout().toRemote(x, y, frameDims.value)
+    fun remoteAt(x: Float, y: Float): Pair<Int, Int> {
+        val l = layout()
+        val fd = frameDims.value
+        // 触点先给即时光标反馈；核心随后用真实远端光标位置覆盖
+        cursorPos.value = Offset(
+            ((x - l.offset.x) / l.scale).coerceIn(0f, (fd.width - 1).coerceAtLeast(0).toFloat()),
+            ((y - l.offset.y) / l.scale).coerceIn(0f, (fd.height - 1).coerceAtLeast(0).toFloat()),
+        )
+        return l.toRemote(x, y, fd)
+    }
 
     fun mouseAt(type: String?, buttons: String?, x: Float, y: Float) {
         val (rx, ry) = remoteAt(x, y)
@@ -288,7 +313,7 @@ private fun RustDeskSessionScreen(
     }
 
     fun setZoom(next: Float) {
-        zoomState.value = next.coerceIn(0.5f, 5f)
+        zoomState.value = next.coerceIn(0.5f, 8f)
         panState.value = clampPan(frameDims.value, viewSize.value, zoomState.value, panState.value)
     }
 
@@ -345,7 +370,8 @@ private fun RustDeskSessionScreen(
                             var dragging = false
                             var dragDistance = 0f
                             var prevCentroid = downPos
-                            var prevSpread = 0f
+                            var startSpread = 0f
+                            var startZoom = zoomState.value
                             val wheel = WheelAccumulator()
 
                             // 长按进入拖放：按下左键，随后的移动就是拖动而不是单纯移动光标
@@ -371,10 +397,17 @@ private fun RustDeskSessionScreen(
                                     val p2 = pressed[1].position
                                     val centroid = Offset((p1.x + p2.x) / 2f, (p1.y + p2.y) / 2f)
                                     val spread = (p1 - p2).getDistance()
-                                    if (prevSpread > 0f) {
-                                        val scaleChange = spread / prevSpread
-                                        if (abs(scaleChange - 1f) > 0.02f) {
-                                            setZoom(zoomState.value * scaleChange)
+                                    if (startSpread <= 0f) {
+                                        // 第二指落下：记基准，避免首帧质心突变被当成滑动
+                                        startSpread = spread.coerceAtLeast(1f)
+                                        startZoom = zoomState.value
+                                    } else if (spread > 0f) {
+                                        // 以手势起点为基准算绝对比例。逐帧累乘 + 2% 死区会把
+                                        // 慢速捏合的增量整段丢掉，导致「怎么捏都只放大一点」
+                                        val target = startZoom * spread / startSpread
+                                        // 缩放与「手势已使用」共用阈值，避免小幅捏合仍被当成轻点补发右键
+                                        if (abs(target - zoomState.value) > 0.005f) {
+                                            setZoom(target)
                                             pinchOrPan = true
                                         }
                                         val delta = centroid - prevCentroid
@@ -396,12 +429,13 @@ private fun RustDeskSessionScreen(
                                         }
                                     }
                                     prevCentroid = centroid
-                                    prevSpread = spread
                                     pressed.forEach { it.consume() }
                                     continue
                                 }
 
                                 val c = pressed.firstOrNull() ?: break
+                                // 双指曾介入又回到单指：重新取捏合基准，避免重回双指时跳变
+                                if (multi) startSpread = 0f
                                 val change = c.positionChange()
                                 dragDistance += change.getDistance()
                                 if (dragDistance > 8f) moved = true
@@ -446,6 +480,25 @@ private fun RustDeskSessionScreen(
                         dstSize = l.size,
                         filterQuality = FilterQuality.Low,
                     )
+                    // 远端光标不在帧里时由宿主叠加指示：帧坐标经同一套布局变换回视图坐标
+                    val cp = cursorPos.value
+                    if (cp != null) {
+                        val cx = l.offset.x + cp.x * l.scale
+                        val cy = l.offset.y + cp.y * l.scale
+                        val s = 18.dp.toPx()
+                        val arrow = Path().apply {
+                            moveTo(cx, cy)
+                            lineTo(cx, cy + s)
+                            lineTo(cx + s * 0.30f, cy + s * 0.76f)
+                            lineTo(cx + s * 0.56f, cy + s * 1.02f)
+                            lineTo(cx + s * 0.74f, cy + s * 0.90f)
+                            lineTo(cx + s * 0.49f, cy + s * 0.64f)
+                            lineTo(cx + s * 0.86f, cy + s * 0.56f)
+                            close()
+                        }
+                        drawPath(arrow, color = Color.Black, style = Stroke(width = 3.dp.toPx()))
+                        drawPath(arrow, color = Color.White)
+                    }
                 }
             }
         } else {
@@ -509,12 +562,12 @@ private fun RustDeskSessionScreen(
             ) {
                 TextButton(
                     text = "−",
-                    onClick = { setZoom(zoomState.value / 1.25f) },
+                    onClick = { setZoom(zoomState.value / 1.5f) },
                     colors = ButtonDefaults.textButtonColorsPrimary(),
                 )
                 TextButton(
                     text = "+",
-                    onClick = { setZoom(zoomState.value * 1.25f) },
+                    onClick = { setZoom(zoomState.value * 1.5f) },
                     colors = ButtonDefaults.textButtonColorsPrimary(),
                 )
                 TextButton(
@@ -559,6 +612,18 @@ private fun RustDeskSessionScreen(
                 TextButton(
                     text = stringResource(R.string.rustdesk_session_more_keys),
                     onClick = { showKeys = !showKeys }
+                )
+                TextButton(
+                    text = if (swapRb.value) {
+                        stringResource(R.string.rustdesk_session_color_rgb)
+                    } else {
+                        stringResource(R.string.rustdesk_session_color_bgr)
+                    },
+                    onClick = {
+                        val next = !swapRb.value
+                        swapRb.value = next
+                        prefs.edit().putBoolean("swap_rb", next).apply()
+                    }
                 )
             }
         }

@@ -487,7 +487,7 @@
     <string name="rustdesk_core_unavailable">Unsupported ABI (no native library)</string>
     <string name="rustdesk_session_help_title">Session controls</string>
     <string name="rustdesk_session_help_summary">Touch gestures, zoom and keyboard shortcuts</string>
-    <string name="rustdesk_session_help_body">Single tap: left click\nLong press and drag: left-button drag\nTwo-finger tap: right click\nSingle-finger swipe: move the cursor\nPinch: zoom in or out\nTwo-finger drag: pan when zoomed, scroll otherwise\nThe toolbar provides Ctrl/Alt/Shift, the soft keyboard, function keys and 100% zoom.</string>
+    <string name="rustdesk_session_help_body">Single tap: left click\nLong press and drag: left-button drag\nTwo-finger tap: right click\nSingle-finger swipe: move the cursor\nPinch: zoom in or out (up to 800%)\nTwo-finger drag: pan when zoomed, scroll otherwise\nThe toolbar provides Ctrl/Alt/Shift, the soft keyboard, function keys and 100% zoom.\nAn on-screen arrow marks the remote cursor. If red and blue look swapped, tap the Color: BGR toolbar button to switch channels.</string>
 
     <string name="rustdesk_account_title">RustDesk account</string>
     <string name="rustdesk_account_signed_in">Signed in as %1$s</string>
@@ -524,6 +524,8 @@
     <string name="rustdesk_session_keyboard">Keyboard</string>
     <string name="rustdesk_session_keyboard_on">Keyboard✓</string>
     <string name="rustdesk_session_more_keys">Keys</string>
+    <string name="rustdesk_session_color_bgr">Color: BGR</string>
+    <string name="rustdesk_session_color_rgb">Color: RGB</string>
     <string name="rustdesk_session_cancel">Cancel</string>
     <string name="rustdesk_session_submit">OK</string>
     <string name="rustdesk_session_ok">OK</string>

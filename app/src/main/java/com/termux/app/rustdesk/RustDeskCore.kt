@@ -81,6 +81,8 @@ object RustDeskCore {
         val link: String = "",
         val hasRetry: Boolean = false,
         val tag: String = "",
+        val x: Float = Float.NaN,
+        val y: Float = Float.NaN,
     )
 
     fun parseEvent(payload: String): EventPayload? = runCatching {
@@ -94,6 +96,8 @@ object RustDeskCore {
             link = o.optString("link"),
             hasRetry = o.optString("hasRetry") == "true",
             tag = o.optString("tag"),
+            x = o.optString("x").toFloatOrNull() ?: Float.NaN,
+            y = o.optString("y").toFloatOrNull() ?: Float.NaN,
         )
     }
 
