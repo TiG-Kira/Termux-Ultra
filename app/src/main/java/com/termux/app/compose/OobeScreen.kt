@@ -3,15 +3,10 @@ package com.termux.app.compose
 import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.FastOutLinearInEasing
 import androidx.compose.animation.core.LinearOutSlowInEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -46,7 +41,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -61,12 +56,9 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
@@ -79,10 +71,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.viewinterop.AndroidView
-import androidx.compose.ui.zIndex
-import androidx.core.content.ContextCompat
-import androidx.core.graphics.drawable.toBitmap
 import com.termux.R
 import kotlinx.coroutines.launch
 import top.yukonga.miuix.kmp.basic.Button
@@ -173,33 +161,6 @@ fun OobeScreen(
     val density = LocalDensity.current
     val darkTheme = isSystemInDarkTheme()
     val statusBarPadding = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-
-    // 渐变背景 (和关于页面一致)
-    val infiniteTransition = rememberInfiniteTransition(label = "oobeBreathing")
-    val gradientFraction by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 6500, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "oobeGradient"
-    )
-
-    val lightGradient = Brush.verticalGradient(
-        colors = listOf(
-            androidx.compose.ui.graphics.lerp(Color(0xFFF52828), Color(0xFFFF7878), gradientFraction),
-            androidx.compose.ui.graphics.lerp(Color(0xFF9AA8F5), Color(0xFFC5CCFC), gradientFraction),
-            androidx.compose.ui.graphics.lerp(Color(0xFF4D49D6), Color(0xFF8A87E6), gradientFraction)
-        )
-    )
-    val darkGradient = Brush.verticalGradient(
-        colors = listOf(
-            androidx.compose.ui.graphics.lerp(Color(0xFF8B1A1A), Color(0xFFF52828), gradientFraction),
-            androidx.compose.ui.graphics.lerp(Color(0xFF3A4273), Color(0xFF9AA8F5), gradientFraction),
-            androidx.compose.ui.graphics.lerp(Color(0xFF1E1C63), Color(0xFF4D49D6), gradientFraction)
-        )
-    )
 
     // 跳过逻辑
     val shouldSkipEula = isUpgrade && eulaLastModified == eulaLastStored && eulaLastStored.isNotEmpty()
@@ -315,48 +276,18 @@ fun OobeScreen(
     // 第一页和最后一页使用渐变背景
     val useGradient = currentPage == 0 || currentPage == 5
 
-    // Dual-track background: API 33+ RuntimeShader animated, older Brush fallback
-    val useShaderBg = android.os.Build.VERSION.SDK_INT >= 31
-    var bgController by remember { mutableStateOf<AboutBgEffect.ShaderController?>(null) }
-    var bgDarkTheme by remember { mutableStateOf(darkTheme) }
+    // 首尾两页用动态变色背景（与关于页同一套渐变场），中间页保持素底
+    val oobeTime = rememberAboutAnimationTime(running = useGradient)
 
     Box(
         modifier = Modifier.fillMaxSize().background(MiuixTheme.colorScheme.surface)
     ) {
         if (useGradient) {
-            if (useShaderBg) {
-                AndroidView(
-                    modifier = Modifier.fillMaxSize()
-                        .graphicsLayer { alpha = if (darkTheme) 0.5f else 1f }
-                        .blur(120.dp)
-                        .zIndex(-1f),
-                    factory = { ctx ->
-                        android.view.View(ctx).apply {
-                            setBackgroundColor(android.graphics.Color.TRANSPARENT)
-                            val ctl = AboutBgEffect.createFor(this, darkTheme)
-                            bgController = ctl
-                            bgDarkTheme = darkTheme
-                            ctl?.start()
-                        }
-                    },
-                    update = { v ->
-                        if (bgDarkTheme != darkTheme) {
-                            bgController?.updateParams(AboutBgEffect.getParams(darkTheme))
-                            bgDarkTheme = darkTheme
-                        }
-                    }
-                )
-                DisposableEffect(Unit) {
-                    onDispose { bgController?.stop() }
-                }
-            } else {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .graphicsLayer { alpha = if (darkTheme) 0.5f else 1f }
-                        .background(if (darkTheme) darkGradient else lightGradient)
-                )
-            }
+            AboutGradientBackground(
+                animationTime = oobeTime,
+                dark = darkTheme,
+                modifier = Modifier.fillMaxSize(),
+            )
         }
         // Circular Reveal Transition Box
         Box(modifier = Modifier.fillMaxSize()) {
@@ -366,6 +297,7 @@ fun OobeScreen(
                     // Welcome 页：独立显示，Circular Reveal 接管切出动画
                     OobeWelcomePage(
                         isUpgrade = isUpgrade,
+                        animationTime = oobeTime,
                         onNext = { _ ->
                             val nextP = if (!isUpgrade) 1 else if (shouldSkipEula) 4 else 1
                             if (currentPage == 0 && !isCircularRevealing) {
@@ -470,6 +402,7 @@ fun OobeScreen(
                                 onBack = { goBack() }
                             )
                             5 -> OobeCompletePage(
+                                animationTime = oobeTime,
                                 onComplete = {
                                     onCompleteStart()
                                     onCompleteFinish()
@@ -525,39 +458,12 @@ private fun OobeWelcomePage(
     isUpgrade: Boolean,
     onNext: (Offset) -> Unit,
     darkTheme: Boolean,
+    animationTime: State<Float>,
     onButtonPositioned: (Offset) -> Unit = {}
 ) {
-    val context = LocalContext.current
     val headerFg = if (darkTheme) Color.White else Color(0xFF333333)
-    val fgInt = android.graphics.Color.argb(
-        (headerFg.alpha * 255).toInt(),
-        (headerFg.red * 255).toInt(),
-        (headerFg.green * 255).toInt(),
-        (headerFg.blue * 255).toInt()
-    )
-    val appIcon = remember(darkTheme) {
-        val orig = ContextCompat.getDrawable(context, R.mipmap.ic_launcher)?.toBitmap()
-        orig?.let { bm ->
-            val copy = bm.copy(android.graphics.Bitmap.Config.ARGB_8888, true)
-            val pixels = IntArray(copy.width * copy.height)
-            copy.getPixels(pixels, 0, copy.width, 0, 0, copy.width, copy.height)
-            for (i in pixels.indices) {
-                val px = pixels[i]
-                val r = (px shr 16) and 0xFF
-                val g = (px shr 8) and 0xFF
-                val b = px and 0xFF
-                val a = (px shr 24) and 0xFF
-                val brightness = (r + g + b) / 3f
-                if (a > 128 && brightness > 180f) {
-                    pixels[i] = 0x00000000
-                } else if (a > 128) {
-                    pixels[i] = fgInt
-                }
-            }
-            copy.setPixels(pixels, 0, copy.width, 0, 0, copy.width, copy.height)
-            copy.asImageBitmap()
-        }
-    }
+    // Logo 蒙版：单色 `>_` 图形（透明底、只有描线），渐变灌进形状
+    val logoMask = rememberGradientLogoMask(R.drawable.ic_foreground_mono)
 
 
     // ========== HyperCeiler OOBE 入场动画 ==========
@@ -618,25 +524,6 @@ private fun OobeWelcomePage(
         label = "upgradeAlpha"
     )
 
-    // Glow pulse: infinite breathing behind logo (HyperCeiler GlowController)
-    val infiniteTransition = rememberInfiniteTransition(label = "oobeWelcomeGlow")
-    val glowPulse by infiniteTransition.animateFloat(
-        initialValue = 0.85f, targetValue = 1.15f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 2200, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "glowPulse"
-    )
-    val glowAlpha by infiniteTransition.animateFloat(
-        initialValue = 0.45f, targetValue = 0.7f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 2200, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "glowAlpha"
-    )
-
     // Real button center captured via onGloballyPositioned (for circular reveal transition)
     
 
@@ -647,29 +534,21 @@ private fun OobeWelcomePage(
             verticalArrangement = Arrangement.Center,
             modifier = Modifier.fillMaxSize().align(Alignment.Center)
         ) {
-            // Glow + Logo
+            // Logo 特效：渐变灌进图形 + 呼吸辉光（与关于页同一套）；
+            // 缩放 / 淡入仍由上面那套 HyperCeiler 编排驱动
             Box(
-                modifier = Modifier.size(160.dp).graphicsLayer {
+                modifier = Modifier.size(170.dp).graphicsLayer {
                     scaleX = logoScale; scaleY = logoScale; alpha = logoAlpha
                 },
                 contentAlignment = Alignment.Center
             ) {
-                Box(
-                    modifier = Modifier.size((120 * glowPulse).dp).graphicsLayer { alpha = glowAlpha }
-                        .background(
-                            Brush.radialGradient(
-                                colors = listOf(
-                                    headerFg.copy(alpha = 0.35f),
-                                    headerFg.copy(alpha = 0.15f),
-                                    Color.Transparent
-                                ),
-                                radius = 140f
-                            ),
-                            shape = CircleShape
-                        )
-                )
-                if (appIcon != null) {
-                    Image(bitmap = appIcon, contentDescription = "Logo", modifier = Modifier.size(100.dp))
+                if (logoMask != null) {
+                    AboutGradientLogo(
+                        logo = logoMask,
+                        animationTime = animationTime,
+                        dark = darkTheme,
+                        logoSize = 132.dp
+                    )
                 } else {
                     Icon(
                         painter = painterResource(R.drawable.ic_terminal),
@@ -680,11 +559,14 @@ private fun OobeWelcomePage(
                 }
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
-            Text(
+            // 文字特效：文字当蒙版灌渐变 + 扫光；入场位移/淡入沿用 HyperCeiler 参数
+            GradientWordmark(
                 text = "Termux Ultra",
-                style = TextStyle(fontSize = 36.sp, fontWeight = FontWeight.Black, color = headerFg),
+                animationTime = animationTime,
+                dark = darkTheme,
+                fontSize = 36,
                 modifier = Modifier.graphicsLayer {
                     translationY = textOffsetY
                     alpha = textAlpha
@@ -1981,39 +1863,12 @@ private fun OobeReleaseNotesPage(
 private fun OobeCompletePage(
     onComplete: () -> Unit,
     darkTheme: Boolean,
+    animationTime: State<Float>,
     onButtonPositioned: (Offset) -> Unit = {}
 ) {
-    val context = LocalContext.current
     val headerFg = if (darkTheme) Color.White else Color(0xFF333333)
-    val fgInt = android.graphics.Color.argb(
-        (headerFg.alpha * 255).toInt(),
-        (headerFg.red * 255).toInt(),
-        (headerFg.green * 255).toInt(),
-        (headerFg.blue * 255).toInt()
-    )
-    val appIcon = remember(darkTheme) {
-        val orig = ContextCompat.getDrawable(context, R.mipmap.ic_launcher)?.toBitmap()
-        orig?.let { bm ->
-            val copy = bm.copy(android.graphics.Bitmap.Config.ARGB_8888, true)
-            val pixels = IntArray(copy.width * copy.height)
-            copy.getPixels(pixels, 0, copy.width, 0, 0, copy.width, copy.height)
-            for (i in pixels.indices) {
-                val c = pixels[i]
-                val r = (c shr 16) and 0xFF
-                val g = (c shr 8) and 0xFF
-                val b = c and 0xFF
-                val a = (c shr 24) and 0xFF
-                val brightness = (r + g + b) / 3f
-                if (a > 128 && brightness > 180f) {
-                    pixels[i] = 0x00000000
-                } else if (a > 128) {
-                    pixels[i] = fgInt
-                }
-            }
-            copy.setPixels(pixels, 0, copy.width, 0, 0, copy.width, copy.height)
-            copy.asImageBitmap()
-        }
-    }
+    // 与欢迎页同一套 Logo 蒙版（渐变灌进 `>_` 图形）
+    val logoMask = rememberGradientLogoMask(R.drawable.ic_foreground_mono)
 
     Box(
         modifier = Modifier.fillMaxSize()
@@ -2024,23 +1879,22 @@ private fun OobeCompletePage(
             verticalArrangement = Arrangement.Center,
             modifier = Modifier.fillMaxSize().align(Alignment.Center)
         ) {
-            if (appIcon != null) {
-                Image(
-                    bitmap = appIcon,
-                    contentDescription = "Logo",
-                    modifier = Modifier.size(100.dp)
+            if (logoMask != null) {
+                AboutGradientLogo(
+                    logo = logoMask,
+                    animationTime = animationTime,
+                    dark = darkTheme,
+                    logoSize = 132.dp
                 )
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
-            Text(
+            GradientWordmark(
                 text = "Termux Ultra",
-                style = TextStyle(
-                    fontSize = 36.sp,
-                    fontWeight = FontWeight.Black,
-                    color = headerFg
-                )
+                animationTime = animationTime,
+                dark = darkTheme,
+                fontSize = 36
             )
 
             Spacer(modifier = Modifier.height(36.dp))

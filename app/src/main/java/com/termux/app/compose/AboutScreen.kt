@@ -2,7 +2,6 @@ package com.termux.app.compose
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -12,19 +11,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
-import androidx.compose.ui.graphics.lerp
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
@@ -36,8 +24,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.navigationBars
-import androidx.core.content.ContextCompat
-import androidx.core.graphics.drawable.toBitmap
 import coil.compose.AsyncImage
 import top.yukonga.miuix.kmp.glass.GlassIconButton
 import top.yukonga.miuix.kmp.glass.GlassTopAppBar
@@ -67,8 +53,6 @@ import com.termux.app.utils.SnackbarHelper
 import com.google.android.material.snackbar.Snackbar
 import com.termux.BuildConfig
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.viewinterop.AndroidView
-import androidx.compose.ui.zIndex
 import androidx.compose.foundation.lazy.rememberLazyListState
 import kotlinx.coroutines.flow.collect
 
@@ -102,18 +86,6 @@ fun AboutScreen(onBack: () -> Unit) {
     val termuxCoreVersion = remember { BuildConfig.TERMUX_CORE_VERSION }
     val isWorkflowCliBuild = remember { try { BuildConfig.WORKFLOW_CLI } catch (_: Throwable) { false } }
 
-    // 呼吸渐变动画 (FeatureCenterCard 风格)
-    val infiniteTransition = rememberInfiniteTransition(label = "breathingGradient")
-    val gradientFraction by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 6500, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "gradientBreathing"
-    )
-
     LaunchedEffect(Unit) {
         scope.launch {
             val status = UpdateChecker.getReleaseStatus(currentVersion)
@@ -125,21 +97,13 @@ fun AboutScreen(onBack: () -> Unit) {
 
     val darkTheme = isSystemInDarkTheme()
 
-    // 呼吸渐变颜色 (FeatureCenterCard 风格)
-    val lightGradient = Brush.verticalGradient(
-        colors = listOf(
-            lerp(Color(0xFFFFE5EF), Color(0xFFF9DBE5), gradientFraction),
-            lerp(Color(0xFFF7BAD1), Color(0xFFBCC1FF), gradientFraction),
-            lerp(Color(0xFFA3A5F9), Color(0xFF8EAFFF), gradientFraction)
-        )
-    )
-    val darkGradient = Brush.verticalGradient(
-        colors = listOf(
-            lerp(Color(0xFF330FE0), Color(0xFF934CBC), gradientFraction),
-            lerp(Color(0xFF4C238C), Color(0xFF9E35AA), gradientFraction),
-            lerp(Color(0xFF1C28D3), Color(0xFF0033C6), gradientFraction)
-        )
-    )
+    // 动效时间轴：背景 / Logo / 字标共用同一组调色板，视觉上是一体的。
+    // 只在 draw 阶段读取，逐帧只失效绘制，不会让整页重组。
+    val aboutTime = rememberAboutAnimationTime()
+    val enterLogo = rememberHeroEnter(0)
+    val enterTitle = rememberHeroEnter(90)
+    val enterVersion = rememberHeroEnter(180)
+
     // 滚动状态跟踪
     val listState = rememberLazyListState()
     val headerHeightPx = with(density) { 100.dp.toPx() }
@@ -156,41 +120,17 @@ fun AboutScreen(onBack: () -> Unit) {
             }
     }
 
-    // Dual-track background: API 33+ RuntimeShader animated, older Brush fallback
-    val useShaderBg = android.os.Build.VERSION.SDK_INT >= 31
-    var bgController by remember { mutableStateOf<AboutBgEffect.ShaderController?>(null) }
-    var bgDarkTheme by remember { mutableStateOf(darkTheme) }
-
+    // 动态变色背景：Compose 渐变场（线性底色 + 4 个正弦漂移光斑），滚过头部即整体淡出。
+    // 旧实现是 AndroidView + RuntimeShader + 120dp blur，既贵又只能当背景。
     Box(
         modifier = Modifier.fillMaxSize().background(MiuixTheme.colorScheme.surface)
     ) {
-        if (useShaderBg) {
-            AndroidView(
-                modifier = Modifier.fillMaxSize().graphicsLayer { alpha = (1f - scrollFraction) * (if (darkTheme) 0.5f else 1f) }.blur(120.dp).zIndex(-1f),
-                factory = { ctx ->
-                    android.view.View(ctx).apply {
-                        setBackgroundColor(android.graphics.Color.TRANSPARENT)
-                        val ctl = AboutBgEffect.createFor(this, darkTheme)
-                        bgController = ctl
-                        bgDarkTheme = darkTheme
-                        ctl?.start()
-                    }
-                },
-                update = { v ->
-                    if (bgDarkTheme != darkTheme) {
-                        bgController?.updateParams(AboutBgEffect.getParams(darkTheme))
-                        bgDarkTheme = darkTheme
-                    }
-                }
-            )
-        } else {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .graphicsLayer { alpha = (1f - scrollFraction) * (if (darkTheme) 0.5f else 1f) }
-                    .background(if (darkTheme) darkGradient else lightGradient)
-            )
-        }
+        AboutGradientBackground(
+            animationTime = aboutTime,
+            dark = darkTheme,
+            alpha = { 1f - scrollFraction },
+            modifier = Modifier.fillMaxSize(),
+        )
 
         Scaffold(
             modifier = Modifier.fillMaxSize(),
@@ -199,8 +139,8 @@ fun AboutScreen(onBack: () -> Unit) {
             topBar = {
                 GlassTopAppBar(
                     title = context.getString(R.string.about_preference_title),
-                    // 本页动态 shader 背景画在 Scaffold 之外，不在取景层内；
-                    // 开带区模糊会采到透明(=黑)形成墨团，所以这页保留渐变底板不模糊。
+                    // 本页渐变背景画在 Scaffold 之外（取景层里没有内容），
+                    // 开带区模糊会采到透明(=黑)形成墨团，所以这页保留底板不模糊。
                     bandBlurRadius = 0.dp,
                     backdrop = glassPage.backdrop,
                     scrollBehavior = scrollBehavior,
@@ -238,64 +178,40 @@ fun AboutScreen(onBack: () -> Unit) {
                         verticalArrangement = Arrangement.Center
                     ) {
                         val headerFg = if (darkTheme) Color.White else Color(0xFF333333)
-                        val fgInt = android.graphics.Color.argb(
-                            (headerFg.alpha * 255).toInt(),
-                            (headerFg.red * 255).toInt(),
-                            (headerFg.green * 255).toInt(),
-                            (headerFg.blue * 255).toInt()
-                        )
-                        val appIcon = remember(darkTheme) {
-                            val orig = ContextCompat.getDrawable(context, R.mipmap.ic_launcher)?.toBitmap()
-                            orig?.let { bm ->
-                                val copy = bm.copy(android.graphics.Bitmap.Config.ARGB_8888, true)
-                                val pixels = IntArray(copy.width * copy.height)
-                                copy.getPixels(pixels, 0, copy.width, 0, 0, copy.width, copy.height)
-                                for (i in pixels.indices) {
-                                    val c = pixels[i]
-                                    val r = (c shr 16) and 0xFF
-                                    val g = (c shr 8) and 0xFF
-                                    val b = c and 0xFF
-                                    val a = (c shr 24) and 0xFF
-                                    val brightness = (r + g + b) / 3f
-                                    if (a > 128 && brightness > 180f) {
-                                        // 白色像素(提示符>_) → 透明，让 shader 透出
-                                        pixels[i] = 0x00000000
-                                    } else if (a > 128) {
-                                        // 其他非透明像素（黑色圆）→ 染成和文字同色
-                                        pixels[i] = fgInt
-                                    }
-                                }
-                                copy.setPixels(pixels, 0, copy.width, 0, 0, copy.width, copy.height)
-                                copy.asImageBitmap().let { BitmapPainter(it) }
-                            }
-                        }
-                        if (appIcon != null) {
-                            Image(
-                                painter = appIcon,
-                                contentDescription = "Logo",
-                                modifier = Modifier.size(100.dp)
+                        // Logo 特效：单色 `>_` 图形当蒙版，流动渐变灌进形状 + 呼吸辉光。
+                        // 蒙版用 ic_foreground_mono（透明底、只有描线），不能用带深色 squircle 底的
+                        // 彩色 launcher 图标——DstIn 吃 alpha，整块不透明会把渐变灌成一块实心色板。
+                        val logoMask = rememberGradientLogoMask(R.drawable.ic_foreground_mono)
+                        if (logoMask != null) {
+                            AboutGradientLogo(
+                                logo = logoMask,
+                                animationTime = aboutTime,
+                                dark = darkTheme,
+                                logoSize = 128.dp,
+                                modifier = Modifier.heroEnter(enterLogo)
                             )
                         } else {
                             Icon(
                                 painter = painterResource(R.drawable.ic_terminal),
                                 contentDescription = "Logo",
-                                modifier = Modifier.size(60.dp),
+                                modifier = Modifier.size(60.dp).heroEnter(enterLogo),
                                 tint = headerFg
                             )
                         }
-                        Spacer(modifier = Modifier.height(20.dp))
-                        Text(
+                        Spacer(modifier = Modifier.height(10.dp))
+                        // 文字特效：文字本身当蒙版灌渐变 + 扫光
+                        GradientWordmark(
                             text = "Termux Ultra",
-                            style = TextStyle(
-                                fontSize = 36.sp,
-                                fontWeight = FontWeight.Black,
-                                color = headerFg
-                            )
+                            animationTime = aboutTime,
+                            dark = darkTheme,
+                            fontSize = 36,
+                            modifier = Modifier.heroEnter(enterTitle)
                         )
                         Spacer(modifier = Modifier.height(10.dp))
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.heroEnter(enterVersion)
                         ) {
                             Text(
                                 text = currentVersion,
