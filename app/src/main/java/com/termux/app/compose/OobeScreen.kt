@@ -2,11 +2,11 @@ package com.termux.app.compose
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.CubicBezierEasing
-import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.FastOutLinearInEasing
 import androidx.compose.animation.core.LinearOutSlowInEasing
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -201,24 +201,27 @@ fun OobeScreen(
         revealTargetPage = targetPage
         isCircularRevealing = true
         coroutineScope.launch {
-            val duration = 600
-            val steps = 60
-            val stepDuration = duration / steps
-            for (i in 0..steps) {
-                val t = i / steps.toFloat()
-                val eased = 1f - (1f - t) * (1f - t) * (1f - t)
-                revealRadius = maxRevealRadius * eased
-                if (i % 10 == 0) {
+            try {
+                // 用 Animatable 而不是手写 for + delay：逐帧交给 compose 帧时钟，
+                // 不受 delay 抖动影响，缓动曲线能精确走完（原来 60 次 delay 会顿）。
+                Animatable(0f).animateTo(
+                    targetValue = 1f,
+                    animationSpec = tween(durationMillis = 720, easing = AppMotion.Push),
+                ) {
+                    revealRadius = maxRevealRadius * value
                 }
-                delay(stepDuration.toLong())
+                revealRadius = maxRevealRadius
+                // Animation complete — Layer 2 (clip circle at full size) covers entire screen.
+                // Now switch Layer 1 to target, then cleanup Layer 2 (which is already invisible on target page)
+                onPageChange(targetPage)
+                delay(80)
+            } finally {
+                // 协程被取消（页面销毁 / 重复触发）时也要把揭示状态收干净，
+                // 否则 isCircularRevealing 会卡在 true，按钮再也点不动
+                isCircularRevealing = false
+                revealTargetPage = null
+                revealRadius = 0f
             }
-            // Animation complete — Layer 2 (clip circle at full size) covers entire screen.
-            // Now switch Layer 1 to target, then cleanup Layer 2 (which is already invisible on target page)
-            onPageChange(targetPage)
-            delay(80)
-            isCircularRevealing = false
-            revealTargetPage = null
-            revealRadius = 0f
         }
     }
 
@@ -321,34 +324,32 @@ fun OobeScreen(
                         targetState = currentPage,
                         label = "oobeMiddlePages",
                         transitionSpec = {
-                            val isForward = targetState > initialState
-                            if (isForward) {
-                                // 前进：新页从右滑入 + fadeIn，旧页向左滑出小距离 + fadeOut
-                                androidx.compose.animation.slideInHorizontally(
-                                    animationSpec = tween(durationMillis = AppMotion.NORMAL, easing = FastOutSlowInEasing)
-                                ) { fullWidth -> fullWidth } +
-                                androidx.compose.animation.fadeIn(
-                                    animationSpec = tween(durationMillis = AppMotion.NORMAL, delayMillis = 60, easing = LinearOutSlowInEasing)
-                                ) togetherWith
-                                androidx.compose.animation.slideOutHorizontally(
-                                    animationSpec = tween(durationMillis = AppMotion.NORMAL, easing = FastOutLinearInEasing)
-                                ) { fullWidth -> -fullWidth / 5 } +
-                                androidx.compose.animation.fadeOut(
-                                    animationSpec = tween(durationMillis = AppMotion.FAST, easing = FastOutLinearInEasing)
+                            if (targetState == 5 || initialState == 5) {
+                                // 完成页不参与横向序列：它是终点、没有"下一屏"，推屏只剩旧页滑走，
+                                // 方向感断裂；这里退回淡入淡出，让完成页自己的错峰入场当主角。
+                                fadeIn(
+                                    animationSpec = tween(durationMillis = 320, easing = AppMotion.SoftOut)
+                                ) togetherWith fadeOut(
+                                    animationSpec = tween(durationMillis = 220)
                                 )
                             } else {
-                                // 后退：新页从左滑入小距离 + fadeIn，旧页向右滑出 + fadeOut
-                                androidx.compose.animation.slideInHorizontally(
-                                    animationSpec = tween(durationMillis = AppMotion.NORMAL, easing = FastOutSlowInEasing)
-                                ) { fullWidth -> -fullWidth / 5 } +
-                                androidx.compose.animation.fadeIn(
-                                    animationSpec = tween(durationMillis = AppMotion.NORMAL, delayMillis = 60, easing = LinearOutSlowInEasing)
-                                ) togetherWith
-                                androidx.compose.animation.slideOutHorizontally(
-                                    animationSpec = tween(durationMillis = AppMotion.NORMAL, easing = FastOutLinearInEasing)
-                                ) { fullWidth -> fullWidth } +
-                                androidx.compose.animation.fadeOut(
-                                    animationSpec = tween(durationMillis = AppMotion.FAST, easing = FastOutLinearInEasing)
+                                // 方向：前进 = 新页从右推入、旧页往左让；后退反之。
+                                // 时长比主页切页略长（360ms），一页一页读，别抢节奏。
+                                val direction = if (targetState > initialState) 1 else -1
+                                (
+                                    slideInHorizontally(
+                                        animationSpec = tween(durationMillis = 360, easing = AppMotion.Push)
+                                    ) { fullWidth -> fullWidth * direction } +
+                                    fadeIn(
+                                        animationSpec = tween(durationMillis = 260, delayMillis = 80, easing = AppMotion.SoftOut)
+                                    )
+                                ) togetherWith (
+                                    slideOutHorizontally(
+                                        animationSpec = tween(durationMillis = 320, easing = AppMotion.Push)
+                                    ) { fullWidth -> -fullWidth * direction / 5 } +
+                                    fadeOut(
+                                        animationSpec = tween(durationMillis = 200, easing = FastOutLinearInEasing)
+                                    )
                                 )
                             }
                         }
@@ -466,61 +467,51 @@ private fun OobeWelcomePage(
     val logoMask = rememberGradientLogoMask(R.drawable.ic_foreground_mono)
 
 
-    // ========== HyperCeiler OOBE 入场动画 ==========
+    // ========== 入场编排 ==========
+    // 原编排是 HyperCeiler 的 Folme 三段 tween：440ms 冲到 0.95、再 700ms 补到位，
+    // 文字 100dp/1700ms 一路往上怼 —— 起步太急、收尾又拖，观感"傻快"。改成：
+    // Logo 一段 spring（轻微过冲后咬合）、文字只走 28dp 并错峰、按钮最后浮起。
     var animStarted by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { animStarted = true }
 
-    // LOGO: 0.5→0.95 (sinOut 440ms) → 1.0 (cubicOut 700ms) - Folme state machine
-    var logoScaleState by remember { mutableStateOf(0.5f) }
-    LaunchedEffect(animStarted) {
-        if (animStarted) {
-            logoScaleState = 0.95f
-            delay(440)
-            logoScaleState = 1.0f
-        }
-    }
+    // LOGO：从略小处弹性浮到原位。spring 的回弹比两段 tween 连贯，不用手写状态机
     val logoScale by animateFloatAsState(
-        targetValue = logoScaleState,
-        animationSpec = tween(
-            durationMillis = if (logoScaleState == 0.95f) 440 else 700,
-            easing = if (logoScaleState == 0.95f) FastOutSlowInEasing else CubicBezierEasing(0.33f, 0f, 0.67f, 1f)
-        ),
+        targetValue = if (animStarted) 1f else 0.78f,
+        animationSpec = spring(dampingRatio = 0.58f, stiffness = 170f),
         label = "logoScale"
     )
     val logoAlpha by animateFloatAsState(
         targetValue = if (animStarted) 1f else 0f,
-        animationSpec = tween(durationMillis = 230, delayMillis = 60),
+        animationSpec = tween(durationMillis = 520, delayMillis = 80, easing = AppMotion.SoftOut),
         label = "logoAlpha"
     )
 
-    // TEXT: translationY 100dp→0 + alpha 0→1 (HyperCeiler AnimHelper)
+    // TEXT：位移从 100dp 收到 28dp，时长从 1700ms 收到 900ms
     val textOffsetY by animateFloatAsState(
-        targetValue = if (animStarted) 0f else 100f,
-        animationSpec = tween(durationMillis = 1700, easing = FastOutSlowInEasing),
+        targetValue = if (animStarted) 0f else 28f,
+        animationSpec = tween(durationMillis = 900, delayMillis = 220, easing = AppMotion.SoftOut),
         label = "textOffset"
     )
     val textAlpha by animateFloatAsState(
         targetValue = if (animStarted) 1f else 0f,
-        animationSpec = tween(durationMillis = 1400, delayMillis = 300, easing = FastOutSlowInEasing),
+        animationSpec = tween(durationMillis = 780, delayMillis = 220, easing = LinearOutSlowInEasing),
         label = "textAlpha"
     )
 
-    // BUTTON: scale 0.9→1.0 + alpha 0→1, delay 1340ms (logo settle first)
+    // BUTTON：等 Logo 那口气沉下来再浮起，不再和文字抢同一段时间
     val btnScale by animateFloatAsState(
-        targetValue = if (animStarted) 1f else 0.9f,
-        animationSpec = tween(durationMillis = 450, delayMillis = 1340,
-                              easing = CubicBezierEasing(0.33f, 0f, 0.67f, 1f)),
+        targetValue = if (animStarted) 1f else 0.92f,
+        animationSpec = tween(durationMillis = 520, delayMillis = 980, easing = AppMotion.Push),
         label = "btnScale"
     )
     val btnAlpha by animateFloatAsState(
         targetValue = if (animStarted) 1f else 0f,
-        animationSpec = tween(durationMillis = 450, delayMillis = 1340,
-                              easing = CubicBezierEasing(0.33f, 0f, 0.67f, 1f)),
+        animationSpec = tween(durationMillis = 520, delayMillis = 980, easing = LinearOutSlowInEasing),
         label = "btnAlpha"
     )
     val upgradeAlpha by animateFloatAsState(
         targetValue = if (animStarted) 1f else 0f,
-        animationSpec = tween(durationMillis = 500, delayMillis = 1340),
+        animationSpec = tween(durationMillis = 560, delayMillis = 900),
         label = "upgradeAlpha"
     )
 
@@ -1870,6 +1861,13 @@ private fun OobeCompletePage(
     // 与欢迎页同一套 Logo 蒙版（渐变灌进 `>_` 图形）
     val logoMask = rememberGradientLogoMask(R.drawable.ic_foreground_mono)
 
+    // 入场编排：Logo 弹性浮起 → 字标 → 说明 → 按钮，四级错峰，
+    // 原来这一页是直接"啪"地出现，切过来太生硬
+    val enterLogo = rememberHeroEnter(0)
+    val enterTitle = rememberHeroEnter(110)
+    val enterCaption = rememberHeroEnter(220)
+    val enterButton = rememberHeroEnter(320)
+
     Box(
         modifier = Modifier.fillMaxSize()
     ) {
@@ -1884,7 +1882,13 @@ private fun OobeCompletePage(
                     logo = logoMask,
                     animationTime = animationTime,
                     dark = darkTheme,
-                    logoSize = 132.dp
+                    logoSize = 132.dp,
+                    modifier = Modifier.graphicsLayer {
+                        val p = enterLogo.value
+                        scaleX = 0.86f + 0.14f * p
+                        scaleY = 0.86f + 0.14f * p
+                        alpha = p
+                    }
                 )
             }
 
@@ -1894,7 +1898,8 @@ private fun OobeCompletePage(
                 text = "Termux Ultra",
                 animationTime = animationTime,
                 dark = darkTheme,
-                fontSize = 36
+                fontSize = 36,
+                modifier = Modifier.heroEnter(enterTitle)
             )
 
             Spacer(modifier = Modifier.height(36.dp))
@@ -1905,7 +1910,8 @@ private fun OobeCompletePage(
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Medium,
                     color = headerFg.copy(alpha = 0.85f)
-                )
+                ),
+                modifier = Modifier.heroEnter(enterCaption)
             )
         }
 
@@ -1917,6 +1923,11 @@ private fun OobeCompletePage(
                 .fillMaxWidth()
                 .padding(horizontal = 40.dp)
                 .height(56.dp)
+                .graphicsLayer {
+                    val p = enterButton.value
+                    alpha = p
+                    translationY = (1f - p) * 12.dp.toPx()
+                }
                 .clip(RoundedCornerShape(28.dp))
                 .background(Color.White.copy(alpha = if (darkTheme) 0.15f else 0.9f))
                 .clickable { onComplete() },
