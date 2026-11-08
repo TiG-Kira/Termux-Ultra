@@ -244,11 +244,13 @@ fun LiquidNavigationBar(
     }
 
     // 图标高亮跟随胶囊实际位置，只在跨过 tab 边界的那一帧重组
-    val highlightIndex by remember {
+    // key 必须带 dragAnimation：它在 items.size / density 变化时会重建，
+    // 这两处若无 key 会继续捕获旧实例（图标高亮冻住、光斑钉在旧位置）。
+    val highlightIndex by remember(dragAnimation) {
         derivedStateOf { dragAnimation.value.fastRoundToInt().fastCoerceIn(0, items.size - 1) }
     }
 
-    val interactiveHighlight = remember(scope) {
+    val interactiveHighlight = remember(scope, dragAnimation) {
         InteractiveHighlight(
             animationScope = scope,
             position = { size, gestureOffset ->
@@ -445,11 +447,16 @@ fun LiquidNavigationBar(
                             w * items.size - down.position.x
                         }
                         val hit = (x / w).toInt().fastCoerceIn(0, items.size - 1)
+                        // 按在当前 tab 上：press / 拖动 / 点按全归胶囊自身的手势链
+                        // （对齐 Kiba 的 `hit != selectedIndex` 门控）。这里若也跟手，
+                        // 胶囊会在没有 press() 的情况下滑动——灰色胶囊跟手、玻璃不浮现。
+                        // 只有胶囊没覆盖到的上下 4dp 边缘条会走到这里，忽略即可。
+                        if (hit == startIndex) return@awaitEachGesture
                         var committed = false
                         // 记账 + 起飞 + 切页一次完成；selectedIndex 回流时
                         // snapshotFlow 靠 lastAnimatedState 去重，不会播两次玻璃。
                         fun commit() {
-                            if (committed || hit == startIndex) return
+                            if (committed) return
                             committed = true
                             lastAnimatedState.intValue = hit
                             metrics.holdingOtherTab = true
