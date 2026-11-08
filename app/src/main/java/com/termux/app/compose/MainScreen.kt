@@ -12,6 +12,8 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.rememberSplineBasedDecay
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Dashboard
@@ -641,30 +643,22 @@ fun MainScreen(
                                     // Skip AnimatedContent transition to avoid double animation flash
                                     skipNextTransition = true
                                     handleSwipe(finalOffset)
-                                    kotlinx.coroutines.delay(50)
-                                    skipNextTransition = false
                                     isSwipingInProgress = false
                                     swipeTargetTab = null
                                     rawDragOffset = 0f
                                     currentPageAlphaState = 1f
                                 } else if (exceeded && !isSubTabSwipe) {
-                                    // Sub-tab swipe exceeded threshold
-                                    skipNextTransition = true
+                                    // 超阈值但没有目标 tab（已到头）：handleSwipe 不动页，
+                                    // AnimatedContent 的 targetState 也没变，不需要 skip 标志
                                     handleSwipe(finalOffset)
-                                    kotlinx.coroutines.delay(50)
-                                    skipNextTransition = false
                                     isSwipingInProgress = false
                                     swipeTargetTab = null
                                     rawDragOffset = 0f
                                     currentPageAlphaState = 1f
                                 } else {
                                     // Not exceeded, spring back
-                                    // Need to skip transition when returning to current page
-                                    skipNextTransition = true
                                     isSwipingInProgress = false
                                     swipeTargetTab = null
-                                    kotlinx.coroutines.delay(50)
-                                    skipNextTransition = false
                                     rawDragOffset = 0f
                                     currentPageAlphaState = 1f
                                 }
@@ -697,19 +691,22 @@ fun MainScreen(
                                         currentPageAlphaState = (1f - progress).coerceIn(0f, 1f)
                                     }
                                 }
-                                // Skip transition when returning to current page
-                                skipNextTransition = true
+                                // 回弹到当前页：selectedTab 没变，AnimatedContent 不会播过渡
                                 isSwipingInProgress = false
                                 swipeTargetTab = null
                                 rawDragOffset = 0f
                                 currentPageAlphaState = 1f
-                                kotlinx.coroutines.delay(50)
-                                skipNextTransition = false
                             }
                         }
                     )
                 }
         ) {
+            // skipNextTransition 只能被"消费一次"：AnimatedContent 在 targetState 变化的那次组合
+            // 里读它，随后由这里复位。原先用固定 delay(50) 复位，首帧一旦被拖慢（GC / 建树 /
+            // 玻璃首帧）就会提前失效，手势已经把页面推到位的同一帧再叠一层推屏 —— 画面二次跳动。
+            LaunchedEffect(selectedTab) {
+                if (skipNextTransition) skipNextTransition = false
+            }
             // 底层：swipe 过程中的目标页面（独立渲染，不影响 AnimatedContent 中当前页面的状态）
             if (isSwipingInProgress && swipeTargetTab != null) {
                 PageContentForTab(
@@ -762,10 +759,20 @@ fun MainScreen(
                     if (skipNextTransition) {
                         EnterTransition.None togetherWith ExitTransition.None
                     } else {
-                        fadeIn(
-                            animationSpec = tween(durationMillis = AppMotion.SLOW)
-                        ) togetherWith fadeOut(
-                            animationSpec = tween(durationMillis = AppMotion.FAST)
+                        // 对齐 Kiba 主页 Tab 切换：按 tab 序号判定推屏方向，
+                        // 旧页整屏滑出 + 淡出，新页从对侧屏幕外飞入 + 淡入。
+                        // 手势滑动那条路径已经自己把页面推到位（skipNextTransition），不走这里。
+                        val direction = if (targetState > initialState) 1 else -1
+                        (
+                            slideInHorizontally(
+                                animationSpec = tween(380, easing = AppMotion.Push),
+                                initialOffsetX = { full -> full * direction },
+                            ) + fadeIn(tween(durationMillis = 220, delayMillis = 40))
+                        ) togetherWith (
+                            slideOutHorizontally(
+                                animationSpec = tween(340, easing = AppMotion.Push),
+                                targetOffsetX = { full -> -full * direction },
+                            ) + fadeOut(tween(durationMillis = 200))
                         )
                     }
                 }
