@@ -21,13 +21,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.ui.unit.sp
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
@@ -42,16 +41,18 @@ import androidx.compose.ui.graphics.GraphicsLayerScope
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.util.fastCoerceIn
 import androidx.compose.ui.util.fastRoundToInt
 import androidx.compose.ui.util.lerp
@@ -70,7 +71,6 @@ import com.kyant.backdrop.shadow.Shadow
 import com.kyant.shapes.Capsule
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.Text
@@ -78,6 +78,7 @@ import top.yukonga.miuix.kmp.glass.GlassNavigationItem
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import kotlin.math.abs
 import kotlin.math.sign
+import kotlin.math.sqrt
 
 /**
  * 液态玻璃底栏高度：与柔光玻璃+（miuix `GlassNavigationBar`，54dp）对齐，
@@ -86,32 +87,24 @@ import kotlin.math.sign
 val LiquidNavHeight: Dp = 54.dp
 
 /**
- * 切换意图：`serial` 每次写都自增，保证「松手吸附回原 tab」这种 index 不变的情况
- * 也会触发一次状态流。单个状态对象 = 单次写 = 单次 emit，避免两次写让
- * `collectLatest` 取消掉正在播的吸附动画并吞掉那次的 `onSelect`。
- */
-private data class NavSettle(val index: Int, val serial: Int)
-
-/**
- * 液态玻璃版底部导航栏 —— 1:1 移植 AndroidLiquidGlass demo 的 `LiquidBottomTabs`
- * （Kyant0 官方实现；酷安的 `LiquidGlassTabPanel` 即基于同库同结构的工程化封装）。
+ * 液态玻璃版底部导航栏。
  *
- * 绘制分三层（z 序）：
- * 1. **Row A 可见底栏**：`vibrancy + blur(8) + lens(24,24)`，表面 = 容器色；
- *    按压时整条底栏 `scale = 1 + 16dp/宽`（随 pressProgress，酷安按压时整条微鼓）；
- * 2. **Row B 隐形导出层**：`alpha(0)` 不可见，只把「底栏 + 图标」染成强调色录进
- *    `tabsBackdrop`，胶囊折射吸进来的图标是染过色的；
- * 3. **胶囊**：采样 `combined(page, tabsBackdrop)`，折射/高光/内阴影/表面强度全部乘
- *    pressProgress——**静止时全为 0，只剩 Black 10% 的灰色提示**（酷安同款）；
- *    速度驱动的拉伸是 demo 的除法对称式：`scaleX /= 1 - v*0.75`。
+ * **交互状态机与手感整体移植自 HyperIsland**（1812z/HyperIsland 的
+ * `LiquidGlassNavigationBar.kt` / `FloatingLiquidBar`）：
+ * - 胶囊本体独占双 pass 手势，按下瞬间就浮现玻璃 + 横纵不同阻尼地鼓起；
+ *   **按住当前选中的 tab 也有完整液态反馈**（旧实现把 press 挂在底层 Row 上，
+ *   被 tab 的 clickable settle 抢掉，等于没有任何动作）；
+ * - 五条独立弹簧（位置 / 速度 / press / scaleX / scaleY）+ `MutatorMutex` +
+ *   真实 `VelocityTracker`，松手等飞行收敛才凝回提示；
+ * - 镜面高光用 AGSL `smoothstep` + `BlendMode.Plus` 加色叠加，并按设备重力方向偏移。
  *
- * 交互：点按 tab、横向拖动胶囊、外部切 Tab 三条路径统一汇入 [NavSettle] 状态流，
- * 动画与 `onSelect` 上报只发生在一处；拖动时 `updateValue` 跟手 + 整条底栏
- * EaseOut 微移（panelOffset，最多 4dp），松手吸附最近 tab 并回弹。
- * 图标高亮跟随胶囊的实际位置（`round(damped.value)`），不跟随目标 tab。
+ * 渲染层仍走 Kiba 的 Kyant0 backdrop 2.0.1（与 miuix blur 是两套不兼容的取景 API），
+ * 因此只做**等效适配**：透明度口径按对方（blur 4dp / 容器 30% / 常驻镜面高光与投影 /
+ * 胶囊 `depthEffect`），三层取景结构（Row A / 隐形 Row B / combined 胶囊）保持不变。
  *
  * 只服务于 Termux Ultra 的「玻璃」档（`navStyle == 2` / `"liquid_glass"`）；
- * 浮动玻璃（默认）与经典档分别由 `GlassNavigationBar`、miuix `NavigationBar` 承担。
+ * 默认浮动玻璃(0) 与经典(1) 两档底栏由 `GlassNavigationBar` / miuix `NavigationBar`
+ * 承担，与本文件无关。镜面主光改为固定重力方向（见 `DeviceTilt.kt`）。
  */
 @Composable
 fun LiquidNavigationBar(
@@ -124,127 +117,180 @@ fun LiquidNavigationBar(
 ) {
     if (items.isEmpty()) return
     val isLightTheme = !isSystemInDarkTheme()
-    // demo 的强调色口径（选中/染色都用它）；与 Kiba 主色（蓝）同族
     val accentColor = if (isLightTheme) Color(0xFF0088FF) else Color(0xFF0091FF)
+    // HyperIsland 口径：表面尽量淡，让折射/高光成为主角（旧值 40% 偏实、发闷）
     val containerColor =
-        if (isLightTheme) Color(0xFFFAFAFA).copy(0.4f) else Color(0xFF121212).copy(0.4f)
+        if (isLightTheme) Color(0xFFFAFAFA).copy(0.3f) else Color(0xFF121212).copy(0.3f)
     val isLtr = LocalLayoutDirection.current == LayoutDirection.Ltr
+    val density = LocalDensity.current
     val scope = rememberCoroutineScope()
-
     val tabsBackdrop = rememberLayerBackdrop()
+    // 保留 State 对象本身：回调 lambda 在 remember 里构造，捕获解包值会读到旧 index / 旧回调
+    val latestSelectedIndexState = rememberUpdatedState(selectedIndex)
+    val latestOnSelectState = rememberUpdatedState(onSelect)
+    // 镜面主光跟随设备倾斜（对方 rememberGravityHighlight 的等效实现：
+    // Kyant0 Highlight 没有可配置光源，改为偏移 InteractiveHighlight 的光斑中心）
+    val tiltState = rememberDeviceTilt()
 
-    // 桥接：动画回调（在 BoxWithConstraints 外构造）需要拿内部测量的量。
-    // 回调每次重组都会被重新赋值（捕获最新状态），所以字段可变即可。
-    class DragBridge {
+    // 动画回调在组件最外层构造，但需要 BoxWithConstraints 里的测量值：
+    // 用普通可变对象桥接（BoxWithConstraints 是 SubcomposeLayout，内部 remember 会重建）
+    class Metrics {
         var tabWidth: Float = 0f
+        var totalWidth: Float = 0f
         var isLtr: Boolean = true
-        var offsetAnimation: Animatable<Float, *>? = null
+        // 拖动时每帧都会 cancel/重建，绝不能用 State（会把含 glass 的子树拖进逐帧重组）
         var offsetSnapJob: Job? = null
-        var setCurrent: (Int) -> Unit = {}
+        /** 手指仍按在「其它 tab」上：玻璃保持到抬手（对齐 2.3.18 的按住手感）。 */
+        var holdingOtherTab: Boolean = false
     }
-    val bridge = remember { DragBridge() }
-    bridge.isLtr = isLtr
-    var dampedRef by remember { mutableStateOf<DampedDragAnimation?>(null) }
+    val metrics = remember { Metrics() }
+    metrics.isLtr = isLtr
 
-    var navSettle by remember { mutableStateOf(NavSettle(selectedIndex, 0)) }
-    // 按住其它 tab 触发的迁移：玻璃保持到松手（抬起后的同 index 再触发走 early-return 淡出）
-    var holdPressUntilUp by remember { mutableStateOf(false) }
-    // 只在上报目标真的变化时回调 onSelect，避免吸附回原位也上报一次
-    var reportedIndex by remember { mutableIntStateOf(selectedIndex) }
-    // 下面的 LaunchedEffect 以 damped 为 key、组合存活期间只启动一次，直接捕获
-    // onSelect 会永久持有首次组合的那枚 lambda。若宿主回调按值捕获了当时的
-    // selectedTab（启动页），用户切走后再点回启动页时，旧 lambda 里
-    //「target != selectedTab」会误判为已在目标页而不上报 —— 胶囊飞过去了，
-    // 页面却不动。用 rememberUpdatedState 让协程每次调用都取最新回调。
-    val currentOnSelect by rememberUpdatedState(onSelect)
+    val totalWidthState = remember { mutableFloatStateOf(0f) }
+    val offsetAnimation = remember { Animatable(0f) }
+    // 记录最后一次驱动过动画的 tab，避免「拖动吸附 + selectedIndex 回流」播两次玻璃。
+    // 保留 State 对象本身：回调 lambda 在 remember 里构造，捕获解包后的 Int 会读到旧值。
+    val lastAnimatedState = remember { mutableIntStateOf(selectedIndex) }
 
-    // 与 Kiba 上游一致用 remember(scope)：宿主的 availableTabs 由 remember 无 key
-    // 计算，组合存活期间 tab 数恒定；开关页面会重启 Activity，整棵状态树重建，
-    // 不需要给 items.size 加 key（加了反而会让 highlightIndex / interactiveHighlight
-    // 等派生状态捕获旧 damped 实例）。
-    val damped = remember(scope) {
+    val panelOffsetState = remember(density) {
+        derivedStateOf {
+            val total = totalWidthState.floatValue
+            if (total == 0f) 0f else {
+                val fraction = (offsetAnimation.value / total).fastCoerceIn(-1f, 1f)
+                with(density) {
+                    4f.dp.toPx() * fraction.sign * EaseOut.transform(abs(fraction))
+                }
+            }
+        }
+    }
+
+    // 自引用桥：canDrag / onDragStopped 需要访问尚未构造完的动画对象
+    class Holder { var animation: DampedDragAnimation? = null }
+    val holder = remember { Holder() }
+
+    val dragAnimation = remember(scope, items.size, density) {
         DampedDragAnimation(
             animationScope = scope,
             initialValue = selectedIndex.toFloat(),
             valueRange = 0f..(items.size - 1).toFloat(),
-            visibilityThreshold = 0.001f,
-            initialScale = 1f,
-            pressedScale = 78f / 56f,
+            canDrag = { offset ->
+                val animation = holder.animation ?: return@DampedDragAnimation false
+                val w = metrics.tabWidth
+                if (w <= 0f || metrics.totalWidth <= 0f) return@DampedDragAnimation false
+                val padding = with(density) { 4f.dp.toPx() }
+                val indicatorX = animation.value * w
+                val touchX = if (metrics.isLtr) {
+                    padding + indicatorX + offset.x
+                } else {
+                    metrics.totalWidth - padding - w - indicatorX + offset.x
+                }
+                touchX in 0f..metrics.totalWidth
+            },
             onDragStopped = {
-                dampedRef?.let { d ->
-                    // targetValue 读同步字段，不受排队 snapTo 滞后影响；roundToInt
-                    // 让停在半程的胶囊吸附到最近 tab，并经由状态流触发换页
-                    val target = d.targetValue.fastRoundToInt().fastCoerceIn(0, items.size - 1)
-                    bridge.setCurrent(target)
-                    // demo 的松手回弹：先丢弃排队中的让位 snapTo，否则它会覆盖回弹动画
-                    bridge.offsetSnapJob?.cancel()
-                    bridge.offsetSnapJob = null
-                    bridge.offsetAnimation?.let { a ->
-                        scope.launch { a.animateTo(0f, spring(1f, 300f, 0.5f)) }
+                // 用「动画目标」而不是瞬时视觉值算落点：轻扫末帧 value 还来不及
+                // 跟上 targetValue，拿 value 判断会误以为胶囊已就位。
+                val target = targetValue.fastRoundToInt().fastCoerceIn(0, items.size - 1)
+                // 无条件上报（onSelect 幂等）：轻扫时 target 可能恰好等于当前页，
+                // 但不能因此整段跳过，否则胶囊位置与 selectedIndex 会永久不一致。
+                latestOnSelectState.value(target)
+                lastAnimatedState.intValue = target
+                // 无条件收敛位置：value 接近整数不代表 targetValue 不是半程残留值。
+                // settleTo 只收位置、不重启 press/release，玻璃收尾仍归 onDragEnd 的 release
+                // （它会等位置收敛后才凝回，飞行余韵不受影响）。
+                settleTo(target.toFloat())
+                metrics.offsetSnapJob?.cancel()
+                metrics.offsetSnapJob = null
+                scope.launch { offsetAnimation.animateTo(0f, spring(1f, 300f, 0.5f)) }
+            },
+            onDrag = { _, amount ->
+                val w = metrics.tabWidth
+                if (w > 0f) {
+                    updateValue(
+                        (targetValue + amount.x / w * if (metrics.isLtr) 1f else -1f)
+                            .fastCoerceIn(0f, (items.size - 1).toFloat()),
+                    )
+                    metrics.offsetSnapJob?.cancel()
+                    metrics.offsetSnapJob = scope.launch {
+                        offsetAnimation.snapTo(offsetAnimation.value + amount.x)
                     }
                 }
             },
-            onDrag = { _, dragAmount ->
-                dampedRef?.let { d ->
-                    val w = bridge.tabWidth
-                    if (w > 0f) {
-                        d.updateValue(
-                            d.targetValue + dragAmount.x / w * if (bridge.isLtr) 1f else -1f,
-                        )
-                        bridge.offsetAnimation?.let { a ->
-                            bridge.offsetSnapJob?.cancel()
-                            bridge.offsetSnapJob = scope.launch { a.snapTo(a.value + dragAmount.x) }
-                        }
-                    }
-                }
+            // release 收敛完成后统一对齐：万一某条手势链完全漏掉 onDragStopped，
+            // 这里也能把页面索引拉回胶囊最终落点（极低概率竞态的最后一道兜底）。
+            onGestureSettled = { index ->
+                val target = index.fastCoerceIn(0, items.size - 1)
+                lastAnimatedState.intValue = target
+                if (target != latestSelectedIndexState.value) latestOnSelectState.value(target)
             },
-        ).also { dampedRef = it }
+        ).also { holder.animation = it }
     }
 
-    // 外部 selectedIndex（其它入口切 Tab）→ 汇入同一条流。
-    // 形参不是 State，靠 LaunchedEffect 的 key 变化驱动即可，无需再包一层 snapshotFlow
-    LaunchedEffect(selectedIndex) {
-        if (selectedIndex != navSettle.index) {
-            navSettle = NavSettle(selectedIndex, navSettle.serial + 1)
+    // 外部切 Tab（其它入口改 selectedIndex）→ 驱动液滴飞行。
+    // 底栏自身的点按已在按下瞬间驱动并记账，拖动吸附也已自己播过动画，
+    // 这里靠 lastAnimated 去重，避免玻璃起落两次。
+    LaunchedEffect(dragAnimation) {
+        snapshotFlow { latestSelectedIndexState.value }.collectLatest { index ->
+            val target = index.fastCoerceIn(0, items.size - 1)
+            // 除了 index 变化，静止状态下胶囊位置偏离整数 tab 时也强制对齐，
+            // 让任何一次外部回流都能自愈「卡在两 tab 之间」的残留状态。
+            // 飞行中必须跳过，否则每次点按的 selectedIndex 回流都会重播一次起飞。
+            val drifted = !dragAnimation.isAnimatingValue &&
+                abs(dragAnimation.value - target.toFloat()) > 0.02f
+            if (target != lastAnimatedState.intValue || drifted) {
+                lastAnimatedState.intValue = target
+                dragAnimation.animateToValue(target.toFloat())
+            }
         }
     }
-    // 点按 / 拖动吸附 / 外部切换的唯一出口。
-    // onSelect 必须在动画**之前**即时上报：collectLatest 的新值会取消上一协程，
-    // 若上报排在动画之后，「动画完成 + 立刻松手」的窗口会让 onSelect 随协程
-    // 一起被取消——页面不切但胶囊已飞到目标（恶性竞态，AVD 实证）。
-    // 页面切换与液滴飞行就此解耦：点按即时换页，液滴随后跟上。
-    LaunchedEffect(damped) {
-        snapshotFlow { navSettle }
-            .drop(1)
-            .collectLatest { (index, _) ->
-                if (index != reportedIndex) {
-                    reportedIndex = index
-                    currentOnSelect(index)
-                }
-                // getter 而非值：hold 状态在收尾瞬间才读，松手后到位即淡出
-                damped.animateToValue(index.toFloat()) { holdPressUntilUp }
-            }
+
+    // 图标高亮跟随胶囊实际位置，只在跨过 tab 边界的那一帧重组
+    val highlightIndex by remember {
+        derivedStateOf { dragAnimation.value.fastRoundToInt().fastCoerceIn(0, items.size - 1) }
     }
 
-    // 图标高亮跟随胶囊的实际位置，只在跨过 tab 边界的那一帧重组
-    val highlightIndex by remember {
-        derivedStateOf { damped.value.fastRoundToInt().fastCoerceIn(0, items.size - 1) }
+    val interactiveHighlight = remember(scope) {
+        InteractiveHighlight(
+            animationScope = scope,
+            position = { size, gestureOffset ->
+                val w = metrics.tabWidth
+                val center = if (metrics.isLtr) {
+                    (dragAnimation.value + 0.5f) * w + panelOffsetState.value
+                } else {
+                    size.width - (dragAnimation.value + 0.5f) * w + panelOffsetState.value
+                }
+                val gravity = tiltState.value
+                val magnitudeSquared =
+                    gravity.gravityX * gravity.gravityX + gravity.gravityY * gravity.gravityY
+                val gx = if (magnitudeSquared > 0.01f) {
+                    gravity.gravityX / sqrt(magnitudeSquared)
+                } else {
+                    0f
+                }
+                // 手指在胶囊内的偏移轻微牵引 + 重力决定镜面主光方向
+                val pull = (gestureOffset.x - w / 2f) * 0.2f
+                Offset(
+                    (center + pull + gx * size.minDimension * 0.12f)
+                        .fastCoerceIn(0f, size.width),
+                    size.height / 2f,
+                )
+            },
+        )
     }
 
     // DrawBackdropElement.equals 按 lambda 引用判等，update() 无条件
-    // invalidateDrawCache()。这些 lambda 一旦每次重组新建，整套取景链就会重录
-    // （滚动时表现为底栏细抖），所以身份一律固定在这里。
+    // invalidateDrawCache()。lambda 换身份会重录整套取景链（滚动时底栏细抖），
+    // 所以下面一律 remember 固定身份，动画值只在 draw / graphicsLayer 阶段读。
     val capsuleShape: () -> Shape = remember { { Capsule() } }
     val barEffects: BackdropEffectScope.() -> Unit = remember {
         {
             vibrancy()
-            blur(8f.dp.toPx())
+            blur(4f.dp.toPx())
             lens(24f.dp.toPx(), 24f.dp.toPx())
         }
     }
-    val barLayerBlock: GraphicsLayerScope.() -> Unit = remember(damped) {
+    val barLayerBlock: GraphicsLayerScope.() -> Unit = remember(dragAnimation) {
         {
-            val scale = lerp(1f, 1f + 16f.dp.toPx() / size.width, damped.pressProgress)
+            val scale = lerp(1f, 1f + 16f.dp.toPx() / size.width, dragAnimation.pressProgress)
             scaleX = scale
             scaleY = scale
         }
@@ -252,60 +298,81 @@ fun LiquidNavigationBar(
     val barSurface: DrawScope.() -> Unit = remember(containerColor) {
         { drawRect(containerColor) }
     }
-    val exportEffects: BackdropEffectScope.() -> Unit = remember(damped) {
+    // 常驻镜面高光 + 淡投影：HyperIsland 的 baseHighlight(0.75) / dropShadow(10dp)
+    val barHighlight: () -> Highlight? = remember {
+        { Highlight.Default.copy(alpha = 0.75f) }
+    }
+    val barShadow: () -> Shadow? = remember(isLightTheme) {
         {
-            val progress = damped.pressProgress
+            Shadow(
+                radius = 10f.dp,
+                color = Color.Black,
+                alpha = if (isLightTheme) 0.1f else 0.2f,
+            )
+        }
+    }
+    val exportEffects: BackdropEffectScope.() -> Unit = remember(dragAnimation) {
+        {
+            val progress = dragAnimation.pressProgress
             vibrancy()
-            blur(8f.dp.toPx())
+            blur(4f.dp.toPx())
             lens(24f.dp.toPx() * progress, 24f.dp.toPx() * progress)
         }
     }
-    val exportHighlight: () -> Highlight? = remember(damped) {
-        { Highlight.Default.copy(alpha = damped.pressProgress) }
+    val exportHighlight: () -> Highlight? = remember(dragAnimation) {
+        { Highlight.Default.copy(alpha = dragAnimation.pressProgress) }
     }
-    val pillLens: BackdropEffectScope.() -> Unit = remember(damped) {
+    val pillLens: BackdropEffectScope.() -> Unit = remember(dragAnimation) {
         {
-            val progress = damped.pressProgress
-            lens(10f.dp.toPx() * progress, 14f.dp.toPx() * progress, chromaticAberration = true)
+            val progress = dragAnimation.pressProgress
+            // depthEffect 对齐 HyperIsland：折射带纵深，不再是一层平面色散
+            lens(
+                10f.dp.toPx() * progress,
+                14f.dp.toPx() * progress,
+                depthEffect = true,
+                chromaticAberration = true,
+            )
         }
     }
-    val pillHighlight: () -> Highlight? = remember(damped) {
-        { Highlight.Default.copy(alpha = damped.pressProgress) }
+    val pillHighlight: () -> Highlight? = remember(dragAnimation) {
+        { Highlight.Default.copy(alpha = dragAnimation.pressProgress) }
     }
-    val pillShadow: () -> Shadow? = remember(damped) {
-        { Shadow(alpha = damped.pressProgress) }
+    val pillShadow: () -> Shadow? = remember(dragAnimation) {
+        { Shadow(alpha = dragAnimation.pressProgress) }
     }
-    val pillInnerShadow: () -> InnerShadow? = remember(damped) {
-        { InnerShadow(radius = 8f.dp * damped.pressProgress, alpha = damped.pressProgress) }
-    }
-    val pillLayerBlock: GraphicsLayerScope.() -> Unit = remember(damped) {
+    val pillInnerShadow: () -> InnerShadow? = remember(dragAnimation) {
         {
-            scaleX = damped.scaleX
-            scaleY = damped.scaleY
-            // 只有手指拖动才拉伸：点按飞行的速度随距离变化，会拉成形状不定的色块
-            val velocity = damped.stretchVelocity / 10f
+            InnerShadow(
+                radius = 8f.dp * dragAnimation.pressProgress,
+                alpha = dragAnimation.pressProgress,
+            )
+        }
+    }
+    val pillLayerBlock: GraphicsLayerScope.() -> Unit = remember(dragAnimation) {
+        {
+            scaleX = dragAnimation.scaleX
+            scaleY = dragAnimation.scaleY
+            val velocity = dragAnimation.velocity / 10f
             scaleX /= 1f - (velocity * 0.75f).fastCoerceIn(-0.2f, 0.2f)
             scaleY *= 1f - (velocity * 0.25f).fastCoerceIn(-0.2f, 0.2f)
         }
     }
-    val pillSurface: DrawScope.() -> Unit = remember(isLightTheme, damped) {
+    val pillSurface: DrawScope.() -> Unit = remember(isLightTheme, dragAnimation) {
         {
-            val progress = damped.pressProgress
+            val progress = dragAnimation.pressProgress
+            // 静止 = 灰色提示；按住/飞行 = 白玻璃气泡（透镜正对图标时也有清晰液滴）
             drawRect(
                 if (isLightTheme) Color.Black.copy(0.1f) else Color.White.copy(0.1f),
                 alpha = 1f - progress,
             )
-            // 按住 / 飞行 = 白玻璃气泡：透镜在当前 tab 上正好对着图标、折射看不出来，
-            // 没有这层白底「按住已选 tag」完全没有玻璃感，白底让任何 tab 都是同一颗液滴
             drawRect(
                 if (isLightTheme) Color.White.copy(0.38f) else Color.White.copy(0.14f),
                 alpha = progress,
             )
         }
     }
-    // Row B 录制层的图标随按压鼓起（demo 的 LocalLiquidBottomTabScale 口径）
-    val pressScale: () -> Float = remember(damped) {
-        { lerp(1f, 1.2f, damped.pressProgress) }
+    val pressScale: () -> Float = remember(dragAnimation) {
+        { lerp(1f, 1.2f, dragAnimation.pressProgress) }
     }
     val combinedBackdrop = if (backdrop != null) {
         rememberCombinedBackdrop(backdrop, tabsBackdrop)
@@ -314,56 +381,30 @@ fun LiquidNavigationBar(
     }
 
     BoxWithConstraints(modifier, contentAlignment = Alignment.CenterStart) {
-        val density = LocalDensity.current
         val tabWidth = with(density) {
             (constraints.maxWidth.toFloat() - 8f.dp.toPx()) / items.size
         }
-        bridge.tabWidth = tabWidth
 
-        // 整条底栏的"被拖动"偏移：拖动时底栏向拖动方向微微让位（最多 4dp，EaseOut 收敛）
-        val offsetAnimation = remember { Animatable(0f) }
-        bridge.offsetAnimation = offsetAnimation
-        // 单次状态写：serial 自增保证「吸附回原 tab」也会 emit 一次
-        bridge.setCurrent = { index ->
-            navSettle = NavSettle(index, navSettle.serial + 1)
-        }
-        val panelOffsetState = remember(density) {
-            derivedStateOf {
-                val fraction = (offsetAnimation.value / constraints.maxWidth).fastCoerceIn(-1f, 1f)
-                with(density) {
-                    4f.dp.toPx() * fraction.sign * EaseOut.transform(abs(fraction))
-                }
-            }
-        }
-        val panelOffset by panelOffsetState
-
-        val interactiveHighlight = remember(scope) {
-            InteractiveHighlight(
-                animationScope = scope,
-                position = { size, _ ->
-                    val w = bridge.tabWidth
-                    Offset(
-                        if (bridge.isLtr) {
-                            (damped.value + 0.5f) * w + panelOffsetState.value
-                        } else {
-                            size.width - (damped.value + 0.5f) * w + panelOffsetState.value
-                        },
-                        size.height / 2f,
-                    )
-                },
-            )
-        }
-
-        // Row A：可见底栏
+        // Row A：可见底栏。胶囊手势只覆盖当前 tab，点其它 tab 的即时入口在链尾的 pointerInput。
         Row(
             Modifier
-                .graphicsLayer { translationX = panelOffset }
+                .onGloballyPositioned { coordinates ->
+                    val w = coordinates.size.width.toFloat()
+                    totalWidthState.floatValue = w
+                    val tabWidthMeasured = ((w - with(density) { 8f.dp.toPx() }) / items.size)
+                        .coerceAtLeast(0f)
+                    metrics.totalWidth = w
+                    metrics.tabWidth = tabWidthMeasured
+                }
+                .graphicsLayer { translationX = panelOffsetState.value }
                 .then(
                     if (backdrop != null) {
                         Modifier.drawBackdrop(
                             backdrop = backdrop,
                             shape = capsuleShape,
                             effects = barEffects,
+                            highlight = barHighlight,
+                            shadow = barShadow,
                             layerBlock = barLayerBlock,
                             onDrawSurface = barSurface,
                         )
@@ -372,114 +413,108 @@ fun LiquidNavigationBar(
                     },
                 )
                 .then(interactiveHighlight.modifier)
+                .clickable(
+                    interactionSource = null,
+                    indication = null,
+                    onClick = {},
+                )
                 .height(height)
                 .fillMaxWidth()
                 .padding(4f.dp)
-                // 按下立刻浮现玻璃（在当前选中的 tag 上）：不等抬起后的状态流。
-                // 抬手后延迟兜底回落——若触发了换页，animateToValue 的
-                // press.animateTo(1f) 会抢占回落，玻璃保持到飞到位再淡出。
-                .pointerInput(Unit) {
+                // 宿主适配（#372 口径）：Kiba 上游在 down 立即「起飞 + onSelect」，
+                // 但从底栏起手的纵向滚动会被误判成选 tab（#367 修过默认底栏同款问题）。
+                // 这里把命中提交延后到确认手势方向；提交时起飞与切页仍在同一帧完成，
+                // 不等父级 selectedIndex 回流，所以不会退化成 Kiba v2 的「抬手慢半拍」。
+                .pointerInput(dragAnimation, items.size) {
                     awaitEachGesture {
-                        awaitFirstDown()
-                    }
-                }
-                .pointerInput(damped, items.size) {
-                    awaitEachGesture {
-                        val down = awaitFirstDown(pass = PointerEventPass.Initial)
-                        val downX = down.position.x
-                        val downY = down.position.y
-                        damped.pressDown()
-                        holdPressUntilUp = true
-                        val hit = (downX / tabWidth).toInt().fastCoerceIn(0, items.size - 1)
-                        // 按下时所在的 tab：松手时据此判断轻点有没有触发迁移
-                        val startIndex = navSettle.index
-                        // Termux Ultra 适配：命中迁移延后到确认手势方向后再提交。
-                        // 从底栏起手的纵向滚动要放行给页面（PR #367 修过默认底栏的同款
-                        // 误判）；Kiba 上游「按下即切页」会让纵滑被误判成选 tab。
-                        var hitCommitted = false
-                        // 按住期间左右拖动跟手：可继续拖过任意 tag，松手吸附最近者。
-                        // 首帧从胶囊的**实际视觉位置**起跳（迁移动画可能已飞出半程，
-                        // 若从 pendingTarget 起跳会回跳）。
-                        var lastX = downX
+                        val down = awaitFirstDown(
+                            requireUnconsumed = false,
+                            pass = PointerEventPass.Initial,
+                        )
+                        val w = metrics.tabWidth
+                        if (w <= 0f) return@awaitEachGesture
+                        val startIndex = latestSelectedIndexState.value
+                        // 内容区宽 = tabWidth * n（左右各 4dp padding 已排除）
+                        val x = if (metrics.isLtr) {
+                            down.position.x
+                        } else {
+                            w * items.size - down.position.x
+                        }
+                        val hit = (x / w).toInt().fastCoerceIn(0, items.size - 1)
+                        var committed = false
+                        // 记账 + 起飞 + 切页一次完成；selectedIndex 回流时
+                        // snapshotFlow 靠 lastAnimatedState 去重，不会播两次玻璃。
+                        fun commit() {
+                            if (committed || hit == startIndex) return
+                            committed = true
+                            lastAnimatedState.intValue = hit
+                            metrics.holdingOtherTab = true
+                            dragAnimation.animateToValue(hit.toFloat()) {
+                                metrics.holdingOtherTab
+                            }
+                            latestOnSelectState.value(hit)
+                        }
+                        val dir = if (metrics.isLtr) 1f else -1f
+                        var lastX = down.position.x
                         var dragging = false
+                        var dragBase = 0f
                         while (true) {
-                            val event = awaitPointerEvent()
-                            val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                            val totalDx = abs(change.position.x - downX)
-                            val dy = abs(change.position.y - downY)
-                            if (!dragging && !hitCommitted &&
-                                dy > viewConfiguration.touchSlop && dy > totalDx
+                            val event = awaitPointerEvent(PointerEventPass.Initial)
+                            val change =
+                                event.changes.firstOrNull { it.id == down.id } ?: break
+                            val totalDx = abs(change.position.x - down.position.x)
+                            val totalDy = abs(change.position.y - down.position.y)
+                            if (!committed && !dragging &&
+                                totalDy > viewConfiguration.touchSlop && totalDy > totalDx
                             ) {
-                                // 纵向为主：不提交命中、不驱动胶囊，事件留给页面滚动
-                                holdPressUntilUp = false
-                                // 与松手段对齐：有迁移在飞时不调，否则 280ms 后的
-                                // 延迟回落会在飞行后半段提前把玻璃淡掉
-                                if (!damped.inFlight) damped.pressUpDelayed()
+                                // 纵向为主：不提交、不驱动胶囊，事件留给页面滚动
                                 return@awaitEachGesture
                             }
                             val dx = change.position.x - lastX
                             lastX = change.position.x
-                            if (dragging || totalDx > viewConfiguration.touchSlop) {
-                                dragging = true
-                                change.consume()
-                                if (!hitCommitted) {
-                                    hitCommitted = true
-                                    if (hit != navSettle.index) {
-                                        navSettle = NavSettle(hit, navSettle.serial + 1)
-                                    }
-                                }
-                                damped.updateValue(
-                                    (if (damped.targetValue != damped.value) damped.value
-                                     else damped.targetValue) + dx / tabWidth * if (isLtr) 1f else -1f,
-                                )
-                                // demo 的让位：整条底栏向拖动方向微移
-                                bridge.offsetSnapJob?.cancel()
-                                bridge.offsetSnapJob = scope.launch {
-                                    bridge.offsetAnimation?.let { a ->
-                                        a.snapTo(a.value + dx)
-                                    }
-                                }
-                            }
                             if (!change.pressed) {
-                                // 轻点：抬起时提交命中
-                                if (!hitCommitted) {
-                                    hitCommitted = true
-                                    if (hit != navSettle.index) {
-                                        navSettle = NavSettle(hit, navSettle.serial + 1)
-                                    }
-                                }
-                                // 消费 up：下层 TabContent 还挂着 clickable，不消费会再写一次
-                                // navSettle（同一帧三次写会让 collectLatest 吞掉本次切换）
-                                change.consume()
+                                // 轻点抬手：提交命中。不 consume up，胶囊上的
+                                // inspectDragGestures 与 TabContent.clickable 都要收到事件。
+                                commit()
                                 break
                             }
+                            if (!dragging) {
+                                if (totalDx <= viewConfiguration.touchSlop) continue
+                                dragging = true
+                                commit()
+                                // 首帧从胶囊真实视觉位置起跳：起飞动画可能已飞出半程，
+                                // 用按下点或 targetValue 起跳都会让液滴当场回跳
+                                dragBase = dragAnimation.value
+                                continue
+                            }
+                            dragBase = (dragBase + dx / w * dir)
+                                .fastCoerceIn(0f, (items.size - 1).toFloat())
+                            dragAnimation.updateValue(dragBase)
+                            // 整条底栏让位（与胶囊拖动手势同口径）
+                            metrics.offsetSnapJob?.cancel()
+                            metrics.offsetSnapJob = scope.launch {
+                                offsetAnimation.snapTo(offsetAnimation.value + dx)
+                            }
                         }
-                        // 松手分流：只有拖动过才按视觉位置重发吸附。
-                        // 纯点按此刻迁移刚提交、还在飞，重发会把它取消在半程并把目标
-                        // 改成中途 tag（快速点按切错页的根因）；页面在提交时已切好，
-                        // 放行动画播完，到位后 hold 已释放、玻璃自动淡出。
-                        holdPressUntilUp = false
-                        bridge.offsetSnapJob?.cancel()
-                        bridge.offsetSnapJob = null
-                        bridge.offsetAnimation?.let { a ->
-                            scope.launch { a.animateTo(0f, spring(1f, 300f, 0.5f)) }
+                        metrics.holdingOtherTab = false
+                        metrics.offsetSnapJob?.cancel()
+                        metrics.offsetSnapJob = null
+                        scope.launch {
+                            offsetAnimation.animateTo(0f, spring(1f, 300f, 0.5f))
                         }
                         if (dragging) {
-                            navSettle = NavSettle(
-                                damped.value.fastRoundToInt().fastCoerceIn(0, items.size - 1),
-                                navSettle.serial + 1,
-                            )
-                        } else if (hit == startIndex && !damped.inFlight) {
-                            // 点在当前 tab / 没有迁移在飞：兜底淡出。有迁移在飞时不调，
-                            // 280ms 后的延迟淡出会在飞行途中把玻璃淡掉，淡出交给
-                            // animateToValue 收尾（hold 释放后到位即淡）。
-                            damped.pressUpDelayed()
+                            // 纯点按绝不重发吸附：此刻起飞动画可能还在飞，
+                            // round 半程点会把目标改成中途 tab 并掐断在飞的动画。
+                            // 拖动过则用 targetValue 而非瞬时 value 算落点：
+                            // 轻扫末帧的写入可能还没落到 value 上。
+                            val target = dragAnimation.targetValue.fastRoundToInt()
+                                .fastCoerceIn(0, items.size - 1)
+                            lastAnimatedState.intValue = target
+                            // 只收敛位置，玻璃收尾仍交给按住链那次 release
+                            dragAnimation.settleTo(target.toFloat())
+                            // 无条件上报，保证页面与胶囊落点一致
+                            latestOnSelectState.value(target)
                         }
-                        // 纯点按且触发了迁移的分支既不重发 navSettle、也不调
-                        // pressUpDelayed：玻璃淡出完全由该次 animateToValue 收尾负责。
-                        // 前提是本帧内没有第二次 navSettle 写入取消它——up 分支已
-                        // change.consume() 挡住下层 TabContent.clickable，且 onSelect
-                        // 回写的 selectedIndex 与 navSettle.index 相等不会再触发流。
                     }
                 },
             verticalAlignment = Alignment.CenterVertically,
@@ -489,9 +524,14 @@ fun LiquidNavigationBar(
                     item = item,
                     tint = if (i == highlightIndex) accentColor else unselectedTint(),
                     modifier = Modifier.weight(1f).fillMaxHeight(),
-                    // 不直接 onSelect：交给状态流在液滴到位后统一上报一次
+                    // 键盘 / 无障碍点击没有 down 事件，这里兜底；普通点按已由上面的
+                    // Initial pass 观察器驱动，lastAnimatedState 去重避免玻璃起落两次。
                     onClick = {
-                        navSettle = NavSettle(i, navSettle.serial + 1)
+                        if (i != lastAnimatedState.intValue) {
+                            lastAnimatedState.intValue = i
+                            dragAnimation.animateToValue(i.toFloat())
+                        }
+                        latestOnSelectState.value(i)
                     },
                 )
             }
@@ -503,7 +543,7 @@ fun LiquidNavigationBar(
                 .clearAndSetSemantics {}
                 .alpha(0f)
                 .layerBackdrop(tabsBackdrop)
-                .graphicsLayer { translationX = panelOffset }
+                .graphicsLayer { translationX = panelOffsetState.value }
                 .then(
                     if (backdrop != null) {
                         Modifier.drawBackdrop(
@@ -523,8 +563,7 @@ fun LiquidNavigationBar(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             // 不画表面色、不整层 ColorFilter.tint、不挂 clickable：
-            // 前两个会把 tabsBackdrop 染成实心蓝（胶囊折射出一整块色块），
-            // 第三个会拦掉 Row A 的真实点按（均为 AVD 实证）。
+            // 前两个会把 tabsBackdrop 染成实心蓝，第三个会拦掉 Row A 的真实点按。
             items.forEach { item ->
                 TabContent(
                     item = item,
@@ -536,18 +575,21 @@ fun LiquidNavigationBar(
             }
         }
 
-        // 胶囊：一切玻璃效果 × pressProgress；静止 = Black 10% 灰色提示
+        // 胶囊：手势 + 高光 + 一切玻璃效果。按住当前 tab 时手指正落在这块上，
+        // inspectDragGestures 的 Initial pass 立刻 press() —— 这是本次修复的关键。
         Box(
             Modifier
                 .padding(horizontal = 4f.dp)
                 .graphicsLayer {
-                    translationX = if (bridge.isLtr) {
-                        damped.value * tabWidth + panelOffset
+                    translationX = if (metrics.isLtr) {
+                        dragAnimation.value * tabWidth + panelOffsetState.value
                     } else {
-                        size.width - (damped.value + 1f) * tabWidth + panelOffset
+                        size.width - (dragAnimation.value + 1f) * tabWidth +
+                            panelOffsetState.value
                     }
                 }
                 .then(interactiveHighlight.gestureModifier)
+                .then(dragAnimation.modifier)
                 .then(
                     if (combinedBackdrop != null) {
                         Modifier.drawBackdrop(
@@ -610,6 +652,7 @@ private fun TabContent(
         verticalArrangement = Arrangement.spacedBy(1.dp, Alignment.CenterVertically),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
+        // 宿主适配：TU 的 GlassNavigationItem 只有 ImageVector，没有 iconPainter。
         Icon(
             imageVector = item.icon,
             contentDescription = item.contentDescription ?: item.label,
