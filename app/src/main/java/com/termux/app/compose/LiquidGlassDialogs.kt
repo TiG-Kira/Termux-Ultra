@@ -91,16 +91,18 @@ fun HyperLiquidDialog(
     onDismissRequest: (() -> Unit)? = null,
     onDismissFinished: (() -> Unit)? = null,
     maxWidth: Dp = DialogDefaults.MaxWidth,
-    cornerRadius: Dp = DialogDefaults.CornerRadius,
+    cornerRadius: Dp? = null,
     content: @Composable () -> Unit,
 ) {
+    // 与 miuix 对话框同源：显式指定优先，否则按屏幕圆角推导（贴底呈现那一档）。
+    val dialogCornerRadius = cornerRadius ?: miuixDialogCornerRadius()
     LiquidDialogHost(show, onDismissRequest, onDismissFinished) {
         LiquidGlassDialog(
             visible = show,
             onDismissRequest = { onDismissRequest?.invoke() },
             backdrop = backdrop,
             alignment = Alignment.BottomCenter,
-            cornerRadius = cornerRadius,
+            cornerRadius = dialogCornerRadius,
             motion = LiquidDialogMotion.Dialog,
         ) {
             Column(

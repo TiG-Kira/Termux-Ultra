@@ -42,12 +42,10 @@ import com.kyant.backdrop.effects.blur
 import com.kyant.backdrop.effects.lens
 import com.kyant.backdrop.effects.vibrancy
 import com.kyant.shapes.RoundedRectangle
+import com.termux.app.compose.miuixDialogCornerRadius
 import top.yukonga.miuix.kmp.glass.GlassMotion
 import top.yukonga.miuix.kmp.glass.GlassOverlayDefaults
 import top.yukonga.miuix.kmp.theme.MiuixTheme
-
-/** 液态玻璃弹层的圆角（与 miuix 对话框的 32dp 对齐，比 glass 默认 28dp 更硬朗）。 */
-val LiquidDialogCornerRadius: Dp = 32.dp
 
 /**
  * 液态弹层的两种出场方式。
@@ -63,10 +61,13 @@ enum class LiquidDialogMotion { Dialog, BottomSheet }
  *
  * 结构与 miuix `GlassDialog` 一致（Scrim 点击关闭 / 底部滑入或居中缩放 / IME 与导航栏避让），
  * 但材质换成液态玻璃：`vibrancy + blur(12dp) + lens(24dp, 28dp, chromaticAberration)`，
- * 28/32dp 圆角用 `RoundedRectangle` 而不是 `Capsule`，透镜 shader 才拿得到角半径。
+ * 圆角用 `RoundedRectangle` 而不是 `Capsule`——透镜 shader 要从形状里取角半径。
+ *
+ * 圆角**默认跟随 miuix 对话框**（[miuixDialogCornerRadius]：贴底呈现走屏幕圆角推导、
+ * 夹在 32..48dp），不再写死 32dp：写死会在屏幕圆角大的机器上比 miuix 自己的弹层明显更方。
  *
  * 与柔光玻璃+ 的差别在于弹层边缘会出现明显的色散彩边（厚玻璃特征），
- * 且内阴影换成 32dp 大圆角的深投影，观感更「液态」。
+ * 且内阴影换成大圆角的深投影，观感更「液态」。
  *
  * 注意：`backdrop` 必须是渲染在本弹层子树**之外**的取景层（主屏内容 Box 注册那条），
  * 否则会自采样成环。
@@ -79,7 +80,7 @@ fun LiquidGlassDialog(
     modifier: Modifier = Modifier,
     alignment: Alignment = Alignment.BottomCenter,
     scrimColor: Color = Color.Black,
-    cornerRadius: Dp = LiquidDialogCornerRadius,
+    cornerRadius: Dp = miuixDialogCornerRadius(),
     motion: LiquidDialogMotion = LiquidDialogMotion.BottomSheet,
     content: @Composable ColumnScope.() -> Unit,
 ) {

@@ -160,7 +160,7 @@ fun MainScreen(
 
     val context = LocalContext.current
     val navPrefs = remember { context.getSharedPreferences("app_settings", Context.MODE_PRIVATE) }
-    // UI 外观样式（超级柔光）：与导航栏样式相互独立；非默认时内容根挂取景层，供玻璃弹层取景。
+    // UI 外观样式（柔光玻璃+）：与导航栏样式相互独立；非默认时内容根挂取景层，供玻璃弹层取景。
     UiStylePrefs.init(context)
     val uiStyle by UiStylePrefs.uiStyle.collectAsState()
     // 组合期同步顶栏 token：切换样式只重启 Activity，进程不重启，只靠 Application 会失效。
@@ -320,7 +320,7 @@ fun MainScreen(
 
     // 根 Box：除 Scaffold 外还要挂「页面弹层」宿主。宿主必须与 Scaffold 同级且声明在
     // 其后（同层后声明者在上），弹层才能绘制在 topBar 槽的全局顶栏之上。
-    // 取景层只在超级柔光下暴露给弹层，默认样式不提供 → 所有弹层原样回落 miuix。
+    // 取景层只在柔光玻璃+ 下暴露给弹层，默认样式不提供 → 所有弹层原样回落 miuix。
     // 液态玻璃外观另走一条 kyant 取景链，顶栏皮肤 / 圆钮 / 弹层共用它；
     // 两个 Local 都只在样式命中时非空，其余样式下所有新分支自动关闭。
     CompositionLocalProvider(

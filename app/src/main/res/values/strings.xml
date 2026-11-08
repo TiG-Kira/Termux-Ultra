@@ -562,7 +562,7 @@
     <!-- UI Appearance Style -->
     <string name="ui_appearance_style">UI Style</string>
     <string name="ui_appearance_style_description">Switch grouped cards, dialogs and the top bar between glass looks. Does not affect navigation bar settings.</string>
-    <string name="ui_style_soft">Super Soft</string>
+    <string name="ui_style_soft">Soft Glass+</string>
     <string name="ui_style_liquid">Liquid Glass</string>
     <string name="ui_style_default">Default</string>
     <string name="ui_style_restart_message">UI style changes will take effect after the app is restarted. Restart now?</string>

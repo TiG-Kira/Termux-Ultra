@@ -39,7 +39,7 @@ fun OverlayDialog(
     content: @Composable () -> Unit,
 ) {
     MainNavBarHideEffect(show)
-    // 超级柔光：走玻璃弹层；默认样式（或没有取景层）原样走 miuix，连参数都不动。
+    // 柔光玻璃+：走玻璃弹层；默认样式（或没有取景层）原样走 miuix，连参数都不动。
     // 读 Local 而不是全局 StateFlow：豁免页可用 AppearanceStyleExempt 强制回落 Default。
     val uiStyle = LocalUiStyle.current
     // 液态玻璃外观：走 kyant 取景链的液态弹层，与柔光的 miuix 玻璃弹层互斥。
@@ -56,7 +56,7 @@ fun OverlayDialog(
             onDismissRequest = onDismissRequest,
             onDismissFinished = onDismissFinished,
             maxWidth = maxWidth,
-            cornerRadius = cornerRadius ?: DialogDefaults.CornerRadius,
+            cornerRadius = cornerRadius,
             content = content,
         )
         return
@@ -79,7 +79,7 @@ fun OverlayDialog(
             onDismissRequest = onDismissRequest,
             onDismissFinished = onDismissFinished,
             maxWidth = maxWidth,
-            cornerRadius = cornerRadius ?: DialogDefaults.CornerRadius,
+            cornerRadius = cornerRadius,
             content = content,
         )
         return
@@ -172,7 +172,7 @@ fun OverlayBottomSheet(
     content: @Composable () -> Unit,
 ) {
     MainNavBarHideEffect(show)
-    // 超级柔光：底部弹层同样玻璃化；默认样式（或没有取景层）原样走 miuix。
+    // 柔光玻璃+：底部弹层同样玻璃化；默认样式（或没有取景层）原样走 miuix。
     val sheetStyle = LocalUiStyle.current
     val sheetLiquidBackdrop = LocalLiquidBackdrop.current
     if (glassEnabled && sheetStyle is HyperGlassStyle.Liquid && sheetLiquidBackdrop != null) {
