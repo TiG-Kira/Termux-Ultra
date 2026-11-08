@@ -35,6 +35,7 @@ import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
@@ -312,29 +313,38 @@ fun AboutGradientLogo(
                 .map(::strengthenAboutColor)
                 .map { aboutInkColor(it, dark) }
             val shift = sin(t * 0.42f) * size.width * 0.30f
-            drawRect(
-                brush = Brush.linearGradient(
-                    colors = colors + colors.first(),
-                    start = Offset(shift - size.width * 0.2f, 0f),
-                    end = Offset(shift + size.width * 1.1f, size.height),
-                ),
-                topLeft = Offset.Zero,
-                size = Size(size.width, size.height),
-            )
             // 按纵横比塞进画布并居中：蒙版已在 [rememberGradientLogoMask] 里裁到图形紧边界，
             // 直接拉伸成正方形会把 `>_` 压扁
             val fit = min(size.width / logo.width, size.height / logo.height)
             val dstW = (logo.width * fit).roundToInt().coerceAtLeast(1)
             val dstH = (logo.height * fit).roundToInt().coerceAtLeast(1)
-            drawImage(
-                image = logo,
-                dstOffset = IntOffset(
-                    (size.width.toInt() - dstW) / 2,
-                    (size.height.toInt() - dstH) / 2,
-                ),
-                dstSize = IntSize(dstW, dstH),
-                blendMode = BlendMode.DstIn,
-            )
+            val dstLeft = (size.width.toInt() - dstW) / 2
+            val dstTop = (size.height.toInt() - dstH) / 2
+            // DstIn 的混合只作用于 drawImage 的 dst 矩形，矩形外的渐变不会被蒙掉。
+            // 图形宽高比不是 1:1，居中后上下会各留一条实心渐变带（就是 Logo 上下那两条横线），
+            // 所以「铺底 + 蒙版」一起裁进同一块 dst 矩形。
+            clipRect(
+                left = dstLeft.toFloat(),
+                top = dstTop.toFloat(),
+                right = (dstLeft + dstW).toFloat(),
+                bottom = (dstTop + dstH).toFloat(),
+            ) {
+                drawRect(
+                    brush = Brush.linearGradient(
+                        colors = colors + colors.first(),
+                        start = Offset(shift - size.width * 0.2f, 0f),
+                        end = Offset(shift + size.width * 1.1f, size.height),
+                    ),
+                    topLeft = Offset.Zero,
+                    size = Size(size.width, size.height),
+                )
+                drawImage(
+                    image = logo,
+                    dstOffset = IntOffset(dstLeft, dstTop),
+                    dstSize = IntSize(dstW, dstH),
+                    blendMode = BlendMode.DstIn,
+                )
+            }
         }
     }
 }
