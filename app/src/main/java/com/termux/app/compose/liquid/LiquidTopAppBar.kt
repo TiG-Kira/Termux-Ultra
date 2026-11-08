@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
@@ -66,6 +67,20 @@ val LiquidTopBarHorizontalInset: Dp = 12.dp
 
 /** 玻璃块底部圆角：顶部贴屏幕边不圆角，底部 28dp 收口像一块垂下来的玻璃。 */
 private val LiquidTopBarGlassRadius: Dp = 28.dp
+
+/**
+ * 玻璃块**顶部**上溢量：把玻璃的顶边推到屏幕之外，屏幕里只剩下一条笔直的边。
+ *
+ * 形状本身已经写成 `topStart = topEnd = 0dp`，但仅靠形状压不住顶角圆弧——
+ * Kyant 的 `drawBackdrop` 会先把玻璃层按 `BackdropEffectScope.padding`（透镜采样外扩）
+ * 放大、再按形状裁轮廓，外扩后的轮廓在屏幕顶边这一侧依旧会露出约 28dp 的圆弧
+ * （用户实证：顶栏玻璃上方左右各一个圆角，下方才是想要的收口）。
+ * 与其跟库的裁剪口径较劲，直接把玻璃块整体上移、高度同步加长：
+ * 顶角圆弧落到屏幕外被裁掉，底部 28dp 圆角的位置分毫不动。
+ *
+ * 多给的 8dp 是余量：外扩 padding 会让轮廓再往外偏一点，只补 28dp 会残留一线弧。
+ */
+private val LiquidTopBarGlassBleed: Dp = LiquidTopBarGlassRadius + 8.dp
 
 /**
  * 顶栏动作按钮的**外**间距（每个按钮左右各占这么多）。
@@ -178,14 +193,19 @@ fun LiquidTopBarSkin(
     val glassSurface: androidx.compose.ui.graphics.drawscope.DrawScope.() -> Unit =
         remember(glassColor) { { drawRect(glassColor) } }
 
+    val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+
     Box(
         modifier = modifier
             .fillMaxWidth()
             // 皮肤只盖「状态栏 + 折叠态高度」：骨架有大标题区（展开态高很多），
             // matchParentSize 会让半透明玻璃在中途态罩住大标题（视觉 bug），固定高度杜绝。
             // 高度必须**含**状态栏且从屏幕顶边起画——玻璃要包住通知栏（statusBarsPadding
-            // 会让玻璃从状态栏下方才开始，顶上露出一条内容，实证踩过）
-            .height(collapsedHeight + WindowInsets.statusBars.asPaddingValues().calculateTopPadding())
+            // 会让玻璃从状态栏下方才开始，顶上露出一条内容，实证踩过）。
+            // 再往上多铺 [LiquidTopBarGlassBleed] 并用同样的偏移把整块玻璃顶上去：
+            // 底边位置不变，顶边的两个圆弧落到屏幕外，可见部分只剩一条直边。
+            .offset(y = -LiquidTopBarGlassBleed)
+            .height(collapsedHeight + statusBarTop + LiquidTopBarGlassBleed)
             .graphicsLayer {
                 // 折叠到 1/3 时玻璃已经完全成形，避免半透明玻璃糊在标题后面
                 alpha = glassAlpha()

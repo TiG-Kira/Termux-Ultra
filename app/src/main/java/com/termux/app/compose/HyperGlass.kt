@@ -45,6 +45,7 @@ import top.yukonga.miuix.kmp.glass.GlassTopAppBarDefaults
 import top.yukonga.miuix.kmp.layout.DialogDefaults
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.utils.MiuixPopupUtils
+import top.yukonga.miuix.kmp.utils.getRoundedCorner
 
 /**
  * 全局 UI 外观样式偏好（设置-外观组）。
@@ -106,7 +107,7 @@ object UiStylePrefs {
 }
 
 /**
- * UI 外观样式：默认（现有 UI）/ 超级柔光 / 液态玻璃。
+ * UI 外观样式：默认（现有 UI）/ 柔光玻璃+ / 液态玻璃。
  *
  * @param cornerRadius 分组卡片圆角：柔光样式用连续曲率的大圆角
  */
@@ -115,7 +116,7 @@ sealed interface HyperGlassStyle {
     /** 默认：完全沿用现有 UI。 */
     data object Default : HyperGlassStyle
 
-    /** 超级柔光：分组卡大圆角 + miuix 玻璃弹层。 */
+    /** 柔光玻璃+：分组卡大圆角 + miuix 玻璃弹层。 */
     data class Soft(
         val cornerRadius: Dp = 26.dp
     ) : HyperGlassStyle
@@ -187,6 +188,22 @@ fun applyUiStyleTokens(style: HyperGlassStyle) {
 }
 
 /**
+ * 弹层圆角：照抄 miuix 的对话框圆角逻辑，不再写死 32dp。
+ *
+ * miuix `DialogContentLayout` 贴底呈现时与设备**屏幕圆角同心**：
+ * `getRoundedCorner() - outsideMargin.width`，再夹到 32dp..48dp
+ * （屏幕圆角 ≤ 44dp 时落在 32dp，≥ 60dp 才顶到 48dp）。玻璃弹层容器的
+ * `enableAutoLargeScreen = false`，永远是贴底那档，所以只取这一档。
+ *
+ * 之前两套玻璃主题都写死 32dp：屏幕圆角大的机器上，弹层比 miuix 自己的
+ * `OverlayDialog` 明显更方——开关一次材质就能看出是两套圆角。
+ */
+@Composable
+fun miuixDialogCornerRadius(): Dp =
+    (getRoundedCorner() - DialogDefaults.outsideMargin.width)
+        .coerceIn(DialogDefaults.CornerRadius, 48.dp)
+
+/**
  * 弹层统一入口（主页转发层 OverlayDialog 调用）。
  *
  * 默认样式或拿不到取景层时原样回落 miuix 弹窗，行为与改动前完全一致；
@@ -211,7 +228,7 @@ fun HyperGlassDialog(
     onDismissRequest: (() -> Unit)? = null,
     onDismissFinished: (() -> Unit)? = null,
     maxWidth: Dp = DialogDefaults.MaxWidth,
-    cornerRadius: Dp = DialogDefaults.CornerRadius,
+    cornerRadius: Dp? = null,
     content: @Composable () -> Unit,
 ) {
     if (style == HyperGlassStyle.Default || backdrop == null) {
@@ -244,6 +261,8 @@ fun HyperGlassDialog(
     if (!show && !hostVisible) return
 
     val isDark = MiuixTheme.colorScheme.background.luminance() < 0.5f
+    // 与 miuix 对话框同源：显式指定优先，否则按屏幕圆角推导（贴底呈现那一档）。
+    val dialogCornerRadius = cornerRadius ?: miuixDialogCornerRadius()
 
     MiuixPopupUtils.DialogLayout(
         visible = remember { mutableStateOf(false) }.also { it.value = hostVisible },
@@ -264,7 +283,7 @@ fun HyperGlassDialog(
                 GlassOverlayDefaults.ScrimAlphaLight
             },
             style = GlassDefaults.style(isDark),
-            shape = GlassShape(cornerRadius),
+            shape = GlassShape(dialogCornerRadius),
             stroke = if (isDark) GlassStrokes.BigDark else GlassStrokes.BigLight,
             shadow = GlassShadows.ExtraHigh,
             onDismissFinished = {
