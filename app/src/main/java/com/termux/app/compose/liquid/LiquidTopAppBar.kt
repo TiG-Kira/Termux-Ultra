@@ -35,7 +35,9 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.kyant.backdrop.Backdrop
@@ -48,6 +50,7 @@ import com.kyant.backdrop.shadow.Shadow
 import com.kyant.shapes.Capsule
 import top.yukonga.miuix.kmp.basic.ScrollBehavior
 import top.yukonga.miuix.kmp.theme.MiuixTheme
+import top.yukonga.miuix.kmp.utils.getRoundedCorner
 
 /** 顶栏单行高度：大标题、标题、按钮**全在这一行里**，折叠前后高度不变。 */
 val LiquidTopBarPillHeight: Dp = 56.dp
@@ -64,31 +67,63 @@ private val LiquidTopBarCollapseDistance: Dp = 36.dp
 /** 顶栏左右内缩（内容留白用；玻璃块本身是通栏的，不内缩）。 */
 val LiquidTopBarHorizontalInset: Dp = 12.dp
 
-/** 玻璃块底部圆角：顶部贴屏幕边不圆角，底部 28dp 收口像一块垂下来的玻璃。 */
+/** 玻璃块的**兜底**圆角：只在 [getRoundedCorner] 取不到值（返回 0）时使用。 */
 private val LiquidTopBarGlassRadius: Dp = 28.dp
 
 /**
- * 顶栏玻璃的形状：**顶部两角固定为 0，只有下两角做 28dp 圆弧**。
+ * 玻璃向上溢出的**余量**（在圆角半径之外再加这么多）。
  *
- * 之前用的是 Kyant 的 `UnevenRoundedRectangle(topStart = 0.dp, topEnd = 0.dp, …)`，
- * 它走**连续曲率（squircle）**的角构建器，0 半径会不会被平滑出一小段弧取决于实现细节——
- * 模拟器上是直角，真机上屏幕顶边左右仍能看出圆角。
- *
- * 换成 androidx 的 [RoundedCornerShape]：标准圆弧，角半径为 0 就是直角，不参与任何曲率
- * 平滑；同时它属于 `CornerBasedShape`，Kyant 的 `lens` 能正确读到四个角的半径
- * （上 0 / 下 28），边缘折射只发生在下方收口处。
- *
- * 注意：这里**不碰高度**。玻璃仍是 `statusBars + 折叠高`（主屏被 `matchParentSize()`
- * 的固定约束夹成骨架真实高度），不加 offset、不加裁剪层——本仓 #389~#391 与 Kiba
- * 2.4.3~2.4.7 那些上溢 / 裁切方案都会让可见底边上移、把顶栏按钮切掉一半，全部作废。
+ * 只多铺「圆角半径」并不够：`lens` / `blur` 会通过 `BackdropEffectScope.padding` 把
+ * 玻璃层整体外扩一点再裁轮廓，外扩后的弧顶还要再往外走几 dp。给 12dp 余量就能把这
+ * 一小段一起吃进去。多铺不会有副作用——溢出部分落在屏幕外，看不见。
  */
-private val LiquidTopBarGlassShape: Shape
-    get() = RoundedCornerShape(
-        topStart = 0.dp,
-        topEnd = 0.dp,
-        bottomEnd = LiquidTopBarGlassRadius,
-        bottomStart = LiquidTopBarGlassRadius,
-    )
+private val LiquidTopBarGlassBleedSlack: Dp = 12.dp
+
+/**
+ * 四角半径：**统一跟随设备屏幕圆角**（[getRoundedCorner]）。
+ *
+ * 顶角那段弧其实看不见（见 [liquidTopBarGlassBleed] 的上溢），但保持四角同源，底角
+ * 的曲率才和屏幕本身的圆角是同一套，收口不会「上大下小」。
+ *
+ * 取不到屏幕圆角（部分模拟器 / 定制 ROM 返回 0）时退回 [LiquidTopBarGlassRadius]，
+ * 别把角画成直角。
+ */
+private fun liquidTopBarGlassRadius(screenCornerRadius: Dp): Dp =
+    if (screenCornerRadius > 0.dp) screenCornerRadius else LiquidTopBarGlassRadius
+
+/**
+ * 玻璃块向上溢出多少：**四角半径 + [LiquidTopBarGlassBleedSlack]**。
+ *
+ * 顶角那圈圆弧（半径 = 设备屏幕圆角）要整个推到屏幕外，屏幕上才只剩一条直边，
+ * 所以溢出量必须 ≥ 圆角半径；再加一点余量吃掉 `lens`/`blur` 的外扩。
+ */
+private fun liquidTopBarGlassBleed(glassRadius: Dp): Dp =
+    glassRadius + LiquidTopBarGlassBleedSlack
+
+/**
+ * 顶栏玻璃的形状：标准圆角矩形，四角同一半径（= 设备屏幕圆角）。
+ *
+ * ## 顶角那颗弧是怎么没的（关键结论）
+ *
+ * 玻璃通栏贴边，顶角压在屏幕顶边。形状里把顶角写成 `0.dp` **没有用**——2.4.8 已经
+ * 用 androidx `RoundedCornerShape(0, 0, 28, 28)` 验证过，真机上顶角照旧是圆的。
+ * 反证来自更早的几版：那几版把玻璃整体**向上溢出**（虽然底边算错了），用户实测
+ * 「左右上角就没有这个圆角」。两件事合起来只能说明：**这颗弧是玻璃自己画出来的**
+ * （`blur`/`lens` 按 `BackdropEffectScope.padding` 外扩后仍会处理成带圆角的轮廓），
+ * 不是系统屏幕圆角裁的。
+ *
+ * 所以这里不跟形状较劲，直接**把整块玻璃往上多铺 [liquidTopBarGlassBleed]**：
+ * 顶角圆弧落到屏幕外被窗口裁掉，屏幕上只剩一条直边。形状本身保留圆角（四角跟屏幕
+ * 圆角同源），溢出之后顶角那部分反正看不见，只留下底部的收口。
+ *
+ * ## 为什么只有这一版的上溢是安全的
+ *
+ * 本仓 #389~#391 与 Kiba 2.4.3~2.4.7 的上溢全部翻车，共同点是**改动了布局尺寸**
+ * （`requiredHeight` / 自定义 layout 报告 `父高 + bleed`）：玻璃的可见底边跟着上移，
+ * 顶栏按钮就被切掉一半。现在改成 `layout(w, h)` 报告**原始高度**、只把 placeable
+ * 上移 `-bleed` 放置——布局尺寸一个像素不变，绘制范围是 `[-bleed, h]`，底边精确停在 `h`。
+ */
+private fun liquidTopBarGlassShape(glassRadius: Dp): Shape = RoundedCornerShape(glassRadius)
 
 /**
  * 顶栏动作按钮的**外**间距（每个按钮左右各占这么多）。
@@ -167,7 +202,14 @@ fun LiquidTopBarSkin(
     val glassColor = remember(isDark) {
         if (isDark) Color(0xFF121212).copy(alpha = 0.55f) else Color(0xFFFAFAFA).copy(alpha = 0.62f)
     }
-    val glassShape: () -> Shape = remember { { LiquidTopBarGlassShape } }
+    // 四角跟设备屏幕圆角同源；玻璃整体再往上多铺一个「圆角 + 余量」，把顶角那圈弧推出屏幕
+    // （那颗弧是 lens/blur 外扩后自己画的，改形状压不住——2.4.8 实测过）。
+    val screenCornerRadius = getRoundedCorner()
+    val glassRadius = remember(screenCornerRadius) { liquidTopBarGlassRadius(screenCornerRadius) }
+    val glassBleed = remember(glassRadius) { liquidTopBarGlassBleed(glassRadius) }
+    val glassShape: () -> Shape = remember(glassRadius) {
+        { liquidTopBarGlassShape(glassRadius) }
+    }
     val glassEffects: BackdropEffectScope.() -> Unit = remember { { liquidBarEffects() } }
     // 玻璃与投影必须共用**同一个进度**，不能指望外层 graphicsLayer 的 alpha 顺带把投影收掉：
     // drawBackdrop 的投影是内部独立的 ShadowNode，它用自己的 GraphicsLayer 绘制，
@@ -192,20 +234,35 @@ fun LiquidTopBarSkin(
     val glassSurface: androidx.compose.ui.graphics.drawscope.DrawScope.() -> Unit =
         remember(glassColor) { { drawRect(glassColor) } }
 
+    // 皮肤只盖「状态栏 + 折叠态高度」：骨架有大标题区（展开态高很多），matchParentSize 会让
+    // 半透明玻璃在中途态罩住大标题（视觉 bug），固定高度杜绝。高度必须**含**状态栏且从屏幕
+    // 顶边起画——玻璃要包住通知栏（statusBarsPadding 会让玻璃从状态栏下方才开始，顶上露出
+    // 一条内容，实证踩过）。
+    val glassHeight = collapsedHeight +
+        WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+
     Box(
         modifier = modifier
             .fillMaxWidth()
-            // 皮肤只盖「状态栏 + 折叠态高度」：骨架有大标题区（展开态高很多），
-            // matchParentSize 会让半透明玻璃在中途态罩住大标题（视觉 bug），固定高度杜绝。
-            // 高度必须**含**状态栏且从屏幕顶边起画——玻璃要包住通知栏（statusBarsPadding
-            // 会让玻璃从状态栏下方才开始，顶上露出一条内容，实证踩过）
+            .height(glassHeight)
+            // 上溢只发生在**绘制**上，布局尺寸一个像素都不变：
+            // - 报告给父级的高度 = 拿到的约束高度（原样），所以不会重排、不会让底边上移；
+            // - 实际测量玻璃为 `h + bleed`，再 `place(0, -bleed)` → 绘制范围 [-bleed, h]。
+            // 底边精确停在 h（= 2.4.2 的行为），顶角的圆弧落到屏幕外被窗口裁掉。
             //
-            // 高度就用 `collapsedHeight + statusBars.top`，**不再加 offset / 裁剪层 /
-            // 父约束读取**：主屏传的 `Modifier.matchParentSize()` 给的是固定约束
-            // （min == max == 骨架高），`.height()` 会被 clamp 成骨架真实高度，本身就是
-            // 「自动量高」。本仓 #389~#391 与 Kiba 2.4.3~2.4.7 那些上溢 / requiredHeight
-            // / 手算 inset 的方案都会让可见底边上移，把顶栏按钮切掉一半，全部作废。
-            .height(collapsedHeight + WindowInsets.statusBars.asPaddingValues().calculateTopPadding())
+            // 本仓 #389~#391 与 Kiba 2.4.3~2.4.7 全是这里翻的车：那些版本用 requiredHeight /
+            // 报告 `h + bleed`，布局尺寸变高，可见底边跟着上移，顶栏按钮就有一半露在玻璃外。
+            .layout { measurable, constraints ->
+                val width = constraints.maxWidth
+                val bleedPx = glassBleed.roundToPx()
+                val height = if (constraints.hasBoundedHeight) {
+                    constraints.maxHeight
+                } else {
+                    glassHeight.roundToPx()
+                }
+                val placeable = measurable.measure(Constraints.fixed(width, height + bleedPx))
+                layout(width, height) { placeable.place(0, -bleedPx) }
+            }
             .graphicsLayer {
                 // 折叠到 1/3 时玻璃已经完全成形，避免半透明玻璃糊在标题后面
                 alpha = glassAlpha()
