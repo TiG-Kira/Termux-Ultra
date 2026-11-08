@@ -415,7 +415,7 @@
     <string name="rustdesk_core_unavailable">当前架构不支持（无对应原生库）</string>
     <string name="rustdesk_session_help_title">会话操控说明</string>
     <string name="rustdesk_session_help_summary">查看触控手势、缩放与快捷键</string>
-    <string name="rustdesk_session_help_body">单指点击：左键\n长按拖动：左键拖放\n双指点击：右键\n单指轻扫：移动光标\n双指捏合：放大缩小\n双指拖动：放大后平移画面，未放大时滚动\n顶栏提供 Ctrl/Alt/Shift、软键盘、功能键与原始比例。</string>
+    <string name="rustdesk_session_help_body">单指点击：左键\n长按拖动：左键拖放\n双指点击：右键\n单指轻扫：移动光标\n双指捏合：放大缩小（最高 800%）\n双指拖动：放大后平移画面，未放大时滚动\n顶栏提供 Ctrl/Alt/Shift、软键盘、功能键与原始比例。\n画面上的箭头指示远端光标位置；若颜色红蓝互换，点顶栏「色彩 BGR」按钮切换通道。</string>
 
     <string name="rustdesk_account_title">RustDesk 账户</string>
     <string name="rustdesk_account_signed_in">已登录：%1$s</string>
@@ -452,6 +452,8 @@
     <string name="rustdesk_session_keyboard">键盘</string>
     <string name="rustdesk_session_keyboard_on">键盘✓</string>
     <string name="rustdesk_session_more_keys">功能键</string>
+    <string name="rustdesk_session_color_bgr">色彩 BGR</string>
+    <string name="rustdesk_session_color_rgb">色彩 RGB</string>
     <string name="rustdesk_session_cancel">取消</string>
     <string name="rustdesk_session_submit">确定</string>
     <string name="rustdesk_session_ok">知道了</string>
