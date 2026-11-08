@@ -88,8 +88,17 @@ class DampedDragAnimation(
      */
     private var valueJob: Job? = null
 
+    /**
+     * 同步维护的逻辑目标：不依赖 `Animatable.targetValue` 何时被赋值。
+     * 手势 up 与最后一帧 move 可能同帧到达，只有这里能保证读到真实落点。
+     */
+    private var pendingTarget: Float = initialValue
+
     /** 胶囊当前位置（tab 下标，可为小数 = 正在两 tab 之间）。 */
     val value: Float get() = valueAnimation.value
+
+    /** 手势落点：最后一帧 move 的写入即使还没落到 Animatable 上，这里也已经是最新值。 */
+    val dragTarget: Float get() = pendingTarget
 
     /** 当前位置动画的目标（松手吸附、release 判定都用它）。 */
     val targetValue: Float get() = valueAnimation.targetValue
@@ -176,6 +185,8 @@ class DampedDragAnimation(
     /** 所有对 [valueAnimation] 的写入必须经过这里：取消旧 job + 当帧启动新动画。 */
     private fun animateValue(target: Float, trackVelocity: Boolean) {
         val coerced = target.coerceIn(valueRange.start, valueRange.endInclusive)
+        // 先同步记账，再启动动画：手势 up 可能在同一帧内紧接着读它
+        pendingTarget = coerced
         valueJob?.cancel()
         valueJob = animationScope.launch(start = CoroutineStart.UNDISPATCHED) {
             valueAnimation.animateTo(coerced, spring(1f, 1000f, 0.001f)) {
