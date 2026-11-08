@@ -71,6 +71,19 @@ val LiquidTopBarHorizontalInset: Dp = 12.dp
 private val LiquidTopBarGlassRadius: Dp = 28.dp
 
 /**
+ * 玻璃圆角**上限**。
+ *
+ * 顶栏高度只有 56dp（[LiquidTopBarCollapsedHeight]），底部收口弧一旦超过半高就开始
+ * 「吃掉」直边：大 R 角机型（小米 17 一档，屏幕圆角 50dp 以上）照搬设备圆角时，
+ * 那条玻璃看着像个半圆胶囊，比固定 28dp 更丑。
+ *
+ * 上限取 32dp：只比半高多 4dp，仍读得出是「圆角矩形底边」；与 miuix 对话框的
+ * `DialogDefaults.CornerRadius`（32dp）同值，全局曲率语言统一；小 R 角机型
+ * （28~32dp 一档）不受影响，依旧跟随设备。
+ */
+private val LiquidTopBarGlassMaxRadius: Dp = 32.dp
+
+/**
  * 玻璃向上溢出的**余量**（在圆角半径之外再加这么多）。
  *
  * 只多铺「圆角半径」并不够：`lens` / `blur` 会通过 `BackdropEffectScope.padding` 把
@@ -80,19 +93,23 @@ private val LiquidTopBarGlassRadius: Dp = 28.dp
 private val LiquidTopBarGlassBleedSlack: Dp = 12.dp
 
 /**
- * 四角半径：**统一跟随设备屏幕圆角**（[getRoundedCorner]）。
+ * 底角半径：**跟随设备屏幕圆角**（[getRoundedCorner]），并夹在 [LiquidTopBarGlassMaxRadius] 以内。
  *
- * 顶角那段弧其实看不见（见 [liquidTopBarGlassBleed] 的上溢），但保持四角同源，底角
- * 的曲率才和屏幕本身的圆角是同一套，收口不会「上大下小」。
+ * 只管底部收口：顶角在形状里写 0（见 [liquidTopBarGlassShape]），这里算出来的值同时决定
+ * 玻璃要上溢多少（[liquidTopBarGlassBleed]）才能把顶部残留的弧形轮廓推出屏幕。
  *
  * 取不到屏幕圆角（部分模拟器 / 定制 ROM 返回 0）时退回 [LiquidTopBarGlassRadius]，
  * 别把角画成直角。
  */
 private fun liquidTopBarGlassRadius(screenCornerRadius: Dp): Dp =
-    if (screenCornerRadius > 0.dp) screenCornerRadius else LiquidTopBarGlassRadius
+    if (screenCornerRadius > 0.dp) {
+        screenCornerRadius.coerceAtMost(LiquidTopBarGlassMaxRadius)
+    } else {
+        LiquidTopBarGlassRadius
+    }
 
 /**
- * 玻璃块向上溢出多少：**四角半径 + [LiquidTopBarGlassBleedSlack]**。
+ * 玻璃块向上溢出多少：**底角半径 + [LiquidTopBarGlassBleedSlack]**。
  *
  * 顶角那圈圆弧（半径 = 设备屏幕圆角）要整个推到屏幕外，屏幕上才只剩一条直边，
  * 所以溢出量必须 ≥ 圆角半径；再加一点余量吃掉 `lens`/`blur` 的外扩。
@@ -101,20 +118,30 @@ private fun liquidTopBarGlassBleed(glassRadius: Dp): Dp =
     glassRadius + LiquidTopBarGlassBleedSlack
 
 /**
- * 顶栏玻璃的形状：标准圆角矩形，四角同一半径（= 设备屏幕圆角）。
+ * 顶栏玻璃的形状：标准圆角矩形，**顶角 0、底角 = 设备屏幕圆角**（夹在
+ * [LiquidTopBarGlassMaxRadius] 以内）。
  *
  * ## 顶角那颗弧是怎么没的（关键结论）
  *
- * 玻璃通栏贴边，顶角压在屏幕顶边。形状里把顶角写成 `0.dp` **没有用**——2.4.8 已经
+ * 玻璃通栏贴边，顶角压在屏幕顶边。单靠形状里把顶角写成 `0.dp` **不够**——2.4.8 已经
  * 用 androidx `RoundedCornerShape(0, 0, 28, 28)` 验证过，真机上顶角照旧是圆的。
  * 反证来自更早的几版：那几版把玻璃整体**向上溢出**（虽然底边算错了），用户实测
- * 「左右上角就没有这个圆角」。两件事合起来只能说明：**这颗弧是玻璃自己画出来的**
+ * 「左右上角就没有这个圆角」。两件事合起来只能说明：**那颗弧是玻璃自己画出来的**
  * （`blur`/`lens` 按 `BackdropEffectScope.padding` 外扩后仍会处理成带圆角的轮廓），
  * 不是系统屏幕圆角裁的。
  *
- * 所以这里不跟形状较劲，直接**把整块玻璃往上多铺 [liquidTopBarGlassBleed]**：
- * 顶角圆弧落到屏幕外被窗口裁掉，屏幕上只剩一条直边。形状本身保留圆角（四角跟屏幕
- * 圆角同源），溢出之后顶角那部分反正看不见，只留下底部的收口。
+ * 所以**去弧只能靠上溢**：把整块玻璃往上多铺 [liquidTopBarGlassBleed]，顶角圆弧落到
+ * 屏幕外被窗口裁掉，屏幕上只剩一条直边。
+ *
+ * ## 那顶角为什么还要写 0（2.4.10）
+ *
+ * 因为它还管着 **`lens` 的折射带宽度**：`lens` 是沿轮廓往里缩一层做的折射，内缩带跟着
+ * 轮廓曲率走——圆角越大，弧段越长，被卷进折射带的区域越宽。2.4.9 把顶角半径从固定
+ * 28dp 换成设备圆角（小米 17 一档 50dp+），那两段大弧的折射带直接铺满顶栏上半部，
+ * 屏幕里的观感就是「最顶上一条没有模糊、背景被拉平」。
+ *
+ * 顶角弧已经由上溢解决，形状里写 0 不会把它暴露出来；它现在唯一的作用就是
+ * **把顶部折射带关掉**，让状态栏那一条回到纯粹的 vibrancy + blur。
  *
  * ## 为什么只有这一版的上溢是安全的
  *
@@ -123,7 +150,12 @@ private fun liquidTopBarGlassBleed(glassRadius: Dp): Dp =
  * 顶栏按钮就被切掉一半。现在改成 `layout(w, h)` 报告**原始高度**、只把 placeable
  * 上移 `-bleed` 放置——布局尺寸一个像素不变，绘制范围是 `[-bleed, h]`，底边精确停在 `h`。
  */
-private fun liquidTopBarGlassShape(glassRadius: Dp): Shape = RoundedCornerShape(glassRadius)
+private fun liquidTopBarGlassShape(glassRadius: Dp): Shape = RoundedCornerShape(
+    topStart = 0.dp,
+    topEnd = 0.dp,
+    bottomEnd = glassRadius,
+    bottomStart = glassRadius,
+)
 
 /**
  * 顶栏动作按钮的**外**间距（每个按钮左右各占这么多）。
@@ -202,8 +234,9 @@ fun LiquidTopBarSkin(
     val glassColor = remember(isDark) {
         if (isDark) Color(0xFF121212).copy(alpha = 0.55f) else Color(0xFFFAFAFA).copy(alpha = 0.62f)
     }
-    // 四角跟设备屏幕圆角同源；玻璃整体再往上多铺一个「圆角 + 余量」，把顶角那圈弧推出屏幕
-    // （那颗弧是 lens/blur 外扩后自己画的，改形状压不住——2.4.8 实测过）。
+    // 底角跟设备屏幕圆角同源（并夹上限，避免大 R 角机型把底边画成胶囊）；顶角在形状里是 0，
+    // 顶部残留的弧形轮廓靠整体上溢推出屏幕。多铺「圆角 + 余量」是为了吃掉 lens/blur 按
+    // BackdropEffectScope.padding 的外扩（那颗弧是外扩后自己画的，改形状压不住——2.4.8 实测过）。
     val screenCornerRadius = getRoundedCorner()
     val glassRadius = remember(screenCornerRadius) { liquidTopBarGlassRadius(screenCornerRadius) }
     val glassBleed = remember(glassRadius) { liquidTopBarGlassBleed(glassRadius) }
