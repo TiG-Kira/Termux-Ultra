@@ -1,5 +1,5 @@
 # 许可证
-Termux Ultra 项目为混合许可证项目，使用 GPL 3.0 许可与 MIT 许可，下方为 GPL 许可证原文：
+Termux Ultra 项目为混合许可证项目，使用 GPL 3.0 许可与 MIT 许可（MIT 许可仅限于 UI 层），下方为 GPL 许可证原文：
 
 GNU GENERAL PUBLIC LICENSE
 Version 3, 29 June 2007
