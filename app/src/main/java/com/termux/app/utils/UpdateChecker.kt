@@ -85,6 +85,10 @@ object UpdateChecker {
     private const val GITHUB_RELEASES_LIST_URL = "https://api.github.com/repos/$GITHUB_REPO/releases?per_page=50"
     private const val GITHUB_RELEASE_PAGE_URL = "https://github.com/$GITHUB_REPO/releases"
 
+    // 资产型 Release（bootstrap-v1 / msdos-v1）只放运行时资产，不是 App 版本更新。
+    // 它们带 prerelease 标记，这里再按 tag 前缀显式排除，防止解析器将来放宽后误报新版本。
+    private val ASSET_TAG_PREFIXES = listOf("bootstrap-", "msdos-")
+
     private val client = OkHttpClient.Builder()
         .connectTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
         .readTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
@@ -138,6 +142,7 @@ object UpdateChecker {
                         if (isDraft) continue
 
                         val tagName = release.optString("tag_name", "")
+                        if (ASSET_TAG_PREFIXES.any { tagName.startsWith(it, ignoreCase = true) }) continue
                         val tagVersion = AppVersion.parse(tagName)
 
                         if (tagVersion == null) continue
@@ -238,6 +243,7 @@ object UpdateChecker {
                     for (i in 0 until releases.length()) {
                         val release = releases.getJSONObject(i)
                         val tagName = release.optString("tag_name", "")
+                        if (ASSET_TAG_PREFIXES.any { tagName.startsWith(it, ignoreCase = true) }) continue
                         val tagVersion = AppVersion.parse(tagName)
 
                         if (tagVersion != null && tagVersion.major == currentVersion.major && tagVersion == currentVersion) {

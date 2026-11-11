@@ -99,6 +99,11 @@
             android:exported="false" />
 
         <activity
+            android:name=".app.activities.MsDosActivity"
+            android:label="@string/msdos_title"
+            android:exported="false" />
+
+        <activity
             android:name=".app.activities.QemuVmActivity"
             android:label="虚拟机"
             android:exported="false" />

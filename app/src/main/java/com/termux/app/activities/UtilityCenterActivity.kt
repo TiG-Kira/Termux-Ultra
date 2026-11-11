@@ -74,6 +74,14 @@ class UtilityCenterActivity : ComponentActivity() {
                 val utilityItems = remember {
                     listOf(
                         ResourceItem(
+                            title = getString(R.string.msdos_title),
+                            description = getString(R.string.msdos_entry_desc),
+                            url = "",
+                            scriptUrl = "",
+                            iconRes = R.drawable.ic_terminal,
+                            type = "msdos_emulator"
+                        ),
+                        ResourceItem(
                             title = "QEMU with VNC",
                             description = "在 Termux 中通过 VNC 运行虚拟机，支持创建/导入磁盘，支持自定义 CPU、内存、CD-ROM、共享目录、引导顺序等",
                             url = "",
@@ -275,6 +283,9 @@ class UtilityCenterActivity : ComponentActivity() {
                                     if (item.type == "qemu_on_vnc") {
                                         // 跳转到虚拟机列表管理页面（QemuVmActivity）
                                         val intent = Intent(context, QemuVmActivity::class.java)
+                                        context.startActivity(intent)
+                                    } else if (item.type == "msdos_emulator") {
+                                        val intent = Intent(context, MsDosActivity::class.java)
                                         context.startActivity(intent)
                                     } else {
                                         expandedCard = if (expandedCard == item.title) null else item.title

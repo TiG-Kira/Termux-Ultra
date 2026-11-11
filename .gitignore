@@ -1,6 +1,9 @@
 # Gradle files
 .gradle/
 build/
+# msdos/build 是入库的 CI 构建脚本，上面无前缀的 build/ 会误吞，须显式放行。
+!msdos/build/
+!msdos/build/**
 
 # Local configuration file (sdk path, etc)
 local.properties

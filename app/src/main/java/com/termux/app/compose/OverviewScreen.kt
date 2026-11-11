@@ -189,6 +189,14 @@ data class ResourceAction(
 object ResourceActions {
     fun getUtilityCenterActions(): List<ResourceAction> = listOf(
         ResourceAction(
+            id = "msdos_emulator",
+            name = "MS-DOS 模拟器",
+            description = "在 QEMU 中运行开源 MS-DOS 4.00，支持控制台与 VNC",
+            category = ResourceActionCategory.UTILITY_CENTER,
+            iconRes = R.drawable.ic_terminal,
+            type = "msdos_emulator"
+        ),
+        ResourceAction(
             id = "qemu_vnc",
             name = "QEMU with VNC",
             description = "在 Termux 中通过 VNC 运行虚拟机",
@@ -4201,6 +4209,11 @@ fun launchResourceAction(
         
         action.type == "qemu_on_vnc" -> {
             val intent = Intent(context, com.termux.app.activities.QemuVmActivity::class.java)
+            context.startActivity(intent)
+        }
+
+        action.type == "msdos_emulator" -> {
+            val intent = Intent(context, com.termux.app.activities.MsDosActivity::class.java)
             context.startActivity(intent)
         }
         
