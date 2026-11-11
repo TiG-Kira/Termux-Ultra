@@ -142,6 +142,8 @@ fun LiquidNavigationBar(
         var offsetSnapJob: Job? = null
         /** 手指仍按在「其它 tab」上：玻璃保持到抬手（对齐 2.3.18 的按住手感）。 */
         var holdingOtherTab: Boolean = false
+        /** 起飞预览尚未提交切页：此时胶囊与页面刻意不一致，禁止兜底回调提前切页。 */
+        var previewPending: Boolean = false
     }
     val metrics = remember { Metrics() }
     metrics.isLtr = isLtr
@@ -220,7 +222,12 @@ fun LiquidNavigationBar(
             onGestureSettled = { index ->
                 val target = index.fastCoerceIn(0, items.size - 1)
                 lastAnimatedState.intValue = target
-                if (target != latestSelectedIndexState.value) latestOnSelectState.value(target)
+                // 按下预览期间 release 的 holdPress 最多等 60 帧就会凝回，若此时
+                // 也上报切页，长按非当前 tab 会在没抬手时提前翻页。预览未提交时
+                // 只记账，页面统一由 commit() 在确认手势方向后切换。
+                if (!metrics.previewPending && target != latestSelectedIndexState.value) {
+                    latestOnSelectState.value(target)
+                }
             },
         ).also { holder.animation = it }
     }
@@ -429,8 +436,9 @@ fun LiquidNavigationBar(
                 .padding(4f.dp)
                 // 宿主适配（#372 口径）：Kiba 上游在 down 立即「起飞 + onSelect」，
                 // 但从底栏起手的纵向滚动会被误判成选 tab（#367 修过默认底栏同款问题）。
-                // 这里把命中提交延后到确认手势方向；提交时起飞与切页仍在同一帧完成，
-                // 不等父级 selectedIndex 回流，所以不会退化成 Kiba v2 的「抬手慢半拍」。
+                // 因此把「切页提交」延后到确认手势方向；**起飞则在 down 当帧就启动**，
+                // 不再等抬手，修掉「按住没反应、松手才飞」的迟滞，同时保留滚动保护。
+                // 提交时不等父级 selectedIndex 回流，所以不会退化成 Kiba v2 的「抬手慢半拍」。
                 .pointerInput(dragAnimation, items.size) {
                     awaitEachGesture {
                         val down = awaitFirstDown(
@@ -452,17 +460,35 @@ fun LiquidNavigationBar(
                         // 胶囊会在没有 press() 的情况下滑动——灰色胶囊跟手、玻璃不浮现。
                         // 只有胶囊没覆盖到的上下 4dp 边缘条会走到这里，忽略即可。
                         if (hit == startIndex) return@awaitEachGesture
+
+                        // 按下瞬间起飞：记账 + 玻璃浮现 + 胶囊飞向手指下的 tab 一次完成，
+                        // 但此刻**不切页**。selectedIndex 回流时 snapshotFlow 靠
+                        // lastAnimatedState 去重，不会播第二次玻璃。
+                        lastAnimatedState.intValue = hit
+                        metrics.holdingOtherTab = true
+                        metrics.previewPending = true
+                        dragAnimation.animateToValue(hit.toFloat()) {
+                            metrics.holdingOtherTab
+                        }
+
                         var committed = false
-                        // 记账 + 起飞 + 切页一次完成；selectedIndex 回流时
-                        // snapshotFlow 靠 lastAnimatedState 去重，不会播两次玻璃。
+                        var previewCancelled = false
+                        // 撤销预览：未提交（纵向滚动 / 手势中断）时把胶囊送回原 tab。
+                        // 只收敛位置、不重启 press/release；down 那次 release 会等它
+                        // 收敛后再凝回玻璃，不会出现二次起落。
+                        fun cancelPreview() {
+                            if (previewCancelled) return
+                            previewCancelled = true
+                            metrics.previewPending = false
+                            lastAnimatedState.intValue = startIndex
+                            metrics.holdingOtherTab = false
+                            dragAnimation.settleTo(startIndex.toFloat())
+                        }
+                        // 提交切页：轻点抬手或确认横向拖动时才上报，纵向滚动不受影响。
                         fun commit() {
                             if (committed) return
                             committed = true
-                            lastAnimatedState.intValue = hit
-                            metrics.holdingOtherTab = true
-                            dragAnimation.animateToValue(hit.toFloat()) {
-                                metrics.holdingOtherTab
-                            }
+                            metrics.previewPending = false
                             latestOnSelectState.value(hit)
                         }
                         val dir = if (metrics.isLtr) 1f else -1f
@@ -478,14 +504,17 @@ fun LiquidNavigationBar(
                             if (!committed && !dragging &&
                                 totalDy > viewConfiguration.touchSlop && totalDy > totalDx
                             ) {
-                                // 纵向为主：不提交、不驱动胶囊，事件留给页面滚动
+                                // 纵向为主：撤销按下时的起飞预览、不提交切页，
+                                // 事件留给页面滚动
+                                cancelPreview()
                                 return@awaitEachGesture
                             }
                             val dx = change.position.x - lastX
                             lastX = change.position.x
                             if (!change.pressed) {
-                                // 轻点抬手：提交命中。不 consume up，胶囊上的
-                                // inspectDragGestures 与 TabContent.clickable 都要收到事件。
+                                // 轻点抬手：只提交切页，飞行动画已在 down 启动。
+                                // 不 consume up，胶囊上的 inspectDragGestures 与
+                                // TabContent.clickable 都要收到事件。
                                 commit()
                                 break
                             }
@@ -507,6 +536,9 @@ fun LiquidNavigationBar(
                                 offsetAnimation.snapTo(offsetAnimation.value + dx)
                             }
                         }
+                        // 手势异常中断（没收到 up、也没确认拖动）时撤销起飞预览，
+                        // 避免胶囊停在别的 tab 上而页面没切。
+                        if (!committed) cancelPreview()
                         metrics.holdingOtherTab = false
                         metrics.offsetSnapJob?.cancel()
                         metrics.offsetSnapJob = null

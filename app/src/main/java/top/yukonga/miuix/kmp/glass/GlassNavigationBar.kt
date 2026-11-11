@@ -32,6 +32,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.BlurredEdgeTreatment
@@ -156,6 +157,11 @@ object GlassNavigationBarDefaults {
  * The indicator follows the pointer while dragging and settles from its current position and
  * velocity on release, without ever overshooting past the outermost destinations.
  *
+ * Pressing a destination other than the current one starts the indicator's flight on that first
+ * down; the selection itself is still committed on tap release or once a horizontal drag is
+ * confirmed, so a vertical scroll started on the bar never changes the page. If a press is
+ * cancelled before it is committed, the indicator springs back to the real selection.
+ *
  * @param items The destinations, in order.
  * @param selectedIndex The index of the current destination.
  * @param onSelect Called with the index under the finger when a tap is released or a horizontal
@@ -273,6 +279,9 @@ fun GlassNavigationBar(
     )
 
     val onSelectState by rememberUpdatedState(onSelect)
+    // pointerInput 的 key 不含 selectedIndex，lambda 内捕获的 index 会是旧值；
+    // 按下预览 / 撤销回位都通过它读最新选中项。
+    val selectedIndexState = rememberUpdatedState(index)
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -326,6 +335,15 @@ fun GlassNavigationBar(
                             var current = indexAt(downX)
                             var selectionSent = false
                             pressedIndex = current
+                            // 按下非当前 tab：指示器当帧就飞向手指下的目标，不再等抬手
+                            // 或确认横向拖动才起飞。切页仍延后到确认手势方向，纵向
+                            // 滚动保护（#367）与拖动跟手逻辑保持不变。
+                            val previewTarget =
+                                if (current != selectedIndexState.value) current else -1
+                            if (previewTarget >= 0) {
+                                val previewLeft = minLeft + previewTarget * span
+                                animateIndicator(previewLeft, previewLeft + chipW)
+                            }
                             var grabOffset = Float.NaN
                             try {
                                 while (true) {
@@ -379,8 +397,34 @@ fun GlassNavigationBar(
                                 pressedIndex = -1
                                 dragging.value = false
                                 if (!grabOffset.isNaN()) {
+                                    // 拖动收尾：落到手指最后经过的 tab
                                     val homeLeft = minLeft + current * span
                                     animateIndicator(homeLeft, homeLeft + chipW)
+                                } else if (previewTarget >= 0 && !selectionSent) {
+                                    // 预览未提交（纵向滚动 / 手势被消费 / 异常中断）：
+                                    // 胶囊弹回真实选中项，页面不切
+                                    val homeLeft = minLeft + selectedIndexState.value * span
+                                    animateIndicator(homeLeft, homeLeft + chipW)
+                                }
+                                if (previewTarget >= 0 && selectionSent) {
+                                    // 已提交：selectedIndex 回流后 LaunchedEffect 会把胶囊
+                                    // 对齐到新位置。若宿主忽略了 onSelect（没切页），几帧后
+                                    // 按真实选中项回位，避免胶囊停在错误的 tab 上。
+                                    val expected = current
+                                    scope.launch {
+                                        // 给父级状态回流留几帧，别在重组还没落地时
+                                        // 误判成「宿主没切页」把胶囊拉回去。
+                                        var frames = 0
+                                        while (selectedIndexState.value != expected && frames < 10) {
+                                            withFrameNanos { }
+                                            frames++
+                                        }
+                                        val settled = selectedIndexState.value
+                                        if (settled != expected) {
+                                            val homeLeft = minLeft + settled * span
+                                            animateIndicator(homeLeft, homeLeft + chipW)
+                                        }
+                                    }
                                 }
                             }
                         }
