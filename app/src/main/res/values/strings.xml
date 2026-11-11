@@ -678,6 +678,10 @@
     <string name="msdos_container_missing">Android 15+ needs the Linux container first: Utility Center → Ubuntu container</string>
     <string name="msdos_port_exhausted">No free VNC port in 5900-5999, stop another VM and retry</string>
     <string name="msdos_mount_invalid">Please pick a folder, not a file</string>
+    <string name="msdos_starting">Starting MS-DOS…</string>
+    <string name="msdos_starting_container">Android 15+: starting QEMU inside the proot container. First launch installs QEMU via apt, which may take a few minutes.</string>
+    <string name="msdos_vnc_connecting">QEMU is starting; the VNC client opens automatically once the port is ready. Launch log is in the terminal.</string>
+    <string name="msdos_vnc_ready">VNC port ready, opening viewer…</string>
     <string name="third_party_center_desc">Script resources maintained by third-party developers. You can add, delete, and modify them. Assess risks before use.</string>
     <string name="click_to_enter">Tap to enter</string>
     <string name="resource_center_warning">Utility Center features are maintained by Termux Ultra officially; Third-Party Center scripts are maintained by third-party developers. Please assess security risks before use.</string>

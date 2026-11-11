@@ -21,6 +21,7 @@ import com.termux.app.compose.MsDosLauncher
 import com.termux.app.compose.MsDosPrefs
 import com.termux.app.compose.MsDosScreen
 import com.termux.app.compose.NavigationHelper
+import com.termux.app.compose.shouldUseQemuInContainer
 import com.termux.app.vnc.VncConnection
 import com.termux.app.vnc.connectToVnc
 import kotlinx.coroutines.CoroutineScope
@@ -101,6 +102,13 @@ class MsDosActivity : ComponentActivity() {
             Toast.makeText(this, R.string.msdos_container_missing, Toast.LENGTH_LONG).show()
             return
         }
+        // 正向进度反馈：让用户知道启动在进行（容器首跑会 apt 装 QEMU，可能数分钟）。
+        val startingMsg = if (shouldUseQemuInContainer()) {
+            R.string.msdos_starting_container
+        } else {
+            R.string.msdos_starting
+        }
+        Toast.makeText(this, startingMsg, Toast.LENGTH_LONG).show()
         vncScope.launch {
             val port = withContext(Dispatchers.IO) {
                 if (mode == MsDosLauncher.Mode.VNC) {
@@ -124,6 +132,12 @@ class MsDosActivity : ComponentActivity() {
             if (session == null) {
                 Toast.makeText(this@MsDosActivity, R.string.msdos_launch_failed, Toast.LENGTH_SHORT).show()
                 return@launch
+            }
+            if (mode == MsDosLauncher.Mode.VNC) {
+                // VNC 就绪前会静默轮询最多 5 分钟，先明确告知用户自动打开 + 去哪看日志。
+                Toast.makeText(
+                    this@MsDosActivity, R.string.msdos_vnc_connecting, Toast.LENGTH_LONG
+                ).show()
             }
             startActivity(
                 Intent(this@MsDosActivity, com.termux.app.TermuxActivity::class.java)
@@ -168,6 +182,9 @@ class MsDosActivity : ComponentActivity() {
             }
             if (isFinishing || isDestroyed) return@launch
             if (ready) {
+                Toast.makeText(
+                    this@MsDosActivity, R.string.msdos_vnc_ready, Toast.LENGTH_SHORT
+                ).show()
                 connectToVnc(
                     this@MsDosActivity,
                     VncConnection(
