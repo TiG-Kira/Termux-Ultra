@@ -45,15 +45,25 @@ ensure_qemu() {
         if command -v "$b" >/dev/null 2>&1; then QEMU_BIN="$b"; return 0; fi
     done
     echo "正在安装 QEMU 与 mtools ..."
-    if command -v apt-get >/dev/null 2>&1; then
-        apt-get update -qq && apt-get install -y -qq qemu-system-x86 qemu-utils mtools 2>&1 | tail -20
+    if [ "$IN_CONTAINER" = 1 ]; then
+        # 容器内（proot Ubuntu/Debian）：用 apt。Ubuntu 没有 qemu-system-i386-headless，
+        # 只有 qemu-system-x86 这个包，它同时提供 qemu-system-i386 与 qemu-system-x86_64。
+        # --no-install-recommends 跳过 EFI/GTK 等无关依赖，缩短首次安装等待。
+        export DEBIAN_FRONTEND=noninteractive
+        apt-get update -qq && apt-get install -y -qq --no-install-recommends \
+            qemu-system-x86 qemu-utils mtools 2>&1 | tail -20
     else
+        # 原生 Termux：用 pkg，包名是 qemu-system-i386-headless
         pkg install -y qemu-system-i386-headless qemu-utils mtools 2>&1 | tail -20
     fi
     for b in qemu-system-i386 qemu-system-x86_64; do
         if command -v "$b" >/dev/null 2>&1; then QEMU_BIN="$b"; return 0; fi
     done
-    echo "QEMU 安装失败，请手动执行：pkg install qemu-system-i386-headless mtools"
+    if [ "$IN_CONTAINER" = 1 ]; then
+        echo "QEMU 安装失败，请手动在容器内执行：apt-get install -y qemu-system-x86 mtools"
+    else
+        echo "QEMU 安装失败，请手动执行：pkg install qemu-system-i386-headless mtools"
+    fi
     exit 1
 }
 ensure_qemu
