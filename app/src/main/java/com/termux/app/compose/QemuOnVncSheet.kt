@@ -34,6 +34,11 @@ import kotlinx.coroutines.launch
  * 新建/编辑 QEMU 虚拟机底部弹窗（Dialog）。
  * 支持选择现有磁盘、从 ISO 安装并新建磁盘、或仅新建空白磁盘。
  * 选定的硬盘镜像/光盘映像文件路径逻辑与现有实现保持一致。
+ *
+ * 整个弹窗固定走 miuix 默认控件与弹层（[AppearanceStyleExempt] 外观豁免），
+ * 无视「柔光玻璃+ / 液态玻璃」外观选项：豁免作用域内玻璃取景层全部回落，
+ * OverlayBottomSheet / OverlayDialog（复制进度、文件来源选择）/ SettingCard
+ * 等一律使用 miuix 默认实现，与玻璃皮肤互不掺和。
  */
 @Composable
 fun QemuOnVncSheet(
@@ -46,26 +51,28 @@ fun QemuOnVncSheet(
     val title = if (isEditMode) "编辑 QEMU 虚拟机" else "新建 QEMU 虚拟机"
     val context = LocalContext.current
 
-    OverlayBottomSheet(
-        show = show,
-        onDismissRequest = onDismiss,
-        title = title,
-        content = {
-            VmWizardContent(
-                existingVm = existingVm,
-                onComplete = { config ->
-                    QemuVmManager.saveVm(context, config)
-                    onDismiss()
-                    if (isEditMode) {
-                        // 编辑模式仅保存配置，不自动启动
-                    } else {
-                        onExecuteScript(config.name, config.generateScript())
-                    }
-                },
-                onCancel = onDismiss
-            )
-        }
-    )
+    AppearanceStyleExempt {
+        OverlayBottomSheet(
+            show = show,
+            onDismissRequest = onDismiss,
+            title = title,
+            content = {
+                VmWizardContent(
+                    existingVm = existingVm,
+                    onComplete = { config ->
+                        QemuVmManager.saveVm(context, config)
+                        onDismiss()
+                        if (isEditMode) {
+                            // 编辑模式仅保存配置，不自动启动
+                        } else {
+                            onExecuteScript(config.name, config.generateScript())
+                        }
+                    },
+                    onCancel = onDismiss
+                )
+            }
+        )
+    }
 }
 
 @Composable
