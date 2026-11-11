@@ -1,0 +1,126 @@
+name: 构建 MS-DOS 4.0 磁盘资产
+
+# 源码改造/编译在 x86 Linux runner 上完成，App 只下载成品镜像。
+# 默认只上传构建产物；publish=true 时才把资产发到常驻 prerelease tag msdos-v1。
+on:
+  push:
+    paths:
+      - 'msdos/v4.0/**'
+      - 'msdos/build/**'
+      - 'msdos/termux/**'
+      - '.github/workflows/msdos-assets.yml'
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: '发布/覆盖 msdos-v1 prerelease 资产'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: msdos-assets-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 dosemu2 / mtools / QEMU
+        run: |
+          sudo add-apt-repository -y ppa:dosemu2/ppa
+          sudo apt-get update
+          sudo apt-get install -y dosemu2 mtools qemu-system-x86 rsync gzip coreutils curl
+
+      - name: 准备源码（vendor 基底 + 固定修复层）
+        run: bash msdos/build/prepare.sh "$RUNNER_TEMP/msdos-build"
+
+      - name: 编译 MS-DOS 4.00
+        run: |
+          cd "$RUNNER_TEMP/msdos-build/v4.0"
+          timeout 3600 ./mak.sh --flavor=msdos
+          ls -l io.sys msdos.sys command.com
+
+      - name: 生成 Termux 精简镜像
+        run: |
+          mkdir -p dist
+          bash msdos/build/make-termux-image.sh "$RUNNER_TEMP/msdos-build/v4.0" "$GITHUB_WORKSPACE/dist"
+
+      - name: QEMU 启动自检
+        run: |
+          set -euo pipefail
+          MON=/tmp/msdos-mon.sock
+          VGA=/tmp/msdos-vga.bin
+          rm -f "$MON" "$VGA" /tmp/msdos-boot.log
+          # -display none 时 DOS 只写 VGA 文本缓冲(0xB8000)，文本不会进 stdio；
+          # 用 QEMU HMP 把这段物理内存 dump 出来判断是不是真进了 DOS 提示符。
+          timeout 90 qemu-system-i386 \
+            -M isapc -cpu 486 -m 8 -smp 1 -accel tcg,thread=single -vga std \
+            -hda dist/msdos4.img -boot c -no-reboot -display none \
+            -monitor "unix:$MON,server,nowait" \
+            > /tmp/msdos-boot.log 2>&1 &
+          QPID=$!
+          trap 'kill "$QPID" 2>/dev/null || true' EXIT
+          for _ in $(seq 1 30); do [ -S "$MON" ] && break; sleep 1; done
+          if [ ! -S "$MON" ]; then
+            echo "QEMU monitor 未就绪"
+            tail -20 /tmp/msdos-boot.log
+            exit 1
+          fi
+          sleep 25
+          python3 - <<'PYEOF'
+          import socket
+          import time
+          s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+          s.settimeout(10)
+          s.connect("/tmp/msdos-mon.sock")
+          try:
+              s.recv(4096)
+          except socket.timeout:
+              pass
+          s.sendall(b"pmemsave 0xb8000 4096 /tmp/msdos-vga.bin\n")
+          time.sleep(2)
+          s.sendall(b"quit\n")
+          s.close()
+          d = open("/tmp/msdos-vga.bin", "rb").read()
+          text = d[0::2].decode("cp437", "replace")
+          open("/tmp/msdos-vga.txt", "w").write(text)
+          print(text[:400])
+          PYEOF
+          if grep -qE 'MS-DOS|C:\\>|Current date|COMMAND' /tmp/msdos-vga.txt; then
+            echo "DOS 4.0 boot check passed"
+          else
+            echo "DOS 4.0 boot check failed"
+            tail -20 /tmp/msdos-boot.log
+            exit 1
+          fi
+
+      - name: 上传构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: msdos4-termux-assets
+          path: |
+            dist/msdos4.img.gz
+            dist/msdos4.img.gz.sha256
+
+      - name: 发布 prerelease 资产
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG=msdos-v1
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" \
+              dist/msdos4.img.gz dist/msdos4.img.gz.sha256 --clobber
+          else
+            gh release create "$TAG" \
+              dist/msdos4.img.gz dist/msdos4.img.gz.sha256 \
+              --prerelease \
+              --title "MS-DOS 4.0 Termux disk assets" \
+              --notes "MS-DOS 4.00 可启动硬盘镜像（FAT16）。CI 从 msdos/v4.0 源码构建并裁剪，App 动态下载并校验 SHA-256。此 Release 仅供资产分发，不是 App 版本更新。"
+          fi
