@@ -93,7 +93,7 @@ class MsDosActivity : ComponentActivity() {
     }
 
     private fun launch(mode: MsDosLauncher.Mode) {
-        if (!MsDosAssetDownloader.isDiskReady()) {
+        if (!MsDosAssetDownloader.hasUsableDisk()) {
             Toast.makeText(this, R.string.msdos_asset_missing, Toast.LENGTH_SHORT).show()
             return
         }
