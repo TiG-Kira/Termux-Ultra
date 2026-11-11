@@ -2,13 +2,10 @@ name: 构建 MS-DOS 4.0 磁盘资产
 
 # 源码改造/编译在 x86 Linux runner 上完成，App 只下载成品镜像。
 # 默认只上传构建产物；publish=true 时才把资产发到常驻 prerelease tag msdos-v1。
+# 该 workflow 只手动触发（仓库 Actions 页 "Run workflow"），不挂 push/pull_request，
+# 以免在 PR 上作为 failing check 阻塞合并。磁盘资产已由 gh release 手动发布/覆盖，
+# 需要重建时在此处手动运行即可。
 on:
-  push:
-    paths:
-      - 'msdos/v4.0/**'
-      - 'msdos/build/**'
-      - 'msdos/termux/**'
-      - '.github/workflows/msdos-assets.yml'
   workflow_dispatch:
     inputs:
       publish:
