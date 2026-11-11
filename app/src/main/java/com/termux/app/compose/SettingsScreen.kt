@@ -303,7 +303,6 @@ fun SettingsScreen(
     }
     var uiStyleIndex by remember { mutableStateOf(uiStyleIndexOf(uiStyle)) }
     LaunchedEffect(uiStyle) { uiStyleIndex = uiStyleIndexOf(uiStyle) }
-    var showUiStyleRestartPrompt by remember { mutableStateOf(false) }
     var showHyperGlassCriticalDialog by remember { mutableStateOf(false) }
     var pendingUiStyleIndex by remember { mutableStateOf(-1) }
 
@@ -703,7 +702,6 @@ fun SettingsScreen(
                         }
                         UiStylePrefs.setUiStyle(context, newStyle)
                         uiStyleIndex = idx
-                        showUiStyleRestartPrompt = true
                     },
                     startAction = { SettingIcon(Icons.Rounded.Palette, contentDescription = context.getString(R.string.ui_appearance_style)) }
                 )
@@ -1286,7 +1284,6 @@ fun SettingsScreen(
                                 }
                                 UiStylePrefs.setUiStyle(context, newStyle)
                                 uiStyleIndex = idx
-                                showUiStyleRestartPrompt = true
                             },
                             startAction = {
                                 SettingIcon(Icons.Rounded.Palette, contentDescription = context.getString(R.string.ui_appearance_style))
@@ -2165,31 +2162,6 @@ fun SettingsScreen(
         }
     )
 
-    // ---------- UI appearance style restart prompt ----------
-                        OverlayDialog(
-        title = context.getString(R.string.restart_required),
-        summary = context.getString(R.string.ui_style_restart_message),
-        show = showUiStyleRestartPrompt,
-        onDismissRequest = { showUiStyleRestartPrompt = false },
-        content = {
-                                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                TextButton(
-                    text = context.getString(R.string.restart_now),
-                    onClick = {
-                        showUiStyleRestartPrompt = false
-                        restartMainActivity(context)
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                TextButton(
-                    text = context.getString(R.string.restart_later),
-                    onClick = { showUiStyleRestartPrompt = false },
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-        }
-    )
-
     // ---------- Critical glass nav bar incompatibility dialog ----------
     if (showCriticalNavDialog) {
                                 ForceEnableCriticalDialog(
@@ -2231,7 +2203,6 @@ fun SettingsScreen(
                     }
                 )
                 pendingUiStyleIndex = -1
-                showUiStyleRestartPrompt = true
             },
             onDismiss = {
                 showHyperGlassCriticalDialog = false
