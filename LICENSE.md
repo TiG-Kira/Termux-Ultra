@@ -1,5 +1,9 @@
 # 许可证
-Termux Ultra 项目为混合许可证项目，使用 GPL 3.0 许可与 MIT 许可（MIT 许可仅限于 UI 层），下方为 GPL 许可证原文：
+Termux Ultra 项目为**混合许可证**项目，使用 GPL 3.0 许可与 MIT 许可（**请注意 MIT 许可仅限于 UI 层**）。
+
+## GPL 3.0 许可证
+> 下方为 GPL 许可证原文。
+> Termux Ultra 大部分源代码采用 GPL 3.0 许可证；其中独立的联网相关模块采用 AGPL 3.0 许可证。
 
 GNU GENERAL PUBLIC LICENSE
 Version 3, 29 June 2007
@@ -187,7 +191,16 @@ If the disclaimer of warranty and limitation of liability provided above cannot 
 
 END OF TERMS AND CONDITIONS
 
-下面为MIT许可：
+## MIT 许可证（For UI）
+> 下面为本项目的 MIT 许可，请先注意：
+> 本项目打包发布的 Release APK 是 UI 模块与 GPL-3.0 核心共同构成的合并分发制品，整体分发遵循 GPL 3.0 协议。
+> 从 Release APK 反编译提取出的 UI 相关代码，属于该 GPL 合并制品的一部分；**如果将该代码和本GPL核心配套分发、作为本程序的组成部分，则需要遵循 GPL 3.0 协议，不能直接以 MIT 许可处理**。
+> 仅仓库内目录下的原始源代码（不涉及 GPL 3.0 协议调用的部分，即页面样式等设计），适用 MIT 许可证。需要 MIT 许可版本的 UI 代码，请直接使用仓库内的原始源码。
+>
+> 本产品 UI 层使用了 miuix 组件，作者 @YukongA，遵循 Apache License Version 2.0。
+> 您使用 UI 层代码时，除遵循对应场景的许可协议外，同时需要遵守 miuix 组件的 Apache 2.0 许可证，保留其版权声明与 NOTICE 信息。
+
+MIT License
 Copyright 2026 KiraStudio (Kira)
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the “Software”), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
