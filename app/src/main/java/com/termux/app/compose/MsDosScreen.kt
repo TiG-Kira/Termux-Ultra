@@ -71,16 +71,23 @@ fun MsDosScreen(
     var progress by remember { mutableStateOf(-1f) }
     var message by remember { mutableStateOf("") }
     var showPicker by remember { mutableStateOf(false) }
+    // 本地镜像一旦存在即可启动，不等待后台检查/下载完成——资产检查与用户启动异步
+    var localReady by remember { mutableStateOf(MsDosAssetDownloader.hasUsableDisk()) }
 
     suspend fun ensure(force: Boolean) {
         MsDosAssetDownloader.ensureDisk(force) { p, value, msg ->
             phase = p
             progress = value
             message = msg
+            // 背景检查期间本地镜像若已就位，立即可解锁启动
+            if (MsDosAssetDownloader.hasUsableDisk()) localReady = true
         }
     }
 
-    LaunchedEffect(Unit) { ensure(false) }
+    LaunchedEffect(Unit) {
+        localReady = MsDosAssetDownloader.hasUsableDisk()
+        ensure(false)
+    }
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
@@ -180,7 +187,7 @@ fun MsDosScreen(
                 SmallTitle(text = stringResource(R.string.msdos_section_launch))
             }
             item(key = "card_launch") {
-                val ready = phase == MsDosAssetDownloader.Phase.READY
+                val ready = localReady
                 Column {
                     LaunchCard(
                         enabled = ready,
@@ -259,27 +266,27 @@ fun MsDosScreen(
                 }
             }
         }
-    }
 
-    TermuxInternalFilePicker(
-        show = showPicker,
-        title = stringResource(R.string.msdos_mount_pick),
-        startDir = if (config.mountDir.isNotBlank() && java.io.File(config.mountDir).isDirectory) {
-            config.mountDir
-        } else {
-            TERMUX_HOME_ABS
-        },
-        allowFolders = true,
-        onDismiss = { showPicker = false },
-        onFileSelected = { path ->
-            if (java.io.File(path).isDirectory) {
-                MsDosPrefs.update(context) { it.copy(mountDir = path, mountEnabled = true) }
-                showPicker = false
+        TermuxInternalFilePicker(
+            show = showPicker,
+            title = stringResource(R.string.msdos_mount_pick),
+            startDir = if (config.mountDir.isNotBlank() && java.io.File(config.mountDir).isDirectory) {
+                config.mountDir
             } else {
-                Toast.makeText(context, R.string.msdos_mount_invalid, Toast.LENGTH_SHORT).show()
+                TERMUX_HOME_ABS
+            },
+            allowFolders = true,
+            onDismiss = { showPicker = false },
+            onFileSelected = { path ->
+                if (java.io.File(path).isDirectory) {
+                    MsDosPrefs.update(context) { it.copy(mountDir = path, mountEnabled = true) }
+                    showPicker = false
+                } else {
+                    Toast.makeText(context, R.string.msdos_mount_invalid, Toast.LENGTH_SHORT).show()
+                }
             }
-        }
-    )
+        )
+    }
 }
 
 @Composable

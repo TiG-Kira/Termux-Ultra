@@ -41,18 +41,23 @@ object MsDosAssetDownloader {
     private const val MAX_EXTRACTED_BYTES = 128L * 1024 * 1024
     private const val MIN_DISK_BYTES = 8L * 1024 * 1024
 
+    // 国内加速源前置：中国大陆访问 github.com 直连常超时，优先走镜像再回落官方。
     private val MIRROR_DIRS = listOf(
-        "https://github.com/$REPO/releases/download/$RELEASE_TAG/",
+        "https://ghfast.top/https://github.com/$REPO/releases/download/$RELEASE_TAG/",
         "https://ghproxy.net/https://github.com/$REPO/releases/download/$RELEASE_TAG/",
-        "https://ghfast.top/https://github.com/$REPO/releases/download/$RELEASE_TAG/"
+        "https://mirror.ghproxy.com/https://github.com/$REPO/releases/download/$RELEASE_TAG/",
+        "https://ghproxy.com/https://github.com/$REPO/releases/download/$RELEASE_TAG/",
+        "https://github.com/$REPO/releases/download/$RELEASE_TAG/"
     )
 
     private val ALLOWED_HOSTS = setOf(
         "github.com",
         "objects.githubusercontent.com",
         "release-assets.githubusercontent.com",
+        "ghfast.top",
         "ghproxy.net",
-        "ghfast.top"
+        "mirror.ghproxy.com",
+        "ghproxy.com"
     )
 
     private val client = OkHttpClient.Builder()
@@ -74,6 +79,16 @@ object MsDosAssetDownloader {
         val disk = File(DISK_PATH)
         val recorded = readStamp(File(TERMUX_DIR, STAMP_FILE)) ?: return false
         return disk.exists() && disk.length() >= MIN_DISK_BYTES && disk.length() == recorded.second
+    }
+
+    /**
+     * 仅判断本地是否已有可用镜像（文件存在且达到最小体积）。
+     * 不依赖远程校验记账，用于在后台检查/下载进行中也能解锁启动，
+     * 避免"有本地镜像却被资产检查阻塞"。落盘采用原子 rename，运行中的会话不会读到半成品。
+     */
+    fun hasUsableDisk(): Boolean {
+        val disk = File(DISK_PATH)
+        return disk.exists() && disk.length() >= MIN_DISK_BYTES
     }
 
     /**
