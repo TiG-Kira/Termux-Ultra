@@ -291,7 +291,7 @@ fun ResourceCard(
                 }
             }
 
-            if (item.url.isNotEmpty() || item.scriptUrl.isNotEmpty() || item.type == "qemu_on_vnc" || item.hasHelp) {
+            if (item.url.isNotEmpty() || item.scriptUrl.isNotEmpty() || item.type == "qemu_on_vnc" || item.type == "msdos_emulator" || item.hasHelp) {
                 HorizontalDivider(color = dividerColor)
                 
                 Row(
@@ -349,7 +349,8 @@ fun ResourceCard(
                         }
                     } else {
                         val isConfigType = item.type == "qemu_on_vnc"
-                        val buttonText = if (isExpanded) "收起" else if (isConfigType) "配置" else "执行"
+                        val isMsdosType = item.type == "msdos_emulator"
+                        val buttonText = if (isExpanded) "收起" else if (isConfigType) "配置" else if (isMsdosType) "进入" else "执行"
                         Button(
                             onClick = {
                                 if (isFeatureDisabled) { showDisabledDialog { onToggleExpand() }; return@Button }
@@ -372,7 +373,7 @@ fun ResourceCard(
                 }
             }
 
-            if (isExpanded && !item.copyToClipboard) {
+            if (isExpanded && !item.copyToClipboard && item.type != "msdos_emulator") {
                 Column(
                     modifier = Modifier
                         .padding(16.dp)
