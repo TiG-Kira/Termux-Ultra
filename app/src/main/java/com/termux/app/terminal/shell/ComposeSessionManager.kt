@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import com.awkoo.libterminal.engine.TerminalSession
 import com.awkoo.libterminal.process.ITerminalProcess
+import com.termux.app.terminal.sixel.SixelTapProcess
 import com.termux.shared.termux.shell.command.environment.TermuxShellEnvironment
 import com.termux.shared.termux.TermuxConstants
 import com.termux.shared.compat.ShellEnvironmentCompat
@@ -98,7 +99,8 @@ class ComposeSessionManager private constructor(private val context: Context) {
                 onInputCommand = { command -> TerminalSessionCompat.setLastCommand(sessionId, command) }
             )
             TerminalSessionCompat.setPid(sessionId, bridge.pid)
-            bridge
+            // sixel 旁路：包装 PTY 输入流做 DCS 扫描（字节原样透传，仿真器行为不变）。
+            SixelTapProcess(bridge, sessionId)
         }
 
         val session = TerminalSession(
