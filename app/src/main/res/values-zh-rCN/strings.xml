@@ -1923,4 +1923,7 @@
     <string name="agentpaw_root_not_granted">不可用</string>
     <string name="agentpaw_root_retest">重新检测</string>
 
+    <!-- Sixel 图形预览（Issue #401） -->
+    <string name="sixel_image_preview">Sixel 图像预览（点按关闭）</string>
+
 </resources>

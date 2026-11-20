@@ -2001,4 +2001,7 @@
     <string name="agentpaw_root_not_granted">Not available</string>
     <string name="agentpaw_root_retest">Retest</string>
 
+    <!-- Sixel graphics preview (Issue #401) -->
+    <string name="sixel_image_preview">Sixel image preview (tap to dismiss)</string>
+
 </resources>
