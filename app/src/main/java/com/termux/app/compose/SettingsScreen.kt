@@ -700,8 +700,10 @@ fun SettingsScreen(
                             1 -> HyperGlassStyle.Liquid
                             else -> HyperGlassStyle.Default
                         }
+                        // 门限兜底：低版本上 prefs 会把玻璃样式回落 Default，
+                        // 回读真实生效值，避免本地选中态与落盘值脱节。
                         UiStylePrefs.setUiStyle(context, newStyle)
-                        uiStyleIndex = idx
+                        uiStyleIndex = uiStyleIndexOf(UiStylePrefs.uiStyle.value)
                     },
                     startAction = { SettingIcon(Icons.Rounded.Palette, contentDescription = context.getString(R.string.ui_appearance_style)) }
                 )
@@ -1282,8 +1284,10 @@ fun SettingsScreen(
                                     1 -> HyperGlassStyle.Liquid
                                     else -> HyperGlassStyle.Default
                                 }
+                                // 门限兜底：低版本上 prefs 会把玻璃样式回落 Default，
+                                // 回读真实生效值，避免本地选中态与落盘值脱节。
                                 UiStylePrefs.setUiStyle(context, newStyle)
-                                uiStyleIndex = idx
+                                uiStyleIndex = uiStyleIndexOf(UiStylePrefs.uiStyle.value)
                             },
                             startAction = {
                                 SettingIcon(Icons.Rounded.Palette, contentDescription = context.getString(R.string.ui_appearance_style))
@@ -2193,7 +2197,6 @@ fun SettingsScreen(
             onConfirmed = {
                 showHyperGlassCriticalDialog = false
                 val idx = pendingUiStyleIndex
-                uiStyleIndex = idx
                 UiStylePrefs.setUiStyle(
                     context,
                     when (idx) {
@@ -2202,6 +2205,7 @@ fun SettingsScreen(
                         else -> HyperGlassStyle.Default
                     }
                 )
+                uiStyleIndex = uiStyleIndexOf(UiStylePrefs.uiStyle.value)
                 pendingUiStyleIndex = -1
             },
             onDismiss = {
