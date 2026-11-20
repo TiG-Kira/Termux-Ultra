@@ -1,5 +1,6 @@
 package com.termux.app.compose
 
+import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
@@ -73,23 +74,26 @@ object UiStylePrefs {
     @Synchronized
     fun init(context: android.content.Context) {
         if (loaded) return
-        _uiStyle.value = styleOf(
-            context.applicationContext
-                .getSharedPreferences(PREFS_NAME, android.content.Context.MODE_PRIVATE)
-                .getString(KEY_UI_STYLE, VALUE_DEFAULT)
+        _uiStyle.value = gateByApi(
+            styleOf(
+                context.applicationContext
+                    .getSharedPreferences(PREFS_NAME, android.content.Context.MODE_PRIVATE)
+                    .getString(KEY_UI_STYLE, VALUE_DEFAULT)
+            )
         )
         loaded = true
     }
 
     @Synchronized
     fun setUiStyle(context: android.content.Context, style: HyperGlassStyle) {
-        _uiStyle.value = style
+        val resolved = gateByApi(style)
+        _uiStyle.value = resolved
         context.applicationContext
             .getSharedPreferences(PREFS_NAME, android.content.Context.MODE_PRIVATE)
             .edit()
             .putString(
                 KEY_UI_STYLE,
-                when (style) {
+                when (resolved) {
                     is HyperGlassStyle.Soft -> VALUE_SOFT
                     HyperGlassStyle.Liquid -> VALUE_LIQUID
                     HyperGlassStyle.Default -> VALUE_DEFAULT
@@ -104,6 +108,25 @@ object UiStylePrefs {
         VALUE_LIQUID -> HyperGlassStyle.Liquid
         else -> HyperGlassStyle.Default
     }
+
+    /**
+     * 玻璃样式的 API 门限（保底）：AGSL `RuntimeShader` 是 API 33+ 才有的类，
+     * Android 12 及以下一触到就 `NoSuchMethodError`（实测 OnePlus 8T /
+     * ColorOS 12 闪退：`com.kyant.backdrop.RuntimeShaderKt` → 页面重组崩溃）。
+     *
+     * 玻璃样式在低版本上没有降级渲染，设置入口的「强制启用」豁免
+     * （`isFeatureUsable` 含用户确认）也救不回来，所以门限必须无条件下沉到
+     * prefs 层：任何来源（落盘残留 / 强制启用 / 直调）的柔光、液态一律回落
+     * Default（非玻璃渲染）。静态上限取 [ApiCompat.Feature.HYPER_GLASS.minApi]。
+     */
+    private fun gateByApi(style: HyperGlassStyle): HyperGlassStyle =
+        if (style !is HyperGlassStyle.Default &&
+            Build.VERSION.SDK_INT < ApiCompat.Feature.HYPER_GLASS.minApi
+        ) {
+            HyperGlassStyle.Default
+        } else {
+            style
+        }
 }
 
 /**
