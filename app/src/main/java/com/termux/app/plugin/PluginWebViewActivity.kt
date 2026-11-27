@@ -1,6 +1,7 @@
 package com.termux.app.plugin
 
 import com.termux.app.compose.pagePaddingWithoutTop
+import com.termux.app.compose.LocalGlassProgressiveBlur
 import com.termux.app.compose.topBarClearance
 import android.annotation.SuppressLint
 import android.content.Context
@@ -40,7 +41,6 @@ import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.glass.ChevronBackward
-import top.yukonga.miuix.kmp.icon.glass.MiuixGlassIcons
 import androidx.compose.foundation.background
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
@@ -160,12 +160,13 @@ class PluginWebViewActivity : ComponentActivity() {
             contentWindowInsets = WindowInsets(0, 0, 0, 0),
             topBar = {
                 GlassTopAppBar(
+                    progressiveBlur = LocalGlassProgressiveBlur.current,
                     title = title,
                     backdrop = glassPage.backdrop,
                     navigationIcon = {
                         GlassIconButton(onClick = { onBack() }) {
                             Icon(
-                                imageVector = MiuixGlassIcons.ChevronBackward,
+                                imageVector = MiuixIcons.Glass.ChevronBackward,
                                 contentDescription = "返回",
                                 tint = MiuixTheme.colorScheme.onSurface,
                                 modifier = Modifier.size(24.dp)

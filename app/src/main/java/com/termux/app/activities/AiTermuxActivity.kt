@@ -87,6 +87,7 @@ import androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner
 import com.termux.R
 import com.termux.app.TermuxService
 import com.termux.app.compose.*
+import com.termux.app.compose.LocalGlassProgressiveBlur
 import com.termux.app.compose.pagePaddingWithoutTop
 import com.termux.app.compose.standaloneContentPadding
 import com.termux.app.utils.SnackbarHelper
@@ -112,7 +113,6 @@ import top.yukonga.miuix.kmp.icon.glass.Back
 import top.yukonga.miuix.kmp.icon.glass.ChevronBackward
 import top.yukonga.miuix.kmp.icon.glass.ExpandMore
 import top.yukonga.miuix.kmp.icon.glass.More
-import top.yukonga.miuix.kmp.icon.glass.MiuixGlassIcons
 import top.yukonga.miuix.kmp.icon.glass.Tasks
 import top.yukonga.miuix.kmp.window.WindowDialog
 import top.yukonga.miuix.kmp.theme.MiuixTheme
@@ -1984,13 +1984,14 @@ private fun AiSetupScreen(vm: AiTermuxViewModel, onBack: () -> Unit) {
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             GlassTopAppBar(
+                progressiveBlur = LocalGlassProgressiveBlur.current,
             title = "Termux Agent 设置",
             backdrop = glassPage.backdrop,
             scrollBehavior = scrollBehavior,
             navigationIcon = {
                 GlassIconButton(onClick = { onBack() }) {
                     Icon(
-                        imageVector = MiuixGlassIcons.ChevronBackward,
+                        imageVector = MiuixIcons.Glass.ChevronBackward,
                             contentDescription = null,
                             modifier = Modifier.size(24.dp),
                             tint = MiuixTheme.colorScheme.onSurface
@@ -2927,6 +2928,7 @@ private fun AiConversationManagementScreen(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             GlassTopAppBar(
+                progressiveBlur = LocalGlassProgressiveBlur.current,
             title = DEFAULT_CONVERSATION_TITLE,
             backdrop = glassPage.backdrop,
             subtitle = modelStatusSubtitle(ctx, vm),
@@ -2934,7 +2936,7 @@ private fun AiConversationManagementScreen(
             navigationIcon = {
                 GlassIconButton(onClick = { onBack() }) {
                     Icon(
-                        imageVector = MiuixGlassIcons.ChevronBackward,
+                        imageVector = MiuixIcons.Glass.ChevronBackward,
                             contentDescription = null,
                             modifier = Modifier.size(24.dp),
                             tint = MiuixTheme.colorScheme.onSurface
@@ -3542,7 +3544,7 @@ private fun AiChatScreen(vm: AiTermuxViewModel, conversationId: String, onBack: 
             anchor = moreAnchor,
             backdrop = glassPage.backdrop,
             anchorContent = {
-                Icon(MiuixGlassIcons.More, null, Modifier.size(22.dp), tint = MiuixTheme.colorScheme.onSurface)
+                Icon(MiuixIcons.Glass.More, null, Modifier.size(22.dp), tint = MiuixTheme.colorScheme.onSurface)
             },
             simplified = true,
         ) {
@@ -3590,6 +3592,7 @@ private fun AiChatGlassTopBar(
     }
 
     GlassTopAppBar(
+        progressiveBlur = LocalGlassProgressiveBlur.current,
         title = vm.activeConversationTitle,
         isContentScrolled = isContentScrolled,
         subtitle = subtitle,
@@ -3598,11 +3601,10 @@ private fun AiChatGlassTopBar(
         // 对话用 animateScrollToItem 跟随最新消息，属自滚动：contentOffset 不会被喂到，
         // 默认的 collapseRamp 停在 0 会让「更多 / 返回」等按钮拿不到阴影，
         // 故改由 isContentScrolled 驱动阴影 ramp，与 band / 按钮材质同步
-        rampFromOverlay = true,
         navigationIcon = {
             GlassIconButton(onClick = onBack) {
                 Icon(
-                    imageVector = MiuixGlassIcons.ChevronBackward,
+                    imageVector = MiuixIcons.Glass.ChevronBackward,
                     contentDescription = "返回",
                     modifier = Modifier.size(24.dp),
                     tint = MiuixTheme.colorScheme.onSurface
@@ -3612,7 +3614,7 @@ private fun AiChatGlassTopBar(
         actions = {
             GlassIconButton(onClick = onNewConversation) {
                 Icon(
-                    imageVector = MiuixGlassIcons.Add,
+                    imageVector = MiuixIcons.Glass.Add,
                     contentDescription = "新建对话",
                     modifier = Modifier.size(22.dp),
                     tint = MiuixTheme.colorScheme.onSurface
@@ -3621,7 +3623,7 @@ private fun AiChatGlassTopBar(
             GlassIconButton(onClick = { showTaskList = true }) {
                 Box(Modifier.fillMaxSize()) {
                     Icon(
-                        imageVector = MiuixGlassIcons.Tasks,
+                        imageVector = MiuixIcons.Glass.Tasks,
                         contentDescription = "任务列表",
                         modifier = Modifier
                             .align(Alignment.Center)
@@ -3646,7 +3648,7 @@ private fun AiChatGlassTopBar(
                 modifier = Modifier.glassPopupAnchor(moreAnchor, cornerRadius = GlassTopAppBarDefaults.ButtonSize / 2),
             ) {
                 Icon(
-                    imageVector = MiuixGlassIcons.More,
+                    imageVector = MiuixIcons.Glass.More,
                     contentDescription = "更多操作",
                     modifier = Modifier.size(22.dp),
                     tint = MiuixTheme.colorScheme.onSurface
@@ -4283,7 +4285,7 @@ private fun ChatBubble(msg: ChatMessage, vm: AiTermuxViewModel, modifier: Modifi
                     style = TextStyle(fontSize = 11.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
                 )
                 Icon(
-                    imageVector = MiuixGlassIcons.ExpandMore,
+                    imageVector = MiuixIcons.Glass.ExpandMore,
                     contentDescription = null,
                     modifier = Modifier.size(12.dp),
                     tint = MiuixTheme.colorScheme.onSurfaceVariantSummary
@@ -4519,7 +4521,7 @@ private fun RotatingExpandChevron(expanded: Boolean, tint: Color) {
         label = "expand_chevron"
     )
     Icon(
-        imageVector = MiuixGlassIcons.ExpandMore,
+        imageVector = MiuixIcons.Glass.ExpandMore,
         contentDescription = null,
         modifier = Modifier
             .size(15.dp)

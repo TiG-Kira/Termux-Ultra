@@ -8,7 +8,7 @@ plugins {
 
 configurations.all {
     resolutionStrategy {
-        force "top.yukonga.miuix.kmp:miuix-ui-android:0.9.4"
+        force "top.yukonga.miuix.kmp:miuix-ui-android:0.9.5-rc01"
         // guava-24.1-jre 自带 ListenableFuture，与 com.google.guava:listenablefuture:1.0 重复
         // （libterminal 4.0.3 → androidx.core:1.19.1 → concurrent-futures 引入）。
         // 替换为 guava 官方空占位包，消除 duplicate class。
@@ -241,11 +241,14 @@ android {
 dependencies {
     implementation fileTree(dir: 'libs', include: ['*.jar'])
     coreLibraryDesugaring "com.android.tools:desugar_jdk_libs:2.1.5"
-    implementation "top.yukonga.miuix.kmp:miuix-ui-android:0.9.4"
-    // 玻璃导航栏（GlassNavigationBar，vendor 于 miuix PR #423 的 miuix-glass 模块）依赖 miuix-blur
-    implementation "top.yukonga.miuix.kmp:miuix-blur-android:0.9.4"
-    implementation "top.yukonga.miuix.kmp:miuix-icons-android:0.9.4"
-        implementation "top.yukonga.miuix.kmp:miuix-preference-android:0.9.4"
+    implementation "top.yukonga.miuix.kmp:miuix-ui-android:0.9.5-rc01"
+    implementation "top.yukonga.miuix.kmp:miuix-blur-android:0.9.5-rc01"
+    // 官方 OS4 玻璃组件与图标（原 vendor 于 miuix PR #423，0.9.5 起随官方模块发布）
+    implementation "top.yukonga.miuix.kmp:miuix-glass-android:0.9.5-rc01"
+    implementation "top.yukonga.miuix.kmp:miuix-glass-icons-android:0.9.5-rc01"
+    implementation "top.yukonga.miuix.kmp:miuix-material-android:0.9.5-rc01"
+    implementation "top.yukonga.miuix.kmp:miuix-icons-android:0.9.5-rc01"
+        implementation "top.yukonga.miuix.kmp:miuix-preference-android:0.9.5-rc01"
 
 
     // miuix-glass 的弹层控件需要 NavigationBackHandler / rememberNavigationEventState，

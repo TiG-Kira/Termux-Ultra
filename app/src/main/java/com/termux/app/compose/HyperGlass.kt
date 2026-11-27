@@ -36,13 +36,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import top.yukonga.miuix.kmp.blur.Backdrop
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.glass.GlassDefaults
 import top.yukonga.miuix.kmp.glass.GlassDialog
-import top.yukonga.miuix.kmp.glass.GlassOverlayDefaults
-import top.yukonga.miuix.kmp.glass.GlassShape
-import top.yukonga.miuix.kmp.glass.GlassShadows
-import top.yukonga.miuix.kmp.glass.GlassStrokes
-import top.yukonga.miuix.kmp.glass.GlassTopAppBarDefaults
+import top.yukonga.miuix.kmp.material.EdgeStrokes
 import top.yukonga.miuix.kmp.layout.DialogDefaults
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.utils.MiuixPopupUtils
@@ -155,6 +150,14 @@ val LocalHyperGlassBackdrop = staticCompositionLocalOf<Backdrop?> { null }
 val LocalUiStyle = staticCompositionLocalOf<HyperGlassStyle> { HyperGlassStyle.Default }
 
 /**
+ * 顶栏渐进模糊带开关：官方 GlassTopAppBar 的 progressiveBlur 是逐调用点参数，
+ * 柔光玻璃+ 下为 true（vendored 时代靠全局 BandBlurRadius var 的 20dp 档），
+ * 默认 / 液态玻璃为 false（液态 band 由 LiquidTopBarSkin 接管，不叠渐进模糊）。
+ * 由 [KiTerminalTheme] 统一 provide；豁免页（终端栏、关于页等自绘顶栏）不引用本值。
+ */
+val LocalGlassProgressiveBlur = staticCompositionLocalOf { false }
+
+/**
  * 主题级取景层：由 [KiTerminalTheme] 创建，交给各页面的 `rememberGlassPageBackdrop()`
  * 追加到内容 Box 的 `contentModifier`。
  *
@@ -187,27 +190,12 @@ fun AppearanceStyleExempt(content: @Composable () -> Unit) {
 }
 
 /**
- * 把当前 UI 样式同步到只能在组合期读取的静态 token（顶栏渐进模糊等）。
+ * 把当前 UI 样式同步到只能在组合期读取的静态 token。
  *
  * 必须在界面建立之前调用（Application.onCreate）；样式切换后由重启流程重新走一遍。
  */
 fun applyUiStyleTokens(context: android.content.Context) {
     UiStylePrefs.init(context)
-    applyUiStyleTokens(UiStylePrefs.uiStyle.value)
-}
-
-/**
- * 按给定样式同步顶栏 token。
- *
- * 必须在组合期调用（页面里 collected state 变化时立刻同步）：切换样式只重启 Activity
- * 不重启进程，只靠 Application.onCreate 会导致第二次切换失效。
- */
-fun applyUiStyleTokens(style: HyperGlassStyle) {
-    val soft = style is HyperGlassStyle.Soft
-    // 顶栏：柔光 = 真模糊 + 白板整体上移；默认 / 液态玻璃 = 不模糊、底板原位。
-    // 液态玻璃的 band 由顶栏骨架整块换成 LiquidTopBarSkin，不能叠 miuix 的渐进模糊。
-    GlassTopAppBarDefaults.BandBlurRadius = if (soft) 20.dp else 0.dp
-    GlassTopAppBarDefaults.BandScrimOffset = if (soft) 24.dp else 0.dp
 }
 
 /**
@@ -296,19 +284,15 @@ fun HyperGlassDialog(
         renderInRootScaffold = true,
     ) {
         GlassDialog(
-            visible = show,
+            show = show,
             onDismissRequest = { onDismissRequest?.invoke() },
             backdrop = backdrop,
             maxWidth = maxWidth,
-            scrimAlpha = if (isDark) {
-                GlassOverlayDefaults.ScrimAlphaDark
-            } else {
-                GlassOverlayDefaults.ScrimAlphaLight
-            },
-            style = GlassDefaults.style(isDark),
-            shape = GlassShape(dialogCornerRadius),
-            stroke = if (isDark) GlassStrokes.BigDark else GlassStrokes.BigLight,
-            shadow = GlassShadows.ExtraHigh,
+            dimColor = Color.Black.copy(
+                alpha = if (isDark) GlassOverlayAlpha.ScrimAlphaDark else GlassOverlayAlpha.ScrimAlphaLight
+            ),
+            cornerRadius = dialogCornerRadius,
+            stroke = if (isDark) EdgeStrokes.BigDark else EdgeStrokes.BigLight,
             onDismissFinished = {
                 onDismissFinished?.invoke()
                 hostVisible = false
@@ -394,20 +378,16 @@ fun HyperGlassBottomSheet(
         renderInRootScaffold = true,
     ) {
         GlassDialog(
-            visible = show,
+            show = show,
             onDismissRequest = { onDismissRequest?.invoke() },
             backdrop = backdrop,
             // 弹层要通栏，宽度上限放到屏幕之外
             maxWidth = 2000.dp,
-            scrimAlpha = if (isDark) {
-                GlassOverlayDefaults.ScrimAlphaDark
-            } else {
-                GlassOverlayDefaults.ScrimAlphaLight
-            },
-            style = GlassDefaults.style(isDark),
-            shape = GlassShape(cornerRadius),
-            stroke = if (isDark) GlassStrokes.BigDark else GlassStrokes.BigLight,
-            shadow = GlassShadows.ExtraHigh,
+            dimColor = Color.Black.copy(
+                alpha = if (isDark) GlassOverlayAlpha.ScrimAlphaDark else GlassOverlayAlpha.ScrimAlphaLight
+            ),
+            cornerRadius = cornerRadius,
+            stroke = if (isDark) EdgeStrokes.BigDark else EdgeStrokes.BigLight,
             onDismissFinished = {
                 onDismissFinished?.invoke()
                 hostVisible = false

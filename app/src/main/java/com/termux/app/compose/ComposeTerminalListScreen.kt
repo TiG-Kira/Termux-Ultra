@@ -56,9 +56,9 @@ import top.yukonga.miuix.kmp.glass.rememberGlassPopupAnchor
 import top.yukonga.miuix.kmp.icon.glass.Add
 import top.yukonga.miuix.kmp.icon.glass.Close
 import top.yukonga.miuix.kmp.icon.glass.Clear
-import top.yukonga.miuix.kmp.icon.glass.Lock
+import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.Lock
 import top.yukonga.miuix.kmp.icon.glass.More
-import top.yukonga.miuix.kmp.icon.glass.MiuixGlassIcons
 import top.yukonga.miuix.kmp.icon.glass.Rocket
 import top.yukonga.miuix.kmp.icon.glass.Sort
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
@@ -211,6 +211,7 @@ fun ComposeTerminalListScreen(
         if (active) {
             onTopBarContent {
                 GlassTopAppBar(
+                    progressiveBlur = LocalGlassProgressiveBlur.current,
                     title = stringResource(R.string.terminal),
                     backdrop = LocalGlassTopAppBarBackdrop.current,
                     scrollBehavior = scrollBehavior,
@@ -226,7 +227,7 @@ fun ComposeTerminalListScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(
-                                imageVector = MiuixGlassIcons.Lock,
+                                imageVector = MiuixIcons.Lock,
                                 contentDescription = null,
                                 modifier = Modifier.size(24.dp),
                                 tint = MiuixTheme.colorScheme.onSurface
@@ -252,7 +253,7 @@ fun ComposeTerminalListScreen(
                             }
                         }) {
                             Icon(
-                                imageVector = MiuixGlassIcons.Add,
+                                imageVector = MiuixIcons.Glass.Add,
                                 contentDescription = stringResource(R.string.new_terminal),
                                 modifier = Modifier.size(24.dp),
                                 tint = MiuixTheme.colorScheme.onSurface
@@ -268,7 +269,7 @@ fun ComposeTerminalListScreen(
                             )
                         ) {
                             Icon(
-                                imageVector = MiuixGlassIcons.More,
+                                imageVector = MiuixIcons.Glass.More,
                                 contentDescription = stringResource(R.string.menu_more),
                                 modifier = Modifier.size(22.dp),
                                 tint = MiuixTheme.colorScheme.onSurface
@@ -669,33 +670,33 @@ fun ComposeTerminalListScreen(
                         anchor = moreAnchor,
                         backdrop = null,
                         anchorContent = {
-                            Icon(MiuixGlassIcons.More, null, Modifier.size(22.dp), tint = MiuixTheme.colorScheme.onSurface)
+                            Icon(MiuixIcons.Glass.More, null, Modifier.size(22.dp), tint = MiuixTheme.colorScheme.onSurface)
                         },
                         simplified = true,
                     ) {
                         GlassPopupItem(
                             text = stringResource(R.string.menu_open_sandbox_session),
-                            icon = MiuixGlassIcons.Rocket,
+                            icon = MiuixIcons.Glass.Rocket,
                             onClick = { showMoreMenu = false; openSandboxSession() }
                         )
                         GlassPopupItem(
                             text = stringResource(R.string.menu_close_all_sessions),
-                            icon = MiuixGlassIcons.Close,
+                            icon = MiuixIcons.Glass.Close,
                             onClick = { showMoreMenu = false; closeAllSessions() }
                         )
                         GlassPopupItem(
                             text = stringResource(R.string.menu_cleanup_uninitialized),
-                            icon = MiuixGlassIcons.Clear,
+                            icon = MiuixIcons.Glass.Clear,
                             onClick = { showMoreMenu = false; cleanupUninitializedSessions() }
                         )
                         GlassPopupItem(
                             text = stringResource(R.string.new_failsafe_session),
-                            icon = MiuixGlassIcons.Add,
+                            icon = MiuixIcons.Glass.Add,
                             onClick = { showMoreMenu = false; newFailsafeSession() }
                         )
                         GlassPopupItem(
                             text = stringResource(R.string.menu_sort_sessions),
-                            icon = MiuixGlassIcons.Sort,
+                            icon = MiuixIcons.Glass.Sort,
                             onClick = { showMoreMenu = false; showSortDialog = true }
                         )
                     }

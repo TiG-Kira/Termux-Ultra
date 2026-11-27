@@ -40,6 +40,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import com.termux.R
 import com.termux.app.compose.AppMotion
+import com.termux.app.compose.LocalGlassProgressiveBlur
 import com.termux.app.vnc.VncConnection
 import com.termux.app.vnc.VncConnectionManager
 import com.termux.app.vnc.connectToVnc
@@ -49,7 +50,7 @@ import com.termux.app.ssh.connectToSsh
 import top.yukonga.miuix.kmp.glass.GlassIconButton
 import top.yukonga.miuix.kmp.glass.GlassTopAppBar
 import top.yukonga.miuix.kmp.icon.glass.Add
-import top.yukonga.miuix.kmp.icon.glass.MiuixGlassIcons
+import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.glass.Refresh
 import top.yukonga.miuix.kmp.basic.CircularProgressIndicator
 import top.yukonga.miuix.kmp.basic.Scaffold
@@ -286,6 +287,7 @@ fun RemoteScreen(
                     }
             ) {
                 GlassTopAppBar(
+                    progressiveBlur = LocalGlassProgressiveBlur.current,
                     title = topAppBarTitle,
                     backdrop = LocalGlassTopAppBarBackdrop.current,
                     scrollBehavior = scrollBehavior,
@@ -298,7 +300,7 @@ fun RemoteScreen(
                                     }
                                 ) {
                                     Icon(
-                                        imageVector = MiuixGlassIcons.Add,
+                                        imageVector = MiuixIcons.Glass.Add,
                                         contentDescription = "添加",
                                         tint = topBarIconColor
                                     )
@@ -309,13 +311,12 @@ fun RemoteScreen(
                                             vncScanRequested.value = true
                                         }
                                     },
-                                    enabled = !isScanning.value
                                 ) {
                                     if (isScanning.value) {
                                         CircularProgressIndicator(size = 24.dp, strokeWidth = 2.dp)
                                     } else {
                                         Icon(
-                                            imageVector = MiuixGlassIcons.Refresh,
+                                            imageVector = MiuixIcons.Glass.Refresh,
                                             contentDescription = "扫描",
                                             tint = topBarIconColor
                                         )
@@ -329,7 +330,7 @@ fun RemoteScreen(
                                     }
                                 ) {
                                     Icon(
-                                        imageVector = MiuixGlassIcons.Add,
+                                        imageVector = MiuixIcons.Glass.Add,
                                         contentDescription = "添加",
                                         tint = topBarIconColor
                                     )
@@ -341,7 +342,7 @@ fun RemoteScreen(
                                     }
                                 ) {
                                     Icon(
-                                        imageVector = MiuixGlassIcons.Add,
+                                        imageVector = MiuixIcons.Glass.Add,
                                         contentDescription = "添加",
                                         tint = topBarIconColor
                                     )
@@ -352,13 +353,12 @@ fun RemoteScreen(
                                             xserverRefreshRequested.value = true
                                         }
                                     },
-                                    enabled = !xserverRefreshing.value
                                 ) {
                                     if (xserverRefreshing.value) {
                                         CircularProgressIndicator(size = 24.dp, strokeWidth = 2.dp)
                                     } else {
                                         Icon(
-                                            imageVector = MiuixGlassIcons.Refresh,
+                                            imageVector = MiuixIcons.Glass.Refresh,
                                             contentDescription = "刷新显示器",
                                             tint = topBarIconColor
                                         )
@@ -371,7 +371,7 @@ fun RemoteScreen(
                                     }
                                 ) {
                                     Icon(
-                                        imageVector = MiuixGlassIcons.Add,
+                                        imageVector = MiuixIcons.Glass.Add,
                                         contentDescription = "添加",
                                         tint = topBarIconColor
                                     )

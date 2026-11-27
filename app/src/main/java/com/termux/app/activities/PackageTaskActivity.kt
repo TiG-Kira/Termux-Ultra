@@ -62,6 +62,7 @@ import androidx.core.view.WindowCompat
 import androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner
 import com.termux.R
 import com.termux.app.compose.KiTerminalTheme
+import com.termux.app.compose.LocalGlassProgressiveBlur
 import com.termux.app.compose.LiveUpdateState
 import com.termux.app.compose.NavigationHelper
 import com.termux.app.compose.PkgRepo
@@ -74,9 +75,9 @@ import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.glass.GlassIconButton
-import top.yukonga.miuix.kmp.glass.GlassSmallTopAppBar
+import top.yukonga.miuix.kmp.glass.GlassTopAppBar
 import top.yukonga.miuix.kmp.icon.glass.ChevronBackward
-import top.yukonga.miuix.kmp.icon.glass.MiuixGlassIcons
+import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.glass.Ok
 import com.termux.app.compose.OverlayDialog
 import top.yukonga.miuix.kmp.theme.MiuixTheme
@@ -247,15 +248,17 @@ private fun PackageTaskScreen(onClose: () -> Unit) {
     Scaffold(
         contentWindowInsets = WindowInsets(0),
         topBar = {
-            GlassSmallTopAppBar(
+            GlassTopAppBar(
+                progressiveBlur = LocalGlassProgressiveBlur.current,
                 title = taskTitle(snap),
+                expandable = false,
                 subtitle = taskSubtitle(snap),
                 backdrop = glassPage.backdrop,
                 isContentScrolled = contentScrolled,
                 navigationIcon = {
                     GlassIconButton(onClick = onClose) {
                         Icon(
-                            imageVector = MiuixGlassIcons.ChevronBackward,
+                            imageVector = MiuixIcons.Glass.ChevronBackward,
                             contentDescription = stringResource(R.string.back),
                             tint = MiuixTheme.colorScheme.onSurface,
                             modifier = Modifier.size(24.dp)
@@ -314,7 +317,7 @@ private fun PackageTaskScreen(onClose: () -> Unit) {
             ) {
                 if (finished) {
                     Icon(
-                        imageVector = MiuixGlassIcons.Ok,
+                        imageVector = MiuixIcons.Glass.Ok,
                         contentDescription = "完成",
                         tint = MiuixTheme.colorScheme.primary,
                         modifier = Modifier.size(24.dp)

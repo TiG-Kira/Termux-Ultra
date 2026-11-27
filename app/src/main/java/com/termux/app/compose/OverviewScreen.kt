@@ -122,7 +122,7 @@ import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.glass.GlassIconButton
 import top.yukonga.miuix.kmp.icon.glass.Add
 import top.yukonga.miuix.kmp.icon.glass.Edit
-import top.yukonga.miuix.kmp.icon.glass.MiuixGlassIcons
+import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.glass.Ok
 import top.yukonga.miuix.kmp.basic.ScrollBehavior
 import top.yukonga.miuix.kmp.basic.Scaffold
@@ -907,7 +907,7 @@ fun OverviewScreen(
                                 showAddCardDialog = true
                             }) {
                                 Icon(
-                                    imageVector = MiuixGlassIcons.Add,
+                                    imageVector = MiuixIcons.Glass.Add,
                                     contentDescription = null,
                                     modifier = Modifier.size(24.dp),
                                     tint = MiuixTheme.colorScheme.onSurface
@@ -917,7 +917,7 @@ fun OverviewScreen(
                                 isEditMode = !isEditMode
                             }) {
                                 Crossfade(
-                                    targetState = if (isEditMode) MiuixGlassIcons.Ok else MiuixGlassIcons.Edit,
+                                    targetState = if (isEditMode) MiuixIcons.Glass.Ok else MiuixIcons.Glass.Edit,
                                     animationSpec = GlassMotion.navContentFloat(),
                                     label = "overviewEditToggle"
                                 ) { icon ->

@@ -113,7 +113,7 @@ import top.yukonga.miuix.kmp.basic.DropdownItem
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.glass.GlassIconButton
 import top.yukonga.miuix.kmp.glass.GlassTopAppBarDefaults
-import top.yukonga.miuix.kmp.glass.GlassShape
+import top.yukonga.miuix.kmp.material.GlassShape
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.SnackbarHost
 import top.yukonga.miuix.kmp.basic.SnackbarHostState
@@ -123,7 +123,6 @@ import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.glass.ChevronBackward
-import top.yukonga.miuix.kmp.icon.glass.MiuixGlassIcons
 import top.yukonga.miuix.kmp.popup.OverlayDropdownPopup
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.theme.MiuixTheme
@@ -778,11 +777,10 @@ fun TerminalDetailScreenCompose(
         GlassIconButton(
             onClick = { updateInteractionTime(); onBack() },
             size = 48.dp,
-            padding = 0.dp,
             shape = GlassShape(24.dp),
         ) {
             Icon(
-                imageVector = MiuixGlassIcons.ChevronBackward,
+                imageVector = MiuixIcons.Glass.ChevronBackward,
                 contentDescription = null,
                 modifier = Modifier.size(24.dp),
                 tint = effectiveTopBarContentColor
@@ -802,10 +800,10 @@ fun TerminalDetailScreenCompose(
                 updateInteractionTime()
                 isTopBarCollapsed = !isTopBarCollapsed
             },
+            modifier = Modifier.padding(horizontal = 6.dp),
             size = 48.dp,
             // 与动作区面板之间留出标准按钮间距（与其他相邻玻璃 pill 一致），
-            // 0 会让面板和把手贴死。
-            padding = GlassTopAppBarDefaults.ButtonPadding,
+            // 0 会让面板和把手贴死。官方 GlassIconButton 无 padding 参数，移到 modifier。
             shape = GlassShape(24.dp),
         ) {
             Icon(

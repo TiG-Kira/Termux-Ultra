@@ -65,7 +65,6 @@ import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.glass.ChevronBackward
-import top.yukonga.miuix.kmp.icon.glass.MiuixGlassIcons
 import top.yukonga.miuix.kmp.icon.glass.Link
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import androidx.compose.foundation.layout.offset
@@ -331,6 +330,7 @@ fun PackageDetailScreen(
     Scaffold(
         topBar = {
             GlassTopAppBar(
+                progressiveBlur = LocalGlassProgressiveBlur.current,
                 title = pkg.name,
                 backdrop = glassPage.backdrop,
                 subtitle = run {
@@ -350,7 +350,7 @@ fun PackageDetailScreen(
                 navigationIcon = {
                     GlassIconButton(onClick = onBack) {
                         Icon(
-                            imageVector = MiuixGlassIcons.ChevronBackward,
+                            imageVector = MiuixIcons.Glass.ChevronBackward,
                             contentDescription = stringResource(R.string.back),
                             tint = colorScheme.onSurface,
                             modifier = Modifier.size(24.dp)
@@ -361,7 +361,7 @@ fun PackageDetailScreen(
                     if (!detail?.homepage.isNullOrBlank()) {
                         GlassIconButton(onClick = { detail?.homepage?.let { openHomepage(it) } }) {
                             Icon(
-                                imageVector = MiuixGlassIcons.Link,
+                                imageVector = MiuixIcons.Glass.Link,
                                 contentDescription = "打开主页",
                                 tint = colorScheme.onSurface,
                                 modifier = Modifier.size(24.dp)

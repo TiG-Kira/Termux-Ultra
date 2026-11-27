@@ -163,8 +163,6 @@ fun MainScreen(
     // UI 外观样式（柔光玻璃+）：与导航栏样式相互独立；非默认时内容根挂取景层，供玻璃弹层取景。
     UiStylePrefs.init(context)
     val uiStyle by UiStylePrefs.uiStyle.collectAsState()
-    // 组合期同步顶栏 token：切换样式只重启 Activity，进程不重启，只靠 Application 会失效。
-    applyUiStyleTokens(uiStyle)
     val hyperGlassActive = uiStyle is HyperGlassStyle.Soft
     // 液态玻璃外观：与底栏样式相互独立，单独驱动顶栏皮肤 / 按钮 / 弹层。
     val liquidUiActive = uiStyle is HyperGlassStyle.Liquid
@@ -957,6 +955,7 @@ private fun MainTopBar(tab: Int, showVnc: Boolean, scrollBehavior: ScrollBehavio
         else -> stringResource(R.string.settings)
     }
     GlassTopAppBar(
+        progressiveBlur = LocalGlassProgressiveBlur.current,
         title = title,
         scrollBehavior = scrollBehavior,
         backdrop = backdrop,

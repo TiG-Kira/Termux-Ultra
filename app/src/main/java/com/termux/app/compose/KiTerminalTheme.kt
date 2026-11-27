@@ -42,7 +42,6 @@ fun KiTerminalTheme(
     // Application.onCreate 只覆盖进程启动，切换样式仅重启 Activity，组合期需再同步一次。
     UiStylePrefs.init(context)
     val uiStyle by UiStylePrefs.uiStyle.collectAsState()
-    applyUiStyleTokens(uiStyle)
     val styled = uiStyle != HyperGlassStyle.Default
 
     // 主题级取景层只在这里创建并下发；真正挂载由 rememberGlassPageBackdrop 追加到
@@ -89,6 +88,9 @@ fun KiTerminalTheme(
 
     CompositionLocalProvider(
         LocalUiStyle provides uiStyle,
+        // 顶栏渐进模糊带按样式分发：官方 GlassTopAppBar 的 progressiveBlur 是逐调用点
+        // 参数（vendored 时代靠全局 BandBlurRadius var），柔光玻璃+ 开、其余样式关。
+        LocalGlassProgressiveBlur provides (uiStyle is HyperGlassStyle.Soft),
         LocalPageBackdropLayers provides pageLayers,
         LocalHyperGlassBackdrop provides if (styled) softLayer else null,
         LocalLiquidBackdrop provides if (uiStyle is HyperGlassStyle.Liquid) liquidLayer else null,

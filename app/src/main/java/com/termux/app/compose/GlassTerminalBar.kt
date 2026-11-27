@@ -27,9 +27,11 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -43,6 +45,11 @@ import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -52,18 +59,22 @@ import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.rememberTopAppBarState
 import top.yukonga.miuix.kmp.blur.Backdrop
-import top.yukonga.miuix.kmp.blur.isRuntimeShaderSupported
-import top.yukonga.miuix.kmp.glass.GlassDefaults
-import top.yukonga.miuix.kmp.glass.GlassShape
-import top.yukonga.miuix.kmp.glass.GlassStrokes
-import top.yukonga.miuix.kmp.glass.GlassStroke
+import top.yukonga.miuix.kmp.material.isRuntimeShaderSupported
+import top.yukonga.miuix.kmp.material.GlassDefaults
+import top.yukonga.miuix.kmp.material.GlassShape
+import top.yukonga.miuix.kmp.material.GlassStyle
+import top.yukonga.miuix.kmp.material.GlassMaterial
+import top.yukonga.miuix.kmp.material.GlassShadow
+import top.yukonga.miuix.kmp.material.GlassShadows
+import top.yukonga.miuix.kmp.material.EdgeStrokes
+import top.yukonga.miuix.kmp.material.GlassEdgeStrokes
+import top.yukonga.miuix.kmp.material.EdgeStroke
 import top.yukonga.miuix.kmp.glass.GlassTopAppBar
 import top.yukonga.miuix.kmp.glass.GlassTopAppBarDefaults
-import top.yukonga.miuix.kmp.glass.LocalGlassTopAppBarContext
 import top.yukonga.miuix.kmp.glass.glassPanel
-import top.yukonga.miuix.kmp.glass.internal.drawGlassMask
-import top.yukonga.miuix.kmp.glass.internal.drawGlassRim
-import top.yukonga.miuix.kmp.glass.internal.drawGlassStroke
+import top.yukonga.miuix.kmp.material.drawGlassMask
+import top.yukonga.miuix.kmp.material.drawGlassRim
+import top.yukonga.miuix.kmp.material.drawGlassEdge
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 /**
@@ -78,7 +89,26 @@ enum class GlassTerminalBarColorStyle {
     System,
 }
 
-/** [GlassTerminalBar] 的默认 token。布局规格全部动态委托给原版 GlassTopAppBar，这里只留终端专属项。 */
+/**
+ * 终端栏玻璃面板（[GlassTerminalBarActionsPanel]）的取色上下文。
+ *
+ * 官方 miuix-glass 的顶栏上下文（LocalGlassHeaderContext）是 internal API，不再对外下发；
+ * 面板对齐栏的材质/描边/底板改走本应用侧 composition local，由 [GlassTerminalBarExpanded]
+ * 按传给官方 [GlassTopAppBar] 的同一组参数下发。
+ */
+internal class GlassTerminalBarContext(
+    val style: GlassStyle,
+    val backdrop: Backdrop?,
+    val material: GlassMaterial,
+    val fill: Color,
+    val stroke: EdgeStroke?,
+    val shadow: GlassShadow?,
+    val alpha: Float,
+)
+
+internal val LocalGlassTerminalBarContext = staticCompositionLocalOf<GlassTerminalBarContext?> { null }
+
+/** [GlassTerminalBar] 的默认 token。布局规格全部动态委托给官方 GlassTopAppBar，这里只留终端专属项。 */
 object GlassTerminalBarDefaults {
 
     /**
@@ -155,10 +185,10 @@ object GlassTerminalBarDefaults {
     fun buttonFill(isDark: Boolean): Color = if (isDark) Color(0xFF2C2C2C) else Color.White
 
     /** 配套的小号 bloom 描边（同 GlassTopAppBarDefaults.buttonStroke 的 small 档）。 */
-    fun buttonStroke(isDark: Boolean): GlassStroke = GlassStrokes.forTheme(
+    fun buttonStroke(isDark: Boolean): EdgeStroke = GlassEdgeStrokes.forTheme(
         isDark = isDark,
-        light = GlassStrokes.SmallLight,
-        dark = GlassStrokes.SmallDark,
+        light = GlassEdgeStrokes.SmallLight,
+        dark = GlassEdgeStrokes.SmallDark,
     )
 
     /**
@@ -403,42 +433,71 @@ private fun GlassTerminalBarExpanded(
                 }
                 .background(bandBrush),
         )
-        // 动态委托原版 GlassTopAppBar：
+        // 动态委托官方 GlassTopAppBar：
         // - isContentScrolled = collapsed：收缩命令驱动按钮材质浮起（展开态裸图标、收缩态 pill）
         // - scrollBehavior：上面的 heightOffset 动画驱动大标题折叠
-        // - 标题位置/大小、主副标题排布、按钮规格全部是原版口径
+        // - 标题位置/大小、主副标题排布、按钮规格全部是官方口径
         // 控制台 / 终端是外观样式的豁免页：bandTint 取色与自绘渐隐底板（PR #350）
         // 不能被液态 band 覆盖，弹层与卡片也一律回落 Default。
         AppearanceStyleExempt {
-            GlassTopAppBar(
-                title = title,
-                isContentScrolled = collapsed,
-                largeTitle = largeTitle,
-                subtitle = subtitle,
-                titleColor = resolvedContentColor,
-                largeTitleColor = resolvedContentColor,
-                subtitleColor = resolvedSubtitleColor,
-                backdrop = backdrop,
-                bandBrush = transparentBrush,
-                // 终端栏排除柔光：bandBlurRadius 不走全局默认（柔光样式 20dp），与关于页同款
-                // 显式置 0。终端栏有自己的 bandTint 渐隐底板设计，且终端内容高频重绘，
-                // 叠一层实时模糊带区既破坏取色口径又白耗渲染线程。
-                bandBlurRadius = 0.dp,
-                scrollBehavior = scrollBehavior,
-                fill = GlassTerminalBarDefaults.buttonFill(isDark),
-                stroke = GlassTerminalBarDefaults.buttonStroke(isDark),
-                navigationIcon = navigationIcon,
-                actions = {
-                    actions()
-                    trailingIcon()
-                },
-                bottomContent = {
-                    // 栏底补白：栏身因此变长，渐隐带（按栏高绘制）的实色段随之向下延伸，
-                    // 副标题与终端首行之间留出空隙。
-                    Spacer(Modifier.height(GlassTerminalBarDefaults.BottomGap))
-                },
-                onBlankTap = onBlankTap,
-            )
+            // 官方 GlassTopAppBar 不再提供 titleColor/subtitleColor 参数（由 MiuixTheme
+            // 派生），这里局部覆写 onSurface 系列注入终端取色口径。
+            MiuixTheme(
+                colors = MiuixTheme.colorScheme.copy(
+                    onSurface = resolvedContentColor,
+                    onSurfaceVariantSummary = resolvedSubtitleColor,
+                ),
+            ) {
+                // 向 actions 槽的玻璃面板下发与顶栏同一组玻璃参数（见 LocalGlassTerminalBarContext）。
+                CompositionLocalProvider(
+                    LocalGlassTerminalBarContext provides GlassTerminalBarContext(
+                        style = GlassDefaults.Style,
+                        backdrop = backdrop,
+                        material = GlassTopAppBarDefaults.buttonMaterial(),
+                        fill = GlassTerminalBarDefaults.buttonFill(isDark),
+                        stroke = GlassTerminalBarDefaults.buttonStroke(isDark),
+                        shadow = GlassShadows.Regular,
+                        alpha = 1f,
+                    ),
+                ) {
+                    // 栏空白处点击（onBlankTap）：官方栏不再内建空白点击，外包手势层还原
+                    // 「栏内空白命中才回调」语义——子按钮在 Main pass 消费的事件使
+                    // waitForUpOrCancellation 判定取消，不会误触发；空白处由本层吞掉穿透。
+                    Box(
+                        modifier = Modifier.pointerInput(onBlankTap) {
+                            if (onBlankTap == null) return@pointerInput
+                            awaitEachGesture {
+                                val down = awaitFirstDown(pass = PointerEventPass.Main)
+                                down.consume()
+                                val up = waitForUpOrCancellation(pass = PointerEventPass.Main)
+                                if (up != null) onBlankTap()
+                            }
+                        },
+                    ) {
+                        GlassTopAppBar(
+                            title = title,
+                            isContentScrolled = collapsed,
+                            largeTitle = largeTitle,
+                            subtitle = subtitle,
+                            backdrop = backdrop,
+                            bandBrush = transparentBrush,
+                            scrollBehavior = scrollBehavior,
+                            fill = GlassTerminalBarDefaults.buttonFill(isDark),
+                            stroke = GlassTerminalBarDefaults.buttonStroke(isDark),
+                            navigationIcon = navigationIcon,
+                            actions = {
+                                actions()
+                                trailingIcon()
+                            },
+                            bottomContent = {
+                                // 栏底补白：栏身因此变长，渐隐带（按栏高绘制）的实色段随之向下延伸，
+                                // 副标题与终端首行之间留出空隙。
+                                Spacer(Modifier.height(GlassTerminalBarDefaults.BottomGap))
+                            },
+                        )
+                    }
+                }
+            }
         }
     }
 }
@@ -539,7 +598,7 @@ fun GlassTerminalBarActionsPanel(
     modifier: Modifier = Modifier,
     content: @Composable RowScope.() -> Unit,
 ) {
-    val barContext = LocalGlassTopAppBarContext.current
+    val barContext = LocalGlassTerminalBarContext.current
     val style = barContext?.style ?: GlassDefaults.Style
     val backdrop = barContext?.backdrop
     val material = barContext?.material ?: GlassTopAppBarDefaults.buttonMaterial()
@@ -584,9 +643,9 @@ fun GlassTerminalBarActionsPanel(
                 .background(fill)
                 .drawWithContent {
                     drawContent()
-                    stroke?.let { drawGlassStroke(shape, layoutDirection, it, 1f) }
-                    drawGlassRim(shape, layoutDirection, style, fill, 1f)
-                    drawGlassMask(shape, layoutDirection)
+                    stroke?.let { drawGlassEdge(shape, it, style, fill, 1f) }
+                    drawGlassRim(shape, style, fill, 1f)
+                    drawGlassMask(shape)
                 },
         )
         Row(
