@@ -373,6 +373,9 @@ runs:
       uses: actions/upload-artifact@v7
       with:
         name: build-logs-${{ inputs.variant }}-${{ inputs.abi }}
-        archive: false
+        # 这里固定会有 incremental.log / full-retry.log 两个文件；
+        # archive: false 只允许单文件，会让「上传排查日志」这步自己失败，
+        # 把真正的编译错误掩盖掉，因此必须打包上传。
+        archive: true
         if-no-files-found: ignore
         path: build-logs/*.log
