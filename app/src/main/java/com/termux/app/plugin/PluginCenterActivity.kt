@@ -38,10 +38,10 @@ import top.yukonga.miuix.kmp.glass.GlassTopAppBar
 import top.yukonga.miuix.kmp.basic.*
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.glass.ChevronBackward
-import top.yukonga.miuix.kmp.icon.glass.MiuixGlassIcons
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import com.termux.R
 import com.termux.app.compose.rememberGlassPageBackdrop
+import com.termux.app.compose.LocalGlassProgressiveBlur
 import com.termux.app.compose.pagePaddingWithoutTop
 import com.termux.app.compose.standaloneContentPadding
 import com.termux.app.compose.KiTerminalTheme
@@ -239,12 +239,13 @@ fun PluginCenterScreen() {
             contentWindowInsets = WindowInsets(0, 0, 0, 0),
             topBar = {
                 GlassTopAppBar(
+                    progressiveBlur = LocalGlassProgressiveBlur.current,
                     title = stringResource(R.string.plugin_center),
                     backdrop = glassPage.backdrop,
                     navigationIcon = {
                         GlassIconButton(onClick = { (context as? ComponentActivity)?.finish() }) {
                             Icon(
-                                imageVector = MiuixGlassIcons.ChevronBackward,
+                                imageVector = MiuixIcons.Glass.ChevronBackward,
                                 contentDescription = null,
                                 modifier = Modifier.size(24.dp),
                                 tint = MiuixTheme.colorScheme.onSurface

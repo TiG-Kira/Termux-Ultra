@@ -33,7 +33,6 @@ import androidx.compose.ui.unit.sp
 import com.termux.R
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.glass.ChevronBackward
-import top.yukonga.miuix.kmp.icon.glass.MiuixGlassIcons
 
 object TerminalTopBarState {
     var title by mutableStateOf("")
@@ -63,7 +62,7 @@ fun TerminalTopBar(
     ) {
         IconButton(onClick = onBack, minWidth = 48.dp, minHeight = 48.dp) {
             Icon(
-                imageVector = MiuixGlassIcons.ChevronBackward,
+                imageVector = MiuixIcons.Glass.ChevronBackward,
                 contentDescription = null,
                 modifier = Modifier.size(26.dp),
                 tint = TerminalTopBarState.iconColor

@@ -1,6 +1,7 @@
 package com.termux.app.activities
 
 import com.termux.app.compose.pagePaddingWithoutTop
+import com.termux.app.compose.LocalGlassProgressiveBlur
 import com.termux.app.compose.standaloneContentPadding
 import android.content.Context
 import android.content.Intent
@@ -104,6 +105,7 @@ class GitHubIssuesActivity : ComponentActivity() {
                         contentWindowInsets = WindowInsets(0, 0, 0, 0),
                         topBar = {
                             GlassTopAppBar(
+                                progressiveBlur = LocalGlassProgressiveBlur.current,
                                 title = stringResource(R.string.github_topics_title),
                                 backdrop = glassPage.backdrop,
                                 scrollBehavior = scrollBehavior,

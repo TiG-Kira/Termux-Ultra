@@ -56,7 +56,7 @@ import top.yukonga.miuix.kmp.icon.glass.Close
 import top.yukonga.miuix.kmp.icon.glass.Copy
 import top.yukonga.miuix.kmp.icon.glass.Cut
 import top.yukonga.miuix.kmp.icon.glass.Delete
-import top.yukonga.miuix.kmp.icon.glass.MiuixGlassIcons
+import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.glass.Paste
 import top.yukonga.miuix.kmp.icon.glass.Rename
 import top.yukonga.miuix.kmp.basic.ScrollBehavior
@@ -313,7 +313,7 @@ fun FileManagerScreen(
                                 isInSelectionMode = false
                             }) {
                                 Icon(
-                                    imageVector = MiuixGlassIcons.Close,
+                                    imageVector = MiuixIcons.Glass.Close,
                                     contentDescription = null,
                                     modifier = Modifier.size(24.dp),
                                     tint = MiuixTheme.colorScheme.onSurface
@@ -373,7 +373,7 @@ fun FileManagerScreen(
                                     isInSelectionMode = false
                                 }) {
                                     Icon(
-                                        imageVector = MiuixGlassIcons.Copy,
+                                        imageVector = MiuixIcons.Glass.Copy,
                                         contentDescription = "复制",
                                         modifier = Modifier.size(24.dp),
                                         tint = MiuixTheme.colorScheme.onSurface
@@ -386,7 +386,7 @@ fun FileManagerScreen(
                                     isInSelectionMode = false
                                 }) {
                                     Icon(
-                                        imageVector = MiuixGlassIcons.Cut,
+                                        imageVector = MiuixIcons.Glass.Cut,
                                         contentDescription = "剪切",
                                         modifier = Modifier.size(24.dp),
                                         tint = MiuixTheme.colorScheme.onSurface
@@ -398,7 +398,7 @@ fun FileManagerScreen(
                                         showRenameDialog = true
                                     }) {
                                         Icon(
-                                            imageVector = MiuixGlassIcons.Rename,
+                                            imageVector = MiuixIcons.Glass.Rename,
                                             contentDescription = "重命名",
                                             modifier = Modifier.size(24.dp),
                                             tint = MiuixTheme.colorScheme.onSurface
@@ -409,7 +409,7 @@ fun FileManagerScreen(
                                     showDeleteDialog = true
                                 }) {
                                     Icon(
-                                        imageVector = MiuixGlassIcons.Delete,
+                                        imageVector = MiuixIcons.Glass.Delete,
                                         contentDescription = "删除",
                                         modifier = Modifier.size(24.dp),
                                         tint = MiuixTheme.colorScheme.onSurface
@@ -464,7 +464,7 @@ fun FileManagerScreen(
                                 }
                             }) {
                                 Icon(
-                                    imageVector = MiuixGlassIcons.Paste,
+                                    imageVector = MiuixIcons.Glass.Paste,
                                     contentDescription = "粘贴",
                                     modifier = Modifier.size(24.dp),
                                     tint = MiuixTheme.colorScheme.onSurface
@@ -506,7 +506,7 @@ fun FileManagerScreen(
                                     showNewTypeDialog = true
                                 }) {
                                     Icon(
-                                        imageVector = MiuixGlassIcons.AddFolder,
+                                        imageVector = MiuixIcons.Glass.AddFolder,
                                         contentDescription = "文件夹",
                                         modifier = Modifier.size(24.dp),
                                         tint = MiuixTheme.colorScheme.onSurface

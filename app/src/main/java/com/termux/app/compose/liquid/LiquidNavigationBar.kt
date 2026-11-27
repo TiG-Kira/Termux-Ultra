@@ -702,9 +702,10 @@ private fun TabContent(
             tint = tint,
             modifier = Modifier.size(28.dp),
         )
-        if (item.label != null) {
+        val label = item.label
+        if (label != null) {
             Text(
-                text = item.label,
+                text = label,
                 fontSize = 11.sp,
                 lineHeight = 12.sp,
                 color = tint,

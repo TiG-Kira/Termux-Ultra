@@ -46,6 +46,7 @@ fun AuthorizationMask() {
         topBar = {
             // 遮罩层是不透明 surface，没有内容可折射，玻璃顶栏退化为实底 pill
             GlassTopAppBar(
+                progressiveBlur = LocalGlassProgressiveBlur.current,
                 title = "授权",
                 backdrop = LocalGlassTopAppBarBackdrop.current,
             )

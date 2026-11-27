@@ -42,9 +42,9 @@ import com.kyant.backdrop.effects.blur
 import com.kyant.backdrop.effects.lens
 import com.kyant.backdrop.effects.vibrancy
 import com.kyant.shapes.RoundedRectangle
+import com.termux.app.compose.GlassOverlayAlpha
 import com.termux.app.compose.miuixDialogCornerRadius
 import top.yukonga.miuix.kmp.glass.GlassMotion
-import top.yukonga.miuix.kmp.glass.GlassOverlayDefaults
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 /**
@@ -85,7 +85,7 @@ fun LiquidGlassDialog(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val isDark = MiuixTheme.colorScheme.background.luminance() < 0.5f
-    val scrimAlpha = if (isDark) GlassOverlayDefaults.ScrimAlphaDark else GlassOverlayDefaults.ScrimAlphaLight
+    val scrimAlpha = if (isDark) GlassOverlayAlpha.ScrimAlphaDark else GlassOverlayAlpha.ScrimAlphaLight
     val isBottomSheet = motion == LiquidDialogMotion.BottomSheet
 
     // 延迟一帧再置可见：否则首次组合时 visible 已是 true，AnimatedVisibility 判定为首帧可见而不播进入动画
@@ -144,9 +144,9 @@ fun LiquidGlassDialog(
             modifier = Modifier
                 .align(alignment)
                 .padding(
-                    start = GlassOverlayDefaults.DialogOutsideMargin,
-                    end = GlassOverlayDefaults.DialogOutsideMargin,
-                    bottom = GlassOverlayDefaults.DialogOutsideMargin,
+                    start = 12.dp,
+                    end = 12.dp,
+                    bottom = 12.dp,
                 )
                 .imePadding()
                 .navigationBarsPadding(),

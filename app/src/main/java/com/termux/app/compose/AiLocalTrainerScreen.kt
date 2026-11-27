@@ -75,7 +75,6 @@ import androidx.compose.ui.res.stringResource
 import top.yukonga.miuix.kmp.window.WindowDialog
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.glass.ChevronBackward
-import top.yukonga.miuix.kmp.icon.glass.MiuixGlassIcons
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 import com.termux.app.compose.pagePaddingWithoutTop
@@ -104,13 +103,14 @@ fun AiLocalTrainerScreen(
             contentWindowInsets = WindowInsets(0, 0, 0, 0),
             topBar = {
                 GlassTopAppBar(
+                    progressiveBlur = LocalGlassProgressiveBlur.current,
                     title = stringResource(R.string.train_local_model),
                     backdrop = glassPage.backdrop,
                     scrollBehavior = scrollBehavior,
                     navigationIcon = {
                         GlassIconButton(onClick = { onBack() }) {
                             Icon(
-                                imageVector = MiuixGlassIcons.ChevronBackward,
+                                imageVector = MiuixIcons.Glass.ChevronBackward,
                                 contentDescription = stringResource(R.string.back),
                                 modifier = Modifier.size(24.dp),
                                 tint = MiuixTheme.colorScheme.onSurface

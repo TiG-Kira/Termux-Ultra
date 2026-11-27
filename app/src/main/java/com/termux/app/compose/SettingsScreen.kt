@@ -558,6 +558,7 @@ fun SettingsScreen(
         if (active) {
             onTopBarContent {
                 GlassTopAppBar(
+                    progressiveBlur = LocalGlassProgressiveBlur.current,
                     title = context.getString(R.string.settings_title),
                     backdrop = LocalGlassTopAppBarBackdrop.current,
                     scrollBehavior = scrollBehavior,

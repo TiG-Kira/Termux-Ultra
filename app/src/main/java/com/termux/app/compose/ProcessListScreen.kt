@@ -58,7 +58,6 @@ import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.glass.ChevronBackward
-import top.yukonga.miuix.kmp.icon.glass.MiuixGlassIcons
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import com.termux.app.compose.pagePaddingWithoutTop
 import com.termux.app.compose.standaloneContentPadding
@@ -217,12 +216,13 @@ fun ProcessListScreen(
         contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0),
         topBar = {
             GlassTopAppBar(
+                progressiveBlur = LocalGlassProgressiveBlur.current,
                 title = stringResource(R.string.process_list_title),
                 backdrop = glassPage.backdrop,
                 navigationIcon = {
                     GlassIconButton(onClick = { onBackPressed() }) {
                         Icon(
-                            imageVector = MiuixGlassIcons.ChevronBackward,
+                            imageVector = MiuixIcons.Glass.ChevronBackward,
                             contentDescription = null,
                             modifier = Modifier.size(24.dp),
                             tint = MiuixTheme.colorScheme.onSurface

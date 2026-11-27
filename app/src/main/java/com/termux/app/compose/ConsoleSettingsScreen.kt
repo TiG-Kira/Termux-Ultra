@@ -40,7 +40,7 @@ import top.yukonga.miuix.kmp.preference.SwitchPreference
 import top.yukonga.miuix.kmp.glass.GlassIconButton
 import top.yukonga.miuix.kmp.glass.GlassTopAppBar
 import top.yukonga.miuix.kmp.icon.glass.ChevronBackward
-import top.yukonga.miuix.kmp.icon.glass.MiuixGlassIcons
+import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.preference.OverlayDropdownPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
@@ -71,12 +71,10 @@ fun ConsoleSettingsScreen(onBack: () -> Unit) {
                 title = stringResource(R.string.console_settings),
                 backdrop = glassPage.backdrop,
                 scrollBehavior = scrollBehavior,
-                // 控制台豁免：不吃柔光的进程级 band 模糊 token（与关于页同款）
-                bandBlurRadius = 0.dp,
                 navigationIcon = {
                     GlassIconButton(onClick = onBack) {
                         Icon(
-                            imageVector = MiuixGlassIcons.ChevronBackward,
+                            imageVector = MiuixIcons.Glass.ChevronBackward,
                             contentDescription = stringResource(R.string.back),
                             tint = MiuixTheme.colorScheme.onSurface,
                             modifier = Modifier.size(24.dp)

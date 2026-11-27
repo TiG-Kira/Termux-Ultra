@@ -38,7 +38,6 @@ import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.glass.ChevronBackward
-import top.yukonga.miuix.kmp.icon.glass.MiuixGlassIcons
 import top.yukonga.miuix.kmp.preference.RadioButtonPreference
 import top.yukonga.miuix.kmp.preference.SwitchPreference
 import androidx.compose.foundation.background
@@ -100,13 +99,14 @@ fun NotificationManagerScreen(
         contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0),
         topBar = {
             GlassTopAppBar(
+                progressiveBlur = LocalGlassProgressiveBlur.current,
                 title = stringResource(R.string.notification_management),
                 backdrop = glassPage.backdrop,
                 scrollBehavior = scrollBehavior,
                 navigationIcon = {
                     GlassIconButton(onClick = { onBack() }) {
                         Icon(
-                            imageVector = MiuixGlassIcons.ChevronBackward,
+                            imageVector = MiuixIcons.Glass.ChevronBackward,
                             contentDescription = stringResource(R.string.back),
                             tint = MiuixTheme.colorScheme.onSurface,
                             modifier = Modifier.width(24.dp).height(24.dp)

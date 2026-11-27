@@ -82,7 +82,6 @@ import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.glass.ChevronBackward
-import top.yukonga.miuix.kmp.icon.glass.MiuixGlassIcons
 import top.yukonga.miuix.kmp.icon.glass.Download
 import top.yukonga.miuix.kmp.icon.glass.Ok
 import top.yukonga.miuix.kmp.icon.glass.Play
@@ -1307,6 +1306,7 @@ fun PackageManagerScreen(
                 contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0),
                 topBar = {
                     GlassTopAppBar(
+                        progressiveBlur = LocalGlassProgressiveBlur.current,
                         title = currentLabel ?: "软件包管理",
                         isContentScrolled = listState.canScrollBackward,
                         backdrop = glassPage.backdrop,
@@ -1318,7 +1318,7 @@ fun PackageManagerScreen(
                                 else onBackPressed()
                             }) {
                                 Icon(
-                                    imageVector = MiuixGlassIcons.ChevronBackward,
+                                    imageVector = MiuixIcons.Glass.ChevronBackward,
                                     contentDescription = stringResource(R.string.back),
                                     tint = MiuixTheme.colorScheme.onSurface,
                                     modifier = Modifier.size(24.dp)
@@ -1333,14 +1333,14 @@ fun PackageManagerScreen(
                                 ) {
                                     if (pkgStateSnap!!.finished) {
                                         Icon(
-                                            imageVector = MiuixGlassIcons.Ok,
+                                            imageVector = MiuixIcons.Glass.Ok,
                                             contentDescription = "查看任务结果",
                                             tint = MiuixTheme.colorScheme.primary,
                                             modifier = Modifier.size(24.dp)
                                         )
                                     } else {
                                         Icon(
-                                            imageVector = MiuixGlassIcons.Play,
+                                            imageVector = MiuixIcons.Glass.Play,
                                             contentDescription = stringResource(R.string.resume_background),
                                             tint = MiuixTheme.colorScheme.primary,
                                             modifier = Modifier.size(24.dp)
@@ -1356,7 +1356,7 @@ fun PackageManagerScreen(
                                 }
                             ) {
                                 Icon(
-                                    imageVector = MiuixGlassIcons.Refresh,
+                                    imageVector = MiuixIcons.Glass.Refresh,
                                     contentDescription = stringResource(R.string.refresh_sources),
                                     tint = MiuixTheme.colorScheme.onSurface,
                                     modifier = Modifier.size(24.dp)
@@ -1643,7 +1643,7 @@ private fun UpgradableEntry(
             onClick = onClick,
             startAction = {
                 Icon(
-                    imageVector = MiuixGlassIcons.Download,
+                    imageVector = MiuixIcons.Glass.Download,
                     contentDescription = null,
                     tint = UpgradeOrange,
                     modifier = Modifier.size(22.dp)

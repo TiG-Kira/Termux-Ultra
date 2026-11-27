@@ -41,6 +41,7 @@ import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.termux.R
 import com.termux.app.compose.rememberGlassPageBackdrop
+import com.termux.app.compose.LocalGlassProgressiveBlur
 import com.termux.app.compose.pagePaddingWithoutTop
 import com.termux.app.compose.standaloneContentPadding
 import com.termux.app.compose.*
@@ -53,7 +54,6 @@ import top.yukonga.miuix.kmp.basic.Card as MiuixCard
 import top.yukonga.miuix.kmp.basic.*
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.glass.ChevronBackward
-import top.yukonga.miuix.kmp.icon.glass.MiuixGlassIcons
 import top.yukonga.miuix.kmp.icon.glass.Add
 import com.termux.app.compose.OverlayDialog
 import top.yukonga.miuix.kmp.theme.MiuixTheme
@@ -218,13 +218,14 @@ class ThirdPartyCenterActivity : ComponentActivity() {
                     contentWindowInsets = WindowInsets(0, 0, 0, 0),
                     topBar = {
                         GlassTopAppBar(
+                            progressiveBlur = LocalGlassProgressiveBlur.current,
                             title = "第三方资源中心",
                             backdrop = glassPage.backdrop,
                             scrollBehavior = scrollBehavior,
                             navigationIcon = {
                                 GlassIconButton(onClick = { finish() }) {
                                     Icon(
-                                        imageVector = MiuixGlassIcons.ChevronBackward,
+                                        imageVector = MiuixIcons.Glass.ChevronBackward,
                                         contentDescription = null,
                                         modifier = Modifier.size(24.dp),
                                         tint = MiuixTheme.colorScheme.onSurface
@@ -245,7 +246,7 @@ class ThirdPartyCenterActivity : ComponentActivity() {
                                     Log.d("ThirdPartyCenter", "showAddDialog set to true: $showAddDialog")
                                 }) {
                                     Icon(
-                                        imageVector = MiuixGlassIcons.Add,
+                                        imageVector = MiuixIcons.Glass.Add,
                                         contentDescription = null,
                                         modifier = Modifier.size(24.dp),
                                         tint = MiuixTheme.colorScheme.onSurface

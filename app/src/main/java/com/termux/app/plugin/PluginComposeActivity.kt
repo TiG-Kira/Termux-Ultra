@@ -19,6 +19,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 import com.termux.app.compose.rememberGlassPageBackdrop
+import com.termux.app.compose.LocalGlassProgressiveBlur
 import com.termux.app.compose.KiTerminalTheme
 import top.yukonga.miuix.kmp.glass.GlassIconButton
 import top.yukonga.miuix.kmp.glass.GlassTopAppBar
@@ -26,7 +27,6 @@ import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.glass.ChevronBackward
-import top.yukonga.miuix.kmp.icon.glass.MiuixGlassIcons
 import androidx.compose.foundation.background
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
@@ -79,12 +79,13 @@ class PluginComposeActivity : ComponentActivity() {
                 val glassPage = rememberGlassPageBackdrop()
                 Scaffold(topBar = {
                     GlassTopAppBar(
+                        progressiveBlur = LocalGlassProgressiveBlur.current,
                         title = title,
                         backdrop = glassPage.backdrop,
                         navigationIcon = {
                             GlassIconButton(onClick = { finish() }) {
                                 Icon(
-                                    imageVector = MiuixGlassIcons.ChevronBackward,
+                                    imageVector = MiuixIcons.Glass.ChevronBackward,
                                     contentDescription = "返回",
                                     tint = MiuixTheme.colorScheme.onSurface,
                                     modifier = Modifier.size(24.dp)

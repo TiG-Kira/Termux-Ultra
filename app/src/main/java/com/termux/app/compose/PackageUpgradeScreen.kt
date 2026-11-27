@@ -45,7 +45,7 @@ import top.yukonga.miuix.kmp.glass.GlassIconButton
 import top.yukonga.miuix.kmp.glass.GlassTopAppBar
 import top.yukonga.miuix.kmp.icon.glass.ChevronBackward
 import top.yukonga.miuix.kmp.icon.glass.Download
-import top.yukonga.miuix.kmp.icon.glass.MiuixGlassIcons
+import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.glass.Refresh
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
@@ -102,6 +102,7 @@ fun PackageUpgradeScreen(
         contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0),
         topBar = {
             GlassTopAppBar(
+                progressiveBlur = LocalGlassProgressiveBlur.current,
                 title = "软件包升级",
                 subtitle = if (upgradableList.isNotEmpty()) "${upgradableList.size} 个软件包可升级" else "",
                 isContentScrolled = listState.canScrollBackward,
@@ -110,7 +111,7 @@ fun PackageUpgradeScreen(
                 navigationIcon = {
                     GlassIconButton(onClick = onBack) {
                         Icon(
-                            imageVector = MiuixGlassIcons.ChevronBackward,
+                            imageVector = MiuixIcons.Glass.ChevronBackward,
                             contentDescription = stringResource(R.string.back),
                             tint = colorScheme.onSurface,
                             modifier = Modifier.size(24.dp)
@@ -120,7 +121,7 @@ fun PackageUpgradeScreen(
                 actions = {
                     GlassIconButton(onClick = { refresh() }) {
                         Icon(
-                            imageVector = MiuixGlassIcons.Refresh,
+                            imageVector = MiuixIcons.Glass.Refresh,
                             contentDescription = stringResource(R.string.refresh_sources),
                             tint = colorScheme.onSurface,
                             modifier = Modifier.size(24.dp)
@@ -232,7 +233,7 @@ private fun UpgradablePackageCard(
             onClick = onClick,
             startAction = {
                 Icon(
-                    imageVector = MiuixGlassIcons.Download,
+                    imageVector = MiuixIcons.Glass.Download,
                     contentDescription = null,
                     tint = UpgradeOrange,
                     modifier = Modifier.size(22.dp)

@@ -29,7 +29,6 @@ import top.yukonga.miuix.kmp.glass.GlassTopAppBar
 import top.yukonga.miuix.kmp.basic.*
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.glass.ChevronBackward
-import top.yukonga.miuix.kmp.icon.glass.MiuixGlassIcons
 import top.yukonga.miuix.kmp.icon.glass.Delete
 import top.yukonga.miuix.kmp.icon.glass.Search
 import top.yukonga.miuix.kmp.theme.MiuixTheme
@@ -149,7 +148,7 @@ fun LogViewerScreen(
                                 },                            contentAlignment = Alignment.Center
                         ) {
                             Icon(
-                                imageVector = MiuixGlassIcons.ChevronBackward,
+                                imageVector = MiuixIcons.Glass.ChevronBackward,
                                 contentDescription = stringResource(R.string.back),
                                 tint = MiuixTheme.colorScheme.onSurface,
                                 modifier = Modifier.size(24.dp)
@@ -193,12 +192,13 @@ fun LogViewerScreen(
                 }
             } else {
                 GlassTopAppBar(
+                    progressiveBlur = LocalGlassProgressiveBlur.current,
                     title = stringResource(R.string.log_management),
                     backdrop = glassPage.backdrop,
                     navigationIcon = {
                         GlassIconButton(onClick = { onBack() }) {
                             Icon(
-                                imageVector = MiuixGlassIcons.ChevronBackward,
+                                imageVector = MiuixIcons.Glass.ChevronBackward,
                                 contentDescription = stringResource(R.string.back),
                                 tint = MiuixTheme.colorScheme.onSurface,
                                 modifier = Modifier.size(24.dp)
@@ -212,7 +212,7 @@ fun LogViewerScreen(
                             // 搜索图标按钮
                             GlassIconButton(onClick = { showSearchBar = true }) {
                                 Icon(
-                                    imageVector = MiuixGlassIcons.Search,
+                                    imageVector = MiuixIcons.Glass.Search,
                                     contentDescription = stringResource(R.string.search),
                                     tint = MiuixTheme.colorScheme.onSurface,
                                     modifier = Modifier.size(24.dp)
@@ -221,7 +221,7 @@ fun LogViewerScreen(
                             // 清除日志图标按钮
                             GlassIconButton(onClick = { showClearDialog = true }) {
                                 Icon(
-                                    imageVector = MiuixGlassIcons.Delete,
+                                    imageVector = MiuixIcons.Glass.Delete,
                                     contentDescription = stringResource(R.string.clear_logs),
                                     tint = MiuixTheme.colorScheme.onSurface,
                                     modifier = Modifier.size(24.dp)

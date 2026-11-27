@@ -1,6 +1,7 @@
 package com.termux.app.activities
 
 import com.termux.app.compose.pagePaddingWithoutTop
+import com.termux.app.compose.LocalGlassProgressiveBlur
 import com.termux.app.compose.topBarClearance
 import android.content.ComponentName
 import android.content.Context
@@ -44,7 +45,6 @@ import top.yukonga.miuix.kmp.glass.GlassTopAppBar
 import top.yukonga.miuix.kmp.basic.*
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.glass.ChevronBackward
-import top.yukonga.miuix.kmp.icon.glass.MiuixGlassIcons
 import com.termux.app.compose.OverlayDialog
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
@@ -171,13 +171,14 @@ private fun QemuVmScreen(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             GlassTopAppBar(
+                progressiveBlur = LocalGlassProgressiveBlur.current,
                 title = "虚拟机",
                 backdrop = glassPage.backdrop,
                 scrollBehavior = scrollBehavior,
                 navigationIcon = {
                     GlassIconButton(onClick = { onBack() }) {
                         Icon(
-                            imageVector = MiuixGlassIcons.ChevronBackward,
+                            imageVector = MiuixIcons.Glass.ChevronBackward,
                             contentDescription = null,
                             modifier = Modifier.size(24.dp),
                             tint = MiuixTheme.colorScheme.onSurface

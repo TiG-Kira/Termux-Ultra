@@ -31,6 +31,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner
 import com.termux.R
 import com.termux.app.compose.*
+import com.termux.app.compose.LocalGlassProgressiveBlur
 import com.termux.app.compose.pagePaddingWithoutTop
 import com.termux.app.compose.topBarClearance
 import com.termux.app.compose.NavigationHelper
@@ -78,6 +79,7 @@ class GitHubAccountActivity : ComponentActivity() {
                             contentWindowInsets = WindowInsets(0, 0, 0, 0),
                             topBar = {
                                 GlassTopAppBar(
+                                    progressiveBlur = LocalGlassProgressiveBlur.current,
                                     title = stringResource(R.string.github_account_title),
                                     backdrop = glassPage.backdrop,
                                     scrollBehavior = scrollBehavior,
@@ -134,6 +136,7 @@ class GitHubAccountActivity : ComponentActivity() {
                         contentWindowInsets = WindowInsets(0, 0, 0, 0),
                         topBar = {
                             GlassTopAppBar(
+                                progressiveBlur = LocalGlassProgressiveBlur.current,
                                 title = stringResource(R.string.github_account_title),
                                 backdrop = glassPage.backdrop,
                                 scrollBehavior = scrollBehavior,

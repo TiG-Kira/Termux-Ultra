@@ -37,7 +37,6 @@ import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.glass.ChevronBackward
-import top.yukonga.miuix.kmp.icon.glass.MiuixGlassIcons
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.preference.SwitchPreference
@@ -140,14 +139,12 @@ fun AboutScreen(onBack: () -> Unit) {
                 GlassTopAppBar(
                     title = context.getString(R.string.about_preference_title),
                     // 本页渐变背景画在 Scaffold 之外（取景层里没有内容），
-                    // 开带区模糊会采到透明(=黑)形成墨团，所以这页保留底板不模糊。
-                    bandBlurRadius = 0.dp,
                     backdrop = glassPage.backdrop,
                     scrollBehavior = scrollBehavior,
                     navigationIcon = {
                         GlassIconButton(onClick = onBack) {
                             Icon(
-                                imageVector = MiuixGlassIcons.ChevronBackward,
+                                imageVector = MiuixIcons.Glass.ChevronBackward,
                                 contentDescription = stringResource(R.string.back),
                                 tint = MiuixTheme.colorScheme.onSurface,
                                 modifier = Modifier.size(24.dp)

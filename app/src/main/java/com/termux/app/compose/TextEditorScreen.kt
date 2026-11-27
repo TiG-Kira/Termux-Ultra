@@ -42,7 +42,6 @@ import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.glass.ChevronBackward
-import top.yukonga.miuix.kmp.icon.glass.MiuixGlassIcons
 import top.yukonga.miuix.kmp.icon.glass.Save
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import java.io.File
@@ -108,6 +107,7 @@ fun TextEditorScreen(
         contentWindowInsets = WindowInsets(0),
         topBar = {
             GlassTopAppBar(
+                progressiveBlur = LocalGlassProgressiveBlur.current,
                 title = if (modified) "$fileName *" else fileName,
                 backdrop = glassPage.backdrop,
                 scrollBehavior = scrollBehavior,
@@ -117,7 +117,7 @@ fun TextEditorScreen(
                         else onClose()
                     }) {
                         Icon(
-                            imageVector = MiuixGlassIcons.ChevronBackward,
+                            imageVector = MiuixIcons.Glass.ChevronBackward,
                             contentDescription = null,
                             tint = MiuixTheme.colorScheme.onSurface,
                             modifier = Modifier.size(24.dp)
@@ -129,7 +129,7 @@ fun TextEditorScreen(
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             GlassIconButton(onClick = { doSave() }) {
                                 Icon(
-                                    imageVector = MiuixGlassIcons.Save,
+                                    imageVector = MiuixIcons.Glass.Save,
                                     contentDescription = stringResource(R.string.save),
                                     modifier = Modifier.size(24.dp),
                                     tint = MiuixTheme.colorScheme.onSurface

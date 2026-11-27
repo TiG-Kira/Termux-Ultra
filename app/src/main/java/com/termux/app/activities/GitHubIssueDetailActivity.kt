@@ -27,6 +27,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner
 import com.termux.R
 import com.termux.app.compose.BackButton
+import com.termux.app.compose.LocalGlassProgressiveBlur
 import com.termux.app.compose.pagePaddingWithoutTop
 import com.termux.app.compose.standaloneContentPadding
 import com.termux.app.compose.CommentCard
@@ -129,6 +130,7 @@ class GitHubIssueDetailActivity : ComponentActivity() {
                         contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0),
                         topBar = {
                             GlassTopAppBar(
+                                progressiveBlur = LocalGlassProgressiveBlur.current,
                                 title = stringResource(R.string.github_issue_detail_title, issueNumber),
                                 backdrop = glassPage.backdrop,
                                 scrollBehavior = scrollBehavior,

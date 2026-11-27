@@ -21,7 +21,6 @@ import top.yukonga.miuix.kmp.basic.HorizontalDivider
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.glass.ChevronBackward
-import top.yukonga.miuix.kmp.icon.glass.MiuixGlassIcons
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -85,13 +84,14 @@ fun ResourcesScreen(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             GlassTopAppBar(
+                progressiveBlur = LocalGlassProgressiveBlur.current,
                 title = "功能中心",
                 backdrop = glassPage.backdrop,
                 navigationIcon = {
                     if (showBackButton) {
                         GlassIconButton(onClick = { (context as? ComponentActivity)?.finish() }) {
                             Icon(
-                                imageVector = MiuixGlassIcons.ChevronBackward,
+                                imageVector = MiuixIcons.Glass.ChevronBackward,
                                 contentDescription = null,
                                 modifier = Modifier.size(24.dp),
                                 tint = MiuixTheme.colorScheme.onSurface
