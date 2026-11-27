@@ -54,6 +54,20 @@ val LocalGlassTopBarFloating = staticCompositionLocalOf { false }
 val GlassTopBarButtonPadding: Dp = 6.dp
 
 /**
+ * vendored 时代的 band 口径：顶部**实色**、过 bar 高度一半才往下淡出，1.0 处归零。
+ * 官方 `TopAppBarBandBrush` 顶段 MAX_ALPHA 0.90 且顶部即开始 smoothstep 淡出，
+ * 内容滚到顶栏上方时几乎透到底；恢复 vendored 渐变曲线统一观感。
+ */
+private fun topBarBandBrush(color: Color): Brush = Brush.verticalGradient(
+    0.00f to color,
+    0.45f to color,
+    0.58f to color.copy(alpha = 0.82f),
+    0.72f to color.copy(alpha = 0.58f),
+    0.86f to color.copy(alpha = 0.34f),
+    1.00f to color.copy(alpha = 0f),
+)
+
+/**
  * miuix `GlassTopAppBar` 的应用侧包装：官方签名原样转发，仅液态玻璃外观接管 band。
  *
  * 液态外观下（vendored 骨架同款）：官方 band 关掉（backgroundAlpha 置 0，几何不变），
@@ -72,7 +86,7 @@ fun GlassTopAppBar(
     subtitle: String = "",
     scrollBehavior: ScrollBehavior? = null,
     bandBrush: Brush = MiuixTheme.colorScheme.surface.let { surface ->
-        remember(surface) { GlassTopAppBarDefaults.bandBrush(surface) }
+        remember(surface) { topBarBandBrush(surface) }
     },
     bandOverhang: Dp = GlassTopAppBarDefaults.BandOverhang,
     titleBlurRadius: Dp = GlassTopAppBarDefaults.TitleBlurRadius,
@@ -179,7 +193,7 @@ fun GlassTopAppBar(
     subtitle: String = "",
     scrollBehavior: ScrollBehavior? = null,
     bandBrush: Brush = MiuixTheme.colorScheme.surface.let { surface ->
-        remember(surface) { GlassTopAppBarDefaults.bandBrush(surface) }
+        remember(surface) { topBarBandBrush(surface) }
     },
     bandOverhang: Dp = GlassTopAppBarDefaults.BandOverhang,
     titleBlurRadius: Dp = GlassTopAppBarDefaults.TitleBlurRadius,

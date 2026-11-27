@@ -884,6 +884,7 @@ fun OverviewScreen(
         if (active) {
             onTopBarContent {
                 GlassTopAppBar(
+                    progressiveBlur = LocalGlassProgressiveBlur.current,
                     backdrop = LocalGlassTopAppBarBackdrop.current,
                     title = stringResource(R.string.overview_title),
                     scrollBehavior = scrollBehavior,
