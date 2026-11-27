@@ -20,8 +20,6 @@ import com.gaurav.avnc.util.deleteTrustedCertificates
 import com.gaurav.avnc.util.forgetKnownHosts
 import com.termux.R
 import com.termux.app.vnc.VncConnectionManager
-import top.yukonga.miuix.kmp.glass.GlassIconButton
-import top.yukonga.miuix.kmp.glass.GlassTopAppBar
 import top.yukonga.miuix.kmp.basic.*
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.glass.ChevronBackward
