@@ -53,10 +53,18 @@ import com.termux.app.compose.liquid.LocalLiquidTopBarEnabled
  * 顶栏骨架的「内容已滚到栏下」状态，由 [GlassTopAppBar] 包装层统一下发。
  *
  * 官方 header context 是 internal 的，按钮拿不到折叠时机；液态圆钮分流
- * （[GlassIconButton] → LiquidIconButton）与皮肤淡入都依赖它。不在顶栏骨架内时
- * 恒为 false，弹层 / 面板里的玻璃按钮不受影响。
+ * （[GlassIconButton] → LiquidIconButton）与皮肤淡入都依赖它。
  */
 val LocalGlassTopBarFloating = staticCompositionLocalOf { false }
+
+/**
+ * 按钮是否处于顶栏骨架之内，由 [GlassTopAppBar] 包装层统一下发。
+ *
+ * vendored `GlassIconButton` 的分时机语义：骨架内展开态裸图标、折叠态 pill；
+ * 骨架外（弹层、页面内）`floating = surfaceAlpha > 0.01f` 常显 pill。骨架外
+ * [LocalGlassTopBarFloating] 无意义（默认 false），必须配合本信号区分两种场景。
+ */
+val LocalGlassTopBarHosted = staticCompositionLocalOf { false }
 
 /**
  * 玻璃按钮的水平外边距（vendored miuix `GlassTopAppBarDefaults.ButtonPadding` 同款 6dp）。
@@ -121,39 +129,51 @@ fun GlassTopAppBar(
     bottomContent: @Composable () -> Unit = {},
 ) {
     if (!LocalLiquidTopBarEnabled.current) {
-        MiuixGlassTopAppBar(
-            title = title,
-            modifier = modifier,
-            contentModifier = contentModifier,
-            expandable = expandable,
-            progressiveBlur = progressiveBlur,
-            backdrop = backdrop,
-            largeTitle = largeTitle,
-            subtitle = subtitle,
-            scrollBehavior = scrollBehavior,
-            bandBrush = bandBrush,
-            bandOverhang = bandOverhang,
-            titleBlurRadius = titleBlurRadius,
-            style = style,
-            material = material,
-            alpha = alpha,
-            buttonSize = buttonSize,
-            buttonShape = buttonShape,
-            fill = fill,
-            stroke = stroke,
-            buttonShadow = buttonShadow,
-            defaultWindowInsetsPadding = defaultWindowInsetsPadding,
-            titleAlpha = titleAlpha,
-            backgroundAlpha = backgroundAlpha,
-            centerObstructionStart = centerObstructionStart,
-            // vendored 骨架同款：导航槽外包一层按钮边距（官方 0.9.5 删除了 slot wrap），
-            // 还原「栏内边距 12dp + 槽位 6dp +（玻璃按钮自带边距）」的原始留白口径。
-            navigationIcon = {
-                Box(Modifier.padding(horizontal = GlassTopBarButtonPadding)) { navigationIcon() }
-            },
-            actions = actions,
-            bottomContent = bottomContent,
-        )
+        // 折叠判定与官方第一重载同口径（含弹性过 scroll；无 scrollBehavior 视为常折叠），
+        // 骨架内按钮据此分流 pill / 裸图标（官方 header context 是 internal，自建下发）。
+        val hostedFloating by remember(scrollBehavior) {
+            derivedStateOf {
+                scrollBehavior?.state?.let { it.contentOffset < -1f || it.overscrollOffset < -1f } ?: true
+            }
+        }
+        CompositionLocalProvider(
+            LocalGlassTopBarHosted provides true,
+            LocalGlassTopBarFloating provides hostedFloating,
+        ) {
+            MiuixGlassTopAppBar(
+                title = title,
+                modifier = modifier,
+                contentModifier = contentModifier,
+                expandable = expandable,
+                progressiveBlur = progressiveBlur,
+                backdrop = backdrop,
+                largeTitle = largeTitle,
+                subtitle = subtitle,
+                scrollBehavior = scrollBehavior,
+                bandBrush = bandBrush,
+                bandOverhang = bandOverhang,
+                titleBlurRadius = titleBlurRadius,
+                style = style,
+                material = material,
+                alpha = alpha,
+                buttonSize = buttonSize,
+                buttonShape = buttonShape,
+                fill = fill,
+                stroke = stroke,
+                buttonShadow = buttonShadow,
+                defaultWindowInsetsPadding = defaultWindowInsetsPadding,
+                titleAlpha = titleAlpha,
+                backgroundAlpha = backgroundAlpha,
+                centerObstructionStart = centerObstructionStart,
+                // vendored 骨架同款：导航槽外包一层按钮边距（官方 0.9.5 删除了 slot wrap），
+                // 还原「栏内边距 12dp + 槽位 6dp +（玻璃按钮自带边距）」的原始留白口径。
+                navigationIcon = {
+                    Box(Modifier.padding(horizontal = GlassTopBarButtonPadding)) { navigationIcon() }
+                },
+                actions = actions,
+                bottomContent = bottomContent,
+            )
+        }
         return
     }
     // 与官方 scrollBehavior 重载同口径的折叠判定（含弹性过 scroll）。
@@ -228,40 +248,46 @@ fun GlassTopAppBar(
     bottomContent: @Composable () -> Unit = {},
 ) {
     if (!LocalLiquidTopBarEnabled.current) {
-        MiuixGlassTopAppBar(
-            title = title,
-            isContentScrolled = isContentScrolled,
-            modifier = modifier,
-            contentModifier = contentModifier,
-            expandable = expandable,
-            progressiveBlur = progressiveBlur,
-            backdrop = backdrop,
-            largeTitle = largeTitle,
-            subtitle = subtitle,
-            scrollBehavior = scrollBehavior,
-            bandBrush = bandBrush,
-            bandOverhang = bandOverhang,
-            titleBlurRadius = titleBlurRadius,
-            style = style,
-            material = material,
-            alpha = alpha,
-            buttonSize = buttonSize,
-            buttonShape = buttonShape,
-            fill = fill,
-            stroke = stroke,
-            buttonShadow = buttonShadow,
-            defaultWindowInsetsPadding = defaultWindowInsetsPadding,
-            titleAlpha = titleAlpha,
-            backgroundAlpha = backgroundAlpha,
-            centerObstructionStart = centerObstructionStart,
-            // vendored 骨架同款：导航槽外包一层按钮边距（官方 0.9.5 删除了 slot wrap），
-            // 还原「栏内边距 12dp + 槽位 6dp +（玻璃按钮自带边距）」的原始留白口径。
-            navigationIcon = {
-                Box(Modifier.padding(horizontal = GlassTopBarButtonPadding)) { navigationIcon() }
-            },
-            actions = actions,
-            bottomContent = bottomContent,
-        )
+        CompositionLocalProvider(
+            LocalGlassTopBarHosted provides true,
+            // 官方第二重载同口径：显式折叠态即为骨架内按钮的 floating 信号。
+            LocalGlassTopBarFloating provides isContentScrolled,
+        ) {
+            MiuixGlassTopAppBar(
+                title = title,
+                isContentScrolled = isContentScrolled,
+                modifier = modifier,
+                contentModifier = contentModifier,
+                expandable = expandable,
+                progressiveBlur = progressiveBlur,
+                backdrop = backdrop,
+                largeTitle = largeTitle,
+                subtitle = subtitle,
+                scrollBehavior = scrollBehavior,
+                bandBrush = bandBrush,
+                bandOverhang = bandOverhang,
+                titleBlurRadius = titleBlurRadius,
+                style = style,
+                material = material,
+                alpha = alpha,
+                buttonSize = buttonSize,
+                buttonShape = buttonShape,
+                fill = fill,
+                stroke = stroke,
+                buttonShadow = buttonShadow,
+                defaultWindowInsetsPadding = defaultWindowInsetsPadding,
+                titleAlpha = titleAlpha,
+                backgroundAlpha = backgroundAlpha,
+                centerObstructionStart = centerObstructionStart,
+                // vendored 骨架同款：导航槽外包一层按钮边距（官方 0.9.5 删除了 slot wrap），
+                // 还原「栏内边距 12dp + 槽位 6dp +（玻璃按钮自带边距）」的原始留白口径。
+                navigationIcon = {
+                    Box(Modifier.padding(horizontal = GlassTopBarButtonPadding)) { navigationIcon() }
+                },
+                actions = actions,
+                bottomContent = bottomContent,
+            )
+        }
         return
     }
     // 官方第二重载同款合并：显式折叠态 ∪ 弹性过 scroll。
@@ -343,7 +369,10 @@ private fun LiquidGlassTopBar(
             collapseProgress = collapseProgress,
             modifier = Modifier.matchParentSize(),
         )
-        CompositionLocalProvider(LocalGlassTopBarFloating provides contentScrolled) {
+        CompositionLocalProvider(
+            LocalGlassTopBarHosted provides true,
+            LocalGlassTopBarFloating provides contentScrolled,
+        ) {
             MiuixGlassTopAppBar(
                 title = title,
                 isContentScrolled = contentScrolled,
@@ -382,16 +411,16 @@ private fun LiquidGlassTopBar(
 }
 
 /**
- * miuix `GlassIconButton` 的应用侧包装：液态玻璃外观下，顶栏骨架内已滚到栏下
- * （[LocalGlassTopBarFloating]）的按钮分流 [LiquidIconButton]（vendored 同款分时机：
- * 展开态保持裸图标，收缩态换液态圆钮）。其余场景走自绘柔光 pill
- * （[SoftGlassPillButton]）。
+ * miuix `GlassIconButton` 的应用侧包装：复刻 vendored 分时机语义——
  *
- * 为什么不再转发官方：官方 0.9.5 `GlassIconButton` 的底板由 internal header context
- * 的 floating 进度门控（`graphicsLayer { alpha = progress }`），且按压叠层内建在
- * `GlassButtonSurface` 里但官方从不传入 interactionSource——顶栏展开态（未滚动）
- * 底板 alpha=0 恒裸、按压无反馈；官方公开 API（`inheritTopBarMaterial` 等）无法
- * 强制浮起。按「按钮默认使用柔光玻璃+ 控件」的口径自绘：常显 pill + 常显按压反馈。
+ * - 顶栏骨架内（[LocalGlassTopBarHosted]）+ 已折叠（[LocalGlassTopBarFloating]）：
+ *   液态外观分流 [LiquidIconButton]（vendored 同款），其余外观走常显柔光 pill；
+ * - 骨架内 + 展开态：裸图标（vendored 同款，保留按压反馈）；
+ * - 骨架外（弹层、页面内）：vendored `floating = surfaceAlpha > 0.01f` 同款常显 pill。
+ *
+ * 为什么不再转发官方：官方 0.9.5 的 floating 只认 internal header context，且其
+ * 折叠判定与按压反馈均有缺口（见 [SoftGlassPillButton] KDoc），公开 API 无法
+ * 还原 vendored 语义。底板材质统一官方 token（`buttonFill`/`buttonStroke`）。
  *
  * [padding] 还原 vendored 的按钮水平外边距（官方 0.9.5 删除了 `ButtonPadding` 与
  * 对应参数，相邻玻璃 pill 会紧贴成一整条）。默认 6dp = vendored `ButtonPadding`；
@@ -407,13 +436,26 @@ fun GlassIconButton(
     padding: Dp = GlassTopBarButtonPadding,
     content: @Composable () -> Unit,
 ) {
-    if (LocalLiquidTopBarEnabled.current && LocalGlassTopBarFloating.current) {
+    val hosted = LocalGlassTopBarHosted.current
+    val floating = LocalGlassTopBarFloating.current
+    if (hosted && LocalLiquidTopBarEnabled.current && floating) {
         LiquidIconButton(onClick = onClick, modifier = modifier, content = content)
+        return
+    }
+    val padded = modifier.padding(horizontal = padding)
+    if (hosted && !floating) {
+        NakedGlassIconButton(
+            onClick = onClick,
+            modifier = padded,
+            size = size,
+            shape = shape,
+            content = content,
+        )
         return
     }
     SoftGlassPillButton(
         onClick = onClick,
-        modifier = modifier.padding(horizontal = padding),
+        modifier = padded,
         size = size,
         shape = shape,
         content = content,
@@ -421,7 +463,50 @@ fun GlassIconButton(
 }
 
 /**
- * 柔光玻璃+ 按钮控件：常显柔光 pill 底板 + 按压反馈。
+ * 裸图标态：骨架内展开态（vendored 同款「bar 在页顶时按钮裸图标」）。无底板、
+ * 无阴影，仅保留按压叠层反馈。结构与 [SoftGlassPillButton] 对齐。
+ */
+@Composable
+private fun NakedGlassIconButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    size: Dp,
+    shape: GlassShape,
+    content: @Composable () -> Unit,
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressedOverlay = GlassTopAppBarDefaults.buttonPressedOverlay()
+    val indication = remember(pressedOverlay) {
+        MiuixIndication(
+            color = pressedOverlay.copy(alpha = 1f),
+            pressAlpha = pressedOverlay.alpha,
+            hoverAlpha = 0f,
+        )
+    }
+    Box(
+        modifier = modifier
+            .size(size)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick,
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .clip(shape)
+                .indication(interactionSource, indication),
+        )
+        content()
+    }
+}
+
+/**
+ * 柔光玻璃+ pill 按钮：底板常显 + 按压反馈。服务两种场景——顶栏骨架内折叠态
+ * （vendored 收缩 pill 同款）与骨架外（vendored `floating = surfaceAlpha > 0.01f`
+ * 回落语义，弹层锚定按钮、页面内按钮）。
  *
  * 结构对齐官方 `GlassButtonSurface` 的 null-backdrop 分支（fill 底板 + 边缘描边 +
  * 玻璃高光遮罩 + 阴影），但去掉 floating 进度门控（底板 alpha 恒 1），按压叠层
