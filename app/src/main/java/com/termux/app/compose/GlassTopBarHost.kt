@@ -67,6 +67,18 @@ val LocalGlassTopBarFloating = staticCompositionLocalOf { false }
 val LocalGlassTopBarHosted = staticCompositionLocalOf { false }
 
 /**
+ * 骨架内按钮底板/描边颜色：由 [GlassTopAppBar] 包装层把调用点传入的 fill/stroke
+ * 统一下发，供 [GlassIconButton] → [SoftGlassPillButton] 回读。
+ *
+ * 按钮在 navigationIcon/actions 槽里是调用方提供的 composable，自绘底板拿不到骨架
+ * 收到的 fill/stroke（官方 0.9.5 经 internal header context 下发，公开 API 无通道）；
+ * 终端控制台（GlassTerminalBar）折叠态底板须追终端亮暗而非系统主题，靠本通道对齐。
+ * 骨架外取值为 null，按钮回落官方默认（系统主题口径）。
+ */
+val LocalGlassTopBarFill = staticCompositionLocalOf<Color?> { null }
+val LocalGlassTopBarStroke = staticCompositionLocalOf<EdgeStroke?> { null }
+
+/**
  * 玻璃按钮的水平外边距（vendored miuix `GlassTopAppBarDefaults.ButtonPadding` 同款 6dp）。
  *
  * 官方 0.9.5-rc01 删除了该 token 且按钮改为紧贴，PR #405 迁移后顶栏按钮间隔随之丢失；
@@ -139,6 +151,8 @@ fun GlassTopAppBar(
         CompositionLocalProvider(
             LocalGlassTopBarHosted provides true,
             LocalGlassTopBarFloating provides hostedFloating,
+            LocalGlassTopBarFill provides fill,
+            LocalGlassTopBarStroke provides stroke,
         ) {
             MiuixGlassTopAppBar(
                 title = title,
@@ -252,6 +266,8 @@ fun GlassTopAppBar(
             LocalGlassTopBarHosted provides true,
             // 官方第二重载同口径：显式折叠态即为骨架内按钮的 floating 信号。
             LocalGlassTopBarFloating provides isContentScrolled,
+            LocalGlassTopBarFill provides fill,
+            LocalGlassTopBarStroke provides stroke,
         ) {
             MiuixGlassTopAppBar(
                 title = title,
@@ -526,8 +542,9 @@ private fun SoftGlassPillButton(
     content: @Composable () -> Unit,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
-    val fill = GlassTopAppBarDefaults.buttonFill()
-    val stroke = GlassTopAppBarDefaults.buttonStroke()
+    // 骨架内：消费调用点下发的 fill/stroke（终端栏折叠态追终端亮暗）；骨架外回落官方默认。
+    val fill = LocalGlassTopBarFill.current ?: GlassTopAppBarDefaults.buttonFill()
+    val stroke = LocalGlassTopBarStroke.current ?: GlassTopAppBarDefaults.buttonStroke()
     val pressedOverlay = GlassTopAppBarDefaults.buttonPressedOverlay()
     val indication = remember(pressedOverlay) {
         MiuixIndication(
