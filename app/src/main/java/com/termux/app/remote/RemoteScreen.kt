@@ -47,8 +47,8 @@ import com.termux.app.vnc.connectToVnc
 import com.termux.app.ssh.SshConnection
 import com.termux.app.ssh.SshConnectionManager
 import com.termux.app.ssh.connectToSsh
-import top.yukonga.miuix.kmp.glass.GlassIconButton
-import top.yukonga.miuix.kmp.glass.GlassTopAppBar
+import com.termux.app.compose.GlassIconButton
+import com.termux.app.compose.GlassTopAppBar
 import top.yukonga.miuix.kmp.icon.glass.Add
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.glass.Refresh

@@ -66,7 +66,6 @@ import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import kotlinx.coroutines.launch
 import top.yukonga.miuix.kmp.basic.Scaffold
-import top.yukonga.miuix.kmp.glass.GlassTopAppBar
 import top.yukonga.miuix.kmp.basic.NavigationBar
 import top.yukonga.miuix.kmp.basic.NavigationBarItem
 import top.yukonga.miuix.kmp.basic.SnackbarHost
@@ -424,6 +423,10 @@ fun MainScreen(
                         4 to stringResource(R.string.settings)
                     )
                     GlassNavigationBar(
+                        // 官方默认会把 navigationBars/captionBar 高度整段垫进 bar 底边距，
+                        // 而 app 侧已在 modifier 上自垫 systemNavBarsHeight——关掉默认
+                        // insets，保持 vendored 时代的几何（底栏不整体抬高）。
+                        defaultWindowInsetsPadding = false,
                         items = availableTabs.map { tab ->
                             GlassNavigationItem(
                                 icon = tabIcons.getValue(tab),
