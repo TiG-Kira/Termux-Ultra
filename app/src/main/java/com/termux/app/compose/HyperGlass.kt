@@ -183,6 +183,7 @@ fun AppearanceStyleExempt(content: @Composable () -> Unit) {
         LocalPageBackdropLayers provides null,
         LocalHyperGlassBackdrop provides null,
         LocalGlassTopAppBarBackdrop provides null,
+        LocalGlassProgressiveBlur provides false,
         LocalLiquidBackdrop provides null,
         LocalLiquidTopBarEnabled provides false,
         content = content,

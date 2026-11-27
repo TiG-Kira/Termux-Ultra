@@ -296,6 +296,7 @@ fun FileManagerScreen(
         if (active) {
             onTopBarContent {
             GlassTopAppBar(
+                progressiveBlur = LocalGlassProgressiveBlur.current,
                 backdrop = LocalGlassTopAppBarBackdrop.current,
                 title = if (isInSelectionMode) {
                     "${selectedFiles.size} ${"项"}"
