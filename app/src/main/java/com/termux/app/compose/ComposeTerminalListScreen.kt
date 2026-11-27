@@ -659,9 +659,9 @@ fun ComposeTerminalListScreen(
                         .fillMaxSize()
                         .offset { IntOffset(-popupHostOrigin.x, -popupHostOrigin.y) }
                 ) {
-                    // backdrop 显式传 null：anchor 是 GlassIconButton，会经 GlassButtonSurface
-                    // 发布自己的 surface（含折射材质），弹层直接用 anchor 的 surface，
-                    // 读 LocalGlassTopAppBarBackdrop 在页面层恒为 null，传它只会埋錆弹。
+                    // backdrop 显式传 null：按钮自绘柔光 pill（不发布官方 anchor surface），
+                    // 弹层走官方 null-anchor 路径——GlassPopupBackground 实色兜底 +
+                    // iconMaterial 淡入，观感与 vendored「强制浮起」一致。
                     GlassTransformPopup(
                         show = showMoreMenu,
                         onDismissRequest = { showMoreMenu = false },
