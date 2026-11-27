@@ -3,25 +3,35 @@ package com.termux.app.compose
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.indication
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import top.yukonga.miuix.kmp.basic.ScrollBehavior
 import top.yukonga.miuix.kmp.blur.Backdrop
-import top.yukonga.miuix.kmp.glass.GlassIconButton as MiuixGlassIconButton
 import top.yukonga.miuix.kmp.glass.GlassTopAppBar as MiuixGlassTopAppBar
 import top.yukonga.miuix.kmp.glass.GlassTopAppBarDefaults
+import top.yukonga.miuix.kmp.glass.glassShadow
 import top.yukonga.miuix.kmp.material.EdgeStroke
 import top.yukonga.miuix.kmp.material.GlassDefaults
 import top.yukonga.miuix.kmp.material.GlassMaterial
@@ -29,7 +39,11 @@ import top.yukonga.miuix.kmp.material.GlassShadow
 import top.yukonga.miuix.kmp.material.GlassShape
 import top.yukonga.miuix.kmp.material.GlassStyle
 import top.yukonga.miuix.kmp.material.GlassShadows
+import top.yukonga.miuix.kmp.material.drawEdgeStroke
+import top.yukonga.miuix.kmp.material.drawGlassMask
+import top.yukonga.miuix.kmp.material.isRuntimeShaderSupported
 import top.yukonga.miuix.kmp.theme.MiuixTheme
+import top.yukonga.miuix.kmp.utils.MiuixIndication
 import com.termux.app.compose.liquid.LiquidIconButton
 import com.termux.app.compose.liquid.LiquidTopBarSkin
 import com.termux.app.compose.liquid.LocalLiquidBackdrop
@@ -370,7 +384,14 @@ private fun LiquidGlassTopBar(
 /**
  * miuix `GlassIconButton` 的应用侧包装：液态玻璃外观下，顶栏骨架内已滚到栏下
  * （[LocalGlassTopBarFloating]）的按钮分流 [LiquidIconButton]（vendored 同款分时机：
- * 展开态保持裸图标，收缩态换液态圆钮）。其余样式 / 非骨架场景转发官方。
+ * 展开态保持裸图标，收缩态换液态圆钮）。其余场景走自绘柔光 pill
+ * （[SoftGlassPillButton]）。
+ *
+ * 为什么不再转发官方：官方 0.9.5 `GlassIconButton` 的底板由 internal header context
+ * 的 floating 进度门控（`graphicsLayer { alpha = progress }`），且按压叠层内建在
+ * `GlassButtonSurface` 里但官方从不传入 interactionSource——顶栏展开态（未滚动）
+ * 底板 alpha=0 恒裸、按压无反馈；官方公开 API（`inheritTopBarMaterial` 等）无法
+ * 强制浮起。按「按钮默认使用柔光玻璃+ 控件」的口径自绘：常显 pill + 常显按压反馈。
  *
  * [padding] 还原 vendored 的按钮水平外边距（官方 0.9.5 删除了 `ButtonPadding` 与
  * 对应参数，相邻玻璃 pill 会紧贴成一整条）。默认 6dp = vendored `ButtonPadding`；
@@ -390,11 +411,82 @@ fun GlassIconButton(
         LiquidIconButton(onClick = onClick, modifier = modifier, content = content)
         return
     }
-    MiuixGlassIconButton(
+    SoftGlassPillButton(
         onClick = onClick,
         modifier = modifier.padding(horizontal = padding),
         size = size,
         shape = shape,
         content = content,
     )
+}
+
+/**
+ * 柔光玻璃+ 按钮控件：常显柔光 pill 底板 + 按压反馈。
+ *
+ * 结构对齐官方 `GlassButtonSurface` 的 null-backdrop 分支（fill 底板 + 边缘描边 +
+ * 玻璃高光遮罩 + 阴影），但去掉 floating 进度门控（底板 alpha 恒 1），按压叠层
+ * 用官方同款 token（`buttonPressedOverlay` + `MiuixIndication`）。点击区域含 6dp
+ * 水平边距（vendored `combinedClickable` 同口径，挂在 padding 之前的整个方块上）。
+ *
+ * 弹层锚定注意：官方 anchor surface 由 `GlassButtonSurface` 发布，自绘后 anchor
+ * 拿不到按钮材质 → `GlassTransformPopup` 回落 null-anchor 路径（实色兜底 +
+ * iconMaterial 淡入），与 vendored 的「强制浮起」观感一致。
+ */
+@Composable
+private fun SoftGlassPillButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    size: Dp,
+    shape: GlassShape,
+    content: @Composable () -> Unit,
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val fill = GlassTopAppBarDefaults.buttonFill()
+    val stroke = GlassTopAppBarDefaults.buttonStroke()
+    val pressedOverlay = GlassTopAppBarDefaults.buttonPressedOverlay()
+    val indication = remember(pressedOverlay) {
+        MiuixIndication(
+            color = pressedOverlay.copy(alpha = 1f),
+            pressAlpha = pressedOverlay.alpha,
+            hoverAlpha = 0f,
+        )
+    }
+    Box(
+        modifier = modifier
+            .size(size)
+            .glassShadow(shape, GlassShadows.Regular)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick,
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        // 底板：fill + 边缘描边 + 玻璃高光遮罩（官方 null-backdrop 分支同款，常显）。
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .then(
+                    if (isRuntimeShaderSupported()) {
+                        Modifier.graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+                    } else {
+                        Modifier.clip(shape)
+                    },
+                )
+                .background(fill)
+                .drawWithContent {
+                    drawContent()
+                    drawEdgeStroke(shape, stroke, 1f)
+                    drawGlassMask(shape)
+                },
+        )
+        // 按压叠层：clip 到 pill 轮廓，不受任何进度门控（官方漏传 interactionSource 的补齐）。
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .clip(shape)
+                .indication(interactionSource, indication),
+        )
+        content()
+    }
 }
