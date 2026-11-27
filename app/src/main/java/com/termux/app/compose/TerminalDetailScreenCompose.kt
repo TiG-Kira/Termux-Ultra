@@ -777,6 +777,9 @@ fun TerminalDetailScreenCompose(
             onClick = { updateInteractionTime(); onBack() },
             size = 48.dp,
             shape = GlassShape(24.dp),
+            // 405 合并前的显式口径：返回键 pill 自身不带外边距，贴边留白由骨架导航槽
+            // 的 6dp 包裹（GlassTopBarButtonPadding）提供。
+            padding = 0.dp,
         ) {
             Icon(
                 imageVector = MiuixIcons.Glass.ChevronBackward,
@@ -799,10 +802,9 @@ fun TerminalDetailScreenCompose(
                 updateInteractionTime()
                 isTopBarCollapsed = !isTopBarCollapsed
             },
-            modifier = Modifier.padding(horizontal = 6.dp),
             size = 48.dp,
-            // 与动作区面板之间留出标准按钮间距（与其他相邻玻璃 pill 一致），
-            // 0 会让面板和把手贴死。官方 GlassIconButton 无 padding 参数，移到 modifier。
+            // 与动作区面板之间留出标准按钮间距（包装层默认外边距 = vendored ButtonPadding
+            // 6dp，相邻玻璃 pill 合计 12dp），0 会让面板和把手贴死。
             shape = GlassShape(24.dp),
         ) {
             Icon(

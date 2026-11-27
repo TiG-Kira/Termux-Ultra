@@ -5,6 +5,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.derivedStateOf
@@ -15,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import top.yukonga.miuix.kmp.basic.ScrollBehavior
 import top.yukonga.miuix.kmp.blur.Backdrop
 import top.yukonga.miuix.kmp.glass.GlassIconButton as MiuixGlassIconButton
@@ -41,6 +43,15 @@ import com.termux.app.compose.liquid.LocalLiquidTopBarEnabled
  * 恒为 false，弹层 / 面板里的玻璃按钮不受影响。
  */
 val LocalGlassTopBarFloating = staticCompositionLocalOf { false }
+
+/**
+ * 玻璃按钮的水平外边距（vendored miuix `GlassTopAppBarDefaults.ButtonPadding` 同款 6dp）。
+ *
+ * 官方 0.9.5-rc01 删除了该 token 且按钮改为紧贴，PR #405 迁移后顶栏按钮间隔随之丢失；
+ * 应用侧包装层按 vendored 口径还原：相邻按钮间隔 = 2 × [GlassTopBarButtonPadding] = 12dp，
+ * 导航槽额外再包一层（见 [GlassTopAppBar] 的 navigationIcon 包装）。
+ */
+val GlassTopBarButtonPadding: Dp = 6.dp
 
 /**
  * miuix `GlassTopAppBar` 的应用侧包装：官方签名原样转发，仅液态玻璃外观接管 band。
@@ -107,7 +118,11 @@ fun GlassTopAppBar(
             titleAlpha = titleAlpha,
             backgroundAlpha = backgroundAlpha,
             centerObstructionStart = centerObstructionStart,
-            navigationIcon = navigationIcon,
+            // vendored 骨架同款：导航槽外包一层按钮边距（官方 0.9.5 删除了 slot wrap），
+            // 还原「栏内边距 12dp + 槽位 6dp +（玻璃按钮自带边距）」的原始留白口径。
+            navigationIcon = {
+                Box(Modifier.padding(horizontal = GlassTopBarButtonPadding)) { navigationIcon() }
+            },
             actions = actions,
             bottomContent = bottomContent,
         )
@@ -211,7 +226,11 @@ fun GlassTopAppBar(
             titleAlpha = titleAlpha,
             backgroundAlpha = backgroundAlpha,
             centerObstructionStart = centerObstructionStart,
-            navigationIcon = navigationIcon,
+            // vendored 骨架同款：导航槽外包一层按钮边距（官方 0.9.5 删除了 slot wrap），
+            // 还原「栏内边距 12dp + 槽位 6dp +（玻璃按钮自带边距）」的原始留白口径。
+            navigationIcon = {
+                Box(Modifier.padding(horizontal = GlassTopBarButtonPadding)) { navigationIcon() }
+            },
             actions = actions,
             bottomContent = bottomContent,
         )
@@ -323,7 +342,10 @@ private fun LiquidGlassTopBar(
                 // band 交给 LiquidTopBarSkin（vendored 骨架同款：官方背板整体关掉）。
                 backgroundAlpha = { 0f },
                 centerObstructionStart = centerObstructionStart,
-                navigationIcon = navigationIcon,
+                // vendored 骨架同款：导航槽外包一层按钮边距（见上方 GlassTopAppBar 重载）。
+                navigationIcon = {
+                    Box(Modifier.padding(horizontal = GlassTopBarButtonPadding)) { navigationIcon() }
+                },
                 actions = actions,
                 bottomContent = bottomContent,
             )
@@ -335,6 +357,11 @@ private fun LiquidGlassTopBar(
  * miuix `GlassIconButton` 的应用侧包装：液态玻璃外观下，顶栏骨架内已滚到栏下
  * （[LocalGlassTopBarFloating]）的按钮分流 [LiquidIconButton]（vendored 同款分时机：
  * 展开态保持裸图标，收缩态换液态圆钮）。其余样式 / 非骨架场景转发官方。
+ *
+ * [padding] 还原 vendored 的按钮水平外边距（官方 0.9.5 删除了 `ButtonPadding` 与
+ * 对应参数，相邻玻璃 pill 会紧贴成一整条）。默认 6dp = vendored `ButtonPadding`；
+ * 终端返回键等显式贴边场景传 0。液态分支不生效——[LiquidIconButton] 自带同款
+ * 6dp 外边距（`LiquidActionButtonPadding`），与 vendored 分时机行为一致。
  */
 @Composable
 fun GlassIconButton(
@@ -342,6 +369,7 @@ fun GlassIconButton(
     modifier: Modifier = Modifier,
     size: Dp = GlassTopAppBarDefaults.ButtonSize,
     shape: GlassShape = remember(size) { GlassShape(size / 2) },
+    padding: Dp = GlassTopBarButtonPadding,
     content: @Composable () -> Unit,
 ) {
     if (LocalLiquidTopBarEnabled.current && LocalGlassTopBarFloating.current) {
@@ -350,7 +378,7 @@ fun GlassIconButton(
     }
     MiuixGlassIconButton(
         onClick = onClick,
-        modifier = modifier,
+        modifier = modifier.padding(horizontal = padding),
         size = size,
         shape = shape,
         content = content,
